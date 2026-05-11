@@ -1,0 +1,726 @@
+{
+  "node_modules": {
+    "display_name": "Project Dependencies",
+    "tag": "safe",
+    "aliases": ["node_modules"],
+    "explanation": "Files downloaded automatically for a coding project. Nothing important is stored here and they can always be recreated."
+  },
+  "DerivedData": {
+    "display_name": "Xcode Build Leftovers",
+    "tag": "safe",
+    "aliases": ["DerivedData", "deriveddata"],
+    "explanation": "Temporary files created by Xcode while building apps. Safe to delete, your next build will just take a little longer."
+  },
+  "iOS DeviceSupport": {
+    "display_name": "Old iPhone Support Files",
+    "tag": "safe",
+    "explanation": "Files downloaded to support older iPhones connected to your Mac. Safe to remove if you no longer use those devices."
+  },
+  "spotify": {
+    "display_name": "Spotify Cache",
+    "bundle_ids": ["com.spotify.client"],
+    "aliases": ["spotify", "Spotify", "com.spotify"],
+    "tag": "safe",
+    "explanation": "Spotify stores music data here to load songs faster. Deleting it just means Spotify will reload things a bit slower for a while."
+  },
+  "chrome": {
+    "display_name": "Google Chrome Cache",
+    "bundle_ids": ["com.google.Chrome", "com.google.chrome"],
+    "aliases": ["chrome", "Chrome", "google-chrome", "Chromium", "com.chromium"],
+    "tag": "safe",
+    "explanation": "Chrome saves website data here to load pages faster. Safe to delete and will rebuild automatically as you browse."
+  },
+  "safari": {
+    "display_name": "Safari Cache",
+    "bundle_ids": ["com.apple.Safari", "com.apple.safari"],
+    "aliases": ["safari", "Safari", "com.apple.Safari"],
+    "tag": "safe",
+    "explanation": "Safari stores temporary website files here. Safe to clear. Pages may take a moment longer to load after."
+  },
+  "firefox": {
+    "display_name": "Firefox Cache",
+    "bundle_ids": ["org.mozilla.firefox"],
+    "aliases": ["firefox", "Firefox"],
+    "tag": "safe",
+    "explanation": "Firefox saves website data to load pages faster. Safe to delete and will rebuild automatically as you browse."
+  },
+  "slack": {
+    "display_name": "Slack Cache",
+    "bundle_ids": ["com.tinyspeck.slackmacgap"],
+    "aliases": ["slack", "Slack", "com.slack", "slackmacgap", "slack-desktop"],
+    "tag": "safe",
+    "explanation": "Slack stores messages and images locally to load faster. Your actual messages are safe in the cloud."
+  },
+  "figma": {
+    "display_name": "Figma Cache",
+    "bundle_ids": ["com.figma.desktop", "com.figma.agent"],
+    "aliases": ["figma", "Figma", "com.figma", "com.figma.agent"],
+    "tag": "safe",
+    "explanation": "Figma stores project previews and assets here. Safe to delete. Figma will reload your files from the cloud next time."
+  },
+  "zoom": {
+    "display_name": "Zoom Cache",
+    "bundle_ids": ["us.zoom.xos", "com.zoom.us"],
+    "aliases": ["zoom", "Zoom", "us.zoom", "com.zoom"],
+    "tag": "safe",
+    "explanation": "Temporary files created by Zoom for meetings. Safe to delete, nothing important is stored here."
+  },
+  "notion": {
+    "display_name": "Notion Cache",
+    "bundle_ids": ["notion.id"],
+    "aliases": ["notion", "Notion", "notion-desktop"],
+    "tag": "safe",
+    "explanation": "Notion stores pages and content locally to load faster. Your actual data is safely stored in the cloud."
+  },
+  "discord": {
+    "display_name": "Discord Cache",
+    "bundle_ids": ["com.hnc.Discord"],
+    "aliases": ["discord", "Discord", "com.discord"],
+    "tag": "safe",
+    "explanation": "Discord saves images and data locally to load faster. Safe to delete, everything will reload from Discord's servers."
+  },
+  "whatsapp": {
+    "display_name": "WhatsApp Cache",
+    "bundle_ids": ["net.whatsapp.WhatsApp"],
+    "aliases": ["whatsapp", "WhatsApp", "net.whatsapp"],
+    "tag": "safe",
+    "explanation": "WhatsApp stores temporary data to load chats faster. Your messages are stored on your phone and in the app, not here."
+  },
+  "telegram": {
+    "display_name": "Telegram Cache",
+    "bundle_ids": ["ru.keepcoder.Telegram"],
+    "aliases": ["telegram", "Telegram", "ru.keepcoder"],
+    "tag": "safe",
+    "explanation": "Telegram stores media locally to load faster. Your actual messages are safe in the cloud."
+  },
+  "dropbox": {
+    "display_name": "Dropbox Cache",
+    "bundle_ids": ["com.dropbox.client2"],
+    "aliases": ["dropbox", "Dropbox", "com.dropbox"],
+    "tag": "medium",
+    "explanation": "Temporary files Dropbox uses to sync your files. Deleting may cause Dropbox to re-sync some files but your actual files in the cloud are not affected."
+  },
+  "googledrive": {
+    "display_name": "Google Drive Cache",
+    "bundle_ids": ["com.google.GoogleDrive", "com.google.drivefs"],
+    "aliases": ["googledrive", "GoogleDrive", "com.google.GoogleDrive"],
+    "tag": "medium",
+    "explanation": "Temporary files Google Drive uses to keep your files synced. Your files in the cloud are safe but Drive may need to re-sync after."
+  },
+  "onedrive": {
+    "display_name": "OneDrive Cache",
+    "bundle_ids": ["com.microsoft.OneDrive"],
+    "aliases": ["onedrive", "OneDrive", "com.microsoft.OneDrive"],
+    "tag": "medium",
+    "explanation": "Temporary files used by Microsoft OneDrive to sync your documents. Your cloud files are safe but OneDrive will re-sync after."
+  },
+  "icloud": {
+    "display_name": "iCloud Cache",
+    "bundle_ids": ["com.apple.cloudd", "com.apple.icloud", "com.apple.bird", "com.apple.iCloudNotificationAgent"],
+    "aliases": ["icloud", "iCloud", "com.apple.cloudd", "com.apple.bird"],
+    "tag": "medium",
+    "explanation": "Temporary files used by iCloud to sync your files and photos. Your data in iCloud is safe but syncing may take a moment to restart."
+  },
+  "vscode": {
+    "display_name": "VS Code Cache",
+    "bundle_ids": ["com.microsoft.VSCode"],
+    "aliases": ["vscode", "VSCode", "code", "visual-studio-code", "com.microsoft.vscode"],
+    "tag": "safe",
+    "explanation": "Temporary files created by Visual Studio Code. Safe to delete and VS Code will recreate them next time it opens."
+  },
+  "cursor": {
+    "display_name": "Cursor Editor Cache",
+    "bundle_ids": ["com.todesktop.230313mzl4w4u92", "com.todesktop.230313mzl4w4u92.ShipIt"],
+    "aliases": ["cursor", "Cursor", "com.cursor", "cursor-editor", "com.todesktop.230313mzl4w4u92", "com.todesktop.230313mzl4w4u92.ShipIt"],
+    "tag": "safe",
+    "explanation": "Temporary files created by the Cursor code editor. Safe to delete and will be recreated when you open Cursor again."
+  },
+  "xcode": {
+    "display_name": "Xcode Cache",
+    "bundle_ids": ["com.apple.dt.Xcode", "com.apple.dt.Xcode.ITunesSoftwareService"],
+    "aliases": ["xcode", "Xcode", "com.apple.dt.Xcode", "com.apple.dt.Xcode.ITunesSoftwareService"],
+    "tag": "medium",
+    "explanation": "Cache files used by Xcode. Deleting may slow down your first build after but nothing will be permanently lost."
+  },
+  "ollama": {
+    "display_name": "Ollama Cache",
+    "bundle_ids": ["com.ollama.ollama"],
+    "aliases": ["ollama", "Ollama", "com.ollama"],
+    "tag": "safe",
+    "explanation": "Temporary cache files used by Ollama. Your actual AI models are stored separately and are not affected. Safe to delete."
+  },
+  "docker": {
+    "display_name": "Docker Cache",
+    "bundle_ids": ["com.docker.docker"],
+    "aliases": ["docker", "Docker", "com.docker", "docker-desktop"],
+    "tag": "safe",
+    "explanation": "Temporary cache files used by Docker. Your actual Docker images and containers are stored separately and are not affected."
+  },
+  "pnpm": {
+    "display_name": "pnpm Package Cache",
+    "aliases": ["pnpm", ".pnpm-store"],
+    "tag": "safe",
+    "explanation": "A cache of downloaded coding packages. Safe to delete and will be rebuilt automatically next time a project needs them."
+  },
+  "npm": {
+    "display_name": "npm Package Cache",
+    "aliases": ["npm", ".npm", "checkpoint-nodejs", "prisma-nodejs"],
+    "tag": "safe",
+    "explanation": "A cache of downloaded coding packages. Safe to delete. Packages will just be re-downloaded next time they are needed."
+  },
+  "yarn": {
+    "display_name": "Yarn Package Cache",
+    "aliases": ["yarn", "Yarn", ".yarn"],
+    "tag": "safe",
+    "explanation": "A cache of downloaded coding packages managed by Yarn. Safe to delete and will rebuild automatically."
+  },
+  "homebrew": {
+    "display_name": "Homebrew Downloads",
+    "bundle_ids": ["com.brew.homebrew"],
+    "aliases": ["homebrew", "Homebrew", "brew"],
+    "tag": "safe",
+    "explanation": "Leftover installation files from Homebrew, a tool developers use to install software. Safe to delete. Your installed apps will still work fine."
+  },
+  "gradle": {
+    "display_name": "Gradle Build Cache",
+    "aliases": ["gradle", ".gradle", "Gradle", ".android"],
+    "tag": "safe",
+    "explanation": "Temporary files used when building Android or Java projects. Safe to remove and will be re-downloaded when next needed."
+  },
+  "cocoapods": {
+    "display_name": "CocoaPods Cache",
+    "aliases": ["cocoapods", "CocoaPods", ".cocoapods"],
+    "tag": "safe",
+    "explanation": "Cached files for a tool used in iOS app development. Safe to delete and will be recreated when needed."
+  },
+  "rust": {
+    "display_name": "Rust Build Cache",
+    "aliases": ["rust", "Rust"],
+    "tag": "safe",
+    "explanation": "Build output from Rust coding projects. Auto-generated and can be recreated by building the project again."
+  },
+  "target": {
+    "display_name": "Rust Build Cache",
+    "aliases": ["target"],
+    "tag": "safe",
+    "explanation": "Build output from Rust coding projects. Auto-generated and can be recreated by building the project again."
+  },
+  "python": {
+    "display_name": "Python Cache",
+    "aliases": ["python", "Python", "__pycache__"],
+    "tag": "safe",
+    "explanation": "Temporary files created by Python to run code faster. Safe to delete and will be recreated automatically."
+  },
+  "pip": {
+    "display_name": "Python Package Cache",
+    "aliases": ["pip", ".pip"],
+    "tag": "safe",
+    "explanation": "Cached Python packages. Safe to delete and packages will just be re-downloaded next time they are needed."
+  },
+  "venv": {
+    "display_name": "Python Environment",
+    "aliases": ["venv", ".venv"],
+    "tag": "safe",
+    "explanation": "A local setup for a Python project. Safe to delete if the project is not active. Running the project setup again will recreate it."
+  },
+  "Pods": {
+    "display_name": "Pods Dependencies Folder",
+    "aliases": ["Pods", "pods"],
+    "tag": "safe",
+    "explanation": "Downloaded dependency code for Apple platform projects using CocoaPods. You can recreate it later by installing dependencies again."
+  },
+  "flutter": {
+    "display_name": "Flutter Build Outputs",
+    "aliases": ["flutter", "Flutter", ".dart_tool", ".flutter"],
+    "tag": "safe",
+    "explanation": "Generated files Flutter uses while building an app. They can grow large and usually come back automatically on your next build."
+  },
+  "photos": {
+    "display_name": "Photos Cache",
+    "bundle_ids": ["com.apple.Photos"],
+    "aliases": ["photos", "Photos", "com.apple.Photos"],
+    "tag": "medium",
+    "explanation": "Thumbnail and preview data for your photo library. Safe to delete but the Photos app will need time to rebuild previews, which can take a while for large libraries."
+  },
+  "mail": {
+    "display_name": "Mail Cache",
+    "bundle_ids": ["com.apple.mail"],
+    "aliases": ["mail", "Mail", "com.apple.mail"],
+    "tag": "medium",
+    "explanation": "Locally cached email data. Deleting means Mail will need to re-download your emails from the server, which may take some time."
+  },
+  "music": {
+    "display_name": "Apple Music Cache",
+    "bundle_ids": ["com.apple.Music", "com.apple.iTunes"],
+    "aliases": ["music", "Music", "com.apple.Music", "com.apple.iTunes", "iTunes"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Apple Music to load songs faster. Safe to delete. Your library and downloads are stored separately."
+  },
+  "maps": {
+    "display_name": "Apple Maps Cache",
+    "bundle_ids": ["com.apple.Maps"],
+    "aliases": ["maps", "Maps", "com.apple.Maps"],
+    "tag": "safe",
+    "explanation": "Map tile data stored locally to load maps faster. Safe to delete. Maps will just re-download tiles as you use it."
+  },
+  "geoservices": {
+    "display_name": "Location Services Cache",
+    "bundle_ids": ["com.apple.GeoServices"],
+    "aliases": ["geoservices", "GeoServices", "com.apple.GeoServices", "com.apple.geoanalyticsd"],
+    "tag": "safe",
+    "explanation": "Temporary location data stored by macOS to load maps and location features faster. Safe to delete and will be recreated automatically."
+  },
+  "microsoft": {
+    "display_name": "Microsoft Apps Cache",
+    "bundle_ids": ["com.microsoft.Word", "com.microsoft.Excel", "com.microsoft.Powerpoint", "com.microsoft.Outlook", "com.microsoft.autoupdate.fba", "com.microsoft.EdgeUpdater"],
+    "aliases": ["microsoft", "Microsoft", "com.microsoft", "com.microsoft.autoupdate.fba", "com.microsoft.EdgeUpdater"],
+    "tag": "safe",
+    "explanation": "Temporary files created by Microsoft apps like Word, Excel, Outlook, or Edge. Safe to delete and will be recreated when you open the apps."
+  },
+  "teams": {
+    "display_name": "Microsoft Teams Cache",
+    "bundle_ids": ["com.microsoft.teams"],
+    "aliases": ["teams", "Teams", "com.microsoft.teams"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Microsoft Teams. Safe to delete. Your chats and files are stored in the cloud."
+  },
+  "linear": {
+    "display_name": "Linear Cache",
+    "bundle_ids": ["com.linear"],
+    "aliases": ["linear", "Linear", "com.linear"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Linear, a project management app. Your actual data is safely stored in the cloud."
+  },
+  "arc": {
+    "display_name": "Arc Browser Cache",
+    "bundle_ids": ["company.thebrowser.Browser"],
+    "aliases": ["arc", "Arc", "thebrowser", "company.thebrowser", "company.thebrowser.browser.helper", "company.thebrowser.dia"],
+    "tag": "safe",
+    "explanation": "Arc browser saves website data here to load pages faster. Safe to delete and will rebuild as you browse."
+  },
+  "brave": {
+    "display_name": "Brave Browser Cache",
+    "bundle_ids": ["com.brave.Browser"],
+    "aliases": ["brave", "Brave", "com.brave"],
+    "tag": "safe",
+    "explanation": "Brave browser saves website data here to load pages faster. Safe to delete and will rebuild automatically."
+  },
+  "opera": {
+    "display_name": "Opera Browser Cache",
+    "bundle_ids": ["com.operasoftware.Opera"],
+    "aliases": ["opera", "Opera", "com.operasoftware"],
+    "tag": "safe",
+    "explanation": "Opera saves website data locally to load pages faster. Safe to delete and will rebuild as you browse."
+  },
+  "1password": {
+    "display_name": "1Password Cache",
+    "bundle_ids": ["com.1password.1password"],
+    "aliases": ["1password", "1Password", "com.1password", "onepassword"],
+    "tag": "medium",
+    "explanation": "Temporary data stored by 1Password. Your actual passwords are safely encrypted and stored separately. Deleting may require you to sign in again."
+  },
+  "alfred": {
+    "display_name": "Alfred Cache",
+    "bundle_ids": ["com.runningwithcrayons.Alfred"],
+    "aliases": ["alfred", "Alfred", "com.runningwithcrayons.Alfred"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Alfred, a Mac productivity tool. Safe to delete and Alfred will rebuild its cache automatically."
+  },
+  "raycast": {
+    "display_name": "Raycast Cache",
+    "bundle_ids": ["com.raycast.macos"],
+    "aliases": ["raycast", "Raycast", "com.raycast"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Raycast, a Mac productivity tool. Safe to delete and will be recreated automatically."
+  },
+  "iterm": {
+    "display_name": "iTerm Cache",
+    "bundle_ids": ["com.googlecode.iterm2"],
+    "aliases": ["iterm", "iTerm", "com.googlecode.iterm2"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by iTerm, a terminal app for Mac. Safe to delete and will be recreated when you open iTerm."
+  },
+  "sketch": {
+    "display_name": "Sketch Cache",
+    "bundle_ids": ["com.bohemiancoding.sketch3"],
+    "aliases": ["sketch", "Sketch", "com.bohemiancoding"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Sketch, a design app. Safe to delete. Your actual design files are not stored here."
+  },
+  "loom": {
+    "display_name": "Loom Cache",
+    "bundle_ids": ["com.loom.desktop"],
+    "aliases": ["loom", "Loom", "com.loom"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Loom for video recording and playback. Safe to delete. Your recorded videos are stored in the cloud."
+  },
+  "grammarly": {
+    "display_name": "Grammarly Cache",
+    "bundle_ids": ["com.grammarly.ProjectLlama"],
+    "aliases": ["grammarly", "Grammarly", "com.grammarly"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Grammarly. Safe to delete and will be recreated automatically when you use Grammarly."
+  },
+  "lungo": {
+    "display_name": "Lungo Cache",
+    "bundle_ids": ["com.sindresorhus.Lungo"],
+    "aliases": ["lungo", "Lungo", "com.sindresorhus.Lungo"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Lungo, a small app that keeps your Mac awake. Safe to delete."
+  },
+  "cleanmymac": {
+    "display_name": "CleanMyMac Cache",
+    "bundle_ids": ["com.macpaw.CleanMyMac4"],
+    "aliases": ["cleanmymac", "CleanMyMac", "com.macpaw"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by CleanMyMac itself. Safe to delete."
+  },
+  "comet": {
+    "display_name": "Comet Cache",
+    "bundle_ids": ["com.comet.app", "ai.perplexity.CometUpdater"],
+    "aliases": ["comet", "Comet", "com.comet", "ai.perplexity.CometUpdater"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Comet. Safe to delete and will be recreated when the app is used again."
+  },
+  "dia": {
+    "display_name": "Dia Cache",
+    "bundle_ids": ["com.dia.app", "company.thebrowser.dia"],
+    "aliases": ["dia", "Dia", "com.dia", "company.thebrowser.dia"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Dia. Safe to delete and will be recreated when the app is used again."
+  },
+  "granola": {
+    "display_name": "Granola Cache",
+    "bundle_ids": ["com.granola.electron", "granolaelectron-updater"],
+    "aliases": ["granola", "Granola", "com.granola", "granolaelectron-updater"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Granola, an AI meeting notes app. Your actual notes are stored in the cloud."
+  },
+  "claude": {
+    "display_name": "Claude Cache",
+    "bundle_ids": ["com.anthropic.claudefordesktop", "com.anthropic.claudefordesktop.ShipIt"],
+    "aliases": ["claude", "Claude", "com.anthropic", "com.anthropic.claudefordesktop", "com.anthropic.claudefordesktop.ShipIt"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by the Claude desktop app. Safe to delete and will be recreated when you open Claude again."
+  },
+  "perplexity": {
+    "display_name": "Perplexity Cache",
+    "bundle_ids": ["ai.perplexity.mac"],
+    "aliases": ["perplexity", "Perplexity", "ai.perplexity"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Perplexity AI. Safe to delete and will be recreated when you use the app again."
+  },
+  "openai": {
+    "display_name": "OpenAI Cache",
+    "bundle_ids": ["com.openai.codex"],
+    "aliases": ["openai", "OpenAI", "com.openai", "com.openai.codex"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by OpenAI tools. Safe to delete and will be recreated when needed."
+  },
+  "blender": {
+    "display_name": "Blender Cache",
+    "aliases": ["blender", "Blender"],
+    "tag": "safe",
+    "explanation": "Temporary files created by Blender, a 3D design tool. Safe to delete. Your actual Blender project files are not stored here."
+  },
+  "sentry": {
+    "display_name": "Sentry Cache",
+    "bundle_ids": ["io.sentry"],
+    "aliases": ["sentry", "Sentry", "io.sentry", "SentryCrash"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Sentry, an error tracking tool used by developers. Safe to delete."
+  },
+  "datadog": {
+    "display_name": "Datadog Cache",
+    "bundle_ids": ["com.datadoghq"],
+    "aliases": ["datadog", "Datadog", "com.datadoghq"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Datadog, a monitoring tool used by developers. Safe to delete and will be recreated automatically."
+  },
+  "segment": {
+    "display_name": "Segment Cache",
+    "aliases": ["segment", "Segment"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Segment, an analytics tool used by apps in the background. Safe to delete."
+  },
+  "revenuecat": {
+    "display_name": "RevenueCat Cache",
+    "bundle_ids": ["com.revenuecat"],
+    "aliases": ["revenuecat", "RevenueCat", "com.revenuecat", "app.spokenly.revenuecat"],
+    "tag": "safe",
+    "explanation": "Temporary files used by RevenueCat, a payment and subscription tool used by apps. Safe to delete."
+  },
+  "spokenly": {
+    "display_name": "Spokenly Cache",
+    "bundle_ids": ["app.spokenly"],
+    "aliases": ["spokenly", "Spokenly", "app.spokenly"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Spokenly. Safe to delete and will be recreated when the app is used again."
+  },
+  "swiftpm": {
+    "display_name": "Swift Package Cache",
+    "aliases": ["swiftpm", "org.swift.swiftpm"],
+    "tag": "safe",
+    "explanation": "Cached Swift packages downloaded for coding projects. Safe to delete and will be re-downloaded when needed."
+  },
+  "gamekit": {
+    "display_name": "Game Center Cache",
+    "bundle_ids": ["com.apple.gamed"],
+    "aliases": ["gamekit", "GameKit", "com.apple.gamed"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Apple Game Center. Safe to delete and will be recreated automatically when you use Game Center."
+  },
+  "cloudkit": {
+    "display_name": "CloudKit Cache",
+    "aliases": ["cloudkit", "CloudKit", "com.apple.CloudTelemetry"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Apple CloudKit to sync app data. Safe to delete and will be recreated automatically when apps sync."
+  },
+  "imagecache": {
+    "display_name": "Image Cache",
+    "aliases": ["imagecache", "ImageCache"],
+    "tag": "safe",
+    "explanation": "Cached image data stored by apps to load images faster. Safe to delete and will be recreated automatically."
+  },
+  "passkit": {
+    "display_name": "Wallet Cache",
+    "bundle_ids": ["com.apple.passd"],
+    "aliases": ["passkit", "PassKit", "com.apple.passd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Apple Wallet. Safe to delete. Your actual passes are stored in iCloud and will reload automatically."
+  },
+  "homekit": {
+    "display_name": "HomeKit Cache",
+    "bundle_ids": ["com.apple.HomeKit", "com.apple.homed"],
+    "aliases": ["homekit", "HomeKit", "com.apple.HomeKit", "com.apple.homed"],
+    "tag": "medium",
+    "explanation": "Temporary files used by Apple Home for smart home devices. Safe to delete but your Home app may take a moment to reconnect to devices."
+  },
+  "spotlight": {
+    "display_name": "Spotlight Cache",
+    "bundle_ids": ["com.apple.Spotlight"],
+    "aliases": ["spotlight", "Spotlight", "com.apple.Spotlight"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Spotlight search. Safe to delete and Spotlight will rebuild its index automatically."
+  },
+  "appstore": {
+    "display_name": "App Store Cache",
+    "bundle_ids": ["com.apple.appstoreagent", "com.apple.storekitagent", "com.apple.managedappdistributionagent"],
+    "aliases": ["appstoreagent", "com.apple.appstoreagent", "com.apple.storekitagent", "com.apple.managedappdistributionagent"],
+    "tag": "safe",
+    "explanation": "Temporary files used by the Mac App Store. Safe to delete and will be recreated automatically."
+  },
+  "appleaccount": {
+    "display_name": "Apple Account Cache",
+    "bundle_ids": ["com.apple.accountsd", "com.apple.appleaccountd", "com.apple.akd"],
+    "aliases": ["accountsd", "com.apple.accountsd", "com.apple.appleaccountd", "com.apple.akd"],
+    "tag": "medium",
+    "explanation": "Temporary files used by your Apple account to stay signed in. Safe to delete but you may need to sign in to some Apple services again."
+  },
+  "siri": {
+    "display_name": "Siri Cache",
+    "bundle_ids": ["com.apple.assistantd", "com.apple.sirittsd"],
+    "aliases": ["assistantd", "com.apple.assistantd", "com.apple.sirittsd", "SiriTTS"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Siri to process requests faster. Safe to delete and will be recreated automatically."
+  },
+  "findmy": {
+    "display_name": "Find My Cache",
+    "bundle_ids": ["com.apple.findmy.fmipcore"],
+    "aliases": ["findmy", "FindMy", "com.apple.findmy", "com.apple.findmy.fmipcore"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Find My. Safe to delete. Your device locations are tracked by Apple and will reload automatically."
+  },
+  "google": {
+    "display_name": "Google Tools Cache",
+    "bundle_ids": ["com.google.antigravity.ShipIt", "com.google.GoogleUpdater"],
+    "aliases": ["com.google.antigravity.ShipIt", "com.google.GoogleUpdater", "google-sdks-events"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Google tools and updaters. Safe to delete and will be recreated automatically."
+  },
+  "jetbrains": {
+    "display_name": "JetBrains Cache",
+    "aliases": ["jetbrains", "JetBrains", "JetPackCache"],
+    "tag": "safe",
+    "explanation": "Temporary files used by JetBrains IDEs like IntelliJ or WebStorm. Safe to delete and will be recreated when you open the IDE."
+  },
+  "playwright": {
+    "display_name": "Playwright Cache",
+    "aliases": ["playwright", "ms-playwright-go", "ms-playwright"],
+    "tag": "safe",
+    "explanation": "Cached browser files used by Playwright, a testing tool for developers. Safe to delete and will be re-downloaded when needed."
+  },
+  "nsurlsession": {
+    "display_name": "Network Cache",
+    "bundle_ids": ["com.apple.nsurlsessiond"],
+    "aliases": ["nsurlsessiond", "com.apple.nsurlsessiond"],
+    "tag": "safe",
+    "explanation": "Temporary network data cached by macOS to speed up connections. Safe to delete and will be recreated automatically."
+  },
+  "reminders": {
+    "display_name": "Reminders Cache",
+    "bundle_ids": ["com.apple.remindd"],
+    "aliases": ["remindd", "com.apple.remindd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by the Reminders app. Safe to delete. Your actual reminders are stored in iCloud and will sync back."
+  },
+  "tips": {
+    "display_name": "Tips App Cache",
+    "bundle_ids": ["com.apple.tipsd"],
+    "aliases": ["tipsd", "com.apple.tipsd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by the macOS Tips app. Safe to delete."
+  },
+  "translation": {
+    "display_name": "Translation Cache",
+    "bundle_ids": ["com.apple.translationd"],
+    "aliases": ["translationd", "com.apple.translationd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by the macOS Translation feature to speed up translations. Safe to delete and will be recreated when you use translation again."
+  },
+  "shazam": {
+    "display_name": "Shazam Cache",
+    "bundle_ids": ["com.apple.shazamlibrary.cloud"],
+    "aliases": ["shazam", "Shazam", "com.apple.shazamlibrary.cloud"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Shazam music recognition. Safe to delete and will be recreated automatically."
+  },
+  "videoconference": {
+    "display_name": "FaceTime Cache",
+    "bundle_ids": ["com.apple.VideoConference"],
+    "aliases": ["VideoConference", "com.apple.VideoConference"],
+    "tag": "safe",
+    "explanation": "Temporary files used by FaceTime and video calling on your Mac. Safe to delete."
+  },
+  "purge": {
+    "display_name": "Purge Cache",
+    "bundle_ids": ["io.getpurge.app"],
+    "aliases": ["purge", "Purge", "io.getpurge.app"],
+    "tag": "safe",
+    "explanation": "Temporary files created by Purge itself. Safe to delete."
+  },
+  "ntware": {
+    "display_name": "NT-ware Cache",
+    "bundle_ids": ["com.nt-ware.SmartClient"],
+    "aliases": ["com.nt-ware.SmartClient", "nt-ware"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by NT-ware SmartClient, a print management tool. Safe to delete."
+  },
+  "archiveutility": {
+    "display_name": "Archive Utility Cache",
+    "aliases": ["Archives", "archive"],
+    "tag": "safe",
+    "explanation": "Temporary files created when opening or creating zip files and archives. Safe to delete."
+  },
+  "familycircle": {
+    "display_name": "Family Sharing Cache",
+    "aliases": ["FamilyCircle", "familycircle", "com.apple.FamilyCircle"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Apple Family Sharing. Safe to delete and will be recreated automatically."
+  },
+  "zen": {
+    "display_name": "Zen Browser Cache",
+    "aliases": ["zen", "Zen"],
+    "tag": "safe",
+    "explanation": "Temporary files stored by Zen Browser. Safe to delete and will rebuild as you browse."
+  },
+  "helpd": {
+    "display_name": "macOS Help Cache",
+    "bundle_ids": ["com.apple.helpd"],
+    "aliases": ["helpd", "com.apple.helpd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by the macOS Help system. Safe to delete."
+  },
+  "ampagent": {
+    "display_name": "Apple Media Cache",
+    "bundle_ids": ["com.apple.AMPLibraryAgent", "com.apple.amsaccountsd", "com.apple.AppleMediaServices", "com.apple.amsengagementd"],
+    "aliases": ["com.apple.AMPLibraryAgent", "com.apple.amsaccountsd", "com.apple.AppleMediaServices", "com.apple.amsengagementd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Apple media services for Music, TV, and Podcasts. Safe to delete and will be recreated automatically."
+  },
+  "containermanager": {
+    "display_name": "App Sandbox Cache",
+    "bundle_ids": ["com.apple.containermanagerd"],
+    "aliases": ["containermanagerd", "com.apple.containermanagerd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by macOS to manage app sandboxing. Safe to delete and will be recreated automatically."
+  },
+  "duetexpert": {
+    "display_name": "macOS Intelligence Cache",
+    "bundle_ids": ["com.apple.duetexpertd"],
+    "aliases": ["duetexpertd", "com.apple.duetexpertd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by macOS to learn your usage patterns and improve suggestions. Safe to delete."
+  },
+  "featureaccess": {
+    "display_name": "Feature Access Cache",
+    "bundle_ids": ["com.apple.FeatureAccessAgent"],
+    "aliases": ["FeatureAccessAgent", "com.apple.FeatureAccessAgent"],
+    "tag": "safe",
+    "explanation": "Temporary files used by macOS to manage which features your apps can access. Safe to delete."
+  },
+  "cachedelete": {
+    "display_name": "System Cache Manager",
+    "bundle_ids": ["com.apple.cache_delete"],
+    "aliases": ["cache_delete", "com.apple.cache_delete"],
+    "tag": "safe",
+    "explanation": "Temporary files used by macOS to manage and clean up system caches. Safe to delete."
+  },
+  "dataaccess": {
+    "display_name": "Data Sync Cache",
+    "bundle_ids": ["com.apple.dataaccess.dataaccessd"],
+    "aliases": ["dataaccessd", "com.apple.dataaccess.dataaccessd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by macOS to sync contacts, calendars, and other data. Safe to delete."
+  },
+  "parsecd": {
+    "display_name": "Proactive Suggestions Cache",
+    "bundle_ids": ["com.apple.parsecd", "com.apple.proactive.eventtracker"],
+    "aliases": ["parsecd", "com.apple.parsecd", "com.apple.proactive.eventtracker"],
+    "tag": "safe",
+    "explanation": "Temporary files used by macOS to power Siri suggestions and proactive features. Safe to delete."
+  },
+  "chrono": {
+    "display_name": "Screen Time Cache",
+    "bundle_ids": ["com.apple.chrono"],
+    "aliases": ["chrono", "com.apple.chrono"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Screen Time on your Mac. Safe to delete."
+  },
+  "feedbacklogger": {
+    "display_name": "Feedback Assistant Cache",
+    "bundle_ids": ["com.apple.feedbacklogger"],
+    "aliases": ["feedbacklogger", "com.apple.feedbacklogger"],
+    "tag": "safe",
+    "explanation": "Temporary files used by Apple Feedback Assistant for submitting bug reports. Safe to delete."
+  },
+  "betaenrollment": {
+    "display_name": "Beta Enrollment Cache",
+    "bundle_ids": ["com.apple.betaenrollmentagent"],
+    "aliases": ["betaenrollmentagent", "com.apple.betaenrollmentagent"],
+    "tag": "safe",
+    "explanation": "Temporary files used to manage macOS beta program enrollment. Safe to delete."
+  },
+  "donotdisturb": {
+    "display_name": "Focus Mode Cache",
+    "bundle_ids": ["com.apple.donotdisturbd"],
+    "aliases": ["donotdisturbd", "com.apple.donotdisturbd"],
+    "tag": "safe",
+    "explanation": "Temporary files used by macOS Focus and Do Not Disturb modes. Safe to delete."
+  },
+  "Library/Preferences": {
+    "display_name": "App Preferences",
+    "tag": "danger",
+    "explanation": "These files store your personal settings for apps. Deleting them will reset apps back to their defaults and you may lose your configurations."
+  },
+  "Library/Keychains": {
+    "display_name": "Saved Passwords",
+    "tag": "danger",
+    "explanation": "This folder contains your saved passwords and login credentials. Do not delete this as it cannot be recovered."
+  },
+  "Library/Application Support": {
+    "display_name": "App Data",
+    "tag": "danger",
+    "explanation": "Important data that apps need to function, including saved progress and local databases. Deleting the wrong files here can break apps."
+  }
+}
