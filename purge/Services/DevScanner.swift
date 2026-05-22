@@ -367,6 +367,46 @@ final class DevScanner {
         return 0
     }
 
+    // MARK: - Folder sizing (hard-link-aware)
+
+    private func accurateFolderSize(at url: URL) -> Int64 {
+        guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
+        process.arguments = ["-sk", url.path]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0 else {
+                return FolderSizing.directoryByteSize(at: url)
+            }
+
+            let output = String(
+                data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+
+            // du -sk returns "SIZE\tPATH" where SIZE is in 512-byte blocks
+            // multiply by 512 to get bytes
+            let parts = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                .components(separatedBy: "\t")
+            if let blocks = Int64(parts.first ?? "") {
+                return blocks * 512
+            }
+
+            return FolderSizing.directoryByteSize(at: url)
+        } catch {
+            return FolderSizing.directoryByteSize(at: url)
+        }
+    }
+
     // MARK: - Global dev tool caches
 
     private func scanGlobalCaches() -> [DevTool] {
@@ -486,15 +526,29 @@ final class DevScanner {
             ])
         ]
 
+        let xcodeAndDockerLabels: Set<String> = [
+            "Xcode Derived Data",
+            "Xcode Archives",
+            "Xcode iOS DeviceSupport",
+            "Xcode Caches",
+            "Docker Desktop"
+        ]
+
         return mapped.map { entry -> DevTool in
             let label = entry.0
-            let existing = entry.2.filter { FileManager.default.fileExists(atPath: $0.path) }
+            let existing = entry.2.filter {
+                FileManager.default.fileExists(atPath: $0.path)
+            }
 
             let size: Int64
-            if label == "Docker Desktop" {
-                size = dockerDiskUsageBytes()
+            if xcodeAndDockerLabels.contains(label) {
+                size = existing.reduce(Int64(0)) {
+                    $0 + accurateFolderSize(at: $1)
+                }
             } else {
-                size = existing.reduce(Int64(0)) { $0 + FolderSizing.directoryByteSize(at: $1) }
+                size = existing.reduce(Int64(0)) {
+                    $0 + FolderSizing.directoryByteSize(at: $1)
+                }
             }
 
             return DevTool(
@@ -504,7 +558,10 @@ final class DevScanner {
                 sizeBytes: size,
                 isSelected: false,
                 isDetected: !existing.isEmpty,
-                safetyInfo: safetyInfo(forToolLabel: label, primaryPath: entry.2.first)
+                safetyInfo: safetyInfo(
+                    forToolLabel: label,
+                    primaryPath: entry.2.first
+                )
             )
         }
     }

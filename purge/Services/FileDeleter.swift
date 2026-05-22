@@ -55,7 +55,12 @@ final class FileDeleter {
     private(set) var deletionLog: [DeletionReport] = []
 
     /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
-    func deleteItems(at urls: [URL], pathToDisplayName: [String: String] = [:]) async throws -> DeletionReport {
+    /// - Parameter pathToExpectedSizeBytes: Pre-scan sizes from deletion candidates; avoids re-measuring folders at delete time.
+    func deleteItems(
+        at urls: [URL],
+        pathToDisplayName: [String: String] = [:],
+        pathToExpectedSizeBytes: [String: Int64] = [:]
+    ) async throws -> DeletionReport {
         var totalDeleted: Int64 = 0
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
@@ -69,11 +74,10 @@ final class FileDeleter {
             let decision = DeletionSafetyPolicy.evaluate(url)
             switch decision {
             case .allow:
-                let size = scanner.calculateFolderSize(at: url)
+                let size = pathToExpectedSizeBytes[standardizedPath] ?? scanner.calculateFolderSize(at: url)
 
                 if DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
-                    var contentsFreed: Int64 = 0
-                    var contentsDeleted: [DeletedItem] = []
+                    var didDeleteAnyContent = false
 
                     if let contents = try? FileManager.default.contentsOfDirectory(
                         at: url,
@@ -81,15 +85,9 @@ final class FileDeleter {
                         options: [.skipsHiddenFiles]
                     ) {
                         for contentURL in contents {
-                            let contentSize = scanner.calculateFolderSize(at: contentURL)
                             do {
                                 try FileManager.default.removeItem(at: contentURL)
-                                contentsFreed += contentSize
-                                contentsDeleted.append(DeletedItem(
-                                    path: contentURL.path,
-                                    sizeBytes: contentSize,
-                                    displayName: friendlyTitle ?? contentURL.lastPathComponent
-                                ))
+                                didDeleteAnyContent = true
                             } catch {
                                 failedItems.append(FailedDeletionItem(
                                     path: contentURL.path,
@@ -99,8 +97,14 @@ final class FileDeleter {
                         }
                     }
 
-                    totalDeleted += contentsFreed
-                    deletedItems.append(contentsOf: contentsDeleted)
+                    if didDeleteAnyContent {
+                        totalDeleted += size
+                        deletedItems.append(DeletedItem(
+                            path: url.path,
+                            sizeBytes: size,
+                            displayName: friendlyTitle
+                        ))
+                    }
                 } else if let udid = Self.coreSimulatorDeviceUDID(from: url) {
                     switch Self.deleteCoreSimulatorDevice(udid: udid) {
                     case .success:

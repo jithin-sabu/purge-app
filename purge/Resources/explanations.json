@@ -962,7 +962,7 @@
     "display_name": "Xcode Build Files",
     "tag": "safe",
     "aliases": ["DerivedData", "deriveddata"],
-    "explanation": "Temporary files Xcode creates while building apps. Always safe to delete. Your next build will just take a little longer as Xcode rebuilds them.",
+    "explanation": "Temporary files Xcode creates while building apps. Always safe to delete. Your next build will just take a little longer as Xcode rebuilds them. Actual space freed may be slightly less than shown due to how Xcode stores build files internally.",
     "scope": "dev_tools"
   },
   {

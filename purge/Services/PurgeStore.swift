@@ -330,15 +330,22 @@ final class PurgeStore: ObservableObject {
         guard !urls.isEmpty else { return }
 
         var pathToDisplayName: [String: String] = [:]
+        var pathToExpectedSizeBytes: [String: Int64] = [:]
         for candidate in candidates {
-            pathToDisplayName[candidate.path.standardizedFileURL.path] = candidate.title
+            let key = candidate.path.standardizedFileURL.path
+            pathToDisplayName[key] = candidate.title
+            pathToExpectedSizeBytes[key] = candidate.sizeBytes
         }
 
         isDeleting = true
         errorMessage = nil
         defer { isDeleting = false }
         do {
-            let report = try await fileDeleter.deleteItems(at: urls, pathToDisplayName: pathToDisplayName)
+            let report = try await fileDeleter.deleteItems(
+                at: urls,
+                pathToDisplayName: pathToDisplayName,
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes
+            )
             let freedBytes = report.actualFreedBytes > 0 ? report.actualFreedBytes : report.totalDeleted
             incrementRecoveredTotal(by: freedBytes)
             deselectSkippedItems(report.skippedItems)
@@ -790,7 +797,7 @@ final class PurgeStore: ObservableObject {
         return DeletionCandidate(
             title: tool.safetyInfo.headline,
             path: path,
-            sizeBytes: cacheScanner.calculateFolderSize(at: path),
+            sizeBytes: tool.sizeBytes,
             safetyInfo: tool.safetyInfo,
             reinstallCommand: tool.safetyInfo.reinstallCommand,
             subtitle: nil,
