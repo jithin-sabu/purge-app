@@ -35,6 +35,20 @@ struct SkeletonBar: View {
     }
 }
 
+/// Horizontal skeleton bar that expands to the width of its container.
+struct SkeletonFillBar: View {
+    var height: CGFloat = 10
+    var cornerRadius: CGFloat = 4
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.secondary.opacity(SkeletonOpacity.medium))
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .accessibilityHidden(true)
+    }
+}
+
 struct SkeletonCircle: View {
     var diameter: CGFloat
 
@@ -68,16 +82,43 @@ struct ScanContentCrossfade<Loading: View, Loaded: View>: View {
     }
 }
 
+// MARK: - List loading surface
+
+/// Crossfades between the shared list skeleton and loaded results.
+/// App Caches and Dev Tools both use this so loading behavior stays identical.
+struct ScanResultsListLoadingSurface<Loaded: View>: View {
+    let isLoading: Bool
+    let skeletonRowCount: Int
+    @ViewBuilder var loaded: () -> Loaded
+
+    var body: some View {
+        ScanContentCrossfade(isLoading: isLoading) {
+            ScanListSkeletonPlaceholder(rowCount: skeletonRowCount)
+        } loaded: {
+            loaded()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 // MARK: - List placeholder
 
 /// List-shaped placeholder rows shown while a tab scan is in progress.
+///
+/// Renders the real `ScanResultRow` view in placeholder mode so the loading
+/// state shares identical paddings, fonts, stack directions, and list styling
+/// with the loaded state. The crossfade handled by `ScanContentCrossfade` then
+/// has no layout shift to fight.
 struct ScanListSkeletonPlaceholder: View {
     var rowCount: Int = SkeletonRowCount.defaultCount
 
     var body: some View {
         List {
             ForEach(0..<rowCount, id: \.self) { index in
-                skeletonRow(index: index)
+                ScanResultRow.placeholder(seed: index)
+                    .listRowInsets(ScanListRowInsets.standard)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
         }
         .listStyle(.inset)
@@ -85,51 +126,6 @@ struct ScanListSkeletonPlaceholder: View {
         .background(AppStyle.canvas)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading results")
-    }
-
-    private func skeletonRow(index: Int) -> some View {
-        let primaryWidth: CGFloat = 120 + CGFloat((index * 17) % 81)
-        let secondaryWidth: CGFloat = 140 + CGFloat((index * 13) % 60)
-        let trailingWidth: CGFloat = 52 + CGFloat((index * 11) % 24)
-        let badgeWidth: CGFloat = 72 + CGFloat((index * 7) % 20)
-
-        return HStack(alignment: .center, spacing: 10) {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.secondary.opacity(SkeletonOpacity.light))
-                .frame(width: 16, height: 16)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
-                HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.secondary.opacity(SkeletonOpacity.light))
-                        .frame(width: 28, height: 28)
-                        .accessibilityHidden(true)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        SkeletonBar(width: primaryWidth, height: 12)
-                        SkeletonBar(width: secondaryWidth, height: 9)
-                    }
-
-                    Spacer(minLength: AppStyle.Spacing.xSmall)
-
-                    SkeletonBar(width: trailingWidth, height: 10)
-                    SkeletonBar(width: badgeWidth, height: 18, cornerRadius: AppStyle.Radius.chip)
-                }
-            }
-        }
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 10)
-        .frame(minHeight: AppStyle.Row.listRowMinHeight, alignment: .leading)
-        .background(AppStyle.elevated, in: RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                .stroke(AppStyle.hairline)
-        }
-        .listRowInsets(ScanListRowInsets.standard)
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
-        .shimmering()
     }
 }
 

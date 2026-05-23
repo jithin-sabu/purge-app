@@ -567,9 +567,10 @@ struct DevToolsView: View {
             .disabled(isLoading)
 
             ZStack {
-                ScanContentCrossfade(isLoading: isLoading) {
-                    ScanListSkeletonPlaceholder(rowCount: skeletonRowCount)
-                } loaded: {
+                ScanResultsListLoadingSurface(
+                    isLoading: isLoading,
+                    skeletonRowCount: skeletonRowCount
+                ) {
                     if developerListEmpty {
                         placeholderNoData
                     } else if nothingMatchesFilter {

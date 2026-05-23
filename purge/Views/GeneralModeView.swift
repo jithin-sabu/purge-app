@@ -114,10 +114,6 @@ struct AppCachesView: View {
         !isLoading && !items.isEmpty && !visibleIndices.isEmpty
     }
 
-    private func isCacheMetadataPending(_ item: CacheItem) -> Bool {
-        store.isEnrichingGeneral && item.gitStatus == .unknown
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             AppSectionPageHeader(
@@ -161,9 +157,10 @@ struct AppCachesView: View {
             .disabled(isLoading)
 
             ZStack {
-                ScanContentCrossfade(isLoading: isLoading) {
-                    ScanListSkeletonPlaceholder(rowCount: skeletonRowCount)
-                } loaded: {
+                ScanResultsListLoadingSurface(
+                    isLoading: isLoading,
+                    skeletonRowCount: skeletonRowCount
+                ) {
                     if items.isEmpty {
                         emptyState
                     } else if visibleIndices.isEmpty {
@@ -238,7 +235,7 @@ struct AppCachesView: View {
                     onMarkDanger: { store.markCacheItem(id: itemID, as: .danger) },
                     onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
                     isUserOverride: store.userOverridePaths.contains(item.path.standardizedFileURL.path),
-                    isMetadataPending: isCacheMetadataPending(item)
+                    isMetadataPending: false
                 )
                 .listRowInsets(ScanListRowInsets.standard)
                 .listRowBackground(Color.clear)
