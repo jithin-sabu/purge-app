@@ -12,6 +12,7 @@ struct OnboardingFlowView: View {
   @StateObject private var revealController = OnboardingScanRevealController()
   @State private var celebrationFreedBytes: Int64 = 0
   @State private var pinnedCleanupCandidates: [PurgeStore.DeletionCandidate] = []
+  @State private var isResultsCleaning = false
 
   @AppStorage("onboarding.pendingCelebration") private var pendingCelebration = false
 
@@ -33,11 +34,23 @@ struct OnboardingFlowView: View {
           .padding(.top, step == .results ? AppStyle.Spacing.xSmall : AppStyle.Spacing.medium)
       }
     }
+
+    if let freedBytes = store.interactiveSafeCleanupFreedBytes {
+      SafeCleanupCelebrationOverlay(freedBytes: freedBytes) {
+        completeResultsCleanupCelebration()
+      }
+      .transition(reduceMotion ? .opacity : .safeCleanupCelebrationBlur)
+      .zIndex(50)
+    }
   }
   .onboardingExitBlur(isExiting: isExitingToHome, reduceMotion: reduceMotion)
   .animation(
     reduceMotion ? nil : .easeInOut(duration: OnboardingTransitions.dismissDuration),
     value: isExitingToHome
+  )
+  .animation(
+    reduceMotion ? nil : .easeInOut(duration: 0.35),
+    value: store.interactiveSafeCleanupFreedBytes != nil
   )
   .frame(
     minWidth: AppWindowLayout.width,
@@ -127,13 +140,16 @@ struct OnboardingFlowView: View {
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.bottom, AppStyle.Spacing.xxSmall)
-        OnboardingPrimaryButton(title: cleanNowTitle) {
-          pinnedCleanupCandidates = store.manualSafeCleanupCandidates()
-          advance(to: .cleaning)
+        OnboardingPrimaryButton(
+          title: isResultsCleaning ? "Cleaning..." : cleanNowTitle,
+          isLoading: isResultsCleaning
+        ) {
+          startResultsCleanup()
         }
         OnboardingSecondaryButton(title: "Review everything first", style: .outlined) {
           exitToReviewPath()
         }
+        .disabled(isResultsCleaning)
       default:
         EmptyView()
       }
@@ -179,6 +195,49 @@ struct OnboardingFlowView: View {
       try? await Task.sleep(for: .seconds(OnboardingTransitions.dismissDuration))
       guard isExitingToHome else { return }
       completeExitToHome()
+    }
+  }
+
+  private func startResultsCleanup() {
+    guard !isResultsCleaning else { return }
+    let candidates = store.manualSafeCleanupCandidates()
+    guard !candidates.isEmpty else { return }
+
+    pinnedCleanupCandidates = candidates
+    isResultsCleaning = true
+    guard store.beginInteractiveSafeCleanup(candidates: candidates, reduceMotion: reduceMotion) else {
+      isResultsCleaning = false
+      return
+    }
+
+    Task { @MainActor in
+      let summary = await store.performManualSafeCleanNow(pinnedCandidates: candidates)
+      if store.errorMessage == nil {
+        store.completeInteractiveSafeCleanup(freedBytes: summary.freedBytes)
+      } else {
+        isResultsCleaning = false
+        store.cancelInteractiveSafeCleanup()
+      }
+    }
+  }
+
+  private func completeResultsCleanupCelebration() {
+    isResultsCleaning = false
+    pendingCelebration = false
+
+    if reduceMotion {
+      store.dismissInteractiveSafeCleanupCelebration()
+      finishOnboarding()
+      return
+    }
+
+    withAnimation(.easeInOut(duration: 0.35)) {
+      store.dismissInteractiveSafeCleanupCelebration()
+    }
+
+    Task { @MainActor in
+      try? await Task.sleep(nanoseconds: 350_000_000)
+      finishOnboarding()
     }
   }
 

@@ -17,15 +17,21 @@ struct OnboardingLayout {
 struct OnboardingPrimaryButton: View {
   let title: String
   var isEnabled: Bool = true
+  var isLoading: Bool = false
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
-      Text(title)
+      CleaningButtonLabel(
+        title: title,
+        systemImage: nil,
+        isCleaning: isLoading,
+        spinnerTint: .white
+      )
         .frame(minWidth: OnboardingLayout.buttonWidth)
     }
     .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
-    .disabled(!isEnabled)
+    .disabled(!isEnabled || isLoading)
     .keyboardShortcut(.return, modifiers: [])
   }
 }

@@ -110,6 +110,8 @@ enum DeletionSafetyPolicy {
             "\(home)/.cargo/git",
             "\(home)/.terraform.d/plugin-cache",
             "\(home)/.vagrant.d/tmp",
+            "\(home)/.zsh_sessions",
+            "\(home)/.zcompdump",
             "\(home)/.cache/go-build",
             "\(home)/go/pkg/mod/cache",
             "\(home)/Library/Application Support/Code/Cache",

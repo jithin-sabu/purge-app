@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AppCachesView: View {
     @EnvironmentObject private var store: PurgeStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var items: [CacheItem]
     let isLoading: Bool
     let onScan: () -> Void
@@ -31,7 +32,9 @@ struct AppCachesView: View {
     }
 
     private var visibleIndices: [Int] {
-        items.indices.filter { currentSafetyFilter.matches(items[$0].safetyInfo) }
+        items.indices.filter {
+            currentSafetyFilter.matches(items[$0].safetyInfo) && !isVisuallyRemovedBySafeCleanup(items[$0])
+        }
     }
 
     /// Chip aggregates during scan use the last finished scan so the chip row doesn't resize from 0 mid-scan.
@@ -167,7 +170,7 @@ struct AppCachesView: View {
                     }
                 }
 
-                if store.isDeleting && showsListContent {
+                if store.isDeleting && showsListContent && !store.isInteractiveSafeCleanupInProgress {
                     CleaningOverlay()
                 }
             }
@@ -239,11 +242,29 @@ struct AppCachesView: View {
                 .listRowInsets(ScanListRowInsets.standard)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+                .transition(cleaningRowRemovalTransition)
             }
         }
         .listStyle(.inset)
         .scrollContentBackground(.hidden)
         .background(AppStyle.canvas)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
+    }
+
+    private var cleaningRowRemovalTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .asymmetric(
+                insertion: .identity,
+                removal: .opacity.combined(with: .move(edge: .trailing))
+            )
+    }
+
+    private func isVisuallyRemovedBySafeCleanup(_ item: CacheItem) -> Bool {
+        let rowPaths = Set(item.locations.map { $0.path.standardizedFileURL.path })
+        let targetedPaths = rowPaths.intersection(store.interactiveSafeCleanupTargetPaths)
+        guard !targetedPaths.isEmpty else { return false }
+        return targetedPaths.isSubset(of: store.interactiveSafeCleanupRemovedPaths)
     }
 
     private var emptyFilterState: some View {

@@ -11,6 +11,7 @@ struct ContentView: View {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 
@@ -77,6 +78,14 @@ struct ContentView: View {
             )
         }
         .overlay {
+            if let freedBytes = store.interactiveSafeCleanupFreedBytes {
+                SafeCleanupCelebrationOverlay(freedBytes: freedBytes) {
+                    completeInteractiveSafeCleanupCelebration()
+                }
+                .transition(reduceMotion ? .opacity : .safeCleanupCelebrationBlur)
+                .zIndex(90)
+            }
+
             if let freedBytes = store.onboardingCelebrationFreedBytes {
                 OnboardingCelebrationView(freedBytes: freedBytes) {
                     completeOnboardingCelebration(freedBytes: freedBytes)
@@ -85,6 +94,10 @@ struct ContentView: View {
                 .zIndex(100)
             }
         }
+        .animation(
+            reduceMotion ? nil : .easeInOut(duration: 0.35),
+            value: store.interactiveSafeCleanupFreedBytes != nil
+        )
         .alert(
             "Missing reinstall instructions",
             isPresented: $store.showMissingLockfileFriction
@@ -142,6 +155,25 @@ struct ContentView: View {
         .modifier(DiskSummaryRefreshModifier())
     }
 
+    private func completeInteractiveSafeCleanupCelebration() {
+        if reduceMotion {
+            store.dismissInteractiveSafeCleanupCelebration()
+            diskStore.refresh()
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.35)) {
+            store.dismissInteractiveSafeCleanupCelebration()
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            withAnimation(.easeInOut(duration: 0.6)) {
+                diskStore.refresh()
+            }
+        }
+    }
+
     private func completeOnboardingCelebration(freedBytes: Int64) {
         _ = freedBytes
         pendingOnboardingCelebration = false
@@ -192,12 +224,12 @@ struct ContentView: View {
                 AppCachesView(
                     items: $store.cacheItems,
                     isLoading: store.isScanningGeneral || store.isScanningAll,
-                    onScan: { Task { await store.scanGeneral() } }
+                    onScan: { Task { await store.scanAll() } }
                 )
             case .devTools:
                 DevToolsView(
                     isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    onScan: { Task { await store.scanDeveloper() } }
+                    onScan: { Task { await store.scanAll() } }
                 )
             case .settings:
                 SettingsView()
@@ -230,6 +262,7 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
 struct SidebarSummaryView: View {
     @EnvironmentObject var store: PurgeStore
     @EnvironmentObject var diskStore: DiskSummaryStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum SummaryFont {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
@@ -248,9 +281,7 @@ struct SidebarSummaryView: View {
                     .padding(.top, AppStyle.Spacing.small)
                     .padding(.bottom, AppStyle.Spacing.small)
 
-                if store.safeRecoverableBytes > 0 {
-                    cleanButton
-                }
+                cleanButton
             }
             .padding(.horizontal, AppStyle.Spacing.small)
             .padding(.bottom, 10)
@@ -274,12 +305,15 @@ struct SidebarSummaryView: View {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color.primary.opacity(0.3))
                         .frame(width: usedFraction * width, height: 8)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: diskStore.usedDiskBytes)
 
                     if safeRecoverableFraction > 0 {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(AppStyle.safe.opacity(0.5))
                             .frame(width: safeRecoverableFraction * width, height: 8)
                             .offset(x: max(0, (usedFraction - safeRecoverableFraction) * width))
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: store.safeRecoverableBytes)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: diskStore.usedDiskBytes)
                     }
                 }
             }
@@ -316,7 +350,8 @@ struct SidebarSummaryView: View {
             label: SafetyLevel.safe.displayName,
             value: formatBytes(store.safeRecoverableBytes),
             color: AppStyle.safe,
-            valueColor: store.safeRecoverableBytes > 0 ? .primary : .secondary
+            valueColor: store.safeRecoverableBytes > 0 ? .primary : .secondary,
+            animationValue: store.safeRecoverableBytes
         )
     }
 
@@ -325,7 +360,8 @@ struct SidebarSummaryView: View {
         label: String,
         value: String,
         color: Color,
-        valueColor: Color
+        valueColor: Color,
+        animationValue: Int64
     ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
@@ -343,21 +379,58 @@ struct SidebarSummaryView: View {
                 .font(SummaryFont.value)
                 .foregroundStyle(valueColor)
                 .monospacedDigit()
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: animationValue)
         }
     }
 
     private var cleanButton: some View {
         Button {
-            Task { await store.performManualSafeCleanNow() }
+            startInteractiveSafeCleanup()
         } label: {
-            Label("Clean Safe Items", systemImage: "sparkles")
-                .labelStyle(.titleAndIcon)
+            CleaningButtonLabel(
+                title: cleanButtonTitle,
+                systemImage: cleanButtonSystemImage,
+                isCleaning: store.isInteractiveSafeCleanupInProgress
+            )
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
         }
         .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
-        .disabled(store.isDeleting)
+        .disabled(!canCleanSafeItems || store.isDeleting || store.isInteractiveSafeCleanupInProgress)
+    }
+
+    private var canCleanSafeItems: Bool {
+        store.safeRecoverableBytes > 0
+    }
+
+    private var cleanButtonTitle: String {
+        if store.isInteractiveSafeCleanupInProgress {
+            return "Cleaning..."
+        }
+        return canCleanSafeItems ? "Clean Safe Items" : "All clean"
+    }
+
+    private var cleanButtonSystemImage: String? {
+        if store.isInteractiveSafeCleanupInProgress {
+            return nil
+        }
+        return canCleanSafeItems ? "sparkles" : "checkmark.circle.fill"
+    }
+
+    private func startInteractiveSafeCleanup() {
+        let candidates = store.manualSafeCleanupCandidates()
+        guard store.beginInteractiveSafeCleanup(candidates: candidates, reduceMotion: reduceMotion) else { return }
+
+        Task { @MainActor in
+            let summary = await store.performManualSafeCleanNow(pinnedCandidates: candidates)
+            if store.errorMessage == nil {
+                store.completeInteractiveSafeCleanup(freedBytes: summary.freedBytes)
+            } else {
+                store.cancelInteractiveSafeCleanup()
+            }
+        }
     }
 
     private var usedFraction: Double {

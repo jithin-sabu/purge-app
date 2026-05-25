@@ -88,6 +88,9 @@ final class PurgeStore: ObservableObject {
     @Published var lastDeletionReport: DeletionReport?
     /// When set, `ContentView` shows the onboarding celebration overlay instead of `DeletionSummarySheet`.
     @Published var onboardingCelebrationFreedBytes: Int64?
+    @Published private(set) var interactiveSafeCleanupTargetPaths: Set<String> = []
+    @Published private(set) var interactiveSafeCleanupRemovedPaths: Set<String> = []
+    @Published private(set) var interactiveSafeCleanupFreedBytes: Int64?
     @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
     @Published var totalRecoveredBytes: Int64 = 0
 
@@ -107,6 +110,7 @@ final class PurgeStore: ObservableObject {
 
     /// Cancels stale async simulator sizing when a new dev scan starts.
     private var simulatorSizingGeneration = 0
+    private var interactiveSafeCleanupRemovalTask: Task<Void, Never>?
 
     /// After the primary confirm sheet runs, extra warnings may enqueue here.
     private var stagedDeletionCandidates: [DeletionCandidate]?
@@ -174,6 +178,10 @@ final class PurgeStore: ObservableObject {
 
     var safeRecoverableBytes: Int64 {
         safeCleanupSummary.totalBytes
+    }
+
+    var isInteractiveSafeCleanupInProgress: Bool {
+        !interactiveSafeCleanupTargetPaths.isEmpty && interactiveSafeCleanupFreedBytes == nil
     }
 
     /// Paths that match the same safety, git, lockfile, and staleness rules used by manual safe cleanup.
@@ -721,6 +729,65 @@ final class PurgeStore: ObservableObject {
         )
         publishOnboardingCelebrationIfNeeded(freedBytes: summary.freedBytes)
         return summary
+    }
+
+    func beginInteractiveSafeCleanup(
+        candidates: [DeletionCandidate],
+        reduceMotion: Bool
+    ) -> Bool {
+        guard !isDeleting, interactiveSafeCleanupTargetPaths.isEmpty else { return false }
+        let orderedPaths = Self.uniqueStandardizedPaths(for: candidates)
+        guard !orderedPaths.isEmpty else { return false }
+
+        errorMessage = nil
+        interactiveSafeCleanupRemovalTask?.cancel()
+        interactiveSafeCleanupFreedBytes = nil
+        interactiveSafeCleanupTargetPaths = Set(orderedPaths)
+
+        if reduceMotion {
+            interactiveSafeCleanupRemovedPaths = Set(orderedPaths)
+        } else {
+            interactiveSafeCleanupRemovedPaths = []
+            interactiveSafeCleanupRemovalTask = Task { @MainActor [weak self] in
+                for path in orderedPaths {
+                    guard let self, !Task.isCancelled else { return }
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        self.interactiveSafeCleanupRemovedPaths.insert(path)
+                    }
+                    try? await Task.sleep(nanoseconds: 80_000_000)
+                }
+            }
+        }
+
+        return true
+    }
+
+    func completeInteractiveSafeCleanup(freedBytes: Int64) {
+        interactiveSafeCleanupFreedBytes = freedBytes
+    }
+
+    func cancelInteractiveSafeCleanup() {
+        interactiveSafeCleanupRemovalTask?.cancel()
+        interactiveSafeCleanupRemovalTask = nil
+        interactiveSafeCleanupTargetPaths = []
+        interactiveSafeCleanupRemovedPaths = []
+        interactiveSafeCleanupFreedBytes = nil
+    }
+
+    func dismissInteractiveSafeCleanupCelebration() {
+        cancelInteractiveSafeCleanup()
+    }
+
+    private static func uniqueStandardizedPaths(for candidates: [DeletionCandidate]) -> [String] {
+        var seen = Set<String>()
+        var paths: [String] = []
+        for candidate in candidates {
+            let path = candidate.path.standardizedFileURL.path
+            guard !seen.contains(path) else { continue }
+            seen.insert(path)
+            paths.append(path)
+        }
+        return paths
     }
 
     static let pendingOnboardingCelebrationKey = "onboarding.pendingCelebration"

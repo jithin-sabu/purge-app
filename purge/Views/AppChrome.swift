@@ -124,6 +124,176 @@ struct AppCleanSelectedButton: View {
     }
 }
 
+struct CleaningButtonLabel: View {
+    let title: String
+    let systemImage: String?
+    var isCleaning: Bool = false
+    var spinnerTint: Color = AppStyle.accent
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if isCleaning {
+                if reduceMotion {
+                    Image(systemName: "clock")
+                        .font(.system(size: 12, weight: .semibold))
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.62)
+                        .frame(width: 13, height: 13)
+                        .tint(spinnerTint)
+                }
+            } else if let systemImage {
+                Image(systemName: systemImage)
+            }
+
+            Text(title)
+        }
+        .labelStyle(.titleAndIcon)
+    }
+}
+
+struct SafeCleanupCelebrationOverlay: View {
+    let freedBytes: Int64
+    let onDone: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var checkmarkProgress: CGFloat = 0
+
+    private let celebrationAccent = AppStyle.accent
+    private let sheetBackground = Color(
+        light: NSColor(calibratedWhite: 0.08, alpha: 1),
+        dark: NSColor(calibratedWhite: 0.08, alpha: 1)
+    )
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.38)
+                .ignoresSafeArea()
+
+            VStack(spacing: AppStyle.Spacing.large) {
+                Spacer(minLength: 0)
+
+                AnimatedCompletionCheckmark(progress: checkmarkProgress, color: celebrationAccent)
+                    .frame(width: 104, height: 104)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: AppStyle.Spacing.small) {
+                    Text("\(formatBytes(freedBytes)) freed")
+                        .font(.system(size: 54, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                        .multilineTextAlignment(.center)
+                        .accessibilityAddTraits(.isHeader)
+
+                    if let comparisonItems = OnboardingSizeComparison.items(for: freedBytes) {
+                        OnboardingSizeComparisonLine(items: comparisonItems)
+                            .foregroundStyle(.white.opacity(0.78))
+                    }
+
+                    Text(encouragement)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, AppStyle.Spacing.xSmall)
+                }
+                .frame(maxWidth: 560)
+
+                Spacer(minLength: 0)
+
+                Button(action: onDone) {
+                    Text("Done")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: 300)
+                        .padding(.vertical, 11)
+                        .background(celebrationAccent, in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 52)
+            .padding(.vertical, 44)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(sheetBackground)
+            .accessibilityElement(children: .contain)
+        }
+        .onAppear {
+            if reduceMotion {
+                checkmarkProgress = 1
+            } else {
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    checkmarkProgress = 1
+                }
+            }
+        }
+        .environment(\.colorScheme, .dark)
+    }
+
+    private var encouragement: String {
+        let oneMegabyte: Int64 = 1024 * 1024
+        let oneGigabyte: Int64 = 1024 * 1024 * 1024
+
+        switch freedBytes {
+        case ..<(500 * oneMegabyte):
+            return "Your Mac is a little lighter. Every byte counts."
+        case ..<(2 * oneGigabyte):
+            return "Nice. Your Mac is breathing easier."
+        case ..<(10 * oneGigabyte):
+            return "That's a serious clean. Your Mac thanks you."
+        default:
+            return "Wow. Your Mac feels brand new."
+        }
+    }
+}
+
+private struct AnimatedCompletionCheckmark: View {
+    let progress: CGFloat
+    let color: Color
+
+    var body: some View {
+        CompletionCheckmarkShape()
+            .trim(from: 0, to: progress)
+            .stroke(
+                color,
+                style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round)
+            )
+    }
+}
+
+private struct CompletionCheckmarkShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + rect.width * 0.18, y: rect.minY + rect.height * 0.56))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.42, y: rect.minY + rect.height * 0.78))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.84, y: rect.minY + rect.height * 0.26))
+        return path
+    }
+}
+
+struct SafeCleanupCelebrationBlurModifier: ViewModifier {
+    let radius: CGFloat
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: radius)
+            .opacity(opacity)
+    }
+}
+
+extension AnyTransition {
+    static var safeCleanupCelebrationBlur: AnyTransition {
+        .modifier(
+            active: SafeCleanupCelebrationBlurModifier(radius: 18, opacity: 0),
+            identity: SafeCleanupCelebrationBlurModifier(radius: 0, opacity: 1)
+        )
+    }
+}
+
 struct AppPageHeader<Trailing: View>: View {
     let title: String
     let subtitle: String
