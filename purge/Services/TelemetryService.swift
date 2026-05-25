@@ -28,9 +28,36 @@ struct TelemetryPayload: Encodable {
     let appVersion: String
     let macOSVersion: String
     let totalCount: Int
-    let unknownCount: Int
-    let allFolderNames: String
-    let unknownFolderNames: String
+    /// Newline-separated `folderName<TAB>category` rows (`safe` or `medium` only).
+    let folderCategories: String
+
+    var folderCategoryRows: [TelemetryFolderCategoryRow] {
+        Self.parseFolderCategories(folderCategories)
+    }
+}
+
+struct TelemetryFolderCategoryRow: Identifiable, Hashable {
+    let folderName: String
+    let category: SafetyLevel
+
+    var id: String { "\(folderName)\t\(category.rawValue)" }
+
+    var categoryLabel: String { category.displayName }
+}
+
+extension TelemetryPayload {
+    static func parseFolderCategories(_ text: String) -> [TelemetryFolderCategoryRow] {
+        text
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                let parts = trimmed.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
+                guard parts.count == 2,
+                      let category = SafetyLevel(rawValue: String(parts[1])) else { return nil }
+                return TelemetryFolderCategoryRow(folderName: String(parts[0]), category: category)
+            }
+    }
 }
 
 enum TelemetryError: Error {
@@ -39,9 +66,11 @@ enum TelemetryError: Error {
 }
 
 enum TelemetryService {
-    private struct ScanItem {
-        let path: URL
-        let sizeBytes: Int64
+    /// Only these levels are included in anonymous reports.
+    private static let includedSafetyLevels: Set<SafetyLevel> = [.safe, .medium]
+
+    private struct CacheTelemetryRow {
+        let folderName: String
         let safetyLevel: SafetyLevel
     }
 
@@ -95,49 +124,33 @@ enum TelemetryService {
 
     @MainActor
     static func makePayload(from store: PurgeStore, submissionDate: Date = Date()) -> TelemetryPayload {
-        let items = scanItems(from: store)
-        let allNames = deduplicatedSortedFolderNames(from: items.map(\.path))
-        let unknownNames = deduplicatedSortedFolderNames(
-            from: items.filter { $0.safetyLevel == .unknown }.map(\.path)
-        )
+        let rows = cacheTelemetryRows(from: store)
+        let folderCategories = rows
+            .map { "\($0.folderName)\t\($0.safetyLevel.rawValue)" }
+            .joined(separator: "\n")
 
         return TelemetryPayload(
             submissionDate: ISO8601DateFormatter().string(from: submissionDate),
             appVersion: appVersion,
             macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-            totalCount: allNames.count,
-            unknownCount: unknownNames.count,
-            allFolderNames: allNames.joined(separator: ", "),
-            unknownFolderNames: unknownNames.joined(separator: ", ")
+            totalCount: rows.count,
+            folderCategories: folderCategories
         )
     }
 
-    private static func deduplicatedSortedFolderNames(from paths: [URL]) -> [String] {
-        let names = paths.map(\.lastPathComponent).filter { !$0.isEmpty }
-        return Array(Set(names)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-
     @MainActor
-    private static func scanItems(from store: PurgeStore) -> [ScanItem] {
-        let cacheItems = store.cacheItems.map {
-            ScanItem(path: $0.path, sizeBytes: $0.sizeBytes, safetyLevel: $0.safetyInfo.level)
-        }
-
-        let devToolItems = store.devTools
-            .filter(\.isDetected)
-            .map { tool in
-                ScanItem(
-                    path: tool.primaryOverridePath ?? URL(fileURLWithPath: tool.toolName),
-                    sizeBytes: tool.sizeBytes,
-                    safetyLevel: tool.safetyInfo.level
+    private static func cacheTelemetryRows(from store: PurgeStore) -> [CacheTelemetryRow] {
+        store.cacheItems
+            .filter { includedSafetyLevels.contains($0.safetyInfo.level) }
+            .map { item in
+                CacheTelemetryRow(
+                    folderName: item.bundleID,
+                    safetyLevel: item.safetyInfo.level
                 )
             }
-
-        let projectItems = store.projectGroups.flatMap(\.artifacts).map {
-            ScanItem(path: $0.path, sizeBytes: $0.sizeBytes, safetyLevel: $0.safetyInfo.level)
-        }
-
-        return cacheItems + devToolItems + projectItems
+            .sorted {
+                $0.folderName.localizedCaseInsensitiveCompare($1.folderName) == .orderedAscending
+            }
     }
 
     private static var appVersion: String {

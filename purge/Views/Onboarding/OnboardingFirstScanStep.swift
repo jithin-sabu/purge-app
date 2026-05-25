@@ -48,8 +48,10 @@ struct OnboardingFirstScanStep: View {
       scanStarted = true
       Task { await store.scanAll() }
       revealController.startReveal(
-        itemProvider: { Self.findings(from: store) },
-        scanFinished: { !store.isScanningAll },
+        itemProvider: { store.onboardingScanFindings() },
+        scanFinished: {
+          !store.isScanningAll && !store.isEnrichingGeneral && !store.isEnrichingDeveloper
+        },
         onReadyForResults: onScanComplete
       )
     }
@@ -61,20 +63,5 @@ struct OnboardingFirstScanStep: View {
   private var combinedProgress: Double {
     let scanProgress: Double = store.isScanningAll ? 0.65 : 1
     return min(1, max(revealController.simulatedProgress, scanProgress * 0.35 + revealController.simulatedProgress * 0.65))
-  }
-
-  static func findings(from store: PurgeStore) -> [OnboardingScanFinding] {
-    var results: [OnboardingScanFinding] = []
-
-    for item in store.cacheItems.sorted(by: { $0.sizeBytes > $1.sizeBytes }).prefix(5) {
-      results.append(OnboardingScanFinding(title: item.appName, formattedSize: formatBytes(item.sizeBytes)))
-    }
-    for tool in store.devTools.filter(\.isDetected).sorted(by: { $0.sizeBytes > $1.sizeBytes }).prefix(3) {
-      results.append(OnboardingScanFinding(title: tool.toolName, formattedSize: formatBytes(tool.sizeBytes)))
-    }
-    for artifact in store.projectGroups.flatMap(\.artifacts).sorted(by: { $0.sizeBytes > $1.sizeBytes }).prefix(2) {
-      results.append(OnboardingScanFinding(title: artifact.kind.rowTag, formattedSize: formatBytes(artifact.sizeBytes)))
-    }
-    return results
   }
 }

@@ -21,6 +21,10 @@ struct DeletionSummarySheet: View {
         return n == 1 ? "across 1 item" : "across \(n) items"
     }
 
+    private var userVisibleSkippedItems: [SkippedDeletionItem] {
+        report.skippedItems.filter(\.isUserVisible)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             successHeader
@@ -72,14 +76,14 @@ struct DeletionSummarySheet: View {
                 .frame(maxHeight: 160)
             }
 
-            if !report.skippedItems.isEmpty {
+            if !userVisibleSkippedItems.isEmpty {
                 Divider()
                     .padding(.vertical, 12)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Skipped for safety (\(report.skippedItems.count))")
+                    Text("Skipped for safety (\(userVisibleSkippedItems.count))")
                         .font(.headline)
-                    List(report.skippedItems) { item in
+                    List(userVisibleSkippedItems) { item in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.path)
                                 .lineLimit(1)

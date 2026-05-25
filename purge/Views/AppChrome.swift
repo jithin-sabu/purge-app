@@ -25,6 +25,8 @@ enum SidebarLayout {
     static let horizontalInset: CGFloat = 8
     static let navRowInnerPadding: CGFloat = 8
     static let selectionCornerRadius: CGFloat = 6
+    /// Clears unified title-bar traffic lights without the extra safe-area gap.
+    static let topContentInset: CGFloat = 36
 }
 
 /// Shared horizontal inset for Settings-style detail pages (App Caches, Dev Tools, Settings).
@@ -494,6 +496,15 @@ private struct SidebarToolbarModifier: ViewModifier {
     }
 }
 
+/// Pulls sidebar header + nav up under the unified toolbar (tighter than default safe area).
+private struct SidebarCompactTopModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
 private extension NSView {
     func firstDescendant(where predicate: (NSView) -> Bool) -> NSView? {
         if predicate(self) { return self }
@@ -517,6 +528,10 @@ extension View {
 
     func sidebarToolbarHidden() -> some View {
         modifier(SidebarToolbarModifier())
+    }
+
+    func sidebarCompactTop() -> some View {
+        modifier(SidebarCompactTopModifier())
     }
 }
 

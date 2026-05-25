@@ -301,6 +301,12 @@ struct DevToolsView: View {
         }
     }
 
+    private func visibleGroupByteTotal(groupIndex gi: Int) -> Int64 {
+        sortedVisibleArtifactIndices(forGroup: gi).reduce(Int64(0)) { sum, ai in
+            sum + store.projectGroups[gi].artifacts[ai].sizeBytes
+        }
+    }
+
     private func sortedVisibleArtifactIndices(forGroup gi: Int) -> [Int] {
         let g = store.projectGroups[gi]
         let raw = g.artifacts.indices.filter { artifactVisible(g.artifacts[$0].safetyInfo) }
@@ -497,6 +503,9 @@ struct DevToolsView: View {
     }
 
     private var developerVisibleByteSize: Int64 {
+        if currentSafetyFilter == .safe {
+            return store.safeCleanupSummary.devToolsTabBytes
+        }
         var sum = Int64(0)
         for entry in mergedStandardRowEntries() {
             switch entry {
@@ -596,6 +605,8 @@ struct DevToolsView: View {
         .background(AppStyle.canvas)
         .onAppear {
             syncDisplayedDeveloperSnapshotIfIdle()
+            guard !isLoading else { return }
+            store.refreshDetectedDevToolSizes()
         }
         .onChange(of: isLoading) { scanning in
             if !scanning {
@@ -848,6 +859,10 @@ struct DevToolsView: View {
                         Text(group.displayName)
                             .font(AppStyle.Typography.rowTitle)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(formatBytes(visibleGroupByteTotal(groupIndex: gi)))
+                            .font(AppStyle.Typography.rowTitle)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.secondary)

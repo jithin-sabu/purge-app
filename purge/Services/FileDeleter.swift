@@ -89,10 +89,12 @@ final class FileDeleter {
                                 try FileManager.default.removeItem(at: contentURL)
                                 didDeleteAnyContent = true
                             } catch {
-                                failedItems.append(FailedDeletionItem(
+                                recordDeletionFailure(
                                     path: contentURL.path,
-                                    reason: error.localizedDescription
-                                ))
+                                    error: error,
+                                    failedItems: &failedItems,
+                                    skippedItems: &skippedItems
+                                )
                             }
                         }
                     }
@@ -119,7 +121,12 @@ final class FileDeleter {
                         totalDeleted += size
                         deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
                     } catch {
-                        failedItems.append(FailedDeletionItem(path: url.path, reason: error.localizedDescription))
+                        recordDeletionFailure(
+                            path: url.path,
+                            error: error,
+                            failedItems: &failedItems,
+                            skippedItems: &skippedItems
+                        )
                     }
                 }
 
@@ -189,6 +196,36 @@ final class FileDeleter {
             return .failure(errText)
         }
         return .failure("simctl delete failed (exit \(process.terminationStatus))")
+    }
+
+    private func recordDeletionFailure(
+        path: String,
+        error: Error,
+        failedItems: inout [FailedDeletionItem],
+        skippedItems: inout [SkippedDeletionItem]
+    ) {
+        if Self.isPermissionDenied(error) {
+            skippedItems.append(
+                SkippedDeletionItem(
+                    path: path,
+                    reason: "Protected by macOS — cannot be removed.",
+                    isUserVisible: true
+                )
+            )
+        } else {
+            failedItems.append(FailedDeletionItem(path: path, reason: error.localizedDescription))
+        }
+    }
+
+    private static func isPermissionDenied(_ error: Error) -> Bool {
+        let ns = error as NSError
+        if ns.domain == NSCocoaErrorDomain {
+            return ns.code == NSFileWriteNoPermissionError || ns.code == NSFileReadNoPermissionError
+        }
+        if ns.domain == NSPOSIXErrorDomain {
+            return ns.code == Int(EACCES) || ns.code == Int(EPERM)
+        }
+        return false
     }
 
     private func volumeCapacitySnapshot(for url: URL) -> (total: Int64, available: Int64) {

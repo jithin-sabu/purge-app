@@ -26,6 +26,12 @@ enum DeletionSafetyDecision: Equatable {
 /// Both manual and scheduled cleanup must run paths through `evaluate(_:)` before
 /// touching the disk. Any path not explicitly allowed is refused.
 enum DeletionSafetyPolicy {
+    /// macOS-protected folders under ~/Library/Caches that cannot be removed even with Full Disk Access.
+    nonisolated static let protectedSystemCacheFolderNames: Set<String> = [
+        "CloudKit",
+        "FamilyCircle"
+    ]
+
     /// Folder names allowed to be removed when located anywhere inside the user's home.
     nonisolated static let whitelistedFolderNames: Set<String> = [
         "node_modules",
@@ -43,7 +49,8 @@ enum DeletionSafetyPolicy {
         ".cache",
         "__pycache__",
         ".turbo",
-        ".parcel-cache"
+        ".parcel-cache",
+        ".dart_tool"
     ]
 
     /// Sensitive locations whose path or any descendant must never be removed.
@@ -140,11 +147,27 @@ enum DeletionSafetyPolicy {
         return contentsOnlyPrefixes(home: home).contains(path)
     }
 
+    nonisolated static func isProtectedSystemCache(_ url: URL) -> Bool {
+        let standardized = url.standardizedFileURL
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let cachesPrefix = "\(home)/Library/Caches"
+        let path = standardized.path
+        guard path.hasPrefix(cachesPrefix + "/") else { return false }
+
+        let relative = String(path.dropFirst(cachesPrefix.count + 1))
+        let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
+        return protectedSystemCacheFolderNames.contains(topFolder)
+    }
+
     nonisolated static func evaluate(_ url: URL) -> DeletionSafetyDecision {
         let standardized = url.standardizedFileURL
         let path = standardized.path
         let homeURL = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         let home = homeURL.path
+
+        if isProtectedSystemCache(standardized) {
+            return .blockedNeverDelete
+        }
 
         for allowed in whitelistedAbsolutePrefixes(home: home) {
             if path == allowed || path.hasPrefix(allowed + "/") {

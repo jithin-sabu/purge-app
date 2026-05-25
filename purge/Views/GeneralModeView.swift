@@ -96,7 +96,10 @@ struct AppCachesView: View {
     }
 
     private var visibleTotalSize: Int64 {
-        visibleIndices.reduce(Int64(0)) { sum, index in sum + items[index].sizeBytes }
+        if currentSafetyFilter == .safe {
+            return store.safeCleanupSummary.appCacheBytes
+        }
+        return visibleIndices.reduce(Int64(0)) { sum, index in sum + items[index].sizeBytes }
     }
 
     private var pageSubtitle: String {

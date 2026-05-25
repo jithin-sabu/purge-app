@@ -3,11 +3,13 @@ import Foundation
 
 @MainActor
 final class CacheScanner {
-    private let excludedFromGeneralScan: Set<String> = [
-        "com.docker.docker",
-        "com.docker.helper",
-        "com.docker.backend"
-    ]
+    private var excludedFromGeneralScan: Set<String> {
+        DeletionSafetyPolicy.protectedSystemCacheFolderNames.union([
+            "com.docker.docker",
+            "com.docker.helper",
+            "com.docker.backend"
+        ])
+    }
 
     func scanCaches() async -> [CacheItem] {
         let home = FileManager.default.homeDirectoryForCurrentUser

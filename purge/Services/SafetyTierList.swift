@@ -26,7 +26,8 @@ enum SafetyTierList {
         "pnpm",
         "pip",
         "cocoapods",
-        "Pods"
+        "Pods",
+        ".dart_tool"
     ]
 
     /// Bundle ID prefixes we are certain are safe app caches.

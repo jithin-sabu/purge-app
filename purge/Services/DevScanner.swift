@@ -414,7 +414,25 @@ final class DevScanner {
 
     // MARK: - Folder sizing (hard-link-aware)
 
-    private func accurateFolderSize(at url: URL) -> Int64 {
+    /// Dev tool labels sized with `du` instead of a manual file walk (large Xcode/Docker trees).
+    nonisolated static let xcodeAndDockerToolLabels: Set<String> = [
+        "Xcode Derived Data",
+        "Xcode Archives",
+        "Xcode iOS DeviceSupport",
+        "Xcode Caches",
+        "Docker Desktop"
+    ]
+
+    /// Shared dev-tool path sizing used by scans, list rows, and safe cleanup totals.
+    nonisolated static func pathByteSize(toolLabel: String, at url: URL) -> Int64 {
+        guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
+        if xcodeAndDockerToolLabels.contains(toolLabel) {
+            return accurateFolderSize(at: url)
+        }
+        return FolderSizing.directoryByteSize(at: url)
+    }
+
+    nonisolated static func accurateFolderSize(at url: URL) -> Int64 {
         guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
 
         let process = Process()
@@ -438,12 +456,11 @@ final class DevScanner {
                 encoding: .utf8
             ) ?? ""
 
-            // du -sk returns "SIZE\tPATH" where SIZE is in 512-byte blocks
-            // multiply by 512 to get bytes
+            // du -sk reports size in 1024-byte blocks (kilobytes).
             let parts = output.trimmingCharacters(in: .whitespacesAndNewlines)
                 .components(separatedBy: "\t")
-            if let blocks = Int64(parts.first ?? "") {
-                return blocks * 512
+            if let kilobytes = Int64(parts.first ?? "") {
+                return kilobytes * 1024
             }
 
             return FolderSizing.directoryByteSize(at: url)
@@ -558,14 +575,6 @@ final class DevScanner {
             ])
         ]
 
-        let xcodeAndDockerLabels: Set<String> = [
-            "Xcode Derived Data",
-            "Xcode Archives",
-            "Xcode iOS DeviceSupport",
-            "Xcode Caches",
-            "Docker Desktop"
-        ]
-
         let built = mapped.map { entry -> DevTool in
             let label = entry.0
             let paths = entry.1
@@ -573,15 +582,8 @@ final class DevScanner {
                 FileManager.default.fileExists(atPath: $0.path)
             }
 
-            let size: Int64
-            if xcodeAndDockerLabels.contains(label) {
-                size = existing.reduce(Int64(0)) {
-                    $0 + accurateFolderSize(at: $1)
-                }
-            } else {
-                size = existing.reduce(Int64(0)) {
-                    $0 + FolderSizing.directoryByteSize(at: $1)
-                }
+            let size = existing.reduce(Int64(0)) {
+                $0 + Self.pathByteSize(toolLabel: label, at: $1)
             }
 
             let definitionKey = Self.toolExplanationKeys[label] ?? label
@@ -628,19 +630,9 @@ final class DevScanner {
             }
         }
 
-        let xcodeAndDockerLabels: Set<String> = [
-            "Xcode Derived Data",
-            "Xcode Archives",
-            "Xcode iOS DeviceSupport",
-            "Xcode Caches",
-            "Docker Desktop"
-        ]
         let existing = mergedPaths.filter { FileManager.default.fileExists(atPath: $0.path) }
-        let size: Int64
-        if members.contains(where: { xcodeAndDockerLabels.contains($0.toolName) }) {
-            size = existing.reduce(Int64(0)) { $0 + accurateFolderSize(at: $1) }
-        } else {
-            size = existing.reduce(Int64(0)) { $0 + FolderSizing.directoryByteSize(at: $1) }
+        let size = existing.reduce(Int64(0)) {
+            $0 + Self.pathByteSize(toolLabel: anchor.toolName, at: $1)
         }
 
         return DevTool(

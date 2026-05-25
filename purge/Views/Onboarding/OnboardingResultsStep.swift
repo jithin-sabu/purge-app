@@ -13,32 +13,23 @@ extension PurgeStore {
     var browserBytes: Int64 = 0
     var appCacheBytes: Int64 = 0
     var systemJunkBytes: Int64 = 0
+    var devArtifactBytes: Int64 = 0
 
-    for item in cacheItems {
-      let size = item.sizeBytes
-      guard size > 0 else { continue }
-
-      if Self.isBrowserCacheItem(item) {
-        browserBytes += size
-      } else if Self.isSystemJunkCacheItem(item) {
-        systemJunkBytes += size
+    for candidate in manualSafeCleanupCandidates() {
+      if let item = cacheItems.first(where: { cacheItem in
+        cacheItem.locations.contains { $0.path.standardizedFileURL.path == candidate.path.standardizedFileURL.path }
+      }) {
+        if Self.isBrowserCacheItem(item) {
+          browserBytes += candidate.sizeBytes
+        } else if Self.isSystemJunkCacheItem(item) {
+          systemJunkBytes += candidate.sizeBytes
+        } else {
+          appCacheBytes += candidate.sizeBytes
+        }
       } else {
-        appCacheBytes += size
+        devArtifactBytes += candidate.sizeBytes
       }
     }
-
-    let devToolBytes = devTools
-      .filter(\.isDetected)
-      .reduce(Int64(0)) { $0 + $1.sizeBytes }
-
-    let simulatorBytes = simulatorDevices
-      .reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
-
-    let projectArtifactBytes = projectGroups
-      .flatMap(\.artifacts)
-      .reduce(Int64(0)) { $0 + $1.sizeBytes }
-
-    let devArtifactBytes = devToolBytes + simulatorBytes + projectArtifactBytes
 
     let candidates = [
       OnboardingResultsCategory(title: "App caches", symbol: "internaldrive", bytes: appCacheBytes),
@@ -52,6 +43,12 @@ extension PurgeStore {
       .sorted { $0.bytes > $1.bytes }
       .prefix(4)
       .map { $0 }
+  }
+
+  func onboardingScanFindings(limit: Int = 12) -> [OnboardingScanFinding] {
+    manualSafeCleanupCandidates()
+      .prefix(limit)
+      .map { OnboardingScanFinding(title: $0.title, formattedSize: $0.formattedSize) }
   }
 
   private static let browserDefinitionKeys: Set<String> = [

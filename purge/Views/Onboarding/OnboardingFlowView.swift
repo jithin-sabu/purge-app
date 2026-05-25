@@ -11,6 +11,7 @@ struct OnboardingFlowView: View {
   @State private var step: OnboardingStep = .welcome
   @StateObject private var revealController = OnboardingScanRevealController()
   @State private var celebrationFreedBytes: Int64 = 0
+  @State private var pinnedCleanupCandidates: [PurgeStore.DeletionCandidate] = []
 
   @AppStorage("onboarding.pendingCelebration") private var pendingCelebration = false
 
@@ -76,7 +77,7 @@ struct OnboardingFlowView: View {
       case .results:
         OnboardingResultsStep()
       case .cleaning:
-        OnboardingCleaningStep(scanRevealedItems: revealController.revealedItems) { freedBytes in
+        OnboardingCleaningStep(pinnedCandidates: pinnedCleanupCandidates) { freedBytes in
           celebrationFreedBytes = freedBytes
           advance(to: .celebration)
         }
@@ -127,6 +128,7 @@ struct OnboardingFlowView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.bottom, AppStyle.Spacing.xxSmall)
         OnboardingPrimaryButton(title: cleanNowTitle) {
+          pinnedCleanupCandidates = store.manualSafeCleanupCandidates()
           advance(to: .cleaning)
         }
         OnboardingSecondaryButton(title: "Review everything first", style: .outlined) {

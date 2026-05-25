@@ -4,8 +4,7 @@ struct OnboardingCleaningStep: View {
   @EnvironmentObject private var store: PurgeStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  /// Items revealed during the first-scan step; falls back to live safe findings when empty.
-  let scanRevealedItems: [OnboardingScanFinding]
+  let pinnedCandidates: [PurgeStore.DeletionCandidate]
   let onFinished: (Int64) -> Void
 
   @State private var visibleItems: [OnboardingScanFinding] = []
@@ -28,8 +27,7 @@ struct OnboardingCleaningStep: View {
               title: item.title,
               subtitle: nil,
               formattedSize: item.formattedSize,
-              primaryBadgeText: "Cleared",
-              primaryBadgeTone: .safe
+              primaryBadgeText: nil
             )
             .transition(OnboardingTransitions.listRowRemoval(reduceMotion: reduceMotion))
           }
@@ -45,7 +43,7 @@ struct OnboardingCleaningStep: View {
     .onAppear {
       guard !cleaningStarted else { return }
       cleaningStarted = true
-      let items = scanRevealedItems.isEmpty ? Self.safeFindings(from: store) : scanRevealedItems
+      let items = Self.findings(from: pinnedCandidates)
       initialItemCount = items.count
       visibleItems = items
       Task { await runCleaning() }
@@ -59,11 +57,11 @@ struct OnboardingCleaningStep: View {
   }
 
   private func runCleaning() async {
-    let allItems = Self.safeFindings(from: store)
+    let expectedFreedBytes = pinnedCandidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
 
-    async let cleanTask = store.performManualSafeCleanNow()
+    async let cleanTask = store.performManualSafeCleanNow(pinnedCandidates: pinnedCandidates)
 
-    for _ in allItems.indices {
+    for _ in pinnedCandidates.indices {
       try? await Task.sleep(nanoseconds: 380_000_000)
       guard !visibleItems.isEmpty else { continue }
       withAnimation(.easeInOut(duration: 0.4)) {
@@ -76,20 +74,10 @@ struct OnboardingCleaningStep: View {
       visibleItems = []
     }
     try? await Task.sleep(nanoseconds: 300_000_000)
-    onFinished(summary.freedBytes)
+    onFinished(summary.freedBytes > 0 ? summary.freedBytes : expectedFreedBytes)
   }
 
-  static func safeFindings(from store: PurgeStore) -> [OnboardingScanFinding] {
-    var results: [OnboardingScanFinding] = []
-    for item in store.cacheItems.filter({ $0.safetyInfo.level == .safe }).sorted(by: { $0.sizeBytes > $1.sizeBytes }) {
-      results.append(OnboardingScanFinding(title: item.appName, formattedSize: formatBytes(item.sizeBytes)))
-    }
-    for tool in store.devTools.filter({ $0.isDetected && $0.safetyInfo.level == .safe }).sorted(by: { $0.sizeBytes > $1.sizeBytes }) {
-      results.append(OnboardingScanFinding(title: tool.toolName, formattedSize: formatBytes(tool.sizeBytes)))
-    }
-    for artifact in store.projectGroups.flatMap(\.artifacts).filter({ $0.safetyInfo.level == .safe }).sorted(by: { $0.sizeBytes > $1.sizeBytes }) {
-      results.append(OnboardingScanFinding(title: artifact.kind.rowTag, formattedSize: formatBytes(artifact.sizeBytes)))
-    }
-    return Array(results.prefix(12))
+  private static func findings(from candidates: [PurgeStore.DeletionCandidate]) -> [OnboardingScanFinding] {
+    candidates.map { OnboardingScanFinding(title: $0.title, formattedSize: $0.formattedSize) }
   }
 }

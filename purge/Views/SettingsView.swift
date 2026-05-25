@@ -6,19 +6,19 @@ struct SettingsView: View {
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @AppStorage("telemetry.lastSentDate") private var telemetryLastSentTimestamp = 0.0
+    // @AppStorage("telemetry.lastSentDate") private var telemetryLastSentTimestamp = 0.0
 
     @State private var easterEggTapTimes: [Date] = []
     @State private var showEasterEgg = false
     @State private var easterEggSessionMadeByTweak = false
-    @State private var showTelemetryPreviewSheet = false
-    @State private var isSendingTelemetry = false
-    @State private var telemetryError: String?
-    @State private var telemetryToast: String?
-    @State private var telemetryToastID = UUID()
+    // @State private var showTelemetryPreviewSheet = false
+    // @State private var isSendingTelemetry = false
+    // @State private var telemetryError: String?
+    // @State private var telemetryToast: String?
+    // @State private var telemetryToastID = UUID()
 
     var body: some View {
-        ScrollView(.vertical) {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 28) {
                 Text("Settings")
                     .font(AppStyle.Typography.pageTitle)
@@ -26,30 +26,33 @@ struct SettingsView: View {
 
                 cleaningScheduleSection
 
-                Divider()
-
-                telemetrySection
-
-                Divider()
-
-                aboutSection
+                // Divider()
+                // telemetrySection
             }
-            .padding(.horizontal, settingsHorizontalContentInset)
             .frame(maxWidth: settingsContentMaxWidth, alignment: .leading)
-            .padding(.top, AppDetailPageLayout.topContentInset)
-            .padding(.bottom, AppDetailPageLayout.verticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: AppStyle.Spacing.large)
+
+            settingsFooterSection
+                .frame(maxWidth: settingsContentMaxWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 18)
         }
+        .padding(.horizontal, settingsHorizontalContentInset)
+        .padding(.top, AppDetailPageLayout.topContentInset)
+        .padding(.bottom, AppDetailPageLayout.verticalPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppStyle.canvas)
-        .sheet(isPresented: $showTelemetryPreviewSheet) {
-            TelemetryPreviewSheet(
-                payload: TelemetryService.makePayload(from: store),
-                isSending: isSendingTelemetry,
-                isSendDisabled: isTelemetrySendDisabled,
-                onCancel: { showTelemetryPreviewSheet = false },
-                onSend: sendTelemetryReport
-            )
-        }
+        // .sheet(isPresented: $showTelemetryPreviewSheet) {
+        //     TelemetryPreviewSheet(
+        //         payload: TelemetryService.makePayload(from: store),
+        //         isSending: isSendingTelemetry,
+        //         isSendDisabled: isTelemetrySendDisabled,
+        //         onCancel: { showTelemetryPreviewSheet = false },
+        //         onSend: sendTelemetryReport
+        //     )
+        // }
         .overlay {
             if showEasterEgg {
                 SettingsEasterEggOverlay(onDismiss: dismissEasterEgg)
@@ -58,6 +61,7 @@ struct SettingsView: View {
         }
     }
 
+    /*
     private var telemetrySection: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Help Improve Purge")
@@ -76,8 +80,7 @@ struct SettingsView: View {
                     telemetryBulletList(
                         title: "What gets sent:",
                         bullets: [
-                            "Cache folder names and sizes",
-                            "How each folder was categorized",
+                            "Cache folders marked Safe to Clean or Check First",
                             "Your macOS version and app version"
                         ]
                     )
@@ -85,6 +88,7 @@ struct SettingsView: View {
                     telemetryBulletList(
                         title: "What never gets sent:",
                         bullets: [
+                            "Folders marked Do Not Delete or Not Sure",
                             "File contents",
                             "Personal data",
                             "Your name or any identifier"
@@ -96,8 +100,7 @@ struct SettingsView: View {
                     telemetryBulletList(
                         title: "What gets sent:",
                         bullets: [
-                            "Cache folder names and sizes",
-                            "How each folder was categorized",
+                            "Cache folders marked Safe to Clean or Check First",
                             "Your macOS version and app version"
                         ]
                     )
@@ -105,6 +108,7 @@ struct SettingsView: View {
                     telemetryBulletList(
                         title: "What never gets sent:",
                         bullets: [
+                            "Folders marked Do Not Delete or Not Sure",
                             "File contents",
                             "Personal data",
                             "Your name or any identifier"
@@ -174,6 +178,7 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+    */
 
     private var cleaningScheduleSection: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -249,6 +254,7 @@ struct SettingsView: View {
         }
     }
 
+    /*
     private var telemetryLastSentDate: Date? {
         guard telemetryLastSentTimestamp > 0 else { return nil }
         return Date(timeIntervalSince1970: telemetryLastSentTimestamp)
@@ -306,6 +312,7 @@ struct SettingsView: View {
             withAnimation { telemetryToast = nil }
         }
     }
+    */
 
     private var aboutMadeByAttribution: String {
         easterEggSessionMadeByTweak
@@ -313,7 +320,7 @@ struct SettingsView: View {
             : "Made by Jithin"
     }
 
-    private var aboutSection: some View {
+    private var settingsFooterSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage)
@@ -462,14 +469,17 @@ struct SettingsView: View {
         return formatter
     }()
 
+    /*
     private static let telemetryDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
     }()
+    */
 }
 
+/*
 private struct TelemetryPreviewSheet: View {
     let payload: TelemetryPayload
     let isSending: Bool
@@ -484,22 +494,22 @@ private struct TelemetryPreviewSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("All cache folders (\(payload.totalCount))")
+                    Text("Cache folders (\(payload.totalCount))")
                         .font(.subheadline.weight(.semibold))
 
-                    Text(displayList(payload.allFolderNames))
+                    Text(previewFolderCategories(payload))
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text("Unidentified folders (\(payload.unknownCount))")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.top, 4)
+                    Divider()
 
-                    Text(displayList(payload.unknownFolderNames))
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("macOS: \(payload.macOSVersion)")
+                        Text("Purge: \(payload.appVersion)")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 .padding(12)
             }
@@ -512,8 +522,8 @@ private struct TelemetryPreviewSheet: View {
 
             Text(
                 """
-                No personal data. No file contents.
-                Just these folder names.
+                Only Safe to Clean and Check First folders are included.
+                No personal data, file contents, or full folder paths.
                 """
             )
             .font(.subheadline)
@@ -533,24 +543,30 @@ private struct TelemetryPreviewSheet: View {
                             ProgressView()
                                 .controlSize(.small)
                         }
-                        Text("Send anyway")
+                        Text(isSending ? "Sending…" : "Send Report")
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppStyle.accent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(isSendDisabled)
+                .disabled(isSendDisabled || isSending)
             }
         }
         .padding(20)
         .frame(width: 560, height: 460)
     }
 
-    private func displayList(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "—" : trimmed
+    private func previewFolderCategories(_ payload: TelemetryPayload) -> String {
+        let rows = payload.folderCategoryRows
+        guard !rows.isEmpty else {
+            return "No Safe to Clean or Check First folders in the latest scan."
+        }
+        return rows
+            .map { "\($0.folderName) — \($0.categoryLabel)" }
+            .joined(separator: "\n")
     }
 }
+*/
 
 private struct SettingsEasterEggOverlay: View {
     let onDismiss: () -> Void

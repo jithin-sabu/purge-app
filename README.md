@@ -83,7 +83,7 @@ Folders that don't match any source are tagged "Not Sure" so you can review them
 
 ## Privacy
 
-Purge never sends your files or file contents anywhere. The optional anonymous telemetry feature only sends cache folder names to help improve identification. You can preview exactly what is sent before it goes anywhere, and it is always opt in.
+Purge never sends your files or file contents anywhere. The optional anonymous telemetry feature only sends cache folders marked Safe to Clean or Check First (with their category), plus your macOS and app version. Folders marked Do Not Delete or Not Sure are never included. You can preview exactly what is sent before it goes anywhere, and it is always opt in.
 
 ---
 

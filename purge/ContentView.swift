@@ -153,7 +153,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 AppBrandMark()
-                    .padding(.top, AppStyle.Spacing.medium)
+                    .padding(.top, SidebarLayout.topContentInset)
                     .padding(.bottom, AppStyle.Spacing.large)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -177,6 +177,7 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
         .background(AppStyle.panel)
+        .sidebarCompactTop()
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
     }
 
@@ -254,6 +255,10 @@ struct SidebarSummaryView: View {
             .padding(.horizontal, AppStyle.Spacing.small)
             .padding(.bottom, 10)
             .padding(.top, 6)
+        }
+        .onAppear {
+            guard !store.isScanningDeveloper, !store.isScanningAll, !store.devTools.isEmpty else { return }
+            store.refreshDetectedDevToolSizes()
         }
     }
 

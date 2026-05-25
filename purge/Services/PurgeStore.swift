@@ -134,21 +134,106 @@ final class PurgeStore: ObservableObject {
         return cacheTotal + toolsTotal + simTotal + projTotal
     }
 
+    /// Byte totals for one-click safe cleanup, grouped by tab so sidebar and filter totals stay aligned.
+    struct SafeCleanupSummary {
+        var appCacheBytes: Int64 = 0
+        var devToolBytes: Int64 = 0
+        var projectArtifactBytes: Int64 = 0
+
+        var totalBytes: Int64 {
+            appCacheBytes + devToolBytes + projectArtifactBytes
+        }
+
+        var devToolsTabBytes: Int64 {
+            devToolBytes + projectArtifactBytes
+        }
+    }
+
+    var safeCleanupSummary: SafeCleanupSummary {
+        let candidates = manualSafeCleanupCandidates()
+        let projectPaths = Set(
+            projectGroups.flatMap(\.artifacts).map { $0.path.standardizedFileURL.path }
+        )
+        let devToolPaths = Set(
+            devTools.flatMap(\.paths).map { $0.standardizedFileURL.path }
+        )
+
+        var summary = SafeCleanupSummary()
+        for candidate in candidates {
+            let path = candidate.path.standardizedFileURL.path
+            if projectPaths.contains(path) {
+                summary.projectArtifactBytes += candidate.sizeBytes
+            } else if devToolPaths.contains(path) {
+                summary.devToolBytes += candidate.sizeBytes
+            } else {
+                summary.appCacheBytes += candidate.sizeBytes
+            }
+        }
+        return summary
+    }
+
     var safeRecoverableBytes: Int64 {
-        let cacheBytes = cacheItems
-            .filter { $0.safetyInfo.level == .safe }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        safeCleanupSummary.totalBytes
+    }
 
-        let toolBytes = devTools
-            .filter { $0.isDetected && $0.safetyInfo.level == .safe }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+    /// Paths that match the same safety, git, lockfile, and staleness rules used by manual safe cleanup.
+    func manualSafeCleanupCandidates(
+        referenceDate now: Date = Date(),
+        minUnusedDaysForCaches: Int = 0,
+        minUnusedDaysForDeveloperArtifacts: Int = 0
+    ) -> [DeletionCandidate] {
+        var candidates: [DeletionCandidate] = []
 
-        let projectBytes = projectGroups
-            .flatMap(\.artifacts)
-            .filter { $0.safetyInfo.level == .safe }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        for artifact in projectGroups.flatMap(\.artifacts) {
+            guard artifact.safetyInfo.level == .safe else { continue }
+            guard artifact.reinstallSafety != .missingLockfile else { continue }
+            guard artifact.gitStatus == .clean else { continue }
+            guard daysBetween(artifact.lastModified, now) >= minUnusedDaysForDeveloperArtifacts else { continue }
+            candidates.append(artifactDeletionCandidate(artifact))
+        }
 
-        return cacheBytes + toolBytes + projectBytes
+        for tool in devTools where tool.isDetected && tool.safetyInfo.level == .safe {
+            for url in tool.paths {
+                guard FileManager.default.fileExists(atPath: url.path) else { continue }
+                let reinstall = ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
+                guard reinstall != .missingLockfile else { continue }
+                guard daysBetween(FolderSizing.contentModificationDate(at: url), now) >= minUnusedDaysForDeveloperArtifacts else { continue }
+                let candidate = devToolDeletionCandidate(tool, path: url)
+                guard candidate.gitStatus == .clean else { continue }
+                candidates.append(candidate)
+            }
+        }
+
+        for item in cacheItems where item.safetyInfo.level == .safe {
+            guard item.reinstallSafety != .missingLockfile else { continue }
+            guard item.gitStatus == .clean else { continue }
+            for location in item.locations {
+                guard daysBetween(location.lastModified, now) >= minUnusedDaysForCaches else { continue }
+                let path = location.path.standardizedFileURL
+                candidates.append(
+                    DeletionCandidate(
+                        title: item.appName,
+                        path: path,
+                        sizeBytes: location.sizeBytes,
+                        safetyInfo: item.safetyInfo,
+                        reinstallCommand: item.safetyInfo.reinstallCommand,
+                        subtitle: location.folderName,
+                        reinstallSafety: Self.cacheReinstallStatus(forPath: path),
+                        gitStatus: item.gitStatus
+                    )
+                )
+            }
+        }
+
+        var seenPaths = Set<String>()
+        return candidates
+            .filter { candidate in
+                let path = candidate.path.standardizedFileURL.path
+                guard !seenPaths.contains(path) else { return false }
+                seenPaths.insert(path)
+                return true
+            }
+            .sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
     var checkFirstRecoverableBytes: Int64 {
@@ -393,7 +478,9 @@ final class PurgeStore: ObservableObject {
             devTools = devTools.map { tool in
                 let paths = tool.paths
                 let existingPaths = paths.filter { FileManager.default.fileExists(atPath: $0.path) }
-                let newSize = existingPaths.reduce(Int64(0)) { $0 + cacheScanner.calculateFolderSize(at: $1) }
+                let newSize = existingPaths.reduce(Int64(0)) {
+                    $0 + DevScanner.pathByteSize(toolLabel: tool.toolName, at: $1)
+                }
                 let stillDetected = !existingPaths.isEmpty
                 let newSelected = tool.isSelected && stillDetected
                 if newSize == tool.sizeBytes, stillDetected == tool.isDetected, newSelected == tool.isSelected {
@@ -560,28 +647,27 @@ final class PurgeStore: ObservableObject {
             reconcileCrossTabCacheDuplicates()
         }
         isScanningDeveloper = false
+        refreshDetectedDevToolSizes()
         let needsSizing = !unsizedSimulators.isEmpty
         let needsGitHydration = !projectGroups.isEmpty
         let needsToolRepoHydration = devTools.contains { !$0.paths.isEmpty }
         guard needsSizing || needsGitHydration || needsToolRepoHydration else { return }
 
-        Task { @MainActor in
-            isEnrichingDeveloper = true
-            defer { isEnrichingDeveloper = false }
+        isEnrichingDeveloper = true
+        defer { isEnrichingDeveloper = false }
 
-            if needsSizing {
-                let sized = await devScanner.measureSimulatorFolderSizes(unsizedSimulators)
-                guard sizingGeneration == self.simulatorSizingGeneration else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    self.simulatorDevices = sized
-                }
+        if needsSizing {
+            let sized = await devScanner.measureSimulatorFolderSizes(unsizedSimulators)
+            guard sizingGeneration == simulatorSizingGeneration else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                simulatorDevices = sized
             }
-            if needsGitHydration {
-                await hydrateDeveloperGitStatusesParallel()
-            }
-            if needsToolRepoHydration {
-                await hydrateDeveloperToolRepoStatusesParallel()
-            }
+        }
+        if needsGitHydration {
+            await hydrateDeveloperGitStatusesParallel()
+        }
+        if needsToolRepoHydration {
+            await hydrateDeveloperToolRepoStatusesParallel()
         }
     }
 
@@ -617,14 +703,21 @@ final class PurgeStore: ObservableObject {
 
     /// Immediate safe cleanup from the menu bar (no “unused days” wait; does not require scheduled cleaning to be enabled).
     @discardableResult
-    func performManualSafeCleanNow(referenceDate now: Date = Date()) async -> ScheduledCleaningSummary {
+    func performManualSafeCleanNow(
+        referenceDate now: Date = Date(),
+        pinnedCandidates: [DeletionCandidate]? = nil
+    ) async -> ScheduledCleaningSummary {
+        if pinnedCandidates == nil {
+            refreshDetectedDevToolSizes()
+        }
         let summary = await performSafeCleanup(
             referenceDate: now,
             minUnusedDaysForCaches: 0,
             minUnusedDaysForDeveloperArtifacts: 0,
             historyTrigger: .manual,
             scheduledNotifications: false,
-            clearSelectionsAfterCleanup: true
+            clearSelectionsAfterCleanup: true,
+            pinnedCandidates: pinnedCandidates
         )
         publishOnboardingCelebrationIfNeeded(freedBytes: summary.freedBytes)
         return summary
@@ -643,53 +736,34 @@ final class PurgeStore: ObservableObject {
         minUnusedDaysForDeveloperArtifacts: Int,
         historyTrigger: CleanupTrigger,
         scheduledNotifications: Bool,
-        clearSelectionsAfterCleanup: Bool
+        clearSelectionsAfterCleanup: Bool,
+        pinnedCandidates: [DeletionCandidate]? = nil
     ) async -> ScheduledCleaningSummary {
-        await scanDeveloper()
-        if cacheItems.isEmpty {
-            await scanGeneral()
-        } else {
-            await hydrateCacheSafetyMetadataParallel()
-        }
-
-        let projectURLs = projectGroups.flatMap(\.artifacts).compactMap { artifact -> URL? in
-            guard artifact.safetyInfo.level == .safe else { return nil }
-            guard artifact.reinstallSafety != .missingLockfile else { return nil }
-            guard artifact.gitStatus == .clean else { return nil }
-            guard daysBetween(artifact.lastModified, now) >= minUnusedDaysForDeveloperArtifacts else { return nil }
-            return artifact.path.standardizedFileURL
-        }
-
-        let toolURLs = devTools.flatMap { tool -> [URL] in
-            guard tool.isDetected, tool.safetyInfo.level == .safe else { return [] }
-            return tool.paths.compactMap { url -> URL? in
-                guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-                let reinstall = ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
-                guard reinstall != .missingLockfile else { return nil }
-                guard daysBetween(FolderSizing.contentModificationDate(at: url), now) >= minUnusedDaysForDeveloperArtifacts else { return nil }
-                return url.standardizedFileURL
+        if pinnedCandidates == nil {
+            await scanDeveloper()
+            if cacheItems.isEmpty {
+                await scanGeneral()
+            } else {
+                await hydrateCacheSafetyMetadataParallel()
             }
         }
 
-        let cacheURLs = cacheItems.filter { $0.safetyInfo.level == .safe }.flatMap { item -> [URL] in
-            guard item.reinstallSafety != .missingLockfile else { return [] }
-            guard item.gitStatus == .clean else { return [] }
-            return item.locations.compactMap { location -> URL? in
-                guard daysBetween(location.lastModified, now) >= minUnusedDaysForCaches else { return nil }
-                return location.path.standardizedFileURL
-            }
-        }
-
-        let rough = Array(Set(projectURLs + toolURLs + cacheURLs)).sorted { $0.path < $1.path }
+        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates(
+            referenceDate: now,
+            minUnusedDaysForCaches: minUnusedDaysForCaches,
+            minUnusedDaysForDeveloperArtifacts: minUnusedDaysForDeveloperArtifacts
+        )
 
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
-        for url in rough {
-            let git = await gitChecker.cleanupStatus(for: url)
+        var pathToExpectedSizeBytes: [String: Int64] = [:]
+        for candidate in syncCandidates {
+            let git = await gitChecker.cleanupStatus(for: candidate.path)
             guard git == .clean else { continue }
-            let std = url.standardizedFileURL
+            let std = candidate.path.standardizedFileURL
             combined.append(std)
-            pathToDisplayName[std.path] = displayNameForDeletionPath(std.path)
+            pathToDisplayName[std.path] = candidate.title
+            pathToExpectedSizeBytes[std.path] = candidate.sizeBytes
         }
 
         guard !combined.isEmpty else {
@@ -704,8 +778,17 @@ final class PurgeStore: ObservableObject {
         defer { isDeleting = false }
 
         do {
-            let report = try await fileDeleter.deleteItems(at: combined, pathToDisplayName: pathToDisplayName)
-            let freedBytes = report.actualFreedBytes > 0 ? report.actualFreedBytes : report.totalDeleted
+            let report = try await fileDeleter.deleteItems(
+                at: combined,
+                pathToDisplayName: pathToDisplayName,
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes
+            )
+            let freedBytes: Int64
+            if historyTrigger == .manual {
+                freedBytes = report.totalDeleted
+            } else {
+                freedBytes = report.actualFreedBytes > 0 ? report.actualFreedBytes : report.totalDeleted
+            }
             incrementRecoveredTotal(by: freedBytes)
             reflectDeletionReportInScanState(report)
             CleanupHistoryStore.shared.append(trigger: historyTrigger, report: report)
@@ -912,7 +995,13 @@ final class PurgeStore: ObservableObject {
 
     private func devToolDeletionCandidate(_ tool: DevTool, path: URL) -> DeletionCandidate {
         let key = path.standardizedFileURL.path
-        let pathBytes = cacheScanner.calculateFolderSize(at: path)
+        let existingPaths = tool.paths.filter { FileManager.default.fileExists(atPath: $0.path) }
+        let pathBytes: Int64
+        if existingPaths.count == 1 {
+            pathBytes = tool.sizeBytes
+        } else {
+            pathBytes = DevScanner.pathByteSize(toolLabel: tool.toolName, at: path)
+        }
         return DeletionCandidate(
             title: tool.safetyInfo.headline,
             path: path,
@@ -963,6 +1052,36 @@ final class PurgeStore: ObservableObject {
         guard bytes > 0 else { return }
         totalRecoveredBytes += bytes
         defaults.set(totalRecoveredBytes, forKey: StorageKeys.totalRecoveredBytes)
+    }
+
+    /// Re-measures detected dev tool folders so list rows and safe cleanup totals stay aligned.
+    func refreshDetectedDevToolSizes() {
+        var updated = devTools
+        var changed = false
+        for index in updated.indices {
+            guard updated[index].isDetected else { continue }
+            let existingPaths = updated[index].paths.filter {
+                FileManager.default.fileExists(atPath: $0.path)
+            }
+            let newSize = existingPaths.reduce(Int64(0)) {
+                $0 + DevScanner.pathByteSize(toolLabel: updated[index].toolName, at: $1)
+            }
+            let stillDetected = !existingPaths.isEmpty
+            guard newSize != updated[index].sizeBytes || stillDetected != updated[index].isDetected else { continue }
+            updated[index] = DevTool(
+                definitionKey: updated[index].definitionKey,
+                toolName: updated[index].toolName,
+                paths: updated[index].paths,
+                sizeBytes: newSize,
+                isSelected: updated[index].isSelected && stillDetected,
+                isDetected: stillDetected,
+                safetyInfo: updated[index].safetyInfo
+            )
+            changed = true
+        }
+        if changed {
+            devTools = updated
+        }
     }
 
     // MARK: - Project row selection bindings
