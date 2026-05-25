@@ -121,7 +121,7 @@ struct ScanListSkeletonPlaceholder: View {
                     .listRowSeparator(.hidden)
             }
         }
-        .listStyle(.inset)
+        .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(AppStyle.canvas)
         .accessibilityElement(children: .ignore)

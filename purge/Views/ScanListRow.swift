@@ -150,8 +150,8 @@ extension ScanListRow where Footer == EmptyView {
 enum ScanListRowInsets {
     static let standard = EdgeInsets(
         top: 4,
-        leading: AppStyle.Spacing.large,
+        leading: AppStyle.Spacing.small,
         bottom: 4,
-        trailing: AppStyle.Spacing.large
+        trailing: AppStyle.Spacing.small
     )
 }

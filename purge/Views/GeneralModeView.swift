@@ -254,7 +254,7 @@ struct AppCachesView: View {
                 .transition(cleaningRowRemovalTransition)
             }
         }
-        .listStyle(.inset)
+        .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(AppStyle.canvas)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
