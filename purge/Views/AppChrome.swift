@@ -24,7 +24,7 @@ struct AppBrandMark: View {
 enum SidebarLayout {
     static let horizontalInset: CGFloat = 8
     static let navRowInnerPadding: CGFloat = 8
-    static let selectionCornerRadius: CGFloat = 6
+    static let selectionCornerRadius: CGFloat = 8
     /// Clears unified title-bar traffic lights without the extra safe-area gap.
     static let topContentInset: CGFloat = 36
 }
@@ -161,6 +161,7 @@ struct SafeCleanupCelebrationOverlay: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var checkmarkProgress: CGFloat = 0
+    @State private var encouragement: CleanupCompletionEncouragement
 
     private let celebrationAccent = AppStyle.accent
     private let sheetBackground = Color(
@@ -168,10 +169,22 @@ struct SafeCleanupCelebrationOverlay: View {
         dark: NSColor(calibratedWhite: 0.08, alpha: 1)
     )
 
+    init(freedBytes: Int64, onDone: @escaping () -> Void) {
+        self.freedBytes = freedBytes
+        self.onDone = onDone
+        _encouragement = State(initialValue: CleanupCompletionMessagePicker.randomMessage(for: freedBytes))
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.black.opacity(0.38)
                 .ignoresSafeArea()
+
+            if showsConfetti {
+                CleanupCompletionConfettiBurst(color: celebrationAccent)
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
+            }
 
             VStack(spacing: AppStyle.Spacing.large) {
                 Spacer(minLength: 0)
@@ -193,9 +206,9 @@ struct SafeCleanupCelebrationOverlay: View {
                             .foregroundStyle(.white.opacity(0.78))
                     }
 
-                    Text(encouragement)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.72))
+                    Text(encouragement.text)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, AppStyle.Spacing.xSmall)
@@ -229,25 +242,196 @@ struct SafeCleanupCelebrationOverlay: View {
                     checkmarkProgress = 1
                 }
             }
+            CleanupCompletionMessagePicker.storeLastShown(encouragement)
         }
         .environment(\.colorScheme, .dark)
     }
 
-    private var encouragement: String {
-        let oneMegabyte: Int64 = 1024 * 1024
-        let oneGigabyte: Int64 = 1024 * 1024 * 1024
+    private var showsConfetti: Bool {
+        freedBytes >= CleanupCompletionMessagePicker.confettiThresholdBytes && !reduceMotion
+    }
+}
 
+private struct CleanupCompletionEncouragement: Equatable {
+    let key: String
+    let text: String
+}
+
+private enum CleanupCompletionMessagePicker {
+    static let confettiThresholdBytes: Int64 = 2 * oneGigabyte
+
+    private static let oneMegabyte: Int64 = 1024 * 1024
+    private static let oneGigabyte: Int64 = 1024 * 1024 * 1024
+    private static let lastShownMessageKey = "cleanCompletion.lastShownMessageKey"
+
+    static func randomMessage(
+        for freedBytes: Int64,
+        defaults: UserDefaults = .standard
+    ) -> CleanupCompletionEncouragement {
+        let messages = tier(for: freedBytes).messages
+        guard messages.count > 1 else {
+            return messages[0]
+        }
+
+        let lastShownKey = defaults.string(forKey: lastShownMessageKey)
+        let eligibleMessages = messages.filter { $0.key != lastShownKey }
+
+        return (eligibleMessages.isEmpty ? messages : eligibleMessages).randomElement() ?? messages[0]
+    }
+
+    static func storeLastShown(
+        _ message: CleanupCompletionEncouragement,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(message.key, forKey: lastShownMessageKey)
+    }
+
+    private static func tier(for freedBytes: Int64) -> CleanupCompletionMessageTier {
         switch freedBytes {
         case ..<(500 * oneMegabyte):
-            return "Your Mac is a little lighter. Every byte counts."
+            return .under500MB
         case ..<(2 * oneGigabyte):
-            return "Nice. Your Mac is breathing easier."
+            return .between500MBAnd2GB
         case ..<(10 * oneGigabyte):
-            return "That's a serious clean. Your Mac thanks you."
+            return .between2GBAnd10GB
         default:
-            return "Wow. Your Mac feels brand new."
+            return .over10GB
         }
     }
+}
+
+private enum CleanupCompletionMessageTier: String {
+    case under500MB
+    case between500MBAnd2GB
+    case between2GBAnd10GB
+    case over10GB
+
+    var messages: [CleanupCompletionEncouragement] {
+        copy.enumerated().map { index, text in
+            CleanupCompletionEncouragement(key: "\(rawValue).\(index)", text: text)
+        }
+    }
+
+    private var copy: [String] {
+        switch self {
+        case .under500MB:
+            return [
+                "Every crumb counts. Your Mac approves.",
+                "Small clean, big satisfaction.",
+                "Your Mac just exhaled a little.",
+                "Tidier than it was. That's enough.",
+                "The digital equivalent of emptying your pockets.",
+                "Baby steps. Your Mac feels it.",
+                "Less junk. More you."
+            ]
+        case .between500MBAnd2GB:
+            return [
+                "Your Mac is breathing easier now.",
+                "That's the stuff. Clean machine.",
+                "Junk: gone. Vibes: immaculate.",
+                "Your future self will thank you.",
+                "Marie Kondo would be proud.",
+                "That was satisfying and you know it.",
+                "Your Mac just got a little faster and a lot happier."
+            ]
+        case .between2GBAnd10GB:
+            return [
+                "Now that's a clean. Well done.",
+                "Your Mac remembers what it felt like to be young.",
+                "Somewhere, a hard drive is smiling.",
+                "You just gave your Mac room to breathe.",
+                "That's not a clean. That's a transformation.",
+                "Your Mac called. It says thank you.",
+                "Digital spring cleaning. Chef's kiss."
+            ]
+        case .over10GB:
+            return [
+                "Absolute unit of a clean. Respect.",
+                "Your Mac is basically new again.",
+                "That's not cleaning. That's archaeology.",
+                "Future you is living in a palace.",
+                "Your Mac just did a happy dance.",
+                "The junk was real. Now it's gone. You did that.",
+                "If your Mac could hug you, it would."
+            ]
+        }
+    }
+}
+
+private struct CleanupCompletionConfettiBurst: View {
+    let color: Color
+
+    @State private var isAnimating = false
+
+    private let particles = CleanupCompletionConfettiParticle.all
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                ForEach(particles) { particle in
+                    particleView(for: particle)
+                        .foregroundStyle(color.opacity(particle.opacity))
+                        .scaleEffect(isAnimating ? particle.endScale : 0.6)
+                        .opacity(isAnimating ? 0 : 1)
+                        .position(
+                            x: proxy.size.width / 2 + particle.xOffset,
+                            y: proxy.size.height - 72 + (isAnimating ? particle.rise : 0)
+                        )
+                        .animation(
+                            .easeOut(duration: 1.35).delay(particle.delay),
+                            value: isAnimating
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            isAnimating = false
+            DispatchQueue.main.async {
+                isAnimating = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func particleView(for particle: CleanupCompletionConfettiParticle) -> some View {
+        switch particle.kind {
+        case .dot:
+            Circle()
+                .frame(width: particle.size, height: particle.size)
+        case .sparkle:
+            Image(systemName: "sparkle")
+                .font(.system(size: particle.size, weight: .semibold))
+        }
+    }
+}
+
+private struct CleanupCompletionConfettiParticle: Identifiable {
+    enum Kind {
+        case dot
+        case sparkle
+    }
+
+    let id: Int
+    let kind: Kind
+    let xOffset: CGFloat
+    let rise: CGFloat
+    let size: CGFloat
+    let opacity: Double
+    let endScale: CGFloat
+    let delay: Double
+
+    static let all: [CleanupCompletionConfettiParticle] = [
+        .init(id: 0, kind: .dot, xOffset: -150, rise: -142, size: 6, opacity: 0.72, endScale: 1.2, delay: 0.00),
+        .init(id: 1, kind: .sparkle, xOffset: -108, rise: -190, size: 12, opacity: 0.78, endScale: 0.9, delay: 0.06),
+        .init(id: 2, kind: .dot, xOffset: -64, rise: -126, size: 5, opacity: 0.66, endScale: 1.1, delay: 0.12),
+        .init(id: 3, kind: .dot, xOffset: -24, rise: -218, size: 7, opacity: 0.75, endScale: 1.0, delay: 0.02),
+        .init(id: 4, kind: .sparkle, xOffset: 18, rise: -168, size: 10, opacity: 0.82, endScale: 0.95, delay: 0.10),
+        .init(id: 5, kind: .dot, xOffset: 58, rise: -230, size: 5, opacity: 0.7, endScale: 1.15, delay: 0.16),
+        .init(id: 6, kind: .dot, xOffset: 104, rise: -136, size: 6, opacity: 0.64, endScale: 1.2, delay: 0.04),
+        .init(id: 7, kind: .sparkle, xOffset: 148, rise: -200, size: 11, opacity: 0.76, endScale: 0.9, delay: 0.14),
+        .init(id: 8, kind: .dot, xOffset: 194, rise: -156, size: 4, opacity: 0.6, endScale: 1.1, delay: 0.08)
+    ]
 }
 
 private struct CompletionCheckmarkBadge: View {

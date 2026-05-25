@@ -487,14 +487,13 @@ struct DevToolsView: View {
             }
     }
 
-    private var developerVisibleRowCount: Int {
-        let simChildRows = (iosSimulatorsExpanded && simulatorSectionVisible)
-            ? sortedVisibleSimulatorIndices().count
-            : 0
-        return mergedStandardRowEntries().count + simChildRows +
-            sortedProjectGroupIndices().reduce(0) { sum, gi in
-                sum + sortedVisibleArtifactIndices(forGroup: gi).count
-            }
+    private var developerVisibleItemCount: Int {
+        let tools = filteredStandardToolIndices().count
+        let sims = visibleSimulatorIndices().count
+        let artifacts = filteredProjectGroupIndices().reduce(0) { sum, gi in
+            sum + sortedVisibleArtifactIndices(forGroup: gi).count
+        }
+        return tools + sims + artifacts
     }
 
     private var developerTotalByteSize: Int64 {
@@ -511,9 +510,6 @@ struct DevToolsView: View {
     }
 
     private var developerVisibleByteSize: Int64 {
-        if currentSafetyFilter == .safe {
-            return store.safeCleanupSummary.devToolsTabBytes
-        }
         var sum = Int64(0)
         for entry in mergedStandardRowEntries() {
             switch entry {
@@ -533,11 +529,23 @@ struct DevToolsView: View {
         return sum
     }
 
+    private var subtitleItemCount: Int {
+        currentSafetyFilter == .all ? developerTotalRowCount : developerVisibleItemCount
+    }
+
+    private var subtitleTotalSize: Int64 {
+        currentSafetyFilter == .all ? developerTotalByteSize : developerVisibleByteSize
+    }
+
+    private var subtitleItemLabel: String {
+        subtitleItemCount == 1 ? "item" : "items"
+    }
+
     private var pageSubtitle: String {
         if isLoading {
             return "Scanning developer tool folders and project artifacts."
         }
-        return "\(developerTotalRowCount) items · \(formatBytes(developerTotalByteSize)) recoverable"
+        return "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable"
     }
 
     var body: some View {
@@ -602,7 +610,7 @@ struct DevToolsView: View {
 
             ScanStatusBar(
                 isLoading: isLoading,
-                visibleCount: developerVisibleRowCount,
+                visibleCount: developerVisibleItemCount,
                 totalCount: developerTotalRowCount,
                 isFiltered: currentSafetyFilter != .all,
                 visibleBytes: developerVisibleByteSize,

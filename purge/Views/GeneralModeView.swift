@@ -99,17 +99,26 @@ struct AppCachesView: View {
     }
 
     private var visibleTotalSize: Int64 {
-        if currentSafetyFilter == .safe {
-            return store.safeCleanupSummary.appCacheBytes
-        }
         return visibleIndices.reduce(Int64(0)) { sum, index in sum + items[index].sizeBytes }
+    }
+
+    private var subtitleItemCount: Int {
+        currentSafetyFilter == .all ? displayableItemCount : visibleIndices.count
+    }
+
+    private var subtitleTotalSize: Int64 {
+        currentSafetyFilter == .all ? totalSize : visibleTotalSize
+    }
+
+    private var subtitleItemLabel: String {
+        subtitleItemCount == 1 ? "item" : "items"
     }
 
     private var pageSubtitle: String {
         if isLoading {
             return "Scanning application cache folders."
         }
-        return "\(displayableItemCount) items · \(formatBytes(totalSize)) recoverable"
+        return "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable"
     }
 
     private var skeletonRowCount: Int {
