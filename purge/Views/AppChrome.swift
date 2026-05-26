@@ -26,8 +26,8 @@ enum SidebarLayout {
     static let horizontalInset: CGFloat = 8
     static let navRowInnerPadding: CGFloat = 8
     static let selectionCornerRadius: CGFloat = 8
-    /// Clears unified title-bar traffic lights without the extra safe-area gap.
-    static let topContentInset: CGFloat = 36
+    /// Clears unified title-bar traffic lights with a little breathing room below.
+    static let topContentInset: CGFloat = 42
 }
 
 /// Shared horizontal inset for Settings-style detail pages (App Caches, Dev Tools, Settings).
@@ -43,6 +43,7 @@ struct AppSectionPageHeader<Trailing: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder var trailing: () -> Trailing
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         title: String,
@@ -62,6 +63,9 @@ struct AppSectionPageHeader<Trailing: View>: View {
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: subtitle)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -78,10 +82,11 @@ struct AppSectionPageHeader<Trailing: View>: View {
 /// Scan and Clean Selected — top-trailing actions on App Caches / Dev Tools pages.
 struct AppScanCleanActions: View {
     let onScan: () -> Void
+    var scanPhase: PurgeStore.ScanPhase = .idle
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
-            AppScanButton(action: onScan)
+            AppScanButton(scanPhase: scanPhase, action: onScan)
             AppCleanSelectedButton()
         }
         .fixedSize()
@@ -89,17 +94,37 @@ struct AppScanCleanActions: View {
 }
 
 struct AppScanButton: View {
+    let scanPhase: PurgeStore.ScanPhase
     let action: () -> Void
+
+    private var isBusy: Bool {
+        scanPhase == .scanning || scanPhase == .cancelling
+    }
+
+    private var title: String {
+        switch scanPhase {
+        case .cancelling:
+            return "Cancelling..."
+        case .scanning:
+            return "Scanning..."
+        case .idle, .completed:
+            return "Scan"
+        }
+    }
 
     var body: some View {
         Button(action: action) {
-            Label("Scan", systemImage: "arrow.clockwise")
-                .labelStyle(.titleAndIcon)
+            CleaningButtonLabel(
+                title: title,
+                systemImage: isBusy ? nil : "arrow.clockwise",
+                isCleaning: isBusy
+            )
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
         }
         .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
         .keyboardShortcut("r", modifiers: [.command])
+        .disabled(isBusy)
     }
 }
 

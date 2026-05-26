@@ -266,6 +266,8 @@ struct FilterSortToolbar: View {
                 Text("\(count)")
                     .font(.callout.weight(.medium))
                     .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: count)
                     .foregroundStyle(.tertiary)
             }
             .font(.system(size: 13, weight: isOn ? .semibold : .regular))

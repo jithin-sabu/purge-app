@@ -21,6 +21,7 @@ enum FolderSizing {
         var visitedInodes = Set<UInt64>()
 
         while let fileURL = enumerator.nextObject() as? URL {
+            if Task.isCancelled { return 0 }
             do {
                 let values = try fileURL.resourceValues(forKeys: [
                     .fileSizeKey,

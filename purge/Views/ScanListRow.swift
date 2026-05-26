@@ -62,18 +62,17 @@ struct ScanListRow<Footer: View>: View {
                 Spacer(minLength: AppStyle.Spacing.xSmall)
 
                 ScanContentCrossfade(isLoading: isTrailingMetadataPending) {
-                    SkeletonBar(width: 44, height: 10, cornerRadius: 4)
-                        .shimmering()
-                    SkeletonBar(width: 72, height: 18, cornerRadius: AppStyle.Radius.chip)
-                        .shimmering()
+                    trailingMetadataSkeleton
                 } loaded: {
-                    Text(formattedSize)
-                        .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Text(formattedSize)
+                            .font(AppStyle.Typography.metadata)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
 
-                    if let primaryBadgeText {
-                        AppBadge(text: primaryBadgeText, tone: primaryBadgeTone)
+                        if let primaryBadgeText {
+                            AppBadge(text: primaryBadgeText, tone: primaryBadgeTone)
+                        }
                     }
                 }
             }
@@ -100,6 +99,14 @@ struct ScanListRow<Footer: View>: View {
             RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
                 .stroke(isSelected ? AppStyle.selectionStroke : AppStyle.hairline)
         }
+    }
+
+    private var trailingMetadataSkeleton: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            SkeletonBar(width: 56, height: 10, cornerRadius: 4)
+            SkeletonBar(width: 92, height: 18, cornerRadius: AppStyle.Radius.chip)
+        }
+        .shimmering()
     }
 
     @ViewBuilder
@@ -154,4 +161,15 @@ enum ScanListRowInsets {
         bottom: 4,
         trailing: AppStyle.Spacing.small
     )
+}
+
+struct ScanListBottomSpacer: View {
+    var body: some View {
+        Color.clear
+            .frame(height: AppStyle.Spacing.large)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .accessibilityHidden(true)
+    }
 }

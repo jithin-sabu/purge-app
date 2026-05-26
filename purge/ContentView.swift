@@ -242,7 +242,11 @@ struct ContentView: View {
 
             SidebarSummaryView()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
         .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
         .background(AppStyle.panel)
         .sidebarCompactTop()
@@ -260,11 +264,13 @@ struct ContentView: View {
                 AppCachesView(
                     items: $store.cacheItems,
                     isLoading: store.isScanningGeneral || store.isScanningAll,
+                    scanPhase: store.scanPhase,
                     onScan: { Task { await store.scanAll() } }
                 )
             case .devTools:
                 DevToolsView(
                     isLoading: store.isScanningDeveloper || store.isScanningAll,
+                    scanPhase: store.scanPhase,
                     onScan: { Task { await store.scanAll() } }
                 )
             case .settings:
@@ -322,10 +328,6 @@ struct SidebarSummaryView: View {
             .padding(.horizontal, AppStyle.Spacing.small)
             .padding(.bottom, 10)
             .padding(.top, 6)
-        }
-        .onAppear {
-            guard !store.isScanningDeveloper, !store.isScanningAll, !store.devTools.isEmpty else { return }
-            store.refreshDetectedDevToolSizes()
         }
     }
 

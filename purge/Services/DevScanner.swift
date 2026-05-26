@@ -7,7 +7,22 @@ struct DeveloperScanOutcome {
     let simulators: [SimulatorDevice]
 }
 
+enum DeveloperScanEvent {
+    case status(String)
+    case devToolFound(DevTool)
+    case devToolSizeResolved(id: String, pathSizeBytesByPath: [String: Int64], sizeBytes: Int64, lastModified: Date)
+    case projectGroupFound(ProjectGroup)
+    case simulatorFound(SimulatorDevice)
+    case simulatorSizeResolved(id: UUID, sizeBytes: Int64)
+}
+
 final class DevScanner {
+    private struct DevToolSizeJob {
+        let toolID: String
+        let toolLabel: String
+        let paths: [URL]
+    }
+
     /// Maps scanner labels to keys in `explanations.json`.
     private static let toolExplanationKeys: [String: String] = [
         "Xcode Derived Data": "DerivedData",
@@ -105,6 +120,57 @@ final class DevScanner {
             projects: projectList.sorted { $0.totalBytes > $1.totalBytes },
             simulators: simulatorList.sorted { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
         )
+    }
+
+    func scanDevToolsStream() -> AsyncStream<DeveloperScanEvent> {
+        AsyncStream { continuation in
+            let task = Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
+                await self.runDeveloperScan(continuation: continuation)
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private func runDeveloperScan(continuation: AsyncStream<DeveloperScanEvent>.Continuation) async {
+        continuation.yield(.status("Scanning Dev Tools..."))
+        let (tools, toolSizeJobs) = scanGlobalCachePlaceholders()
+        for tool in tools {
+            if Task.isCancelled {
+                continuation.finish()
+                return
+            }
+            continuation.yield(.devToolFound(tool))
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { [toolSizeJobs] in
+                continuation.yield(.status("Calculating Dev Tool sizes..."))
+                await self.runDevToolSizeJobs(toolSizeJobs, continuation: continuation)
+            }
+
+            group.addTask {
+                if Task.isCancelled { return }
+                continuation.yield(.status("Scanning iOS Simulators..."))
+                let simulators = await self.discoverShutdownSimulatorsWithoutSizes()
+                for simulator in simulators {
+                    if Task.isCancelled { return }
+                    continuation.yield(.simulatorFound(simulator))
+                }
+                await self.runSimulatorSizeJobs(simulators, continuation: continuation)
+            }
+
+            group.addTask {
+                if Task.isCancelled { return }
+                continuation.yield(.status("Scanning Developer Projects..."))
+                _ = await self.discoverProjects(continuation: continuation)
+            }
+        }
+
+        continuation.finish()
     }
 
     // MARK: - iOS Simulators
@@ -471,10 +537,10 @@ final class DevScanner {
 
     // MARK: - Global dev tool caches
 
-    private func scanGlobalCaches() -> [DevTool] {
+    private func globalCacheDefinitions() -> [(label: String, paths: [URL])] {
         let home = FileManager.default.homeDirectoryForCurrentUser
 
-        let mapped: [(String, [URL])] = [
+        return [
             ("Xcode Derived Data", [home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true)]),
             ("Xcode Archives", [home.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true)]),
             ("Xcode iOS DeviceSupport", [home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport", isDirectory: true)]),
@@ -574,30 +640,75 @@ final class DevScanner {
                 home.appendingPathComponent(".cache/ms-playwright", isDirectory: true)
             ])
         ]
+    }
+
+    private func scanGlobalCachePlaceholders() -> ([DevTool], [DevToolSizeJob]) {
+        let built = globalCacheDefinitions().compactMap { entry -> DevTool? in
+            let label = entry.label
+            let paths = entry.paths
+            let existing = paths.filter {
+                FileManager.default.fileExists(atPath: $0.path)
+            }
+            guard !existing.isEmpty else { return nil }
+
+            let definitionKey = Self.toolExplanationKeys[label] ?? label
+            let reinstall = reinstallRollup(for: existing)
+            return DevTool(
+                definitionKey: definitionKey,
+                toolName: label,
+                paths: existing.map(\.standardizedFileURL),
+                sizeBytes: 0,
+                pathSizeBytesByPath: [:],
+                lastModified: .distantPast,
+                isSelected: false,
+                isDetected: true,
+                safetyInfo: safetyInfo(
+                    forToolLabel: label,
+                    primaryPath: existing.first
+                ),
+                reinstallSafety: reinstall
+            )
+        }
+
+        let tools = groupDevToolsByDefinitionKey(built)
+        let jobs = tools.map {
+            DevToolSizeJob(toolID: $0.id, toolLabel: $0.toolName, paths: $0.paths)
+        }
+        return (tools, jobs)
+    }
+
+    private func scanGlobalCaches() -> [DevTool] {
+        let mapped = globalCacheDefinitions()
 
         let built = mapped.map { entry -> DevTool in
-            let label = entry.0
-            let paths = entry.1
+            let label = entry.label
+            let paths = entry.paths
             let existing = paths.filter {
                 FileManager.default.fileExists(atPath: $0.path)
             }
 
-            let size = existing.reduce(Int64(0)) {
-                $0 + Self.pathByteSize(toolLabel: label, at: $1)
+            var pathSizes: [String: Int64] = [:]
+            for path in existing {
+                pathSizes[path.standardizedFileURL.path] = Self.pathByteSize(toolLabel: label, at: path)
             }
+            let size = pathSizes.values.reduce(Int64(0), +)
+            let modified = existing.map { FolderSizing.contentModificationDate(at: $0) }.max() ?? .distantPast
 
             let definitionKey = Self.toolExplanationKeys[label] ?? label
             return DevTool(
                 definitionKey: definitionKey,
                 toolName: label,
-                paths: paths,
+                paths: existing.map(\.standardizedFileURL),
                 sizeBytes: size,
+                pathSizeBytesByPath: pathSizes,
+                lastModified: modified,
                 isSelected: false,
                 isDetected: !existing.isEmpty,
                 safetyInfo: safetyInfo(
                     forToolLabel: label,
                     primaryPath: paths.first
-                )
+                ),
+                reinstallSafety: reinstallRollup(for: existing)
             )
         }
         return groupDevToolsByDefinitionKey(built)
@@ -631,24 +742,134 @@ final class DevScanner {
         }
 
         let existing = mergedPaths.filter { FileManager.default.fileExists(atPath: $0.path) }
-        let size = existing.reduce(Int64(0)) {
-            $0 + Self.pathByteSize(toolLabel: anchor.toolName, at: $1)
+        var pathSizes: [String: Int64] = [:]
+        for path in existing {
+            let key = path.standardizedFileURL.path
+            pathSizes[key] = members.compactMap { $0.pathSizeBytesByPath[key] }.first ?? 0
         }
+        let size = pathSizes.values.reduce(Int64(0), +)
+        let modified = members.map(\.lastModified).max() ?? .distantPast
 
         return DevTool(
             definitionKey: definitionKey,
             toolName: anchor.toolName,
-            paths: mergedPaths,
+            paths: existing.map(\.standardizedFileURL),
             sizeBytes: size,
+            pathSizeBytesByPath: pathSizes,
+            lastModified: modified,
             isSelected: members.contains(where: \.isSelected),
             isDetected: !existing.isEmpty,
-            safetyInfo: anchor.safetyInfo
+            safetyInfo: anchor.safetyInfo,
+            reinstallSafety: reinstallRollup(for: existing)
         )
+    }
+
+    private func runDevToolSizeJobs(
+        _ jobs: [DevToolSizeJob],
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation,
+        maxConcurrent: Int = 4
+    ) async {
+        guard !jobs.isEmpty else { return }
+        await withTaskGroup(of: (String, [String: Int64], Int64, Date)?.self) { group in
+            var iterator = jobs.makeIterator()
+            var running = 0
+
+            func enqueueNext() {
+                guard let job = iterator.next() else { return }
+                running += 1
+                group.addTask {
+                    if Task.isCancelled { return nil }
+                    var pathSizes: [String: Int64] = [:]
+                    var modified = Date.distantPast
+                    for path in job.paths {
+                        if Task.isCancelled { return nil }
+                        let standardized = path.standardizedFileURL
+                        pathSizes[standardized.path] = Self.pathByteSize(toolLabel: job.toolLabel, at: standardized)
+                        modified = max(modified, FolderSizing.contentModificationDate(at: standardized))
+                    }
+                    let total = pathSizes.values.reduce(Int64(0), +)
+                    return (job.toolID, pathSizes, total, modified)
+                }
+            }
+
+            for _ in 0..<min(maxConcurrent, jobs.count) {
+                enqueueNext()
+            }
+
+            while running > 0 {
+                guard let result = await group.next() else { break }
+                running -= 1
+                if let (id, pathSizes, total, modified) = result {
+                    continuation.yield(.devToolSizeResolved(
+                        id: id,
+                        pathSizeBytesByPath: pathSizes,
+                        sizeBytes: total,
+                        lastModified: modified
+                    ))
+                }
+                if Task.isCancelled {
+                    group.cancelAll()
+                    break
+                }
+                enqueueNext()
+            }
+        }
+    }
+
+    private func runSimulatorSizeJobs(
+        _ devices: [SimulatorDevice],
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation,
+        maxConcurrent: Int = 4
+    ) async {
+        guard !devices.isEmpty else { return }
+        await withTaskGroup(of: (UUID, Int64)?.self) { group in
+            var iterator = devices.makeIterator()
+            var running = 0
+
+            func enqueueNext() {
+                guard let device = iterator.next() else { return }
+                running += 1
+                group.addTask {
+                    if Task.isCancelled { return nil }
+                    let bytes = FolderSizing.directoryByteSize(at: device.folderURL)
+                    if Task.isCancelled { return nil }
+                    return (device.id, bytes)
+                }
+            }
+
+            for _ in 0..<min(maxConcurrent, devices.count) {
+                enqueueNext()
+            }
+
+            while running > 0 {
+                guard let result = await group.next() else { break }
+                running -= 1
+                if let (id, size) = result {
+                    continuation.yield(.simulatorSizeResolved(id: id, sizeBytes: size))
+                }
+                if Task.isCancelled {
+                    group.cancelAll()
+                    break
+                }
+                enqueueNext()
+            }
+        }
+    }
+
+    private func reinstallRollup(for paths: [URL]) -> ReinstallSafetyStatus {
+        guard !paths.isEmpty else { return .notApplicable }
+        let values = paths.map { ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: $0) }
+        if values.contains(.missingLockfile) { return .missingLockfile }
+        if values.allSatisfy({ $0 == .notApplicable }) { return .notApplicable }
+        return .reinstallable
     }
 
     // MARK: - Project-aware scan
 
-    private func discoverProjects(maxDepth: Int = 6) async -> [ProjectGroup] {
+    private func discoverProjects(
+        maxDepth: Int = 6,
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
+    ) async -> [ProjectGroup] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let roots = [
             home,
@@ -791,7 +1012,7 @@ final class DevScanner {
         discoveredRoots.sort { $0.0.path.count < $1.0.path.count }
 
         /// Build artifact list per root (expensive sizing runs concurrently).
-        return await buildProjectGroups(for: discoveredRoots)
+        return await buildProjectGroups(for: discoveredRoots, continuation: continuation)
     }
 
     private func containsXcodeBundle(in directory: URL) -> Bool {
@@ -823,7 +1044,10 @@ final class DevScanner {
             || fm.fileExists(atPath: android.appendingPathComponent("build.gradle.kts").path)
     }
 
-    private func buildProjectGroups(for discovered: [(URL, [ProjectType])]) async -> [ProjectGroup] {
+    private func buildProjectGroups(
+        for discovered: [(URL, [ProjectType])],
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
+    ) async -> [ProjectGroup] {
         guard !discovered.isEmpty else { return [] }
 
         return await withTaskGroup(of: ProjectGroup?.self) { group in
@@ -878,7 +1102,10 @@ final class DevScanner {
 
             var groups: [ProjectGroup] = []
             for await g in group {
-                if let g { groups.append(g) }
+                if let g {
+                    groups.append(g)
+                    continuation?.yield(.projectGroupFound(g))
+                }
             }
             return groups
         }

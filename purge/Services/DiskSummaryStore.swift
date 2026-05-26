@@ -8,6 +8,10 @@ final class DiskSummaryStore: ObservableObject {
     @Published private(set) var usedDiskBytes: Int64 = 0
     @Published private(set) var freeDiskBytes: Int64 = 0
 
+    init() {
+        refresh()
+    }
+
     func refresh() {
         let home = FileManager.default.homeDirectoryForCurrentUser
         guard let values = try? home.resourceValues(forKeys: [

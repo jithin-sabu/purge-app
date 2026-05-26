@@ -214,12 +214,11 @@ enum ExplanationDatabase {
         return cachedAliasesByKey ?? [:]
     }
 
-    /// Sandbox app container cache folder when present and non-empty.
+    /// Sandbox app container cache folder when present.
     nonisolated static func containerCacheURL(forBundleID bundleID: String, home: URL) -> URL? {
         let url = home
             .appendingPathComponent("Library/Containers/\(bundleID)/Data/Library/Caches", isDirectory: true)
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        guard FolderSizing.directoryByteSize(at: url) > 0 else { return nil }
         return url
     }
 

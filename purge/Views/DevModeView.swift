@@ -5,22 +5,19 @@ struct DevToolsView: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isLoading: Bool
+    let scanPhase: PurgeStore.ScanPhase
     let onScan: () -> Void
 
     @State private var expandedProjectRoots = Set<String>()
     @State private var iosSimulatorsExpanded = false
-    /// Last completed dev scan; stabilizes chip counts during an in-flight rescan.
-    @State private var displayedDevTools: [DevTool] = []
-    @State private var displayedProjectGroups: [ProjectGroup] = []
-    @State private var displayedSimulatorDevices: [SimulatorDevice] = []
 
     /// Stable list IDs so sibling `ForEach` loops in the same `List` never share
     /// bare `Int` identities (which can duplicate or swap rows on expand/collapse).
     private struct ProjectGroupRowKey: Hashable, Identifiable {
         let id: String
         let groupIndex: Int
-        static func make(_ groupIndex: Int) -> ProjectGroupRowKey {
-            ProjectGroupRowKey(id: "project-group-\(groupIndex)", groupIndex: groupIndex)
+        static func make(group: ProjectGroup, groupIndex: Int) -> ProjectGroupRowKey {
+            ProjectGroupRowKey(id: "project-group-\(group.id)", groupIndex: groupIndex)
         }
     }
 
@@ -28,22 +25,27 @@ struct DevToolsView: View {
         let id: String
         let groupIndex: Int
         let artifactIndex: Int
-        static func make(groupIndex: Int, artifactIndex: Int) -> ProjectArtifactRowKey {
-            ProjectArtifactRowKey(
-                id: "project-\(groupIndex)-artifact-\(artifactIndex)",
+        let groupID: String
+        let artifactID: String
+        static func make(group: ProjectGroup, groupIndex: Int, artifactIndex: Int) -> ProjectArtifactRowKey {
+            let artifact = group.artifacts[artifactIndex]
+            return ProjectArtifactRowKey(
+                id: "project-\(group.id)-artifact-\(artifact.id)",
                 groupIndex: groupIndex,
-                artifactIndex: artifactIndex
+                artifactIndex: artifactIndex,
+                groupID: group.id,
+                artifactID: artifact.id
             )
         }
     }
 
     private enum MergedDevStandardRow: Hashable, Identifiable {
-        case tool(index: Int)
+        case tool(id: String, index: Int)
         case simulators
 
         var id: String {
             switch self {
-            case .tool(let index): return "merged-tool-\(index)"
+            case .tool(let id, _): return "merged-tool-\(id)"
             case .simulators: return "merged-simulators"
             }
         }
@@ -207,27 +209,27 @@ struct DevToolsView: View {
 
     private func mergedStandardRowEntries() -> [MergedDevStandardRow] {
         let tools = sortedStandardToolIndices()
-        var rows: [MergedDevStandardRow] = tools.map { .tool(index: $0) }
+        var rows: [MergedDevStandardRow] = tools.map { .tool(id: store.devTools[$0].id, index: $0) }
         guard simulatorSectionVisible else { return rows }
         rows.append(.simulators)
 
         func entrySize(_ e: MergedDevStandardRow) -> Int64 {
             switch e {
-            case .tool(let i): return store.devTools[i].sizeBytes
+            case .tool(_, let i): return store.devTools[i].sizeBytes
             case .simulators: return simulatorSectionByteTotal()
             }
         }
 
         func entryDate(_ e: MergedDevStandardRow) -> Date {
             switch e {
-            case .tool(let i): return devToolModified(store.devTools[i])
+            case .tool(_, let i): return devToolModified(store.devTools[i])
             case .simulators: return simulatorSectionModifiedDate()
             }
         }
 
         func entryName(_ e: MergedDevStandardRow) -> String {
             switch e {
-            case .tool(let i): return store.devTools[i].toolName
+            case .tool(_, let i): return store.devTools[i].toolName
             case .simulators: return "iOS Simulators"
             }
         }
@@ -333,14 +335,6 @@ struct DevToolsView: View {
         }
     }
 
-    private func reinstallRollup(for tool: DevTool) -> ReinstallSafetyStatus {
-        guard !tool.paths.isEmpty else { return .notApplicable }
-        let values = tool.paths.map { ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: $0) }
-        if values.contains(.missingLockfile) { return .missingLockfile }
-        if values.allSatisfy({ $0 == .notApplicable }) { return .notApplicable }
-        return .reinstallable
-    }
-
     private func toolShowsUncommitted(_ tool: DevTool) -> Bool {
         tool.paths.contains { path in
             let key = path.standardizedFileURL.path
@@ -412,16 +406,13 @@ struct DevToolsView: View {
     }
 
     private func developerSafetySnapshotsForChipRow() -> [SafetyInfo] {
-        let tools = isLoading ? displayedDevTools : store.devTools
-        let groups = isLoading ? displayedProjectGroups : store.projectGroups
-        let sims = isLoading ? displayedSimulatorDevices : store.simulatorDevices
-        var infos: [SafetyInfo] = tools.filter(\.isDetected).map(\.safetyInfo)
-        for group in groups {
+        var infos: [SafetyInfo] = store.devTools.filter(\.isDetected).map(\.safetyInfo)
+        for group in store.projectGroups {
             for art in group.artifacts {
                 infos.append(art.safetyInfo)
             }
         }
-        for sim in sims {
+        for sim in store.simulatorDevices {
             infos.append(sim.safetyInfo)
         }
         return infos
@@ -437,28 +428,17 @@ struct DevToolsView: View {
     }
 
     private var developerListEmpty: Bool {
-        if isLoading {
-            return displayedDevTools.isEmpty
-                && displayedProjectGroups.isEmpty
-                && displayedSimulatorDevices.isEmpty
-        }
         return store.projectGroups.isEmpty
             && store.devTools.isEmpty
             && store.simulatorDevices.isEmpty
     }
 
-    private var skeletonRowCount: Int {
-        let tools = displayedDevTools.filter(\.isDetected).count
-        let artifacts = displayedProjectGroups.reduce(0) { $0 + $1.artifacts.count }
-        let sims = displayedSimulatorDevices.count
-        return SkeletonRowCount.clamped(tools + artifacts + sims)
-    }
-
     private var showsDeveloperListContent: Bool {
-        !isLoading && !developerListEmpty && !nothingMatchesFilter
+        !developerListEmpty && !nothingMatchesFilter
     }
 
     private func isDevToolMetadataPending(_ tool: DevTool) -> Bool {
+        if store.pendingDevToolSizeIDs.contains(tool.id) { return true }
         guard store.isEnrichingDeveloper else { return false }
         return tool.paths.contains {
             store.devToolRepoStatusByPath[$0.standardizedFileURL.path] == nil
@@ -513,7 +493,7 @@ struct DevToolsView: View {
         var sum = Int64(0)
         for entry in mergedStandardRowEntries() {
             switch entry {
-            case .tool(let i):
+            case .tool(_, let i):
                 sum += store.devTools[i].sizeBytes
             case .simulators:
                 sum += simulatorSectionByteTotal()
@@ -542,16 +522,13 @@ struct DevToolsView: View {
     }
 
     private var pageSubtitle: String {
-        if isLoading {
-            return "Scanning developer tool folders and project artifacts."
-        }
         return "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable"
     }
 
     var body: some View {
         VStack(spacing: 0) {
             AppSectionPageHeader(title: "Dev Tools", subtitle: pageSubtitle) {
-                AppScanCleanActions(onScan: onScan)
+                AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
             }
 
             FilterSortToolbar(
@@ -571,33 +548,34 @@ struct DevToolsView: View {
                 showsControlsRow: false
             )
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .disabled(isLoading)
 
             HStack {
                 TriStateCheckbox(title: "Select All", state: selectAllDeveloperState) {
                     toggleDeveloperSelectAll()
                 }
                 .fixedSize()
-                .disabled(isLoading || !hasEligibleSelectableRows)
+                .disabled(!hasEligibleSelectableRows)
                 Spacer()
                 AppSortMenu(selection: sortOptionBinding)
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.vertical, AppStyle.Spacing.xSmall)
-            .disabled(isLoading)
 
             ZStack {
-                ScanResultsListLoadingSurface(
-                    isLoading: isLoading,
-                    skeletonRowCount: skeletonRowCount
-                ) {
-                    if developerListEmpty {
-                        placeholderNoData
-                    } else if nothingMatchesFilter {
-                        emptyFilterState
+                if developerListEmpty {
+                    if isLoading {
+                        scanningPlaceholder
                     } else {
-                        developerListOnly
+                        placeholderNoData
                     }
+                } else if nothingMatchesFilter {
+                    if isLoading {
+                        scanningPlaceholder
+                    } else {
+                        emptyFilterState
+                    }
+                } else {
+                    developerListOnly
                 }
 
                 if store.isDeleting && showsDeveloperListContent && !store.isInteractiveSafeCleanupInProgress {
@@ -605,73 +583,38 @@ struct DevToolsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-
-            ScanStatusBar(
-                isLoading: isLoading,
-                visibleCount: developerVisibleItemCount,
-                totalCount: developerTotalRowCount,
-                isFiltered: currentSafetyFilter != .all,
-                visibleBytes: developerVisibleByteSize,
-                totalBytes: developerTotalByteSize,
-                selectedCount: selectedInScopeCount,
-                selectedBytes: selectedInScopeBytes
-            )
         }
         .background(AppStyle.canvas)
-        .onAppear {
-            syncDisplayedDeveloperSnapshotIfIdle()
-            guard !isLoading else { return }
-            store.refreshDetectedDevToolSizes()
-        }
-        .onChange(of: isLoading) { scanning in
-            if !scanning {
-                syncDisplayedDeveloperSnapshotFromStore()
-            }
-        }
-        .onChange(of: store.devTools) { _ in
-            syncDisplayedDeveloperSnapshotIfIdle()
-        }
-        .onChange(of: store.projectGroups) { _ in
-            syncDisplayedDeveloperSnapshotIfIdle()
-        }
-        .onChange(of: store.simulatorDevices) { _ in
-            syncDisplayedDeveloperSnapshotIfIdle()
-        }
-    }
-
-    private func syncDisplayedDeveloperSnapshotIfIdle() {
-        guard !isLoading else { return }
-        syncDisplayedDeveloperSnapshotFromStore()
-    }
-
-    private func syncDisplayedDeveloperSnapshotFromStore() {
-        displayedDevTools = store.devTools
-        displayedProjectGroups = store.projectGroups
-        displayedSimulatorDevices = store.simulatorDevices
     }
 
     private var placeholderNoData: some View {
         VStack(spacing: 8) {
             Text("No dev tool folders surfaced yet.")
                 .font(.headline)
-            Text("Run a scan after adding projects or tool-generated folders.")
+            Text(scanPhase == .completed ? "Your Mac is looking clean. Check back later." : "Run a scan after adding projects or tool-generated folders.")
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var scanningPlaceholder: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Scanning developer folders")
     }
 
     private var developerListOnly: some View {
         List {
             ForEach(mergedStandardRowEntries()) { entry in
                 switch entry {
-                case .tool(let index):
+                case .tool(let entryID, let index):
+                    if store.devTools.indices.contains(index), store.devTools[index].id == entryID {
                     let tool = store.devTools[index]
                     let toolID = tool.id
                     let primaryPath = tool.primaryOverridePath
                     ScanResultRow(
-                        isSelected: bindingForStandardTool(index),
+                        isSelected: bindingForStandardTool(id: toolID),
                         primaryLabel: tool.safetyInfo.headline,
                         formattedSize: tool.formattedSize,
                         safetyInfo: tool.safetyInfo,
@@ -680,7 +623,7 @@ struct DevToolsView: View {
                             ? { store.requestUnknownDeletion(candidates: store.unknownDeletionCandidates(forDevTool: tool)) }
                             : nil,
                         detailCaption: nil,
-                        reinstallSafety: reinstallRollup(for: tool),
+                        reinstallSafety: tool.reinstallSafety,
                         showUncommittedRepoChanges: !isDevToolMetadataPending(tool) && toolShowsUncommitted(tool),
                         onRecategorize: primaryPath != nil ? { store.recategorizeDevTool(id: toolID) } : nil,
                         onMarkSafe: primaryPath != nil ? { store.markDevTool(id: toolID, as: .safe) } : nil,
@@ -695,7 +638,8 @@ struct DevToolsView: View {
                     .listRowInsets(ScanListRowInsets.standard)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                    .transition(cleaningRowRemovalTransition)
+                    .transition(rowInsertionTransition)
+                    }
 
                 case .simulators:
                     iosSimulatorsHostRow
@@ -703,31 +647,33 @@ struct DevToolsView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     if iosSimulatorsExpanded {
-                        ForEach(sortedVisibleSimulatorIndices(), id: \.self) { si in
-                            let device = store.simulatorDevices[si]
-                            ScanResultRow(
-                                isSelected: bindingForSimulator(id: device.id),
-                                primaryLabel: device.safetyInfo.headline,
-                                formattedSize: device.formattedSize,
-                                safetyInfo: device.safetyInfo,
-                                brandIcon: .sfSymbol("ipad.and.iphone"),
-                                onRequestUnknownDelete: nil,
-                                detailCaption: nil,
-                                reinstallSafety: .notApplicable,
-                                showUncommittedRepoChanges: false,
-                                onRecategorize: nil,
-                                onMarkSafe: nil,
-                                onMarkMedium: nil,
-                                onMarkDanger: nil,
-                                onResetToAutomatic: nil,
-                                isUserOverride: false,
-                                allowsBulkSelection: !device.isDanger,
-                                isMetadataPending: isSimulatorMetadataPending(device)
-                            )
-                            .padding(.leading, 24)
-                            .listRowInsets(ScanListRowInsets.standard)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                        ForEach(sortedVisibleSimulatorIndices().map { store.simulatorDevices[$0].id }, id: \.self) { deviceID in
+                            if let device = store.simulatorDevices.first(where: { $0.id == deviceID }) {
+                                ScanResultRow(
+                                    isSelected: bindingForSimulator(id: device.id),
+                                    primaryLabel: device.safetyInfo.headline,
+                                    formattedSize: device.formattedSize,
+                                    safetyInfo: device.safetyInfo,
+                                    brandIcon: .sfSymbol("ipad.and.iphone"),
+                                    onRequestUnknownDelete: nil,
+                                    detailCaption: nil,
+                                    reinstallSafety: .notApplicable,
+                                    showUncommittedRepoChanges: false,
+                                    onRecategorize: nil,
+                                    onMarkSafe: nil,
+                                    onMarkMedium: nil,
+                                    onMarkDanger: nil,
+                                    onResetToAutomatic: nil,
+                                    isUserOverride: false,
+                                    allowsBulkSelection: !device.isDanger,
+                                    isMetadataPending: isSimulatorMetadataPending(device)
+                                )
+                                .padding(.leading, 24)
+                                .listRowInsets(ScanListRowInsets.standard)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .transition(rowInsertionTransition)
+                            }
                         }
                     }
                 }
@@ -735,16 +681,18 @@ struct DevToolsView: View {
 
             if !sortedProjectGroupIndices().isEmpty {
                 Section {
-                    ForEach(sortedProjectGroupIndices().map(ProjectGroupRowKey.make)) { row in
+                    ForEach(sortedProjectGroupIndices().map { ProjectGroupRowKey.make(group: store.projectGroups[$0], groupIndex: $0) }) { row in
                         let gi = row.groupIndex
-                        let group = store.projectGroups[gi]
-                        let isExpanded = expandedProjectRoots.contains(group.id)
+                        if store.projectGroups.indices.contains(gi), row.id == "project-group-\(store.projectGroups[gi].id)" {
+                            let group = store.projectGroups[gi]
+                            let isExpanded = expandedProjectRoots.contains(group.id)
 
-                        projectGroupCard(for: group, groupIndex: gi, isExpanded: isExpanded)
-                            .listRowInsets(ScanListRowInsets.standard)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .transition(cleaningRowRemovalTransition)
+                            projectGroupCard(for: group, groupIndex: gi, isExpanded: isExpanded)
+                                .listRowInsets(ScanListRowInsets.standard)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .transition(rowInsertionTransition)
+                        }
                     }
                 } header: {
                     Text(projectSectionHeading)
@@ -752,11 +700,27 @@ struct DevToolsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            ScanListBottomSpacer()
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(AppStyle.canvas)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
+        .animation(rowInsertionAnimation, value: developerTotalRowCount)
+    }
+
+    private var rowInsertionAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08)
+    }
+
+    private var rowInsertionTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .asymmetric(
+                insertion: .scanRowInsertion,
+                removal: cleaningRowRemovalTransition
+            )
     }
 
     private var cleaningRowRemovalTransition: AnyTransition {
@@ -880,11 +844,13 @@ struct DevToolsView: View {
         return "Developer Projects"
     }
 
-    private func projectGroupCard(for group: ProjectGroup, groupIndex gi: Int, isExpanded: Bool) -> some View {
+    @ViewBuilder
+    private func projectGroupCard(for group: ProjectGroup, groupIndex _: Int, isExpanded: Bool) -> some View {
+        if let currentGroupIndex = store.projectGroups.firstIndex(where: { $0.id == group.id }) {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
-                TriStateCheckbox(title: "", state: projectSelectTriState(forGroupIndex: gi)) {
-                    toggleProjectEligibleSelection(groupIndex: gi)
+                TriStateCheckbox(title: "", state: projectSelectTriState(forGroupIndex: currentGroupIndex)) {
+                    toggleProjectEligibleSelection(groupIndex: currentGroupIndex)
                 }
                 .frame(width: 24)
 
@@ -901,7 +867,7 @@ struct DevToolsView: View {
                         Text(group.displayName)
                             .font(AppStyle.Typography.rowTitle)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(formatBytes(visibleGroupByteTotal(groupIndex: gi)))
+                        Text(formatBytes(visibleGroupByteTotal(groupIndex: currentGroupIndex)))
                             .font(AppStyle.Typography.rowTitle)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -922,7 +888,7 @@ struct DevToolsView: View {
             .frame(minHeight: AppStyle.Row.parentHeight)
 
             if isExpanded {
-                projectArtifactRows(groupIndex: gi)
+                projectArtifactRows(groupIndex: currentGroupIndex)
             }
         }
         .background(AppStyle.elevated.opacity(0.5))
@@ -930,51 +896,65 @@ struct DevToolsView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Project \(group.displayName)")
         .accessibilityHint("Grouped dev tool cleanup targets")
-    }
-
-    @ViewBuilder
-    private func projectArtifactRows(groupIndex gi: Int) -> some View {
-        ForEach(
-            sortedVisibleArtifactIndices(forGroup: gi).map {
-                ProjectArtifactRowKey.make(groupIndex: gi, artifactIndex: $0)
-            }
-        ) { artRow in
-            projectArtifactRow(groupIndex: gi, artifactIndex: artRow.artifactIndex)
         }
     }
 
     @ViewBuilder
-    private func projectArtifactRow(groupIndex gi: Int, artifactIndex ai: Int) -> some View {
-        let art = store.projectGroups[gi].artifacts[ai]
-        let artifactPath = art.path.standardizedFileURL.path
-        let unknownHandler: (() -> Void)? = art.safetyInfo.level == .unknown
-            ? { store.requestUnknownDeletion(candidates: store.unknownDeletionCandidates(forArtifact: art)) }
-            : nil
+    private func projectArtifactRows(groupIndex gi: Int) -> some View {
+        if store.projectGroups.indices.contains(gi) {
+            let group = store.projectGroups[gi]
+            ForEach(
+                sortedVisibleArtifactIndices(forGroup: gi).map {
+                    ProjectArtifactRowKey.make(group: group, groupIndex: gi, artifactIndex: $0)
+                }
+            ) { artRow in
+                projectArtifactRow(
+                    groupIndex: artRow.groupIndex,
+                    artifactIndex: artRow.artifactIndex,
+                    groupID: artRow.groupID,
+                    artifactID: artRow.artifactID
+                )
+            }
+        }
+    }
 
-        ScanResultRow(
-            isSelected: bindingForArtifact(gi: gi, ai: ai),
-            primaryLabel: art.safetyInfo.headline,
-            formattedSize: art.formattedSize,
-            safetyInfo: art.safetyInfo,
-            brandIcon: nil,
-            onRequestUnknownDelete: unknownHandler,
-            detailCaption: nil,
-            reinstallSafety: nil,
-            showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
-            onRecategorize: { store.recategorizeProjectArtifact(groupIndex: gi, artifactIndex: ai) },
-            onMarkSafe: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .safe) },
-            onMarkMedium: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .medium) },
-            onMarkDanger: { store.markProjectArtifact(groupIndex: gi, artifactIndex: ai, as: .danger) },
-            onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupIndex: gi, artifactIndex: ai) },
-            isUserOverride: store.userOverridePaths.contains(artifactPath),
-            showsBulkCheckbox: false,
-            isMetadataPending: isArtifactMetadataPending(art),
-            showsCardChrome: false,
-            showsLeadingIcon: false
-        )
-        .padding(.trailing, AppStyle.Spacing.xSmall)
-        .padding(.leading, AppStyle.Row.projectArtifactLeadingInset)
-        .transition(cleaningRowRemovalTransition)
+    @ViewBuilder
+    private func projectArtifactRow(groupIndex gi: Int, artifactIndex ai: Int, groupID: String, artifactID: String) -> some View {
+        if store.projectGroups.indices.contains(gi),
+           store.projectGroups[gi].id == groupID,
+           store.projectGroups[gi].artifacts.indices.contains(ai),
+           store.projectGroups[gi].artifacts[ai].id == artifactID {
+            let art = store.projectGroups[gi].artifacts[ai]
+            let artifactPath = art.path.standardizedFileURL.path
+            let unknownHandler: (() -> Void)? = art.safetyInfo.level == .unknown
+                ? { store.requestUnknownDeletion(candidates: store.unknownDeletionCandidates(forArtifact: art)) }
+                : nil
+
+            ScanResultRow(
+                isSelected: bindingForArtifact(groupID: groupID, artifactID: artifactID),
+                primaryLabel: art.safetyInfo.headline,
+                formattedSize: art.formattedSize,
+                safetyInfo: art.safetyInfo,
+                brandIcon: nil,
+                onRequestUnknownDelete: unknownHandler,
+                detailCaption: nil,
+                reinstallSafety: nil,
+                showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
+                onRecategorize: { store.recategorizeProjectArtifact(groupID: groupID, artifactID: artifactID) },
+                onMarkSafe: { store.markProjectArtifact(groupID: groupID, artifactID: artifactID, as: .safe) },
+                onMarkMedium: { store.markProjectArtifact(groupID: groupID, artifactID: artifactID, as: .medium) },
+                onMarkDanger: { store.markProjectArtifact(groupID: groupID, artifactID: artifactID, as: .danger) },
+                onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifactID) },
+                isUserOverride: store.userOverridePaths.contains(artifactPath),
+                showsBulkCheckbox: false,
+                isMetadataPending: isArtifactMetadataPending(art) || store.projectArtifactHasPendingSize(art),
+                showsCardChrome: false,
+                showsLeadingIcon: false
+            )
+            .padding(.trailing, AppStyle.Spacing.xSmall)
+            .padding(.leading, AppStyle.Row.projectArtifactLeadingInset)
+            .transition(cleaningRowRemovalTransition)
+        }
     }
 
     private func toggleProjectExpanded(_ groupID: String) {
@@ -985,23 +965,23 @@ struct DevToolsView: View {
         }
     }
 
-    private func bindingForStandardTool(_ index: Int) -> Binding<Bool> {
+    private func bindingForStandardTool(id: String) -> Binding<Bool> {
         Binding(
-            get: { store.devTools[index].isSelected },
-            set: { newVal in
-                var tools = store.devTools
-                tools[index].isSelected = newVal
-                store.devTools = tools
-            }
+            get: { store.devTools.first(where: { $0.id == id })?.isSelected ?? false },
+            set: { newVal in store.setDevToolSelected(id: id, isSelected: newVal) }
         )
     }
 
-    private func bindingForArtifact(gi: Int, ai: Int) -> Binding<Bool> {
+    private func bindingForArtifact(groupID: String, artifactID: String) -> Binding<Bool> {
         Binding(
-            get: { store.projectGroups[gi].artifacts[ai].isSelected },
-            set: { newVal in
-                store.setProjectArtifactSelected(groupIndex: gi, artifactIndex: ai, isSelected: newVal)
-            }
+            get: {
+                store.projectGroups
+                    .first(where: { $0.id == groupID })?
+                    .artifacts
+                    .first(where: { $0.id == artifactID })?
+                    .isSelected ?? false
+            },
+            set: { newVal in store.setProjectArtifactSelected(groupID: groupID, artifactID: artifactID, isSelected: newVal) }
         )
     }
 
@@ -1018,11 +998,11 @@ struct DevToolsView: View {
             allSimSafeSelected
 
         let newVal = !allOn
+        var tools = store.devTools
         for ti in toolsIx {
-            var tools = store.devTools
             tools[ti].isSelected = newVal
-            store.devTools = tools
         }
+        store.devTools = tools
         for p in pairs {
             store.setProjectArtifactSelected(groupIndex: p.0, artifactIndex: p.1, isSelected: newVal)
         }
@@ -1069,9 +1049,7 @@ struct DevToolsView: View {
     }
 
     private func devToolModified(_ tool: DevTool) -> Date {
-        tool.paths.compactMap { url in
-            try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        }.max() ?? .distantPast
+        tool.lastModified
     }
 
     private func projectGroupIconAccessibilityLabel(for group: ProjectGroup) -> String {
@@ -1084,14 +1062,22 @@ struct DevToolsView: View {
 }
 
 #Preview("Dev Tools — scanning") {
-    DevToolsView(isLoading: true, onScan: {})
+    DevToolsView(
+        isLoading: true,
+        scanPhase: .scanning,
+        onScan: {}
+    )
         .environmentObject(PurgeStore())
         .frame(width: 720, height: 560)
 }
 
 #Preview("Dev Tools — loaded") {
     let store = PurgeStore()
-    return DevToolsView(isLoading: false, onScan: {})
+    return DevToolsView(
+        isLoading: false,
+        scanPhase: .idle,
+        onScan: {}
+    )
         .environmentObject(store)
         .frame(width: 720, height: 560)
 }

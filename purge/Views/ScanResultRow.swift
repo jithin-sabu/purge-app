@@ -37,7 +37,7 @@ struct ScanResultRow: View {
     var allowsBulkSelection: Bool = true
     /// When `false`, hides the row checkbox; selection may still be driven by a parent control (e.g. project group header).
     var showsBulkCheckbox: Bool = true
-    /// When true, trailing size and safety badge show skeleton placeholders (post-scan enrichment).
+    /// When true, the trailing size shows a skeleton placeholder (post-scan enrichment).
     var isMetadataPending: Bool = false
     /// When false, the row renders without its own card chrome (for nested rows inside a parent card).
     var showsCardChrome: Bool = true
@@ -211,7 +211,7 @@ struct ScanResultRow: View {
                     alignment: .topLeading
                 )
 
-            if hasExtraBadges || isMetadataPending {
+            if hasExtraBadges {
                 badgesRow
             }
         }
@@ -242,11 +242,7 @@ struct ScanResultRow: View {
     @ViewBuilder
     private var trailingColumn: some View {
         if rendersAsPlaceholder {
-            VStack(alignment: .trailing, spacing: 8) {
-                SkeletonBar(width: 44, height: 10, cornerRadius: 4)
-                SkeletonBar(width: 72, height: 18, cornerRadius: AppStyle.Radius.chip)
-            }
-            .shimmering()
+            trailingMetadataSkeleton
         } else {
             loadedTrailingColumn
         }
@@ -254,12 +250,7 @@ struct ScanResultRow: View {
 
     private var loadedTrailingColumn: some View {
         ScanContentCrossfade(isLoading: isMetadataPending) {
-            VStack(alignment: .trailing, spacing: 8) {
-                SkeletonBar(width: 44, height: 10, cornerRadius: 4)
-                    .shimmering()
-                SkeletonBar(width: 72, height: 18, cornerRadius: AppStyle.Radius.chip)
-                    .shimmering()
-            }
+            trailingMetadataSkeleton
         } loaded: {
             VStack(alignment: .trailing, spacing: 8) {
                 Text(formattedSize)
@@ -272,9 +263,23 @@ struct ScanResultRow: View {
         }
     }
 
+    private var trailingMetadataSkeleton: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            SkeletonBar(width: 56, height: ScanResultRow.subheadlineOneLineHeight, cornerRadius: 4)
+            SkeletonBar(width: 92, height: 18, cornerRadius: AppStyle.Radius.chip)
+        }
+        .shimmering()
+    }
+
     /// Single-line height for `.headline` title text.
     static let headlineOneLineHeight: CGFloat = {
         let font = NSFont.preferredFont(forTextStyle: .headline)
+        return ceil(font.ascender - font.descender + font.leading)
+    }()
+
+    /// Single-line height for `.subheadline` trailing size text.
+    static let subheadlineOneLineHeight: CGFloat = {
+        let font = NSFont.preferredFont(forTextStyle: .subheadline)
         return ceil(font.ascender - font.descender + font.leading)
     }()
 
@@ -331,32 +336,26 @@ struct ScanResultRow: View {
         return ceil(lineHeight * 2)
     }()
 
+    @ViewBuilder
     private var extraBadges: some View {
-        ScanContentCrossfade(isLoading: isMetadataPending) {
-            SkeletonBar(width: 96, height: 16, cornerRadius: AppStyle.Radius.chip)
-                .shimmering()
-        } loaded: {
-            Group {
-                if isUserOverride {
-                    userOverrideBadge
-                }
-                if let detailCaption {
-                    AppBadge(text: detailCaption, tone: .neutral)
-                }
-                if let reinstallSafety {
-                    switch reinstallSafety {
-                    case .reinstallable:
-                        AppBadge(text: "Can be rebuilt", tone: .safe)
-                    case .missingLockfile:
-                        AppBadge(text: "Check support files", tone: .warning)
-                    case .notApplicable:
-                        EmptyView()
-                    }
-                }
-                if showUncommittedRepoChanges {
-                    AppBadge(text: "Local changes nearby", tone: .warning)
-                }
+        if isUserOverride {
+            userOverrideBadge
+        }
+        if let detailCaption {
+            AppBadge(text: detailCaption, tone: .neutral)
+        }
+        if let reinstallSafety {
+            switch reinstallSafety {
+            case .reinstallable:
+                AppBadge(text: "Can be rebuilt", tone: .safe)
+            case .missingLockfile:
+                AppBadge(text: "Check support files", tone: .warning)
+            case .notApplicable:
+                EmptyView()
             }
+        }
+        if showUncommittedRepoChanges {
+            AppBadge(text: "Local changes nearby", tone: .warning)
         }
     }
 

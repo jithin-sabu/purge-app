@@ -6,12 +6,11 @@ struct AppCachesView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var items: [CacheItem]
     let isLoading: Bool
+    let scanPhase: PurgeStore.ScanPhase
     let onScan: () -> Void
 
     @AppStorage("filter.appCaches") private var filterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("sort.appCaches") private var sortRaw: String = SortOption.sizeDesc.rawValue
-    /// Last completed scan snapshot; used for chip counts during an in-flight rescan so counts don't collapse to zero.
-    @State private var displayedItems: [CacheItem] = []
 
     private var currentSafetyFilter: SafetyFilter {
         SafetyFilter(rawValue: filterRaw) ?? .all
@@ -35,11 +34,6 @@ struct AppCachesView: View {
         items.indices.filter {
             currentSafetyFilter.matches(items[$0].safetyInfo) && !isVisuallyRemovedBySafeCleanup(items[$0])
         }
-    }
-
-    /// Chip aggregates during scan use the last finished scan so the chip row doesn't resize from 0 mid-scan.
-    private var itemsForChipCounts: [CacheItem] {
-        isLoading ? displayedItems : items
     }
 
     private var eligibleSelectIndices: [Int] {
@@ -72,10 +66,9 @@ struct AppCachesView: View {
     }
 
     private var chipCounts: [SafetyFilter: Int] {
-        let source = itemsForChipCounts
         var d: [SafetyFilter: Int] = [:]
         for filter in SafetyFilter.allCases {
-            d[filter] = source.filter { filter.matches($0.safetyInfo) }.count
+            d[filter] = items.filter { filter.matches($0.safetyInfo) }.count
         }
         return d
     }
@@ -115,24 +108,17 @@ struct AppCachesView: View {
     }
 
     private var pageSubtitle: String {
-        if isLoading {
-            return "Scanning application cache folders."
-        }
         return "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable"
     }
 
-    private var skeletonRowCount: Int {
-        SkeletonRowCount.clamped(displayedItems.count)
-    }
-
     private var showsListContent: Bool {
-        !isLoading && !items.isEmpty && !visibleIndices.isEmpty
+        !items.isEmpty && !visibleIndices.isEmpty
     }
 
     var body: some View {
         VStack(spacing: 0) {
             AppSectionPageHeader(title: "App Caches", subtitle: pageSubtitle) {
-                AppScanCleanActions(onScan: onScan)
+                AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
             }
 
             FilterSortToolbar(
@@ -150,33 +136,34 @@ struct AppCachesView: View {
                 showsControlsRow: false
             )
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .disabled(isLoading)
 
             HStack {
                 TriStateCheckbox(title: "Select All", state: selectAllState) {
                     toggleSelectAll()
                 }
                 .fixedSize()
-                .disabled(isLoading || eligibleSelectIndices.isEmpty)
+                .disabled(eligibleSelectIndices.isEmpty)
                 Spacer()
                 AppSortMenu(selection: sortOptionBinding)
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.vertical, AppStyle.Spacing.xSmall)
-            .disabled(isLoading)
 
             ZStack {
-                ScanResultsListLoadingSurface(
-                    isLoading: isLoading,
-                    skeletonRowCount: skeletonRowCount
-                ) {
-                    if items.isEmpty {
-                        emptyState
-                    } else if visibleIndices.isEmpty {
-                        emptyFilterState
+                if items.isEmpty {
+                    if isLoading {
+                        scanningPlaceholder
                     } else {
-                        cacheResultsList
+                        emptyState
                     }
+                } else if visibleIndices.isEmpty {
+                    if isLoading {
+                        scanningPlaceholder
+                    } else {
+                        emptyFilterState
+                    }
+                } else {
+                    cacheResultsList
                 }
 
                 if store.isDeleting && showsListContent && !store.isInteractiveSafeCleanupInProgress {
@@ -184,36 +171,8 @@ struct AppCachesView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-
-            ScanStatusBar(
-                isLoading: isLoading,
-                visibleCount: visibleIndices.count,
-                totalCount: displayableItemCount,
-                isFiltered: currentSafetyFilter != .all,
-                visibleBytes: visibleTotalSize,
-                totalBytes: totalSize,
-                selectedCount: selectedInScopeCount,
-                selectedBytes: selectedInScopeBytes
-            )
         }
         .background(AppStyle.canvas)
-        .onAppear {
-            if !isLoading {
-                displayedItems = items
-            }
-        }
-        .onChange(of: isLoading) { scanning in
-            if !scanning {
-                displayedItems = items
-            }
-        }
-        .onChange(of: items) { newItems in
-            if !isLoading {
-                displayedItems = newItems
-            }
-        }
     }
 
     private func reinstallDisplay(for item: CacheItem) -> ReinstallSafetyStatus? {
@@ -246,18 +205,34 @@ struct AppCachesView: View {
                     isUserOverride: item.locations.contains {
                         store.userOverridePaths.contains($0.path.standardizedFileURL.path)
                     },
-                    isMetadataPending: false
+                    isMetadataPending: store.cacheItemHasPendingSize(item)
                 )
                 .listRowInsets(ScanListRowInsets.standard)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
-                .transition(cleaningRowRemovalTransition)
+                .transition(rowInsertionTransition)
             }
+
+            ScanListBottomSpacer()
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(AppStyle.canvas)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
+        .animation(rowInsertionAnimation, value: items.map(\.id))
+    }
+
+    private var rowInsertionAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.08)
+    }
+
+    private var rowInsertionTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .asymmetric(
+                insertion: .scanRowInsertion,
+                removal: cleaningRowRemovalTransition
+            )
     }
 
     private var cleaningRowRemovalTransition: AnyTransition {
@@ -301,12 +276,19 @@ struct AppCachesView: View {
             Image(systemName: "externaldrive.badge.checkmark")
                 .font(.system(size: 38))
                 .foregroundStyle(.secondary)
-            Text("No Caches Found")
+            Text(scanPhase == .completed ? "Your Mac is looking clean." : "No Caches Found")
                 .font(.title3)
-            Text("Run a scan to inspect recoverable application caches.")
+            Text(scanPhase == .completed ? "Check back later." : "Run a scan to inspect recoverable application caches.")
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var scanningPlaceholder: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Scanning app caches")
     }
 
 }
@@ -315,6 +297,7 @@ struct AppCachesView: View {
     AppCachesView(
         items: .constant([]),
         isLoading: true,
+        scanPhase: .scanning,
         onScan: {}
     )
     .environmentObject(PurgeStore())
@@ -345,6 +328,7 @@ struct AppCachesView: View {
             )
         ]),
         isLoading: false,
+        scanPhase: .idle,
         onScan: {}
     )
     .environmentObject(PurgeStore())

@@ -82,6 +82,42 @@ struct ScanContentCrossfade<Loading: View, Loaded: View>: View {
     }
 }
 
+// MARK: - Streamed row transitions
+
+private struct ScanRowAppearModifier: ViewModifier {
+    let blurRadius: CGFloat
+    let opacity: Double
+    let yOffset: CGFloat
+    let scale: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: blurRadius)
+            .opacity(opacity)
+            .offset(y: yOffset)
+            .scaleEffect(scale, anchor: .top)
+    }
+}
+
+extension AnyTransition {
+    static var scanRowInsertion: AnyTransition {
+        .modifier(
+            active: ScanRowAppearModifier(
+                blurRadius: 8,
+                opacity: 0,
+                yOffset: 12,
+                scale: 0.985
+            ),
+            identity: ScanRowAppearModifier(
+                blurRadius: 0,
+                opacity: 1,
+                yOffset: 0,
+                scale: 1
+            )
+        )
+    }
+}
+
 // MARK: - List loading surface
 
 /// Crossfades between the shared list skeleton and loaded results.

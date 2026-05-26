@@ -24,6 +24,13 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    enum ScanPhase: Equatable {
+        case idle
+        case scanning
+        case cancelling
+        case completed
+    }
+
     struct DeletionCandidate: Identifiable, Hashable {
         var id: String { path.path }
         let title: String
@@ -79,6 +86,11 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var isScanningAll = false
     @Published private(set) var isEnrichingGeneral = false
     @Published private(set) var isEnrichingDeveloper = false
+    @Published private(set) var scanPhase: ScanPhase = .idle
+    @Published private(set) var scanStatusLine = ""
+    @Published private(set) var pendingCacheSizePaths: Set<String> = []
+    @Published private(set) var pendingDevToolSizeIDs: Set<String> = []
+    @Published private(set) var pendingProjectArtifactPaths: Set<String> = []
     @Published var isDeleting = false
     @Published var errorMessage: String?
     @Published var showDeletionSheet = false
@@ -110,6 +122,9 @@ final class PurgeStore: ObservableObject {
 
     /// Cancels stale async simulator sizing when a new dev scan starts.
     private var simulatorSizingGeneration = 0
+    private var scanGeneration = 0
+    private var scanTask: Task<Void, Never>?
+    private var scanCompletionHideTask: Task<Void, Never>?
     private var interactiveSafeCleanupRemovalTask: Task<Void, Never>?
 
     /// After the primary confirm sheet runs, extra warnings may enqueue here.
@@ -154,24 +169,27 @@ final class PurgeStore: ObservableObject {
     }
 
     var safeCleanupSummary: SafeCleanupSummary {
-        let candidates = manualSafeCleanupCandidates()
-        let projectPaths = Set(
-            projectGroups.flatMap(\.artifacts).map { $0.path.standardizedFileURL.path }
-        )
-        let devToolPaths = Set(
-            devTools.flatMap(\.paths).map { $0.standardizedFileURL.path }
-        )
-
         var summary = SafeCleanupSummary()
-        for candidate in candidates {
-            let path = candidate.path.standardizedFileURL.path
-            if projectPaths.contains(path) {
-                summary.projectArtifactBytes += candidate.sizeBytes
-            } else if devToolPaths.contains(path) {
-                summary.devToolBytes += candidate.sizeBytes
-            } else {
-                summary.appCacheBytes += candidate.sizeBytes
+        summary.appCacheBytes = cacheItems.reduce(Int64(0)) { total, item in
+            guard item.safetyInfo.level == .safe,
+                  item.reinstallSafety != .missingLockfile,
+                  item.gitStatus == .clean else { return total }
+            return total + item.sizeBytes
+        }
+        summary.devToolBytes = devTools.reduce(Int64(0)) { total, tool in
+            guard tool.isDetected,
+                  tool.safetyInfo.level == .safe,
+                  tool.reinstallSafety != .missingLockfile,
+                  !tool.paths.contains(where: { devToolRepoStatusByPath[$0.standardizedFileURL.path] == .dirty }) else {
+                return total
             }
+            return total + tool.sizeBytes
+        }
+        summary.projectArtifactBytes = projectGroups.flatMap(\.artifacts).reduce(Int64(0)) { total, artifact in
+            guard artifact.safetyInfo.level == .safe,
+                  artifact.reinstallSafety != .missingLockfile,
+                  artifact.gitStatus == .clean else { return total }
+            return total + artifact.sizeBytes
         }
         return summary
     }
@@ -190,22 +208,21 @@ final class PurgeStore: ObservableObject {
         minUnusedDaysForCaches: Int = 0,
         minUnusedDaysForDeveloperArtifacts: Int = 0
     ) -> [DeletionCandidate] {
+        _ = now
+        _ = minUnusedDaysForCaches
+        _ = minUnusedDaysForDeveloperArtifacts
         var candidates: [DeletionCandidate] = []
 
         for artifact in projectGroups.flatMap(\.artifacts) {
             guard artifact.safetyInfo.level == .safe else { continue }
             guard artifact.reinstallSafety != .missingLockfile else { continue }
             guard artifact.gitStatus == .clean else { continue }
-            guard daysBetween(artifact.lastModified, now) >= minUnusedDaysForDeveloperArtifacts else { continue }
             candidates.append(artifactDeletionCandidate(artifact))
         }
 
         for tool in devTools where tool.isDetected && tool.safetyInfo.level == .safe {
+            guard tool.reinstallSafety != .missingLockfile else { continue }
             for url in tool.paths {
-                guard FileManager.default.fileExists(atPath: url.path) else { continue }
-                let reinstall = ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
-                guard reinstall != .missingLockfile else { continue }
-                guard daysBetween(FolderSizing.contentModificationDate(at: url), now) >= minUnusedDaysForDeveloperArtifacts else { continue }
                 let candidate = devToolDeletionCandidate(tool, path: url)
                 guard candidate.gitStatus == .clean else { continue }
                 candidates.append(candidate)
@@ -489,12 +506,14 @@ final class PurgeStore: ObservableObject {
             }
 
             devTools = devTools.map { tool in
-                let paths = tool.paths
-                let existingPaths = paths.filter { FileManager.default.fileExists(atPath: $0.path) }
-                let newSize = existingPaths.reduce(Int64(0)) {
-                    $0 + DevScanner.pathByteSize(toolLabel: tool.toolName, at: $1)
+                let remainingPaths = tool.paths.filter {
+                    !deletedPaths.contains($0.standardizedFileURL.path)
                 }
-                let stillDetected = !existingPaths.isEmpty
+                let pathSizes = tool.pathSizeBytesByPath.filter { key, _ in
+                    remainingPaths.contains { $0.standardizedFileURL.path == key }
+                }
+                let newSize = pathSizes.values.reduce(Int64(0), +)
+                let stillDetected = !remainingPaths.isEmpty && newSize > 0
                 let newSelected = tool.isSelected && stillDetected
                 if newSize == tool.sizeBytes, stillDetected == tool.isDetected, newSelected == tool.isSelected {
                     return tool
@@ -502,11 +521,14 @@ final class PurgeStore: ObservableObject {
                 return DevTool(
                     definitionKey: tool.definitionKey,
                     toolName: tool.toolName,
-                    paths: paths,
+                    paths: remainingPaths,
                     sizeBytes: newSize,
+                    pathSizeBytesByPath: pathSizes,
+                    lastModified: tool.lastModified,
                     isSelected: newSelected,
                     isDetected: stillDetected,
-                    safetyInfo: tool.safetyInfo
+                    safetyInfo: tool.safetyInfo,
+                    reinstallSafety: tool.reinstallSafety
                 )
             }
 
@@ -631,51 +653,141 @@ final class PurgeStore: ObservableObject {
     }
 
     func scanGeneral() async {
-        isScanningGeneral = true
-        errorMessage = nil
-        let scannedCaches = await cacheScanner.scanCaches()
-        let junkItems = await cacheScanner.scanSystemJunk()
-        let allItems = dedupeCacheItemsByPath(scannedCaches + junkItems)
-        await gitChecker.clearSessionCache()
-        withAnimation(.easeInOut(duration: 0.2)) {
-            cacheItems = allItems.sorted { $0.sizeBytes > $1.sizeBytes }
-            reconcileCrossTabCacheDuplicates()
-        }
-        isScanningGeneral = false
-        await hydrateCacheSafetyMetadataParallel()
+        scanGeneration += 1
+        let generation = scanGeneration
+        scanPhase = .scanning
+        clearGeneralScanState()
+        await runGeneralScan(generation: generation)
+        await finishStandaloneScanIfCurrent(generation: generation)
     }
 
     func scanDeveloper() async {
-        isScanningDeveloper = true
+        scanGeneration += 1
+        let generation = scanGeneration
+        scanPhase = .scanning
+        clearDeveloperScanState()
+        await runDeveloperScan(generation: generation)
+        await finishStandaloneScanIfCurrent(generation: generation)
+    }
+
+    func scanAll() async {
+        let previousTask = scanTask
+        let previousGeneration = scanGeneration
+        if let previousTask, !previousTask.isCancelled {
+            previousTask.cancel()
+            let cancellationIndicator = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                guard let self,
+                      self.scanGeneration == previousGeneration,
+                      self.scanTask != nil else { return }
+                self.scanPhase = .cancelling
+                self.scanStatusLine = "Cancelling..."
+            }
+            await previousTask.value
+            cancellationIndicator.cancel()
+        }
+
+        scanGeneration += 1
+        let generation = scanGeneration
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.runFullScan(generation: generation)
+        }
+        scanTask = task
+        await task.value
+        if scanGeneration == generation {
+            scanTask = nil
+        }
+    }
+
+    private func runFullScan(generation: Int) async {
+        scanCompletionHideTask?.cancel()
         errorMessage = nil
-        simulatorSizingGeneration += 1
-        let sizingGeneration = simulatorSizingGeneration
-        let outcome = await devScanner.scanDevTools()
-        let unsizedSimulators = outcome.simulators
+        scanPhase = .scanning
+        isScanningAll = true
+        clearGeneralScanState()
+        clearDeveloperScanState()
+        defer {
+            if scanGeneration == generation {
+                isScanningAll = false
+            }
+        }
+
+        await runGeneralScan(generation: generation)
+        guard !Task.isCancelled, scanGeneration == generation else { return }
+        await runDeveloperScan(generation: generation)
+        guard !Task.isCancelled, scanGeneration == generation else { return }
+        finishScan(generation: generation)
+    }
+
+    private func runGeneralScan(generation: Int) async {
+        scanCompletionHideTask?.cancel()
+        errorMessage = nil
+        isScanningGeneral = true
         await gitChecker.clearSessionCache()
+        defer {
+            if scanGeneration == generation {
+                isScanningGeneral = false
+            }
+        }
+
+        for await event in cacheScanner.scanGeneralStream() {
+            guard scanGeneration == generation, !Task.isCancelled else { return }
+            switch event {
+            case .status(let status):
+                scanStatusLine = status
+            case .found(let item):
+                publishCacheItem(item)
+            case .sizeResolved(let path, let sizeBytes, let lastModified):
+                applyCacheSize(path: path, sizeBytes: sizeBytes, lastModified: lastModified)
+            }
+        }
+
+        guard scanGeneration == generation, !Task.isCancelled else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
-            devTools = outcome.tools
-            projectGroups = outcome.projects
-            simulatorDevices = unsizedSimulators
+            cacheItems = dedupeCacheItemsByPath(cacheItems)
             reconcileCrossTabCacheDuplicates()
         }
-        isScanningDeveloper = false
-        refreshDetectedDevToolSizes()
-        let needsSizing = !unsizedSimulators.isEmpty
+        await hydrateCacheSafetyMetadataParallel()
+    }
+
+    private func runDeveloperScan(generation: Int) async {
+        scanCompletionHideTask?.cancel()
+        errorMessage = nil
+        simulatorSizingGeneration += 1
+        isScanningDeveloper = true
+        await gitChecker.clearSessionCache()
+        defer {
+            if scanGeneration == generation {
+                isScanningDeveloper = false
+            }
+        }
+
+        for await event in devScanner.scanDevToolsStream() {
+            guard scanGeneration == generation, !Task.isCancelled else { return }
+            switch event {
+            case .status(let status):
+                scanStatusLine = status
+            case .devToolFound(let tool):
+                publishDevTool(tool)
+            case .devToolSizeResolved(let id, let pathSizes, let sizeBytes, let lastModified):
+                applyDevToolSize(id: id, pathSizeBytesByPath: pathSizes, sizeBytes: sizeBytes, lastModified: lastModified)
+            case .projectGroupFound(let group):
+                publishProjectGroup(group)
+            case .simulatorFound(let simulator):
+                publishSimulator(simulator)
+            case .simulatorSizeResolved(let id, let sizeBytes):
+                applySimulatorSize(id: id, sizeBytes: sizeBytes)
+            }
+        }
+
+        guard scanGeneration == generation, !Task.isCancelled else { return }
         let needsGitHydration = !projectGroups.isEmpty
         let needsToolRepoHydration = devTools.contains { !$0.paths.isEmpty }
-        guard needsSizing || needsGitHydration || needsToolRepoHydration else { return }
+        guard needsGitHydration || needsToolRepoHydration else { return }
 
         isEnrichingDeveloper = true
         defer { isEnrichingDeveloper = false }
-
-        if needsSizing {
-            let sized = await devScanner.measureSimulatorFolderSizes(unsizedSimulators)
-            guard sizingGeneration == simulatorSizingGeneration else { return }
-            withAnimation(.easeInOut(duration: 0.2)) {
-                simulatorDevices = sized
-            }
-        }
         if needsGitHydration {
             await hydrateDeveloperGitStatusesParallel()
         }
@@ -684,11 +796,24 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    func scanAll() async {
-        isScanningAll = true
-        defer { isScanningAll = false }
-        await scanGeneral()
-        await scanDeveloper()
+    private func finishStandaloneScanIfCurrent(generation: Int) async {
+        guard scanGeneration == generation, !Task.isCancelled else { return }
+        finishScan(generation: generation)
+    }
+
+    private func finishScan(generation: Int) {
+        guard scanGeneration == generation else { return }
+        scanPhase = .completed
+        scanStatusLine = "Scan complete"
+        scanCompletionHideTask?.cancel()
+        scanCompletionHideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard let self, self.scanGeneration == generation, self.scanPhase == .completed else { return }
+            withAnimation(.easeInOut(duration: 0.25)) {
+                self.scanPhase = .idle
+                self.scanStatusLine = ""
+            }
+        }
     }
 
     // MARK: - Scheduled cleaning
@@ -720,9 +845,6 @@ final class PurgeStore: ObservableObject {
         referenceDate now: Date = Date(),
         pinnedCandidates: [DeletionCandidate]? = nil
     ) async -> ScheduledCleaningSummary {
-        if pinnedCandidates == nil {
-            refreshDetectedDevToolSizes()
-        }
         let summary = await performSafeCleanup(
             referenceDate: now,
             minUnusedDaysForCaches: 0,
@@ -903,6 +1025,144 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    private func clearGeneralScanState() {
+        pendingCacheSizePaths = []
+        cacheItems = []
+        isEnrichingGeneral = false
+    }
+
+    private func clearDeveloperScanState() {
+        pendingDevToolSizeIDs = []
+        pendingProjectArtifactPaths = []
+        devTools = []
+        simulatorDevices = []
+        projectGroups = []
+        devToolRepoStatusByPath = [:]
+        isEnrichingDeveloper = false
+    }
+
+    private func publishCacheItem(_ item: CacheItem) {
+        let paths = item.locations.map { $0.path.standardizedFileURL.path }
+        pendingCacheSizePaths.formUnion(paths)
+        withAnimation(.easeOut(duration: 0.22)) {
+            cacheItems = DefinitionCacheGrouper.group(cacheItems + [item])
+            reconcileCrossTabCacheDuplicates()
+        }
+    }
+
+    private func applyCacheSize(path: String, sizeBytes: Int64, lastModified: Date) {
+        pendingCacheSizePaths.remove(path)
+        var updated: [CacheItem] = []
+        for item in cacheItems {
+            let locations = item.locations.compactMap { location -> CacheLocation? in
+                guard location.path.standardizedFileURL.path == path else { return location }
+                guard sizeBytes > 0 else { return nil }
+                return CacheLocation(
+                    path: location.path,
+                    sizeBytes: sizeBytes,
+                    lastModified: lastModified,
+                    folderName: location.folderName
+                )
+            }
+            guard !locations.isEmpty else { continue }
+            updated.append(item.withLocations(locations))
+        }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            cacheItems = DefinitionCacheGrouper.group(updated)
+            reconcileCrossTabCacheDuplicates()
+        }
+    }
+
+    private func publishDevTool(_ tool: DevTool) {
+        pendingDevToolSizeIDs.insert(tool.id)
+        withAnimation(.easeOut(duration: 0.22)) {
+            if let index = devTools.firstIndex(where: { $0.id == tool.id }) {
+                devTools[index] = tool
+            } else {
+                devTools.append(tool)
+            }
+            devTools.sort { $0.sizeBytes > $1.sizeBytes }
+            reconcileCrossTabCacheDuplicates()
+        }
+    }
+
+    private func applyDevToolSize(
+        id: String,
+        pathSizeBytesByPath: [String: Int64],
+        sizeBytes: Int64,
+        lastModified: Date
+    ) {
+        pendingDevToolSizeIDs.remove(id)
+        guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
+        let tool = devTools[index]
+        let updated = DevTool(
+            definitionKey: tool.definitionKey,
+            toolName: tool.toolName,
+            paths: tool.paths,
+            sizeBytes: sizeBytes,
+            pathSizeBytesByPath: pathSizeBytesByPath,
+            lastModified: lastModified,
+            isSelected: tool.isSelected && sizeBytes > 0,
+            isDetected: sizeBytes > 0,
+            safetyInfo: tool.safetyInfo,
+            reinstallSafety: tool.reinstallSafety
+        )
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if updated.isDetected {
+                devTools[index] = updated
+                devTools.sort { $0.sizeBytes > $1.sizeBytes }
+            } else {
+                devTools.remove(at: index)
+            }
+            reconcileCrossTabCacheDuplicates()
+        }
+    }
+
+    private func publishProjectGroup(_ group: ProjectGroup) {
+        let paths = group.artifacts.map { $0.path.standardizedFileURL.path }
+        pendingProjectArtifactPaths.formUnion(paths.filter { path in
+            group.artifacts.first { $0.path.standardizedFileURL.path == path }?.sizeBytes == 0
+        })
+        withAnimation(.easeOut(duration: 0.22)) {
+            if let index = projectGroups.firstIndex(where: { $0.id == group.id }) {
+                projectGroups[index] = group
+            } else {
+                projectGroups.append(group)
+            }
+            projectGroups.sort { $0.totalBytes > $1.totalBytes }
+        }
+    }
+
+    private func publishSimulator(_ simulator: SimulatorDevice) {
+        withAnimation(.easeOut(duration: 0.22)) {
+            if let index = simulatorDevices.firstIndex(where: { $0.id == simulator.id }) {
+                simulatorDevices[index] = simulator
+            } else {
+                simulatorDevices.append(simulator)
+            }
+        }
+    }
+
+    private func applySimulatorSize(id: UUID, sizeBytes: Int64) {
+        guard let index = simulatorDevices.firstIndex(where: { $0.id == id }) else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if sizeBytes > 0 {
+                simulatorDevices[index].sizeOnDisk = sizeBytes
+                simulatorDevices.sort { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
+            } else {
+                simulatorDevices.remove(at: index)
+            }
+        }
+    }
+
+    func cacheItemHasPendingSize(_ item: CacheItem) -> Bool {
+        item.locations.contains { pendingCacheSizePaths.contains($0.path.standardizedFileURL.path) }
+    }
+
+    func projectArtifactHasPendingSize(_ artifact: ProjectCacheArtifact) -> Bool {
+        pendingProjectArtifactPaths.contains(artifact.path.standardizedFileURL.path)
+    }
+
     private func reconcileCrossTabCacheDuplicates() {
         let devPaths = Set(
             devTools
@@ -1067,13 +1327,7 @@ final class PurgeStore: ObservableObject {
 
     private func devToolDeletionCandidate(_ tool: DevTool, path: URL) -> DeletionCandidate {
         let key = path.standardizedFileURL.path
-        let existingPaths = tool.paths.filter { FileManager.default.fileExists(atPath: $0.path) }
-        let pathBytes: Int64
-        if existingPaths.count == 1 {
-            pathBytes = tool.sizeBytes
-        } else {
-            pathBytes = DevScanner.pathByteSize(toolLabel: tool.toolName, at: path)
-        }
+        let pathBytes = tool.pathSizeBytesByPath[key] ?? (tool.paths.count == 1 ? tool.sizeBytes : 0)
         return DeletionCandidate(
             title: tool.safetyInfo.headline,
             path: path,
@@ -1081,14 +1335,14 @@ final class PurgeStore: ObservableObject {
             safetyInfo: tool.safetyInfo,
             reinstallCommand: tool.safetyInfo.reinstallCommand,
             subtitle: path.lastPathComponent,
-            reinstallSafety: ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: path),
+            reinstallSafety: tool.reinstallSafety,
             gitStatus: devToolRepoStatusByPath[key] ?? .unknown
         )
     }
 
     private func simulatorDeletionCandidate(_ device: SimulatorDevice) -> DeletionCandidate {
         let path = device.folderURL.standardizedFileURL
-        let bytes = device.sizeOnDisk ?? cacheScanner.calculateFolderSize(at: path)
+        let bytes = device.sizeOnDisk ?? 0
         return DeletionCandidate(
             title: device.safetyInfo.headline,
             path: path,
@@ -1128,35 +1382,25 @@ final class PurgeStore: ObservableObject {
 
     /// Re-measures detected dev tool folders so list rows and safe cleanup totals stay aligned.
     func refreshDetectedDevToolSizes() {
-        var updated = devTools
-        var changed = false
-        for index in updated.indices {
-            guard updated[index].isDetected else { continue }
-            let existingPaths = updated[index].paths.filter {
-                FileManager.default.fileExists(atPath: $0.path)
-            }
-            let newSize = existingPaths.reduce(Int64(0)) {
-                $0 + DevScanner.pathByteSize(toolLabel: updated[index].toolName, at: $1)
-            }
-            let stillDetected = !existingPaths.isEmpty
-            guard newSize != updated[index].sizeBytes || stillDetected != updated[index].isDetected else { continue }
-            updated[index] = DevTool(
-                definitionKey: updated[index].definitionKey,
-                toolName: updated[index].toolName,
-                paths: updated[index].paths,
-                sizeBytes: newSize,
-                isSelected: updated[index].isSelected && stillDetected,
-                isDetected: stillDetected,
-                safetyInfo: updated[index].safetyInfo
-            )
-            changed = true
-        }
-        if changed {
-            devTools = updated
-        }
+        // Sizes are refreshed by the background scanner and streamed into `devTools`.
     }
 
     // MARK: - Project row selection bindings
+
+    func setDevToolSelected(id: String, isSelected: Bool) {
+        guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
+        var copy = devTools
+        copy[index].isSelected = isSelected
+        devTools = copy
+    }
+
+    private func projectArtifactIndices(groupID: String, artifactID: String) -> (groupIndex: Int, artifactIndex: Int)? {
+        guard let groupIndex = projectGroups.firstIndex(where: { $0.id == groupID }),
+              let artifactIndex = projectGroups[groupIndex].artifacts.firstIndex(where: { $0.id == artifactID }) else {
+            return nil
+        }
+        return (groupIndex, artifactIndex)
+    }
 
     func setProjectArtifactSelected(groupIndex: Int, artifactIndex: Int, isSelected: Bool) {
         guard projectGroups.indices.contains(groupIndex),
@@ -1164,6 +1408,15 @@ final class PurgeStore: ObservableObject {
         var copy = projectGroups
         copy[groupIndex].artifacts[artifactIndex].isSelected = isSelected
         projectGroups = copy
+    }
+
+    func setProjectArtifactSelected(groupID: String, artifactID: String, isSelected: Bool) {
+        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
+        setProjectArtifactSelected(
+            groupIndex: indices.groupIndex,
+            artifactIndex: indices.artifactIndex,
+            isSelected: isSelected
+        )
     }
 
     func setSimulatorDeviceSelected(id: UUID, isSelected: Bool) {
@@ -1232,7 +1485,7 @@ final class PurgeStore: ObservableObject {
         refreshUserOverridePaths()
     }
 
-    func markDevTool(id: UUID, as level: SafetyLevel) {
+    func markDevTool(id: String, as level: SafetyLevel) {
         guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
         let tool = devTools[index]
         guard let primary = tool.primaryOverridePath else { return }
@@ -1252,6 +1505,11 @@ final class PurgeStore: ObservableObject {
             devTools[index].safetyInfo = info
         }
         refreshUserOverridePaths()
+    }
+
+    func markProjectArtifact(groupID: String, artifactID: String, as level: SafetyLevel) {
+        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
+        markProjectArtifact(groupIndex: indices.groupIndex, artifactIndex: indices.artifactIndex, as: level)
     }
 
     func markProjectArtifact(groupIndex: Int, artifactIndex: Int, as level: SafetyLevel) {
@@ -1294,7 +1552,7 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    func resetDevToolToAutomatic(id: UUID) {
+    func resetDevToolToAutomatic(id: String) {
         guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
         let tool = devTools[index]
         guard let primary = tool.primaryOverridePath else { return }
@@ -1309,6 +1567,11 @@ final class PurgeStore: ObservableObject {
         withAnimation {
             devTools[index].safetyInfo = info
         }
+    }
+
+    func resetProjectArtifactToAutomatic(groupID: String, artifactID: String) {
+        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
+        resetProjectArtifactToAutomatic(groupIndex: indices.groupIndex, artifactIndex: indices.artifactIndex)
     }
 
     func resetProjectArtifactToAutomatic(groupIndex: Int, artifactIndex: Int) {
@@ -1348,7 +1611,7 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    func recategorizeDevTool(id: UUID) {
+    func recategorizeDevTool(id: String) {
         guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
         let tool = devTools[index]
         guard let primary = tool.primaryOverridePath else { return }
@@ -1365,6 +1628,11 @@ final class PurgeStore: ObservableObject {
             devTools[index].safetyInfo = info
             devTools[index].isSelected = false
         }
+    }
+
+    func recategorizeProjectArtifact(groupID: String, artifactID: String) {
+        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
+        recategorizeProjectArtifact(groupIndex: indices.groupIndex, artifactIndex: indices.artifactIndex)
     }
 
     func recategorizeProjectArtifact(groupIndex: Int, artifactIndex: Int) {
