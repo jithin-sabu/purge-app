@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var store: PurgeStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -220,6 +221,8 @@ struct SettingsView: View {
                 Text(scheduleSummary)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(scheduleTextTransition)
+                    .animation(scheduleTextAnimation, value: scheduleSummary)
             }
 
             VStack(spacing: 8) {
@@ -241,19 +244,9 @@ struct SettingsView: View {
             }
             .disabled(!prefs.isEnabled)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Next scheduled clean: \(formattedDate(nextScheduledCleanDate))")
-
-                if let latestScheduledClean {
-                    Text(
-                        "Last clean: \(formattedDate(latestScheduledClean.date)) · " +
-                            "\(formatBytes(latestScheduledClean.totalFreedBytes)) freed"
-                    )
-                }
+            TimelineView(.periodic(from: Date(), by: 60)) { context in
+                cleaningScheduleStatusCard(referenceDate: context.date)
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .padding(.top, 2)
         }
     }
 
@@ -397,6 +390,179 @@ struct SettingsView: View {
         }
     }
 
+    private func cleaningScheduleStatusCard(referenceDate: Date) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !prefs.isEnabled {
+                autoCleanDisabledStatus
+            } else if let latestClean {
+                lastCleanStatusRow(latestClean, referenceDate: referenceDate)
+
+                Rectangle()
+                    .fill(AppStyle.hairline)
+                    .frame(height: 0.5)
+                    .padding(.vertical, 12)
+
+                nextCleanStatusRow(referenceDate: referenceDate, showsQuietDescription: false)
+            } else {
+                nextCleanStatusRow(referenceDate: referenceDate, showsQuietDescription: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            AppStyle.elevated,
+            in: RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+                .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
+        }
+    }
+
+    private var autoCleanDisabledStatus: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text("Auto-clean is off. Turn it on to keep your Mac clean automatically.")
+                .font(scheduleStatusSecondaryFont)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            statusTextButton("Enable", isDisabled: false, action: enableAutoClean)
+        }
+    }
+
+    private func lastCleanStatusRow(_ entry: CleanupHistoryEntry, referenceDate: Date) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                scheduleStatusLabel("Last clean")
+
+                Text(formattedDate(entry.date))
+                    .font(scheduleStatusPrimaryFont)
+                    .foregroundStyle(.primary)
+                    .contentTransition(scheduleTextTransition)
+                    .animation(scheduleTextAnimation, value: formattedDate(entry.date))
+
+                Text(relativeDateText(for: entry.date, referenceDate: referenceDate))
+                    .font(scheduleStatusTertiaryFont)
+                    .foregroundStyle(.tertiary)
+                    .contentTransition(scheduleTextTransition)
+                    .animation(
+                        scheduleTextAnimation,
+                        value: relativeDateText(for: entry.date, referenceDate: referenceDate)
+                    )
+
+                Text("\(formatBytes(entry.totalFreedBytes)) freed")
+                    .font(scheduleStatusAchievementFont)
+                    .foregroundStyle(AppStyle.accent)
+                    .padding(.top, 1)
+                    .contentTransition(scheduleTextTransition)
+                    .animation(scheduleTextAnimation, value: entry.totalFreedBytes)
+            }
+
+            Spacer(minLength: 12)
+        }
+    }
+
+    private func nextCleanStatusRow(referenceDate: Date, showsQuietDescription: Bool) -> some View {
+        let isDueToday = Calendar.current.isDate(nextScheduledCleanDate, inSameDayAs: referenceDate)
+
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                scheduleStatusLabel("Next clean", showsDueDot: isDueToday)
+
+                Text(primaryNextCleanDateText(referenceDate: referenceDate))
+                    .font(scheduleStatusPrimaryFont)
+                    .foregroundStyle(.primary)
+                    .contentTransition(scheduleTextTransition)
+                    .animation(
+                        scheduleTextAnimation,
+                        value: primaryNextCleanDateText(referenceDate: referenceDate)
+                    )
+
+                Text(relativeDateText(for: nextScheduledCleanDate, referenceDate: referenceDate))
+                    .font(scheduleStatusTertiaryFont)
+                    .foregroundStyle(.tertiary)
+                    .contentTransition(scheduleTextTransition)
+                    .animation(
+                        scheduleTextAnimation,
+                        value: relativeDateText(for: nextScheduledCleanDate, referenceDate: referenceDate)
+                    )
+
+                nextCleanEstimateOrScanPrompt(referenceDate: referenceDate)
+                    .padding(.top, 1)
+
+                if showsQuietDescription {
+                    Text("Purge will quietly remove safe caches it finds on your Mac.")
+                        .font(scheduleStatusTertiaryFont)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 3)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            statusTextButton(cleanNowTitle, isDisabled: isCleanNowDisabled, action: cleanNow)
+                .padding(.top, 18)
+        }
+    }
+
+    @ViewBuilder
+    private func nextCleanEstimateOrScanPrompt(referenceDate: Date) -> some View {
+        if let lastScanCompletedAt = store.lastScanCompletedAt,
+           let estimatedBytes = store.lastScanSafeRecoverableBytes {
+            Text(
+                nextCleanEstimateText(
+                    estimatedBytes: estimatedBytes,
+                    lastScanCompletedAt: lastScanCompletedAt,
+                    referenceDate: referenceDate
+                )
+            )
+                .font(scheduleStatusTertiaryFont)
+                .foregroundStyle(.tertiary)
+                .contentTransition(scheduleTextTransition)
+                .animation(
+                    scheduleTextAnimation,
+                    value: nextCleanEstimateText(
+                        estimatedBytes: estimatedBytes,
+                        lastScanCompletedAt: lastScanCompletedAt,
+                        referenceDate: referenceDate
+                    )
+                )
+        } else {
+            statusTextButton(scanPromptTitle, isDisabled: isScanPromptDisabled, action: runScan)
+        }
+    }
+
+    private func scheduleStatusLabel(_ title: String, showsDueDot: Bool = false) -> some View {
+        HStack(spacing: 5) {
+            Text(title)
+                .font(scheduleStatusLabelFont)
+                .foregroundStyle(.secondary)
+
+            if showsDueDot {
+                Circle()
+                    .fill(AppStyle.accent)
+                    .frame(width: 5, height: 5)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private func statusTextButton(
+        _ title: String,
+        isDisabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(scheduleStatusLinkFont)
+                .foregroundStyle(AppStyle.accent)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
+    }
+
     private func registerAboutEasterEggTap() {
         let now = Date()
         if let last = easterEggTapTimes.last, now.timeIntervalSince(last) > 2 {
@@ -432,12 +598,122 @@ struct SettingsView: View {
     }
 
     private var nextScheduledCleanDate: Date {
-        let today = Date()
-        return Calendar.current.date(byAdding: prefs.frequency.calendarComponent, to: today) ?? today
+        let now = Date()
+        let baseDate = latestClean?.date ?? now
+        let candidate = Calendar.current.date(byAdding: prefs.frequency.calendarComponent, to: baseDate) ?? now
+        return candidate < now ? now : candidate
     }
 
-    private var latestScheduledClean: CleanupHistoryEntry? {
-        history.archive.entries.first { $0.trigger == .scheduled }
+    private var latestClean: CleanupHistoryEntry? {
+        history.archive.entries.first
+    }
+
+    private var scheduleStatusLabelFont: Font {
+        .system(size: 11, weight: .medium)
+    }
+
+    private var scheduleStatusPrimaryFont: Font {
+        .system(size: 13, weight: .regular)
+    }
+
+    private var scheduleStatusSecondaryFont: Font {
+        .system(size: 12, weight: .regular)
+    }
+
+    private var scheduleStatusTertiaryFont: Font {
+        .system(size: 11, weight: .regular)
+    }
+
+    private var scheduleStatusAchievementFont: Font {
+        .system(size: 11, weight: .semibold)
+    }
+
+    private var scheduleStatusLinkFont: Font {
+        .system(size: 11, weight: .medium)
+    }
+
+    private var scheduleTextTransition: ContentTransition {
+        reduceMotion ? .identity : .numericText()
+    }
+
+    private var scheduleTextAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.45)
+    }
+
+    private var isScanInProgress: Bool {
+        store.isScanningAll || store.isScanningGeneral || store.isScanningDeveloper
+    }
+
+    private var isCleanNowDisabled: Bool {
+        store.isDeleting || isScanInProgress
+    }
+
+    private var isScanPromptDisabled: Bool {
+        isScanInProgress || store.isDeleting
+    }
+
+    private var cleanNowTitle: String {
+        store.isDeleting ? "Cleaning..." : "Clean now"
+    }
+
+    private var scanPromptTitle: String {
+        isScanInProgress ? "Scanning..." : "Run a scan to see what Purge will clean"
+    }
+
+    private func enableAutoClean() {
+        Task { await prefs.setEnabled(true) }
+    }
+
+    private func runScan() {
+        Task { await store.scanAll() }
+    }
+
+    private func cleanNow() {
+        Task { await store.performManualSafeCleanNow() }
+    }
+
+    private func primaryNextCleanDateText(referenceDate: Date) -> String {
+        Calendar.current.isDate(nextScheduledCleanDate, inSameDayAs: referenceDate)
+            ? "Today"
+            : formattedDate(nextScheduledCleanDate)
+    }
+
+    private func nextCleanEstimateText(
+        estimatedBytes: Int64,
+        lastScanCompletedAt: Date,
+        referenceDate: Date
+    ) -> String {
+        let estimatedSize = formatBytes(estimatedBytes)
+        if isScanOutdated(lastScanCompletedAt, referenceDate: referenceDate) {
+            return "~\(estimatedSize) estimated · scan may be outdated."
+        }
+        return "~\(estimatedSize) estimated based on your last scan"
+    }
+
+    private func isScanOutdated(_ scanDate: Date, referenceDate: Date) -> Bool {
+        guard let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: referenceDate) else {
+            return false
+        }
+        return scanDate < cutoff
+    }
+
+    private func relativeDateText(for date: Date, referenceDate: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDate(date, inSameDayAs: referenceDate) {
+            return "Today"
+        }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: referenceDate),
+           calendar.isDate(date, inSameDayAs: tomorrow) {
+            return "Tomorrow"
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: referenceDate),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "Yesterday"
+        }
+
+        let relative = Self.relativeDateFormatter.localizedString(for: date, relativeTo: referenceDate)
+        guard let first = relative.first else { return relative }
+        return first.uppercased() + String(relative.dropFirst())
     }
 
     private var appVersion: String {
@@ -469,6 +745,13 @@ struct SettingsView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .long
         formatter.timeStyle = .none
+        return formatter
+    }()
+
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        formatter.formattingContext = .beginningOfSentence
         return formatter
     }()
 

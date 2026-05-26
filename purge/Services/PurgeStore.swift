@@ -7,6 +7,8 @@ import Combine
 final class PurgeStore: ObservableObject {
     private enum StorageKeys {
         static let totalRecoveredBytes = "totalRecoveredBytes"
+        static let lastScanCompletedAt = "lastScanCompletedAt"
+        static let lastScanSafeRecoverableBytes = "lastScanSafeRecoverableBytes"
     }
 
     enum Tab: String, CaseIterable, Identifiable {
@@ -105,6 +107,8 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var interactiveSafeCleanupFreedBytes: Int64?
     @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
     @Published var totalRecoveredBytes: Int64 = 0
+    @Published private(set) var lastScanCompletedAt: Date?
+    @Published private(set) var lastScanSafeRecoverableBytes: Int64?
 
     @Published var showMissingLockfileFriction = false
     @Published var showUncommittedGitFriction = false
@@ -135,6 +139,10 @@ final class PurgeStore: ObservableObject {
 
     init() {
         totalRecoveredBytes = Int64(defaults.integer(forKey: StorageKeys.totalRecoveredBytes))
+        lastScanCompletedAt = defaults.object(forKey: StorageKeys.lastScanCompletedAt) as? Date
+        if defaults.object(forKey: StorageKeys.lastScanSafeRecoverableBytes) != nil {
+            lastScanSafeRecoverableBytes = Int64(defaults.integer(forKey: StorageKeys.lastScanSafeRecoverableBytes))
+        }
     }
 
     var selectedTotalBytes: Int64 {
@@ -544,6 +552,10 @@ final class PurgeStore: ObservableObject {
         for path in deletedPaths {
             devToolRepoStatusByPath.removeValue(forKey: path)
         }
+
+        if lastScanCompletedAt != nil {
+            persistLastScanSafeRecoverableBytes()
+        }
     }
 
     private func clearAllSelections() {
@@ -803,6 +815,10 @@ final class PurgeStore: ObservableObject {
 
     private func finishScan(generation: Int) {
         guard scanGeneration == generation else { return }
+        let completedAt = Date()
+        lastScanCompletedAt = completedAt
+        defaults.set(completedAt, forKey: StorageKeys.lastScanCompletedAt)
+        persistLastScanSafeRecoverableBytes()
         scanPhase = .completed
         scanStatusLine = "Scan complete"
         scanCompletionHideTask?.cancel()
@@ -814,6 +830,12 @@ final class PurgeStore: ObservableObject {
                 self.scanStatusLine = ""
             }
         }
+    }
+
+    private func persistLastScanSafeRecoverableBytes() {
+        let bytes = safeRecoverableBytes
+        lastScanSafeRecoverableBytes = bytes
+        defaults.set(bytes, forKey: StorageKeys.lastScanSafeRecoverableBytes)
     }
 
     // MARK: - Scheduled cleaning
