@@ -114,20 +114,15 @@ struct OnboardingFlowView: View {
         }
       case .permissions:
         OnboardingPrimaryButton(
-          title: "Grant permissions",
+          title: store.hasFullDiskAccess ? "Continue" : "Grant disk access to continue",
           isEnabled: store.hasFullDiskAccess
         ) {
-          grantPermissions(andSkipOptional: false)
+          continueFromPermissions()
         }
-        OnboardingSecondaryButton(title: "Skip optional ones for now", style: .outlined) {
-          grantPermissions(andSkipOptional: true)
+        OnboardingSecondaryButton(title: "Skip for now", style: .outlined) {
+          continueFromPermissions()
         }
-        if !store.hasFullDiskAccess {
-          OnboardingSecondaryButton(title: "Open Privacy Settings") {
-            openFullDiskAccessSettings()
-            store.refreshPermission()
-          }
-        }
+        .disabled(!store.hasFullDiskAccess)
       case .preferences:
         OnboardingPrimaryButton(title: "Looks good, continue") {
           OnboardingPreferencesStep.applyToScheduledPreferences()
@@ -165,17 +160,8 @@ struct OnboardingFlowView: View {
     return "Clean now"
   }
 
-  private func grantPermissions(andSkipOptional: Bool) {
-    if !store.hasFullDiskAccess {
-      openFullDiskAccessSettings()
-    }
+  private func continueFromPermissions() {
     store.refreshPermission()
-    if !andSkipOptional {
-      Task {
-        _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
-        _ = LoginItemRegistrar.register()
-      }
-    }
     guard store.hasFullDiskAccess else { return }
     advance(to: .preferences)
   }

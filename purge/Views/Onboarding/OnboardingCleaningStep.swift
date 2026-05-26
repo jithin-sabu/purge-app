@@ -19,7 +19,7 @@ struct OnboardingCleaningStep: View {
         .padding(.bottom, AppStyle.Spacing.xSmall)
         .frame(maxWidth: .infinity)
 
-      ScrollView(showsIndicators: false) {
+      OnboardingFadingScrollView(maxHeight: OnboardingLayout.scrollingListMaxHeight) {
         VStack(spacing: 8) {
           ForEach(visibleItems) { item in
             ScanListRow(
@@ -35,7 +35,7 @@ struct OnboardingCleaningStep: View {
         .padding(.bottom, AppStyle.Spacing.xSmall)
         .animation(.easeInOut(duration: 0.45), value: visibleItems.count)
       }
-      .frame(maxHeight: 300)
+      .accessibilityLabel("Items being cleaned, \(visibleItems.count)")
 
       Spacer(minLength: 0)
     }

@@ -21,7 +21,7 @@ struct OnboardingFirstScanStep: View {
         .padding(.bottom, AppStyle.Spacing.xSmall)
         .frame(maxWidth: .infinity)
 
-      OnboardingFadingScrollView(maxHeight: 280) {
+      OnboardingFadingScrollView(maxHeight: OnboardingLayout.scrollingListMaxHeight) {
         LazyVStack(spacing: 8) {
           ForEach(revealController.revealedItems) { item in
             ScanListRow(

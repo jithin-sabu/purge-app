@@ -1,44 +1,54 @@
 import SwiftUI
-import UserNotifications
 
 struct OnboardingPermissionsStep: View {
   @EnvironmentObject private var store: PurgeStore
 
-  @State private var notificationsGranted = false
   @State private var loginItemRegistered = false
+  @State private var loginItemFailed = false
+  @State private var didOpenFullDiskAccessSettings = false
 
   var body: some View {
     VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
       OnboardingStepTitle(text: "A couple of quick permissions.")
 
       VStack(spacing: AppStyle.Spacing.small) {
-        OnboardingPermissionRow(
-          symbol: "externaldrive.fill.badge.checkmark",
-          title: "Full disk access",
-          description: "Lets Purge scan caches and junk across your home folder.",
-          badgeText: "Required",
-          badgeTone: .accent,
-          isGranted: store.hasFullDiskAccess
-        )
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+          OnboardingPermissionRow(
+            symbol: "externaldrive.fill.badge.checkmark",
+            title: "Full disk access",
+            description: "Lets Purge find caches and junk across your entire Mac. Without this, scanning is limited.",
+            badgeText: "Required",
+            badgeTone: .accent,
+            isGranted: store.hasFullDiskAccess
+          )
+          .contentShape(Rectangle())
+          .onTapGesture(perform: requestFullDiskAccess)
+          .accessibilityAddTraits(.isButton)
+
+          if didOpenFullDiskAccessSettings && !store.hasFullDiskAccess {
+            Text("We opened System Settings. Find Purge in the list and toggle it on, then come back here.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+              .padding(.horizontal, AppStyle.Spacing.small)
+              .transition(.opacity)
+          }
+        }
         .onboardingBlurIn(index: 0)
-        OnboardingPermissionRow(
-          symbol: "bell.fill",
-          title: "Notifications",
-          description: "Optional alerts when scheduled cleaning frees space or needs attention.",
-          badgeText: "Optional",
-          badgeTone: .neutral,
-          isGranted: notificationsGranted
-        )
-        .onboardingBlurIn(index: 1)
+
         OnboardingPermissionRow(
           symbol: "power",
           title: "Login item",
-          description: "Optional — keeps Purge ready in the background after you sign in.",
+          description: "Keeps Purge running quietly in the background so it's always working for you.",
           badgeText: "Optional",
           badgeTone: .neutral,
-          isGranted: loginItemRegistered
+          isGranted: loginItemRegistered,
+          statusText: loginItemFailed ? "Not enabled" : nil
         )
-        .onboardingBlurIn(index: 2)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: enableLoginItem)
+        .accessibilityAddTraits(.isButton)
+        .onboardingBlurIn(index: 1)
       }
       .frame(maxWidth: .infinity)
 
@@ -51,31 +61,48 @@ struct OnboardingPermissionsStep: View {
       Spacer(minLength: 0)
     }
     .frame(maxWidth: OnboardingLayout.contentMaxWidth, maxHeight: .infinity, alignment: .top)
-    .onAppear { refreshOptionalStatus() }
+    .onAppear { refreshLoginItemStatus() }
+    .task { await pollFullDiskAccess() }
   }
 
-  func refreshOptionalStatus() {
+  private func refreshLoginItemStatus() {
     loginItemRegistered = LoginItemRegistrar.isRegistered
-    Task {
-      let settings = await UNUserNotificationCenter.current().notificationSettings()
+    loginItemFailed = false
+  }
+
+  private func requestFullDiskAccess() {
+    withAnimation(.easeInOut(duration: 0.2)) {
+      didOpenFullDiskAccessSettings = true
+    }
+    openFullDiskAccessSettings()
+    refreshFullDiskAccess()
+  }
+
+  private func enableLoginItem() {
+    let registered = LoginItemRegistrar.register()
+    withAnimation(.easeInOut(duration: 0.2)) {
+      loginItemRegistered = registered
+      loginItemFailed = !registered
+    }
+  }
+
+  private func pollFullDiskAccess() async {
+    while !Task.isCancelled {
       await MainActor.run {
-        notificationsGranted = settings.authorizationStatus == .authorized
-          || settings.authorizationStatus == .provisional
+        refreshFullDiskAccess()
+      }
+
+      do {
+        try await Task.sleep(for: .seconds(1))
+      } catch {
+        break
       }
     }
   }
 
-  func grantAllPermissions() {
-    if !store.hasFullDiskAccess {
-      openFullDiskAccessSettings()
+  private func refreshFullDiskAccess() {
+    withAnimation(.easeInOut(duration: 0.2)) {
+      store.refreshPermission()
     }
-    store.refreshPermission()
-    Task {
-      let ok = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
-      await MainActor.run {
-        notificationsGranted = ok
-      }
-    }
-    loginItemRegistered = LoginItemRegistrar.register()
   }
 }

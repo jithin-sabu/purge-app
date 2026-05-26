@@ -12,6 +12,7 @@ struct OnboardingLayout {
   static let horizontalPadding: CGFloat = 48
   static let verticalPadding: CGFloat = 40
   static let buttonWidth: CGFloat = 260
+  static let scrollingListMaxHeight: CGFloat = 324
 }
 
 struct OnboardingPrimaryButton: View {
@@ -31,8 +32,10 @@ struct OnboardingPrimaryButton: View {
         .frame(minWidth: OnboardingLayout.buttonWidth)
     }
     .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+    .saturation(isEnabled && !isLoading ? 1 : 0)
     .disabled(!isEnabled || isLoading)
     .keyboardShortcut(.return, modifiers: [])
+    .animation(.easeInOut(duration: 0.2), value: isEnabled && !isLoading)
   }
 }
 
@@ -99,6 +102,7 @@ struct OnboardingPermissionRow: View {
   let badgeText: String
   let badgeTone: AppBadge.Tone
   var isGranted: Bool = false
+  var statusText: String? = nil
 
   var body: some View {
     HStack(alignment: .top, spacing: AppStyle.Spacing.small) {
@@ -118,6 +122,12 @@ struct OnboardingPermissionRow: View {
               .font(.caption)
               .foregroundStyle(AppStyle.safe)
               .accessibilityLabel("Granted")
+              .transition(.scale(scale: 0.75).combined(with: .opacity))
+          } else if let statusText {
+            Text(statusText)
+              .font(.caption2.weight(.medium))
+              .foregroundStyle(.secondary)
+              .transition(.opacity)
           }
         }
         Text(description)
@@ -134,6 +144,8 @@ struct OnboardingPermissionRow: View {
       RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
         .stroke(AppStyle.hairline)
     }
+    .animation(.easeInOut(duration: 0.2), value: isGranted)
+    .animation(.easeInOut(duration: 0.2), value: statusText)
     .accessibilityElement(children: .combine)
   }
 }
@@ -404,7 +416,8 @@ private struct OnboardingScrollViewportHeightKey: PreferenceKey {
 /// Scroll view that fades the bottom edge before content clips, once the list nears the viewport limit.
 struct OnboardingFadingScrollView<Content: View>: View {
   let maxHeight: CGFloat
-  var fadeHeight: CGFloat = 52
+  var fadeHeight: CGFloat = 56
+  var fadeTopClearance: CGFloat = 28
   @ViewBuilder let content: () -> Content
 
   @State private var contentHeight: CGFloat = 0
@@ -414,11 +427,15 @@ struct OnboardingFadingScrollView<Content: View>: View {
 
   private var shouldEngageFade: Bool {
     guard viewportHeight > 0 else { return false }
-    return contentHeight > viewportHeight - fadeHeight
+    return contentHeight > viewportHeight - visibleFadeHeight
   }
 
   private var showsFade: Bool {
     fadeEngaged || shouldEngageFade
+  }
+
+  private var visibleFadeHeight: CGFloat {
+    max(0, fadeHeight - fadeTopClearance)
   }
 
   var body: some View {
@@ -449,7 +466,7 @@ struct OnboardingFadingScrollView<Content: View>: View {
     }
     .overlay(alignment: .bottom) {
       if showsFade {
-        OnboardingScrollBottomFade(height: fadeHeight)
+        OnboardingScrollBottomFade(height: fadeHeight, topClearance: fadeTopClearance)
           .allowsHitTesting(false)
           .transaction { $0.animation = nil }
       }
@@ -460,13 +477,19 @@ struct OnboardingFadingScrollView<Content: View>: View {
 /// Fades scroll content into the onboarding canvas so the edge matches the window background.
 private struct OnboardingScrollBottomFade: View {
   let height: CGFloat
+  let topClearance: CGFloat
+
+  private var fadeStartLocation: CGFloat {
+    min(0.95, max(0, topClearance / max(height, 1)))
+  }
 
   var body: some View {
     LinearGradient(
       stops: [
         .init(color: AppStyle.canvas.opacity(0), location: 0),
-        .init(color: AppStyle.canvas.opacity(0.25), location: 0.35),
-        .init(color: AppStyle.canvas.opacity(0.72), location: 0.7),
+        .init(color: AppStyle.canvas.opacity(0), location: fadeStartLocation),
+        .init(color: AppStyle.canvas.opacity(0.28), location: fadeStartLocation + (1 - fadeStartLocation) * 0.45),
+        .init(color: AppStyle.canvas.opacity(0.76), location: fadeStartLocation + (1 - fadeStartLocation) * 0.75),
         .init(color: AppStyle.canvas, location: 1),
       ],
       startPoint: .top,
