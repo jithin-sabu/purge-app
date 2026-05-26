@@ -15,6 +15,8 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
+    @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.all.rawValue
+    @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.all.rawValue
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 
@@ -255,28 +257,173 @@ struct ContentView: View {
 
     @ViewBuilder
     private var tabContent: some View {
-        ZStack {
-            AppStyle.canvas
-                .ignoresSafeArea()
+        VStack(spacing: 0) {
+            selectedPageHeader
 
-            switch store.selectedTab {
-            case .appCaches:
-                AppCachesView(
-                    items: $store.cacheItems,
-                    isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { Task { await store.scanAll() } }
-                )
-            case .devTools:
-                DevToolsView(
-                    isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { Task { await store.scanAll() } }
-                )
-            case .settings:
-                SettingsView()
+            ZStack {
+                AppStyle.canvas
+                    .ignoresSafeArea()
+
+                switch store.selectedTab {
+                case .appCaches:
+                    AppCachesView(
+                        items: $store.cacheItems,
+                        isLoading: store.isScanningGeneral || store.isScanningAll,
+                        scanPhase: store.scanPhase,
+                        onScan: { Task { await store.scanAll() } },
+                        showsPageHeader: false
+                    )
+                case .devTools:
+                    DevToolsView(
+                        isLoading: store.isScanningDeveloper || store.isScanningAll,
+                        scanPhase: store.scanPhase,
+                        onScan: { Task { await store.scanAll() } },
+                        showsPageHeader: false
+                    )
+                case .settings:
+                    SettingsView(showsPageHeader: false)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(AppStyle.canvas)
+    }
+
+    private var selectedPageHeader: some View {
+        AppSectionPageHeader(title: store.selectedTab.rawValue, subtitle: selectedPageSubtitle) {
+            if store.selectedTab != .settings {
+                AppScanCleanActions(onScan: { Task { await store.scanAll() } }, scanPhase: store.scanPhase)
             }
         }
+    }
+
+    private var selectedPageSubtitle: String? {
+        switch store.selectedTab {
+        case .appCaches:
+            return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
+        case .devTools:
+            return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
+        case .settings:
+            return nil
+        }
+    }
+
+    private func pageSubtitle(count: Int, bytes: Int64) -> String {
+        let itemLabel = count == 1 ? "item" : "items"
+        return "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable"
+    }
+
+    private var appCachesSafetyFilter: SafetyFilter {
+        SafetyFilter(rawValue: appCachesFilterRaw) ?? .all
+    }
+
+    private var appCachesDisplayableItems: [CacheItem] {
+        store.cacheItems.filter { SafetyFilter.all.matches($0.safetyInfo) }
+    }
+
+    private var appCachesVisibleItems: [CacheItem] {
+        store.cacheItems.filter {
+            appCachesSafetyFilter.matches($0.safetyInfo) && !isVisuallyRemovedBySafeCleanup($0)
+        }
+    }
+
+    private var appCachesSubtitleItemCount: Int {
+        appCachesSafetyFilter == .all ? appCachesDisplayableItems.count : appCachesVisibleItems.count
+    }
+
+    private var appCachesSubtitleTotalSize: Int64 {
+        let items = appCachesSafetyFilter == .all ? appCachesDisplayableItems : appCachesVisibleItems
+        return items.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+
+    private var devToolsSafetyFilter: SafetyFilter {
+        SafetyFilter(rawValue: devToolsFilterRaw) ?? .all
+    }
+
+    private var devToolsSubtitleItemCount: Int {
+        devToolsSafetyFilter == .all ? devToolsTotalRowCount : devToolsVisibleItemCount
+    }
+
+    private var devToolsSubtitleTotalSize: Int64 {
+        devToolsSafetyFilter == .all ? devToolsTotalByteSize : devToolsVisibleByteSize
+    }
+
+    private var devToolsTotalRowCount: Int {
+        store.devTools.filter { $0.isDetected && $0.safetyInfo.level != .unknown }.count +
+            store.simulatorDevices.filter { $0.safetyInfo.level != .unknown }.count +
+            store.projectGroups.reduce(0) { sum, group in
+                sum + group.artifacts.filter { $0.safetyInfo.level != .unknown }.count
+            }
+    }
+
+    private var devToolsVisibleItemCount: Int {
+        let tools = store.devTools.filter(devToolVisible).count
+        let sims = store.simulatorDevices.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
+        let artifacts = store.projectGroups.reduce(0) { sum, group in
+            sum + group.artifacts.filter(projectArtifactVisible).count
+        }
+        return tools + sims + artifacts
+    }
+
+    private var devToolsTotalByteSize: Int64 {
+        let tools = store.devTools
+            .filter { $0.isDetected && $0.safetyInfo.level != .unknown }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let sims = store.simulatorDevices
+            .filter { $0.safetyInfo.level != .unknown }
+            .reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
+        let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
+            sum + group.artifacts
+                .filter { $0.safetyInfo.level != .unknown }
+                .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        }
+        return tools + sims + artifacts
+    }
+
+    private var devToolsVisibleByteSize: Int64 {
+        let tools = store.devTools
+            .filter(devToolVisible)
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let sims = store.simulatorDevices
+            .filter { devToolsSafetyFilter.matches($0.safetyInfo) }
+            .reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
+        let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
+            sum + group.artifacts
+                .filter(projectArtifactVisible)
+                .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        }
+        return tools + sims + artifacts
+    }
+
+    private func devToolVisible(_ tool: DevTool) -> Bool {
+        tool.isDetected &&
+            devToolsSafetyFilter.matches(tool.safetyInfo) &&
+            !isVisuallyRemovedBySafeCleanup(tool)
+    }
+
+    private func projectArtifactVisible(_ artifact: ProjectCacheArtifact) -> Bool {
+        devToolsSafetyFilter.matches(artifact.safetyInfo) &&
+            !isVisuallyRemovedBySafeCleanup(artifact)
+    }
+
+    private func isVisuallyRemovedBySafeCleanup(_ item: CacheItem) -> Bool {
+        let rowPaths = Set(item.locations.map { $0.path.standardizedFileURL.path })
+        let targetedPaths = rowPaths.intersection(store.interactiveSafeCleanupTargetPaths)
+        guard !targetedPaths.isEmpty else { return false }
+        return targetedPaths.isSubset(of: store.interactiveSafeCleanupRemovedPaths)
+    }
+
+    private func isVisuallyRemovedBySafeCleanup(_ tool: DevTool) -> Bool {
+        let rowPaths = Set(tool.paths.map { $0.standardizedFileURL.path })
+        let targetedPaths = rowPaths.intersection(store.interactiveSafeCleanupTargetPaths)
+        guard !targetedPaths.isEmpty else { return false }
+        return targetedPaths.isSubset(of: store.interactiveSafeCleanupRemovedPaths)
+    }
+
+    private func isVisuallyRemovedBySafeCleanup(_ artifact: ProjectCacheArtifact) -> Bool {
+        let path = artifact.path.standardizedFileURL.path
+        return store.interactiveSafeCleanupTargetPaths.contains(path)
+            && store.interactiveSafeCleanupRemovedPaths.contains(path)
     }
 }
 

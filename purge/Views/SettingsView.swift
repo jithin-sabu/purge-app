@@ -6,6 +6,7 @@ struct SettingsView: View {
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    var showsPageHeader = true
     // @AppStorage("telemetry.lastSentDate") private var telemetryLastSentTimestamp = 0.0
 
     @State private var easterEggTapTimes: [Date] = []
@@ -19,10 +20,12 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 28) {
-                Text("Settings")
-                    .font(AppStyle.Typography.pageTitle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: showsPageHeader ? 28 : 0) {
+                if showsPageHeader {
+                    Text("Settings")
+                        .font(AppStyle.Typography.pageTitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 cleaningScheduleSection
 
@@ -40,7 +43,7 @@ struct SettingsView: View {
                 .padding(.bottom, 18)
         }
         .padding(.horizontal, settingsHorizontalContentInset)
-        .padding(.top, AppDetailPageLayout.topContentInset)
+        .padding(.top, showsPageHeader ? AppDetailPageLayout.topContentInset : AppStyle.Spacing.medium)
         .padding(.bottom, AppDetailPageLayout.verticalPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppStyle.canvas)

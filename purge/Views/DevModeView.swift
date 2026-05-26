@@ -7,6 +7,7 @@ struct DevToolsView: View {
     let isLoading: Bool
     let scanPhase: PurgeStore.ScanPhase
     let onScan: () -> Void
+    var showsPageHeader = true
 
     @State private var expandedProjectRoots = Set<String>()
     @State private var iosSimulatorsExpanded = false
@@ -527,8 +528,10 @@ struct DevToolsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppSectionPageHeader(title: "Dev Tools", subtitle: pageSubtitle) {
-                AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
+            if showsPageHeader {
+                AppSectionPageHeader(title: "Dev Tools", subtitle: pageSubtitle) {
+                    AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
+                }
             }
 
             FilterSortToolbar(

@@ -41,13 +41,13 @@ enum AppDetailPageLayout {
 /// Page header matching Settings section typography (`.headline` + subtitle).
 struct AppSectionPageHeader<Trailing: View>: View {
     let title: String
-    let subtitle: String
+    let subtitle: String?
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         title: String,
-        subtitle: String,
+        subtitle: String? = nil,
         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
     ) {
         self.title = title
@@ -58,15 +58,17 @@ struct AppSectionPageHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .top, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(AppStyle.Typography.pageTitle)
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: subtitle)
-                    .fixedSize(horizontal: false, vertical: true)
+                AnimatedPageTitle(title)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: subtitle)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: AppStyle.Spacing.medium)
@@ -76,6 +78,99 @@ struct AppSectionPageHeader<Trailing: View>: View {
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
         .padding(.top, AppDetailPageLayout.topContentInset)
         .padding(.bottom, AppStyle.Spacing.small)
+    }
+}
+
+private struct AnimatedPageTitle: View {
+    let title: String
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var displayedTitle: String
+    @State private var previousTitle: String?
+    @State private var previousTitleVisible = false
+    @State private var titleVisible = true
+    @State private var animationToken = 0
+
+    init(_ title: String) {
+        self.title = title
+        _displayedTitle = State(initialValue: title)
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            if let previousTitle {
+                Text(previousTitle)
+                    .font(AppStyle.Typography.pageTitle)
+                    .opacity(previousTitleVisible ? 1 : 0)
+                    .offset(y: previousTitleVisible ? 0 : -5)
+                    .blur(radius: previousTitleVisible ? 0 : 1.5)
+            }
+
+            HStack(spacing: 0) {
+                ForEach(Array(displayedTitle.enumerated()), id: \.offset) { index, character in
+                    Text(String(character))
+                        .font(AppStyle.Typography.pageTitle)
+                        .opacity(titleVisible || reduceMotion ? 1 : 0)
+                        .offset(y: titleVisible || reduceMotion ? 0 : 7)
+                        .rotation3DEffect(
+                            .degrees(titleVisible || reduceMotion ? 0 : -18),
+                            axis: (x: 1, y: 0, z: 0),
+                            anchor: .bottom
+                        )
+                        .animation(characterAnimation(for: index), value: titleVisible)
+                }
+            }
+            .id(animationToken)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .onChange(of: title) { newTitle in
+            animateTitleChange(to: newTitle)
+        }
+    }
+
+    private func animateTitleChange(to newTitle: String) {
+        guard newTitle != displayedTitle else { return }
+
+        if reduceMotion {
+            displayedTitle = newTitle
+            previousTitle = nil
+            titleVisible = true
+            return
+        }
+
+        previousTitle = displayedTitle
+        previousTitleVisible = true
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            displayedTitle = newTitle
+            animationToken += 1
+            titleVisible = false
+        }
+        let currentToken = animationToken
+
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.16)) {
+                previousTitleVisible = false
+            }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.78, blendDuration: 0.04)) {
+                titleVisible = true
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            guard animationToken == currentToken else { return }
+            previousTitle = nil
+        }
+    }
+
+    private func characterAnimation(for index: Int) -> Animation? {
+        guard !reduceMotion else { return nil }
+        return .spring(response: 0.28, dampingFraction: 0.78, blendDuration: 0.04)
+            .delay(Double(index) * 0.012)
     }
 }
 

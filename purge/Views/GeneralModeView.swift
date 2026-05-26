@@ -8,6 +8,7 @@ struct AppCachesView: View {
     let isLoading: Bool
     let scanPhase: PurgeStore.ScanPhase
     let onScan: () -> Void
+    var showsPageHeader = true
 
     @AppStorage("filter.appCaches") private var filterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("sort.appCaches") private var sortRaw: String = SortOption.sizeDesc.rawValue
@@ -117,8 +118,10 @@ struct AppCachesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppSectionPageHeader(title: "App Caches", subtitle: pageSubtitle) {
-                AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
+            if showsPageHeader {
+                AppSectionPageHeader(title: "App Caches", subtitle: pageSubtitle) {
+                    AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
+                }
             }
 
             FilterSortToolbar(
