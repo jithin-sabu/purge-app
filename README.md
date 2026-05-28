@@ -4,7 +4,7 @@
 
 Purge scans your Mac for cache files and junk left behind by apps and development tools. Every item gets a plain-English explanation, a safety label, and recovery guidance before you delete anything. One-click cleanup only touches items marked **Safe to Clean**.
 
-https://github.com/jithinsabumec/purge-app/raw/main/screenshots/Purge-Demo.mp4
+![Purge demo](screenshots/Purge-Demo.gif)
 
 ---
 
