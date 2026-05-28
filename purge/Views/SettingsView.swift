@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -6,13 +5,9 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     var showsPageHeader = true
     // @AppStorage("telemetry.lastSentDate") private var telemetryLastSentTimestamp = 0.0
 
-    @State private var easterEggTapTimes: [Date] = []
-    @State private var showEasterEgg = false
-    @State private var easterEggSessionMadeByTweak = false
     // @State private var showTelemetryPreviewSheet = false
     // @State private var isSendingTelemetry = false
     // @State private var telemetryError: String?
@@ -33,15 +28,8 @@ struct SettingsView: View {
                 // Divider()
                 // telemetrySection
             }
-            .frame(maxWidth: settingsContentMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: AppStyle.Spacing.large)
-
-            settingsFooterSection
-                .frame(maxWidth: settingsContentMaxWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 18)
         }
         .padding(.horizontal, settingsHorizontalContentInset)
         .padding(.top, showsPageHeader ? AppDetailPageLayout.topContentInset : AppStyle.Spacing.medium)
@@ -57,12 +45,6 @@ struct SettingsView: View {
         //         onSend: sendTelemetryReport
         //     )
         // }
-        .overlay {
-            if showEasterEgg {
-                SettingsEasterEggOverlay(onDismiss: dismissEasterEgg)
-                    .transition(.opacity)
-            }
-        }
     }
 
     /*
@@ -185,7 +167,7 @@ struct SettingsView: View {
     */
 
     private var cleaningScheduleSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        settingsSectionCard {
             VStack(alignment: .leading, spacing: 12) {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .center) {
@@ -194,12 +176,7 @@ struct SettingsView: View {
 
                         Spacer(minLength: 12)
 
-                        Toggle("Run automatic cleaning", isOn: Binding(
-                            get: { prefs.isEnabled },
-                            set: { newVal in
-                                Task { await prefs.setEnabled(newVal) }
-                            }
-                        ))
+                        Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
                         .toggleStyle(.switch)
                     }
 
@@ -207,12 +184,7 @@ struct SettingsView: View {
                         Text("Cleaning Schedule")
                             .font(.headline)
 
-                        Toggle("Run automatic cleaning", isOn: Binding(
-                            get: { prefs.isEnabled },
-                            set: { newVal in
-                                Task { await prefs.setEnabled(newVal) }
-                            }
-                        ))
+                        Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
                         .toggleStyle(.switch)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -224,6 +196,9 @@ struct SettingsView: View {
                     .contentTransition(scheduleTextTransition)
                     .animation(scheduleTextAnimation, value: scheduleSummary)
             }
+            .padding(16)
+
+            settingsSectionDivider
 
             VStack(spacing: 8) {
                 settingPickerRow(title: "How often") {
@@ -242,10 +217,19 @@ struct SettingsView: View {
                     }
                 }
             }
+            .padding(16)
             .disabled(!prefs.isEnabled)
 
+            settingsSectionDivider
+
             TimelineView(.periodic(from: Date(), by: 60)) { context in
-                cleaningScheduleStatusCard(referenceDate: context.date)
+                ScheduleStatusAnimatedHeight(
+                    reduceMotion: reduceMotion,
+                    animation: scheduleLayoutAnimation
+                ) {
+                    cleaningScheduleStatusCard(referenceDate: context.date)
+                }
+                .padding(16)
             }
         }
     }
@@ -310,56 +294,6 @@ struct SettingsView: View {
     }
     */
 
-    private var aboutMadeByAttribution: String {
-        easterEggSessionMadeByTweak
-            ? "Made by Jithin (who definitely did not spend 10 minutes on that)"
-            : "Made by Jithin"
-    }
-
-    private var settingsFooterSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: registerAboutEasterEggTap)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Purge")
-                        .fontWeight(.semibold)
-                        .contentShape(Rectangle())
-                        .onTapGesture(perform: registerAboutEasterEggTap)
-                    Text("Version \(appVersion)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Button("Replay Onboarding") {
-                hasCompletedOnboarding = false
-            }
-            .controlSize(.small)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) {
-                    Text(aboutMadeByAttribution)
-
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-
-                    Link("Send Feedback", destination: feedbackURL)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(aboutMadeByAttribution)
-                    Link("Send Feedback", destination: feedbackURL)
-                }
-            }
-            .font(.subheadline)
-        }
-    }
-
     private func settingPickerRow<PickerContent: View>(
         title: String,
         @ViewBuilder picker: () -> PickerContent
@@ -392,31 +326,32 @@ struct SettingsView: View {
 
     private func cleaningScheduleStatusCard(referenceDate: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if !prefs.isEnabled {
-                autoCleanDisabledStatus
-            } else if let latestClean {
+            if prefs.isEnabled, let latestClean {
                 lastCleanStatusRow(latestClean, referenceDate: referenceDate)
+                    .transition(scheduleStatusTransition)
 
                 Rectangle()
                     .fill(AppStyle.hairline)
                     .frame(height: 0.5)
                     .padding(.vertical, 12)
+                    .transition(.opacity)
 
                 nextCleanStatusRow(referenceDate: referenceDate, showsQuietDescription: false)
+                    .transition(scheduleStatusTransition)
             } else {
-                nextCleanStatusRow(referenceDate: referenceDate, showsQuietDescription: true)
+                Group {
+                    if !prefs.isEnabled {
+                        autoCleanDisabledStatus
+                    } else {
+                        nextCleanStatusRow(referenceDate: referenceDate, showsQuietDescription: true)
+                    }
+                }
+                .transition(scheduleStatusTransition)
             }
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            AppStyle.elevated,
-            in: RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
-        }
+        .animation(scheduleLayoutAnimation, value: prefs.isEnabled)
+        .animation(scheduleLayoutAnimation, value: latestClean?.date.timeIntervalSinceReferenceDate ?? 0)
     }
 
     private var autoCleanDisabledStatus: some View {
@@ -563,31 +498,26 @@ struct SettingsView: View {
         .opacity(isDisabled ? 0.45 : 1)
     }
 
-    private func registerAboutEasterEggTap() {
-        let now = Date()
-        if let last = easterEggTapTimes.last, now.timeIntervalSince(last) > 2 {
-            easterEggTapTimes = [now]
-        } else {
-            easterEggTapTimes.append(now)
-        }
-        guard easterEggTapTimes.count >= 5 else { return }
-        easterEggTapTimes.removeAll()
-        withAnimation(.easeOut(duration: 0.25)) {
-            showEasterEgg = true
-        }
-    }
-
-    private func dismissEasterEgg() {
-        withAnimation(.easeOut(duration: 0.2)) {
-            showEasterEgg = false
-        }
-        easterEggSessionMadeByTweak = true
-    }
-
-    /// Caps line length on wide windows; layout still shrinks with a narrow split-view column.
-    private var settingsContentMaxWidth: CGFloat { 560 }
-
     private var settingsHorizontalContentInset: CGFloat { AppDetailPageLayout.horizontalInset }
+
+    private var settingsSectionDivider: some View {
+        InsetCardDivider()
+    }
+
+    private func settingsSectionCard<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0, content: content)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                AppStyle.elevated,
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                    .strokeBorder(AppStyle.hairline, lineWidth: 0.5)
+            }
+    }
 
     private var scheduleSummary: String {
         """
@@ -640,6 +570,29 @@ struct SettingsView: View {
         reduceMotion ? nil : .easeInOut(duration: 0.45)
     }
 
+    private var scheduleLayoutAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.9)
+    }
+
+    private var scheduleStatusTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+        return .modifier(
+            active: ScheduleStatusBlurTransition(blur: 8, opacity: 0),
+            identity: ScheduleStatusBlurTransition(blur: 0, opacity: 1)
+        )
+    }
+
+    private var autoCleanEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { prefs.isEnabled },
+            set: { newVal in
+                Task { await prefs.setEnabled(newVal, animation: scheduleLayoutAnimation) }
+            }
+        )
+    }
+
     private var isScanInProgress: Bool {
         store.isScanningAll || store.isScanningGeneral || store.isScanningDeveloper
     }
@@ -661,7 +614,7 @@ struct SettingsView: View {
     }
 
     private func enableAutoClean() {
-        Task { await prefs.setEnabled(true) }
+        Task { await prefs.setEnabled(true, animation: scheduleLayoutAnimation) }
     }
 
     private func runScan() {
@@ -714,27 +667,6 @@ struct SettingsView: View {
         let relative = Self.relativeDateFormatter.localizedString(for: date, relativeTo: referenceDate)
         guard let first = relative.first else { return relative }
         return first.uppercased() + String(relative.dropFirst())
-    }
-
-    private var appVersion: String {
-        let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String
-        let build = info?["CFBundleVersion"] as? String
-
-        switch (version?.isEmpty == false ? version : nil, build?.isEmpty == false ? build : nil) {
-        case let (.some(version), .some(build)) where build != version:
-            return "\(version) (\(build))"
-        case let (.some(version), _):
-            return version
-        case let (_, .some(build)):
-            return build
-        default:
-            return "1.0.0"
-        }
-    }
-
-    private var feedbackURL: URL {
-        URL(string: "mailto:design@jithinsabu.com?subject=Purge%20Feedback")!
     }
 
     private func formattedDate(_ date: Date) -> String {
@@ -854,64 +786,55 @@ private struct TelemetryPreviewSheet: View {
 }
 */
 
-private struct SettingsEasterEggOverlay: View {
-    let onDismiss: () -> Void
-    @State private var appeared = false
+private struct ScheduleStatusBlurTransition: ViewModifier {
+    let blur: CGFloat
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: blur)
+            .opacity(opacity)
+    }
+}
+
+private enum ScheduleStatusHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ScheduleStatusAnimatedHeight<Content: View>: View {
+    let reduceMotion: Bool
+    let animation: Animation?
+    @ViewBuilder var content: () -> Content
+    @State private var height: CGFloat?
 
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.48)
-                .ignoresSafeArea()
-                .opacity(appeared ? 1 : 0)
-
-            VStack(alignment: .center, spacing: 0) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Oh, you found this.")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text("Cool.")
-                        .foregroundStyle(.secondary)
-
-                    Text("No seriously, cool.")
-                        .foregroundStyle(.secondary)
-
-                    Text("We spent like 10 minutes on it.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 14)
-
-                HStack {
-                    Spacer()
-                    Button("Ok fine thanks", action: onDismiss)
-                        .buttonStyle(.borderedProminent)
-                    Spacer()
+        content()
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .preference(key: ScheduleStatusHeightKey.self, value: proxy.size.height)
                 }
             }
-            .padding(20)
-            .frame(width: 320, height: 220)
-            .fixedSize(horizontal: true, vertical: true)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(red: 0.12, green: 0.13, blue: 0.15))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-            )
-            .environment(\.colorScheme, .dark)
-            .scaleEffect(appeared ? 1.0 : 0.95)
-            .opacity(appeared ? 1.0 : 0.0)
-        }
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.28)) {
-                appeared = true
+            .onPreferenceChange(ScheduleStatusHeightKey.self) { newHeight in
+                guard newHeight > 0 else { return }
+                if height == nil {
+                    height = newHeight
+                } else if abs((height ?? 0) - newHeight) > 0.5 {
+                    if let animation, !reduceMotion {
+                        withAnimation(animation) {
+                            height = newHeight
+                        }
+                    } else {
+                        height = newHeight
+                    }
+                }
             }
-        }
+            .frame(height: height, alignment: .top)
+            .clipped()
     }
 }
 

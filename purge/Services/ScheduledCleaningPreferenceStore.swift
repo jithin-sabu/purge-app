@@ -56,8 +56,14 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         }
     }
 
-    func setEnabled(_ enabled: Bool) async {
-        isEnabled = enabled
+    func setEnabled(_ enabled: Bool, animation: Animation? = nil) async {
+        if let animation {
+            withAnimation(animation) {
+                isEnabled = enabled
+            }
+        } else {
+            isEnabled = enabled
+        }
         if enabled {
             _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
         }

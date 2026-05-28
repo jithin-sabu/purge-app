@@ -249,49 +249,117 @@ struct ContentView: View {
             maxHeight: .infinity,
             alignment: .topLeading
         )
-        .frame(minWidth: 200, idealWidth: 220, maxWidth: 280)
+        .frame(width: SidebarLayout.width)
         .background(AppStyle.panel)
         .sidebarCompactTop()
-        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
+        .navigationSplitViewColumnWidth(SidebarLayout.width)
     }
 
-    @ViewBuilder
+    /// Shared overlaid header so `AnimatedPageTitle` stays mounted across tab switches.
+    /// About reserves matching space in its `safeAreaBar` (invisible) so cards still blur.
     private var tabContent: some View {
-        VStack(spacing: 0) {
-            selectedPageHeader
-
+        ZStack(alignment: .top) {
             ZStack {
                 AppStyle.canvas
                     .ignoresSafeArea()
 
-                switch store.selectedTab {
-                case .appCaches:
-                    AppCachesView(
-                        items: $store.cacheItems,
-                        isLoading: store.isScanningGeneral || store.isScanningAll,
-                        scanPhase: store.scanPhase,
-                        onScan: { Task { await store.scanAll() } },
-                        showsPageHeader: false
-                    )
-                case .devTools:
-                    DevToolsView(
-                        isLoading: store.isScanningDeveloper || store.isScanningAll,
-                        scanPhase: store.scanPhase,
-                        onScan: { Task { await store.scanAll() } },
-                        showsPageHeader: false
-                    )
-                case .settings:
-                    SettingsView(showsPageHeader: false)
-                }
+                tabBody
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            selectedPageHeader
         }
+        .background(AppStyle.canvas)
+    }
+
+    @ViewBuilder
+    private var tabBody: some View {
+        switch store.selectedTab {
+        case .about:
+            aboutTabBody
+        case .appCaches:
+            appCachesTabBody
+        case .devTools:
+            devToolsTabBody
+        case .settings:
+            SettingsView(showsPageHeader: false)
+                .underDetailPageHeader(includesSubtitle: false)
+        }
+    }
+
+    @ViewBuilder
+    private var appCachesTabBody: some View {
+        Group {
+            if #available(macOS 26.0, *) {
+                AppCachesView(
+                    items: $store.cacheItems,
+                    isLoading: store.isScanningGeneral || store.isScanningAll,
+                    scanPhase: store.scanPhase,
+                    onScan: { Task { await store.scanAll() } },
+                    showsPageHeader: false,
+                    usesExternalScrollContainer: true
+                )
+            } else {
+                AppCachesView(
+                    items: $store.cacheItems,
+                    isLoading: store.isScanningGeneral || store.isScanningAll,
+                    scanPhase: store.scanPhase,
+                    onScan: { Task { await store.scanAll() } },
+                    showsPageHeader: false
+                )
+            }
+        }
+        .underDetailPageHeader(includesSubtitle: true)
+    }
+
+    @ViewBuilder
+    private var devToolsTabBody: some View {
+        Group {
+            if #available(macOS 26.0, *) {
+                DevToolsView(
+                    isLoading: store.isScanningDeveloper || store.isScanningAll,
+                    scanPhase: store.scanPhase,
+                    onScan: { Task { await store.scanAll() } },
+                    showsPageHeader: false,
+                    usesExternalScrollContainer: true
+                )
+            } else {
+                DevToolsView(
+                    isLoading: store.isScanningDeveloper || store.isScanningAll,
+                    scanPhase: store.scanPhase,
+                    onScan: { Task { await store.scanAll() } },
+                    showsPageHeader: false
+                )
+            }
+        }
+        .underDetailPageHeader(includesSubtitle: true)
+    }
+
+    @ViewBuilder
+    private var aboutTabBody: some View {
+        Group {
+            if #available(macOS 26.0, *) {
+                aboutScrollView
+                    .aboutPageScrollEdge()
+            } else {
+                aboutScrollView
+                    .underDetailPageHeader(includesSubtitle: false)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var aboutScrollView: some View {
+        ScrollView {
+            AboutView(showsPageHeader: false, usesExternalScrollContainer: true)
+        }
+        .scrollContentBackground(.hidden)
         .background(AppStyle.canvas)
     }
 
     private var selectedPageHeader: some View {
         AppSectionPageHeader(title: store.selectedTab.rawValue, subtitle: selectedPageSubtitle) {
-            if store.selectedTab != .settings {
+            if store.selectedTab == .appCaches || store.selectedTab == .devTools {
                 AppScanCleanActions(onScan: { Task { await store.scanAll() } }, scanPhase: store.scanPhase)
             }
         }
@@ -304,6 +372,8 @@ struct ContentView: View {
         case .devTools:
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
         case .settings:
+            return nil
+        case .about:
             return nil
         }
     }

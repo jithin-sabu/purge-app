@@ -15,6 +15,7 @@ final class PurgeStore: ObservableObject {
         case appCaches = "App Caches"
         case devTools = "Dev Tools"
         case settings = "Settings"
+        case about = "About"
 
         var id: String { rawValue }
         func icon(selected: Bool) -> String {
@@ -22,6 +23,7 @@ final class PurgeStore: ObservableObject {
             case .appCaches: return selected ? "internaldrive.fill" : "internaldrive"
             case .devTools: return selected ? "hammer.fill" : "hammer"
             case .settings: return selected ? "gearshape.fill" : "gearshape"
+            case .about: return selected ? "info.circle.fill" : "info.circle"
             }
         }
     }

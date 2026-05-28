@@ -23,6 +23,7 @@ struct AppBrandMark: View {
 
 /// Sidebar column insets — brand mark and nav selection share the same leading edge.
 enum SidebarLayout {
+    static let width: CGFloat = 220
     static let horizontalInset: CGFloat = 8
     static let navRowInnerPadding: CGFloat = 8
     static let selectionCornerRadius: CGFloat = 8
@@ -36,6 +37,48 @@ enum AppDetailPageLayout {
     /// Space below the title bar before page content begins.
     static let topContentInset: CGFloat = 20
     static let verticalPadding: CGFloat = 12
+    /// Clear band below a `safeAreaBar` page header before the scroll edge blur ramps up.
+    static let scrollEdgeClearanceBelowHeader: CGFloat = 24
+    /// Approximate height of `AppSectionPageHeader` (top inset + title + bottom padding).
+    static let pageTitleChromeHeight: CGFloat = topContentInset + 28 + AppStyle.Spacing.small
+    /// Extra line when a subtitle is shown (spacing + subheadline).
+    static let pageSubtitleChromeHeight: CGFloat = 4 + 16
+
+    static func pageHeaderChromeHeight(includesSubtitle: Bool) -> CGFloat {
+        pageTitleChromeHeight + (includesSubtitle ? pageSubtitleChromeHeight : 0)
+    }
+
+    static func scrollEdgeInsetBelowPageHeader(includesSubtitle: Bool) -> CGFloat {
+        pageHeaderChromeHeight(includesSubtitle: includesSubtitle) + scrollEdgeClearanceBelowHeader
+    }
+}
+
+@available(macOS 26.0, *)
+extension View {
+    /// Sticky scan-tab chrome with a soft scroll edge blur as list rows pass underneath.
+    func scanTabSoftScrollEdge<Chrome: View>(@ViewBuilder chrome: @escaping () -> Chrome) -> some View {
+        safeAreaBar(edge: .top, spacing: 0, content: chrome)
+            .scrollEdgeEffectStyle(.soft, for: .top)
+    }
+
+    /// About tab: an invisible page-header sized bar reserves space so cards blur as they pass
+    /// underneath, while the visible animated title is owned by the persistent parent overlay.
+    func aboutPageScrollEdge() -> some View {
+        safeAreaBar(edge: .top, spacing: 0) {
+            AppSectionPageHeader(title: "About")
+                .opacity(0)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+        }
+        .scrollEdgeEffectStyle(.soft, for: .top)
+    }
+}
+
+extension View {
+    /// Keeps tab body content below a page header drawn in a parent `ZStack`.
+    func underDetailPageHeader(includesSubtitle: Bool = false) -> some View {
+        padding(.top, AppDetailPageLayout.pageHeaderChromeHeight(includesSubtitle: includesSubtitle))
+    }
 }
 
 /// Page header matching Settings section typography (`.headline` + subtitle).
@@ -106,21 +149,13 @@ private struct AnimatedPageTitle: View {
                     .blur(radius: previousTitleVisible ? 0 : 1.5)
             }
 
-            HStack(spacing: 0) {
-                ForEach(Array(displayedTitle.enumerated()), id: \.offset) { index, character in
-                    Text(String(character))
-                        .font(AppStyle.Typography.pageTitle)
-                        .opacity(titleVisible || reduceMotion ? 1 : 0)
-                        .offset(y: titleVisible || reduceMotion ? 0 : 7)
-                        .rotation3DEffect(
-                            .degrees(titleVisible || reduceMotion ? 0 : -18),
-                            axis: (x: 1, y: 0, z: 0),
-                            anchor: .bottom
-                        )
-                        .animation(characterAnimation(for: index), value: titleVisible)
-                }
-            }
-            .id(animationToken)
+            Text(displayedTitle)
+                .font(AppStyle.Typography.pageTitle)
+                .opacity(titleVisible || reduceMotion ? 1 : 0)
+                .offset(y: titleVisible || reduceMotion ? 0 : 6)
+                .blur(radius: titleVisible || reduceMotion ? 0 : 0.8)
+                .animation(titleAnimation, value: titleVisible)
+                .id(animationToken)
         }
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
@@ -152,13 +187,11 @@ private struct AnimatedPageTitle: View {
         }
         let currentToken = animationToken
 
-        DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.16)) {
-                previousTitleVisible = false
-            }
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.78, blendDuration: 0.04)) {
-                titleVisible = true
-            }
+        withAnimation(.easeOut(duration: 0.16)) {
+            previousTitleVisible = false
+        }
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.78, blendDuration: 0.04)) {
+            titleVisible = true
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
@@ -167,10 +200,9 @@ private struct AnimatedPageTitle: View {
         }
     }
 
-    private func characterAnimation(for index: Int) -> Animation? {
+    private var titleAnimation: Animation? {
         guard !reduceMotion else { return nil }
-        return .spring(response: 0.28, dampingFraction: 0.78, blendDuration: 0.04)
-            .delay(Double(index) * 0.012)
+        return .spring(response: 0.28, dampingFraction: 0.8, blendDuration: 0.04)
     }
 }
 
@@ -1000,6 +1032,8 @@ private final class AnimatedSidebarCollapseCoordinator: NSResponder {
         item.canCollapse = true
         item.canCollapseFromWindowResize = false
         item.collapseBehavior = .preferResizingSiblingsWithFixedSplitView
+        item.minimumThickness = SidebarLayout.width
+        item.maximumThickness = SidebarLayout.width
     }
 
     private func installResponder(before splitView: NSSplitView) {

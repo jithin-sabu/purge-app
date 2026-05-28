@@ -1,13 +1,32 @@
 import AppKit
 import SwiftUI
 
-struct DevToolsView: View {
+struct DevToolsView<PageHeader: View>: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isLoading: Bool
     let scanPhase: PurgeStore.ScanPhase
     let onScan: () -> Void
     var showsPageHeader = true
+    /// When true, the parent supplies the page header and the list uses `safeAreaBar` scroll-edge blur (macOS 26+).
+    var usesExternalScrollContainer = false
+    private let pageHeader: () -> PageHeader
+
+    init(
+        isLoading: Bool,
+        scanPhase: PurgeStore.ScanPhase,
+        onScan: @escaping () -> Void,
+        showsPageHeader: Bool = true,
+        usesExternalScrollContainer: Bool = false,
+        @ViewBuilder pageHeader: @escaping () -> PageHeader
+    ) {
+        self.isLoading = isLoading
+        self.scanPhase = scanPhase
+        self.onScan = onScan
+        self.showsPageHeader = showsPageHeader
+        self.usesExternalScrollContainer = usesExternalScrollContainer
+        self.pageHeader = pageHeader
+    }
 
     @State private var expandedProjectRoots = Set<String>()
     @State private var iosSimulatorsExpanded = false
@@ -527,6 +546,17 @@ struct DevToolsView: View {
     }
 
     var body: some View {
+        Group {
+            if usesExternalScrollContainer {
+                externalScrollBody
+            } else {
+                standardBody
+            }
+        }
+        .background(AppStyle.canvas)
+    }
+
+    private var standardBody: some View {
         VStack(spacing: 0) {
             if showsPageHeader {
                 AppSectionPageHeader(title: "Dev Tools", subtitle: pageSubtitle) {
@@ -534,60 +564,115 @@ struct DevToolsView: View {
                 }
             }
 
-            FilterSortToolbar(
-                safetyFilter: safetyFilterBinding,
-                sortOption: sortOptionBinding,
-                chipCounts: chipCounts,
-                selectedInScopeCount: selectedInScopeCount,
-                isDeleting: store.isDeleting,
-                onCleanSelected: {
-                    Task {
-                        await store.presentDeletionSheetResolvingGit(
-                            candidates: store.selectedDeveloperDeletionCandidates
-                        )
-                    }
-                },
-                useStackedLayout: true,
-                showsControlsRow: false
-            )
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-
-            HStack {
-                TriStateCheckbox(title: "Select All", state: selectAllDeveloperState) {
-                    toggleDeveloperSelectAll()
-                }
-                .fixedSize()
-                .disabled(!hasEligibleSelectableRows)
-                Spacer()
-                AppSortMenu(selection: sortOptionBinding)
-            }
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .padding(.vertical, AppStyle.Spacing.xSmall)
-
-            ZStack {
-                if developerListEmpty {
-                    if isLoading {
-                        scanningPlaceholder
-                    } else {
-                        placeholderNoData
-                    }
-                } else if nothingMatchesFilter {
-                    if isLoading {
-                        scanningPlaceholder
-                    } else {
-                        emptyFilterState
-                    }
-                } else {
-                    developerListOnly
-                }
-
-                if store.isDeleting && showsDeveloperListContent && !store.isInteractiveSafeCleanupInProgress {
-                    CleaningOverlay()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            scanControlsChrome
+            scanListStack
         }
-        .background(AppStyle.canvas)
+    }
+
+    @ViewBuilder
+    private var externalScrollBody: some View {
+        if #available(macOS 26.0, *) {
+            VStack(spacing: 0) {
+                fixedScanTabHeader
+
+                if showsDeveloperListContent {
+                    ZStack {
+                        developerListOnly
+                            .scanTabSoftScrollEdge { selectAllRowChrome }
+
+                        if store.isDeleting && !store.isInteractiveSafeCleanupInProgress {
+                            CleaningOverlay()
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    VStack(spacing: 0) {
+                        selectAllRowChrome
+                        scanListStack
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+        } else {
+            standardBody
+        }
+    }
+
+    /// Filter chips — fixed above the scroll edge; page title lives in the parent column header.
+    private var fixedScanTabHeader: some View {
+        filterToolbarChrome
+    }
+
+    private var filterToolbarChrome: some View {
+        FilterSortToolbar(
+            safetyFilter: safetyFilterBinding,
+            sortOption: sortOptionBinding,
+            chipCounts: chipCounts,
+            selectedInScopeCount: selectedInScopeCount,
+            isDeleting: store.isDeleting,
+            onCleanSelected: {
+                Task {
+                    await store.presentDeletionSheetResolvingGit(
+                        candidates: store.selectedDeveloperDeletionCandidates
+                    )
+                }
+            },
+            useStackedLayout: true,
+            showsControlsRow: false
+        )
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+    }
+
+    /// Bottom edge of the blur zone — list rows fade under this row only.
+    private var selectAllRowChrome: some View {
+        HStack {
+            TriStateCheckbox(title: "Select All", state: selectAllDeveloperState) {
+                toggleDeveloperSelectAll()
+            }
+            .fixedSize()
+            .disabled(!hasEligibleSelectableRows)
+            Spacer()
+            AppSortMenu(selection: sortOptionBinding)
+        }
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        .padding(.vertical, AppStyle.Spacing.xSmall)
+    }
+
+    private var scanControlsChrome: some View {
+        VStack(spacing: 0) {
+            filterToolbarChrome
+            selectAllRowChrome
+        }
+    }
+
+    private var scanListStack: some View {
+        ZStack {
+            scanListOrPlaceholder
+
+            if store.isDeleting && showsDeveloperListContent && !store.isInteractiveSafeCleanupInProgress {
+                CleaningOverlay()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var scanListOrPlaceholder: some View {
+        if developerListEmpty {
+            if isLoading {
+                scanningPlaceholder
+            } else {
+                placeholderNoData
+            }
+        } else if nothingMatchesFilter {
+            if isLoading {
+                scanningPlaceholder
+            } else {
+                emptyFilterState
+            }
+        } else {
+            developerListOnly
+        }
     }
 
     private var placeholderNoData: some View {
@@ -1061,6 +1146,25 @@ struct DevToolsView: View {
             return "Project"
         }
         return "Project, \(types)"
+    }
+}
+
+extension DevToolsView where PageHeader == EmptyView {
+    init(
+        isLoading: Bool,
+        scanPhase: PurgeStore.ScanPhase,
+        onScan: @escaping () -> Void,
+        showsPageHeader: Bool = true,
+        usesExternalScrollContainer: Bool = false
+    ) {
+        self.init(
+            isLoading: isLoading,
+            scanPhase: scanPhase,
+            onScan: onScan,
+            showsPageHeader: showsPageHeader,
+            usesExternalScrollContainer: usesExternalScrollContainer,
+            pageHeader: { EmptyView() }
+        )
     }
 }
 

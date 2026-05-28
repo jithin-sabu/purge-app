@@ -43,9 +43,15 @@ enum AppStyle {
     static let accent = Color(red: 0 / 255, green: 115 / 255, blue: 231 / 255)
     static let selectionFill = accent.opacity(0.07)
     static let selectionStroke = accent.opacity(0.18)
-    static let canvas = Color(light: NSColor(calibratedWhite: 0.98, alpha: 1), dark: NSColor(calibratedWhite: 0.09, alpha: 1))
+    static let canvas = Color(
+        light: NSColor(calibratedWhite: 0.98, alpha: 1),
+        dark: NSColor(srgbRed: 30 / 255, green: 30 / 255, blue: 30 / 255, alpha: 1) // #1E1E1E
+    )
     static let panel = Color(light: NSColor(calibratedWhite: 0.96, alpha: 1), dark: NSColor(calibratedWhite: 0.12, alpha: 1))
-    static let elevated = Color(light: NSColor.white, dark: NSColor(calibratedWhite: 0.14, alpha: 1))
+    static let elevated = Color(
+        light: NSColor.white,
+        dark: NSColor(srgbRed: 37 / 255, green: 37 / 255, blue: 37 / 255, alpha: 1) // #252525
+    )
     static let rowHover = Color(light: NSColor(calibratedWhite: 0.94, alpha: 1), dark: NSColor(calibratedWhite: 0.16, alpha: 1))
     static let hairline = Color.primary.opacity(0.1)
 
@@ -53,6 +59,18 @@ enum AppStyle {
     static let warning = Color(red: 187 / 255, green: 126 / 255, blue: 51 / 255)
     static let danger = Color(red: 202 / 255, green: 80 / 255, blue: 80 / 255)
     static let neutral = Color.secondary
+}
+
+/// Hairline separator inset from card edges (matches card content horizontal padding).
+struct InsetCardDivider: View {
+    var horizontalInset: CGFloat = AppStyle.Spacing.medium
+
+    var body: some View {
+        Rectangle()
+            .fill(AppStyle.hairline)
+            .frame(height: 0.5)
+            .padding(.horizontal, horizontalInset)
+    }
 }
 
 extension Color {

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-struct AppCachesView: View {
+struct AppCachesView<PageHeader: View>: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var items: [CacheItem]
@@ -9,6 +9,27 @@ struct AppCachesView: View {
     let scanPhase: PurgeStore.ScanPhase
     let onScan: () -> Void
     var showsPageHeader = true
+    /// When true, the parent supplies the page header and the list uses `safeAreaBar` scroll-edge blur (macOS 26+).
+    var usesExternalScrollContainer = false
+    private let pageHeader: () -> PageHeader
+
+    init(
+        items: Binding<[CacheItem]>,
+        isLoading: Bool,
+        scanPhase: PurgeStore.ScanPhase,
+        onScan: @escaping () -> Void,
+        showsPageHeader: Bool = true,
+        usesExternalScrollContainer: Bool = false,
+        @ViewBuilder pageHeader: @escaping () -> PageHeader
+    ) {
+        _items = items
+        self.isLoading = isLoading
+        self.scanPhase = scanPhase
+        self.onScan = onScan
+        self.showsPageHeader = showsPageHeader
+        self.usesExternalScrollContainer = usesExternalScrollContainer
+        self.pageHeader = pageHeader
+    }
 
     @AppStorage("filter.appCaches") private var filterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("sort.appCaches") private var sortRaw: String = SortOption.sizeDesc.rawValue
@@ -117,6 +138,17 @@ struct AppCachesView: View {
     }
 
     var body: some View {
+        Group {
+            if usesExternalScrollContainer {
+                externalScrollBody
+            } else {
+                standardBody
+            }
+        }
+        .background(AppStyle.canvas)
+    }
+
+    private var standardBody: some View {
         VStack(spacing: 0) {
             if showsPageHeader {
                 AppSectionPageHeader(title: "App Caches", subtitle: pageSubtitle) {
@@ -124,58 +156,113 @@ struct AppCachesView: View {
                 }
             }
 
-            FilterSortToolbar(
-                safetyFilter: safetyFilterBinding,
-                sortOption: sortOptionBinding,
-                chipCounts: chipCounts,
-                selectedInScopeCount: selectedInScopeCount,
-                isDeleting: store.isDeleting,
-                onCleanSelected: {
-                    Task {
-                        await store.presentDeletionSheetResolvingGit(candidates: store.selectedGeneralDeletionCandidates)
-                    }
-                },
-                useStackedLayout: true,
-                showsControlsRow: false
-            )
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-
-            HStack {
-                TriStateCheckbox(title: "Select All", state: selectAllState) {
-                    toggleSelectAll()
-                }
-                .fixedSize()
-                .disabled(eligibleSelectIndices.isEmpty)
-                Spacer()
-                AppSortMenu(selection: sortOptionBinding)
-            }
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .padding(.vertical, AppStyle.Spacing.xSmall)
-
-            ZStack {
-                if items.isEmpty {
-                    if isLoading {
-                        scanningPlaceholder
-                    } else {
-                        emptyState
-                    }
-                } else if visibleIndices.isEmpty {
-                    if isLoading {
-                        scanningPlaceholder
-                    } else {
-                        emptyFilterState
-                    }
-                } else {
-                    cacheResultsList
-                }
-
-                if store.isDeleting && showsListContent && !store.isInteractiveSafeCleanupInProgress {
-                    CleaningOverlay()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            scanControlsChrome
+            scanListStack
         }
-        .background(AppStyle.canvas)
+    }
+
+    @ViewBuilder
+    private var externalScrollBody: some View {
+        if #available(macOS 26.0, *) {
+            VStack(spacing: 0) {
+                fixedScanTabHeader
+
+                if showsListContent {
+                    ZStack {
+                        cacheResultsList
+                            .scanTabSoftScrollEdge { selectAllRowChrome }
+
+                        if store.isDeleting && !store.isInteractiveSafeCleanupInProgress {
+                            CleaningOverlay()
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    VStack(spacing: 0) {
+                        selectAllRowChrome
+                        scanListStack
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+        } else {
+            standardBody
+        }
+    }
+
+    /// Filter chips — fixed above the scroll edge; page title lives in the parent column header.
+    private var fixedScanTabHeader: some View {
+        filterToolbarChrome
+    }
+
+    private var filterToolbarChrome: some View {
+        FilterSortToolbar(
+            safetyFilter: safetyFilterBinding,
+            sortOption: sortOptionBinding,
+            chipCounts: chipCounts,
+            selectedInScopeCount: selectedInScopeCount,
+            isDeleting: store.isDeleting,
+            onCleanSelected: {
+                Task {
+                    await store.presentDeletionSheetResolvingGit(candidates: store.selectedGeneralDeletionCandidates)
+                }
+            },
+            useStackedLayout: true,
+            showsControlsRow: false
+        )
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+    }
+
+    /// Bottom edge of the blur zone — list rows fade under this row only.
+    private var selectAllRowChrome: some View {
+        HStack {
+            TriStateCheckbox(title: "Select All", state: selectAllState) {
+                toggleSelectAll()
+            }
+            .fixedSize()
+            .disabled(eligibleSelectIndices.isEmpty)
+            Spacer()
+            AppSortMenu(selection: sortOptionBinding)
+        }
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        .padding(.vertical, AppStyle.Spacing.xSmall)
+    }
+
+    private var scanControlsChrome: some View {
+        VStack(spacing: 0) {
+            filterToolbarChrome
+            selectAllRowChrome
+        }
+    }
+
+    private var scanListStack: some View {
+        ZStack {
+            scanListOrPlaceholder
+
+            if store.isDeleting && showsListContent && !store.isInteractiveSafeCleanupInProgress {
+                CleaningOverlay()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var scanListOrPlaceholder: some View {
+        if items.isEmpty {
+            if isLoading {
+                scanningPlaceholder
+            } else {
+                emptyState
+            }
+        } else if visibleIndices.isEmpty {
+            if isLoading {
+                scanningPlaceholder
+            } else {
+                emptyFilterState
+            }
+        } else {
+            cacheResultsList
+        }
     }
 
     private func reinstallDisplay(for item: CacheItem) -> ReinstallSafetyStatus? {
@@ -294,6 +381,27 @@ struct AppCachesView: View {
             .accessibilityLabel("Scanning app caches")
     }
 
+}
+
+extension AppCachesView where PageHeader == EmptyView {
+    init(
+        items: Binding<[CacheItem]>,
+        isLoading: Bool,
+        scanPhase: PurgeStore.ScanPhase,
+        onScan: @escaping () -> Void,
+        showsPageHeader: Bool = true,
+        usesExternalScrollContainer: Bool = false
+    ) {
+        self.init(
+            items: items,
+            isLoading: isLoading,
+            scanPhase: scanPhase,
+            onScan: onScan,
+            showsPageHeader: showsPageHeader,
+            usesExternalScrollContainer: usesExternalScrollContainer,
+            pageHeader: { EmptyView() }
+        )
+    }
 }
 
 #Preview("App Caches — scanning") {
