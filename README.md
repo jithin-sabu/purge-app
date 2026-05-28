@@ -104,18 +104,6 @@ Purge needs Full Disk Access to scan your cache folders.
 
 ---
 
-## How Purge identifies folders
-
-Purge uses a local, hand-curated database — no cloud AI, no file contents uploaded. Resolution order:
-
-1. **Your manual overrides** — any category you set yourself always wins
-2. **Bundled database** — a curated `explanations.json` ships with the app
-3. **Safety tier list** — pattern-based rules for common folder names
-
-Anything that does not match is not shown in the list.
-
----
-
 ## Requirements
 
 - macOS 13.0 or later
