@@ -70,27 +70,51 @@ actor GitStatusChecker {
     /// Skips the check entirely for known rebuildable folders, and only flags
     /// folders that sit directly inside the enclosing git repository.
     func cleanupStatus(for itemPath: URL) async -> GitWorktreeStatus {
-        let standardized = itemPath.standardizedFileURL
+        let statuses = await cleanupStatuses(for: [itemPath])
+        return statuses[itemPath.standardizedFileURL.path] ?? .clean
+    }
 
-        if GitWarningPolicy.isRebuildableFolder(standardized) {
-            return .clean
+    /// Resolves cleanup status for many paths with one `git status` per unique repository.
+    func cleanupStatuses(for itemPaths: [URL]) async -> [String: GitWorktreeStatus] {
+        var result: [String: GitWorktreeStatus] = [:]
+        var repoRootsToResolve: Set<String> = []
+        var pathToRepoRoot: [String: String] = [:]
+
+        for itemPath in itemPaths {
+            let standardized = itemPath.standardizedFileURL
+            let pathKey = standardized.path
+
+            if GitWarningPolicy.isRebuildableFolder(standardized) {
+                result[pathKey] = .clean
+                continue
+            }
+
+            guard let repoRoot = GitRepositoryFinder.enclosingRepository(for: standardized) else {
+                result[pathKey] = .clean
+                continue
+            }
+
+            let parent = standardized.deletingLastPathComponent().standardizedFileURL
+            guard parent.path == repoRoot.path else {
+                result[pathKey] = .clean
+                continue
+            }
+
+            pathToRepoRoot[pathKey] = repoRoot.path
+            repoRootsToResolve.insert(repoRoot.path)
         }
 
-        guard let repoRoot = GitRepositoryFinder.enclosingRepository(for: standardized) else {
-            return .clean
+        for repoPath in repoRootsToResolve {
+            if cache[repoPath] != nil { continue }
+            let repoURL = URL(fileURLWithPath: repoPath)
+            cache[repoPath] = await GitStatusChecker.runGitStatus(repository: repoURL)
         }
 
-        let parent = standardized.deletingLastPathComponent().standardizedFileURL
-        guard parent.path == repoRoot.path else {
-            return .clean
+        for (pathKey, repoPath) in pathToRepoRoot {
+            result[pathKey] = cache[repoPath] ?? .clean
         }
 
-        let key = repoRoot.path
-        if let hit = cache[key] { return hit }
-
-        let status = await GitStatusChecker.runGitStatus(repository: repoRoot)
-        cache[key] = status
-        return status
+        return result
     }
 
     func clearSessionCache() {

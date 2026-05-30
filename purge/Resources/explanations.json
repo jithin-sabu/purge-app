@@ -2651,5 +2651,113 @@
       "stale-browser-framework"
     ],
     "scope": "app_caches"
+  },
+  {
+    "key": "system-library-caches",
+    "display_name": "System App Caches",
+    "tag": "safe",
+    "explanation": "macOS-wide application caches stored under /Library/Caches. Apps recreate these automatically. Removing them may require administrator privileges.",
+    "bundle_ids": [],
+    "aliases": [
+      "system-library-caches"
+    ],
+    "scope": "system"
+  },
+  {
+    "key": "system-library-updates",
+    "display_name": "macOS Software Updates",
+    "tag": "safe",
+    "explanation": "Leftover macOS update and installer payloads under /Library/Updates. Safe to remove; macOS re-downloads updates when needed. Deletion may require administrator privileges.",
+    "bundle_ids": [],
+    "aliases": [
+      "system-library-updates"
+    ],
+    "scope": "system"
+  },
+  {
+    "key": "system-var-log",
+    "display_name": "System Log Files",
+    "tag": "safe",
+    "explanation": "Rotated system log files under /private/var/log. Not your personal documents. macOS recreates logs as needed. Deletion may require administrator privileges.",
+    "bundle_ids": [],
+    "aliases": [
+      "system-var-log"
+    ],
+    "scope": "system"
+  },
+  {
+    "key": "system-diagnostic-pipeline",
+    "display_name": "Diagnostic Pipeline Data",
+    "tag": "safe",
+    "explanation": "Temporary diagnostic pipeline data used by macOS. Safe to remove; the system rebuilds it when needed. Deletion may require administrator privileges.",
+    "bundle_ids": [],
+    "aliases": [
+      "system-diagnostic-pipeline"
+    ],
+    "scope": "system"
+  },
+  {
+    "key": "system-diagnostic-reports",
+    "display_name": "System Crash Reports",
+    "tag": "safe",
+    "explanation": "System-level crash and diagnostic reports under /Library/Logs/DiagnosticReports (distinct from your user Library). Safe to delete. Deletion may require administrator privileges.",
+    "bundle_ids": [],
+    "aliases": [
+      "system-diagnostic-reports"
+    ],
+    "scope": "system"
+  },
+  {
+    "key": "link-thumbnail-cache",
+    "display_name": "Link Thumbnail Cache",
+    "tag": "safe",
+    "explanation": "Cached link preview thumbnails from messaging apps. Regenerated automatically when you open conversations.",
+    "bundle_ids": [],
+    "aliases": [
+      "LinkThumbnail"
+    ],
+    "scope": "app_caches"
+  },
+  {
+    "key": "chat-media-cache",
+    "display_name": "Chat Media Cache",
+    "tag": "safe",
+    "explanation": "Cached media previews from messaging apps. Not your message history; apps re-fetch media as needed.",
+    "bundle_ids": [],
+    "aliases": [
+      "ChatMedia"
+    ],
+    "scope": "app_caches"
+  },
+  {
+    "key": "app-installation-binary-deltas",
+    "display_name": "App Store Binary Deltas",
+    "tag": "safe",
+    "explanation": "Cached App Store update deltas. macOS re-downloads them on the next app update.",
+    "bundle_ids": [],
+    "aliases": [
+      "AppInstallationBinaryDeltas"
+    ],
+    "scope": "app_caches"
+  },
+  {
+    "key": "shipit-updater-cache",
+    "display_name": "App Updater Cache",
+    "tag": "safe",
+    "explanation": "Temporary files from Squirrel-based app updaters (ShipIt folders). Recreated when apps check for updates.",
+    "bundle_ids": [],
+    "aliases": [
+      "ShipIt"
+    ],
+    "scope": "app_caches"
+  },
+  {
+    "key": "spotlight-profiles-cache",
+    "display_name": "Spotlight Profile Cache",
+    "tag": "safe",
+    "explanation": "Spotlight index profile data. Safe to delete; Spotlight rebuilds its index automatically.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "app_caches"
   }
 ]

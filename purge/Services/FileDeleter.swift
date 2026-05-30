@@ -71,6 +71,18 @@ final class FileDeleter {
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path
             let friendlyTitle = pathToDisplayName[standardizedPath]
+
+            if DeletionSafetyPolicy.requiresAdminPrivileges(for: url), geteuid() != 0 {
+                skippedItems.append(
+                    SkippedDeletionItem(
+                        path: standardizedPath,
+                        reason: "Requires administrator privileges to remove system locations.",
+                        isUserVisible: true
+                    )
+                )
+                continue
+            }
+
             let decision = DeletionSafetyPolicy.evaluate(url)
             switch decision {
             case .allow:

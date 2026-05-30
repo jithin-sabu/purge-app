@@ -788,6 +788,20 @@ struct DevToolsView<PageHeader: View>: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, AppStyle.Spacing.small)
                 }
+            } else if store.isScanningProjects {
+                Section {
+                    Text("Finding projects…")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(.secondary)
+                        .listRowInsets(ScanListRowInsets.standard)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                } header: {
+                    Text("Developer Projects")
+                        .font(AppStyle.Typography.metadataEmphasis)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, AppStyle.Spacing.small)
+                }
             }
 
             ScanListBottomSpacer()

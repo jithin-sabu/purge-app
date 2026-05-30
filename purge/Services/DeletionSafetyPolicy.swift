@@ -26,6 +26,22 @@ enum DeletionSafetyDecision: Equatable {
 /// Both manual and scheduled cleanup must run paths through `evaluate(_:)` before
 /// touching the disk. Any path not explicitly allowed is refused.
 enum DeletionSafetyPolicy {
+    /// System-level cache and log paths that may be deleted when explicitly whitelisted.
+    nonisolated static let systemCacheDeletionPrefixes: [String] = [
+        "/Library/Caches",
+        "/Library/Updates",
+        "/private/var/log",
+        "/private/var/db/DiagnosticPipeline",
+        "/Library/Logs/DiagnosticReports"
+    ]
+
+    /// System paths where only children may be removed; the directory itself must remain.
+    nonisolated static let systemCacheContentsOnlyPrefixes: [String] = [
+        "/Library/Caches",
+        "/private/var/log",
+        "/Library/Logs/DiagnosticReports"
+    ]
+
     /// macOS-protected folders under ~/Library/Caches that cannot be removed even with Full Disk Access.
     nonisolated static let protectedSystemCacheFolderNames: Set<String> = [
         "CloudKit",
@@ -139,7 +155,12 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/Notion/Cache",
             "\(home)/Library/Application Support/Figma/Cache",
             "\(home)/Library/Containers/com.docker.docker",
-            "\(home)/.vagrant.d/boxes"
+            "\(home)/.vagrant.d/boxes",
+            "/Library/Caches",
+            "/Library/Updates",
+            "/private/var/log",
+            "/private/var/db/DiagnosticPipeline",
+            "/Library/Logs/DiagnosticReports"
         ]
     }
 
@@ -149,7 +170,14 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Logs",
             "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/Library/Caches"
-        ]
+        ] + systemCacheContentsOnlyPrefixes
+    }
+
+    nonisolated static func requiresAdminPrivileges(for url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        return systemCacheDeletionPrefixes.contains { prefix in
+            path == prefix || path.hasPrefix(prefix + "/")
+        }
     }
 
     nonisolated static func shouldDeleteContentsOnly(_ url: URL) -> Bool {

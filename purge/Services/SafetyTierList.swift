@@ -32,6 +32,9 @@ enum SafetyTierList {
         "CacheStorage",
         "ScriptCache",
         "DocumentationCache",
+        "LinkThumbnail",
+        "ChatMedia",
+        "AppInstallationBinaryDeltas",
         "corepack",
         "Homebrew",
         "yarn",
@@ -110,7 +113,11 @@ enum SafetyTierList {
                 || pathLower.contains("/code cache")
                 || pathLower.contains("/cacheddata")
                 || pathLower.contains("/component_crx_cache")
-                || pathLower.contains("/crashpad/completed") {
+                || pathLower.contains("/crashpad/completed")
+                || pathLower.contains("/linkthumbnail")
+                || pathLower.contains("/chatmedia")
+                || pathLower.contains("/appinstallationbinarydeltas")
+                || (pathLower.contains("/spotlight/") && pathLower.contains("/profiles/")) {
                 return .safe
             }
             if pathLower.contains(".app/contents/frameworks/") && pathLower.contains("/versions/") {
@@ -133,6 +140,19 @@ enum SafetyTierList {
 
         if lower == "stale-browser-framework" {
             return .medium
+        }
+
+        if lower.hasSuffix(".shipit") {
+            return .safe
+        }
+
+        if lower == "profile" || lower == "profiles" {
+            if let path {
+                let pathLower = path.standardizedFileURL.path.lowercased()
+                if pathLower.contains("/spotlight/") || pathLower.contains("com.apple.spotlight") {
+                    return .safe
+                }
+            }
         }
 
         // Check definitely safe folder names

@@ -87,6 +87,7 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:]
     @Published var isScanningGeneral = false
     @Published var isScanningDeveloper = false
+    @Published private(set) var isScanningProjects = false
     @Published private(set) var isScanningAll = false
     @Published private(set) var isEnrichingGeneral = false
     @Published private(set) var isEnrichingDeveloper = false
@@ -130,6 +131,7 @@ final class PurgeStore: ObservableObject {
     private var simulatorSizingGeneration = 0
     private var scanGeneration = 0
     private var scanTask: Task<Void, Never>?
+    private var projectDiscoveryTask: Task<Void, Never>?
     private var scanCompletionHideTask: Task<Void, Never>?
     private var interactiveSafeCleanupRemovalTask: Task<Void, Never>?
 
@@ -245,6 +247,7 @@ final class PurgeStore: ObservableObject {
             for location in item.locations {
                 guard daysBetween(location.lastModified, now) >= minUnusedDaysForCaches else { continue }
                 let path = location.path.standardizedFileURL
+                guard !DeletionSafetyPolicy.requiresAdminPrivileges(for: path) else { continue }
                 candidates.append(
                     DeletionCandidate(
                         title: item.appName,
@@ -796,17 +799,45 @@ final class PurgeStore: ObservableObject {
         }
 
         guard scanGeneration == generation, !Task.isCancelled else { return }
-        let needsGitHydration = !projectGroups.isEmpty
         let needsToolRepoHydration = devTools.contains { !$0.paths.isEmpty }
-        guard needsGitHydration || needsToolRepoHydration else { return }
-
-        isEnrichingDeveloper = true
-        defer { isEnrichingDeveloper = false }
-        if needsGitHydration {
-            await hydrateDeveloperGitStatusesParallel()
-        }
         if needsToolRepoHydration {
+            isEnrichingDeveloper = true
+            defer { isEnrichingDeveloper = false }
             await hydrateDeveloperToolRepoStatusesParallel()
+        }
+
+        startProjectDiscovery(generation: generation)
+    }
+
+    private func startProjectDiscovery(generation: Int) {
+        projectDiscoveryTask?.cancel()
+        projectDiscoveryTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            isScanningProjects = true
+            defer {
+                if self.scanGeneration == generation {
+                    self.isScanningProjects = false
+                    self.projectDiscoveryTask = nil
+                }
+            }
+
+            for await event in devScanner.discoverProjectsStream() {
+                guard scanGeneration == generation, !Task.isCancelled else { return }
+                switch event {
+                case .projectGroupFound(let group):
+                    publishProjectGroup(group)
+                case .status:
+                    break
+                default:
+                    break
+                }
+            }
+
+            guard scanGeneration == generation, !Task.isCancelled else { return }
+            guard !projectGroups.isEmpty else { return }
+            isEnrichingDeveloper = true
+            defer { isEnrichingDeveloper = false }
+            await hydrateDeveloperGitStatusesParallel()
         }
     }
 
@@ -1056,6 +1087,9 @@ final class PurgeStore: ObservableObject {
     }
 
     private func clearDeveloperScanState() {
+        projectDiscoveryTask?.cancel()
+        projectDiscoveryTask = nil
+        isScanningProjects = false
         pendingDevToolSizeIDs = []
         pendingProjectArtifactPaths = []
         devTools = []
@@ -1286,17 +1320,14 @@ final class PurgeStore: ObservableObject {
             }
         }
         guard !snapshots.isEmpty else { return }
+
+        let paths = snapshots.map(\.2)
+        let statusesByPath = await gitChecker.cleanupStatuses(for: paths)
+
         var updated = projectGroups
-        await withTaskGroup(of: (Int, Int, GitWorktreeStatus).self) { group in
-            for snapshot in snapshots {
-                group.addTask {
-                    let status = await self.gitChecker.cleanupStatus(for: snapshot.2)
-                    return (snapshot.0, snapshot.1, status)
-                }
-            }
-            for await (gIndex, aIndex, git) in group {
-                updated[gIndex].artifacts[aIndex].gitStatus = git
-            }
+        for (gIndex, aIndex, path) in snapshots {
+            let pathKey = path.standardizedFileURL.path
+            updated[gIndex].artifacts[aIndex].gitStatus = statusesByPath[pathKey] ?? .clean
         }
         withAnimation(.easeInOut(duration: 0.2)) {
             projectGroups = updated
@@ -1309,21 +1340,10 @@ final class PurgeStore: ObservableObject {
             devToolRepoStatusByPath = [:]
             return
         }
-        var accum: [String: GitWorktreeStatus] = [:]
-        await withTaskGroup(of: (String, GitWorktreeStatus).self) { group in
-            for u in urls {
-                group.addTask {
-                    let standardized = u.standardizedFileURL
-                    let git = await self.gitChecker.cleanupStatus(for: standardized)
-                    return (standardized.path, git)
-                }
-            }
-            for await (path, git) in group {
-                accum[path] = git
-            }
-        }
+
+        let statusesByPath = await gitChecker.cleanupStatuses(for: urls)
         withAnimation(.easeInOut(duration: 0.2)) {
-            devToolRepoStatusByPath = accum
+            devToolRepoStatusByPath = statusesByPath
         }
     }
 

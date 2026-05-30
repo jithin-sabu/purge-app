@@ -161,6 +161,43 @@ final class CacheScanner {
             sizeJobs.append(SizeJob(path: url))
         }
 
+        continuation.yield(.status("Scanning System Caches..."))
+        for location in systemCacheLocations() {
+            if Task.isCancelled {
+                continuation.finish()
+                return
+            }
+            let displayName = location.displayName
+            let url = location.url.standardizedFileURL
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let folderName = url.lastPathComponent
+            let headline = "System Caches — \(displayName)"
+            let pathKey = url.path
+            guard !collectedPaths.contains(pathKey) else { continue }
+            collectedPaths.insert(pathKey)
+
+            let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
+                folderName: location.definitionKey,
+                friendlyHeadline: headline,
+                path: url
+            )
+
+            continuation.yield(.found(
+                CacheItem(
+                    definitionKey: location.definitionKey,
+                    location: CacheLocation(
+                        path: url,
+                        sizeBytes: 0,
+                        lastModified: .distantPast,
+                        folderName: folderName
+                    ),
+                    appName: headline,
+                    safetyInfo: safetyInfo
+                )
+            ))
+            sizeJobs.append(SizeJob(path: url))
+        }
+
         continuation.yield(.status("Calculating sizes..."))
         await runSizeJobs(sizeJobs, continuation: continuation)
         continuation.finish()
@@ -247,11 +284,15 @@ final class CacheScanner {
         var items: [CacheItem] = []
         for cacheURL in CacheDiscoveryPaths.containerCacheURLs(home: home) {
             let bundleID = containerBundleID(from: cacheURL) ?? cacheURL.lastPathComponent
-            let headline = appNameFromBundleID(bundleID) ?? bundleID
+            let appName = appNameFromBundleID(bundleID) ?? bundleID
+            let subfolderName = cacheURL.lastPathComponent
+            let isCachesRoot = subfolderName == "Caches"
+            let folderName = isCachesRoot ? bundleID : subfolderName
+            let headline = isCachesRoot ? "\(appName) Cache" : "\(appName) \(subfolderName)"
             guard let item = cacheItemAtDiscoveredPath(
                 cacheURL,
-                headline: "\(headline) Cache",
-                folderName: bundleID,
+                headline: headline,
+                folderName: folderName,
                 collectedPaths: &collectedPaths
             ) else { continue }
             items.append(item)
@@ -355,36 +396,56 @@ final class CacheScanner {
 
     private func runSizeJobs(
         _ jobs: [SizeJob],
-        continuation: AsyncStream<CacheScanEvent>.Continuation,
-        maxConcurrent: Int = 6
+        continuation: AsyncStream<CacheScanEvent>.Continuation
     ) async {
         guard !jobs.isEmpty else { return }
-        await withTaskGroup(of: (String, Int64, Date)?.self) { group in
-            var iterator = jobs.makeIterator()
+
+        let chunkSize = FolderSizing.duChunkSize
+        let maxConcurrent = 10
+        var chunks: [[SizeJob]] = []
+        var index = 0
+        while index < jobs.count {
+            chunks.append(Array(jobs[index..<min(index + chunkSize, jobs.count)]))
+            index += chunkSize
+        }
+
+        await withTaskGroup(of: ([SizeJob], [String: Int64])?.self) { group in
+            var iterator = chunks.makeIterator()
             var running = 0
 
             func enqueueNext() {
-                guard let job = iterator.next() else { return }
+                guard let chunk = iterator.next() else { return }
                 running += 1
                 group.addTask {
                     if Task.isCancelled { return nil }
-                    let size = FolderSizing.directoryByteSize(at: job.path)
+                    let paths = chunk.map(\.path)
+                    let sizesByPath = FolderSizing.directorySizesForChunk(paths)
                     if Task.isCancelled { return nil }
-                    let modified = FolderSizing.contentModificationDate(at: job.path)
-                    return (job.path.standardizedFileURL.path, size, modified)
+                    return (chunk, sizesByPath)
                 }
             }
 
-            for _ in 0..<min(maxConcurrent, jobs.count) {
+            for _ in 0..<min(maxConcurrent, chunks.count) {
                 enqueueNext()
             }
 
             while running > 0 {
                 guard let result = await group.next() else { break }
                 running -= 1
-                if let (path, size, modified) = result {
-                    continuation.yield(.sizeResolved(path: path, sizeBytes: size, lastModified: modified))
+
+                if let (chunk, sizesByPath) = result {
+                    for job in chunk {
+                        if Task.isCancelled {
+                            group.cancelAll()
+                            return
+                        }
+                        let pathKey = job.path.standardizedFileURL.path
+                        let size = sizesByPath[pathKey] ?? 0
+                        let modified = FolderSizing.contentModificationDate(at: job.path)
+                        continuation.yield(.sizeResolved(path: pathKey, sizeBytes: size, lastModified: modified))
+                    }
                 }
+
                 if Task.isCancelled {
                     group.cancelAll()
                     break
@@ -421,6 +482,36 @@ final class CacheScanner {
             (
                 "Font Cache",
                 home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)
+            )
+        ]
+    }
+
+    private func systemCacheLocations() -> [(displayName: String, url: URL, definitionKey: String)] {
+        [
+            (
+                "System App Caches",
+                URL(fileURLWithPath: "/Library/Caches", isDirectory: true),
+                "system-library-caches"
+            ),
+            (
+                "macOS Software Updates",
+                URL(fileURLWithPath: "/Library/Updates", isDirectory: true),
+                "system-library-updates"
+            ),
+            (
+                "System Log Files",
+                URL(fileURLWithPath: "/private/var/log", isDirectory: true),
+                "system-var-log"
+            ),
+            (
+                "Diagnostic Pipeline Data",
+                URL(fileURLWithPath: "/private/var/db/DiagnosticPipeline", isDirectory: true),
+                "system-diagnostic-pipeline"
+            ),
+            (
+                "System Crash Reports",
+                URL(fileURLWithPath: "/Library/Logs/DiagnosticReports", isDirectory: true),
+                "system-diagnostic-reports"
             )
         ]
     }

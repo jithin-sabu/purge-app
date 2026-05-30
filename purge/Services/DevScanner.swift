@@ -118,12 +118,11 @@ final class DevScanner {
 
     func scanDevTools() async -> DeveloperScanOutcome {
         let tools = scanGlobalCaches()
-        async let projects = discoverProjects()
-        async let simulators = discoverShutdownSimulatorsWithoutSizes()
-        let (projectList, simulatorList) = await (projects, simulators)
+        let discovered = await discoverShutdownSimulatorsWithoutSizes()
+        let simulatorList = await measureSimulatorFolderSizes(discovered)
         return DeveloperScanOutcome(
             tools: tools.sorted { $0.sizeBytes > $1.sizeBytes },
-            projects: projectList.sorted { $0.totalBytes > $1.totalBytes },
+            projects: [],
             simulators: simulatorList.sorted { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
         )
     }
@@ -136,6 +135,21 @@ final class DevScanner {
                     return
                 }
                 await self.runDeveloperScan(continuation: continuation)
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func discoverProjectsStream() -> AsyncStream<DeveloperScanEvent> {
+        AsyncStream { continuation in
+            let task = Task.detached(priority: .background) { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
+                continuation.yield(.status("Scanning Developer Projects..."))
+                _ = await self.discoverProjects(continuation: continuation)
+                continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -168,12 +182,6 @@ final class DevScanner {
                 }
                 await self.runSimulatorSizeJobs(simulators, continuation: continuation)
             }
-
-            group.addTask {
-                if Task.isCancelled { return }
-                continuation.yield(.status("Scanning Developer Projects..."))
-                _ = await self.discoverProjects(continuation: continuation)
-            }
         }
 
         continuation.finish()
@@ -203,24 +211,15 @@ final class DevScanner {
     /// Fills `sizeOnDisk` for each row (can be slow for many devices).
     func measureSimulatorFolderSizes(_ devices: [SimulatorDevice]) async -> [SimulatorDevice] {
         guard !devices.isEmpty else { return [] }
-        return await withTaskGroup(of: (UUID, Int64).self) { group in
-            for device in devices {
-                let id = device.id
-                let folderURL = device.folderURL
-                group.addTask {
-                    let bytes = FolderSizing.directoryByteSize(at: folderURL)
-                    return (id, bytes)
-                }
-            }
-            var sizeByID: [UUID: Int64] = [:]
-            for await (id, size) in group {
-                sizeByID[id] = size
-            }
-            return devices.map { d in
-                var copy = d
-                copy.sizeOnDisk = sizeByID[d.id] ?? 0
-                return copy
-            }
+
+        let folderURLs = devices.map(\.folderURL)
+        let sizesByPath = FolderSizing.directorySizes(at: folderURLs)
+
+        return devices.map { device in
+            var copy = device
+            let pathKey = device.folderURL.standardizedFileURL.path
+            copy.sizeOnDisk = sizesByPath[pathKey] ?? 0
+            return copy
         }
     }
 
@@ -484,61 +483,11 @@ final class DevScanner {
         return 0
     }
 
-    // MARK: - Folder sizing (hard-link-aware)
-
-    /// Dev tool labels sized with `du` instead of a manual file walk (large Xcode/Docker trees).
-    nonisolated static let xcodeAndDockerToolLabels: Set<String> = [
-        "Xcode Derived Data",
-        "Xcode Archives",
-        "Xcode iOS DeviceSupport",
-        "Xcode Caches",
-        "Docker Desktop"
-    ]
+    // MARK: - Folder sizing
 
     /// Shared dev-tool path sizing used by scans, list rows, and safe cleanup totals.
     nonisolated static func pathByteSize(toolLabel: String, at url: URL) -> Int64 {
-        guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
-        if xcodeAndDockerToolLabels.contains(toolLabel) {
-            return accurateFolderSize(at: url)
-        }
-        return FolderSizing.directoryByteSize(at: url)
-    }
-
-    nonisolated static func accurateFolderSize(at url: URL) -> Int64 {
-        guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
-        process.arguments = ["-sk", url.path]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else {
-                return FolderSizing.directoryByteSize(at: url)
-            }
-
-            let output = String(
-                data: pipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8
-            ) ?? ""
-
-            // du -sk reports size in 1024-byte blocks (kilobytes).
-            let parts = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                .components(separatedBy: "\t")
-            if let kilobytes = Int64(parts.first ?? "") {
-                return kilobytes * 1024
-            }
-
-            return FolderSizing.directoryByteSize(at: url)
-        } catch {
-            return FolderSizing.directoryByteSize(at: url)
-        }
+        FolderSizing.directoryByteSize(at: url)
     }
 
     // MARK: - Global dev tool caches
@@ -851,93 +800,49 @@ final class DevScanner {
 
     private func runDevToolSizeJobs(
         _ jobs: [DevToolSizeJob],
-        continuation: AsyncStream<DeveloperScanEvent>.Continuation,
-        maxConcurrent: Int = 4
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation
     ) async {
         guard !jobs.isEmpty else { return }
-        await withTaskGroup(of: (String, [String: Int64], Int64, Date)?.self) { group in
-            var iterator = jobs.makeIterator()
-            var running = 0
 
-            func enqueueNext() {
-                guard let job = iterator.next() else { return }
-                running += 1
-                group.addTask {
-                    if Task.isCancelled { return nil }
-                    var pathSizes: [String: Int64] = [:]
-                    var modified = Date.distantPast
-                    for path in job.paths {
-                        if Task.isCancelled { return nil }
-                        let standardized = path.standardizedFileURL
-                        pathSizes[standardized.path] = Self.pathByteSize(toolLabel: job.toolLabel, at: standardized)
-                        modified = max(modified, FolderSizing.contentModificationDate(at: standardized))
-                    }
-                    let total = pathSizes.values.reduce(Int64(0), +)
-                    return (job.toolID, pathSizes, total, modified)
-                }
+        let allPaths = jobs.flatMap(\.paths)
+        let sizesByPath = FolderSizing.directorySizes(at: allPaths)
+
+        for job in jobs {
+            if Task.isCancelled { return }
+
+            var pathSizes: [String: Int64] = [:]
+            var modified = Date.distantPast
+            for path in job.paths {
+                let standardized = path.standardizedFileURL
+                let pathKey = standardized.path
+                pathSizes[pathKey] = sizesByPath[pathKey] ?? 0
+                modified = max(modified, FolderSizing.contentModificationDate(at: standardized))
             }
 
-            for _ in 0..<min(maxConcurrent, jobs.count) {
-                enqueueNext()
-            }
-
-            while running > 0 {
-                guard let result = await group.next() else { break }
-                running -= 1
-                if let (id, pathSizes, total, modified) = result {
-                    continuation.yield(.devToolSizeResolved(
-                        id: id,
-                        pathSizeBytesByPath: pathSizes,
-                        sizeBytes: total,
-                        lastModified: modified
-                    ))
-                }
-                if Task.isCancelled {
-                    group.cancelAll()
-                    break
-                }
-                enqueueNext()
-            }
+            let total = pathSizes.values.reduce(Int64(0), +)
+            continuation.yield(.devToolSizeResolved(
+                id: job.toolID,
+                pathSizeBytesByPath: pathSizes,
+                sizeBytes: total,
+                lastModified: modified
+            ))
         }
     }
 
     private func runSimulatorSizeJobs(
         _ devices: [SimulatorDevice],
-        continuation: AsyncStream<DeveloperScanEvent>.Continuation,
-        maxConcurrent: Int = 4
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation
     ) async {
         guard !devices.isEmpty else { return }
-        await withTaskGroup(of: (UUID, Int64)?.self) { group in
-            var iterator = devices.makeIterator()
-            var running = 0
 
-            func enqueueNext() {
-                guard let device = iterator.next() else { return }
-                running += 1
-                group.addTask {
-                    if Task.isCancelled { return nil }
-                    let bytes = FolderSizing.directoryByteSize(at: device.folderURL)
-                    if Task.isCancelled { return nil }
-                    return (device.id, bytes)
-                }
-            }
+        let folderURLs = devices.map(\.folderURL)
+        let sizesByPath = FolderSizing.directorySizes(at: folderURLs)
 
-            for _ in 0..<min(maxConcurrent, devices.count) {
-                enqueueNext()
-            }
-
-            while running > 0 {
-                guard let result = await group.next() else { break }
-                running -= 1
-                if let (id, size) = result {
-                    continuation.yield(.simulatorSizeResolved(id: id, sizeBytes: size))
-                }
-                if Task.isCancelled {
-                    group.cancelAll()
-                    break
-                }
-                enqueueNext()
-            }
+        for device in devices {
+            if Task.isCancelled { return }
+            let pathKey = device.folderURL.standardizedFileURL.path
+            let size = sizesByPath[pathKey] ?? 0
+            continuation.yield(.simulatorSizeResolved(id: device.id, sizeBytes: size))
         }
     }
 
@@ -951,8 +856,10 @@ final class DevScanner {
 
     // MARK: - Project-aware scan
 
+    private static let maxDirectoryEntriesBeforeSkip = 2000
+
     private func discoverProjects(
-        maxDepth: Int = 6,
+        maxDepth: Int = 4,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
     ) async -> [ProjectGroup] {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -1063,6 +970,8 @@ final class DevScanner {
                 return
             }
 
+            guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else { return }
+
             for entry in entries {
                 let name = entry.lastPathComponent
                 /// Skip invisible dot folders (noise and huge caches handled elsewhere).
@@ -1143,32 +1052,29 @@ final class DevScanner {
                     let rows = DevScanner.collectArtifacts(projectRoot: rootURL, types: types)
                     guard !rows.isEmpty else { return nil }
 
-                    let sized = await withTaskGroup(of: ProjectCacheArtifact.self) { inner in
-                        for row in rows {
-                            inner.addTask {
-                                let bytes = FolderSizing.directoryByteSize(at: row.path)
-                                let modified = FolderSizing.contentModificationDate(at: row.path)
-                                return ProjectCacheArtifact(
-                                    kind: row.kind,
-                                    path: row.path,
-                                    projectRoot: row.projectRoot,
-                                    sizeBytes: bytes,
-                                    lastModified: modified,
-                                    isSelected: false,
-                                    safetyInfo: row.safetyInfo,
-                                    reinstallSafety: row.reinstallSafety,
-                                    gitStatus: .unknown
-                                )
-                            }
-                        }
+                    let artifactPaths = rows.map(\.path)
+                    let sizesByPath = FolderSizing.directorySizes(at: artifactPaths)
 
-                        var built: [ProjectCacheArtifact] = []
-                        for await artifact in inner {
-                            built.append(artifact)
-                        }
-                        built.sort { $0.sizeBytes > $1.sizeBytes }
-                        return built
+                    var sized: [ProjectCacheArtifact] = []
+                    for row in rows {
+                        let pathKey = row.path.standardizedFileURL.path
+                        let bytes = sizesByPath[pathKey] ?? 0
+                        let modified = FolderSizing.contentModificationDate(at: row.path)
+                        sized.append(
+                            ProjectCacheArtifact(
+                                kind: row.kind,
+                                path: row.path,
+                                projectRoot: row.projectRoot,
+                                sizeBytes: bytes,
+                                lastModified: modified,
+                                isSelected: false,
+                                safetyInfo: row.safetyInfo,
+                                reinstallSafety: row.reinstallSafety,
+                                gitStatus: .unknown
+                            )
+                        )
                     }
+                    sized.sort { $0.sizeBytes > $1.sizeBytes }
 
                     let staleDays = DevToolsStalenessOption.currentThresholdDays()
                     let now = Date()
