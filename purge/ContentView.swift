@@ -143,8 +143,8 @@ struct ContentView: View {
         } message: {
             Text(
                 """
-                This includes folders marked Do Not Delete and/or Not Sure. They will be removed immediately and \
-                cannot be restored by Purge. Only continue if you understand the risk.
+                This includes folders marked Do Not Delete and/or Not Sure. They will be moved to Trash. \
+                Only continue if you understand the risk.
                 """
             )
         }

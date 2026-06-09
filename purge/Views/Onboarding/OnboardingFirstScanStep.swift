@@ -7,7 +7,9 @@ struct OnboardingFirstScanStep: View {
   let onScanComplete: () -> Void
 
   @State private var scanStarted = false
+  @State private var scanBeganAt = Date()
 
+  private static let minimumScanDuration: TimeInterval = 2
   private static let rowInsertionTransition: AnyTransition = .asymmetric(
     insertion: .opacity.combined(with: .offset(y: 8)),
     removal: .opacity
@@ -46,13 +48,22 @@ struct OnboardingFirstScanStep: View {
     .onAppear {
       guard !scanStarted else { return }
       scanStarted = true
-      Task { await store.scanAll() }
+      scanBeganAt = Date()
+
+      Task {
+        await store.scanAll()
+        revealController.markSourceScanFinished()
+      }
+
       revealController.startReveal(
         itemProvider: { store.onboardingScanFindings() },
         scanFinished: {
-          !store.isScanningAll && !store.isEnrichingGeneral && !store.isEnrichingDeveloper
+          revealController.sourceScanFinished
+            && !store.isScanningAll
+            && !store.isEnrichingGeneral
+            && !store.isEnrichingDeveloper
         },
-        onReadyForResults: onScanComplete
+        onReadyForResults: finishOnboardingScan
       )
     }
     .onDisappear {
@@ -63,5 +74,16 @@ struct OnboardingFirstScanStep: View {
   private var combinedProgress: Double {
     let scanProgress: Double = store.isScanningAll ? 0.65 : 1
     return min(1, max(revealController.simulatedProgress, scanProgress * 0.35 + revealController.simulatedProgress * 0.65))
+  }
+
+  private func finishOnboardingScan() {
+    Task { @MainActor in
+      let remaining = Self.minimumScanDuration - Date().timeIntervalSince(scanBeganAt)
+      if remaining > 0 {
+        try? await Task.sleep(for: .seconds(remaining))
+      }
+      guard scanStarted else { return }
+      onScanComplete()
+    }
   }
 }

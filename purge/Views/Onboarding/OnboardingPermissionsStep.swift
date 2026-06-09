@@ -11,46 +11,44 @@ struct OnboardingPermissionsStep: View {
     VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
       OnboardingStepTitle(text: "A couple of quick permissions.")
 
-      VStack(spacing: AppStyle.Spacing.small) {
-        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
-          OnboardingPermissionRow(
-            symbol: "externaldrive.fill.badge.checkmark",
-            title: "Full disk access",
-            description: "Lets Purge find caches and junk across your entire Mac. Without this, scanning is limited.",
-            badgeText: "Required",
-            badgeTone: .accent,
-            isGranted: store.hasFullDiskAccess
-          )
-          .contentShape(Rectangle())
-          .onTapGesture(perform: requestFullDiskAccess)
-          .accessibilityAddTraits(.isButton)
-
-          if didOpenFullDiskAccessSettings && !store.hasFullDiskAccess {
-            Text("We opened System Settings. Find Purge in the list and toggle it on, then come back here.")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-              .padding(.horizontal, AppStyle.Spacing.small)
-              .transition(.opacity)
-          }
-        }
+      OnboardingPermissionGroup {
+        OnboardingPermissionRow(
+          title: "Full disk access",
+          description: "Lets Purge find caches and junk across your entire Mac. Without this, scanning is limited.",
+          badgeText: "Required",
+          badgeTone: .accent,
+          buttonTitle: "Open settings",
+          isGranted: store.hasFullDiskAccess,
+          action: requestFullDiskAccess
+        )
         .onboardingBlurIn(index: 0)
 
+        Divider()
+          .padding(.leading, AppStyle.Spacing.medium)
+
         OnboardingPermissionRow(
-          symbol: "power",
           title: "Login item",
           description: "Keeps Purge running quietly in the background so it's always working for you.",
           badgeText: "Optional",
           badgeTone: .neutral,
+          buttonTitle: "Enable login item",
           isGranted: loginItemRegistered,
-          statusText: loginItemFailed ? "Not enabled" : nil
+          statusText: loginItemFailed ? "Not enabled" : nil,
+          action: enableLoginItem
         )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: enableLoginItem)
-        .accessibilityAddTraits(.isButton)
         .onboardingBlurIn(index: 1)
       }
       .frame(maxWidth: .infinity)
+
+      if didOpenFullDiskAccessSettings && !store.hasFullDiskAccess {
+        Text("We opened System Settings. Find Purge in the list and toggle it on, then come back here.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.horizontal, AppStyle.Spacing.small)
+          .transition(.opacity)
+      }
 
       if !store.hasFullDiskAccess {
         Text("Full Disk Access is required before your first scan.")

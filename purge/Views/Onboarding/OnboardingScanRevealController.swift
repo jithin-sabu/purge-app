@@ -7,6 +7,7 @@ final class OnboardingScanRevealController: ObservableObject {
   @Published private(set) var revealedItems: [OnboardingScanFinding] = []
   @Published private(set) var simulatedProgress: Double = 0
   @Published private(set) var isRevealComplete = false
+  @Published private(set) var sourceScanFinished = false
 
   private var revealTask: Task<Void, Never>?
 
@@ -19,6 +20,7 @@ final class OnboardingScanRevealController: ObservableObject {
     revealedItems = []
     simulatedProgress = 0
     isRevealComplete = false
+    sourceScanFinished = false
 
     revealTask = Task {
       var queueIndex = 0
@@ -52,6 +54,10 @@ final class OnboardingScanRevealController: ObservableObject {
         try? await Task.sleep(nanoseconds: 200_000_000)
       }
     }
+  }
+
+  func markSourceScanFinished() {
+    sourceScanFinished = true
   }
 
   func cancel() {

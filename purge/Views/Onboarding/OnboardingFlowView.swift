@@ -115,7 +115,7 @@ struct OnboardingFlowView: View {
         }
       case .permissions:
         OnboardingPrimaryButton(
-          title: store.hasFullDiskAccess ? "Continue" : "Grant disk access to continue",
+          title: "Continue",
           isEnabled: store.hasFullDiskAccess
         ) {
           continueFromPermissions()
@@ -130,12 +130,18 @@ struct OnboardingFlowView: View {
           advance(to: .firstScan)
         }
       case .results:
-        Text("Your documents, photos, and projects are never touched.")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.bottom, AppStyle.Spacing.xxSmall)
+        VStack(spacing: AppStyle.Spacing.xxSmall) {
+          Text("Your documents, photos, and projects are never touched.")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+          Text("Cleaned items move to your Trash so you can recover anything. Empty Trash to reclaim the space.")
+            .font(.subheadline)
+            .foregroundStyle(.tertiary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        }
         OnboardingPrimaryButton(
           title: isResultsCleaning ? "Cleaning..." : cleanNowTitle,
           isLoading: isResultsCleaning

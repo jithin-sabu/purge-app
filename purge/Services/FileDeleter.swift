@@ -89,7 +89,7 @@ final class FileDeleter {
                     ) {
                         for contentURL in contents {
                             do {
-                                try FileManager.default.removeItem(at: contentURL)
+                                try FileManager.default.trashItem(at: contentURL, resultingItemURL: nil)
                                 didDeleteAnyContent = true
                             } catch {
                                 recordDeletionFailure(
@@ -120,7 +120,7 @@ final class FileDeleter {
                     }
                 } else {
                     do {
-                        try FileManager.default.removeItem(at: url)
+                        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
                         totalDeleted += size
                         deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
                     } catch {

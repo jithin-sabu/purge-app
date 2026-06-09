@@ -96,57 +96,75 @@ struct OnboardingFeatureChip: View {
 }
 
 struct OnboardingPermissionRow: View {
-  let symbol: String
   let title: String
   let description: String
   let badgeText: String
   let badgeTone: AppBadge.Tone
+  let buttonTitle: String
   var isGranted: Bool = false
   var statusText: String? = nil
+  let action: () -> Void
 
   var body: some View {
-    HStack(alignment: .top, spacing: AppStyle.Spacing.small) {
-      Image(systemName: symbol)
-        .font(.system(size: 18, weight: .semibold))
-        .foregroundStyle(AppStyle.accent)
-        .frame(width: 40, height: 40)
-        .background(AppStyle.elevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
+    HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
       VStack(alignment: .leading, spacing: 4) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
           Text(title)
             .font(.subheadline.weight(.semibold))
+            .fixedSize(horizontal: false, vertical: true)
           AppBadge(text: badgeText, tone: badgeTone)
-          if isGranted {
-            Image(systemName: "checkmark.circle.fill")
-              .font(.caption)
-              .foregroundStyle(AppStyle.safe)
-              .accessibilityLabel("Granted")
-              .transition(.scale(scale: 0.75).combined(with: .opacity))
-          } else if let statusText {
-            Text(statusText)
-              .font(.caption2.weight(.medium))
-              .foregroundStyle(.secondary)
-              .transition(.opacity)
-          }
         }
+
         Text(description)
           .font(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
-      }
 
-      Spacer(minLength: 0)
+        if let statusText, !isGranted {
+          Text(statusText)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .transition(.opacity)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .layoutPriority(1)
+
+      Button(action: action) {
+        HStack(spacing: 6) {
+          if isGranted {
+            Image(systemName: "checkmark")
+              .font(.caption.weight(.semibold))
+          }
+          Text(isGranted ? "Enabled" : buttonTitle)
+            .lineLimit(1)
+        }
+      }
+      .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+      .fixedSize(horizontal: true, vertical: false)
+      .layoutPriority(0)
+      .disabled(isGranted)
+      .accessibilityLabel(isGranted ? "\(title), enabled" : "\(buttonTitle) for \(title)")
     }
-    .padding(AppStyle.Spacing.small)
+    .padding(.horizontal, AppStyle.Spacing.medium)
+    .padding(.vertical, AppStyle.Spacing.small)
+    .animation(.easeInOut(duration: 0.2), value: isGranted)
+    .animation(.easeInOut(duration: 0.2), value: statusText)
+  }
+}
+
+struct OnboardingPermissionGroup<Content: View>: View {
+  @ViewBuilder let content: () -> Content
+
+  var body: some View {
+    VStack(spacing: 0) {
+      content()
+    }
     .background(AppStyle.panel, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
     .overlay {
       RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
         .stroke(AppStyle.hairline)
     }
-    .animation(.easeInOut(duration: 0.2), value: isGranted)
-    .animation(.easeInOut(duration: 0.2), value: statusText)
-    .accessibilityElement(children: .combine)
   }
 }
 

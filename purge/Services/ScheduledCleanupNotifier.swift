@@ -18,7 +18,7 @@ enum ScheduledCleanupNotifier {
         let noun = deletedCount == 1 ? "item" : "items"
         await deliver(
             title: "Scheduled clean finished",
-            body: "Removed \(deletedCount) \(noun) and freed about \(space)."
+            body: "Moved \(deletedCount) \(noun) to Trash, clearing about \(space)."
         )
     }
 

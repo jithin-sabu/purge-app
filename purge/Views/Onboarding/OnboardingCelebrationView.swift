@@ -24,7 +24,7 @@ struct OnboardingCelebrationView: View {
             .monospacedDigit()
             .accessibilityLabel("\(formatBytes(freedBytes)) freed")
 
-          Text("freed")
+          Text("moved to Trash")
             .font(.title2.weight(.semibold))
             .foregroundStyle(.secondary)
         } else {
@@ -43,8 +43,17 @@ struct OnboardingCelebrationView: View {
 
       Spacer(minLength: 0)
 
-      OnboardingPrimaryButton(title: "Continue", action: onContinue)
-        .frame(maxWidth: OnboardingLayout.contentMaxWidth)
+      VStack(spacing: AppStyle.Spacing.small) {
+        if freedBytes > 0 {
+          Text("Empty your Trash to reclaim this space.")
+            .font(.callout)
+            .foregroundStyle(.tertiary)
+            .multilineTextAlignment(.center)
+        }
+
+        OnboardingPrimaryButton(title: "Continue", action: onContinue)
+      }
+      .frame(maxWidth: OnboardingLayout.contentMaxWidth)
     }
     .padding(.horizontal, OnboardingLayout.horizontalPadding)
     .padding(.vertical, OnboardingLayout.verticalPadding)

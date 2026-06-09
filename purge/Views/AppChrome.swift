@@ -347,12 +347,17 @@ struct SafeCleanupCelebrationOverlay: View {
                     .accessibilityHidden(true)
 
                 VStack(spacing: AppStyle.Spacing.small) {
-                    Text("\(formatBytes(freedBytes)) freed")
+                    Text(formatBytes(freedBytes))
                         .font(.system(size: 54, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .monospacedDigit()
                         .multilineTextAlignment(.center)
                         .accessibilityAddTraits(.isHeader)
+
+                    Text("moved to Trash")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .multilineTextAlignment(.center)
 
                     if let comparisonItems = OnboardingSizeComparison.items(for: freedBytes) {
                         OnboardingSizeComparisonLine(items: comparisonItems)
@@ -370,16 +375,25 @@ struct SafeCleanupCelebrationOverlay: View {
 
                 Spacer(minLength: 0)
 
-                Button(action: onDone) {
-                    Text("Done")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: 300)
-                        .padding(.vertical, 11)
-                        .background(celebrationAccent, in: Capsule(style: .continuous))
+                VStack(spacing: AppStyle.Spacing.small) {
+                    if freedBytes > 0 {
+                        Text("Empty your Trash to reclaim this space.")
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.6))
+                            .multilineTextAlignment(.center)
+                    }
+
+                    Button(action: onDone) {
+                        Text("Done")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: 300)
+                            .padding(.vertical, 11)
+                            .background(celebrationAccent, in: Capsule(style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 52)
             .padding(.vertical, 44)

@@ -232,7 +232,7 @@ struct DeletionConfirmSheet: View {
                 .font(.title3)
                 .fontWeight(.semibold)
 
-            Text("These files will be permanently deleted. Purge cannot undo this.")
+            Text("These items will be moved to Trash. You can recover anything from Trash if you change your mind.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
