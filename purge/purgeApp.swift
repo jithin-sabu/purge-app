@@ -13,6 +13,12 @@ import UserNotifications
 struct PurgeApp: App {
     @StateObject private var store = PurgeStore()
     @StateObject private var diskStore = DiskSummaryStore()
+    @AppStorage(AppearanceMode.userDefaultsKey)
+    private var appearanceModeRaw = AppearanceMode.system.rawValue
+
+    private var appearanceMode: AppearanceMode {
+        AppearanceMode(rawValue: appearanceModeRaw) ?? .system
+    }
 
     init() {
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
@@ -28,6 +34,7 @@ struct PurgeApp: App {
                     ScheduledCleaningRegistrar.shared.attach(store: store)
                 }
                 .font(.system(.body, design: .rounded))
+                .preferredColorScheme(appearanceMode.colorScheme)
         }
         .defaultSize(width: AppWindowLayout.width, height: AppWindowLayout.defaultHeight)
         .windowResizability(.contentSize)

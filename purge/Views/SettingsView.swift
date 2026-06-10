@@ -7,7 +7,11 @@ struct SettingsView: View {
     @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage(DevToolsStalenessOption.userDefaultsKey)
     private var devToolsStalenessThresholdRaw = DevToolsStalenessOption.defaultOption.rawValue
+    @AppStorage(AppearanceMode.userDefaultsKey)
+    private var appearanceModeRaw = AppearanceMode.system.rawValue
     var showsPageHeader = true
+    /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
+    var usesExternalScrollContainer = false
     // @AppStorage("telemetry.lastSentDate") private var telemetryLastSentTimestamp = 0.0
 
     // @State private var showTelemetryPreviewSheet = false
@@ -26,6 +30,7 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 18) {
+                    appearanceSection
                     cleaningScheduleSection
                     devToolsSection
                 }
@@ -37,9 +42,10 @@ struct SettingsView: View {
 
         }
         .padding(.horizontal, settingsHorizontalContentInset)
-        .padding(.top, showsPageHeader ? AppDetailPageLayout.topContentInset : AppStyle.Spacing.medium)
+        .padding(.top, contentTopPadding)
         .padding(.bottom, AppDetailPageLayout.verticalPadding)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxHeight: usesExternalScrollContainer ? nil : .infinity, alignment: .topLeading)
         .background(AppStyle.canvas)
         .onChange(of: devToolsStalenessThresholdRaw) { _ in
             Task { await store.scanAll() }
@@ -173,6 +179,55 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     */
+
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Appearance")
+                .font(.headline)
+
+            settingsSectionCard {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 24) {
+                        appearanceDescription
+
+                        Spacer(minLength: 12)
+
+                        appearanceOptions
+                    }
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        appearanceDescription
+                        appearanceOptions
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(16)
+            }
+        }
+    }
+
+    private var appearanceDescription: some View {
+        Text("Choose a light or dark look, or match your system setting.")
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var appearanceOptions: some View {
+        HStack(alignment: .top, spacing: 16) {
+            ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                AppearanceOptionButton(
+                    mode: mode,
+                    isSelected: currentAppearanceMode == mode
+                ) {
+                    appearanceModeRaw = mode.rawValue
+                }
+            }
+        }
+    }
+
+    private var currentAppearanceMode: AppearanceMode {
+        AppearanceMode(rawValue: appearanceModeRaw) ?? .system
+    }
 
     private var cleaningScheduleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -534,6 +589,13 @@ struct SettingsView: View {
 
     private var settingsHorizontalContentInset: CGFloat { AppDetailPageLayout.horizontalInset }
 
+    private var contentTopPadding: CGFloat {
+        if usesExternalScrollContainer {
+            return AppDetailPageLayout.scrollEdgeClearanceBelowHeader
+        }
+        return showsPageHeader ? AppDetailPageLayout.topContentInset : AppStyle.Spacing.medium
+    }
+
     private var currentDevToolsStalenessOption: DevToolsStalenessOption {
         DevToolsStalenessOption(rawValue: devToolsStalenessThresholdRaw) ?? .defaultOption
     }
@@ -808,6 +870,113 @@ private struct TelemetryPreviewSheet: View {
     }
 }
 */
+
+private struct AppearanceOptionButton: View {
+    let mode: AppearanceMode
+    let isSelected: Bool
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 7) {
+                thumbnail
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                    }
+                    .overlay {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .inset(by: -3)
+                                .strokeBorder(AppStyle.accent, lineWidth: 2)
+                        }
+                    }
+
+                Text(mode.displayName)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: isSelected)
+        .accessibilityLabel("\(mode.displayName) appearance")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        switch mode {
+        case .system:
+            ZStack {
+                AppearanceThumbnail(scheme: .light)
+                AppearanceThumbnail(scheme: .dark)
+                    .clipShape(TrailingHalf())
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        case .light:
+            AppearanceThumbnail(scheme: .light)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        case .dark:
+            AppearanceThumbnail(scheme: .dark)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+    }
+}
+
+private struct TrailingHalf: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(x: rect.midX, y: rect.minY, width: rect.width / 2, height: rect.height))
+    }
+}
+
+private struct AppearanceThumbnail: View {
+    let scheme: ColorScheme
+
+    private var isDark: Bool { scheme == .dark }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            LinearGradient(
+                colors: isDark
+                    ? [Color(red: 0.16, green: 0.18, blue: 0.30), Color(red: 0.10, green: 0.10, blue: 0.16)]
+                    : [Color(red: 0.55, green: 0.70, blue: 0.95), Color(red: 0.75, green: 0.82, blue: 0.96)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Mini window with traffic lights
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 2.5) {
+                    Circle().fill(Color(red: 1.0, green: 0.37, blue: 0.34))
+                    Circle().fill(Color(red: 1.0, green: 0.74, blue: 0.18))
+                    Circle().fill(Color(red: 0.22, green: 0.79, blue: 0.25))
+                }
+                .frame(height: 4)
+
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(isDark ? Color.white.opacity(0.25) : Color.black.opacity(0.15))
+                    .frame(width: 26, height: 3)
+
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(isDark ? Color.white.opacity(0.12) : Color.black.opacity(0.08))
+                    .frame(width: 18, height: 3)
+            }
+            .padding(6)
+            .background(
+                isDark ? Color(red: 0.13, green: 0.13, blue: 0.14) : .white,
+                in: UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 5, bottomLeading: 0, bottomTrailing: 0, topTrailing: 5),
+                    style: .continuous
+                )
+            )
+            .padding(.top, 14)
+            .padding(.leading, 10)
+        }
+        .frame(width: 64, height: 44)
+    }
+}
 
 private struct ScheduleStatusBlurTransition: ViewModifier {
     let blur: CGFloat

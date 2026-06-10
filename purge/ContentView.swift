@@ -282,9 +282,30 @@ struct ContentView: View {
         case .devTools:
             devToolsTabBody
         case .settings:
-            SettingsView(showsPageHeader: false)
-                .underDetailPageHeader(includesSubtitle: false)
+            settingsTabBody
         }
+    }
+
+    @ViewBuilder
+    private var settingsTabBody: some View {
+        Group {
+            if #available(macOS 26.0, *) {
+                settingsScrollView
+                    .detailPageScrollEdge(title: "Settings")
+            } else {
+                settingsScrollView
+                    .underDetailPageHeader(includesSubtitle: false)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var settingsScrollView: some View {
+        ScrollView {
+            SettingsView(showsPageHeader: false, usesExternalScrollContainer: true)
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppStyle.canvas)
     }
 
     @ViewBuilder
@@ -340,7 +361,7 @@ struct ContentView: View {
         Group {
             if #available(macOS 26.0, *) {
                 aboutScrollView
-                    .aboutPageScrollEdge()
+                    .detailPageScrollEdge(title: "About")
             } else {
                 aboutScrollView
                     .underDetailPageHeader(includesSubtitle: false)

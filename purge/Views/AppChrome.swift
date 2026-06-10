@@ -61,11 +61,11 @@ extension View {
             .scrollEdgeEffectStyle(.soft, for: .top)
     }
 
-    /// About tab: an invisible page-header sized bar reserves space so cards blur as they pass
+    /// An invisible page-header sized bar reserves space so cards blur as they pass
     /// underneath, while the visible animated title is owned by the persistent parent overlay.
-    func aboutPageScrollEdge() -> some View {
+    func detailPageScrollEdge(title: String) -> some View {
         safeAreaBar(edge: .top, spacing: 0) {
-            AppSectionPageHeader(title: "About")
+            AppSectionPageHeader(title: title)
                 .opacity(0)
                 .accessibilityHidden(true)
                 .allowsHitTesting(false)
