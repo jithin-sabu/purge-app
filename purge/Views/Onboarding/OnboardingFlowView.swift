@@ -36,8 +36,8 @@ struct OnboardingFlowView: View {
       }
     }
 
-    if let freedBytes = store.interactiveSafeCleanupFreedBytes {
-      SafeCleanupCelebrationOverlay(freedBytes: freedBytes) {
+    if let session = store.interactiveSafeCleanupSession {
+      SafeCleanupCelebrationOverlay(session: session) {
         completeResultsCleanupCelebration()
       }
       .transition(reduceMotion ? .opacity : .safeCleanupCelebrationBlur)
@@ -51,7 +51,7 @@ struct OnboardingFlowView: View {
   )
   .animation(
     reduceMotion ? nil : .easeInOut(duration: 0.35),
-    value: store.interactiveSafeCleanupFreedBytes != nil
+    value: store.interactiveSafeCleanupSession != nil
   )
   .frame(
     minWidth: AppWindowLayout.width,
@@ -201,7 +201,7 @@ struct OnboardingFlowView: View {
     Task { @MainActor in
       let summary = await store.performManualSafeCleanNow(pinnedCandidates: candidates)
       if store.errorMessage == nil {
-        store.completeInteractiveSafeCleanup(freedBytes: summary.freedBytes)
+        store.completeInteractiveSafeCleanup(summary: summary)
       } else {
         isResultsCleaning = false
         resultsSnapshot = nil

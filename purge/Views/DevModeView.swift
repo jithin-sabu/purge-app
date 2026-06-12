@@ -580,7 +580,7 @@ struct DevToolsView<PageHeader: View>: View {
                         developerListOnly
                             .scanTabSoftScrollEdge { selectAllRowChrome }
 
-                        if store.isDeleting && !store.isInteractiveSafeCleanupInProgress {
+                        if store.isDeleting && !store.isInteractiveSafeCleanupInProgress && store.manualDeletionSession == nil {
                             CleaningOverlay()
                         }
                     }
@@ -649,7 +649,8 @@ struct DevToolsView<PageHeader: View>: View {
         ZStack {
             scanListOrPlaceholder
 
-            if store.isDeleting && showsDeveloperListContent && !store.isInteractiveSafeCleanupInProgress {
+            if store.isDeleting && showsDeveloperListContent && !store.isInteractiveSafeCleanupInProgress
+                && store.manualDeletionSession == nil {
                 CleaningOverlay()
             }
         }

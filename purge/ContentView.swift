@@ -73,9 +73,10 @@ struct ContentView: View {
                 }
             )
         }
+        .disabled(store.isManualCleaningInProgress)
         .overlay {
-            if isLifecycleActive, let freedBytes = store.interactiveSafeCleanupFreedBytes {
-                SafeCleanupCelebrationOverlay(freedBytes: freedBytes) {
+            if isLifecycleActive, let session = store.interactiveSafeCleanupSession {
+                SafeCleanupCelebrationOverlay(session: session) {
                     completeInteractiveSafeCleanupCelebration()
                 }
                 .transition(reduceMotion ? .opacity : .safeCleanupCelebrationBlur)
@@ -90,8 +91,8 @@ struct ContentView: View {
                 .zIndex(100)
             }
 
-            if isLifecycleActive, let report = store.lastDeletionReport {
-                SafeCleanupCelebrationOverlay(freedBytes: deletionSummaryFreedBytes(for: report)) {
+            if isLifecycleActive, let session = store.manualDeletionSession {
+                SafeCleanupCelebrationOverlay(session: session) {
                     completeDeletionSummary()
                 }
                 .transition(reduceMotion ? .opacity : .safeCleanupCelebrationBlur)
@@ -100,11 +101,11 @@ struct ContentView: View {
         }
         .animation(
             reduceMotion ? nil : .easeInOut(duration: 0.35),
-            value: store.interactiveSafeCleanupFreedBytes != nil
+            value: store.interactiveSafeCleanupSession != nil
         )
         .animation(
             reduceMotion ? nil : .easeInOut(duration: 0.35),
-            value: store.lastDeletionReport != nil
+            value: store.manualDeletionSession != nil
         )
         .alert(
             "Missing reinstall instructions",
@@ -189,18 +190,16 @@ struct ContentView: View {
         }
     }
 
-    private func deletionSummaryFreedBytes(for report: DeletionReport) -> Int64 {
-        report.totalDeleted
-    }
-
     private func completeDeletionSummary() {
         if reduceMotion {
+            store.dismissManualDeletionSession()
             store.lastDeletionReport = nil
             diskStore.refresh()
             return
         }
 
         withAnimation(.easeInOut(duration: 0.35)) {
+            store.dismissManualDeletionSession()
             store.lastDeletionReport = nil
         }
 
@@ -694,12 +693,16 @@ struct SidebarSummaryView: View {
 
     private func startInteractiveSafeCleanup() {
         let candidates = store.manualSafeCleanupCandidates()
-        guard store.beginInteractiveSafeCleanup(candidates: candidates, reduceMotion: reduceMotion) else { return }
+        guard store.beginInteractiveSafeCleanup(
+            candidates: candidates,
+            reduceMotion: reduceMotion,
+            presentsLiveSession: true
+        ) else { return }
 
         Task { @MainActor in
             let summary = await store.performManualSafeCleanNow(pinnedCandidates: candidates)
             if store.errorMessage == nil {
-                store.completeInteractiveSafeCleanup(freedBytes: summary.freedBytes)
+                store.completeInteractiveSafeCleanup(summary: summary)
             } else {
                 store.cancelInteractiveSafeCleanup()
             }

@@ -308,13 +308,32 @@ struct CleaningButtonLabel: View {
     }
 }
 
+/// Single home for both deletion phases: presented in `.cleaning` when the user
+/// confirms deletion, it flips to `.complete` in place when the engine finishes.
+/// Sessions created already-`.complete` (safe cleanup, onboarding) render the
+/// completion layout immediately, exactly as before.
 struct SafeCleanupCelebrationOverlay: View {
-    let freedBytes: Int64
+    @ObservedObject var session: DeletionSession
     let onDone: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var checkmarkProgress: CGFloat = 0
-    @State private var encouragement: CleanupCompletionEncouragement
+    @State private var checkmarkScale: CGFloat
+    @State private var checkmarkVisible: Bool
+    @State private var subtitleShowsComplete: Bool
+    @State private var completionLinesVisible: Bool
+    @State private var footerVisible: Bool
+    @State private var progressGroupVisible: Bool
+    @State private var confettiArmed: Bool
+    @State private var displayedBytes: Int64
+    @State private var displayedFraction: Double
+    @State private var tagline: TimeTagline.Selection?
+    @State private var appearedAt = Date()
+    @State private var didBeginCompletion = false
+    @State private var sequenceTask: Task<Void, Never>?
+
+    private static let confettiThresholdBytes: Int64 = 2 * 1024 * 1024 * 1024
+    private static let minimumCleaningDwell: TimeInterval = 1.2
 
     private let celebrationAccent = AppStyle.accent
     private let sheetBackground = Color(
@@ -322,10 +341,23 @@ struct SafeCleanupCelebrationOverlay: View {
         dark: NSColor(calibratedWhite: 0.08, alpha: 1)
     )
 
-    init(freedBytes: Int64, onDone: @escaping () -> Void) {
-        self.freedBytes = freedBytes
+    init(session: DeletionSession, onDone: @escaping () -> Void) {
+        self.session = session
         self.onDone = onDone
-        _encouragement = State(initialValue: CleanupCompletionMessagePicker.randomMessage(for: freedBytes))
+        // Sessions created already-complete mount straight into the final layout;
+        // live runs mount in the cleaning phase even if the engine has since finished
+        // (the completion sequence then runs from onAppear, honoring the dwell).
+        let mountsComplete = session.phase == .complete && !session.isLiveRun
+        _checkmarkScale = State(initialValue: mountsComplete ? 1 : 0.85)
+        _checkmarkVisible = State(initialValue: mountsComplete)
+        _subtitleShowsComplete = State(initialValue: mountsComplete)
+        _completionLinesVisible = State(initialValue: mountsComplete)
+        _footerVisible = State(initialValue: mountsComplete)
+        _progressGroupVisible = State(initialValue: !mountsComplete)
+        _confettiArmed = State(initialValue: mountsComplete)
+        _displayedBytes = State(initialValue: mountsComplete ? session.finalBytesFreed : 0)
+        _displayedFraction = State(initialValue: mountsComplete ? 1 : 0)
+        _tagline = State(initialValue: mountsComplete ? TimeTagline.select(for: session.elapsedSeconds) : nil)
     }
 
     var body: some View {
@@ -344,43 +376,69 @@ struct SafeCleanupCelebrationOverlay: View {
 
                 CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
                     .frame(width: 88, height: 88)
+                    .scaleEffect(checkmarkScale)
+                    .opacity(checkmarkVisible ? 1 : 0)
                     .accessibilityHidden(true)
 
                 VStack(spacing: AppStyle.Spacing.small) {
-                    Text(formatBytes(freedBytes))
+                    Text(formatBytes(displayedBytes))
                         .font(.system(size: 54, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .monospacedDigit()
+                        .contentTransition(reduceMotion ? .identity : .numericText())
                         .multilineTextAlignment(.center)
                         .accessibilityAddTraits(.isHeader)
 
-                    Text("moved to Trash")
+                    Text(subtitleText)
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.78))
                         .multilineTextAlignment(.center)
+                        .contentTransition(.opacity)
 
-                    if let comparisonItems = OnboardingSizeComparison.items(for: freedBytes) {
-                        OnboardingSizeComparisonLine(items: comparisonItems)
-                            .foregroundStyle(.white.opacity(0.78))
+                    // The cleaning-phase progress group draws into the slot the
+                    // completion lines occupy (always laid out, opacity-toggled),
+                    // so neither phase ever shifts the other's elements.
+                    ZStack(alignment: .top) {
+                        VStack(spacing: AppStyle.Spacing.small) {
+                            if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
+                                OnboardingSizeComparisonLine(items: comparisonItems)
+                                    .foregroundStyle(.white.opacity(0.78))
+                            }
+
+                            Text(tagline?.line ?? "")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, AppStyle.Spacing.xSmall)
+                        }
+                        .opacity(completionLinesVisible ? 1 : 0)
+
+                        progressGroup
+                            .frame(height: 0, alignment: .top)
+                            .opacity(progressGroupVisible ? 1 : 0)
                     }
-
-                    Text(encouragement.text)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, AppStyle.Spacing.xSmall)
                 }
                 .frame(maxWidth: 560)
 
                 Spacer(minLength: 0)
 
                 VStack(spacing: AppStyle.Spacing.small) {
-                    if freedBytes > 0 {
-                        Text("Empty your Trash to reclaim this space.")
+                    if session.phase == .complete, session.failedCount > 0 {
+                        Text(failedItemsText)
                             .font(.callout)
                             .foregroundStyle(.white.opacity(0.6))
                             .multilineTextAlignment(.center)
+                    }
+
+                    if reservesTrashDisclaimerSpace {
+                        HStack(spacing: 5) {
+                            Image(systemName: "trash")
+                            Text("Empty your Trash to reclaim this space.")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
                     }
 
                     Button(action: onDone) {
@@ -393,7 +451,9 @@ struct SafeCleanupCelebrationOverlay: View {
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
+                    .disabled(!footerVisible)
                 }
+                .opacity(footerVisible ? 1 : 0)
             }
             .padding(.horizontal, 52)
             .padding(.vertical, 44)
@@ -401,126 +461,174 @@ struct SafeCleanupCelebrationOverlay: View {
             .background(sheetBackground)
             .accessibilityElement(children: .contain)
         }
-        .onAppear {
-            if reduceMotion {
-                checkmarkProgress = 1
-            } else {
-                withAnimation(.easeInOut(duration: 0.6)) {
-                    checkmarkProgress = 1
-                }
-            }
-            CleanupCompletionMessagePicker.storeLastShown(encouragement)
+        .onAppear(perform: handleAppear)
+        .onChange(of: session.phase) { phase in
+            guard phase == .complete else { return }
+            beginCompletionSequence()
         }
+        .onChange(of: session.bytesFreed) { newValue in
+            mirrorLiveProgress(bytesFreed: newValue)
+        }
+        .onDisappear { sequenceTask?.cancel() }
         .environment(\.colorScheme, .dark)
     }
 
+    private var progressGroup: some View {
+        VStack(spacing: AppStyle.Spacing.xSmall) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.14))
+                    Capsule(style: .continuous)
+                        .fill(celebrationAccent)
+                        .frame(width: max(0, min(1, displayedFraction)) * geo.size.width)
+                }
+            }
+            .frame(height: 4)
+
+            Text(currentItemText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Cleaning, \(formatBytes(displayedBytes)) of \(formatBytes(session.totalBytes))")
+    }
+
+    private var subtitleText: String {
+        subtitleShowsComplete ? "moved to Trash" : "of \(formatBytes(session.totalBytes)) selected"
+    }
+
+    private var currentItemText: String {
+        session.currentItemName.map { "Cleaning \($0)…" } ?? "Cleaning…"
+    }
+
+    private var failedItemsText: String {
+        session.failedCount == 1
+            ? "1 item couldn't be cleaned"
+            : "\(session.failedCount) items couldn't be cleaned"
+    }
+
+    /// Shown in the complete phase only when something actually went to Trash.
+    /// During cleaning the (invisible) footer reserves its space so nothing shifts.
+    private var reservesTrashDisclaimerSpace: Bool {
+        session.phase == .cleaning || session.movedToTrashCount > 0
+    }
+
+    /// Reserves comparison-line space from the selected total during cleaning;
+    /// switches to the exact engine result at completion.
+    private var comparisonBytes: Int64 {
+        session.phase == .complete ? session.finalBytesFreed : session.totalBytes
+    }
+
     private var showsConfetti: Bool {
-        freedBytes >= CleanupCompletionMessagePicker.confettiThresholdBytes && !reduceMotion
+        confettiArmed && session.finalBytesFreed >= Self.confettiThresholdBytes && !reduceMotion
     }
-}
 
-private struct CleanupCompletionEncouragement: Equatable {
-    let key: String
-    let text: String
-}
-
-private enum CleanupCompletionMessagePicker {
-    static let confettiThresholdBytes: Int64 = 2 * oneGigabyte
-
-    private static let oneMegabyte: Int64 = 1024 * 1024
-    private static let oneGigabyte: Int64 = 1024 * 1024 * 1024
-    private static let lastShownMessageKey = "cleanCompletion.lastShownMessageKey"
-
-    static func randomMessage(
-        for freedBytes: Int64,
-        defaults: UserDefaults = .standard
-    ) -> CleanupCompletionEncouragement {
-        let messages = tier(for: freedBytes).messages
-        guard messages.count > 1 else {
-            return messages[0]
+    private func handleAppear() {
+        appearedAt = Date()
+        guard session.phase == .complete else { return }
+        if session.isLiveRun {
+            // Engine finished before the view mounted (tiny cleans): run the
+            // full cleaning -> complete choreography, dwell included.
+            beginCompletionSequence()
+            return
         }
-
-        let lastShownKey = defaults.string(forKey: lastShownMessageKey)
-        let eligibleMessages = messages.filter { $0.key != lastShownKey }
-
-        return (eligibleMessages.isEmpty ? messages : eligibleMessages).randomElement() ?? messages[0]
-    }
-
-    static func storeLastShown(
-        _ message: CleanupCompletionEncouragement,
-        defaults: UserDefaults = .standard
-    ) {
-        defaults.set(message.key, forKey: lastShownMessageKey)
-    }
-
-    private static func tier(for freedBytes: Int64) -> CleanupCompletionMessageTier {
-        switch freedBytes {
-        case ..<(500 * oneMegabyte):
-            return .under500MB
-        case ..<(2 * oneGigabyte):
-            return .between500MBAnd2GB
-        case ..<(10 * oneGigabyte):
-            return .between2GBAnd10GB
-        default:
-            return .over10GB
+        if reduceMotion {
+            checkmarkProgress = 1
+        } else {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                checkmarkProgress = 1
+            }
         }
-    }
-}
-
-private enum CleanupCompletionMessageTier: String {
-    case under500MB
-    case between500MBAnd2GB
-    case between2GBAnd10GB
-    case over10GB
-
-    var messages: [CleanupCompletionEncouragement] {
-        copy.enumerated().map { index, text in
-            CleanupCompletionEncouragement(key: "\(rawValue).\(index)", text: text)
+        if let tagline {
+            TimeTagline.store(tagline)
         }
     }
 
-    private var copy: [String] {
-        switch self {
-        case .under500MB:
-            return [
-                "Every crumb counts. Your Mac approves.",
-                "Small clean, big satisfaction.",
-                "Your Mac just exhaled a little.",
-                "Tidier than it was. That's enough.",
-                "The digital equivalent of emptying your pockets.",
-                "Baby steps. Your Mac feels it.",
-                "Less junk. More you."
-            ]
-        case .between500MBAnd2GB:
-            return [
-                "Your Mac is breathing easier now.",
-                "That's the stuff. Clean machine.",
-                "Junk: gone. Vibes: immaculate.",
-                "Your future self will thank you.",
-                "Marie Kondo would be proud.",
-                "That was satisfying and you know it.",
-                "Your Mac just got a little faster and a lot happier."
-            ]
-        case .between2GBAnd10GB:
-            return [
-                "Now that's a clean. Well done.",
-                "Your Mac remembers what it felt like to be young.",
-                "Somewhere, a hard drive is smiling.",
-                "You just gave your Mac room to breathe.",
-                "That's not a clean. That's a transformation.",
-                "Your Mac called. It says thank you.",
-                "Digital spring cleaning. Chef's kiss."
-            ]
-        case .over10GB:
-            return [
-                "Absolute unit of a clean. Respect.",
-                "Your Mac is basically new again.",
-                "That's not cleaning. That's archaeology.",
-                "Future you is living in a palace.",
-                "Your Mac just did a happy dance.",
-                "The junk was real. Now it's gone. You did that.",
-                "If your Mac could hug you, it would."
-            ]
+    private func mirrorLiveProgress(bytesFreed: Int64) {
+        guard session.phase == .cleaning, !didBeginCompletion else { return }
+        let fraction = session.totalBytes > 0
+            ? min(1.0, Double(bytesFreed) / Double(session.totalBytes))
+            : 0
+        if reduceMotion {
+            displayedBytes = bytesFreed
+            displayedFraction = fraction
+        } else {
+            withAnimation(.easeOut(duration: 0.3)) {
+                displayedBytes = bytesFreed
+                displayedFraction = fraction
+            }
+        }
+    }
+
+    private func beginCompletionSequence() {
+        guard !didBeginCompletion else { return }
+        didBeginCompletion = true
+
+        sequenceTask = Task { @MainActor in
+            let finalBytes = session.finalBytesFreed
+            tagline = TimeTagline.select(for: session.elapsedSeconds)
+            if let tagline {
+                TimeTagline.store(tagline)
+            }
+
+            if reduceMotion {
+                displayedBytes = finalBytes
+                displayedFraction = 1
+                checkmarkProgress = 1
+                checkmarkScale = 1
+                confettiArmed = true
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    progressGroupVisible = false
+                    subtitleShowsComplete = true
+                    checkmarkVisible = true
+                    completionLinesVisible = true
+                    footerVisible = true
+                }
+                return
+            }
+
+            // Minimum dwell: a KB-scale clean settles the counter and bar over
+            // the remaining time so it reads as a moment, not a flash.
+            let sinceAppear = Date().timeIntervalSince(appearedAt)
+            let settleDuration = sinceAppear < Self.minimumCleaningDwell
+                ? Self.minimumCleaningDwell - sinceAppear
+                : 0.25
+            withAnimation(.easeOut(duration: settleDuration)) {
+                displayedBytes = finalBytes
+                displayedFraction = 1
+            }
+            try? await Task.sleep(nanoseconds: UInt64(settleDuration * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+
+            withAnimation(.easeOut(duration: 0.3)) {
+                progressGroupVisible = false
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                subtitleShowsComplete = true
+            }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
+
+            confettiArmed = true
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                checkmarkVisible = true
+                checkmarkScale = 1
+            }
+            withAnimation(.easeInOut(duration: 0.6)) {
+                checkmarkProgress = 1
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                completionLinesVisible = true
+            }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                footerVisible = true
+            }
         }
     }
 }
@@ -881,6 +989,30 @@ enum AppSidebarAnimation {
     static let duration: TimeInterval = 0.28
 }
 
+/// Blocks window close and app quit while a cleaning run is mid-flight.
+/// `isCleaningActive` is wired to `PurgeStore` once at launch.
+@MainActor
+enum CleaningQuitGuard {
+    static var isCleaningActive: () -> Bool = { false }
+
+    /// Returns `true` when the user chooses to interrupt the clean anyway.
+    static func confirmInterruption() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Purge is still cleaning"
+        alert.informativeText = "Purge is still cleaning. Quitting now may leave some items partially removed."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Quit Anyway")
+        alert.addButton(withTitle: "Keep Cleaning")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    /// Shared gate for `windowShouldClose` / `applicationShouldTerminate`.
+    static func shouldAllowTermination() -> Bool {
+        guard isCleaningActive() else { return true }
+        return confirmInterruption()
+    }
+}
+
 /// Clamps live resize attempts; SwiftUI often overrides `minSize` / `maxSize` alone.
 private final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
     let fixedWidth: CGFloat
@@ -903,6 +1035,17 @@ private final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
             return chainedDelegate.windowWillResize!(sender, to: clamped)
         }
         return clamped
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard MainActor.assumeIsolated({ CleaningQuitGuard.shouldAllowTermination() }) else {
+            return false
+        }
+        if let chainedDelegate,
+           chainedDelegate.responds(to: #selector(NSWindowDelegate.windowShouldClose(_:))) {
+            return chainedDelegate.windowShouldClose!(sender)
+        }
+        return true
     }
 }
 

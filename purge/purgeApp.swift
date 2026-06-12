@@ -9,8 +9,16 @@ import AppKit
 import SwiftUI
 import UserNotifications
 
+@MainActor
+final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        CleaningQuitGuard.shouldAllowTermination() ? .terminateNow : .terminateCancel
+    }
+}
+
 @main
 struct PurgeApp: App {
+    @NSApplicationDelegateAdaptor(PurgeAppDelegate.self) private var appDelegate
     @StateObject private var store = PurgeStore()
     @StateObject private var diskStore = DiskSummaryStore()
     @AppStorage(AppearanceMode.userDefaultsKey)
@@ -32,6 +40,9 @@ struct PurgeApp: App {
                 .onAppear {
                     diskStore.refresh()
                     ScheduledCleaningRegistrar.shared.attach(store: store)
+                    CleaningQuitGuard.isCleaningActive = { [weak store] in
+                        store?.isManualCleaningInProgress ?? false
+                    }
                 }
                 .font(.system(.body, design: .rounded))
                 .preferredColorScheme(appearanceMode.colorScheme)
@@ -62,6 +73,7 @@ struct PurgeApp: App {
             Button("Clean Safe Files Now") {
                 Task { await store.performManualSafeCleanNow() }
             }
+            .disabled(store.isDeleting)
             Divider()
             Button("Quit Purge") {
                 NSApplication.shared.terminate(nil)
@@ -84,7 +96,7 @@ struct PurgeCommands: Commands {
                 Task { await store.scanAll() }
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
-            .disabled(!store.hasFullDiskAccess)
+            .disabled(!store.hasFullDiskAccess || store.isDeleting)
         }
         CommandGroup(replacing: .undoRedo) {}
     }

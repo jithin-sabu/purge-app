@@ -6,12 +6,15 @@ struct DeletedItem: Identifiable {
     let sizeBytes: Int64
     /// Friendly label from the main list (e.g. explanation headline); nil if unknown.
     let displayName: String?
+    /// `false` for items removed directly (e.g. simulators via `simctl delete`).
+    let movedToTrash: Bool
 
-    init(path: String, sizeBytes: Int64, displayName: String? = nil) {
+    init(path: String, sizeBytes: Int64, displayName: String? = nil, movedToTrash: Bool = true) {
         self.id = UUID()
         self.path = path
         self.sizeBytes = sizeBytes
         self.displayName = displayName
+        self.movedToTrash = movedToTrash
     }
 }
 
@@ -48,6 +51,15 @@ struct DeletionReport: Identifiable {
     var hasUserVisibleSkips: Bool {
         skippedItems.contains { $0.isUserVisible }
     }
+
+    var movedToTrashCount: Int {
+        deletedItems.lazy.filter(\.movedToTrash).count
+    }
+
+    /// Selected items that did not get cleaned and the user should hear about.
+    var userVisibleFailureCount: Int {
+        failedItems.count + skippedItems.lazy.filter(\.isUserVisible).count
+    }
 }
 
 final class FileDeleter {
@@ -56,10 +68,13 @@ final class FileDeleter {
 
     /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
     /// - Parameter pathToExpectedSizeBytes: Pre-scan sizes from deletion candidates; avoids re-measuring folders at delete time.
+    /// - Parameter onProgress: Called on the engine's executor after each item starts / successfully
+    ///   deletes. Must be cheap; UI publishing is buffered elsewhere.
     func deleteItems(
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],
-        pathToExpectedSizeBytes: [String: Int64] = [:]
+        pathToExpectedSizeBytes: [String: Int64] = [:],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
         var totalDeleted: Int64 = 0
         var deletedItems: [DeletedItem] = []
@@ -77,6 +92,7 @@ final class FileDeleter {
             let decision = DeletionSafetyPolicy.evaluate(url)
             switch decision {
             case .allow:
+                onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
                 let size = pathToExpectedSizeBytes[standardizedPath] ?? scanner.calculateFolderSize(at: url)
 
                 if DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
@@ -109,13 +125,21 @@ final class FileDeleter {
                             sizeBytes: size,
                             displayName: friendlyTitle
                         ))
+                        onProgress?(.itemDeleted(sizeBytes: size))
                     }
                 } else if let udid = Self.coreSimulatorDeviceUDID(from: url) {
                     switch Self.deleteCoreSimulatorDevice(udid: udid) {
                     case .success:
                         totalDeleted += size
-                        deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
+                        deletedItems.append(DeletedItem(
+                            path: url.path,
+                            sizeBytes: size,
+                            displayName: friendlyTitle,
+                            movedToTrash: false
+                        ))
+                        onProgress?(.itemDeleted(sizeBytes: size))
                     case .failure(let message):
+                        NSLog("Purge: failed to delete simulator %@ — %@", url.path, message)
                         failedItems.append(FailedDeletionItem(path: url.path, reason: message))
                     }
                 } else {
@@ -123,6 +147,7 @@ final class FileDeleter {
                         try FileManager.default.trashItem(at: url, resultingItemURL: nil)
                         totalDeleted += size
                         deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
+                        onProgress?(.itemDeleted(sizeBytes: size))
                     } catch {
                         recordDeletionFailure(
                             path: url.path,
@@ -207,6 +232,7 @@ final class FileDeleter {
         failedItems: inout [FailedDeletionItem],
         skippedItems: inout [SkippedDeletionItem]
     ) {
+        NSLog("Purge: failed to delete %@ — %@", path, error.localizedDescription)
         if Self.isPermissionDenied(error) {
             skippedItems.append(
                 SkippedDeletionItem(

@@ -103,6 +103,11 @@ final class PurgeStore: ObservableObject {
     @Published var deletionSheetCandidates: [DeletionCandidate]?
     @Published var pendingUnknownDeletion: UnknownDeletionPayload?
     @Published var lastDeletionReport: DeletionReport?
+    /// Live session behind the cleanup overlay for manual "Clean Selected" runs.
+    /// Presented in `.cleaning` when deletion starts; flips to `.complete` in place.
+    @Published private(set) var manualDeletionSession: DeletionSession?
+    /// Already-complete session for the sidebar safe cleanup celebration.
+    @Published private(set) var interactiveSafeCleanupSession: DeletionSession?
     /// When set, `ContentView` shows the onboarding celebration overlay instead of the standard deletion summary.
     @Published var onboardingCelebrationFreedBytes: Int64?
     @Published private(set) var interactiveSafeCleanupTargetPaths: Set<String> = []
@@ -139,6 +144,11 @@ final class PurgeStore: ObservableObject {
     private var projectDiscoveryTask: Task<Void, Never>?
     private var scanCompletionHideTask: Task<Void, Never>?
     private var interactiveSafeCleanupRemovalTask: Task<Void, Never>?
+    /// Set while an interactive safe cleanup tracks a live engine run, so
+    /// `performSafeCleanup` can stream per-item progress into the overlay.
+    private var interactiveSafeCleanupProgressBuffer: DeletionProgressBuffer?
+    private var interactiveSafeCleanupProgressPoller: Task<Void, Never>?
+    private var interactiveCleanupStartedAt: Date?
 
     /// After the primary confirm sheet runs, extra warnings may enqueue here.
     private var stagedDeletionCandidates: [DeletionCandidate]?
@@ -228,6 +238,13 @@ final class PurgeStore: ObservableObject {
 
     var isInteractiveSafeCleanupInProgress: Bool {
         !interactiveSafeCleanupTargetPaths.isEmpty && interactiveSafeCleanupFreedBytes == nil
+    }
+
+    /// `true` while the cleanup overlay is in its cleaning phase — used to gate
+    /// navigation, window close, and app quit.
+    var isManualCleaningInProgress: Bool {
+        manualDeletionSession?.phase == .cleaning
+            || interactiveSafeCleanupSession?.phase == .cleaning
     }
 
     /// Paths that match the same safety, git, lockfile, and staleness rules used by manual safe cleanup.
@@ -486,15 +503,46 @@ final class PurgeStore: ObservableObject {
             pathToExpectedSizeBytes[key] = candidate.sizeBytes
         }
 
+        // Present the cleanup overlay in its cleaning phase for interactive runs.
+        // Totals come from the selected items, before the engine starts.
+        let presentsSession = trigger == .manual
+            && !defaults.bool(forKey: Self.pendingOnboardingCelebrationKey)
+        let progressBuffer = DeletionProgressBuffer()
+        var session: DeletionSession?
+        var progressPoller: Task<Void, Never>?
+        if presentsSession {
+            let totalBytes = candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
+            manualDeletionSession = liveSession
+            session = liveSession
+            progressPoller = Task { @MainActor [weak liveSession] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    guard let liveSession, liveSession.phase == .cleaning else { return }
+                    liveSession.applyProgress(progressBuffer.snapshot())
+                }
+            }
+        }
+
         isDeleting = true
         errorMessage = nil
-        defer { isDeleting = false }
+        defer {
+            isDeleting = false
+            progressPoller?.cancel()
+        }
+        let engineStart = Date()
         do {
+            var onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+            if presentsSession {
+                onProgress = { @Sendable event in progressBuffer.ingest(event) }
+            }
             let report = try await fileDeleter.deleteItems(
                 at: urls,
                 pathToDisplayName: pathToDisplayName,
-                pathToExpectedSizeBytes: pathToExpectedSizeBytes
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                onProgress: onProgress
             )
+            let elapsedSeconds = Date().timeIntervalSince(engineStart)
             let freedBytes: Int64
             if trigger == .manual {
                 freedBytes = report.totalDeleted
@@ -510,12 +558,26 @@ final class PurgeStore: ObservableObject {
             } else {
                 lastDeletionReport = report
             }
+            progressPoller?.cancel()
+            session?.completeRun(
+                bytesFreed: report.totalDeleted,
+                elapsedSeconds: elapsedSeconds,
+                failedCount: report.userVisibleFailureCount,
+                movedToTrashCount: report.movedToTrashCount
+            )
             CleanupHistoryStore.shared.append(trigger: trigger, report: report)
         } catch {
+            if session != nil {
+                manualDeletionSession = nil
+            }
             errorMessage = trigger == .scheduled
                 ? "Scheduled cleaning couldn’t finish. Open the app to try manually."
                 : "Unable to clean selected items. Please try again."
         }
+    }
+
+    func dismissManualDeletionSession() {
+        manualDeletionSession = nil
     }
 
     /// Updates in-memory scan results so removed folders disappear without requiring a full rescan
@@ -977,6 +1039,10 @@ final class PurgeStore: ObservableObject {
     struct ScheduledCleaningSummary {
         let deletedCount: Int
         let freedBytes: Int64
+        /// Real engine time for the deletion run, in seconds.
+        var elapsedSeconds: Double = 0
+        var movedToTrashCount: Int = 0
+        var failedCount: Int = 0
     }
 
     @discardableResult
@@ -1001,6 +1067,10 @@ final class PurgeStore: ObservableObject {
         referenceDate now: Date = Date(),
         pinnedCandidates: [DeletionCandidate]? = nil
     ) async -> ScheduledCleaningSummary {
+        var onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+        if let buffer = interactiveSafeCleanupProgressBuffer {
+            onProgress = { @Sendable event in buffer.ingest(event) }
+        }
         let summary = await performSafeCleanup(
             referenceDate: now,
             minUnusedDaysForCaches: 0,
@@ -1008,7 +1078,8 @@ final class PurgeStore: ObservableObject {
             historyTrigger: .manual,
             scheduledNotifications: false,
             clearSelectionsAfterCleanup: true,
-            pinnedCandidates: pinnedCandidates
+            pinnedCandidates: pinnedCandidates,
+            onProgress: onProgress
         )
         publishOnboardingCelebrationIfNeeded(freedBytes: summary.freedBytes)
         return summary
@@ -1016,7 +1087,8 @@ final class PurgeStore: ObservableObject {
 
     func beginInteractiveSafeCleanup(
         candidates: [DeletionCandidate],
-        reduceMotion: Bool
+        reduceMotion: Bool,
+        presentsLiveSession: Bool = false
     ) -> Bool {
         guard !isDeleting, interactiveSafeCleanupTargetPaths.isEmpty else { return false }
         let orderedPaths = Self.uniqueStandardizedPaths(for: candidates)
@@ -1026,6 +1098,36 @@ final class PurgeStore: ObservableObject {
         interactiveSafeCleanupRemovalTask?.cancel()
         interactiveSafeCleanupFreedBytes = nil
         interactiveSafeCleanupTargetPaths = Set(orderedPaths)
+        let startedAt = Date()
+        interactiveCleanupStartedAt = startedAt
+
+        if presentsLiveSession {
+            // Same choreography as manual deletion: present the overlay in its
+            // cleaning phase now and poll engine progress into it (~120ms).
+            var seenPaths = Set<String>()
+            var totalBytes: Int64 = 0
+            for candidate in candidates {
+                let path = candidate.path.standardizedFileURL.path
+                guard !seenPaths.contains(path) else { continue }
+                seenPaths.insert(path)
+                totalBytes += candidate.sizeBytes
+            }
+            let liveSession = DeletionSession(
+                totalBytes: totalBytes,
+                totalItems: orderedPaths.count,
+                startedAt: startedAt
+            )
+            interactiveSafeCleanupSession = liveSession
+            let buffer = DeletionProgressBuffer()
+            interactiveSafeCleanupProgressBuffer = buffer
+            interactiveSafeCleanupProgressPoller = Task { @MainActor [weak liveSession] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    guard let liveSession, liveSession.phase == .cleaning else { return }
+                    liveSession.applyProgress(buffer.snapshot())
+                }
+            }
+        }
 
         if reduceMotion {
             interactiveSafeCleanupRemovedPaths = Set(orderedPaths)
@@ -1045,16 +1147,44 @@ final class PurgeStore: ObservableObject {
         return true
     }
 
-    func completeInteractiveSafeCleanup(freedBytes: Int64) {
-        interactiveSafeCleanupFreedBytes = freedBytes
+    func completeInteractiveSafeCleanup(summary: ScheduledCleaningSummary) {
+        interactiveSafeCleanupFreedBytes = summary.freedBytes
+        interactiveSafeCleanupProgressPoller?.cancel()
+        interactiveSafeCleanupProgressPoller = nil
+        interactiveSafeCleanupProgressBuffer = nil
+        if let liveSession = interactiveSafeCleanupSession, liveSession.isLiveRun {
+            liveSession.completeRun(
+                bytesFreed: summary.freedBytes,
+                elapsedSeconds: summary.elapsedSeconds,
+                failedCount: summary.failedCount,
+                movedToTrashCount: summary.movedToTrashCount
+            )
+        } else {
+            let elapsedSeconds = interactiveCleanupStartedAt.map {
+                Date().timeIntervalSince($0)
+            } ?? summary.elapsedSeconds
+            interactiveSafeCleanupSession = .completed(
+                freedBytes: summary.freedBytes,
+                elapsedSeconds: elapsedSeconds,
+                movedToTrashCount: summary.movedToTrashCount,
+                failedCount: summary.failedCount,
+                startedAt: interactiveCleanupStartedAt
+            )
+        }
+        interactiveCleanupStartedAt = nil
     }
 
     func cancelInteractiveSafeCleanup() {
         interactiveSafeCleanupRemovalTask?.cancel()
         interactiveSafeCleanupRemovalTask = nil
+        interactiveSafeCleanupProgressPoller?.cancel()
+        interactiveSafeCleanupProgressPoller = nil
+        interactiveSafeCleanupProgressBuffer = nil
+        interactiveCleanupStartedAt = nil
         interactiveSafeCleanupTargetPaths = []
         interactiveSafeCleanupRemovedPaths = []
         interactiveSafeCleanupFreedBytes = nil
+        interactiveSafeCleanupSession = nil
     }
 
     func dismissInteractiveSafeCleanupCelebration() {
@@ -1087,7 +1217,8 @@ final class PurgeStore: ObservableObject {
         historyTrigger: CleanupTrigger,
         scheduledNotifications: Bool,
         clearSelectionsAfterCleanup: Bool,
-        pinnedCandidates: [DeletionCandidate]? = nil
+        pinnedCandidates: [DeletionCandidate]? = nil,
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async -> ScheduledCleaningSummary {
         if pinnedCandidates == nil {
             await scanDeveloper()
@@ -1123,16 +1254,23 @@ final class PurgeStore: ObservableObject {
             return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
         }
 
+        guard !isDeleting else {
+            return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
+        }
+
         isDeleting = true
         errorMessage = nil
         defer { isDeleting = false }
 
+        let engineStart = Date()
         do {
             let report = try await fileDeleter.deleteItems(
                 at: combined,
                 pathToDisplayName: pathToDisplayName,
-                pathToExpectedSizeBytes: pathToExpectedSizeBytes
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                onProgress: onProgress
             )
+            let elapsedSeconds = Date().timeIntervalSince(engineStart)
             let freedBytes: Int64
             if historyTrigger == .manual {
                 freedBytes = report.totalDeleted
@@ -1151,7 +1289,13 @@ final class PurgeStore: ObservableObject {
                     deletedCount: report.deletedItems.count
                 )
             }
-            return ScheduledCleaningSummary(deletedCount: report.deletedItems.count, freedBytes: freedBytes)
+            return ScheduledCleaningSummary(
+                deletedCount: report.deletedItems.count,
+                freedBytes: freedBytes,
+                elapsedSeconds: elapsedSeconds,
+                movedToTrashCount: report.movedToTrashCount,
+                failedCount: report.userVisibleFailureCount
+            )
         } catch {
             if scheduledNotifications {
                 await ScheduledCleanupNotifier.notifyScheduledCleanFailed()

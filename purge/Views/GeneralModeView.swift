@@ -172,7 +172,7 @@ struct AppCachesView<PageHeader: View>: View {
                         cacheResultsList
                             .scanTabSoftScrollEdge { selectAllRowChrome }
 
-                        if store.isDeleting && !store.isInteractiveSafeCleanupInProgress {
+                        if store.isDeleting && !store.isInteractiveSafeCleanupInProgress && store.manualDeletionSession == nil {
                             CleaningOverlay()
                         }
                     }
@@ -239,7 +239,8 @@ struct AppCachesView<PageHeader: View>: View {
         ZStack {
             scanListOrPlaceholder
 
-            if store.isDeleting && showsListContent && !store.isInteractiveSafeCleanupInProgress {
+            if store.isDeleting && showsListContent && !store.isInteractiveSafeCleanupInProgress
+                && store.manualDeletionSession == nil {
                 CleaningOverlay()
             }
         }
