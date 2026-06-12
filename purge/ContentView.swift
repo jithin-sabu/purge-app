@@ -616,6 +616,14 @@ struct SidebarSummaryView: View {
         return parts.joined(separator: ", ")
     }
 
+    private var isSafeToCleanSummaryLoading: Bool {
+        guard store.safeRecoverableBytes == 0 else { return false }
+        return store.scanPhase == .scanning
+            || store.scanPhase == .cancelling
+            || store.isEnrichingGeneral
+            || store.isEnrichingDeveloper
+    }
+
     private var stats: some View {
         statRow(
             symbol: SafetyLevel.safe.symbolName(filled: true),
@@ -623,7 +631,8 @@ struct SidebarSummaryView: View {
             value: formatBytes(store.safeRecoverableBytes),
             color: AppStyle.safe,
             valueColor: store.safeRecoverableBytes > 0 ? .primary : .secondary,
-            animationValue: store.safeRecoverableBytes
+            animationValue: store.safeRecoverableBytes,
+            isValueLoading: isSafeToCleanSummaryLoading
         )
     }
 
@@ -633,7 +642,8 @@ struct SidebarSummaryView: View {
         value: String,
         color: Color,
         valueColor: Color,
-        animationValue: Int64
+        animationValue: Int64,
+        isValueLoading: Bool = false
     ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
@@ -647,12 +657,33 @@ struct SidebarSummaryView: View {
 
             Spacer()
 
-            Text(value)
-                .font(SummaryFont.value)
-                .foregroundStyle(valueColor)
-                .monospacedDigit()
-                .contentTransition(reduceMotion ? .identity : .numericText())
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: animationValue)
+            if isValueLoading {
+                safeToCleanValueLoadingIndicator
+                    .accessibilityLabel("Scanning")
+            } else {
+                Text(value)
+                    .font(SummaryFont.value)
+                    .foregroundStyle(valueColor)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: animationValue)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var safeToCleanValueLoadingIndicator: some View {
+        if reduceMotion {
+            Image(systemName: "clock")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: 16)
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.62)
+                .frame(width: 16, height: 16)
+                .tint(.secondary)
         }
     }
 
