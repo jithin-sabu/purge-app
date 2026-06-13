@@ -375,9 +375,22 @@ struct LargeFilesView: View {
 private struct LargeFileRow: View {
     let file: LargeFile
     @Binding var isSelected: Bool
+    @State private var isHoveringLocation = false
 
     private var dateText: String {
         relativeDateText(for: file.lastUsed, referenceDate: Date())
+    }
+
+    private var parentFolderPath: String {
+        file.path.deletingLastPathComponent().path
+    }
+
+    private var fileURL: URL {
+        file.path.standardizedFileURL
+    }
+
+    private func revealInFinder() {
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
     }
 
     var body: some View {
@@ -386,30 +399,55 @@ private struct LargeFileRow: View {
                 .toggleStyle(.checkbox)
                 .labelsHidden()
 
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(AppStyle.selectionFill)
-                Image(systemName: file.category.symbolName)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(AppStyle.accent)
-            }
-            .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(file.displayName)
-                    .font(AppStyle.Typography.rowTitle)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                HStack(spacing: 6) {
-                    Text(file.locationLabel)
-                    Text("·")
-                    Text("Last used \(dateText)")
+            HStack(spacing: 10) {
+                Button {
+                    isSelected.toggle()
+                } label: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(AppStyle.selectionFill)
+                        Image(systemName: file.category.symbolName)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(AppStyle.accent)
+                    }
+                    .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
                 }
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        isSelected.toggle()
+                    } label: {
+                        Text(file.displayName)
+                            .font(AppStyle.Typography.rowTitle)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    HStack(spacing: 6) {
+                        Button(action: revealInFinder) {
+                            Text(file.locationLabel)
+                                .underline(isHoveringLocation)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppStyle.accent)
+                        .onHover { isHoveringLocation = $0 }
+                        .help("Show in Finder\n\(parentFolderPath)")
+                        .accessibilityLabel("Reveal \(file.locationLabel) in Finder")
+
+                        Text("·")
+                            .foregroundStyle(.secondary)
+                        Text("Last used \(dateText)")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(AppStyle.Typography.metadata)
+                    .lineLimit(1)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: AppStyle.Spacing.medium)
 
@@ -419,9 +457,14 @@ private struct LargeFileRow: View {
                 .monospacedDigit()
         }
         .padding(.vertical, 7)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            isSelected.toggle()
+        .contextMenu {
+            Button("Show in Finder") {
+                revealInFinder()
+            }
+
+            Button(isSelected ? "Deselect" : "Select") {
+                isSelected.toggle()
+            }
         }
     }
 }
