@@ -33,7 +33,7 @@ enum AppStyle {
     }
 
     enum Typography {
-        static let pageTitle = Font.system(size: 24, weight: .semibold, design: .rounded)
+        static let pageTitle = Font.system(size: 20, weight: .semibold, design: .rounded)
         static let rowTitle = Font.system(size: 13, weight: .medium)
         static let metadata = Font.system(size: 11)
         static let metadataEmphasis = Font.system(size: 11, weight: .medium)
@@ -61,6 +61,11 @@ enum AppStyle {
     static let hairline = Color(
         light: NSColor.black.withAlphaComponent(0.1),
         dark: NSColor.white.withAlphaComponent(0.1)
+    )
+    /// Field labels on elevated cards — readable against custom dark fills.
+    static let formLabel = Color(
+        light: NSColor(srgbRed: 0.40, green: 0.40, blue: 0.42, alpha: 1),
+        dark: NSColor(srgbRed: 0.70, green: 0.70, blue: 0.72, alpha: 1)
     )
 
     static let safe = Color(red: 54 / 255, green: 148 / 255, blue: 104 / 255)

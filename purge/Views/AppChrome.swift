@@ -39,7 +39,7 @@ enum AppDetailPageLayout {
     /// Clear band below a `safeAreaBar` page header before the scroll edge blur ramps up.
     static let scrollEdgeClearanceBelowHeader: CGFloat = 24
     /// Approximate height of `AppSectionPageHeader` (top inset + title + bottom padding).
-    static let pageTitleChromeHeight: CGFloat = topContentInset + 28 + AppStyle.Spacing.small
+    static let pageTitleChromeHeight: CGFloat = topContentInset + 24 + AppStyle.Spacing.small
     /// Extra line when a subtitle is shown (spacing + subheadline).
     static let pageSubtitleChromeHeight: CGFloat = 4 + 16
 
@@ -1180,20 +1180,46 @@ struct AppBadge: View {
     var body: some View {
         Text(text)
             .font(AppStyle.Typography.metadataEmphasis)
-            .foregroundStyle(color)
+            .foregroundStyle(foregroundColor)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(color.opacity(0.1))
+            .background(backgroundColor, in: RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                    .stroke(color.opacity(0.14))
+                    .strokeBorder(borderColor, lineWidth: 0.5)
             }
-            .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous))
+    }
+
+    private var foregroundColor: Color {
+        switch tone {
+        case .accent: return .white
+        default: return color
+        }
+    }
+
+    private var backgroundColor: Color {
+        switch tone {
+        case .accent: return AppStyle.accent
+        case .neutral:
+            return Color(
+                light: NSColor.black.withAlphaComponent(0.06),
+                dark: NSColor.white.withAlphaComponent(0.1)
+            )
+        default: return color.opacity(0.12)
+        }
+    }
+
+    private var borderColor: Color {
+        switch tone {
+        case .accent: return AppStyle.accent.opacity(0.85)
+        case .neutral: return AppStyle.hairline
+        default: return color.opacity(0.22)
+        }
     }
 
     private var color: Color {
         switch tone {
-        case .neutral: return .secondary
+        case .neutral: return AppStyle.formLabel
         case .accent: return AppStyle.accent
         case .safe: return AppStyle.safe
         case .warning: return AppStyle.warning
@@ -1218,7 +1244,7 @@ struct AppNavRow: View {
                     .frame(width: 16)
                     .foregroundStyle(isSelected ? AppStyle.accent : .secondary)
                 Text(title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
             }

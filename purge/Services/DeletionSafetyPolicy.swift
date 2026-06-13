@@ -44,7 +44,10 @@ enum DeletionSafetyPolicy {
 
     /// Sandboxed app containers whose cache directories are guarded by macOS.
     nonisolated static let protectedContainerBundleIDs: Set<String> = [
-        "com.apple.Safari"
+        "com.apple.Safari",
+        "com.apple.Home",
+        "com.apple.homed",
+        "com.apple.HomeKit"
     ]
 
     /// Folder names allowed to be removed when located anywhere inside the user's home.

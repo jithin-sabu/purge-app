@@ -388,7 +388,7 @@ struct SettingsView: View {
         ViewThatFits(in: .horizontal) {
             HStack {
                 Text(title)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppStyle.formLabel)
 
                 Spacer(minLength: 12)
 
@@ -402,7 +402,7 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppStyle.formLabel)
 
                 SettingsMenuPicker(
                     selection: selection,

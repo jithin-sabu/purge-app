@@ -242,7 +242,7 @@ struct ContentView: View {
                     ForEach(PurgeStore.Tab.allCases) { tab in
                         AppNavRow(
                             title: tab.rawValue,
-                            systemImage: tab.icon(selected: store.selectedTab == tab),
+                            systemImage: tab.icon,
                             isSelected: store.selectedTab == tab,
                             action: { store.selectedTab = tab }
                         )

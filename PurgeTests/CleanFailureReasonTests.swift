@@ -31,6 +31,31 @@ struct CleanFailureReasonTests {
         let error = NSError(domain: "TestDomain", code: 999)
         #expect(CleanFailureReason.from(error: error) == .unknown)
     }
+
+    @Test(arguments: [
+        (NSPOSIXErrorDomain, Int(EACCES)),
+        (NSPOSIXErrorDomain, Int(EPERM)),
+        (NSCocoaErrorDomain, NSFileWriteNoPermissionError),
+    ])
+    func upgradesPermissionErrorsWhenFullDiskAccessGranted(domain: String, code: Int) {
+        let error = NSError(domain: domain, code: code)
+        #expect(CleanFailureReason.from(error: error) == .needsFullDiskAccess)
+        #expect(
+            CleanFailureReason.resolved(from: error, fullDiskAccessGranted: true)
+                == .systemProtected
+        )
+        #expect(
+            CleanFailureReason.resolved(from: error, fullDiskAccessGranted: false)
+                == .needsFullDiskAccess
+        )
+    }
+
+    @Test func preservesNonPermissionReasonsWhenFullDiskAccessGranted() {
+        let busy = NSError(domain: NSPOSIXErrorDomain, code: Int(EBUSY))
+        #expect(
+            CleanFailureReason.resolved(from: busy, fullDiskAccessGranted: true) == .inUse
+        )
+    }
 }
 
 @Suite("TimeTagline fact part")

@@ -82,6 +82,16 @@ enum CleanFailureReason: Equatable, Error {
         return .unknown
     }
 
+    /// Maps a deletion error to a user-facing reason, upgrading permission errors to
+    /// `systemProtected` when Full Disk Access is already granted.
+    static func resolved(from error: Error, fullDiskAccessGranted: Bool) -> CleanFailureReason? {
+        guard let reason = from(error: error) else { return nil }
+        if fullDiskAccessGranted, reason == .needsFullDiskAccess {
+            return .systemProtected
+        }
+        return reason
+    }
+
     private static func isFileNotFound(_ error: NSError) -> Bool {
         if error.domain == NSCocoaErrorDomain,
            error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError {

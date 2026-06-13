@@ -285,7 +285,10 @@ final class FileDeleter {
         sizeBytes: Int64,
         failedItems: inout [FailedDeletionItem]
     ) {
-        guard let reason = CleanFailureReason.from(error: error) else {
+        guard let reason = CleanFailureReason.resolved(
+            from: error,
+            fullDiskAccessGranted: PermissionChecker().hasFullDiskAccess()
+        ) else {
             NSLog("Purge: item already gone, skipping %@", path)
             return
         }

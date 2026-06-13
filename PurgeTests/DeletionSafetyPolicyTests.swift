@@ -116,6 +116,19 @@ struct ProtectedSystemCachesTests {
         )
         #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
     }
+
+    @Test(arguments: [
+        "com.apple.Home",
+        "com.apple.homed",
+        "com.apple.HomeKit",
+    ])
+    func homeKitContainerCaches(bundleID: String) {
+        let url = TestPaths.homeURL(
+            "Library", "Containers", bundleID, "Data", "Library", "Caches"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
+    }
 }
 
 // MARK: - Group 3: Whitelisted absolute prefixes
