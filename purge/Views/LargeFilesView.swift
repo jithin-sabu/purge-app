@@ -420,74 +420,28 @@ private struct LargeFileRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
             Toggle("", isOn: $isSelected)
-                .toggleStyle(.checkbox)
                 .labelsHidden()
+                .toggleStyle(.checkbox)
 
-            HStack(spacing: 10) {
-                Button {
-                    isSelected.toggle()
-                } label: {
-                    Image(systemName: file.category.symbolName)
-                        .font(.system(size: AppStyle.Row.sfSymbolPointSize))
-                        .foregroundStyle(.secondary)
-                        .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
-                }
-                .buttonStyle(.plain)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Button(action: quickLook) {
-                        Text(file.displayName)
-                            .font(AppStyle.Typography.rowTitle)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { hovering in
-                        if hovering {
-                            NSCursor.pointingHand.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
-                    .help("Quick Look")
-                    .accessibilityLabel("Quick Look \(file.displayName)")
-
-                    HStack(spacing: 6) {
-                        Button(action: revealInFinder) {
-                            Text(file.locationLabel)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .underline(isHoveringLocation)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(AppStyle.accent)
-                        .onHover { isHoveringLocation = $0 }
-                        .help("Show in Finder\n\(parentFolderPath)")
-                        .accessibilityLabel("Reveal in Finder, \(file.locationLabel)")
-
-                        Text("·")
-                            .foregroundStyle(.secondary)
-                        Text("Last used \(dateText)")
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(AppStyle.Typography.metadata)
-                    .lineLimit(1)
-                }
+            Button {
+                isSelected.toggle()
+            } label: {
+                rowMainContent
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.plain)
 
-            Spacer(minLength: AppStyle.Spacing.medium)
+            Spacer(minLength: 12)
 
             Text(file.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(.secondary)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
                 .monospacedDigit()
         }
-        .padding(.vertical, 7)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .modifier(ScanRowCardChrome())
         .contextMenu {
             Button("Quick Look") {
                 quickLook()
@@ -501,6 +455,55 @@ private struct LargeFileRow: View {
                 isSelected.toggle()
             }
         }
+    }
+
+    private var rowMainContent: some View {
+        HStack(alignment: .center, spacing: 12) {
+            AdaptiveBrandIconImage(source: .sfSymbol(file.category.symbolName))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Button(action: quickLook) {
+                    Text(file.displayName)
+                        .font(.headline.weight(.semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .help("Quick Look")
+                .accessibilityLabel("Quick Look \(file.displayName)")
+
+                HStack(spacing: 6) {
+                    Button(action: revealInFinder) {
+                        Text(file.locationLabel)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .underline(isHoveringLocation)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppStyle.accent)
+                    .onHover { isHoveringLocation = $0 }
+                    .help("Show in Finder\n\(parentFolderPath)")
+                    .accessibilityLabel("Reveal in Finder, \(file.locationLabel)")
+
+                    Text("·")
+                        .foregroundStyle(.secondary)
+                    Text("Last used \(dateText)")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+                .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

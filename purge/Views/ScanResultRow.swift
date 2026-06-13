@@ -377,9 +377,9 @@ struct ScanResultRow: View {
 
 // MARK: - Row chrome
 
-private struct ScanResultRowChrome: ViewModifier {
-    let showsCardChrome: Bool
-    let canSelectForBulk: Bool
+struct ScanRowCardChrome: ViewModifier {
+    var showsCardChrome: Bool = true
+    var canSelectForBulk: Bool = true
 
     func body(content: Content) -> some View {
         if showsCardChrome {
@@ -393,6 +393,8 @@ private struct ScanResultRowChrome: ViewModifier {
         }
     }
 }
+
+private typealias ScanResultRowChrome = ScanRowCardChrome
 
 // MARK: - Placeholder
 
