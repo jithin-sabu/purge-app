@@ -766,76 +766,12 @@ private struct AppearanceOptionButton: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    @ViewBuilder
     private var thumbnail: some View {
-        switch mode {
-        case .system:
-            ZStack {
-                AppearanceThumbnail(scheme: .light)
-                AppearanceThumbnail(scheme: .dark)
-                    .clipShape(TrailingHalf())
-            }
+        Image(mode.thumbnailAssetName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 64, height: 44)
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        case .light:
-            AppearanceThumbnail(scheme: .light)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        case .dark:
-            AppearanceThumbnail(scheme: .dark)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-    }
-}
-
-private struct TrailingHalf: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path(CGRect(x: rect.midX, y: rect.minY, width: rect.width / 2, height: rect.height))
-    }
-}
-
-private struct AppearanceThumbnail: View {
-    let scheme: ColorScheme
-
-    private var isDark: Bool { scheme == .dark }
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            LinearGradient(
-                colors: isDark
-                    ? [Color(red: 0.16, green: 0.18, blue: 0.30), Color(red: 0.10, green: 0.10, blue: 0.16)]
-                    : [Color(red: 0.55, green: 0.70, blue: 0.95), Color(red: 0.75, green: 0.82, blue: 0.96)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            // Mini window with traffic lights
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 2.5) {
-                    Circle().fill(Color(red: 1.0, green: 0.37, blue: 0.34))
-                    Circle().fill(Color(red: 1.0, green: 0.74, blue: 0.18))
-                    Circle().fill(Color(red: 0.22, green: 0.79, blue: 0.25))
-                }
-                .frame(height: 4)
-
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(isDark ? Color.white.opacity(0.25) : Color.black.opacity(0.15))
-                    .frame(width: 26, height: 3)
-
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(isDark ? Color.white.opacity(0.12) : Color.black.opacity(0.08))
-                    .frame(width: 18, height: 3)
-            }
-            .padding(6)
-            .background(
-                isDark ? Color(red: 0.13, green: 0.13, blue: 0.14) : .white,
-                in: UnevenRoundedRectangle(
-                    cornerRadii: .init(topLeading: 5, bottomLeading: 0, bottomTrailing: 0, topTrailing: 5),
-                    style: .continuous
-                )
-            )
-            .padding(.top, 14)
-            .padding(.leading, 10)
-        }
-        .frame(width: 64, height: 44)
     }
 }
 

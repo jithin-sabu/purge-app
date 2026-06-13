@@ -15,6 +15,14 @@ enum AppearanceMode: String, CaseIterable {
         }
     }
 
+    var thumbnailAssetName: String {
+        switch self {
+        case .system: return "appearance-auto"
+        case .light: return "appearance-light"
+        case .dark: return "appearance-dark"
+        }
+    }
+
     /// `nil` means follow the system appearance.
     var colorScheme: ColorScheme? {
         switch self {
