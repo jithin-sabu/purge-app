@@ -4,9 +4,8 @@
 
 Purge scans your Mac for cache files and junk left behind by apps and development tools. Every item gets a plain-English explanation and a safety label before you delete anything. One-click cleanup only touches items marked **Safe to Clean**.
 
-![Purge demo](screenshots/Purge-Demo.gif)
-
 ---
+
 
 ## Features
 
@@ -29,20 +28,32 @@ Three sections in one view:
 
 In **Settings → Dev Tools**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which project folders appear.
 
+### Large Files
+
+Find space-hogging personal files without digging through folders:
+
+- Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**
+- Skips managed libraries (Photos, iMovie, Music, and similar) and hidden folders
+- Filter by **size** (5 MB to 1 GB) and **last used** (any time up to over 1 year ago)
+- Category chips for videos, audio, images, PDFs, archives, documents, and other files
+- Sort by size, date, or name; select files and review before deleting
+- **Quick Look** preview and **Reveal in Finder** from each row
+- Deletions move files to **Trash** — nothing is permanently erased
+
+Large Files is separate from cache cleanup: these are your personal files, not rebuildable caches.
+
 ### Safety labels
 
-Purge uses two labels you will see in the app:
+Purge assigns one of four labels to every item it recognizes:
 
 | Label | Meaning |
 |-------|---------|
 | **Safe to Clean** | Known cache or rebuildable artifact — safe to remove |
 | **Check First** | May be safe, but could cause inconvenience |
 
-Filter with **All**, **Safe to Clean**, or **Check First**. Sort by size, date modified, or name.
+Filter with **All**, **Safe to Clean**, or **Check First** (⌘1–⌘3). Sort by size, date modified, or name.
 
 Unidentified folders are left out of the list entirely — Purge only shows what it knows about.
-
-Row badges call out extra context when relevant: **Can be rebuilt**, **Check support files**, **Local changes nearby**, and **Manual category** (when you override an item yourself). Right-click any row to recategorize or reset to automatic.
 
 ### Cleaning
 
@@ -50,11 +61,19 @@ Row badges call out extra context when relevant: **Can be rebuilt**, **Check sup
 - **Clean Selected** — pick specific rows, review in a confirmation sheet, then delete
 - **Clean Safe Files Now** — same safe cleanup from the menu bar
 - **Scheduled cleaning** — in **Settings → Cleaning Schedule**, enable **Run automatic cleaning**, choose **How often** (weekly, monthly, or every 3 months) and **Untouched for** (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app
+- All deletions move items to **Trash**, not permanent removal
+
+### Settings
+
+- **Appearance** — Light, Dark, or System
+- **Cleaning Schedule** — automatic safe cleanup with frequency, staleness threshold, and next-clean date
+- **Dev Tools** — stale-project threshold for developer artifact scanning
+
 
 ### More
 
-- **First-run onboarding** — permissions, auto-clean preference, first scan, and a safe clean walkthrough
-- **Menu bar companion** — recoverable space at a glance, quick open, and safe cleanup
+- **First-run onboarding** — welcome, permissions (Full Disk Access and optional login item), auto-clean preference, first scan, results review, and a safe clean walkthrough
+- **Menu bar companion** — recoverable space at a glance, quick open, scan/clean actions, and all-time cleaned total
 - **Disk summary** — sidebar shows used/free space and how much is safe to recover
 - **Scan All** — rescans App Caches and Dev Tools together (⇧⌘R)
 
@@ -62,7 +81,7 @@ Row badges call out extra context when relevant: **Can be rebuilt**, **Check sup
 
 ## Download
 
-👉 [Download the latest version](https://github.com/jithinsabumec/purge-app/releases/tag/v1.1.1)
+👉 [Download the latest version](https://github.com/jithinsabumec/purge-app/releases/tag/v1.1.3)
 
 ---
 

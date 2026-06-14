@@ -8,15 +8,12 @@ enum TelemetryConfig {
         if let key = Bundle.main.infoDictionary?["AIRTABLE_API_KEY"] as? String,
            !key.isEmpty,
            key != "$(AIRTABLE_API_KEY)" {
-            print("🔑 Using key from bundle")
             return key
         }
         if let envKey = ProcessInfo.processInfo.environment["AIRTABLE_API_KEY"],
            !envKey.isEmpty {
-            print("🔑 Using AIRTABLE_API_KEY from process environment")
             return envKey
         }
-        print("🔑 Bundle key empty or unexpanded; copy Secrets.xcconfig.template to Secrets.xcconfig and set AIRTABLE_API_KEY")
         return ""
     }()
 
@@ -81,12 +78,7 @@ enum TelemetryService {
     /// Telemetry is strictly opt-in. This service is only called from explicit user actions,
     /// never on app launch, after scans, or in the background.
     static func sendTelemetry(payload: TelemetryPayload) async throws {
-        print("🔑 Airtable API key being used: '\(TelemetryConfig.airtableAPIKey)'")
-        print("🔑 Key length: \(TelemetryConfig.airtableAPIKey.count)")
-        print("🔑 Key starts with pat: \(TelemetryConfig.airtableAPIKey.hasPrefix("pat"))")
-
         guard !TelemetryConfig.airtableAPIKey.isEmpty else {
-            print("Telemetry: No API key configured, skipping send")
             return
         }
 
@@ -102,19 +94,7 @@ enum TelemetryService {
         let body = AirtableRecord(fields: payload)
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        // DEBUG: print full response
-        if let httpResponse = response as? HTTPURLResponse {
-            print("Airtable status code: \(httpResponse.statusCode)")
-        }
-        if let responseString = String(data: data, encoding: .utf8) {
-            print("Airtable response body: \(responseString)")
-        }
-        // Also print what we are sending
-        if let bodyData = request.httpBody, let bodyString = String(data: bodyData, encoding: .utf8) {
-            print("Airtable request body: \(bodyString)")
-        }
+        let (_, response) = try await URLSession.shared.data(for: request)
 
         guard let http = response as? HTTPURLResponse,
               (200...299).contains(http.statusCode) else {

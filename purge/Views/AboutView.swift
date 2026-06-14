@@ -145,6 +145,12 @@ struct AboutView: View {
 
                 InsetCardDivider()
 
+                AboutActionRow(icon: "cup.and.saucer.fill", label: "Buy me a coffee") {
+                    NSWorkspace.shared.open(buyMeACoffeeURL)
+                }
+
+                InsetCardDivider()
+
                 AboutActionRow(icon: "arrow.counterclockwise", label: "Replay onboarding") {
                     hasCompletedOnboarding = false
                 }
@@ -240,6 +246,10 @@ struct AboutView: View {
 
     private var featureRequestURL: URL {
         URL(string: "mailto:design@jithinsabu.com?subject=Purge%20Feature%20Request")!
+    }
+
+    private var buyMeACoffeeURL: URL {
+        URL(string: "https://buymeacoffee.com/jithinsabu")!
     }
 
     private var xProfileURL: URL {
