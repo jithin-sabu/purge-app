@@ -4,6 +4,7 @@ import SwiftUI
 
 private enum UDKeys {
     static let scheduledCleanEnabled = "scheduledClean.enabled"
+    static let scheduledEnabledAt = "scheduledClean.enabledAt"
     static let scheduledFrequency = "scheduledClean.frequency"
     static let scheduledStaleDays = "scheduledClean.staleDays"
 }
@@ -19,6 +20,12 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
             ud.set(isEnabled, forKey: UDKeys.scheduledCleanEnabled)
             NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: nil)
         }
+    }
+
+    /// Timestamp of when automatic cleaning was first enabled and not yet cleared.
+    /// Survives toggling off/on so the next-clean anchor is a pause/resume, not a restart.
+    var enabledAt: Date? {
+        ud.object(forKey: UDKeys.scheduledEnabledAt) as? Date
     }
 
     @Published var frequency: ScheduledCleaningFrequency {
@@ -63,6 +70,11 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
             }
         } else {
             isEnabled = enabled
+        }
+        // Anchor the schedule the first time it's enabled; never clear it on disable
+        // so toggling off then on resumes against the same anchor.
+        if enabled, enabledAt == nil {
+            ud.set(Date(), forKey: UDKeys.scheduledEnabledAt)
         }
         if enabled {
             _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()

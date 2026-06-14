@@ -40,6 +40,18 @@ final class ScheduledCleaningRegistrar {
         }
     }
 
+    /// Single source of truth for the next scheduled clean.
+    /// Anchor priority: the last actual clean wins; before any clean, fall back to
+    /// `enabledAt`; live `now` is only a last resort.
+    func nextCleanDate(referenceDate now: Date = Date()) -> Date {
+        let anchor = ScheduledCleaningRegistrar.lastGraceSweepDate
+            ?? ScheduledCleaningPreferenceStore.shared.enabledAt
+            ?? now
+        let interval = ScheduledCleaningPreferenceStore.shared.frequency.repeatIntervalSeconds
+        let candidate = anchor.addingTimeInterval(interval)
+        return candidate < now ? now : candidate
+    }
+
     func applyScheduleFromPrefs() async {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [Self.repeatingReminderIdentifier])
@@ -48,10 +60,6 @@ final class ScheduledCleaningRegistrar {
 
         _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
 
-        let prefs = ScheduledCleaningPreferenceStore.shared
-        var interval = prefs.frequency.repeatIntervalSeconds
-        if interval < 60 { interval = 60 }
-
         let content = UNMutableNotificationContent()
         content.title = "Scheduled cleanup due"
         content.body = """
@@ -59,7 +67,11 @@ final class ScheduledCleaningRegistrar {
         """
         content.sound = .default
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: true)
+        // One-shot reminder anchored to the canonical next-clean date. Re-armed by
+        // prefs changes and by the activation sweep, so it stays anchor-accurate
+        // instead of restarting on every toggle.
+        let secondsUntil = max(60, nextCleanDate().timeIntervalSinceNow)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: secondsUntil, repeats: false)
         let request = UNNotificationRequest(identifier: Self.repeatingReminderIdentifier, content: content, trigger: trigger)
 
         do {

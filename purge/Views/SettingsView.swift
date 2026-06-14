@@ -559,10 +559,7 @@ struct SettingsView: View {
     }
 
     private var nextScheduledCleanDate: Date {
-        let now = Date()
-        let baseDate = ScheduledCleaningRegistrar.lastGraceSweepDate ?? now
-        let candidate = baseDate.addingTimeInterval(prefs.frequency.repeatIntervalSeconds)
-        return candidate < now ? now : candidate
+        ScheduledCleaningRegistrar.shared.nextCleanDate()
     }
 
     private var scheduleStatusLabelFont: Font {
