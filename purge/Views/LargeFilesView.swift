@@ -485,7 +485,7 @@ private struct LargeFileRow: View {
                             .underline(isHoveringLocation)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(AppStyle.accent)
+                    .foregroundStyle(.secondary)
                     .onHover { isHoveringLocation = $0 }
                     .help("Show in Finder\n\(parentFolderPath)")
                     .accessibilityLabel("Reveal in Finder, \(file.locationLabel)")

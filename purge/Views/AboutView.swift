@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AboutView: View {
     @EnvironmentObject private var store: PurgeStore
+    @StateObject private var updateChecker = UpdateChecker()
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     var showsPageHeader = true
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
@@ -63,6 +64,11 @@ struct AboutView: View {
             Text("Version \(appVersion)")
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(.secondary)
+
+            aboutCard {
+                AboutUpdateRow(checker: updateChecker)
+            }
+            .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
     }
@@ -282,6 +288,85 @@ private struct LifetimeSizeComparisonChip: View {
                 .stroke(Color.primary.opacity(0.16), lineWidth: 1)
         }
         .accessibilityLabel("About the size of \(item.label)")
+    }
+}
+
+private struct AboutUpdateRow: View {
+    @ObservedObject var checker: UpdateChecker
+
+    private let allReleasesURL = URL(string: "https://github.com/jithinsabumec/purge-app/releases")!
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+
+            Button {
+                Task { await checker.check() }
+            } label: {
+                statusLabel
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(checker.status == .checking)
+
+            trailingContent
+        }
+        .padding(.horizontal, 16)
+        .frame(height: AppStyle.Row.compactHeight)
+    }
+
+    @ViewBuilder
+    private var statusLabel: some View {
+        switch checker.status {
+        case .idle:
+            Text("Check for updates")
+        case .checking:
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("checking...")
+                    .foregroundStyle(.secondary)
+            }
+        case .upToDate(let current):
+            Text("you're up to date (v\(current))")
+        case .updateAvailable(let latest, _):
+            Text("update available: v\(latest)")
+        case .failed:
+            Text("couldn't check")
+        }
+    }
+
+    @ViewBuilder
+    private var trailingContent: some View {
+        switch checker.status {
+        case .updateAvailable(_, let url):
+            Button("view release") {
+                NSWorkspace.shared.open(url)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+        case .failed:
+            Button("view releases") {
+                NSWorkspace.shared.open(allReleasesURL)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+        case .checking:
+            EmptyView()
+        default:
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 12)
+        }
     }
 }
 
