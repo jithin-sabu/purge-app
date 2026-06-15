@@ -71,16 +71,6 @@ enum AICacheStore {
         return nil
     }
 
-    nonisolated static func clearAll() {
-        lock.lock()
-        defer { lock.unlock() }
-        ensureDirectory()
-        if let data = try? JSONEncoder().encode([String: AICacheEntry]()) {
-            try? data.write(to: fileURL(), options: [.atomic])
-        }
-        refreshCacheLocked([:])
-    }
-
     nonisolated static func count() -> Int {
         lock.lock()
         defer { lock.unlock() }

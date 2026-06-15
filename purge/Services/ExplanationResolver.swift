@@ -58,14 +58,4 @@ enum ExplanationResolver {
             reinstallCommand: nil
         )
     }
-
-    nonisolated static func unsureSafetyInfo(headline: String) -> SafetyInfo {
-        SafetyInfo(
-            level: .unknown,
-            headline: headline,
-            explanation: unsureExplanation,
-            recoverySteps: "",
-            reinstallCommand: nil
-        )
-    }
 }

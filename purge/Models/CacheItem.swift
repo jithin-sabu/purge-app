@@ -57,11 +57,6 @@ struct CacheItem: Identifiable, Hashable {
         return locations.first { $0.path.standardizedFileURL.path == key }?.sizeBytes ?? 0
     }
 
-    mutating func applyMetadata(reinstall: ReinstallSafetyStatus, git: GitWorktreeStatus) {
-        reinstallSafety = reinstall
-        gitStatus = git
-    }
-
     func withLocations(_ locations: [CacheLocation]) -> CacheItem {
         if let definitionKey {
             return CacheItem(

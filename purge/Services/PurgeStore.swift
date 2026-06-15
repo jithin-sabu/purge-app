@@ -199,14 +199,6 @@ final class PurgeStore: ObservableObject {
         return selectedCaches + selectedTools + simSelected + projectSelected
     }
 
-    var recoverableTotalBytes: Int64 {
-        let cacheTotal = cacheItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let toolsTotal = devTools.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let simTotal = simulatorDevices.reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
-        let projTotal = projectGroups.reduce(Int64(0)) { $0 + $1.totalBytes }
-        return cacheTotal + toolsTotal + simTotal + projTotal
-    }
-
     /// Byte totals for one-click safe cleanup, grouped by tab so sidebar and filter totals stay aligned.
     struct SafeCleanupSummary {
         var appCacheBytes: Int64 = 0
@@ -215,10 +207,6 @@ final class PurgeStore: ObservableObject {
 
         var totalBytes: Int64 {
             appCacheBytes + devToolBytes + projectArtifactBytes
-        }
-
-        var devToolsTabBytes: Int64 {
-            devToolBytes + projectArtifactBytes
         }
     }
 
@@ -321,34 +309,6 @@ final class PurgeStore: ObservableObject {
                 return true
             }
             .sorted { $0.sizeBytes > $1.sizeBytes }
-    }
-
-    var checkFirstRecoverableBytes: Int64 {
-        func isCheckFirst(_ level: SafetyLevel) -> Bool {
-            level == .medium || level == .danger
-        }
-
-        let cacheBytes = cacheItems
-            .filter { isCheckFirst($0.safetyInfo.level) }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
-
-        let toolBytes = devTools
-            .filter { $0.isDetected && isCheckFirst($0.safetyInfo.level) }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
-
-        let projectBytes = projectGroups
-            .flatMap(\.artifacts)
-            .filter { isCheckFirst($0.safetyInfo.level) }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
-
-        return cacheBytes + toolBytes + projectBytes
-    }
-
-    var totalRecoverableBytes: Int64 {
-        let cacheBytes = cacheItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let toolBytes = devTools.filter(\.isDetected).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let projectBytes = projectGroups.flatMap(\.artifacts).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        return cacheBytes + toolBytes + projectBytes
     }
 
     var selectedCount: Int {
@@ -815,10 +775,6 @@ final class PurgeStore: ObservableObject {
 
     var selectedLargeFileBytes: Int64 {
         selectedLargeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
-    }
-
-    var largeFilesTotalBytes: Int64 {
-        largeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
     func scanLargeFilesIfNeeded() async {
@@ -1942,7 +1898,7 @@ final class PurgeStore: ObservableObject {
             return ExplanationDatabase.safetyInfo(from: record)
         }
         let primary = item.locations[0]
-        let fallback = appNameFromBundleIDForReset(primary.folderName) ?? item.appName
+        let fallback = appDisplayName(forBundleID: primary.folderName) ?? item.appName
         return ExplanationResolver.initialSafetyForCacheFolder(
             folderName: primary.folderName,
             friendlyHeadline: fallback,
@@ -2043,28 +1999,6 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Resolves the same friendly headline shown in scan lists for a path (scheduled cleanup).
-    private func displayNameForDeletionPath(_ standardizedPath: String) -> String {
-        if let item = cacheItems.first(where: { item in
-            item.locations.contains { $0.path.standardizedFileURL.path == standardizedPath }
-        }) {
-            return item.appName
-        }
-        for tool in devTools where tool.isDetected {
-            if tool.paths.contains(where: { $0.standardizedFileURL.path == standardizedPath }) {
-                return tool.safetyInfo.headline
-            }
-        }
-        if let sim = simulatorDevices.first(where: { $0.folderURL.standardizedFileURL.path == standardizedPath }) {
-            return sim.safetyInfo.headline
-        }
-        if let artifact = projectGroups.flatMap(\.artifacts).first(where: { $0.path.standardizedFileURL.path == standardizedPath }) {
-            return artifact.safetyInfo.headline
-        }
-        let fallback = URL(fileURLWithPath: standardizedPath).lastPathComponent
-        return fallback.isEmpty ? standardizedPath : fallback
-    }
-
     private func devToolDeletionCandidate(_ tool: DevTool, path: URL) -> DeletionCandidate {
         let key = path.standardizedFileURL.path
         let pathBytes = tool.pathSizeBytesByPath[key] ?? (tool.paths.count == 1 ? tool.sizeBytes : 0)
@@ -2122,11 +2056,6 @@ final class PurgeStore: ObservableObject {
         defaults.set(totalRecoveredBytes, forKey: StorageKeys.totalRecoveredBytes)
     }
 
-    /// Re-measures detected dev tool folders so list rows and safe cleanup totals stay aligned.
-    func refreshDetectedDevToolSizes() {
-        // Sizes are refreshed by the background scanner and streamed into `devTools`.
-    }
-
     // MARK: - Project row selection bindings
 
     func setDevToolSelected(id: String, isSelected: Bool) {
@@ -2174,17 +2103,6 @@ final class PurgeStore: ObservableObject {
             copy[index].isSelected = allSelected
         }
         simulatorDevices = copy
-    }
-
-    func setEligibleArtifactsInProjectSelected(groupIndex: Int, isSelected: Bool) {
-        guard projectGroups.indices.contains(groupIndex) else { return }
-        var copy = projectGroups
-        for idx in copy[groupIndex].artifacts.indices {
-            let info = copy[groupIndex].artifacts[idx].safetyInfo
-            guard isManualDeletionCandidateEligible(info) else { continue }
-            copy[groupIndex].artifacts[idx].isSelected = isSelected
-        }
-        projectGroups = copy
     }
 
     // MARK: - Categorization (per-row recategorize, manual mark, reset)
@@ -2396,116 +2314,6 @@ final class PurgeStore: ObservableObject {
         withAnimation {
             projectGroups = groups
         }
-    }
-
-    /// Re-resolves rows after `ai_cache.json` is cleared from Settings.
-    func reapplyAutomaticCategorizationForAllRows() {
-        var caches = cacheItems
-        for index in caches.indices {
-            let resolved = resolvedAutomaticSafety(for: caches[index])
-            caches[index].safetyInfo = resolved
-            caches[index].appName = resolved.headline
-        }
-        withAnimation {
-            cacheItems = caches
-        }
-
-        var tools = devTools
-        for index in tools.indices {
-            let tool = tools[index]
-            let label = tool.toolName
-            let info = DevScanner.automaticSafetyInfo(
-                forDevToolLabel: label,
-                primaryPath: tool.primaryOverridePath ?? tool.paths.first
-            )
-            tools[index].safetyInfo = info
-        }
-        withAnimation {
-            devTools = tools
-        }
-
-        var groups = projectGroups
-        for gi in groups.indices {
-            for ai in groups[gi].artifacts.indices {
-                let artifact = groups[gi].artifacts[ai]
-                let info = SafetyInfo.forStaleProjectArtifact(
-                    kind: artifact.kind,
-                    path: artifact.path,
-                    reinstallCommand: artifact.safetyInfo.reinstallCommand
-                )
-                groups[gi].artifacts[ai].safetyInfo = info
-            }
-        }
-        withAnimation {
-            projectGroups = groups
-        }
-
-        refreshUserOverridePaths()
-    }
-
-    func clearAllUserOverridesAndReapply() {
-        UserOverridesStore.clearAll()
-        refreshUserOverridePaths()
-        reapplyAutomaticCategorizationForAllRows()
-    }
-
-    func clearAICacheAndReapply() {
-        AICacheStore.clearAll()
-        reapplyAutomaticCategorizationForAllRows()
-    }
-
-    func resetEverythingAndReapply() {
-        AICacheStore.clearAll()
-        UserOverridesStore.clearAll()
-        refreshUserOverridePaths()
-        reapplyAutomaticCategorizationForAllRows()
-    }
-
-    /// Public read of the override entry for a given path so views can show the badge.
-    func userOverride(forPath path: URL) -> UserOverrideEntry? {
-        UserOverridesStore.read(path: path)
-    }
-
-    private func appNameFromBundleIDForReset(_ bundleID: String) -> String? {
-        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return nil
-        }
-        return FileManager.default.displayName(atPath: appURL.path)
-    }
-
-    private func devToolExplanationKey(forToolLabel toolLabel: String) -> String {
-        let map: [String: String] = [
-            "Xcode Derived Data": "DerivedData",
-            "Xcode iOS DeviceSupport": "iOS DeviceSupport",
-            "Xcode Archives": "archives",
-            "Xcode Caches": "xcode",
-            "Homebrew Cache": "homebrew",
-            "Gradle Cache": "gradle",
-            "Docker Desktop": "docker",
-            "npm Cache": "npm",
-            "pnpm Store": "pnpm",
-            "Yarn Cache": "yarn",
-            "CocoaPods": "cocoapods",
-            "Git Worktrees": "gitworktrees",
-            "VS Code Cache": "vscode",
-            "Cursor Cache": "cursor",
-            "JetBrains Cache": "jetbrains",
-            "Zed Cache": "zed",
-            "Go Module Cache": "go",
-            "Maven Cache": "maven",
-            "SBT Cache": "sbt",
-            "Ruby Gems": "rubygems",
-            "Bundler Cache": "bundler",
-            "Composer Cache": "composer",
-            "Cargo Registry": "cargo",
-            "Terraform Cache": "terraform",
-            "GitHub Actions Cache": "githubactions",
-            "Vagrant Cache": "vagrant",
-            "Zsh Cache": "zsh",
-            "Electron App Caches": "electron",
-            "Playwright Browsers": "playwright"
-        ]
-        return map[toolLabel] ?? toolLabel
     }
 
     private func manualOverrideExplanation(level: SafetyLevel) -> String {

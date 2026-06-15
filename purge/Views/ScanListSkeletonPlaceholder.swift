@@ -16,10 +16,8 @@ enum SkeletonRowCount {
 // MARK: - Primitives
 
 enum SkeletonOpacity {
-    static let strong: Double = 0.2
     static let medium: Double = 0.15
     static let light: Double = 0.14
-    static let subtle: Double = 0.12
 }
 
 struct SkeletonBar: View {
@@ -45,17 +43,6 @@ struct SkeletonFillBar: View {
             .fill(Color.secondary.opacity(SkeletonOpacity.medium))
             .frame(maxWidth: .infinity)
             .frame(height: height)
-            .accessibilityHidden(true)
-    }
-}
-
-struct SkeletonCircle: View {
-    var diameter: CGFloat
-
-    var body: some View {
-        Circle()
-            .fill(Color.secondary.opacity(SkeletonOpacity.light))
-            .frame(width: diameter, height: diameter)
             .accessibilityHidden(true)
     }
 }
@@ -118,25 +105,6 @@ extension AnyTransition {
     }
 }
 
-// MARK: - List loading surface
-
-/// Crossfades between the shared list skeleton and loaded results.
-/// App Caches and Dev Tools both use this so loading behavior stays identical.
-struct ScanResultsListLoadingSurface<Loaded: View>: View {
-    let isLoading: Bool
-    let skeletonRowCount: Int
-    @ViewBuilder var loaded: () -> Loaded
-
-    var body: some View {
-        ScanContentCrossfade(isLoading: isLoading) {
-            ScanListSkeletonPlaceholder(rowCount: skeletonRowCount)
-        } loaded: {
-            loaded()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 // MARK: - List placeholder
 
 /// List-shaped placeholder rows shown while a tab scan is in progress.
@@ -162,68 +130,6 @@ struct ScanListSkeletonPlaceholder: View {
         .background(AppStyle.canvas)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading results")
-    }
-}
-
-// MARK: - Filter chips
-
-struct FilterChipSkeletonRow: View {
-    var chipCount: Int = SafetyFilter.allCases.count
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                ForEach(0..<chipCount, id: \.self) { index in
-                    let width: CGFloat = 64 + CGFloat((index * 11) % 36)
-                    SkeletonBar(width: width, height: 26, cornerRadius: AppStyle.Radius.chip)
-                        .shimmering()
-                }
-            }
-            .padding(.vertical, 2)
-        }
-        .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading filters")
-    }
-}
-
-// MARK: - Status bar
-
-struct ScanStatusBarSkeleton: View {
-    var showsSelectedSummary: Bool = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            SkeletonBar(width: 88, height: 10)
-            if showsSelectedSummary {
-                Text("·")
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-                SkeletonBar(width: 72, height: 10)
-            }
-
-            Spacer(minLength: 12)
-
-            if showsSelectedSummary {
-                SkeletonBar(width: 64, height: 10)
-                Text("·")
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-            }
-            SkeletonBar(width: 76, height: 10)
-        }
-        .font(.footnote)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(AppStyle.canvas)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(AppStyle.hairline)
-                .frame(height: 1)
-        }
-        .shimmering()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading scan summary")
     }
 }
 

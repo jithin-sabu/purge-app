@@ -81,10 +81,6 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         }
         Task { await ScheduledCleaningRegistrar.shared.applyScheduleFromPrefs() }
     }
-
-    func updateFrequencyWithoutSideEffects(_ freq: ScheduledCleaningFrequency) {
-        frequency = freq
-    }
 }
 
 extension Notification.Name {

@@ -51,16 +51,6 @@ enum ReinstallSafetyEvaluator {
         return hasFile(android, "build.gradle") || hasFile(android, "build.gradle.kts")
     }
 
-    /// For paths like global Derived Data (always safe reinstall-wise).
-    nonisolated static func evaluateGlobalCachePath(lastPathComponent: String) -> ReinstallSafetyStatus {
-        switch lastPathComponent.lowercased() {
-        case "deriveddata":
-            return .notApplicable
-        default:
-            return .notApplicable
-        }
-    }
-
     nonisolated static func evaluateByFolderNameDeleting(path: URL) -> ReinstallSafetyStatus {
         let name = path.lastPathComponent.lowercased()
         switch name {

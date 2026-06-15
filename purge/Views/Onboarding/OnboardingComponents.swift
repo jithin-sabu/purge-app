@@ -168,50 +168,6 @@ struct OnboardingPermissionGroup<Content: View>: View {
   }
 }
 
-struct OnboardingNotificationPreviewCard: View {
-  let appName: String
-  let timeLabel: String
-  let bodyText: String
-
-  var body: some View {
-    HStack(alignment: .top, spacing: AppStyle.Spacing.small) {
-      Image(nsImage: NSApplication.shared.applicationIconImage)
-        .resizable()
-        .aspectRatio(contentMode: .fit)
-        .frame(width: 32, height: 32)
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .accessibilityHidden(true)
-
-      VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 4) {
-          Text(appName)
-            .font(.subheadline.weight(.semibold))
-          Text("·")
-            .foregroundStyle(.tertiary)
-          Text(timeLabel)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
-        Text(bodyText)
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      Spacer(minLength: 0)
-    }
-    .padding(AppStyle.Spacing.small)
-    .background(AppStyle.elevated, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
-    .overlay {
-      RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-        .stroke(AppStyle.hairline)
-    }
-    .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(appName), \(timeLabel). \(bodyText)")
-  }
-}
-
 struct OnboardingToggleRow: View {
   let title: String
   let subtitle: String

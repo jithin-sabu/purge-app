@@ -1140,24 +1140,6 @@ struct DevToolsView<PageHeader: View>: View {
         }
     }
 
-    private var devHeaderRow: some View {
-        HStack {
-            Text("Dev Tools")
-                .font(.title3)
-                .fontWeight(.bold)
-            Spacer()
-            Button(action: onScan) {
-                Label("Scan", systemImage: "arrow.clockwise")
-                    .labelStyle(.titleAndIcon)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(AppStyle.accent)
-            .keyboardShortcut("r", modifiers: [.command])
-        }
-    }
-
     private var emptyFilterState: some View {
         VStack(spacing: 4) {
             Text("Nothing here.")

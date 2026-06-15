@@ -46,10 +46,6 @@ enum AppDetailPageLayout {
     static func pageHeaderChromeHeight(includesSubtitle: Bool) -> CGFloat {
         pageTitleChromeHeight + (includesSubtitle ? pageSubtitleChromeHeight : 0)
     }
-
-    static func scrollEdgeInsetBelowPageHeader(includesSubtitle: Bool) -> CGFloat {
-        pageHeaderChromeHeight(includesSubtitle: includesSubtitle) + scrollEdgeClearanceBelowHeader
-    }
 }
 
 @available(macOS 26.0, *)
@@ -1061,33 +1057,6 @@ extension AnyTransition {
             active: SafeCleanupCelebrationBlurModifier(radius: 18, opacity: 0),
             identity: SafeCleanupCelebrationBlurModifier(radius: 0, opacity: 1)
         )
-    }
-}
-
-struct AppPageHeader<Trailing: View>: View {
-    let title: String
-    let subtitle: String
-    @ViewBuilder var trailing: () -> Trailing
-
-    var body: some View {
-        HStack(alignment: .top, spacing: AppStyle.Spacing.medium) {
-            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
-                Text(title)
-                    .font(AppStyle.Typography.pageTitle)
-                    .foregroundStyle(.primary)
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: AppStyle.Spacing.medium)
-
-            trailing()
-        }
-        .padding(.horizontal, AppStyle.Spacing.large)
-        .padding(.top, AppStyle.Spacing.large)
-        .padding(.bottom, AppStyle.Spacing.small)
     }
 }
 

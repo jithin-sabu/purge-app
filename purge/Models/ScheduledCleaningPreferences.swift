@@ -56,14 +56,6 @@ enum ScheduledCleaningUnusedDaysOption: Int, Codable, CaseIterable, Identifiable
     var developerArtifactStaleDays: Int {
         max(Self.developerArtifactFloorDays, rawValue * 6)
     }
-
-    /// Reads the configured developer-artifact staleness threshold without `@MainActor`.
-    nonisolated static func currentDeveloperArtifactStaleDays(userDefaults: UserDefaults = .standard) -> Int {
-        let raw = userDefaults.integer(forKey: "scheduledClean.staleDays")
-        let days = raw == 0 ? ScheduledCleaningUnusedDaysOption.months6.rawValue : raw
-        let option = ScheduledCleaningUnusedDaysOption(rawValue: days) ?? .months6
-        return option.developerArtifactStaleDays
-    }
 }
 
 enum DevToolsStalenessOption: Int, Codable, CaseIterable, Identifiable {

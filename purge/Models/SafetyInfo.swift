@@ -46,21 +46,6 @@ enum SafetyLevel: String, CaseIterable, Codable, Hashable {
         case .unknown: return filled ? "questionmark.circle.fill" : "questionmark.circle"
         }
     }
-
-    var iconColor: Color {
-        switch self {
-        case .safe: return AppStyle.safe
-        case .medium: return AppStyle.warning
-        case .danger: return AppStyle.danger
-        case .unknown: return AppStyle.neutral
-        }
-    }
-}
-
-enum PurgeSummarySymbol {
-    static func freedSoFar(filled: Bool = true) -> String {
-        filled ? "minus.circle.fill" : "minus.circle"
-    }
 }
 
 struct SafetyInfo: Hashable {

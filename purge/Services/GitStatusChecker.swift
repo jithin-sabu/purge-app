@@ -52,20 +52,6 @@ enum GitWarningPolicy {
 actor GitStatusChecker {
     private var cache: [String: GitWorktreeStatus] = [:]
 
-    /// Underlying repo cleanliness check. Prefer `cleanupStatus(for:)` for UI
-    /// signals; this is only useful when the caller already vetted the path.
-    func worktreeStatus(for itemPath: URL) async -> GitWorktreeStatus {
-        guard let repoRoot = GitRepositoryFinder.enclosingRepository(for: itemPath) else {
-            return .clean
-        }
-        let key = repoRoot.path
-        if let hit = cache[key] { return hit }
-
-        let status = await GitStatusChecker.runGitStatus(repository: repoRoot)
-        cache[key] = status
-        return status
-    }
-
     /// Status used to decide whether to show "Unfinished local changes nearby".
     /// Skips the check entirely for known rebuildable folders, and only flags
     /// folders that sit directly inside the enclosing git repository.

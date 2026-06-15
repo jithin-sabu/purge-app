@@ -65,17 +65,8 @@ struct DeletionReport: Identifiable {
         max(0, availableCapacityAfter - availableCapacityBefore)
     }
 
-    var hasUserVisibleSkips: Bool {
-        skippedItems.contains { $0.isUserVisible }
-    }
-
     var movedToTrashCount: Int {
         deletedItems.lazy.filter(\.movedToTrash).count
-    }
-
-    /// Selected items that did not get cleaned and the user should hear about.
-    var userVisibleFailureCount: Int {
-        failedItems.count + skippedItems.lazy.filter(\.isUserVisible).count
     }
 }
 

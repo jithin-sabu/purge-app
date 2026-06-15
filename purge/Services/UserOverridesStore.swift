@@ -105,12 +105,6 @@ enum UserOverridesStore {
         persistLocked(entries)
     }
 
-    nonisolated static func clearAll() {
-        lock.lock()
-        defer { lock.unlock() }
-        persistLocked([:])
-    }
-
     nonisolated static func allOverriddenPaths() -> Set<String> {
         lock.lock()
         defer { lock.unlock() }

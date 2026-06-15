@@ -20,29 +20,6 @@ final class CacheScanner {
         ])
     }
 
-    func scanCaches() async -> [CacheItem] {
-        var items: [CacheItem] = []
-        for await event in scanGeneralStream() {
-            switch event {
-            case .found(let item):
-                items = DefinitionCacheGrouper.group(items + [item])
-            case .sizeResolved(let path, let sizeBytes, let lastModified):
-                items = Self.itemsByApplyingSize(path: path, sizeBytes: sizeBytes, lastModified: lastModified, to: items)
-            case .status:
-                break
-            }
-        }
-        return items
-    }
-
-    func scanSystemJunk() async -> [CacheItem] {
-        let all = await scanCaches()
-        let junkPaths = Set(systemJunkLocations(home: FileManager.default.homeDirectoryForCurrentUser).map { $0.url.standardizedFileURL.path })
-        return all.filter { item in
-            item.locations.contains { junkPaths.contains($0.path.standardizedFileURL.path) }
-        }
-    }
-
     func scanGeneralStream() -> AsyncStream<CacheScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) { [weak self] in
@@ -200,7 +177,7 @@ final class CacheScanner {
             collectedPaths.insert(pathKey)
 
             let modified = values.contentModificationDate ?? .distantPast
-            let fallbackAppName = appNameFromBundleID(bundleID) ?? bundleID
+            let fallbackAppName = appDisplayName(forBundleID: bundleID) ?? bundleID
             let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
                 folderName: bundleID,
                 friendlyHeadline: fallbackAppName,
@@ -264,7 +241,7 @@ final class CacheScanner {
         var items: [CacheItem] = []
         for cacheURL in CacheDiscoveryPaths.containerCacheURLs(home: home) {
             let bundleID = containerBundleID(from: cacheURL) ?? cacheURL.lastPathComponent
-            let appName = appNameFromBundleID(bundleID) ?? bundleID
+            let appName = appDisplayName(forBundleID: bundleID) ?? bundleID
             let subfolderName = cacheURL.lastPathComponent
             let isCachesRoot = subfolderName == "Caches"
             let folderName = isCachesRoot ? bundleID : subfolderName
@@ -466,36 +443,5 @@ final class CacheScanner {
                 home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)
             )
         ]
-    }
-
-    private static func itemsByApplyingSize(
-        path: String,
-        sizeBytes: Int64,
-        lastModified: Date,
-        to items: [CacheItem]
-    ) -> [CacheItem] {
-        var updated: [CacheItem] = []
-        for item in items {
-            let locations = item.locations.compactMap { location -> CacheLocation? in
-                guard location.path.standardizedFileURL.path == path else { return location }
-                guard sizeBytes > 0 else { return nil }
-                return CacheLocation(
-                    path: location.path,
-                    sizeBytes: sizeBytes,
-                    lastModified: lastModified,
-                    folderName: location.folderName
-                )
-            }
-            guard !locations.isEmpty else { continue }
-            updated.append(item.withLocations(locations))
-        }
-        return DefinitionCacheGrouper.group(updated)
-    }
-
-    private func appNameFromBundleID(_ bundleID: String) -> String? {
-        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return nil
-        }
-        return FileManager.default.displayName(atPath: appURL.path)
     }
 }

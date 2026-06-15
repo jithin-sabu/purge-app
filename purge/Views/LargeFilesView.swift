@@ -69,10 +69,6 @@ struct LargeFilesView: View {
         return .mixed
     }
 
-    private var selectedVisibleCount: Int {
-        visibleFiles.filter(\.isSelected).count
-    }
-
     var body: some View {
         Group {
             if usesExternalScrollContainer {

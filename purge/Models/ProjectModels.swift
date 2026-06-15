@@ -6,8 +6,6 @@ enum NodePackageManager: String, Hashable, Sendable {
     case pnpm
     case yarn
 
-    nonisolated var badgeLabel: String { rawValue }
-
     nonisolated var installCommand: String {
         switch self {
         case .npm: return "npm install"
@@ -126,6 +124,4 @@ struct ProjectGroup: Identifiable, Hashable {
     var totalBytes: Int64 {
         artifacts.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
-
-    var formattedTotal: String { formatBytes(totalBytes) }
 }

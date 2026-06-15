@@ -1,12 +1,5 @@
 import Foundation
 
-/// Result of filesystem discovery for Dev Tools.
-struct DeveloperScanOutcome {
-    let tools: [DevTool]
-    let projects: [ProjectGroup]
-    let simulators: [SimulatorDevice]
-}
-
 enum DeveloperScanEvent {
     case status(String)
     case devToolFound(DevTool)
@@ -116,17 +109,6 @@ final class DevScanner {
         Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0
     }
 
-    func scanDevTools() async -> DeveloperScanOutcome {
-        let tools = scanGlobalCaches()
-        let discovered = await discoverShutdownSimulatorsWithoutSizes()
-        let simulatorList = await measureSimulatorFolderSizes(discovered)
-        return DeveloperScanOutcome(
-            tools: tools.sorted { $0.sizeBytes > $1.sizeBytes },
-            projects: [],
-            simulators: simulatorList.sorted { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
-        )
-    }
-
     func scanDevToolsStream() -> AsyncStream<DeveloperScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) { [weak self] in
@@ -214,12 +196,6 @@ final class DevScanner {
 
     // MARK: - iOS Simulators
 
-    /// Full pipeline: discover shutdown simulators, then measure every device folder on disk.
-    func loadSimulators() async -> [SimulatorDevice] {
-        let discovered = await discoverShutdownSimulatorsWithoutSizes()
-        return await measureSimulatorFolderSizes(discovered)
-    }
-
     /// Metadata only (`sizeOnDisk` is `nil`). Requires `xcrun` and a CoreSimulator devices folder.
     func discoverShutdownSimulatorsWithoutSizes() async -> [SimulatorDevice] {
         let devicesRoot = FileManager.default.homeDirectoryForCurrentUser
@@ -231,21 +207,6 @@ final class DevScanner {
             return fromSimctl
         }
         return loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot)
-    }
-
-    /// Fills `sizeOnDisk` for each row (can be slow for many devices).
-    func measureSimulatorFolderSizes(_ devices: [SimulatorDevice]) async -> [SimulatorDevice] {
-        guard !devices.isEmpty else { return [] }
-
-        let folderURLs = devices.map(\.folderURL)
-        let sizesByPath = FolderSizing.directorySizes(at: folderURLs)
-
-        return devices.map { device in
-            var copy = device
-            let pathKey = device.folderURL.standardizedFileURL.path
-            copy.sizeOnDisk = sizesByPath[pathKey] ?? 0
-            return copy
-        }
     }
 
     private static let xcrunPath = "/usr/bin/xcrun"
@@ -427,92 +388,6 @@ final class DevScanner {
         let platform = String(parts[0])
         let version = String(parts[1]).replacingOccurrences(of: "-", with: ".")
         return "\(platform) \(version)"
-    }
-
-    // MARK: - Docker size calculation
-
-    private func dockerDiskUsageBytes() -> Int64 {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/local/bin/docker")
-        process.arguments = ["system", "df", "--format", "{{json .}}"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            if process.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    return parseDockerDFOutput(output)
-                }
-            }
-        } catch {}
-
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let rawPaths = [
-            home.appendingPathComponent("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw"),
-            home.appendingPathComponent("Library/Group Containers/group.com.docker/Data/vms/0/data/Docker.raw")
-        ]
-
-        for path in rawPaths {
-            if FileManager.default.fileExists(atPath: path.path) {
-                if let values = try? path.resourceValues(forKeys: [.totalFileAllocatedSizeKey]),
-                   let allocated = values.totalFileAllocatedSize, allocated > 0 {
-                    return Int64(allocated)
-                }
-            }
-        }
-
-        let containerPath = home.appendingPathComponent(
-            "Library/Containers/com.docker.docker", isDirectory: true
-        )
-        return FolderSizing.directoryByteSize(at: containerPath)
-    }
-
-    private func parseDockerDFOutput(_ output: String) -> Int64 {
-        var total: Int64 = 0
-        let lines = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        for line in lines {
-            guard let data = line.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let sizeString = json["Size"] as? String else { continue }
-            total += parseDockerSizeString(sizeString)
-        }
-        return total
-    }
-
-    private func parseDockerSizeString(_ size: String) -> Int64 {
-        let trimmed = size.trimmingCharacters(in: .whitespaces)
-        if trimmed == "0B" || trimmed == "0" { return 0 }
-
-        let units: [(String, Int64)] = [
-            ("TB", 1_000_000_000_000),
-            ("GB", 1_000_000_000),
-            ("MB", 1_000_000),
-            ("KB", 1_000),
-            ("B", 1)
-        ]
-
-        for (unit, multiplier) in units {
-            if trimmed.hasSuffix(unit) {
-                let numberString = String(trimmed.dropLast(unit.count))
-                if let value = Double(numberString) {
-                    return Int64(value * Double(multiplier))
-                }
-            }
-        }
-        return 0
-    }
-
-    // MARK: - Folder sizing
-
-    /// Shared dev-tool path sizing used by scans, list rows, and safe cleanup totals.
-    nonisolated static func pathByteSize(toolLabel: String, at url: URL) -> Int64 {
-        FolderSizing.directoryByteSize(at: url)
     }
 
     // MARK: - Global dev tool caches
@@ -741,45 +616,6 @@ final class DevScanner {
             if l != r { return l < r ? .orderedAscending : .orderedDescending }
         }
         return .orderedSame
-    }
-
-    private func scanGlobalCaches() -> [DevTool] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let mapped = Self.globalCacheDefinitions() + discoverObsoleteEditorExtensionDefinitions(home: home)
-
-        let built = mapped.map { entry -> DevTool in
-            let label = entry.label
-            let paths = entry.paths
-            let existing = paths.filter {
-                FileManager.default.fileExists(atPath: $0.path)
-                    && DeletionSafetyPolicy.isOfferedForCleanup($0)
-            }
-
-            var pathSizes: [String: Int64] = [:]
-            for path in existing {
-                pathSizes[path.standardizedFileURL.path] = Self.pathByteSize(toolLabel: label, at: path)
-            }
-            let size = pathSizes.values.reduce(Int64(0), +)
-            let modified = existing.map { FolderSizing.contentModificationDate(at: $0) }.max() ?? .distantPast
-
-            let definitionKey = Self.toolExplanationKeys[label] ?? label
-            return DevTool(
-                definitionKey: definitionKey,
-                toolName: label,
-                paths: existing.map(\.standardizedFileURL),
-                sizeBytes: size,
-                pathSizeBytesByPath: pathSizes,
-                lastModified: modified,
-                isSelected: false,
-                isDetected: !existing.isEmpty,
-                safetyInfo: safetyInfo(
-                    forToolLabel: label,
-                    primaryPath: paths.first
-                ),
-                reinstallSafety: reinstallRollup(for: existing)
-            )
-        }
-        return groupDevToolsByDefinitionKey(built)
     }
 
     private func groupDevToolsByDefinitionKey(_ tools: [DevTool]) -> [DevTool] {

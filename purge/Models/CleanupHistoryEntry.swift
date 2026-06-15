@@ -79,8 +79,4 @@ struct CleanupHistoryFile: Codable {
     mutating func clear() {
         entries.removeAll()
     }
-
-    var allTimeTotalFreedBytes: Int64 {
-        entries.reduce(Int64(0)) { $0 + $1.totalFreedBytes }
-    }
 }

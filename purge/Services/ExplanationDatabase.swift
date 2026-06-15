@@ -61,7 +61,6 @@ enum ExplanationDatabase {
     private nonisolated(unsafe) static var cachedAliasKeyIndex: [String: String]?
     private nonisolated(unsafe) static var cachedBundleKeyIndex: [String: String]?
     private nonisolated(unsafe) static var cachedBundleIDsByKey: [String: [String]]?
-    private nonisolated(unsafe) static var cachedAliasesByKey: [String: [String]]?
 
     private nonisolated static func loadFromBundle() -> [String: BundledExplanationRecord] {
         if let cachedRecords { return cachedRecords }
@@ -79,15 +78,11 @@ enum ExplanationDatabase {
             var aliasIndex: [String: BundledExplanationRecord] = [:]
             var aliasKeyIndex: [String: String] = [:]
             var bundleIDsByKey: [String: [String]] = [:]
-            var aliasesByKey: [String: [String]] = [:]
             for entry in array {
                 let rec = entry.record
                 dict[entry.key] = rec
                 if let bundleIds = entry.bundleIds, !bundleIds.isEmpty {
                     bundleIDsByKey[entry.key] = bundleIds
-                }
-                if let aliases = entry.aliases, !aliases.isEmpty {
-                    aliasesByKey[entry.key] = aliases
                 }
                 if let aliases = entry.aliases {
                     for alias in aliases {
@@ -100,7 +95,6 @@ enum ExplanationDatabase {
             cachedAliasIndex = aliasIndex
             cachedAliasKeyIndex = aliasKeyIndex
             cachedBundleIDsByKey = bundleIDsByKey
-            cachedAliasesByKey = aliasesByKey
             return dict
         }
 
@@ -197,29 +191,6 @@ enum ExplanationDatabase {
     /// All bundle IDs declared under a definition key.
     nonisolated static func allBundleIDs(forKey key: String) -> [String] {
         bundleIDsByKeyIndex()[key] ?? []
-    }
-
-    /// Bundle IDs plus alias strings that look like bundle identifiers (for container cache probing).
-    nonisolated static func containerProbeBundleIDs(forKey key: String) -> [String] {
-        var ids = Set(allBundleIDs(forKey: key))
-        for alias in aliasesByKeyIndex()[key] ?? [] where alias.contains(".") {
-            ids.insert(alias)
-        }
-        return Array(ids)
-    }
-
-    private nonisolated static func aliasesByKeyIndex() -> [String: [String]] {
-        if let cachedAliasesByKey { return cachedAliasesByKey }
-        _ = loadFromBundle()
-        return cachedAliasesByKey ?? [:]
-    }
-
-    /// Sandbox app container cache folder when present.
-    nonisolated static func containerCacheURL(forBundleID bundleID: String, home: URL) -> URL? {
-        let url = home
-            .appendingPathComponent("Library/Containers/\(bundleID)/Data/Library/Caches", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return url
     }
 
     nonisolated static func record(forKey key: String) -> BundledExplanationRecord? {
