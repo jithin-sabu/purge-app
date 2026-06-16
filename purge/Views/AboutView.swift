@@ -163,7 +163,7 @@ struct AboutView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
 
-                    Text("purge is unsigned, so macOS throws that scary 'unidentified developer' warning on first open. chip in toward the $99/yr apple developer fee and i can sign it so installs are clean.")
+                    Text("Purge is free and always will be. If it has earned a spot on your Mac, chip in toward the Apple Developer Fee and help drop the 'unidentified developer' warning.")
                         .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -171,7 +171,7 @@ struct AboutView: View {
                     fundingProgressBar
 
                     HStack(alignment: .center, spacing: 8) {
-                        Text("$\(Int(fundingStore.info.raised)) of $99 (first year)")
+                        Text(fundingProgressLabel)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.tertiary)
                             .monospacedDigit()
@@ -222,6 +222,12 @@ struct AboutView: View {
         .frame(height: 4)
         .accessibilityLabel("Developer fee progress")
         .accessibilityValue("\(Int(fundingStore.progress * 100)) percent")
+    }
+
+    private var fundingProgressLabel: String {
+        let base = "$\(Int(fundingStore.info.raised)) of $99 (first year)"
+        let count = fundingStore.info.contributorCount
+        return "\(base) · \(count) chipped in"
     }
 
     private var fundingPaymentURL: URL? {

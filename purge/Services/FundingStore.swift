@@ -3,10 +3,38 @@ import Foundation
 
 struct FundingInfo: Codable {
     var raised: Double
+    var contributorCount: Int
     var goal: Double
     var currency: String
     var paymentURL: String
     var signed: Bool
+
+    init(
+        raised: Double,
+        contributorCount: Int,
+        goal: Double,
+        currency: String,
+        paymentURL: String,
+        signed: Bool
+    ) {
+        self.raised = raised
+        self.contributorCount = contributorCount
+        self.goal = goal
+        self.currency = currency
+        self.paymentURL = paymentURL
+        self.signed = signed
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        raised = try container.decode(Double.self, forKey: .raised)
+        // Tolerate older payloads that predate the contributor count.
+        contributorCount = try container.decodeIfPresent(Int.self, forKey: .contributorCount) ?? 0
+        goal = try container.decode(Double.self, forKey: .goal)
+        currency = try container.decode(String.self, forKey: .currency)
+        paymentURL = try container.decode(String.self, forKey: .paymentURL)
+        signed = try container.decode(Bool.self, forKey: .signed)
+    }
 }
 
 @MainActor
@@ -23,6 +51,7 @@ final class FundingStore: ObservableObject {
         } else {
             info = FundingInfo(
                 raised: 0,
+                contributorCount: 0,
                 goal: 99,
                 currency: "USD",
                 paymentURL: "",
