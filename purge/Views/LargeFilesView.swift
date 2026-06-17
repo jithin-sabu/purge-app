@@ -191,13 +191,14 @@ struct LargeFilesView: View {
                 }
             }
         } label: {
-            filterDropdownLabel(
-                title: sizeThreshold.menuButtonLabel,
-                systemImage: "arrow.up.forward.circle"
+            FilterChip(
+                style: .dropdown,
+                label: sizeThreshold.menuButtonLabel,
+                leadingSystemImage: "arrow.up.forward.circle"
             )
         }
         .menuStyle(.button)
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel("Size filter")
         .accessibilityValue(sizeThreshold.menuButtonLabel)
@@ -218,28 +219,17 @@ struct LargeFilesView: View {
                 }
             }
         } label: {
-            filterDropdownLabel(
-                title: ageThreshold.menuButtonLabel,
-                systemImage: "calendar"
+            FilterChip(
+                style: .dropdown,
+                label: ageThreshold.menuButtonLabel,
+                leadingSystemImage: "calendar"
             )
         }
         .menuStyle(.button)
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel("Last used filter")
         .accessibilityValue(ageThreshold.menuButtonLabel)
-    }
-
-    private func filterDropdownLabel(title: String, systemImage: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .imageScale(.small)
-            Text(title)
-                .lineLimit(1)
-            Image(systemName: "chevron.down")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-        }
     }
 
     private func categoryChip(id: String, title: String, systemImage: String, count: Int) -> some View {
@@ -247,31 +237,14 @@ struct LargeFilesView: View {
         return Button {
             selectCategory(id)
         } label: {
-            HStack(spacing: 6) {
-                AppChipIcon(
-                    systemName: systemImage,
-                    color: isOn ? AppColors.textPrimary : .secondary
-                )
-                AppChipTitle(text: title, isSelected: isOn)
-                Text("\(count)")
-                    .font(.callout.weight(.medium))
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .foregroundStyle(.tertiary)
-            }
-            .font(.system(size: 13))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background {
-                Capsule()
-                    .fill(isOn ? AppColors.bgElevated : Color.clear)
-            }
-            .overlay {
-                Capsule()
-                    .strokeBorder(isOn ? AppColors.borderSubtle : Color.clear, lineWidth: 1)
-            }
-            .contentShape(Capsule())
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isOn)
+            FilterChip(
+                style: .tab,
+                label: title,
+                isSelected: isOn,
+                tier: .neutral,
+                leadingSystemImage: systemImage,
+                count: count
+            )
         }
         .buttonStyle(.plain)
     }

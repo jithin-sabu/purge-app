@@ -54,14 +54,6 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         case .checkFirst: return SafetyLevel.medium.symbolName(filled: isSelected)
         }
     }
-
-    func chipIconColor(isSelected: Bool) -> Color {
-        switch self {
-        case .all: return isSelected ? AppColors.textPrimary : .secondary
-        case .safe: return AppColors.tagSafeText
-        case .checkFirst: return AppColors.tagCheckText
-        }
-    }
 }
 
 enum SortOption: String, CaseIterable, Identifiable {
@@ -177,10 +169,6 @@ struct FilterSortToolbar: View {
         selectedInScopeCount == 0 || isDeleting
     }
 
-    private var activeChipFill: Color {
-        AppColors.bgElevated
-    }
-
     var body: some View {
         Group {
             if useStackedLayout {
@@ -258,34 +246,15 @@ struct FilterSortToolbar: View {
         return Button {
             select(filter)
         } label: {
-            HStack(spacing: 6) {
-                AppChipIcon(
-                    systemName: filter.chipSymbolName(isSelected: isOn),
-                    color: filter.chipIconColor(isSelected: isOn)
-                )
-                AppChipTitle(text: filter.displayName, isSelected: isOn)
-                Text("\(count)")
-                    .font(.callout.weight(.medium))
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: count)
-                    .foregroundStyle(.tertiary)
-            }
-            .font(.system(size: 13))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background {
-                Capsule()
-                    .fill(isOn ? activeChipFill : Color.clear)
-            }
-            .overlay {
-                Capsule()
-                    .stroke(AppColors.borderSubtle)
-            }
-            .foregroundStyle(isOn ? Color.primary : Color.secondary)
+            FilterChip(
+                style: .tab,
+                label: filter.displayName,
+                isSelected: isOn,
+                tier: filter.chipTier,
+                leadingSystemImage: filter.chipSymbolName(isSelected: isOn),
+                count: count
+            )
             .opacity(count == 0 && !isOn ? 0.45 : 1.0)
-            .contentShape(Capsule())
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isOn)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(filter.displayName), \(count) items")
