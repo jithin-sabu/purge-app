@@ -356,7 +356,7 @@ struct AboutView: View {
     }
 
     private var fundingProgressLabel: String {
-        let base = "$\(Int(fundingStore.info.raised)) of $99 (first year)"
+        let base = "$\(Int(fundingStore.info.raised)) of $99"
         let count = fundingStore.info.contributorCount
         return "\(base) · \(count) chipped in"
     }

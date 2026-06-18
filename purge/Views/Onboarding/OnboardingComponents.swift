@@ -390,6 +390,54 @@ struct OnboardingStepTitle: View {
   }
 }
 
+struct OnboardingLoadingStepTitle: View {
+  let baseText: String
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var dotCount = 1
+  @State private var dotAnimationTask: Task<Void, Never>?
+
+  private static let dotCycleInterval: Duration = .milliseconds(1000)
+
+  var body: some View {
+    Text(displayText)
+      .font(.system(size: 28, weight: .bold, design: .rounded))
+      .multilineTextAlignment(.center)
+      .frame(maxWidth: .infinity, alignment: .center)
+      .accessibilityLabel("\(baseText).")
+      .onAppear { startDotAnimationIfNeeded() }
+      .onDisappear {
+        dotAnimationTask?.cancel()
+        dotAnimationTask = nil
+      }
+  }
+
+  private var displayText: String {
+    if reduceMotion {
+      return "\(baseText)."
+    }
+    return baseText + String(repeating: ".", count: dotCount)
+  }
+
+  private func startDotAnimationIfNeeded() {
+    dotAnimationTask?.cancel()
+
+    guard !reduceMotion else {
+      dotCount = 1
+      return
+    }
+
+    dotCount = 1
+    dotAnimationTask = Task { @MainActor in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: Self.dotCycleInterval)
+        guard !Task.isCancelled else { break }
+        dotCount = dotCount >= 3 ? 1 : dotCount + 1
+      }
+    }
+  }
+}
+
 private struct OnboardingBlurInModifier: ViewModifier {
   let index: Int
   @Environment(\.accessibilityReduceMotion) private var reduceMotion

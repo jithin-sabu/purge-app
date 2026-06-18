@@ -17,7 +17,7 @@ struct OnboardingFirstScanStep: View {
 
   var body: some View {
     VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
-      OnboardingStepTitle(text: "Running your first scan.")
+      OnboardingLoadingStepTitle(baseText: "Running your first scan")
 
       OnboardingProgressBar(progress: combinedProgress)
         .padding(.bottom, AppStyle.Spacing.xSmall)
