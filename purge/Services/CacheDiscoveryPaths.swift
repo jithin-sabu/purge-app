@@ -165,12 +165,8 @@ enum CacheDiscoveryPaths {
             guard fm.fileExists(atPath: versionsDir.path) else { continue }
 
             let currentLink = versionsDir.appendingPathComponent("Current", isDirectory: false)
-            let currentResolved: String?
-            if let dest = try? fm.destinationOfSymbolicLink(atPath: currentLink.path) {
-                currentResolved = URL(fileURLWithPath: dest, relativeTo: versionsDir).lastPathComponent
-            } else {
-                currentResolved = nil
-            }
+            guard let dest = try? fm.destinationOfSymbolicLink(atPath: currentLink.path) else { continue }
+            let currentResolved = URL(fileURLWithPath: dest, relativeTo: versionsDir).lastPathComponent
 
             guard let versionDirs = try? fm.contentsOfDirectory(
                 at: versionsDir,

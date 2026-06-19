@@ -230,9 +230,9 @@ struct UnlistedPathsTests {
     }
 
     @Test
-    func moviesFileIsNotWhitelisted() {
+    func moviesFileIsNeverDelete() {
         let url = TestPaths.homeURL("Movies", "myvideo.mp4")
-        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNotWhitelisted)
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
     }
 
     @Test
@@ -293,5 +293,28 @@ struct ContentsOnlyDeletionTests {
     func npmCacheIsNotContentsOnly() {
         let url = TestPaths.homeURL(".npm", "_cacache")
         #expect(!DeletionSafetyPolicy.shouldDeleteContentsOnly(url))
+    }
+}
+
+// MARK: - Group 8: Music and Movies are fully protected
+
+@Suite("Music and Movies are protected at every depth")
+struct MediaFolderProtectionTests {
+    @Test(arguments: [
+        (["Music"], "Music root"),
+        (["Movies"], "Movies root"),
+        (["Music", "song.mp3"], "Music file"),
+        (["Movies", "clip.mov"], "Movies file"),
+        (["Music", "node_modules"], "Music whitelisted-name folder"),
+        (["Movies", "build"], "Movies whitelisted-name folder"),
+        (["Music", "project", "target"], "Music nested whitelisted-name folder"),
+    ])
+    func mediaPathsAreNeverDelete(components: [String], label: String) {
+        let url = TestPaths.homeURL(components)
+        #expect(
+            DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete,
+            "\(label): \(url.path)"
+        )
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
     }
 }

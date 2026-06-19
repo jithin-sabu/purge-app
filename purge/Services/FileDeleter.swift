@@ -112,6 +112,7 @@ final class FileDeleter {
                         options: [.skipsHiddenFiles]
                     ) {
                         for contentURL in contents {
+                            guard DeletionSafetyPolicy.isOfferedForCleanup(contentURL) else { continue }
                             do {
                                 try FileManager.default.trashItem(at: contentURL, resultingItemURL: nil)
                                 didDeleteAnyContent = true

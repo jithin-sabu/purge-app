@@ -82,6 +82,8 @@ enum DeletionSafetyPolicy {
             "\(home)/Desktop",
             "\(home)/Downloads",
             "\(home)/Pictures",
+            "\(home)/Music",
+            "\(home)/Movies",
             "/Library",
             "/usr",
             "/bin",
@@ -95,9 +97,7 @@ enum DeletionSafetyPolicy {
     /// nested below them remain reachable through the whitelist.
     nonisolated static func neverDeleteExactPaths(home: String) -> [String] {
         [
-            "\(home)/Library/Application Support",
-            "\(home)/Music",
-            "\(home)/Movies"
+            "\(home)/Library/Application Support"
         ]
     }
 
