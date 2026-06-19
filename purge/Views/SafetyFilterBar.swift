@@ -25,7 +25,7 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return true
         case .safe: return safetyInfo.level == .safe
-        case .checkFirst: return safetyInfo.level == .medium || safetyInfo.level == .danger
+        case .checkFirst: return safetyInfo.level == .medium
         }
     }
 

@@ -44,7 +44,7 @@ Large Files is separate from cache cleanup: these are your personal files, not r
 
 ### Safety labels
 
-Purge assigns one of four labels to every item it recognizes:
+Purge assigns a safety label to every item it recognizes:
 
 | Label | Meaning |
 |-------|---------|
@@ -76,12 +76,13 @@ Unidentified folders are left out of the list entirely — Purge only shows what
 - **Menu bar companion** — recoverable space at a glance, quick open, scan/clean actions, and all-time cleaned total
 - **Disk summary** — sidebar shows used/free space and how much is safe to recover
 - **Scan All** — rescans App Caches and Dev Tools together (⇧⌘R)
+- **Update check** — the About screen checks GitHub releases and points you to the latest version
 
 ---
 
 ## Download
 
-👉 [Download the latest version](https://github.com/jithinsabumec/purge-app/releases/tag/v1.1.3)
+👉 [Download the latest version](https://github.com/jithinsabumec/purge-app/releases/latest)
 
 ---
 
@@ -139,6 +140,12 @@ Purge never reads or sends file contents.
 
 ---
 
+## Support
+
+Purge is free. If it saved you some disk space, you can chip in toward the running costs from the **About** screen inside the app, or directly at [Buy Me a Coffee](https://buymeacoffee.com/jithinsabu).
+
+---
+
 ## Built by
 
-Jithin Sabu · [LinkedIn](https://linkedin.com/in/jithinsabu) · [Send Feedback](mailto:design@jithinsabu.com)
+Jithin Sabu · [LinkedIn](https://linkedin.com/in/jithinsabu) · [X](https://x.com/sabu_jithin) · [Send Feedback](mailto:design@jithinsabu.com)
