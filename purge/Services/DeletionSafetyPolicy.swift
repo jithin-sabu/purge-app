@@ -42,6 +42,12 @@ enum DeletionSafetyPolicy {
         "FamilyCircle"
     ]
 
+    /// macOS-managed folders under ~/Library/Logs that the OS refuses to remove even with
+    /// Full Disk Access. They surface inside the "Application Logs" scan but must never be offered.
+    nonisolated static let protectedLogFolderNames: Set<String> = [
+        "DiagnosticReportsForNewHardware"
+    ]
+
     /// Sandboxed app containers whose cache directories are guarded by macOS.
     nonisolated static let protectedContainerBundleIDs: Set<String> = [
         "com.apple.Safari",
@@ -78,9 +84,6 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Preferences",
             "\(home)/Library/Mail",
             "\(home)/System",
-            "\(home)/Documents",
-            "\(home)/Desktop",
-            "\(home)/Downloads",
             "\(home)/Pictures",
             "\(home)/Music",
             "\(home)/Movies",
@@ -97,7 +100,10 @@ enum DeletionSafetyPolicy {
     /// nested below them remain reachable through the whitelist.
     nonisolated static func neverDeleteExactPaths(home: String) -> [String] {
         [
-            "\(home)/Library/Application Support"
+            "\(home)/Library/Application Support",
+            "\(home)/Documents",
+            "\(home)/Desktop",
+            "\(home)/Downloads"
         ]
     }
 
@@ -257,6 +263,18 @@ enum DeletionSafetyPolicy {
         return protectedSystemCacheFolderNames.contains(topFolder)
     }
 
+    nonisolated static func isProtectedLogFolder(_ url: URL) -> Bool {
+        let standardized = url.standardizedFileURL
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let logsPrefix = "\(home)/Library/Logs"
+        let path = standardized.path
+        guard path == logsPrefix || path.hasPrefix(logsPrefix + "/") else { return false }
+
+        let relative = path == logsPrefix ? "" : String(path.dropFirst(logsPrefix.count + 1))
+        let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
+        return protectedLogFolderNames.contains(topFolder)
+    }
+
     nonisolated static func isProtectedAppContainer(_ url: URL) -> Bool {
         let standardized = url.standardizedFileURL
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
@@ -340,7 +358,9 @@ enum DeletionSafetyPolicy {
         let homeURL = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         let home = homeURL.path
 
-        if isProtectedSystemCache(standardized) || isProtectedAppContainer(standardized) {
+        if isProtectedSystemCache(standardized)
+            || isProtectedAppContainer(standardized)
+            || isProtectedLogFolder(standardized) {
             return .blockedNeverDelete
         }
 

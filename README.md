@@ -26,7 +26,7 @@ Three sections in one view:
 - **iOS Simulators** — unused simulator runtimes grouped together (booted simulators are skipped)
 - **Developer projects** — `node_modules`, Python virtual environments, Rust `target`, Flutter build output, Xcode `Pods`, Android `.gradle`, and other artifacts grouped by project
 
-In **Settings → Dev Tools**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which project folders appear.
+In **Settings → Developer Projects**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which project folders appear.
 
 ### Large Files
 
@@ -67,7 +67,7 @@ Unidentified folders are left out of the list entirely — Purge only shows what
 
 - **Appearance** — Light, Dark, or System
 - **Cleaning Schedule** — automatic safe cleanup with frequency, staleness threshold, and next-clean date
-- **Dev Tools** — stale-project threshold for developer artifact scanning
+- **Developer Projects** — stale-project threshold for developer artifact scanning
 
 
 ### More

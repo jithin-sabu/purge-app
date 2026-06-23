@@ -129,6 +129,27 @@ struct ProtectedSystemCachesTests {
         #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
         #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
     }
+
+    @Test
+    func diagnosticReportsForNewHardwareIsNeverOffered() {
+        // macOS surfaces this sibling of DiagnosticReports inside the Application Logs
+        // scan but refuses to delete it, so it must never be offered.
+        let folder = TestPaths.homeURL("Library", "Logs", "DiagnosticReportsForNewHardware")
+        #expect(DeletionSafetyPolicy.evaluate(folder) == .blockedNeverDelete)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(folder))
+
+        let child = TestPaths.homeURL(
+            "Library", "Logs", "DiagnosticReportsForNewHardware", "report.diag"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(child) == .blockedNeverDelete)
+    }
+
+    @Test
+    func diagnosticReportsCrashLogsStillOffered() {
+        // The adjacent DiagnosticReports folder remains cleanable as Crash Reports.
+        let url = TestPaths.homeURL("Library", "Logs", "DiagnosticReports")
+        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    }
 }
 
 // MARK: - Group 3: Whitelisted absolute prefixes
@@ -195,6 +216,11 @@ struct WhitelistedFolderNamesTests {
         (["Developer", "myproject", "target"], "target"),
         (["Developer", "myproject", "Pods"], "Pods"),
         (["Developer", "myproject", ".gradle"], ".gradle"),
+        // Projects kept under Documents/Desktop/Downloads: the folder root is a hard
+        // never-delete, but nested whitelisted caches must remain cleanable.
+        (["Documents", "myproject", "node_modules"], "node_modules under Documents"),
+        (["Desktop", "myproject", "target"], "target under Desktop"),
+        (["Downloads", "myproject", ".venv"], ".venv under Downloads"),
     ])
     func whitelistedArtifactFolders(components: [String], label: String) {
         let url = TestPaths.homeURL(components)
@@ -210,17 +236,20 @@ struct WhitelistedFolderNamesTests {
 @Suite("Unlisted paths return .blockedNotWhitelisted or .blockedNeverDelete")
 struct UnlistedPathsTests {
     @Test
-    func desktopFileIsNeverDelete() {
+    func desktopFileIsNotOfferedForCleanup() {
+        // The user's own files under Desktop are not whitelisted caches, so they are
+        // skipped for safety (never offered for cleanup), but the folder root itself
+        // remains a hard never-delete so nested whitelisted caches can pass through.
         let url = TestPaths.homeURL("Desktop", "important-file.txt")
-        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
-        #expect(DeletionSafetyPolicy.evaluate(url) != .blockedNotWhitelisted)
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNotWhitelisted)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
     }
 
     @Test
-    func documentsProjectIsNeverDelete() {
+    func documentsProjectIsNotOfferedForCleanup() {
         let url = TestPaths.homeURL("Documents", "my-project")
-        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
-        #expect(DeletionSafetyPolicy.evaluate(url) != .blockedNotWhitelisted)
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNotWhitelisted)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
     }
 
     @Test

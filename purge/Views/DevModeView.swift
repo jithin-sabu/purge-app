@@ -801,7 +801,7 @@ struct DevToolsView<PageHeader: View>: View {
                         }
                     }
                 } header: {
-                    Text(projectSectionHeading)
+                    Text("Developer Projects")
                         .font(AppStyle.Typography.metadataEmphasis)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, AppStyle.Spacing.small)
@@ -947,35 +947,6 @@ struct DevToolsView<PageHeader: View>: View {
         .accessibilityLabel("iOS Simulators")
     }
 
-    private var projectSectionHeading: String {
-        let kinds = Set(
-            sortedProjectGroupIndices().flatMap { gi in
-                sortedVisibleArtifactIndices(forGroup: gi).map { store.projectGroups[gi].artifacts[$0].kind }
-            }
-        )
-        guard !kinds.isEmpty else { return "Developer Projects" }
-
-        func heading(for kind: DeletableArtifactKind) -> String? {
-            switch kind {
-            case .nodeModules: return "Node.js Packages"
-            case .dartTool, .flutterBuild: return "Flutter Projects"
-            case .dotGradle: return "Android Projects"
-            case .target: return "Rust Projects"
-            case .venv, .pods: return nil
-            }
-        }
-
-        let mapped = kinds.filter { heading(for: $0) != nil }
-        let unmapped = kinds.filter { heading(for: $0) == nil }
-        if !unmapped.isEmpty { return "Developer Projects" }
-
-        let headings = Set(mapped.compactMap { heading(for: $0) })
-        if headings.count == 1, let only = headings.first {
-            return only
-        }
-        return "Developer Projects"
-    }
-
     @ViewBuilder
     private func projectGroupCard(for group: ProjectGroup, groupIndex _: Int, isExpanded: Bool) -> some View {
         if let currentGroupIndex = store.projectGroups.firstIndex(where: { $0.id == group.id }) {
@@ -1027,6 +998,7 @@ struct DevToolsView<PageHeader: View>: View {
                     .transition(expandCollapseTransition)
             }
         }
+        .padding(.bottom, isExpanded ? AppStyle.Spacing.xSmall : 0)
         .devToolsGroupCardChrome()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Project \(group.displayName)")
@@ -1174,15 +1146,7 @@ struct DevToolsView<PageHeader: View>: View {
 
 private extension View {
     func devToolsGroupCardChrome() -> some View {
-        self
-            .background(
-                AppColors.bgElevated,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                    .stroke(AppColors.borderSubtle, lineWidth: 0.5)
-            }
+        modifier(ScanRowCardChrome())
     }
 }
 

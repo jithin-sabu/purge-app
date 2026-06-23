@@ -162,7 +162,7 @@ struct SettingsView: View {
 
     private var devToolsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Dev Tools")
+            Text("Developer Projects")
                 .font(.headline)
 
             settingsSectionCard {
