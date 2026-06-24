@@ -15,6 +15,10 @@ struct AboutView: View {
     /// Last flash line shown, so we never repeat the same one twice in a row.
     @State private var lastFlash: String? = nil
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage(DeveloperMode.userDefaultsKey) private var developerModeEnabled = false
+    /// Counts rapid taps on the app icon; reaching the threshold toggles developer mode.
+    @State private var iconTapCount = 0
+    @State private var devModeFlash: String? = nil
     var showsPageHeader = true
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
     var usesExternalScrollContainer = false
@@ -74,13 +78,20 @@ struct AboutView: View {
                 .frame(width: 64, height: 64)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .contentShape(Rectangle())
+                .onTapGesture { registerIconTap() }
 
             Text("Purge")
                 .font(.system(size: 30, weight: .semibold, design: .rounded))
 
-            Text("Version \(appVersion)")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.secondary)
+            if let devModeFlash {
+                Text(devModeFlash)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Version \(appVersion)")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
 
             aboutCard {
                 AboutUpdateRow(checker: updateChecker)
@@ -88,6 +99,21 @@ struct AboutView: View {
             .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Counts taps on the app icon; the threshold toggles hidden developer mode.
+    private func registerIconTap() {
+        iconTapCount += 1
+        guard iconTapCount >= DeveloperMode.unlockTapCount else { return }
+        iconTapCount = 0
+        developerModeEnabled.toggle()
+        devModeFlash = developerModeEnabled
+            ? "Developer mode enabled"
+            : "Developer mode disabled"
+        let message = devModeFlash
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if devModeFlash == message { devModeFlash = nil }
+        }
     }
 
     private var lifetimeStatsSection: some View {

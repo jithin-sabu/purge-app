@@ -8,9 +8,14 @@ struct SettingsView: View {
     private var devToolsStalenessThresholdRaw = DevToolsStalenessOption.defaultOption.rawValue
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
+    @AppStorage(DeveloperMode.userDefaultsKey)
+    private var developerModeEnabled = false
     var showsPageHeader = true
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
     var usesExternalScrollContainer = false
+
+    @State private var isRunningScheduledCleanNow = false
+    @State private var scheduledCleanNowMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -38,6 +43,17 @@ struct SettingsView: View {
         .background(AppColors.bgBase)
         .onChange(of: devToolsStalenessThresholdRaw) { _ in
             Task { await store.scanAll() }
+        }
+        .alert(
+            "Scheduled clean",
+            isPresented: Binding(
+                get: { scheduledCleanNowMessage != nil },
+                set: { if !$0 { scheduledCleanNowMessage = nil } }
+            )
+        ) {
+            Button("OK") { scheduledCleanNowMessage = nil }
+        } message: {
+            Text(scheduledCleanNowMessage ?? "")
         }
     }
 
@@ -156,8 +172,81 @@ struct SettingsView: View {
                     }
                     .padding(16)
                 }
+
+                if prefs.isEnabled && developerModeEnabled {
+                    settingsSectionDivider
+
+                    runScheduledCleanNowRow
+                        .padding(16)
+                }
             }
         }
+    }
+
+    /// Verification affordance: runs the real scheduled-clean pipeline now (same
+    /// safe rules and staleness thresholds) so users don't have to wait out a full
+    /// interval to confirm automatic cleaning works.
+    private var runScheduledCleanNowRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                runScheduledCleanNowCopy
+                Spacer(minLength: 12)
+                runScheduledCleanNowButton
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                runScheduledCleanNowCopy
+                runScheduledCleanNowButton
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var runScheduledCleanNowCopy: some View {
+        Text("Run a scheduled clean right now to confirm it works. It uses the same safe rules above and counts as this period's clean.")
+            .font(scheduleStatusSecondaryFont)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var runScheduledCleanNowButton: some View {
+        Button(action: runScheduledCleanNow) {
+            HStack(spacing: 6) {
+                if isRunningScheduledCleanNow {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Text(isRunningScheduledCleanNow ? "Cleaning…" : "Run now")
+            }
+        }
+        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .disabled(isRunningScheduledCleanNow || store.isDeleting)
+    }
+
+    private func runScheduledCleanNow() {
+        guard !isRunningScheduledCleanNow else { return }
+        isRunningScheduledCleanNow = true
+        Task {
+            let summary = await ScheduledCleaningRegistrar.shared.runScheduledCleanNow()
+            isRunningScheduledCleanNow = false
+            scheduledCleanNowMessage = Self.scheduledCleanNowMessage(for: summary)
+        }
+    }
+
+    private static func scheduledCleanNowMessage(
+        for summary: PurgeStore.ScheduledCleaningSummary?
+    ) -> String {
+        guard let summary else {
+            return "Auto-clean is off, so nothing ran. Turn it on and try again."
+        }
+        if summary.deletedCount == 0 {
+            return """
+            Nothing matched your safe settings right now — the schedule is working, there just \
+            wasn't anything stale enough to clean yet.
+            """
+        }
+        let noun = summary.deletedCount == 1 ? "item" : "items"
+        return "Moved \(summary.deletedCount) \(noun) to Trash, clearing about \(formatBytes(summary.freedBytes))."
     }
 
     private var devToolsSection: some View {

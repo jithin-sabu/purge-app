@@ -93,6 +93,21 @@ final class ScheduledCleaningRegistrar {
         }
     }
 
+    /// Runs the scheduled-clean pipeline immediately, ignoring the due date. Backs
+    /// the Settings "Run now" affordance so the schedule can be verified without
+    /// waiting out a full interval. Advances the anchor and re-arms exactly like an
+    /// activation sweep, so the next scheduled clean moves forward one interval.
+    @discardableResult
+    func runScheduledCleanNow(referenceDate now: Date = Date()) async -> PurgeStore.ScheduledCleaningSummary? {
+        guard ScheduledCleaningPreferenceStore.shared.isEnabled else { return nil }
+        guard let store else { return nil }
+
+        let summary = await store.performScheduledClean(referenceDate: now)
+        UserDefaults.standard.set(now, forKey: Self.lastGraceSweepKey)
+        await applyScheduleFromPrefs()
+        return summary
+    }
+
     /// Runs cleanup whenever the app is foregrounded past the next due date.
     /// macOS has no background scheduling, so this lazy sweep — fired on launch and
     /// on every activation — is what actually executes the schedule. Anchored to the
