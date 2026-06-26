@@ -1,11 +1,43 @@
-# Purge
+<div align="center">
 
-**Free up your Mac. Safely.**
+  <img src="Assets/purge-iOS-Default-1024x1024@1x.png" width="128" alt="Purge app icon" />
+
+  <h1>Purge</h1>
+
+  <p><b>Free up your Mac. Safely.</b></p>
+
+  <p>
+    Clean your Mac's cache and junk.<br/>
+    Open source, trash-by-default, never permanent.
+  </p>
+
+  <p>
+    <img src="https://img.shields.io/badge/platform-macOS%2013%2B-black?logo=apple&logoColor=white" alt="Platform: macOS 13+" />
+    <img src="https://img.shields.io/badge/built%20with-SwiftUI-F05138?logo=swift&logoColor=white" alt="Built with SwiftUI" />
+    <img src="https://img.shields.io/github/license/jithinsabumec/purge-app?color=blue" alt="License: MIT" />
+    <img src="https://img.shields.io/github/v/release/jithinsabumec/purge-app?label=latest&color=success" alt="Latest release" />
+    <img src="https://img.shields.io/github/downloads/jithinsabumec/purge-app/total?label=downloads&color=brightgreen" alt="Total downloads" />
+  </p>
+
+  <p>
+    <a href="https://github.com/jithinsabumec/purge-app/releases/latest"><b>⬇ Download</b></a>
+    &nbsp;·&nbsp;
+    <a href="#installation">Install guide</a>
+    &nbsp;·&nbsp;
+    <a href="#build-from-source">Build from source</a>
+    &nbsp;·&nbsp;
+    <a href="#security">Security</a>
+  </p>
+
+  <img src="Assets/purge-scr.png" width="720" alt="Purge scanning a Mac for safe-to-clean cache" />
+
+</div>
+
+---
 
 Purge scans your Mac for cache files and junk left behind by apps and development tools. Every item gets a plain-English explanation and a safety label before you delete anything. One-click cleanup only touches items marked **Safe to Clean**.
 
 ---
-
 
 ## Features
 
@@ -14,7 +46,7 @@ Purge scans your Mac for cache files and junk left behind by apps and developmen
 Scans `~/Library/Caches`, sandbox container caches, and common system junk:
 
 - Per-app cache folders with friendly names, brand icons, and plain-English explanations
-- **System Junk** — iPhone backups, application logs, crash reports, macOS installers, font cache
+- System Junk like application logs, crash reports, macOS installers, font cache
 - Duplicate cache locations for the same app merged into a single row
 - Results stream in as they are found
 
@@ -22,9 +54,9 @@ Scans `~/Library/Caches`, sandbox container caches, and common system junk:
 
 Three sections in one view:
 
-- **Global dev tool caches** — Xcode (Derived Data, Archives, DeviceSupport), Homebrew, npm, pnpm, Yarn, CocoaPods, Gradle, Flutter, Docker Desktop, VS Code, Cursor, JetBrains, Cargo, Terraform, and more
-- **iOS Simulators** — unused simulator runtimes grouped together (booted simulators are skipped)
-- **Developer projects** — `node_modules`, Python virtual environments, Rust `target`, Flutter build output, Xcode `Pods`, Android `.gradle`, and other artifacts grouped by project
+- **Global dev tool caches**: Xcode (Derived Data, Archives, DeviceSupport), Homebrew, npm, pnpm, Yarn, CocoaPods, Gradle, Flutter, Docker Desktop, VS Code, Cursor, JetBrains, Cargo, Terraform, and more
+- **iOS Simulators**: unused simulator runtimes grouped together (booted simulators are skipped)
+- **Developer projects**: `node_modules`, Python virtual environments, Rust `target`, Flutter build output, Xcode `Pods`, Android `.gradle`, and other artifacts grouped by project
 
 In **Settings → Developer Projects**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which project folders appear.
 
@@ -38,7 +70,7 @@ Find space-hogging personal files without digging through folders:
 - Category chips for videos, audio, images, PDFs, archives, documents, and other files
 - Sort by size, date, or name; select files and review before deleting
 - **Quick Look** preview and **Reveal in Finder** from each row
-- Deletions move files to **Trash** — nothing is permanently erased
+- Deletions move files to **Trash**, so nothing is permanently erased
 
 Large Files is separate from cache cleanup: these are your personal files, not rebuildable caches.
 
@@ -48,35 +80,34 @@ Purge assigns a safety label to every item it recognizes:
 
 | Label | Meaning |
 |-------|---------|
-| **Safe to Clean** | Known cache or rebuildable artifact — safe to remove |
+| **Safe to Clean** | Known cache or rebuildable artifact, safe to remove |
 | **Check First** | May be safe, but could cause inconvenience |
 
 Filter with **All**, **Safe to Clean**, or **Check First** (⌘1–⌘3). Sort by size, date modified, or name.
 
-Unidentified folders are left out of the list entirely — Purge only shows what it knows about.
+Unidentified folders are left out of the list entirely. Purge only shows what it knows about.
 
 ### Cleaning
 
-- **Clean Safe Items** — one-click cleanup from the sidebar; only Safe to Clean items, with git and lockfile checks
-- **Clean Selected** — pick specific rows, review in a confirmation sheet, then delete
-- **Clean Safe Files Now** — same safe cleanup from the menu bar
-- **Scheduled cleaning** — in **Settings → Cleaning Schedule**, enable **Run automatic cleaning**, choose **How often** (weekly, monthly, or every 3 months) and **Untouched for** (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app
+- **Clean Safe Items**: one-click cleanup from the sidebar; only Safe to Clean items, with git and lockfile checks
+- **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete
+- **Clean Safe Files Now**: same safe cleanup from the menu bar
+- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning**, choose **How often** (weekly, monthly, or every 3 months) and **Untouched for** (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app
 - All deletions move items to **Trash**, not permanent removal
 
 ### Settings
 
-- **Appearance** — Light, Dark, or System
-- **Cleaning Schedule** — automatic safe cleanup with frequency, staleness threshold, and next-clean date
-- **Developer Projects** — stale-project threshold for developer artifact scanning
-
+- **Appearance**: Light, Dark, or System
+- **Cleaning Schedule**: automatic safe cleanup with frequency, staleness threshold, and next-clean date
+- **Developer Projects**: stale-project threshold for developer artifact scanning
 
 ### More
 
-- **First-run onboarding** — welcome, permissions (Full Disk Access and optional login item), auto-clean preference, first scan, results review, and a safe clean walkthrough
-- **Menu bar companion** — recoverable space at a glance, quick open, scan/clean actions, and all-time cleaned total
-- **Disk summary** — sidebar shows used/free space and how much is safe to recover
-- **Scan All** — rescans App Caches and Dev Tools together (⇧⌘R)
-- **Update check** — the About screen checks GitHub releases and points you to the latest version
+- **First-run onboarding**: welcome, permissions (Full Disk Access and optional login item), auto-clean preference, first scan, results review, and a safe clean walkthrough
+- **Menu bar companion**: recoverable space at a glance, quick open, scan/clean actions, and all-time cleaned total
+- **Disk summary**: sidebar shows used/free space and how much is safe to recover
+- **Scan All**: rescans App Caches and Dev Tools together (⇧⌘R)
+- **Update check**: the About screen checks GitHub releases and points you to the latest version
 
 ---
 
@@ -115,7 +146,7 @@ Since Purge is not on the Mac App Store, macOS will block it the first time you 
 
 **Here is how to open it:**
 
-1. Double-click Purge to open it — macOS will block it and show a warning; that is expected
+1. Double-click Purge to open it. macOS will block it and show a warning; that is expected
 2. Open **System Settings** on your Mac
 3. Go to **Privacy & Security**
 4. Scroll down to the **Security** section
@@ -143,7 +174,7 @@ Purge isn't on the Mac App Store, so it doesn't update itself automatically. Ins
 
 ### Checking for a new version
 
-Open the **About** screen inside Purge and use **Check for Updates**. It compares your version against the latest GitHub release. If a newer one exists, it points you to the release page so you can download it. This is a notifier only — it doesn't download or install the update for you.
+Open the **About** screen inside Purge and use **Check for Updates**. It compares your version against the latest GitHub release. If a newer one exists, it points you to the release page so you can download it. This is a notifier only: it doesn't download or install the update for you.
 
 You can also just visit the [releases page](https://github.com/jithinsabumec/purge-app/releases/latest) anytime.
 
@@ -153,7 +184,7 @@ You can also just visit the [releases page](https://github.com/jithinsabumec/pur
 2. Open it and drag Purge into your Applications folder
 3. When asked, choose **Replace** to overwrite the old version
 
-That's it. Your settings, cleaning schedule, and history are kept — they live separately from the app, so replacing the app doesn't touch them. You won't need to grant Full Disk Access again either; the permission stays with Purge.
+That's it. Your settings, cleaning schedule, and history are kept; they live separately from the app, so replacing the app doesn't touch them. You won't need to grant Full Disk Access again either; the permission stays with Purge.
 
 One thing to expect: because the app is unsigned, the first time you open a freshly downloaded update macOS may block it again, the same as the very first install. If that happens, use the same **Open Anyway** step from [Step 4](#step-4-open-for-the-first-time) above. After that one click it opens normally.
 
@@ -167,7 +198,7 @@ Prefer to build Purge yourself instead of downloading the release? Here is how.
 
 - macOS 13.0 or later
 - **Xcode 15 or later** (from the Mac App Store)
-- [Node.js](https://nodejs.org) 18+ and npm — only needed if you want to regenerate brand icons
+- [Node.js](https://nodejs.org) 18+ and npm, only needed if you want to regenerate brand icons
 
 ### Step 1: Clone the repo
 
@@ -225,7 +256,7 @@ xcodebuild -project purge.xcodeproj -scheme purge -destination 'platform=macOS' 
 
 ## Privacy
 
-Purge runs entirely on your Mac. Scans, explanations, manual overrides, and cleanup history stay in local Application Support — nothing is uploaded.
+Purge runs entirely on your Mac. Scans, explanations, manual overrides, and cleanup history stay in local Application Support. Nothing is uploaded.
 
 Purge never reads or sends file contents.
 
@@ -235,10 +266,10 @@ Purge never reads or sends file contents.
 
 Purge deletes files, so safety is the point. A few things worth knowing:
 
-- **Trash by default** — nothing is permanently deleted. Items move to the macOS Trash and can be restored until you empty it.
-- **Allowlist-based deletion** — only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched.
-- **You choose what goes** — Purge shows what is reclaimable and you decide what to clear.
-- **Open source** — the full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
+- **Trash by default**: nothing is permanently deleted. Items move to the macOS Trash and can be restored until you empty it.
+- **Allowlist-based deletion**: only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched.
+- **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
+- **Open source**: the full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
 
 Found a safety gap or a path that could be deleted when it shouldn't be? Please report it. See [SECURITY.md](SECURITY.md) for how.
 
