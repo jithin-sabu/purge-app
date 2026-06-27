@@ -11,16 +11,29 @@
     Open source, trash-by-default, never permanent.
   </p>
 
-  <p>
+<p>
+  <a href="https://github.com/jithin-sabu/purge-app/releases/latest">
     <img src="https://img.shields.io/badge/platform-macOS%2013%2B-black?logo=apple&logoColor=white" alt="Platform: macOS 13+" />
+  </a>
+  <a href="https://developer.apple.com/swiftui/">
     <img src="https://img.shields.io/badge/built%20with-SwiftUI-F05138?logo=swift&logoColor=white" alt="Built with SwiftUI" />
-    <img src="https://img.shields.io/github/license/jithinsabumec/purge-app?color=blue" alt="License: MIT" />
-    <img src="https://img.shields.io/github/v/release/jithinsabumec/purge-app?label=latest&color=success" alt="Latest release" />
-    <img src="https://img.shields.io/github/downloads/jithinsabumec/purge-app/total?label=downloads&color=brightgreen" alt="Total downloads" />
-  </p>
+  </a>
+  <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="License: MIT" />
+  </a>
+  <a href="https://github.com/jithin-sabu/purge-app/releases/latest">
+    <img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=success" alt="Latest release" />
+  </a>
+  <a href="https://github.com/jithin-sabu/purge-app/releases">
+    <img src="https://img.shields.io/github/downloads/jithin-sabu/purge-app/total?label=downloads&color=brightgreen" alt="Total downloads" />
+  </a>
+  <a href="https://github.com/jithin-sabu/purge-app/stargazers">
+    <img src="https://img.shields.io/github/stars/jithin-sabu/purge-app?color=yellow" alt="GitHub stars" />
+  </a>
+</p>
 
   <p>
-    <a href="https://github.com/jithinsabumec/purge-app/releases/latest"><b>⬇ Download</b></a>
+    <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><b>⬇ Download</b></a>
     &nbsp;·&nbsp;
     <a href="#installation">Install guide</a>
     &nbsp;·&nbsp;
@@ -113,7 +126,7 @@ Unidentified folders are left out of the list entirely. Purge only shows what it
 
 ## Download
 
-👉 [Download the latest version](https://github.com/jithinsabumec/purge-app/releases/latest)
+👉 [Download the latest version](https://github.com/jithin-sabu/purge-app/releases/latest)
 
 ---
 
@@ -176,7 +189,7 @@ Purge isn't on the Mac App Store, so it doesn't update itself automatically. Ins
 
 Open the **About** screen inside Purge and use **Check for Updates**. It compares your version against the latest GitHub release. If a newer one exists, it points you to the release page so you can download it. This is a notifier only: it doesn't download or install the update for you.
 
-You can also just visit the [releases page](https://github.com/jithinsabumec/purge-app/releases/latest) anytime.
+You can also just visit the [releases page](https://github.com/jithin-sabu/purge-app/releases/latest) anytime.
 
 ### Installing the update
 
@@ -203,7 +216,7 @@ Prefer to build Purge yourself instead of downloading the release? Here is how.
 ### Step 1: Clone the repo
 
 ```bash
-git clone https://github.com/jithinsabumec/purge-app.git
+git clone https://github.com/jithin-sabu/purge-app.git
 cd purge-app
 ```
 
