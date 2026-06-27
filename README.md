@@ -13,9 +13,8 @@
 
 <p>
   <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/badge/platform-macOS%2013%2B-black?logo=apple&logoColor=white" alt="Platform: macOS 13+" /></a>
-  <a href="https://developer.apple.com/xcode/swiftui/"><img src="https://img.shields.io/badge/built%20with-SwiftUI-F05138?logo=swift&logoColor=white" alt="Built with SwiftUI" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="License: MIT" /></a>
-  <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=success" alt="Latest release" /></a>
+  <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=red" alt="Latest release" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/releases"><img src="https://img.shields.io/github/downloads/jithin-sabu/purge-app/total?label=downloads&color=brightgreen" alt="Total downloads" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/stargazers"><img src="https://img.shields.io/github/stars/jithin-sabu/purge-app?color=yellow" alt="GitHub stars" /></a>
 </p>
@@ -118,7 +117,11 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 
 ## Download
 
-👉 [Download the latest version](https://github.com/jithin-sabu/purge-app/releases/latest)
+<div align="center">
+
+<a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/badge/download-Purge-2EA043?style=flat&logo=apple&logoColor=white" alt="Download Purge" /></a>
+
+</div>
 
 ---
 
@@ -289,9 +292,10 @@ Purge is released under the [MIT License](LICENSE). You are free to use, read, m
 ## Support
 
 Purge is free. If it saved you some disk space, you can chip in toward the running costs from the **About** screen inside the app, or directly at [Buy Me a Coffee](https://buymeacoffee.com/jithinsabu).
-
 <div align="center">
-  <a href="https://www.buymeacoffee.com/jithinsabu"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=☕&slug=jithinsabu&button_colour=FFDD00&font_colour=000000&font_family=Lato&outline_colour=000000&coffee_colour=ffffff" alt="Buy me a coffee" /></a>
+
+<a href="https://buymeacoffee.com/jithinsabu"><img src="https://img.shields.io/badge/support-Buy_me_a_coffee-FFDD00?style=flat&logo=buymeacoffee&logoColor=white" alt="Buy me a coffee" /></a>
+
 </div>
 
 ---
