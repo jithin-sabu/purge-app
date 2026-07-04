@@ -20,7 +20,7 @@
 </p>
 
   <p>
-    <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><b>⬇ Download</b></a>
+    <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><b>Download</b></a>
     &nbsp;·&nbsp;
     <a href="#installation">Install guide</a>
     &nbsp;·&nbsp;

@@ -3,4 +3,5 @@ Secrets.xcconfig
 node_modules/
 xcuserdata/
 *.vsix
+*.profraw
 .claude/

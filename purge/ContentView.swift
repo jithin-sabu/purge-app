@@ -186,6 +186,9 @@ struct ContentView: View {
 
     private func scanIfNeeded() async {
         guard isLifecycleActive, !isRunningPreview else { return }
+        // The menu bar model kicks off the launch scan; racing a second
+        // `scanAll` here would cancel and restart it from scratch.
+        guard !store.isScanningAll else { return }
         guard store.hasFullDiskAccess, store.cacheItems.isEmpty, store.devTools.isEmpty, store.projectGroups.isEmpty else { return }
         await store.scanAll()
     }

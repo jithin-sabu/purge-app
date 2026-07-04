@@ -26,6 +26,7 @@ struct PurgeApp: App {
     @NSApplicationDelegateAdaptor(PurgeAppDelegate.self) private var appDelegate
     @StateObject private var store = PurgeStore()
     @StateObject private var diskStore = DiskSummaryStore()
+    @StateObject private var menuModel = MenuViewModel()
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
     @State private var systemThemeObserver: NSObjectProtocol?
@@ -40,15 +41,6 @@ struct PurgeApp: App {
 
     private var appearanceMode: AppearanceMode {
         AppearanceMode(rawValue: appearanceModeRaw) ?? .system
-    }
-
-    private var scanMenuTitle: String {
-        store.scanPhase == .scanning ? "Scanning…" : "Scan Now"
-    }
-
-    private var cleanMenuTitle: String {
-        if store.isDeleting { return "Cleaning…" }
-        return store.safeRecoverableBytes > 0 ? "Clean Safe Files Now" : "Nothing to clean"
     }
 
     /// SwiftUI semantic colors need `preferredColorScheme`; AppKit-backed menu
@@ -70,6 +62,11 @@ struct PurgeApp: App {
                 .environmentObject(diskStore)
                 .onAppear {
                     diskStore.refresh()
+                    menuModel.attach(store: store)
+                    MenuScanNotifier.configure()
+                    ScheduledNotificationPresentationDelegate.shared.onCleanAction = { [weak menuModel] in
+                        menuModel?.performCleanFromNotification()
+                    }
                     ScheduledCleaningRegistrar.shared.attach(store: store)
                     CleaningQuitGuard.isCleaningActive = { [weak store] in
                         store?.isManualCleaningInProgress ?? false
@@ -98,33 +95,14 @@ struct PurgeApp: App {
             PurgeCommands(store: store)
         }
 
-        MenuBarExtra(formatBytes(store.safeRecoverableBytes), systemImage: "paintbrush.fill") {
-            Button("Open Purge") {
-                NSApp.activate(ignoringOtherApps: true)
-                NSApp.windows.first?.makeKeyAndOrderFront(nil)
-            }
-
-            Button(scanMenuTitle) {
-                Task { await store.scanAll() }
-            }
-            .disabled(!store.hasFullDiskAccess || store.isDeleting || store.scanPhase == .scanning)
-
-            Button(cleanMenuTitle) {
-                Task { await store.performManualSafeCleanNow() }
-            }
-            .disabled(store.safeRecoverableBytes == 0 || store.isDeleting)
-
-            if store.hasDisplayableLifetimeStats {
-                Divider()
-                Text("\(formatBytes(store.totalRecoveredBytes)) cleaned all-time")
-            }
-
-            Divider()
-
-            Button("Quit Purge") {
-                NSApplication.shared.terminate(nil)
-            }
+        MenuBarExtra {
+            MenuBarContentView(model: menuModel)
+                .environmentObject(store)
+                .environmentObject(diskStore)
+        } label: {
+            MenuBarStatusIcon()
         }
+        .menuBarExtraStyle(.window)
     }
 }
 

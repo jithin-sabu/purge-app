@@ -42,9 +42,13 @@ enum ScheduledCleanupNotifier {
     }
 }
 
-/// Shows banners while the Purge window is visible.
+/// Shows banners while the Purge window is visible and routes notification
+/// actions (currently the menu-scan Clean button) back into the app.
 final class ScheduledNotificationPresentationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = ScheduledNotificationPresentationDelegate()
+
+    /// Invoked on the main actor when the menu-scan Clean action is tapped.
+    var onCleanAction: (@MainActor () -> Void)?
 
     func userNotificationCenter(
         _: UNUserNotificationCenter,
@@ -52,5 +56,17 @@ final class ScheduledNotificationPresentationDelegate: NSObject, UNUserNotificat
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound])
+    }
+
+    func userNotificationCenter(
+        _: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if response.actionIdentifier == MenuScanNotifier.cleanActionIdentifier {
+            let handler = onCleanAction
+            Task { @MainActor in handler?() }
+        }
+        completionHandler()
     }
 }
