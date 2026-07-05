@@ -400,6 +400,17 @@ struct AboutView: View {
     private var actionCardSection: some View {
         aboutCard {
             VStack(spacing: 0) {
+                AboutAllowlistSummaryBlock()
+
+                AboutActionRow(
+                    icon: "chevron.left.forwardslash.chevron.right",
+                    label: "View the full allowlist"
+                ) {
+                    NSWorkspace.shared.open(Self.allowlistPolicyURL)
+                }
+
+                InsetCardDivider()
+
                 AboutActionRow(icon: "ant.fill", label: "Report a bug") {
                     NSWorkspace.shared.open(reportBugURL)
                 }
@@ -516,6 +527,16 @@ struct AboutView: View {
     private var xProfileURL: URL {
         URL(string: "https://x.com/sabu_jithin")!
     }
+
+    static let repoBaseURL = URL(string: "https://github.com/jithin-sabu/purge-app")!
+
+    static var allReleasesURL: URL {
+        URL(string: "\(repoBaseURL.absoluteString)/releases")!
+    }
+
+    static var allowlistPolicyURL: URL {
+        URL(string: "\(repoBaseURL.absoluteString)/blob/main/purge/Services/DeletionSafetyPolicy.swift")!
+    }
 }
 
 private struct LifetimeSizeComparisonChip: View {
@@ -546,10 +567,61 @@ private struct LifetimeSizeComparisonChip: View {
     }
 }
 
+private struct AboutAllowlistSummaryBlock: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("what purge can clean")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(SafetyAllowlistSummary.allowedCategories) { category in
+                    AboutAllowlistCategoryRow(category: category)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(SafetyAllowlistSummary.boundaryLine)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 18)
+    }
+}
+
+private struct AboutAllowlistCategoryRow: View {
+    let category: SafetyAllowlistSummary.Category
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: category.icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: 16, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+
+                Text(category.description)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(category.title). \(category.description)")
+    }
+}
+
 private struct AboutUpdateRow: View {
     @ObservedObject var checker: UpdateChecker
-
-    private let allReleasesURL = URL(string: "https://github.com/jithin-sabu/purge-app/releases")!
 
     var body: some View {
         HStack(spacing: 10) {
@@ -609,7 +681,7 @@ private struct AboutUpdateRow: View {
             .foregroundStyle(.secondary)
         case .failed:
             Button("view releases") {
-                NSWorkspace.shared.open(allReleasesURL)
+                NSWorkspace.shared.open(AboutView.allReleasesURL)
             }
             .buttonStyle(.plain)
             .font(.system(size: 13, weight: .medium))
