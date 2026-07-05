@@ -1,0 +1,64 @@
+---
+description: Commit message format per awesome-commit-conventions (Conventional Commits + SemVer)
+alwaysApply: true
+---
+
+# Commit Conventions
+
+Follow [awesome-commit-conventions](https://github.com/khasky/awesome-commit-conventions) for all commit messages.
+
+## Format
+
+```
+<type>(<scope>): <short summary>
+
+<body: why the change, what was wrong>
+
+<footer: Closes #123, BREAKING CHANGE:, Co-authored-by:>
+```
+
+Only the first line is required. Body and footer are optional.
+
+## Header rules
+
+- Imperative mood: `add`, `fix`, `remove` — not `added`, `adds`, `fixing`
+- ≤ ~50 characters, lowercase after `:`, no trailing period
+- Wrap body lines at 72 characters
+
+## Types
+
+| Type | Use for |
+|------|---------|
+| `feat` | New user-facing feature (minor bump) |
+| `fix` | Bug fix (patch bump) |
+| `docs` | Documentation only |
+| `refactor` | Code change, no behavior change |
+| `perf` | Performance improvement |
+| `test` | Tests |
+| `build` | Xcode project, dependencies, release tooling |
+| `ci` | CI pipelines |
+| `chore` | Housekeeping (version bumps, config) — not user-facing |
+| `style` | Formatting only |
+| `revert` | Reverts a prior commit |
+
+Breaking changes: `feat(api)!:` or `BREAKING CHANGE:` in footer → major bump.
+
+## Scopes
+
+Use `kebab-case`, stay consistent, match project areas. Examples for this repo:
+
+`menu-bar`, `settings`, `scheduler`, `update-checker`, `about`, `purge-store`, `release`
+
+Global changes may omit scope: `build:`, `ci:`, `chore(release):`.
+
+## Examples
+
+```
+feat(scheduler): add weekly cleaning preference
+fix(menu-bar): keep popover open during scan
+refactor(purge-store): simplify cache invalidation
+chore(release): bump version to 1.2.4
+docs: update security disclosure process
+```
+
+Header = **what**. Body = **why**. Use `Closes #123` in footer when applicable.

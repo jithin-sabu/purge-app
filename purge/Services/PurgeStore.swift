@@ -838,16 +838,37 @@ final class PurgeStore: ObservableObject {
             pathToExpectedSizeBytes[key] = file.sizeBytes
         }
 
+        // Present the cleanup overlay in its cleaning phase and poll per-item
+        // progress, mirroring the caches / dev-tools manual deletion flow so
+        // large-file deletions get the same progress + completion screen.
+        let progressBuffer = DeletionProgressBuffer()
+        let totalBytes = targets.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
+        manualDeletionSession = liveSession
+        let progressPoller = Task { @MainActor [weak liveSession] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                guard let liveSession, liveSession.phase == .cleaning else { return }
+                liveSession.applyProgress(progressBuffer.snapshot())
+            }
+        }
+
         isDeleting = true
         errorMessage = nil
-        defer { isDeleting = false }
+        defer {
+            isDeleting = false
+            progressPoller.cancel()
+        }
 
+        let engineStart = Date()
         do {
             let report = try await fileDeleter.deleteUserSelectedFiles(
                 at: urls,
                 pathToDisplayName: pathToDisplayName,
-                pathToExpectedSizeBytes: pathToExpectedSizeBytes
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
+            let elapsedSeconds = Date().timeIntervalSince(engineStart)
             incrementRecoveredTotal(by: report.totalDeleted)
             lastDeletionReport = report
             let deletedPaths = Set(report.deletedItems.map {
@@ -856,8 +877,16 @@ final class PurgeStore: ObservableObject {
             withAnimation(.easeInOut(duration: 0.2)) {
                 largeFiles.removeAll { deletedPaths.contains($0.id) }
             }
+            progressPoller.cancel()
+            liveSession.completeRun(
+                bytesFreed: report.totalDeleted,
+                elapsedSeconds: elapsedSeconds,
+                failedItems: report.userVisibleFailures,
+                movedToTrashCount: report.movedToTrashCount
+            )
             CleanupHistoryStore.shared.append(trigger: .manual, report: report)
         } catch {
+            manualDeletionSession = nil
             errorMessage = "Unable to delete the selected files. Please try again."
         }
     }
