@@ -9,7 +9,7 @@ to report a problem.
 If you find a security issue, a safety gap in the deletion logic, or a path
 that could be deleted when it shouldn't be, please report it.
 
-- Open a [private security advisory](https://github.com/jithinsabumec/purge-app/security/advisories/new), or
+- Open a [private security advisory](https://github.com/jithin-sabu/purge-app/security/advisories/new), or
 - Email the maintainer at the address listed on the GitHub profile.
 
 Please do not open a public issue for a security or data-loss vulnerability

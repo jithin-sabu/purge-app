@@ -4,6 +4,8 @@ struct SettingsView: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
+    @ObservedObject private var registrar = ScheduledCleaningRegistrar.shared
+    @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage(DevToolsStalenessOption.userDefaultsKey)
     private var devToolsStalenessThresholdRaw = DevToolsStalenessOption.defaultOption.rawValue
     @AppStorage(AppearanceMode.userDefaultsKey)
@@ -30,6 +32,7 @@ struct SettingsView: View {
                     appearanceSection
                     cleaningScheduleSection
                     devToolsSection
+                    cleaningHistorySection
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -143,21 +146,12 @@ struct SettingsView: View {
 
                 settingsSectionDivider
 
-                VStack(spacing: 8) {
-                    settingPickerRow(
-                        title: "How often",
-                        selection: $prefs.frequency,
-                        options: ScheduledCleaningFrequency.allCases,
-                        optionLabel: \.displayName
-                    )
-
-                    settingPickerRow(
-                        title: "Untouched for",
-                        selection: $prefs.unusedDays,
-                        options: ScheduledCleaningUnusedDaysOption.allCases,
-                        optionLabel: \.label
-                    )
-                }
+                settingPickerRow(
+                    title: "How often",
+                    selection: $prefs.frequency,
+                    options: ScheduledCleaningFrequency.allCases,
+                    optionLabel: \.displayName
+                )
                 .padding(16)
                 .disabled(!prefs.isEnabled)
 
@@ -242,12 +236,77 @@ struct SettingsView: View {
         if summary.deletedCount == 0 {
             return """
             Nothing matched your safe settings right now — the schedule is working, there just \
-            wasn't anything stale enough to clean yet.
+            wasn't anything safe to clean yet.
             """
         }
         let noun = summary.deletedCount == 1 ? "item" : "items"
         return "Moved \(summary.deletedCount) \(noun) to Trash, clearing about \(formatBytes(summary.freedBytes))."
     }
+
+    /// Recent cleanup activity, so scheduled cleans are visible in the app instead
+    /// of only in a passing notification.
+    private var cleaningHistorySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Cleaning History")
+                .font(.headline)
+
+            settingsSectionCard {
+                if recentHistoryEntries.isEmpty {
+                    Text("No cleans recorded yet. Automatic and manual cleans will show up here.")
+                        .font(scheduleStatusSecondaryFont)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(16)
+                } else {
+                    ForEach(Array(recentHistoryEntries.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 {
+                            settingsSectionDivider
+                        }
+                        cleaningHistoryRow(entry)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                    }
+                }
+            }
+        }
+    }
+
+    private var recentHistoryEntries: [CleanupHistoryEntry] {
+        Array(history.archive.entries.prefix(6))
+    }
+
+    private func cleaningHistoryRow(_ entry: CleanupHistoryEntry) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.trigger == .scheduled ? "Automatic clean" : "Manual clean")
+                    .font(scheduleStatusPrimaryFont)
+                    .foregroundStyle(.primary)
+
+                Text(Self.historyDateFormatter.string(from: entry.date))
+                    .font(scheduleStatusTertiaryFont)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(formatBytes(entry.totalFreedBytes))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+
+                Text("\(entry.deletedItems.count) \(entry.deletedItems.count == 1 ? "item" : "items")")
+                    .font(scheduleStatusTertiaryFont)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private static let historyDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
     private var devToolsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -338,8 +397,42 @@ struct SettingsView: View {
         let isDueToday = Calendar.current.isDate(nextScheduledCleanDate, inSameDayAs: referenceDate)
         let display = nextCleanDisplay(referenceDate: referenceDate)
 
-        return HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "calendar")
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 16, alignment: .center)
+                    .padding(.top, 1)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    scheduleStatusLabel("Next clean", showsDueDot: isDueToday)
+
+                    Text(display.primary)
+                        .font(scheduleStatusPrimaryFont)
+                        .foregroundStyle(.primary)
+                        .contentTransition(scheduleTextTransition)
+                        .animation(scheduleTextAnimation, value: display.primary)
+
+                    if let secondary = display.secondary {
+                        Text(secondary)
+                            .font(scheduleStatusTertiaryFont)
+                            .foregroundStyle(.tertiary)
+                            .contentTransition(scheduleTextTransition)
+                            .animation(scheduleTextAnimation, value: secondary)
+                    }
+                }
+            }
+
+            lastCleanStatusRow(referenceDate: referenceDate)
+        }
+    }
+
+    private func lastCleanStatusRow(referenceDate: Date) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .symbolRenderingMode(.hierarchical)
@@ -348,23 +441,31 @@ struct SettingsView: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
-                scheduleStatusLabel("Next clean", showsDueDot: isDueToday)
+                scheduleStatusLabel("Last clean")
 
-                Text(display.primary)
-                    .font(scheduleStatusPrimaryFont)
-                    .foregroundStyle(.primary)
-                    .contentTransition(scheduleTextTransition)
-                    .animation(scheduleTextAnimation, value: display.primary)
+                if let outcome = registrar.lastOutcome {
+                    Text(lastCleanPrimaryText(for: outcome))
+                        .font(scheduleStatusPrimaryFont)
+                        .foregroundStyle(.primary)
 
-                if let secondary = display.secondary {
-                    Text(secondary)
+                    Text(relativeDateText(for: outcome.date, referenceDate: referenceDate))
                         .font(scheduleStatusTertiaryFont)
                         .foregroundStyle(.tertiary)
-                        .contentTransition(scheduleTextTransition)
-                        .animation(scheduleTextAnimation, value: secondary)
+                } else {
+                    Text("No scheduled clean has run yet.")
+                        .font(scheduleStatusPrimaryFont)
+                        .foregroundStyle(.primary)
                 }
             }
         }
+    }
+
+    private func lastCleanPrimaryText(for outcome: LastScheduledCleanOutcome) -> String {
+        guard outcome.deletedCount > 0 else {
+            return "Ran on \(formattedDate(outcome.date)) — nothing safe to clean."
+        }
+        let noun = outcome.deletedCount == 1 ? "item" : "items"
+        return "Ran on \(formattedDate(outcome.date)) — cleared \(formatBytes(outcome.freedBytes)) (\(outcome.deletedCount) \(noun))."
     }
 
     private func scheduleStatusLabel(_ title: String, showsDueDot: Bool = false) -> some View {
@@ -442,9 +543,9 @@ struct SettingsView: View {
 
     private var scheduleSummary: String {
         """
-        Every \(prefs.frequency.summaryPhrase), we will quietly remove safe files and stale developer \
-        artifacts untouched for \(prefs.unusedDays.summaryDurationPhrase). \
-        Your actual work is never deleted.
+        Every \(prefs.frequency.summaryPhrase), we will quietly clean the same safe items as the \
+        Clean Safe Items button - safe caches and stale developer artifacts. Your actual work is \
+        never deleted.
         """
     }
 

@@ -549,7 +549,7 @@ private struct LifetimeSizeComparisonChip: View {
 private struct AboutUpdateRow: View {
     @ObservedObject var checker: UpdateChecker
 
-    private let allReleasesURL = URL(string: "https://github.com/jithinsabumec/purge-app/releases")!
+    private let allReleasesURL = URL(string: "https://github.com/jithin-sabu/purge-app/releases")!
 
     var body: some View {
         HStack(spacing: 10) {

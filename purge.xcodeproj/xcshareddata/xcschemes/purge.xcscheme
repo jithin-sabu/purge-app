@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5AF380442FAA15E4001693A0"
-               BuildableName = "purge.app"
+               BuildableName = "Purge.app"
                BlueprintName = "purge"
                ReferencedContainer = "container:purge.xcodeproj">
             </BuildableReference>
@@ -72,7 +72,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5AF380442FAA15E4001693A0"
-            BuildableName = "purge.app"
+            BuildableName = "Purge.app"
             BlueprintName = "purge"
             ReferencedContainer = "container:purge.xcodeproj">
          </BuildableReference>
@@ -89,7 +89,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5AF380442FAA15E4001693A0"
-            BuildableName = "purge.app"
+            BuildableName = "Purge.app"
             BlueprintName = "purge"
             ReferencedContainer = "container:purge.xcodeproj">
          </BuildableReference>

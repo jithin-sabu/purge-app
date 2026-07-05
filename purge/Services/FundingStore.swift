@@ -41,7 +41,7 @@ struct FundingInfo: Codable {
 final class FundingStore: ObservableObject {
     @Published private(set) var info: FundingInfo
 
-    private static let remoteURL = URL(string: "https://raw.githubusercontent.com/jithinsabumec/purge-app/main/funding.json")!
+    private static let remoteURL = URL(string: "https://raw.githubusercontent.com/jithin-sabu/purge-app/main/funding.json")!
 
     init() {
         if let url = Bundle.main.url(forResource: "funding", withExtension: "json"),

@@ -13,7 +13,7 @@ enum UpdateStatus: Equatable {
 final class UpdateChecker: ObservableObject {
     @Published private(set) var status: UpdateStatus = .idle
 
-    private static let releasesAPIURL = URL(string: "https://api.github.com/repos/jithinsabumec/purge-app/releases/latest")!
+    private static let releasesAPIURL = URL(string: "https://api.github.com/repos/jithin-sabu/purge-app/releases/latest")!
 
     private struct GitHubRelease: Decodable {
         let tag_name: String

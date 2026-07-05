@@ -71,7 +71,7 @@ struct DevToolsView<PageHeader: View>: View {
         }
     }
 
-    @AppStorage("filter.devTools") private var filterRaw: String = SafetyFilter.all.rawValue
+    @AppStorage("filter.devTools") private var filterRaw: String = SafetyFilter.safe.rawValue
     @AppStorage("sort.devTools") private var sortRaw: String = SortOption.sizeDesc.rawValue
 
     private var currentSafetyFilter: SafetyFilter {

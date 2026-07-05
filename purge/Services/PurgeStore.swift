@@ -251,15 +251,9 @@ final class PurgeStore: ObservableObject {
             || interactiveSafeCleanupSession?.phase == .cleaning
     }
 
-    /// Paths that match the same safety, git, lockfile, and staleness rules used by manual safe cleanup.
-    func manualSafeCleanupCandidates(
-        referenceDate now: Date = Date(),
-        minUnusedDaysForCaches: Int = 0,
-        minUnusedDaysForDeveloperArtifacts: Int = 0
-    ) -> [DeletionCandidate] {
-        _ = now
-        _ = minUnusedDaysForCaches
-        _ = minUnusedDaysForDeveloperArtifacts
+    /// Paths that match the safety, git, and lockfile rules used by safe cleanup
+    /// (manual and scheduled — both clean the same set).
+    func manualSafeCleanupCandidates() -> [DeletionCandidate] {
         var candidates: [DeletionCandidate] = []
 
         for artifact in projectGroups.flatMap(\.artifacts) {
@@ -282,7 +276,6 @@ final class PurgeStore: ObservableObject {
             guard item.reinstallSafety != .missingLockfile else { continue }
             guard item.gitStatus == .clean else { continue }
             for location in item.locations {
-                guard daysBetween(location.lastModified, now) >= minUnusedDaysForCaches else { continue }
                 let path = location.path.standardizedFileURL
                 guard DeletionSafetyPolicy.isOfferedForCleanup(path) else { continue }
                 candidates.append(
@@ -1174,25 +1167,20 @@ final class PurgeStore: ObservableObject {
     }
 
     @discardableResult
-    func performScheduledClean(referenceDate now: Date = Date()) async -> ScheduledCleaningSummary {
+    func performScheduledClean() async -> ScheduledCleaningSummary {
         guard ScheduledCleaningPreferenceStore.shared.isEnabled else {
             return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
         }
-        let option = ScheduledCleaningPreferenceStore.shared.unusedDays
         return await performSafeCleanup(
-            referenceDate: now,
-            minUnusedDaysForCaches: option.cacheStaleDays,
-            minUnusedDaysForDeveloperArtifacts: option.developerArtifactStaleDays,
             historyTrigger: .scheduled,
             scheduledNotifications: true,
             clearSelectionsAfterCleanup: false
         )
     }
 
-    /// Immediate safe cleanup from the menu bar (no “unused days” wait; does not require scheduled cleaning to be enabled).
+    /// Immediate safe cleanup from the menu bar (does not require scheduled cleaning to be enabled).
     @discardableResult
     func performManualSafeCleanNow(
-        referenceDate now: Date = Date(),
         pinnedCandidates: [DeletionCandidate]? = nil
     ) async -> ScheduledCleaningSummary {
         var onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
@@ -1200,9 +1188,6 @@ final class PurgeStore: ObservableObject {
             onProgress = { @Sendable event in buffer.ingest(event) }
         }
         let summary = await performSafeCleanup(
-            referenceDate: now,
-            minUnusedDaysForCaches: 0,
-            minUnusedDaysForDeveloperArtifacts: 0,
             historyTrigger: .manual,
             scheduledNotifications: false,
             clearSelectionsAfterCleanup: true,
@@ -1339,9 +1324,6 @@ final class PurgeStore: ObservableObject {
     }
 
     private func performSafeCleanup(
-        referenceDate now: Date,
-        minUnusedDaysForCaches: Int,
-        minUnusedDaysForDeveloperArtifacts: Int,
         historyTrigger: CleanupTrigger,
         scheduledNotifications: Bool,
         clearSelectionsAfterCleanup: Bool,
@@ -1357,11 +1339,7 @@ final class PurgeStore: ObservableObject {
             }
         }
 
-        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates(
-            referenceDate: now,
-            minUnusedDaysForCaches: minUnusedDaysForCaches,
-            minUnusedDaysForDeveloperArtifacts: minUnusedDaysForDeveloperArtifacts
-        )
+        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates()
 
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
@@ -1432,10 +1410,6 @@ final class PurgeStore: ObservableObject {
             }
             return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
         }
-    }
-
-    private func daysBetween(_ start: Date, _ end: Date) -> Int {
-        Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0
     }
 
     private func dedupeCacheItemsByPath(_ items: [CacheItem]) -> [CacheItem] {

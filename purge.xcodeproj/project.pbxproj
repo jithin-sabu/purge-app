@@ -22,7 +22,7 @@
 
 /* Begin PBXFileReference section */
 		5AB930692FAF6F5400EB0EBD /* purge.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = purge.icon; sourceTree = "<group>"; };
-		5AF380452FAA15E4001693A0 /* purge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = purge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5AF380452FAA15E4001693A0 /* Purge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Purge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5AF381002FAA15E4001693A0 /* PurgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PurgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -70,7 +70,7 @@
 		5AF380462FAA15E4001693A0 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5AF380452FAA15E4001693A0 /* purge.app */,
+				5AF380452FAA15E4001693A0 /* Purge.app */,
 				5AF381002FAA15E4001693A0 /* PurgeTests.xctest */,
 			);
 			name = Products;
@@ -98,8 +98,8 @@
 			name = purge;
 			packageProductDependencies = (
 			);
-			productName = purge;
-			productReference = 5AF380452FAA15E4001693A0 /* purge.app */;
+			productName = Purge;
+			productReference = 5AF380452FAA15E4001693A0 /* Purge.app */;
 			productType = "com.apple.product-type.application";
 		};
 		5AF381022FAA15E4001693A0 /* PurgeTests */ = {
@@ -357,6 +357,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Purge;
+				INFOPLIST_KEY_CFBundleName = Purge;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -364,7 +365,7 @@
 				);
 				MARKETING_VERSION = 1.2.3;
 				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.app;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Purge;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -391,6 +392,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Purge;
+				INFOPLIST_KEY_CFBundleName = Purge;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -398,7 +400,7 @@
 				);
 				MARKETING_VERSION = 1.2.3;
 				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.app;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Purge;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -431,7 +433,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/purge.app/Contents/MacOS/purge";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Purge.app/Contents/MacOS/Purge";
 			};
 			name = Debug;
 		};
@@ -457,7 +459,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/purge.app/Contents/MacOS/purge";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Purge.app/Contents/MacOS/Purge";
 			};
 			name = Release;
 		};

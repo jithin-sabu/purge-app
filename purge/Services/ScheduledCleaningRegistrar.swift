@@ -1,23 +1,58 @@
+import Combine
 import Foundation
 import UserNotifications
+
+/// Outcome of the most recent scheduled clean (including runs that found nothing
+/// eligible), persisted so Settings can show what the schedule last did.
+struct LastScheduledCleanOutcome: Codable, Equatable {
+    let date: Date
+    let freedBytes: Int64
+    let deletedCount: Int
+}
 
 /// macOS scheduling: repeating local reminders plus a graceful sweep when the app becomes active.
 /// Background processing tasks (`BGTaskScheduler` / `BGProcessingTask`) are not available on macOS.
 @MainActor
-final class ScheduledCleaningRegistrar {
+final class ScheduledCleaningRegistrar: ObservableObject {
     static let shared = ScheduledCleaningRegistrar()
 
     /// Single pending repeating request; aligns with purge bundle conventions.
     static let repeatingReminderIdentifier = "io.getpurge.app.scheduled-clean"
 
     private static let lastGraceSweepKey = "ScheduledCleaningRegistrar.lastGraceSweep"
+    private static let lastOutcomeKey = "ScheduledCleaningRegistrar.lastOutcome"
 
     static var lastGraceSweepDate: Date? {
         UserDefaults.standard.object(forKey: lastGraceSweepKey) as? Date
     }
 
+    @Published private(set) var lastOutcome: LastScheduledCleanOutcome?
+
     private weak var store: PurgeStore?
     private var prefsObserver: NSObjectProtocol?
+    /// The launch `.task` and the scene-activation handler can both find the same
+    /// overdue schedule before either advances the anchor (the scan inside the
+    /// clean takes a while), producing back-to-back duplicate cleans. One sweep
+    /// at a time.
+    private var isSweepRunning = false
+
+    init() {
+        if let data = UserDefaults.standard.data(forKey: Self.lastOutcomeKey) {
+            lastOutcome = try? JSONDecoder().decode(LastScheduledCleanOutcome.self, from: data)
+        }
+    }
+
+    private func recordOutcome(_ summary: PurgeStore.ScheduledCleaningSummary, at date: Date) {
+        let outcome = LastScheduledCleanOutcome(
+            date: date,
+            freedBytes: summary.freedBytes,
+            deletedCount: summary.deletedCount
+        )
+        lastOutcome = outcome
+        if let data = try? JSONEncoder().encode(outcome) {
+            UserDefaults.standard.set(data, forKey: Self.lastOutcomeKey)
+        }
+    }
 
     func attach(store: PurgeStore) {
         self.store = store
@@ -75,7 +110,7 @@ final class ScheduledCleaningRegistrar {
         let content = UNMutableNotificationContent()
         content.title = "Scheduled cleanup due"
         content.body = """
-        Open Purge when you’re ready — if it’s safe by your filters, unused items clear automatically soon after launch.
+        Open Purge when you’re ready — safe items clear automatically soon after launch.
         """
         content.sound = .default
 
@@ -100,10 +135,14 @@ final class ScheduledCleaningRegistrar {
     @discardableResult
     func runScheduledCleanNow(referenceDate now: Date = Date()) async -> PurgeStore.ScheduledCleaningSummary? {
         guard ScheduledCleaningPreferenceStore.shared.isEnabled else { return nil }
-        guard let store else { return nil }
+        guard let store, !isSweepRunning else { return nil }
 
-        let summary = await store.performScheduledClean(referenceDate: now)
+        isSweepRunning = true
+        defer { isSweepRunning = false }
+
+        let summary = await store.performScheduledClean()
         UserDefaults.standard.set(now, forKey: Self.lastGraceSweepKey)
+        recordOutcome(summary, at: now)
         await applyScheduleFromPrefs()
         return summary
     }
@@ -114,11 +153,15 @@ final class ScheduledCleaningRegistrar {
     /// same due date the UI shows, so an overdue clean runs the next time Purge opens.
     func runGracefulActivationSweepIfPastDue(referenceDate now: Date = Date()) async {
         guard ScheduledCleaningPreferenceStore.shared.isEnabled else { return }
-        guard let store else { return }
+        guard let store, !isSweepRunning else { return }
         guard now >= dueDate(referenceDate: now) else { return }
 
-        _ = await store.performScheduledClean(referenceDate: now)
+        isSweepRunning = true
+        defer { isSweepRunning = false }
+
+        let summary = await store.performScheduledClean()
         UserDefaults.standard.set(now, forKey: Self.lastGraceSweepKey)
+        recordOutcome(summary, at: now)
 
         Task { await applyScheduleFromPrefs() }
     }

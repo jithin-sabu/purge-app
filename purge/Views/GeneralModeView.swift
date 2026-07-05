@@ -31,7 +31,7 @@ struct AppCachesView<PageHeader: View>: View {
         self.pageHeader = pageHeader
     }
 
-    @AppStorage("filter.appCaches") private var filterRaw: String = SafetyFilter.all.rawValue
+    @AppStorage("filter.appCaches") private var filterRaw: String = SafetyFilter.safe.rawValue
     @AppStorage("sort.appCaches") private var sortRaw: String = SortOption.sizeDesc.rawValue
 
     private var currentSafetyFilter: SafetyFilter {

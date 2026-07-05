@@ -91,8 +91,8 @@ struct MenuBarContentView: View {
         VStack(alignment: .leading, spacing: 2) {
             statusRegion
                 .padding(.horizontal, MenuLayout.contentHorizontalInset)
-                .padding(.top, 10)
-                .padding(.bottom, 6)
+                .padding(.top, 4)
+                .padding(.bottom, 2)
 
             menuDivider
 
@@ -213,7 +213,7 @@ struct MenuBarContentView: View {
         Divider()
             .opacity(0.5)
             .padding(.horizontal, Metrics.dividerInset)
-            .padding(.vertical, 4)
+            .padding(.vertical, 2)
     }
 
     // MARK: Formatting

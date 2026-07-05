@@ -25,39 +25,6 @@ enum ScheduledCleaningFrequency: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum ScheduledCleaningUnusedDaysOption: Int, Codable, CaseIterable, Identifiable {
-    case days30 = 30
-    case days60 = 60
-    case days90 = 90
-    case months6 = 180
-    case months12 = 365
-
-    /// Minimum staleness for developer artifacts in scheduled cleaning (6× user threshold, floored here).
-    static let developerArtifactFloorDays = 180
-
-    var id: Int { rawValue }
-
-    var label: String {
-        switch self {
-        case .days30: return "30 days"
-        case .days60: return "60 days"
-        case .days90: return "90 days"
-        case .months6: return "6 months"
-        case .months12: return "12 months"
-        }
-    }
-
-    var summaryDurationPhrase: String { label }
-
-    /// User-facing threshold for app caches in scheduled cleaning.
-    var cacheStaleDays: Int { rawValue }
-
-    /// Internal threshold for project artifacts and global dev tool folders (6× selection, 6-month floor).
-    var developerArtifactStaleDays: Int {
-        max(Self.developerArtifactFloorDays, rawValue * 6)
-    }
-}
-
 enum DevToolsStalenessOption: Int, Codable, CaseIterable, Identifiable {
     case oneMonth = 30
     case threeMonths = 90

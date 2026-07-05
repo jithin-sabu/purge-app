@@ -6,7 +6,6 @@ private enum UDKeys {
     static let scheduledCleanEnabled = "scheduledClean.enabled"
     static let scheduledEnabledAt = "scheduledClean.enabledAt"
     static let scheduledFrequency = "scheduledClean.frequency"
-    static let scheduledStaleDays = "scheduledClean.staleDays"
 }
 
 @MainActor
@@ -35,31 +34,16 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         }
     }
 
-    @Published var unusedDays: ScheduledCleaningUnusedDaysOption {
-        didSet {
-            ud.set(unusedDays.rawValue, forKey: UDKeys.scheduledStaleDays)
-            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: nil)
-        }
-    }
-
     init() {
         ud.register(defaults: [
             UDKeys.scheduledCleanEnabled: false,
-            UDKeys.scheduledFrequency: ScheduledCleaningFrequency.monthly.rawValue,
-            UDKeys.scheduledStaleDays: ScheduledCleaningUnusedDaysOption.months6.rawValue
+            UDKeys.scheduledFrequency: ScheduledCleaningFrequency.monthly.rawValue
         ])
         isEnabled = ud.bool(forKey: UDKeys.scheduledCleanEnabled)
         if let f = ScheduledCleaningFrequency(rawValue: ud.string(forKey: UDKeys.scheduledFrequency) ?? "") {
             frequency = f
         } else {
             frequency = .monthly
-        }
-        let daysRaw = ud.integer(forKey: UDKeys.scheduledStaleDays)
-        let defaultDays = ScheduledCleaningUnusedDaysOption.months6.rawValue
-        if let d = ScheduledCleaningUnusedDaysOption(rawValue: daysRaw == 0 ? defaultDays : daysRaw) {
-            unusedDays = d
-        } else {
-            unusedDays = .months6
         }
     }
 
