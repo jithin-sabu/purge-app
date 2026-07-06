@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Purge</title>
+    <item>
+      <title>Version 1.2.4</title>
+      <pubDate>Mon, 06 Jul 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>1.2.4</sparkle:version>
+      <sparkle:shortVersionString>1.2.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.2.4/Purgev1.2.4.dmg"
+        sparkle:edSignature="D+6VMU5XaBv5ChuF7LQRTvYSj0PUl+qp65voHXMFvXlYa0JLUWDZf5nzXZD4WIjicgGR0LqM7fN0iIOqwkEAAQ=="
+        length="5884434"
+        type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>
+
