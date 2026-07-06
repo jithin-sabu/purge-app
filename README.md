@@ -132,9 +132,6 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 
 There are two ways to install Purge: with Homebrew if you live in the terminal, or by downloading the app directly. Both land in the same place.
 
-> [!IMPORTANT]
-> Purge is unsigned, so the first time you open it, macOS blocks it once. This is expected, not a problem with the app. Use the Open Anyway steps in [Step 4](#step-4-open-for-the-first-time) below. Installing through Homebrew does not change this.
-
 ### Install with Homebrew
 
 ```bash
@@ -169,22 +166,9 @@ A result ending in `OK` means the file matches the published release.
 
 Open the `.dmg` and drag Purge to your Applications folder.
 
-#### Step 4: Open for the first time
+#### Step 4: Open Purge
 
-Since Purge is not on the Mac App Store, macOS will block it the first time you try to open it.
-
-**Here is how to open it:**
-
-1. Double-click Purge to open it. macOS will block it and show a warning; that is expected
-2. Open **System Settings** on your Mac
-3. Go to **Privacy & Security**
-4. Scroll down to the **Security** section
-5. You will see **"Purge was blocked from use because it is not from an identified developer"**
-6. Click **Open Anyway**
-7. Enter your Mac password if asked
-8. Click **Open** in the final confirmation
-
-You only need to do this once. After that it opens normally.
+Double-click Purge to open it. Purge is notarized by Apple, so it opens normally with no extra steps.
 
 #### Step 5: Grant Full Disk Access
 
@@ -225,7 +209,6 @@ You can also just visit the [releases page](https://github.com/jithin-sabu/purge
 
 That's it. Your settings, cleaning schedule, and history are kept; they live separately from the app, so replacing the app doesn't touch them. You won't need to grant Full Disk Access again either; the permission stays with Purge.
 
-One thing to expect: because the app is unsigned, the first time you open a freshly downloaded update macOS may block it again, the same as the very first install. If that happens, use the same **Open Anyway** step from [Step 4](#step-4-open-for-the-first-time) above. After that one click it opens normally.
 
 ---
 
@@ -305,10 +288,11 @@ Purge never reads or sends file contents.
 
 Purge deletes files, so safety is the point. A few things worth knowing:
 
-- **Trash by default**: nothing is permanently deleted. Items move to the macOS Trash and can be restored until you empty it.
-- **Allowlist-based deletion**: only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched.
+- **Trash by default**: Nothing is permanently deleted. Items move to the macOS Trash and can be restored until you empty it.
+- **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched.
 - **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
-- **Open source**: the full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
+- **Open source**: The full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
+- **Notarized by Apple**: The app is signed and notarized, so macOS can verify it hasn't been tampered with since release.
 
 Found a safety gap or a path that could be deleted when it shouldn't be? Please report it. See [SECURITY.md](SECURITY.md) for how.
 

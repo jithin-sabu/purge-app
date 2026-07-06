@@ -11,6 +11,8 @@ import UserNotifications
 
 @MainActor
 final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
+    let updater = PurgeUpdater()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Apply the saved appearance before the first paint to avoid a launch flash.
         AppAppearance.apply(AppearanceMode.current)
@@ -18,6 +20,21 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         CleaningQuitGuard.shouldAllowTermination() ? .terminateNow : .terminateCancel
+    }
+
+    func checkForUpdates() {
+        updater.checkForUpdates()
+    }
+}
+
+private struct PurgeAppDelegateKey: EnvironmentKey {
+    static let defaultValue: PurgeAppDelegate? = nil
+}
+
+extension EnvironmentValues {
+    var purgeAppDelegate: PurgeAppDelegate? {
+        get { self[PurgeAppDelegateKey.self] }
+        set { self[PurgeAppDelegateKey.self] = newValue }
     }
 }
 
@@ -60,6 +77,7 @@ struct PurgeApp: App {
             AppRootView()
                 .environmentObject(store)
                 .environmentObject(diskStore)
+                .environment(\.purgeAppDelegate, appDelegate)
                 .onAppear {
                     diskStore.refresh()
                     menuModel.attach(store: store)

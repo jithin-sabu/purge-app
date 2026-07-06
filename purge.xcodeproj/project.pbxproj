@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5AB9306A2FAF6F5400EB0EBD /* purge.icon in Resources */ = {isa = PBXBuildFile; fileRef = 5AB930692FAF6F5400EB0EBD /* purge.icon */; };
+		5AD314EE2FFB1DB500AEB32F /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5AD314ED2FFB1DB500AEB32F /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -26,9 +27,22 @@
 		5AF381002FAA15E4001693A0 /* PurgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PurgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5AD314F02FFB1FF800AEB32F /* Exceptions for "purge" folder in "purge" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5AF380442FAA15E4001693A0 /* purge */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5AF380472FAA15E4001693A0 /* purge */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5AD314F02FFB1FF800AEB32F /* Exceptions for "purge" folder in "purge" target */,
+			);
 			path = purge;
 			sourceTree = "<group>";
 		};
@@ -44,6 +58,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5AD314EE2FFB1DB500AEB32F /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -97,6 +112,7 @@
 			);
 			name = purge;
 			packageProductDependencies = (
+				5AD314ED2FFB1DB500AEB32F /* Sparkle */,
 			);
 			productName = Purge;
 			productReference = 5AF380452FAA15E4001693A0 /* Purge.app */;
@@ -152,6 +168,9 @@
 			);
 			mainGroup = 5AF3803C2FAA15E4001693A0;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5AD314EC2FFB1DB500AEB32F /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5AF380462FAA15E4001693A0 /* Products */;
 			projectDirPath = "";
@@ -347,15 +366,25 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = purge;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_STYLE = Automatic;
+				AUTOMATION_APPLE_EVENTS = NO;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 9;
-				DEVELOPMENT_TEAM = BX83ZBV95B;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = purge/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Purge;
 				INFOPLIST_KEY_CFBundleName = Purge;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -366,7 +395,14 @@
 				MARKETING_VERSION = 1.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.app;
 				PRODUCT_NAME = Purge;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -382,15 +418,25 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = purge;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_STYLE = Automatic;
+				AUTOMATION_APPLE_EVENTS = NO;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 9;
-				DEVELOPMENT_TEAM = BX83ZBV95B;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = purge/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Purge;
 				INFOPLIST_KEY_CFBundleName = Purge;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -401,7 +447,14 @@
 				MARKETING_VERSION = 1.2.4;
 				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.app;
 				PRODUCT_NAME = Purge;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -494,6 +547,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5AD314EC2FFB1DB500AEB32F /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5AD314ED2FFB1DB500AEB32F /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5AD314EC2FFB1DB500AEB32F /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5AF3803D2FAA15E4001693A0 /* Project object */;
 }

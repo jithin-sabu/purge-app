@@ -120,16 +120,12 @@ struct MenuBarContentView: View {
                     .opacity(MenuLayout.mutedStatusOpacity)
                     .transition(Self.heroTransition)
 
-            case .clear(let lastScanned):
-                HStack(spacing: 8) {
-                    Text("You're all clear")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppColors.textPrimary)
-                    Spacer(minLength: 0)
-                    scannedAgoLabel(for: lastScanned)
-                }
-                .opacity(MenuLayout.mutedStatusOpacity)
-                .transition(Self.heroTransition)
+            case .clear:
+                Text("You're all clear")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .opacity(MenuLayout.mutedStatusOpacity)
+                    .transition(Self.heroTransition)
 
             case .ready(let bytes, let lastScanned):
                 HStack(spacing: 8) {
