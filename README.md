@@ -52,6 +52,7 @@ Scans `~/Library/Caches`, sandbox container caches, and common system junk:
 
 - Per-app cache folders with friendly names, brand icons, and a plain-English explanation if you want to read it
 - System Junk like application logs, crash reports, macOS installers, font cache
+- Large media caches from creative apps like Premiere Pro and After Effects
 - Duplicate cache locations for the same app merged into a single row
 - Results stream in as they are found
 
