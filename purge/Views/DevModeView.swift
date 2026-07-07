@@ -29,7 +29,6 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     @State private var expandedProjectRoots = Set<String>()
-    @State private var iosSimulatorsExpanded = false
 
     /// Stable list IDs so sibling `ForEach` loops in the same `List` never share
     /// bare `Int` identities (which can duplicate or swap rows on expand/collapse).
@@ -61,12 +60,10 @@ struct DevToolsView<PageHeader: View>: View {
 
     private enum MergedDevStandardRow: Hashable, Identifiable {
         case tool(id: String, index: Int)
-        case simulators
 
         var id: String {
             switch self {
             case .tool(let id, _): return "merged-tool-\(id)"
-            case .simulators: return "merged-simulators"
             }
         }
     }
@@ -198,58 +195,25 @@ struct DevToolsView<PageHeader: View>: View {
         visibleSimulatorIndices().reduce(Int64(0)) { $0 + (store.simulatorDevices[$1].sizeOnDisk ?? 0) }
     }
 
-    private var simulatorSectionHasPendingSizes: Bool {
-        visibleSimulatorIndices().contains { store.simulatorDevices[$0].sizeOnDisk == nil }
-    }
-
-    private func simulatorSectionModifiedDate() -> Date {
-        visibleSimulatorIndices()
-            .map { store.simulatorDevices[$0].lastBootedAt ?? .distantPast }
-            .max() ?? .distantPast
-    }
-
-    private func worstSafetyLevel(_ levels: [SafetyLevel]) -> SafetyLevel {
-        if levels.contains(.medium) { return .medium }
-        if levels.contains(.unknown) { return .unknown }
-        return .safe
-    }
-
-    private func simulatorParentSafetyInfo() -> SafetyInfo {
-        let visible = visibleSimulatorIndices().map { store.simulatorDevices[$0] }
-        let worst = worstSafetyLevel(visible.map(\.safetyInfo.level))
-        return SafetyInfo(
-            level: worst,
-            headline: "iOS Simulators",
-            explanation: "Each entry is one simulator device folder. Expand the list to delete individual simulators safely.",
-            recoverySteps: "",
-            reinstallCommand: nil
-        )
-    }
-
     private func mergedStandardRowEntries() -> [MergedDevStandardRow] {
         let tools = sortedStandardToolIndices()
         var rows: [MergedDevStandardRow] = tools.map { .tool(id: store.devTools[$0].id, index: $0) }
-        guard simulatorSectionVisible else { return rows }
-        rows.append(.simulators)
 
         func entrySize(_ e: MergedDevStandardRow) -> Int64 {
             switch e {
             case .tool(_, let i): return store.devTools[i].sizeBytes
-            case .simulators: return simulatorSectionByteTotal()
             }
         }
 
         func entryDate(_ e: MergedDevStandardRow) -> Date {
             switch e {
             case .tool(_, let i): return devToolModified(store.devTools[i])
-            case .simulators: return simulatorSectionModifiedDate()
             }
         }
 
         func entryName(_ e: MergedDevStandardRow) -> String {
             switch e {
             case .tool(_, let i): return store.devTools[i].toolName
-            case .simulators: return "iOS Simulators"
             }
         }
 
@@ -266,22 +230,6 @@ struct DevToolsView<PageHeader: View>: View {
             rows.sort { entryName($0).localizedCaseInsensitiveCompare(entryName($1)) == .orderedAscending }
         }
         return rows
-    }
-
-    private func simulatorParentTriState() -> SelectAllTriState {
-        let ix = visibleSimulatorIndices()
-        guard !ix.isEmpty else { return .none }
-        let selected = ix.filter { store.simulatorDevices[$0].isSelected }.count
-        if selected == 0 { return .none }
-        if selected == ix.count { return .all }
-        return .mixed
-    }
-
-    private func toggleSimulatorParentCheckbox() {
-        let ix = visibleSimulatorIndices()
-        guard !ix.isEmpty else { return }
-        let allOn = ix.allSatisfy { store.simulatorDevices[$0].isSelected }
-        store.setSimulatorGroupSelection(allSelected: !allOn)
     }
 
     private func eligibleSimulatorIndicesForToolbarSelectAll() -> [Int] {
@@ -469,7 +417,9 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var nothingMatchesFilter: Bool {
-        mergedStandardRowEntries().isEmpty && filteredProjectGroupIndices().isEmpty
+        mergedStandardRowEntries().isEmpty
+            && !simulatorSectionVisible
+            && filteredProjectGroupIndices().isEmpty
     }
 
     /// Row counts mirror the dev tools list + chip aggregates (detected tools + all project artifacts),
@@ -510,9 +460,10 @@ struct DevToolsView<PageHeader: View>: View {
             switch entry {
             case .tool(_, let i):
                 sum += store.devTools[i].sizeBytes
-            case .simulators:
-                sum += simulatorSectionByteTotal()
             }
+        }
+        if simulatorSectionVisible {
+            sum += simulatorSectionByteTotal()
         }
         for gi in filteredProjectGroupIndices() {
             let g = store.projectGroups[gi]
@@ -746,37 +697,36 @@ struct DevToolsView<PageHeader: View>: View {
                     .listRowSeparator(.hidden)
                     .transition(rowInsertionTransition)
                     }
+                }
+            }
 
-                case .simulators:
-                    iosSimulatorsHostRow
-                        .listRowInsets(ScanListRowInsets.standard)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    if iosSimulatorsExpanded {
-                        ForEach(sortedVisibleSimulatorIndices().map { store.simulatorDevices[$0].id }, id: \.self) { deviceID in
-                            if let device = store.simulatorDevices.first(where: { $0.id == deviceID }) {
-                                ScanResultRow(
-                                    isSelected: bindingForSimulator(id: device.id),
-                                    primaryLabel: device.safetyInfo.headline,
-                                    formattedSize: device.formattedSize,
-                                    safetyInfo: device.safetyInfo,
-                                    brandIcon: .sfSymbol("ipad.and.iphone"),
-                                    detailCaption: nil,
-                                    reinstallSafety: .notApplicable,
-                                    showUncommittedRepoChanges: false,
-                                    onResetToAutomatic: nil,
-                                    isUserOverride: false,
-                                    allowsBulkSelection: true,
-                                    isMetadataPending: isSimulatorMetadataPending(device)
-                                )
-                                .padding(.leading, 24)
-                                .listRowInsets(ScanListRowInsets.standard)
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                                .transition(rowInsertionTransition)
-                            }
+            if simulatorSectionVisible {
+                Section {
+                    ForEach(sortedVisibleSimulatorIndices().map { store.simulatorDevices[$0].id }, id: \.self) { deviceID in
+                        if let device = store.simulatorDevices.first(where: { $0.id == deviceID }) {
+                            ScanResultRow(
+                                isSelected: bindingForSimulator(id: device.id),
+                                primaryLabel: device.safetyInfo.headline,
+                                formattedSize: device.formattedSize,
+                                safetyInfo: device.safetyInfo,
+                                brandIcon: .sfSymbol("ipad.and.iphone"),
+                                detailCaption: nil,
+                                reinstallSafety: .notApplicable,
+                                showUncommittedRepoChanges: false,
+                                onResetToAutomatic: nil,
+                                isUserOverride: false,
+                                allowsBulkSelection: true,
+                                isMetadataPending: isSimulatorMetadataPending(device),
+                                usesCompactExplanation: true
+                            )
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(rowInsertionTransition)
                         }
                     }
+                } header: {
+                    iosSimulatorsSectionHeader
                 }
             }
 
@@ -796,10 +746,11 @@ struct DevToolsView<PageHeader: View>: View {
                         }
                     }
                 } header: {
-                    Text("Developer Projects")
-                        .font(AppStyle.Typography.metadataEmphasis)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, AppStyle.Spacing.small)
+                    devToolsSectionHeader {
+                        Text("Developer Projects")
+                            .font(AppStyle.Typography.metadataEmphasis)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             } else if store.isScanningProjects {
                 Section {
@@ -810,10 +761,11 @@ struct DevToolsView<PageHeader: View>: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 } header: {
-                    Text("Developer Projects")
-                        .font(AppStyle.Typography.metadataEmphasis)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, AppStyle.Spacing.small)
+                    devToolsSectionHeader {
+                        Text("Developer Projects")
+                            .font(AppStyle.Typography.metadataEmphasis)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -824,7 +776,6 @@ struct DevToolsView<PageHeader: View>: View {
         .background(AppColors.bgBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
         .animation(rowInsertionAnimation, value: developerTotalRowCount)
-        .animation(expandCollapseAnimation, value: iosSimulatorsExpanded)
         .animation(expandCollapseAnimation, value: expandedProjectRoots)
     }
 
@@ -882,64 +833,24 @@ struct DevToolsView<PageHeader: View>: View {
         )
     }
 
-    private var iosSimulatorsHostRow: some View {
-        let parentInfo = simulatorParentSafetyInfo()
-        let sizeLabel = simulatorSectionHasPendingSizes
-            ? "Calculating…"
-            : formatBytes(simulatorSectionByteTotal())
-        return HStack(alignment: .center, spacing: 6) {
-            Button {
-                withAnimation(expandCollapseAnimation) {
-                    iosSimulatorsExpanded.toggle()
-                }
-            } label: {
-                ZStack {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 12, height: 12)
-                .rotationEffect(.degrees(iosSimulatorsExpanded ? 180 : 0), anchor: .center)
-                .frame(width: 12, height: 44, alignment: .center)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(iosSimulatorsExpanded ? "Collapse iOS Simulators" : "Expand iOS Simulators")
-
-            TriStateCheckbox(title: "", state: simulatorParentTriState()) {
-                toggleSimulatorParentCheckbox()
-            }
-            .frame(width: 24)
-
-            Circle()
-                .fill(parentInfo.level == .safe ? AppColors.tagSafeText : AppColors.tagCheckText)
-                .frame(width: 6, height: 6)
-
-            Image(systemName: "ipad.and.iphone")
-                .font(.system(size: AppStyle.Row.sfSymbolPointSize))
-                .foregroundStyle(.secondary)
-                .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
-
+    private var iosSimulatorsSectionHeader: some View {
+        devToolsSectionHeader {
             VStack(alignment: .leading, spacing: 2) {
                 Text("iOS Simulators")
-                    .font(AppStyle.Typography.rowTitle)
+                    .font(AppStyle.Typography.metadataEmphasis)
+                    .foregroundStyle(.secondary)
                 Text("Shutdown devices only — booted simulators stay hidden.")
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.tertiary)
-                    .lineLimit(2)
             }
-            Spacer(minLength: 8)
-            Text(sizeLabel)
-                .font(AppStyle.Typography.rowTitle)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
         }
-        .padding(.vertical, 2)
-        .padding(.horizontal, AppStyle.Spacing.xSmall)
-        .frame(minHeight: AppStyle.Row.parentHeight)
-        .devToolsGroupCardChrome()
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("iOS Simulators")
+    }
+
+    private func devToolsSectionHeader<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, AppStyle.Spacing.medium)
+            .padding(.horizontal, AppStyle.Spacing.small)
     }
 
     @ViewBuilder

@@ -52,13 +52,14 @@ struct SkeletonFillBar: View {
 /// Crossfades between a loading placeholder and loaded content (respects Reduce Motion).
 struct ScanContentCrossfade<Loading: View, Loaded: View>: View {
     var isLoading: Bool
+    var contentAlignment: Alignment = .center
     @ViewBuilder var loading: () -> Loading
     @ViewBuilder var loaded: () -> Loaded
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: contentAlignment) {
             loaded()
                 .opacity(isLoading ? 0 : 1)
             loading()

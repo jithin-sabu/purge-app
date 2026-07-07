@@ -61,7 +61,7 @@ struct ScanListRow<Footer: View>: View {
 
                 Spacer(minLength: AppStyle.Spacing.xSmall)
 
-                ScanContentCrossfade(isLoading: isTrailingMetadataPending) {
+                ScanContentCrossfade(isLoading: isTrailingMetadataPending, contentAlignment: .topTrailing) {
                     trailingMetadataSkeleton
                 } loaded: {
                     VStack(alignment: .trailing, spacing: 8) {

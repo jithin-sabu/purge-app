@@ -38,6 +38,8 @@ struct ScanResultRow: View {
     var showsCardChrome: Bool = true
     /// When false, no leading icon column is shown (e.g. expanded project artifact rows).
     var showsLeadingIcon: Bool = true
+    /// When true, reserves one explanation line instead of two (e.g. simulator device rows).
+    var usesCompactExplanation: Bool = false
 
     @Environment(\.scanRowPlaceholderAppearance) private var rendersAsPlaceholder
 
@@ -69,6 +71,20 @@ struct ScanResultRow: View {
         isUserOverride || detailCaption != nil || showsReinstallBadge || showUncommittedRepoChanges
     }
 
+    private var explanationMinHeight: CGFloat {
+        usesCompactExplanation
+            ? ScanResultRow.subheadlineOneLineHeight
+            : ScanResultRow.subheadlineTwoLineHeight
+    }
+
+    private var explanationLineLimit: Int {
+        usesCompactExplanation ? 1 : 3
+    }
+
+    private var rowVerticalPadding: CGFloat {
+        usesCompactExplanation ? 10 : 12
+    }
+
     private var showsReinstallBadge: Bool {
         guard let reinstallSafety else { return false }
         return reinstallSafety != .notApplicable
@@ -89,7 +105,8 @@ struct ScanResultRow: View {
         showsBulkCheckbox: Bool = true,
         isMetadataPending: Bool = false,
         showsCardChrome: Bool = true,
-        showsLeadingIcon: Bool = true
+        showsLeadingIcon: Bool = true,
+        usesCompactExplanation: Bool = false
     ) {
         self._isSelected = isSelected
         self.primaryLabel = primaryLabel
@@ -106,6 +123,7 @@ struct ScanResultRow: View {
         self.isMetadataPending = isMetadataPending
         self.showsCardChrome = showsCardChrome
         self.showsLeadingIcon = showsLeadingIcon
+        self.usesCompactExplanation = usesCompactExplanation
     }
 
     var body: some View {
@@ -137,8 +155,8 @@ struct ScanResultRow: View {
 
             trailingColumn
         }
-        .padding(.horizontal, showsCardChrome ? 14 : 0)
-        .padding(.vertical, showsCardChrome ? 12 : 8)
+        .padding(.horizontal, showsCardChrome ? AppStyle.Row.scanCardHorizontalPadding : 0)
+        .padding(.vertical, showsCardChrome ? rowVerticalPadding : 8)
     }
 
     private var rowMainContent: some View {
@@ -180,13 +198,13 @@ struct ScanResultRow: View {
                 .lineLimit(1)
 
             Text(safetyInfo.explanation)
-                .lineLimit(3)
+                .lineLimit(explanationLineLimit)
                 .truncationMode(.tail)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(
-                    minHeight: ScanResultRow.subheadlineTwoLineHeight,
-                    alignment: .topLeading
+                    minHeight: explanationMinHeight,
+                    alignment: usesCompactExplanation ? .leading : .topLeading
                 )
 
             if hasExtraBadges {
@@ -200,12 +218,16 @@ struct ScanResultRow: View {
             SkeletonFillBar(height: ScanResultRow.headlineOneLineHeight, cornerRadius: 4)
 
             VStack(alignment: .leading, spacing: 4) {
-                SkeletonFillBar(height: 10)
-                SkeletonFillBar(height: 10)
+                if usesCompactExplanation {
+                    SkeletonFillBar(height: 10)
+                } else {
+                    SkeletonFillBar(height: 10)
+                    SkeletonFillBar(height: 10)
+                }
             }
             .frame(
                 maxWidth: .infinity,
-                minHeight: ScanResultRow.subheadlineTwoLineHeight,
+                minHeight: explanationMinHeight,
                 alignment: .topLeading
             )
 
@@ -227,7 +249,7 @@ struct ScanResultRow: View {
     }
 
     private var loadedTrailingColumn: some View {
-        ScanContentCrossfade(isLoading: isMetadataPending) {
+        ScanContentCrossfade(isLoading: isMetadataPending, contentAlignment: .topTrailing) {
             trailingMetadataSkeleton
         } loaded: {
             VStack(alignment: .trailing, spacing: 8) {

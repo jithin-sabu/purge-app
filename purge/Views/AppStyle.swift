@@ -29,6 +29,8 @@ enum AppStyle {
         static let projectGroupIconCornerRadius: CGFloat = 5
         /// Aligns expanded artifact text with the project title (parent checkbox + spacing).
         static let projectArtifactLeadingInset: CGFloat = 34
+        /// Inner horizontal padding for scan result cards (matches `ScanResultRow` chrome).
+        static let scanCardHorizontalPadding: CGFloat = 14
     }
 
     enum Typography {
