@@ -125,7 +125,7 @@ final class PurgeStore: ObservableObject {
 
     @Published var showMissingLockfileFriction = false
     @Published var showUncommittedGitFriction = false
-    /// Second-step confirmation after the primary deletion sheet when the batch includes Do Not Delete or Not Sure items.
+    /// Second-step confirmation after the primary deletion sheet when the batch includes Not Sure items.
     @Published var showHighRiskDeletionSecondConfirm = false
 
     /// Standardized paths with manual user categorizations. Mirrors `user_overrides.json`.
@@ -316,7 +316,7 @@ final class PurgeStore: ObservableObject {
         true
     }
 
-    /// Selected caches eligible for manual delete (includes Do Not Delete / Not Sure when selected).
+    /// Selected caches eligible for manual delete (includes Not Sure when selected).
     var selectedGeneralDeletionCandidates: [DeletionCandidate] {
         cacheItems.filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
             .flatMap { DeletionCandidate.deletionCandidates(forCache: $0) }
@@ -395,7 +395,7 @@ final class PurgeStore: ObservableObject {
             return
         }
         dismissDeletionSheet()
-        if picks.contains(where: { $0.safetyInfo.level == .danger || $0.safetyInfo.level == .unknown }) {
+        if picks.contains(where: { $0.safetyInfo.level == .unknown }) {
             highRiskDeletionStagingCandidates = picks
             showHighRiskDeletionSecondConfirm = true
             return
@@ -748,7 +748,7 @@ final class PurgeStore: ObservableObject {
         for idx in resolved.indices where resolved[idx].gitStatus == .unknown {
             resolved[idx].gitStatus = await gitChecker.cleanupStatus(for: resolved[idx].path)
         }
-        if resolved.contains(where: { $0.safetyInfo.level == .danger || $0.safetyInfo.level == .unknown }) {
+        if resolved.contains(where: { $0.safetyInfo.level == .unknown }) {
             highRiskDeletionStagingCandidates = resolved
             showHighRiskDeletionSecondConfirm = true
             return
@@ -1657,6 +1657,18 @@ final class PurgeStore: ObservableObject {
                     published.appName = previous.appName
                 }
             }
+            // Hard safety net: only the two eligible risk tiers (safe / check
+            // first) may surface. Anything else — an unclassified folder, or a
+            // future allowlist/classification mistake — is dropped so it can
+            // never leak into the UI.
+            guard published.safetyInfo.level.canSurfaceInScanResults else {
+                #if DEBUG
+                for location in published.locations {
+                    print("[Purge] Dropped ineligible scan result (\(published.safetyInfo.level.rawValue)): \(location.path.path)")
+                }
+                #endif
+                return nil
+            }
             return published
         }
     }
@@ -2100,9 +2112,9 @@ final class PurgeStore: ObservableObject {
         simulatorDevices = copy
     }
 
-    func setSimulatorGroupNonDangerSelection(allSelected: Bool) {
+    func setSimulatorGroupSelection(allSelected: Bool) {
         var copy = simulatorDevices
-        for index in copy.indices where copy[index].safetyInfo.level != .danger {
+        for index in copy.indices {
             copy[index].isSelected = allSelected
         }
         simulatorDevices = copy
@@ -2114,7 +2126,6 @@ final class PurgeStore: ObservableObject {
         switch level {
         case .safe: return "safe"
         case .medium: return "medium"
-        case .danger: return "danger"
         case .unknown: return "unknown"
         }
     }
@@ -2325,8 +2336,6 @@ final class PurgeStore: ObservableObject {
             return "You marked this as Safe to Clean."
         case .medium:
             return "You marked this as Check First."
-        case .danger:
-            return "You marked this as Do Not Delete."
         case .unknown:
             return "You marked this as Not Sure."
         }

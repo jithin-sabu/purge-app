@@ -137,7 +137,9 @@ enum UserOverridesStore {
         switch entry.overrideTag.lowercased() {
         case "safe": level = .safe
         case "medium": level = .medium
-        case "danger": level = .danger
+        // Legacy "danger" override maps to Not Sure; the "Do Not Delete" tier
+        // no longer exists.
+        case "danger": level = .unknown
         case "unknown": level = .unknown
         default: level = .unknown
         }
@@ -148,8 +150,6 @@ enum UserOverridesStore {
             explanation = "You marked this as Safe to Clean."
         case .medium:
             explanation = "You marked this as Check First."
-        case .danger:
-            explanation = "You marked this as Do Not Delete."
         case .unknown:
             explanation = "You marked this as Not Sure."
         }

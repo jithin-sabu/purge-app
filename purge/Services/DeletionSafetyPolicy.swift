@@ -57,6 +57,13 @@ enum DeletionSafetyPolicy {
     ]
 
     /// Folder names allowed to be removed when located anywhere inside the user's home.
+    ///
+    /// AUDIT: `build`, `dist`, `out`, and `target` are generic names that could,
+    /// in principle, match a user-authored directory rather than a build
+    /// artifact. This match only authorizes deletion; discovery is driven by
+    /// `DevScanner`, which only surfaces these when they sit next to a known
+    /// project manifest — so a lone user folder named "out" is never scanned.
+    /// Kept as-is deliberately; flagged here so the breadth stays visible.
     nonisolated static let whitelistedFolderNames: Set<String> = [
         "node_modules",
         "venv",
@@ -108,12 +115,21 @@ enum DeletionSafetyPolicy {
     }
 
     /// Absolute paths (and their descendants) we are explicitly authorized to delete.
+    ///
+    /// Audit note: every entry below resolves to a regenerable cache, build
+    /// artifact, or log directory — nothing here holds non-recoverable user
+    /// data. A handful of entries are flagged `AUDIT` where the folder holds
+    /// re-creatable but not-instantly-regenerated state; those are surfaced as
+    /// "Check First" by their classifiers (never silently downgraded to Safe),
+    /// and are called out here so the risk stays visible.
     nonisolated static func whitelistedAbsolutePrefixes(home: String) -> [String] {
         [
             "\(home)/Library/Caches",
             "\(home)/Library/Developer/Xcode/DerivedData",
             "\(home)/Library/Developer/Xcode/iOS DeviceSupport",
             "\(home)/Library/Developer/Xcode/DocumentationCache",
+            // AUDIT: Xcode Archives hold built .xcarchive bundles + dSYMs. Not
+            // user data, but not auto-regenerated — treat as Check First, never Safe.
             "\(home)/Library/Developer/Xcode/Archives",
             "\(home)/.npm",
             "\(home)/.npm/_npx",
@@ -122,6 +138,9 @@ enum DeletionSafetyPolicy {
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
             "\(home)/.gradle/caches",
+            // AUDIT: `.android` also holds AVD emulator images and the adb key.
+            // Re-creatable (re-auth devices / re-create AVDs) but not a pure
+            // cache — classify as Check First, not Safe.
             "\(home)/.android",
             "\(home)/.cocoapods",
             "\(home)/.sbt",
@@ -131,7 +150,9 @@ enum DeletionSafetyPolicy {
             "\(home)/.cargo/registry",
             "\(home)/.pub-cache",
             "\(home)/.flutter",
-            "\(home)/Library/Application Support/MobileSync/Backup",
+            // NOTE: `~/Library/Application Support/MobileSync/Backup` (iPhone/iPad
+            // backups) is deliberately NOT on the allowlist. Those backups are
+            // non-recoverable, so they must never be scanned, sized, or shown.
             "\(home)/Library/Logs",
             "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/.m2/repository",
@@ -154,6 +175,9 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/Cursor/User/workspaceStorage",
             "\(home)/Library/Caches/JetBrains",
             "\(home)/Library/Application Support/JetBrains",
+            // AUDIT: `Zed/db` is Zed's local state database (not a pure cache).
+            // Re-created on next launch but may reset local editor state —
+            // Check First, not Safe.
             "\(home)/Library/Application Support/Zed/db",
             "\(home)/Library/Caches/Zed",
             "\(home)/Library/Caches/ms-playwright",
@@ -165,6 +189,10 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/discord/Code Cache",
             "\(home)/Library/Application Support/Notion/Cache",
             "\(home)/Library/Application Support/Figma/Cache",
+            // AUDIT: Docker's container holds images/volumes. Re-pullable but
+            // deleting can be costly — Check First, not Safe. (App Caches scan
+            // already excludes com.docker.* bundle IDs; this entry is used by
+            // the Dev Tools path.)
             "\(home)/Library/Containers/com.docker.docker",
             "\(home)/.vagrant.d/boxes",
             "/Applications/Install macOS"

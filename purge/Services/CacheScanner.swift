@@ -415,14 +415,10 @@ final class CacheScanner {
     }
 
     private func systemJunkLocations(home: URL) -> [(displayName: String, url: URL)] {
+        // iPhone/iPad backups (`MobileSync/Backup`) are intentionally excluded:
+        // they are non-recoverable user data and must never be offered for
+        // cleanup. They are also absent from the DeletionSafetyPolicy allowlist.
         [
-            (
-                "iPhone Backups",
-                home.appendingPathComponent(
-                    "Library/Application Support/MobileSync/Backup",
-                    isDirectory: true
-                )
-            ),
             (
                 "Application Logs",
                 home.appendingPathComponent("Library/Logs", isDirectory: true)

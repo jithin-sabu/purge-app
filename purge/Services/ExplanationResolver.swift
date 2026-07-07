@@ -45,8 +45,6 @@ enum ExplanationResolver {
             explanation = "This is a known cache folder that apps or developer tools recreate automatically."
         case .medium:
             explanation = "This folder may involve synced or user-facing app data. Deleting it can be safe, but it may cause inconvenience."
-        case .danger:
-            explanation = "This folder can contain passwords, credentials, or critical system data. Leave it alone."
         case .unknown:
             explanation = unsureExplanation
         }

@@ -137,7 +137,7 @@ struct ContentView: View {
         } message: {
             Text(
                 """
-                This includes folders marked Do Not Delete and/or Not Sure. They will be moved to Trash. \
+                This includes folders marked Not Sure. They will be moved to Trash. \
                 Only continue if you understand the risk.
                 """
             )

@@ -18,7 +18,10 @@ struct BundledExplanationRecord: Codable, Sendable {
         switch tag.lowercased() {
         case "safe": return .safe
         case "medium": return .medium
-        case "danger": return .danger
+        // Legacy "danger" tag: the "Do Not Delete" tier no longer exists.
+        // Treat it as unclassified so it is dropped at the assembly boundary
+        // rather than surfacing.
+        case "danger": return .unknown
         case "unknown": return .unknown
         default: return .unknown
         }

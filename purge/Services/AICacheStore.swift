@@ -91,7 +91,9 @@ enum AICacheStore {
         switch entry.tag.lowercased() {
         case "safe": level = .safe
         case "medium": level = .medium
-        case "danger": level = .danger
+        // Legacy "danger" tag maps to unclassified; the "Do Not Delete" tier
+        // no longer exists.
+        case "danger": level = .unknown
         case "unknown": level = .unknown
         default: level = .unknown
         }

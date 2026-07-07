@@ -1285,21 +1285,6 @@
     "scope": "app_caches"
   },
   {
-    "key": "iphone-backups",
-    "display_name": "iPhone Backups",
-    "tag": "danger",
-    "explanation": "Full iPhone and iPad backups. Cannot be recovered once deleted \u2014 only remove if iCloud Backup is enabled.",
-    "bundle_ids": [
-      "com.apple.MobileSync"
-    ],
-    "aliases": [
-      "MobileSync",
-      "Backup",
-      "iphone-backups"
-    ],
-    "scope": "app_caches"
-  },
-  {
     "key": "applogs",
     "display_name": "Application Logs",
     "tag": "safe",

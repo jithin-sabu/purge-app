@@ -17,9 +17,6 @@ struct SimulatorDevice: Identifiable, Hashable {
         return formatBytes(sizeOnDisk)
     }
 
-    /// Children that are not "Do Not Delete" — parent checkbox toggles these.
-    var isDanger: Bool { safetyInfo.level == .danger }
-
     static func safetyInfo(
         isAvailable: Bool,
         lastBootedAt: Date?,

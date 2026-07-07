@@ -71,7 +71,6 @@ extension PurgeStore {
   ]
 
   private static let systemJunkAppNames: Set<String> = [
-    "iPhone Backups",
     "Application Logs",
     "Crash Reports",
     "macOS Installers",

@@ -89,18 +89,6 @@ enum SafetyTierList {
         "com.apple.icloud"
     ]
 
-    /// Folders that must never be deleted.
-    /// These contain credentials, passwords, or critical system data.
-    nonisolated static let doNotDelete: Set<String> = [
-        "Keychains",
-        "Preferences",
-        "Application Support",
-        "Mail",
-        "AddressBook",
-        "CallHistoryDB",
-        "com.apple.TCC"
-    ]
-
     nonisolated static func evaluate(folderName: String, path: URL? = nil) -> SafetyLevel? {
         let lower = folderName.lowercased()
 
@@ -127,11 +115,6 @@ enum SafetyTierList {
                 || pathLower.contains("/.vscode/extensions/") {
                 return .safe
             }
-        }
-
-        // Check do not delete first
-        if doNotDelete.contains(where: { lower == $0.lowercased() }) {
-            return .danger
         }
 
         if lower.contains("obsolete") && lower.contains("extension") {

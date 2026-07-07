@@ -209,7 +209,6 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private func worstSafetyLevel(_ levels: [SafetyLevel]) -> SafetyLevel {
-        if levels.contains(.danger) { return .danger }
         if levels.contains(.medium) { return .medium }
         if levels.contains(.unknown) { return .unknown }
         return .safe
@@ -269,12 +268,8 @@ struct DevToolsView<PageHeader: View>: View {
         return rows
     }
 
-    private func simulatorNonDangerVisibleIndices() -> [Int] {
-        visibleSimulatorIndices().filter { store.simulatorDevices[$0].safetyInfo.level != .danger }
-    }
-
     private func simulatorParentTriState() -> SelectAllTriState {
-        let ix = simulatorNonDangerVisibleIndices()
+        let ix = visibleSimulatorIndices()
         guard !ix.isEmpty else { return .none }
         let selected = ix.filter { store.simulatorDevices[$0].isSelected }.count
         if selected == 0 { return .none }
@@ -283,10 +278,10 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private func toggleSimulatorParentCheckbox() {
-        let ix = simulatorNonDangerVisibleIndices()
+        let ix = visibleSimulatorIndices()
         guard !ix.isEmpty else { return }
         let allOn = ix.allSatisfy { store.simulatorDevices[$0].isSelected }
-        store.setSimulatorGroupNonDangerSelection(allSelected: !allOn)
+        store.setSimulatorGroupSelection(allSelected: !allOn)
     }
 
     private func eligibleSimulatorIndicesForToolbarSelectAll() -> [Int] {
@@ -385,7 +380,7 @@ struct DevToolsView<PageHeader: View>: View {
     private var hasEligibleSelectableRows: Bool {
         !eligibleStandardToolIndices().isEmpty
             || !eligibleProjectArtifactPairs().isEmpty
-            || !simulatorNonDangerVisibleIndices().isEmpty
+            || !visibleSimulatorIndices().isEmpty
     }
 
     private var selectAllDeveloperState: SelectAllTriState {
@@ -771,7 +766,7 @@ struct DevToolsView<PageHeader: View>: View {
                                     showUncommittedRepoChanges: false,
                                     onResetToAutomatic: nil,
                                     isUserOverride: false,
-                                    allowsBulkSelection: !device.isDanger,
+                                    allowsBulkSelection: true,
                                     isMetadataPending: isSimulatorMetadataPending(device)
                                 )
                                 .padding(.leading, 24)
@@ -917,7 +912,7 @@ struct DevToolsView<PageHeader: View>: View {
             .frame(width: 24)
 
             Circle()
-                .fill(parentInfo.level == .safe ? AppColors.tagSafeText : parentInfo.level == .danger ? AppColors.tagDangerText : AppColors.tagCheckText)
+                .fill(parentInfo.level == .safe ? AppColors.tagSafeText : AppColors.tagCheckText)
                 .frame(width: 6, height: 6)
 
             Image(systemName: "ipad.and.iphone")

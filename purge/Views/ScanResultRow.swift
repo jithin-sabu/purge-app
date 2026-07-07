@@ -49,7 +49,6 @@ struct ScanResultRow: View {
         switch safetyInfo.level {
         case .safe: return .safe
         case .medium: return .warning
-        case .danger: return .danger
         case .unknown: return .neutral
         }
     }
@@ -422,7 +421,7 @@ private struct ScanResultRowPlaceholder: View {
     }
 
     private static func safetyInfo(for seed: Int, showsExtraBadges: Bool) -> SafetyInfo {
-        let levels: [SafetyLevel] = [.safe, .medium, .danger, .unknown]
+        let levels: [SafetyLevel] = [.safe, .medium, .unknown]
         let level = showsExtraBadges ? levels[abs(seed) % levels.count] : .safe
         let explanation = explanations[abs(seed) % explanations.count]
         return SafetyInfo(

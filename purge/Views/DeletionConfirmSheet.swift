@@ -9,10 +9,6 @@ struct DeletionConfirmSheet: View {
         candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
-    private var dangerCandidates: [PurgeStore.DeletionCandidate] {
-        candidates.filter { $0.safetyInfo.level == .danger }.sorted { $0.sizeBytes > $1.sizeBytes }
-    }
-
     private var unknownCandidates: [PurgeStore.DeletionCandidate] {
         candidates.filter { $0.safetyInfo.level == .unknown }.sorted { $0.sizeBytes > $1.sizeBytes }
     }
@@ -24,7 +20,7 @@ struct DeletionConfirmSheet: View {
     }
 
     private var showsElevatedRiskLayout: Bool {
-        !dangerCandidates.isEmpty || !unknownCandidates.isEmpty
+        !unknownCandidates.isEmpty
     }
 
     private static let groupedSectionOrder: [SafetyLevel] = [.safe, .medium]
@@ -60,26 +56,7 @@ struct DeletionConfirmSheet: View {
             GeometryReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        if !dangerCandidates.isEmpty {
-                            Text("Marked Do Not Delete")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                            ForEach(dangerCandidates) { item in
-                                elevatedItemCard(
-                                    title: item.title,
-                                    explanation: item.safetyInfo.explanation,
-                                tint: Color.primary.opacity(0.04)
-                                )
-                            }
-                        }
-
                         if !unknownCandidates.isEmpty {
-                            if !dangerCandidates.isEmpty {
-                                Divider()
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 4)
-                            }
                             Text(SafetyLevel.unknown.displayName)
                                 .font(.headline)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -155,54 +132,23 @@ struct DeletionConfirmSheet: View {
 
     @ViewBuilder
     private var elevatedWarningHeader: some View {
-        let hasDanger = !dangerCandidates.isEmpty
-        let hasUnknown = !unknownCandidates.isEmpty
-
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: hasDanger ? "exclamationmark.triangle.fill" : "questionmark.circle.fill")
+            Image(systemName: "questionmark.circle.fill")
                 .font(.largeTitle)
-                .foregroundStyle(hasDanger ? Color.red : Color.secondary)
+                .foregroundStyle(Color.secondary)
             VStack(alignment: .leading, spacing: 6) {
-                if hasDanger && hasUnknown {
-                    Text("This cleanup includes protected and unclassified items")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Text(
-                        """
-                        Some items are marked Do Not Delete; others are Not Sure. Removing them can break apps, \
-                        sign you out, or delete data Purge cannot recover. You will be asked to confirm again.
-                        """
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                } else if hasDanger {
-                    Text("This could break something")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Text(
-                        """
-                        This file is used by your Mac or an app to store important data. Deleting it could cause \
-                        apps to reset or stop working. You will be asked to confirm again before anything is removed.
-                        """
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("We are not sure what some of these are")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Text(
-                        """
-                        Purge could not identify every selected folder. Only continue if you know it is safe to remove. \
-                        You will be asked to confirm again before anything is deleted.
-                        """
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
+                Text("We are not sure what some of these are")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+                Text(
+                    """
+                    Purge could not identify every selected folder. Only continue if you know it is safe to remove. \
+                    You will be asked to confirm again before anything is deleted.
+                    """
+                )
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
