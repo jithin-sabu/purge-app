@@ -105,6 +105,38 @@ enum CacheDiscoveryPaths {
         }
     }
 
+    /// Default Adobe media cache locations under Application Support.
+    ///
+    /// Premiere Pro and After Effects park large rendered previews, conformed
+    /// audio, and the index that tracks them here — outside `~/Library/Caches`,
+    /// so the general Caches sweep never sees them. Only the default `Common`
+    /// locations are listed; a project-local or user-chosen scratch cache is
+    /// never targeted. `key` doubles as the folder name used for classification
+    /// (matched against `explanations.json`).
+    nonisolated static let adobeMediaCacheEntries: [(relative: String, headline: String, key: String)] = [
+        ("Adobe/Common/Media Cache Files", "Adobe Media Cache Files", "Adobe Media Cache Files"),
+        ("Adobe/Common/Media Cache", "Adobe Media Cache Database", "Adobe Media Cache")
+    ]
+
+    /// Adobe media cache directories that actually exist on disk. Absent Adobe
+    /// folders (app not installed) simply yield nothing — never an error row.
+    nonisolated static func adobeMediaCacheURLs(
+        home: URL
+    ) -> [(url: URL, headline: String, key: String)] {
+        let fm = FileManager.default
+        let appSupport = home.appendingPathComponent("Library/Application Support", isDirectory: true)
+        var results: [(url: URL, headline: String, key: String)] = []
+        for entry in adobeMediaCacheEntries {
+            let url = appSupport
+                .appendingPathComponent(entry.relative, isDirectory: true)
+                .standardizedFileURL
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { continue }
+            results.append((url, entry.headline, entry.key))
+        }
+        return results
+    }
+
     /// Enumerates cache paths under `~/Library/Containers/<bundleID>/Data/Library/Caches`.
     nonisolated static func containerCacheURLs(home: URL) -> [URL] {
         let containersRoot = home.appendingPathComponent("Library/Containers", isDirectory: true)

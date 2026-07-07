@@ -207,6 +207,72 @@ struct WhitelistedAbsolutePrefixesTests {
     }
 }
 
+// MARK: - Group 3b: Adobe media caches under Application Support
+
+@Suite("Adobe media caches are allowed only at their default locations")
+struct AdobeMediaCacheTests {
+    @Test
+    func mediaCacheFilesRootIsAllowed() {
+        let url = TestPaths.homeURL(
+            "Library", "Application Support", "Adobe", "Common", "Media Cache Files"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    }
+
+    @Test
+    func mediaCacheDatabaseRootIsAllowed() {
+        let url = TestPaths.homeURL(
+            "Library", "Application Support", "Adobe", "Common", "Media Cache"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    }
+
+    @Test
+    func mediaCacheFilesDescendantIsAllowed() {
+        let url = TestPaths.homeURL(
+            "Library", "Application Support", "Adobe", "Common", "Media Cache Files",
+            "1a2b3c.mcdb"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    }
+
+    @Test
+    func siblingWithMediaCachePrefixIsNotAllowed() {
+        // "Media Cache" must not act as a prefix for an unrelated sibling folder.
+        let url = TestPaths.homeURL(
+            "Library", "Application Support", "Adobe", "Common", "Media Cache Extras"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNotWhitelisted)
+    }
+
+    @Test
+    func projectLocalMediaCacheIsNotAllowed() {
+        // A media cache the user parked next to a project must never be offered —
+        // only the default Application Support locations are whitelisted.
+        let url = TestPaths.homeURL(
+            "Documents", "MyEdit", "Adobe", "Common", "Media Cache Files"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNotWhitelisted)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
+    }
+
+    @Test
+    func discoveryTargetsOnlyDefaultAppSupportLocations() {
+        let appSupportAdobe = TestPaths.homeURL(
+            "Library", "Application Support", "Adobe", "Common"
+        ).standardizedFileURL.path
+        for entry in CacheDiscoveryPaths.adobeMediaCacheEntries {
+            #expect(entry.relative.hasPrefix("Adobe/Common/"), "unexpected root: \(entry.relative)")
+        }
+        // Every URL the discovery would surface must sit under the default location
+        // and pass the results-boundary guard.
+        for surfaced in CacheDiscoveryPaths.adobeMediaCacheURLs(home: TestPaths.home) {
+            #expect(surfaced.url.path.hasPrefix(appSupportAdobe + "/"))
+            #expect(DeletionSafetyPolicy.isOfferedForCleanup(surfaced.url))
+        }
+    }
+}
+
 // MARK: - Group 4: Whitelisted folder names inside home
 
 @Suite("Whitelisted folder names inside home return .allow")

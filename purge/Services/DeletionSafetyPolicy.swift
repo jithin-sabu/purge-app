@@ -189,6 +189,13 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/discord/Code Cache",
             "\(home)/Library/Application Support/Notion/Cache",
             "\(home)/Library/Application Support/Figma/Cache",
+            // Adobe stores its heavy caches under Application Support rather than
+            // ~/Library/Caches, so the broad Caches sweep never reaches them. These
+            // are the default Common media cache locations only (never a project-local
+            // or user-chosen scratch dir); Premiere/After Effects rebuild them on
+            // next launch. Safe, not Check First.
+            "\(home)/Library/Application Support/Adobe/Common/Media Cache Files",
+            "\(home)/Library/Application Support/Adobe/Common/Media Cache",
             // AUDIT: Docker's container holds images/volumes. Re-pullable but
             // deleting can be costly — Check First, not Safe. (App Caches scan
             // already excludes com.docker.* bundle IDs; this entry is used by

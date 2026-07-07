@@ -86,6 +86,16 @@ final class CacheScanner {
                 sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
             }
 
+            let adobeItems = adobeMediaCacheItems(home: home, collectedPaths: &collectedPaths)
+            for item in adobeItems {
+                if Task.isCancelled {
+                    continuation.finish()
+                    return
+                }
+                continuation.yield(.found(item))
+                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+            }
+
             continuation.yield(.status("Scanning sandboxed app caches..."))
             let containerItems = allContainerCacheItems(home: home, collectedPaths: &collectedPaths)
             for item in containerItems {
@@ -230,6 +240,23 @@ final class CacheScanner {
                 ) else { continue }
                 items.append(item)
             }
+        }
+        return items
+    }
+
+    private func adobeMediaCacheItems(
+        home: URL,
+        collectedPaths: inout Set<String>
+    ) -> [CacheItem] {
+        var items: [CacheItem] = []
+        for entry in CacheDiscoveryPaths.adobeMediaCacheURLs(home: home) {
+            guard let item = cacheItemAtDiscoveredPath(
+                entry.url,
+                headline: entry.headline,
+                folderName: entry.key,
+                collectedPaths: &collectedPaths
+            ) else { continue }
+            items.append(item)
         }
         return items
     }

@@ -1,5 +1,38 @@
 [
   {
+    "key": "adobe-media-cache-files",
+    "display_name": "Adobe Media Cache Files",
+    "tag": "safe",
+    "explanation": "premiere pro and after effects store rendered previews and conformed audio here. safe to clean. the apps rebuild it on next launch, which can take a few minutes for large projects.",
+    "bundle_ids": [],
+    "aliases": [
+      "Adobe Media Cache Files"
+    ],
+    "scope": "app_caches"
+  },
+  {
+    "key": "adobe-media-cache",
+    "display_name": "Adobe Media Cache Database",
+    "tag": "safe",
+    "explanation": "the index adobe uses to track media cache files. safe to clean. rebuilds alongside the cache.",
+    "bundle_ids": [],
+    "aliases": [
+      "Adobe Media Cache"
+    ],
+    "scope": "app_caches"
+  },
+  {
+    "key": "adobe-camera-raw",
+    "display_name": "Adobe Camera Raw Cache",
+    "tag": "safe",
+    "explanation": "photoshop, lightroom and bridge cache raw previews here. safe to clean. rebuilds automatically when you open images.",
+    "bundle_ids": [],
+    "aliases": [
+      "Adobe Camera Raw"
+    ],
+    "scope": "app_caches"
+  },
+  {
     "key": "android-sdk",
     "display_name": "Android SDK Tools",
     "tag": "medium",
