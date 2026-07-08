@@ -3,6 +3,25 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.2.7</title>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>12</sparkle:version>
+      <sparkle:shortVersionString>1.2.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Large files list now responds to a tap anywhere on the row, not just the checkbox. Selection state reads correctly for VoiceOver too.</li>
+          <li>Deletion now runs off the main thread, keeping the app responsive during large cleans.</li>
+          <li>Reworked how updates are handled so the update check no longer hangs. Manual "check for updates" now works reliably.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.2.7/Purgev1.2.7.dmg"
+        sparkle:edSignature="lHLZlWPFBlvtvRPnFL/5eY2QWuJ3RQgQF31HrrVl6S6IC+56m4JlkMeMD7HdsQMOR9XDHbtBYJl9qPpbnSucAw=="
+        length="6737069"
+        type="application/octet-stream" />  
+    </item>
+    <item>
       <title>Version 1.2.6</title>
       <pubDate>Wed, 08 Jul 2026 12:00:00 +0000</pubDate>
       <sparkle:version>11</sparkle:version>
