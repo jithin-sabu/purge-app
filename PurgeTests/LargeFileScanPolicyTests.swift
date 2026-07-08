@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import purge
+@testable import Purge
 
 @Suite("Large file scan policy stays separate from cache safety")
 struct LargeFileScanPolicyTests {

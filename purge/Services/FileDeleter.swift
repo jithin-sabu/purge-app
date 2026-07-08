@@ -1,6 +1,6 @@
 import Foundation
 
-struct DeletedItem: Identifiable {
+nonisolated struct DeletedItem: Identifiable {
     let id: UUID
     let path: String
     let sizeBytes: Int64
@@ -18,7 +18,7 @@ struct DeletedItem: Identifiable {
     }
 }
 
-struct FailedDeletionItem: Identifiable {
+nonisolated struct FailedDeletionItem: Identifiable {
     let id = UUID()
     let path: String
     let displayName: String
@@ -33,7 +33,7 @@ struct FailedDeletionItem: Identifiable {
     }
 }
 
-struct SkippedDeletionItem: Identifiable, Hashable {
+nonisolated struct SkippedDeletionItem: Identifiable, Hashable {
     let id = UUID()
     let path: String
     let displayName: String
@@ -50,7 +50,7 @@ struct SkippedDeletionItem: Identifiable, Hashable {
     }
 }
 
-struct DeletionReport: Identifiable {
+nonisolated struct DeletionReport: Identifiable {
     let id = UUID()
     let totalDeleted: Int64
     let deletedItems: [DeletedItem]
@@ -70,15 +70,14 @@ struct DeletionReport: Identifiable {
     }
 }
 
-final class FileDeleter {
-    private let scanner = CacheScanner()
-    private(set) var deletionLog: [DeletionReport] = []
-
+/// Deletion engine. Runs off the main actor (`@concurrent`) so large removals
+/// never block the UI; progress reaches the UI via the `onProgress` buffer.
+nonisolated final class FileDeleter: Sendable {
     /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
     /// - Parameter pathToExpectedSizeBytes: Pre-scan sizes from deletion candidates; avoids re-measuring folders at delete time.
     /// - Parameter onProgress: Called on the engine's executor after each item starts / successfully
     ///   deletes. Must be cheap; UI publishing is buffered elsewhere.
-    func deleteItems(
+    @concurrent func deleteItems(
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],
         pathToExpectedSizeBytes: [String: Int64] = [:],
@@ -101,7 +100,7 @@ final class FileDeleter {
             switch decision {
             case .allow:
                 onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
-                let size = pathToExpectedSizeBytes[standardizedPath] ?? scanner.calculateFolderSize(at: url)
+                let size = pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.directoryByteSize(at: url)
 
                 if DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
                     var didDeleteAnyContent = false
@@ -198,13 +197,12 @@ final class FileDeleter {
             availableCapacityAfter: capacityAfter.available,
             timestamp: Date()
         )
-        deletionLog.append(report)
         return report
     }
 
     /// Dedicated route for the Large & Old Files feature. It only handles
     /// individually selected regular files and always moves them to Trash.
-    func deleteUserSelectedFiles(
+    @concurrent func deleteUserSelectedFiles(
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],
         pathToExpectedSizeBytes: [String: Int64] = [:],
@@ -260,7 +258,6 @@ final class FileDeleter {
             availableCapacityAfter: capacityAfter.available,
             timestamp: Date()
         )
-        deletionLog.append(report)
         return report
     }
 

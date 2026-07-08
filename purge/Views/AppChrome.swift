@@ -519,7 +519,7 @@ struct SafeCleanupCelebrationOverlay: View {
     }
 
     private var subtitleText: String {
-        subtitleShowsComplete ? "moved to Trash" : "of \(formatBytes(session.totalBytes)) selected"
+        subtitleShowsComplete ? "moved to Trash" : "of \(formatBytes(session.totalBytes))"
     }
 
     private var currentItemText: String {

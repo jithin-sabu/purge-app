@@ -1,6 +1,6 @@
 import Foundation
 
-enum CleanFailureReason: Equatable, Error {
+nonisolated enum CleanFailureReason: Equatable, Error {
     case needsFullDiskAccess
     case inUse
     case systemProtected

@@ -1,6 +1,6 @@
 import Foundation
 
-struct PermissionChecker {
+nonisolated struct PermissionChecker {
     /// Returns true when the Large Files feature can read common user content folders.
     /// These locations do not require Full Disk Access; they are separate from Library cache scans.
     func canScanLargeFiles() -> Bool {

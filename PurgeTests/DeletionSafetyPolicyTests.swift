@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import purge
+@testable import Purge
 
 private enum TestPaths {
     static var home: URL {

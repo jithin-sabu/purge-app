@@ -1,7 +1,7 @@
 import Foundation
 
 /// Outcome of running a candidate path through the safety policy.
-enum DeletionSafetyDecision: Equatable {
+nonisolated enum DeletionSafetyDecision: Equatable {
     /// Safe to remove.
     case allow
     /// On the never-delete list. Skip silently and drop from any selection.

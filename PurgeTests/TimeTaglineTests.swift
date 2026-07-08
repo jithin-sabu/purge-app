@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import purge
+@testable import Purge
 
 @Suite("TimeTagline time formatting")
 struct TimeTaglineTimeTextTests {
