@@ -273,6 +273,97 @@ struct AdobeMediaCacheTests {
     }
 }
 
+// MARK: - Group 3c: Telegram media cache in the Group Container
+
+@Suite("Telegram media cache is allowed only at .../account-*/postbox/media")
+struct TelegramMediaCacheTests {
+    private static let container = [
+        "Library", "Group Containers", "6N38VWS5BX.ru.keepcoder.Telegram"
+    ]
+
+    private static func mediaURL(channel: String, account: String, extra: String...) -> URL {
+        TestPaths.homeURL(container + [channel, account, "postbox", "media"] + extra)
+    }
+
+    @Test
+    func mediaDirectoryItselfIsAllowed() {
+        let url = Self.mediaURL(channel: "stable", account: "account-1")
+        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    }
+
+    @Test
+    func mediaDescendantIsAllowed() {
+        let url = Self.mediaURL(channel: "appstore", account: "account-42", extra: "0", "cached.jpg")
+        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    }
+
+    @Test
+    func postboxDatabaseIsNeverAllowed() {
+        // The account database lives directly in `postbox`; nothing shallower
+        // than `postbox/media` may ever be authorized for deletion.
+        let postbox = TestPaths.homeURL(Self.container + ["stable", "account-1", "postbox"])
+        #expect(DeletionSafetyPolicy.evaluate(postbox) != .allow)
+
+        let db = TestPaths.homeURL(Self.container + ["stable", "account-1", "postbox", "db"])
+        #expect(DeletionSafetyPolicy.evaluate(db) != .allow)
+    }
+
+    @Test
+    func accountAndContainerRootsAreNeverAllowed() {
+        let account = TestPaths.homeURL(Self.container + ["stable", "account-1"])
+        #expect(DeletionSafetyPolicy.evaluate(account) != .allow)
+
+        let channel = TestPaths.homeURL(Self.container + ["stable"])
+        #expect(DeletionSafetyPolicy.evaluate(channel) != .allow)
+
+        let root = TestPaths.homeURL(Self.container)
+        #expect(DeletionSafetyPolicy.evaluate(root) != .allow)
+    }
+
+    @Test
+    func siblingOfMediaIsNeverAllowed() {
+        // A "media"-prefixed sibling under postbox must not slip through.
+        let url = TestPaths.homeURL(
+            Self.container + ["stable", "account-1", "postbox", "media-old"]
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) != .allow)
+    }
+
+    @Test
+    func nonAccountFolderIsNeverAllowed() {
+        // The second segment must be `account-*`; a stray folder cannot match.
+        let url = TestPaths.homeURL(
+            Self.container + ["stable", "notanaccount", "postbox", "media"]
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) != .allow)
+    }
+
+    @Test
+    func onlyTheMediaDirectoryIsClearedContentsOnly() {
+        let media = Self.mediaURL(channel: "stable", account: "account-1")
+        #expect(DeletionSafetyPolicy.shouldDeleteContentsOnly(media))
+
+        // A descendant is deleted outright (as normal contents), not contents-only.
+        let child = Self.mediaURL(channel: "stable", account: "account-1", extra: "0")
+        #expect(!DeletionSafetyPolicy.shouldDeleteContentsOnly(child))
+
+        // The postbox directory is never a contents-only target either.
+        let postbox = TestPaths.homeURL(Self.container + ["stable", "account-1", "postbox"])
+        #expect(!DeletionSafetyPolicy.shouldDeleteContentsOnly(postbox))
+    }
+
+    @Test
+    func discoverySurfacesOnlyPostboxMediaThatPassesTheGuard() {
+        // Whatever discovery surfaces on this machine (possibly nothing) must
+        // terminate at `postbox/media` and pass the results-boundary guard.
+        for surfaced in CacheDiscoveryPaths.telegramMediaCacheURLs(home: TestPaths.home) {
+            #expect(surfaced.url.path.hasSuffix("/postbox/media"))
+            #expect(surfaced.key == "Telegram Media Cache")
+            #expect(DeletionSafetyPolicy.isOfferedForCleanup(surfaced.url))
+        }
+    }
+}
+
 // MARK: - Group 4: Whitelisted folder names inside home
 
 @Suite("Whitelisted folder names inside home return .allow")

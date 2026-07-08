@@ -1,6 +1,8 @@
 Secrets.xcconfig
 *.xcconfig
 node_modules/
+build/
+DerivedData/
 xcuserdata/
 *.vsix
 *.profraw

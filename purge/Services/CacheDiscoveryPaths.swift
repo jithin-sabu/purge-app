@@ -137,6 +137,65 @@ enum CacheDiscoveryPaths {
         return results
     }
 
+    /// Telegram's native macOS app parks auto-downloaded photos, videos, and
+    /// files inside its Group Container rather than `~/Library/Caches`, so the
+    /// broad Caches sweep never reaches them. Only the `postbox/media` directory
+    /// is ever targeted — never `postbox` itself, which holds the account
+    /// database whose removal would log the user out or lose local data. The
+    /// `*` segment covers the distribution channel (stable, appstore, and any
+    /// future channel); `account-*` covers every signed-in account. The match
+    /// still terminates at `postbox/media` exactly.
+    nonisolated static let telegramGroupContainerRelative =
+        "Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram"
+
+    /// Folder name used for classification (matched against `explanations.json`)
+    /// and the headline shown in the list.
+    nonisolated static let telegramMediaCacheKey = "Telegram Media Cache"
+
+    /// Existing `.../<channel>/account-*/postbox/media` directories across all
+    /// distribution channels and signed-in accounts. Absent folders (Telegram
+    /// not installed) simply yield nothing — never an error row.
+    nonisolated static func telegramMediaCacheURLs(
+        home: URL
+    ) -> [(url: URL, headline: String, key: String)] {
+        let fm = FileManager.default
+        let root = home.appendingPathComponent(telegramGroupContainerRelative, isDirectory: true)
+        guard fm.fileExists(atPath: root.path) else { return [] }
+
+        func subdirectories(of dir: URL, namePrefix: String? = nil) -> [URL] {
+            guard let entries = try? fm.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { return [] }
+            return entries.filter { url in
+                guard (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+                    return false
+                }
+                if let namePrefix { return url.lastPathComponent.hasPrefix(namePrefix) }
+                return true
+            }
+        }
+
+        var results: [(url: URL, headline: String, key: String)] = []
+        // `*` — distribution channel (stable, appstore, any future channel).
+        for channelDir in subdirectories(of: root) {
+            // `account-*` — one directory per signed-in account.
+            for accountDir in subdirectories(of: channelDir, namePrefix: "account-") {
+                let media = accountDir
+                    .appendingPathComponent("postbox", isDirectory: true)
+                    .appendingPathComponent("media", isDirectory: true)
+                    .standardizedFileURL
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: media.path, isDirectory: &isDir), isDir.boolValue else {
+                    continue
+                }
+                results.append((media, telegramMediaCacheKey, telegramMediaCacheKey))
+            }
+        }
+        return results
+    }
+
     /// Enumerates cache paths under `~/Library/Containers/<bundleID>/Data/Library/Caches`.
     nonisolated static func containerCacheURLs(home: URL) -> [URL] {
         let containersRoot = home.appendingPathComponent("Library/Containers", isDirectory: true)

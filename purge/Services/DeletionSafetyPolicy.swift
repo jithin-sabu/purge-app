@@ -283,7 +283,11 @@ enum DeletionSafetyPolicy {
     nonisolated static func shouldDeleteContentsOnly(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
-        return contentsOnlyPrefixes(home: home).contains(path)
+        if contentsOnlyPrefixes(home: home).contains(path) { return true }
+        // Clear the Telegram media cache's contents but leave the `media`
+        // directory itself (and everything above it) in place.
+        if isTelegramMediaCacheDirectory(path, home: home) { return true }
+        return false
     }
 
     nonisolated static func isProtectedSystemCache(_ url: URL) -> Bool {
@@ -367,6 +371,50 @@ enum DeletionSafetyPolicy {
         return true
     }
 
+    /// Split of a Telegram Group Container path into the segments below
+    /// `.../6N38VWS5BX.ru.keepcoder.Telegram/`. Returns `nil` when `path` is not
+    /// inside that container at all.
+    private nonisolated static func telegramGroupContainerRelativeParts(
+        _ path: String,
+        home: String
+    ) -> [String]? {
+        let groupRoot = "\(home)/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/"
+        guard path.hasPrefix(groupRoot) else { return nil }
+        let relative = String(path.dropFirst(groupRoot.count))
+        guard !relative.isEmpty else { return nil }
+        return relative.split(separator: "/").map(String.init)
+    }
+
+    /// Whether `path` is the Telegram `.../account-*/postbox/media` cache
+    /// directory itself, or a descendant of it.
+    ///
+    /// The account database lives directly in `postbox`, so touching anything
+    /// shallower would log the user out or lose local data. Authorization
+    /// requires the full `<channel>/account-*/postbox/media` suffix — `postbox`
+    /// itself and every ancestor can never match.
+    nonisolated static func isWhitelistedTelegramMediaCachePath(_ path: String, home: String) -> Bool {
+        guard let parts = telegramGroupContainerRelativeParts(path, home: home) else { return false }
+        // channel / account-* / postbox / media  (media itself, or a descendant of it)
+        guard parts.count >= 4 else { return false }
+        guard !parts[0].isEmpty,
+              parts[1].hasPrefix("account-"),
+              parts[2] == "postbox",
+              parts[3] == "media" else { return false }
+        return true
+    }
+
+    /// Whether `path` is exactly the Telegram `media` directory (not a
+    /// descendant). Used to clean the directory's contents while leaving the
+    /// `media` directory itself in place.
+    nonisolated static func isTelegramMediaCacheDirectory(_ path: String, home: String) -> Bool {
+        guard let parts = telegramGroupContainerRelativeParts(path, home: home) else { return false }
+        guard parts.count == 4 else { return false }
+        return !parts[0].isEmpty
+            && parts[1].hasPrefix("account-")
+            && parts[2] == "postbox"
+            && parts[3] == "media"
+    }
+
     nonisolated static func isWhitelistedStaleBrowserFrameworkPath(_ path: String) -> Bool {
         guard path.hasPrefix("/Applications/"), path.contains(".app/Contents/Frameworks/") else {
             return false
@@ -409,6 +457,9 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedContainerCachePath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedTelegramMediaCachePath(path, home: home) {
             return .allow
         }
         if isWhitelistedStaleBrowserFrameworkPath(path) {

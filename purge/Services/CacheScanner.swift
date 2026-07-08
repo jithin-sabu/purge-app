@@ -96,6 +96,16 @@ final class CacheScanner {
                 sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
             }
 
+            let telegramItems = telegramMediaCacheItems(home: home, collectedPaths: &collectedPaths)
+            for item in telegramItems {
+                if Task.isCancelled {
+                    continuation.finish()
+                    return
+                }
+                continuation.yield(.found(item))
+                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+            }
+
             continuation.yield(.status("Scanning sandboxed app caches..."))
             let containerItems = allContainerCacheItems(home: home, collectedPaths: &collectedPaths)
             for item in containerItems {
@@ -250,6 +260,23 @@ final class CacheScanner {
     ) -> [CacheItem] {
         var items: [CacheItem] = []
         for entry in CacheDiscoveryPaths.adobeMediaCacheURLs(home: home) {
+            guard let item = cacheItemAtDiscoveredPath(
+                entry.url,
+                headline: entry.headline,
+                folderName: entry.key,
+                collectedPaths: &collectedPaths
+            ) else { continue }
+            items.append(item)
+        }
+        return items
+    }
+
+    private func telegramMediaCacheItems(
+        home: URL,
+        collectedPaths: inout Set<String>
+    ) -> [CacheItem] {
+        var items: [CacheItem] = []
+        for entry in CacheDiscoveryPaths.telegramMediaCacheURLs(home: home) {
             guard let item = cacheItemAtDiscoveredPath(
                 entry.url,
                 headline: entry.headline,

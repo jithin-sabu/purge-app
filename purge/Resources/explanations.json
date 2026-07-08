@@ -1990,6 +1990,17 @@
     "scope": "app_caches"
   },
   {
+    "key": "telegram-media-cache",
+    "display_name": "Telegram Media Cache",
+    "tag": "medium",
+    "explanation": "Telegram stores auto-downloaded photos, videos and files here. It re-downloads them from the cloud as needed, but secret-chat media may exist only on this Mac.",
+    "bundle_ids": [],
+    "aliases": [
+      "Telegram Media Cache"
+    ],
+    "scope": "app_caches"
+  },
+  {
     "key": "linear",
     "display_name": "Linear",
     "tag": "safe",

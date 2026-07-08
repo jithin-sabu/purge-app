@@ -15,6 +15,7 @@ enum BrandIconMapping {
         "spotify": "spotify",
         "whatsapp": "whatsapp",
         "telegram": "telegram",
+        "telegram-media-cache": "telegram",
         "linear": "linear",
         "figma": "figma",
         "figma-agent": "figma",
