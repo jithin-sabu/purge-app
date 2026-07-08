@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<false/>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/jithin-sabu/purge-app/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
