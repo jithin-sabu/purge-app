@@ -430,54 +430,66 @@ private struct LargeFileRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Toggle("", isOn: $isSelected)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .tint(AppColors.buttonPrimaryBg)
+        Button {
+            isSelected.toggle()
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                checkboxVisual
 
-            Button {
-                isSelected.toggle()
-            } label: {
                 rowMainContent
+
+                Spacer(minLength: 12)
+
+                Text(file.formattedSize)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
             }
-            .buttonStyle(.plain)
-
-            Spacer(minLength: 12)
-
-            Text(file.formattedSize)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
-                .monospacedDigit()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .buttonStyle(.plain)
         .modifier(ScanRowCardChrome())
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Non-interactive checkbox that only reflects selection state, so the whole
+    /// row is a single tap target and the checkmark fills on the same frame as
+    /// the tap (no competing hit target, no visible in-between state).
+    private var checkboxVisual: some View {
+        Toggle("", isOn: .constant(isSelected))
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+            .tint(AppColors.buttonPrimaryBg)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private var rowMainContent: some View {
         HStack(alignment: .center, spacing: 12) {
-            LargeFileThumbnailIcon(file: file)
+            Button(action: quickLook) {
+                LargeFileThumbnailIcon(file: file)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .help("Quick Look")
+            .accessibilityLabel("Quick Look \(file.displayName)")
 
             VStack(alignment: .leading, spacing: 4) {
-                Button(action: quickLook) {
-                    Text(file.displayName)
-                        .font(.headline.weight(.semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    if hovering {
-                        NSCursor.pointingHand.push()
-                    } else {
-                        NSCursor.pop()
-                    }
-                }
-                .help("Quick Look")
-                .accessibilityLabel("Quick Look \(file.displayName)")
+                Text(file.displayName)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 6) {
                     Button(action: revealInFinder) {
