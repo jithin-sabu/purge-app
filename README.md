@@ -29,7 +29,7 @@
     <a href="#security">Security</a>
   </p>
 
-  <img src="Assets/purge-scr.png" width="720" alt="Purge scanning a Mac for safe-to-clean cache" />
+  <img src="Assets/github-hero.png" width="720" alt="Purge scanning a Mac for safe-to-clean cache" />
 
 </div>
 
