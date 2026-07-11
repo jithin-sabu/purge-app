@@ -7,3 +7,4 @@ xcuserdata/
 *.vsix
 *.profraw
 .claude/
+release.sh

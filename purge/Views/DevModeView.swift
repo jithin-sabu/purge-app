@@ -571,7 +571,7 @@ struct DevToolsView<PageHeader: View>: View {
 
     /// Bottom edge of the blur zone — list rows fade under this row only.
     private var selectAllRowChrome: some View {
-        HStack {
+        HStack(alignment: .bottom) {
             TriStateCheckbox(title: "Select All", state: selectAllDeveloperState) {
                 toggleDeveloperSelectAll()
             }
@@ -702,6 +702,11 @@ struct DevToolsView<PageHeader: View>: View {
 
             if simulatorSectionVisible {
                 Section {
+                    iosSimulatorsSectionHeader
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+
                     ForEach(sortedVisibleSimulatorIndices().map { store.simulatorDevices[$0].id }, id: \.self) { deviceID in
                         if let device = store.simulatorDevices.first(where: { $0.id == deviceID }) {
                             ScanResultRow(
@@ -725,13 +730,16 @@ struct DevToolsView<PageHeader: View>: View {
                             .transition(rowInsertionTransition)
                         }
                     }
-                } header: {
-                    iosSimulatorsSectionHeader
                 }
             }
 
             if !sortedProjectGroupIndices().isEmpty {
                 Section {
+                    developerProjectsSectionHeader
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+
                     ForEach(sortedProjectGroupIndices().map { ProjectGroupRowKey.make(group: store.projectGroups[$0], groupIndex: $0) }) { row in
                         let gi = row.groupIndex
                         if store.projectGroups.indices.contains(gi), row.id == "project-group-\(store.projectGroups[gi].id)" {
@@ -745,27 +753,20 @@ struct DevToolsView<PageHeader: View>: View {
                                 .transition(rowInsertionTransition)
                         }
                     }
-                } header: {
-                    devToolsSectionHeader {
-                        Text("Developer Projects")
-                            .font(AppStyle.Typography.metadataEmphasis)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             } else if store.isScanningProjects {
                 Section {
+                    developerProjectsSectionHeader
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+
                     Text("Finding projects…")
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(.secondary)
                         .listRowInsets(ScanListRowInsets.standard)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                } header: {
-                    devToolsSectionHeader {
-                        Text("Developer Projects")
-                            .font(AppStyle.Typography.metadataEmphasis)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
 
@@ -831,6 +832,14 @@ struct DevToolsView<PageHeader: View>: View {
                 store.setSimulatorDeviceSelected(id: id, isSelected: newVal)
             }
         )
+    }
+
+    private var developerProjectsSectionHeader: some View {
+        devToolsSectionHeader {
+            Text("Developer Projects")
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var iosSimulatorsSectionHeader: some View {

@@ -215,7 +215,7 @@ struct AppCachesView<PageHeader: View>: View {
 
     /// Bottom edge of the blur zone — list rows fade under this row only.
     private var selectAllRowChrome: some View {
-        HStack {
+        HStack(alignment: .bottom) {
             TriStateCheckbox(title: "Select All", state: selectAllState) {
                 toggleSelectAll()
             }

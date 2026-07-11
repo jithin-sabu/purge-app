@@ -260,7 +260,7 @@ struct LargeFilesView: View {
     }
 
     private var selectAllRowChrome: some View {
-        HStack {
+        HStack(alignment: .bottom) {
             TriStateCheckbox(title: "Select All", state: selectAllState) {
                 toggleSelectAll()
             }
