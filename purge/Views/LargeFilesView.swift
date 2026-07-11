@@ -307,12 +307,6 @@ struct LargeFilesView: View {
     private var resultsList: some View {
         ScrollViewReader { proxy in
             resultsListContent
-                .onAppear {
-                    // App launch / tab switch with results already loaded.
-                    if !visibleFiles.isEmpty {
-                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
-                    }
-                }
                 .onChange(of: isLoading) { loading in
                     // A scan just finished populating the list.
                     guard !loading else { return }
@@ -430,29 +424,32 @@ private struct LargeFileRow: View {
     }
 
     var body: some View {
-        Button {
-            isSelected.toggle()
-        } label: {
-            HStack(alignment: .center, spacing: 12) {
-                checkboxVisual
+        // Tap gesture instead of a Button: a Button in a macOS List row makes the
+        // List scroll the clicked row into view, shifting the whole list on select.
+        HStack(alignment: .center, spacing: 12) {
+            checkboxVisual
 
-                rowMainContent
+            rowMainContent
 
-                Spacer(minLength: 12)
+            Spacer(minLength: 12)
 
-                Text(file.formattedSize)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .monospacedDigit()
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
+            Text(file.formattedSize)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .monospacedDigit()
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            isSelected.toggle()
+        }
         .modifier(ScanRowCardChrome())
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction {
+            isSelected.toggle()
+        }
     }
 
     /// Non-interactive checkbox that only reflects selection state, so the whole

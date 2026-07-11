@@ -40,6 +40,10 @@ enum AppDetailPageLayout {
     static let scrollEdgeClearanceBelowHeader: CGFloat = 24
     /// Cancels the default soft scroll-edge inset so list cards sit tight under Select All.
     static let scanTabScrollContentTopCompensation: CGFloat = -20
+    /// Pulls `List` content up under the Select All bar's safe-area reservation so the
+    /// first card sits a small gap below it; `contentMargins` alone can't reduce that
+    /// part of the inset (negative values clamp).
+    static let scanTabBarSpacing: CGFloat = -22
     /// Approximate height of `AppSectionPageHeader` (top inset + title + bottom padding).
     static let pageTitleChromeHeight: CGFloat = topContentInset + 24 + AppStyle.Spacing.small
     /// Extra line when a subtitle is shown (spacing + subheadline).
@@ -54,7 +58,7 @@ enum AppDetailPageLayout {
 extension View {
     /// Sticky scan-tab chrome with a soft scroll edge blur as list rows pass underneath.
     func scanTabSoftScrollEdge<Chrome: View>(@ViewBuilder chrome: @escaping () -> Chrome) -> some View {
-        safeAreaBar(edge: .top, spacing: 0, content: chrome)
+        safeAreaBar(edge: .top, spacing: AppDetailPageLayout.scanTabBarSpacing, content: chrome)
             .scrollEdgeEffectStyle(.soft, for: .top)
             .contentMargins(
                 .top,

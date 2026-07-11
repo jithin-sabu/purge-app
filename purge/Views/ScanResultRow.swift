@@ -141,12 +141,16 @@ struct ScanResultRow: View {
             }
 
             if canTapRowToToggleSelection {
-                Button {
-                    isSelected.toggle()
-                } label: {
-                    rowMainContent
-                }
-                .buttonStyle(.plain)
+                // Tap gesture instead of a Button: a Button in a macOS List row makes
+                // the List scroll the clicked row into view, shifting the whole list.
+                rowMainContent
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        isSelected.toggle()
+                    }
+                    .accessibilityAction {
+                        isSelected.toggle()
+                    }
             } else {
                 rowMainContent
             }

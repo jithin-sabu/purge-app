@@ -277,12 +277,6 @@ struct AppCachesView<PageHeader: View>: View {
     private var cacheResultsList: some View {
         ScrollViewReader { proxy in
             cacheResultsListContent
-                .onAppear {
-                    // App launch / tab switch with results already loaded.
-                    if showsListContent {
-                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
-                    }
-                }
                 .onChange(of: scanPhase) { newPhase in
                     // A new scan just finished populating the list.
                     guard newPhase == .completed else { return }

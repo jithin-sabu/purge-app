@@ -645,12 +645,6 @@ struct DevToolsView<PageHeader: View>: View {
     private var developerListOnly: some View {
         ScrollViewReader { proxy in
             developerListContent
-                .onAppear {
-                    // App launch / tab switch with results already loaded.
-                    if showsDeveloperListContent {
-                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
-                    }
-                }
                 .onChange(of: scanPhase) { newPhase in
                     // A new scan just finished populating the list.
                     guard newPhase == .completed else { return }
