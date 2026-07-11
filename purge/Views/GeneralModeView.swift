@@ -201,6 +201,7 @@ struct AppCachesView<PageHeader: View>: View {
             sortOption: sortOptionBinding,
             chipCounts: chipCounts,
             selectedInScopeCount: selectedInScopeCount,
+            selectedInScopeBytes: selectedInScopeBytes,
             isDeleting: store.isDeleting,
             onCleanSelected: {
                 Task {

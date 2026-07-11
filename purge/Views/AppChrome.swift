@@ -273,17 +273,16 @@ struct AppScanButton: View {
 struct AppCleanSelectedButton: View {
     @EnvironmentObject private var store: PurgeStore
 
-    private var title: String {
-        guard store.selectedCount > 0 else { return "Clean Selected" }
-        return "Clean Selected (\(formatBytes(store.selectedTotalBytes)))"
-    }
-
     var body: some View {
         Button {
             store.showDeletionSheet = true
         } label: {
-            Label(title, systemImage: "trash.fill")
-                .labelStyle(.titleAndIcon)
+            AnimatedDeleteActionLabel(
+                inactiveTitle: "Clean Selected",
+                activeTitle: "Clean Selected",
+                selectedCount: store.selectedCount,
+                selectedBytes: store.selectedTotalBytes
+            )
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
         }
@@ -320,6 +319,102 @@ struct CleaningButtonLabel: View {
             Text(title)
         }
         .labelStyle(.titleAndIcon)
+    }
+}
+
+struct AnimatedDeleteActionLabel: View {
+    let inactiveTitle: String
+    let activeTitle: String
+    let selectedCount: Int
+    let selectedBytes: Int64
+    var systemImage = "trash.fill"
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var measuredTextWidth: CGFloat?
+
+    private var hasSelection: Bool {
+        selectedCount > 0
+    }
+
+    private var widthAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.92, blendDuration: 0.12)
+    }
+
+    private var textAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.5)
+    }
+
+    private var accessibilityTitle: String {
+        guard hasSelection else { return inactiveTitle }
+        return "\(activeTitle), \(formatBytes(selectedBytes)) selected"
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .accessibilityHidden(true)
+
+            ZStack(alignment: .leading) {
+                textContent
+                    .fixedSize(horizontal: true, vertical: false)
+
+                textContent
+                    .fixedSize(horizontal: true, vertical: false)
+                    .hidden()
+                    .background(AnimatedDeleteActionWidthReader())
+                    .accessibilityHidden(true)
+            }
+            .frame(width: measuredTextWidth, alignment: .leading)
+            .clipped()
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityTitle)
+        .onPreferenceChange(AnimatedDeleteActionWidthKey.self) { width in
+            guard width > 0 else { return }
+            if reduceMotion {
+                measuredTextWidth = width
+            } else {
+                withAnimation(widthAnimation) {
+                    measuredTextWidth = width
+                }
+            }
+        }
+    }
+
+    private var textContent: some View {
+        HStack(spacing: 0) {
+            Text(hasSelection ? activeTitle : inactiveTitle)
+                .contentTransition(reduceMotion ? .identity : .opacity)
+
+            if hasSelection {
+                Text(" (")
+                    .transition(.opacity)
+                Text(formatBytes(selectedBytes))
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                Text(")")
+                    .transition(.opacity)
+            }
+        }
+        .animation(widthAnimation, value: hasSelection)
+        .animation(textAnimation, value: selectedBytes)
+    }
+}
+
+private struct AnimatedDeleteActionWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct AnimatedDeleteActionWidthReader: View {
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: AnimatedDeleteActionWidthKey.self, value: proxy.size.width)
+        }
     }
 }
 
@@ -1092,6 +1187,7 @@ struct AppButtonStyle: ButtonStyle {
     var isCapsule: Bool = false
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -1103,6 +1199,11 @@ struct AppButtonStyle: ButtonStyle {
             .overlay(border)
             .clipShape(buttonShape)
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
+            .animation(stateAnimation, value: isEnabled)
+    }
+
+    private var stateAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.28)
     }
 
     private var labelFont: Font {

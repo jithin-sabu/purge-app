@@ -64,7 +64,25 @@ struct LargeFile: Identifiable, Hashable {
     let category: LargeFileCategory
     var isSelected: Bool = false
 
-    var id: String { path.standardizedFileURL.path }
+    /// Stored (not computed) so identity checks in row bindings, sorting, and list
+    /// animations don't re-standardize the URL on every access — the repeated cost
+    /// made selection feel delayed compared to App Caches.
+    let id: String
+
+    init(
+        path: URL,
+        sizeBytes: Int64,
+        lastUsed: Date,
+        category: LargeFileCategory,
+        isSelected: Bool = false
+    ) {
+        self.path = path
+        self.sizeBytes = sizeBytes
+        self.lastUsed = lastUsed
+        self.category = category
+        self.isSelected = isSelected
+        self.id = path.standardizedFileURL.path
+    }
     var displayName: String { path.lastPathComponent }
     var formattedSize: String { formatBytes(sizeBytes) }
     var locationLabel: String { displayDirectoryPath(for: path.deletingLastPathComponent()) }

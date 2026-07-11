@@ -151,6 +151,7 @@ struct FilterSortToolbar: View {
     let chipCounts: [SafetyFilter: Int]
 
     let selectedInScopeCount: Int
+    var selectedInScopeBytes: Int64 = 0
     let isDeleting: Bool
 
     let onCleanSelected: () -> Void
@@ -231,8 +232,12 @@ struct FilterSortToolbar: View {
         Button {
             onCleanSelected()
         } label: {
-            Label(title, systemImage: "trash.fill")
-                .labelStyle(.titleAndIcon)
+            AnimatedDeleteActionLabel(
+                inactiveTitle: title,
+                activeTitle: title,
+                selectedCount: selectedInScopeCount,
+                selectedBytes: selectedInScopeBytes
+            )
         }
         .buttonStyle(AppButtonStyle(variant: .filled))
         .disabled(bulkDisabled)

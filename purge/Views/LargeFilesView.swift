@@ -137,8 +137,12 @@ struct LargeFilesView: View {
             Button {
                 store.presentLargeFileDeletionSheet()
             } label: {
-                Label(reviewButtonTitle, systemImage: "trash.fill")
-                    .labelStyle(.titleAndIcon)
+                AnimatedDeleteActionLabel(
+                    inactiveTitle: "Delete Selected",
+                    activeTitle: "Delete Selected",
+                    selectedCount: store.selectedLargeFileCount,
+                    selectedBytes: store.selectedLargeFileBytes
+                )
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
             }
@@ -330,7 +334,7 @@ struct LargeFilesView: View {
                 LargeFileRow(
                     file: file,
                     isSelected: Binding(
-                        get: { store.largeFiles.first(where: { $0.id == file.id })?.isSelected ?? false },
+                        get: { file.isSelected },
                         set: { store.setLargeFileSelected(id: file.id, isSelected: $0) }
                     )
                 )
@@ -392,10 +396,6 @@ struct LargeFilesView: View {
         return "\(count) \(itemLabel) · \(formatBytes(bytes)) to review"
     }
 
-    private var reviewButtonTitle: String {
-        guard store.selectedLargeFileCount > 0 else { return "Delete" }
-        return "Delete Selected (\(formatBytes(store.selectedLargeFileBytes)))"
-    }
 }
 
 private struct LargeFileRow: View {
@@ -430,6 +430,13 @@ private struct LargeFileRow: View {
             checkboxVisual
 
             rowMainContent
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isSelected.toggle()
+                }
+                .accessibilityAction {
+                    isSelected.toggle()
+                }
 
             Spacer(minLength: 12)
 
@@ -440,28 +447,18 @@ private struct LargeFileRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            isSelected.toggle()
-        }
         .modifier(ScanRowCardChrome())
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityAction {
-            isSelected.toggle()
-        }
     }
 
-    /// Non-interactive checkbox that only reflects selection state, so the whole
-    /// row is a single tap target and the checkmark fills on the same frame as
-    /// the tap (no competing hit target, no visible in-between state).
+    /// Bound checkbox matches the scan rows used by App Caches and Dev Tools, so
+    /// selection publishes immediately and the header action updates on the same beat.
     private var checkboxVisual: some View {
-        Toggle("", isOn: .constant(isSelected))
+        Toggle("", isOn: $isSelected)
             .labelsHidden()
             .toggleStyle(.checkbox)
             .tint(AppColors.buttonPrimaryBg)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 
     private var rowMainContent: some View {
@@ -610,11 +607,6 @@ private struct LargeFileThumbnailIcon: View {
 struct LargeFilesHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
 
-    private var reviewButtonTitle: String {
-        guard store.selectedLargeFileCount > 0 else { return "Delete" }
-        return "Delete Selected (\(formatBytes(store.selectedLargeFileBytes)))"
-    }
-
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
             Button {
@@ -634,8 +626,12 @@ struct LargeFilesHeaderActions: View {
             Button {
                 store.presentLargeFileDeletionSheet()
             } label: {
-                Label(reviewButtonTitle, systemImage: "trash.fill")
-                    .labelStyle(.titleAndIcon)
+                AnimatedDeleteActionLabel(
+                    inactiveTitle: "Delete Selected",
+                    activeTitle: "Delete Selected",
+                    selectedCount: store.selectedLargeFileCount,
+                    selectedBytes: store.selectedLargeFileBytes
+                )
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
             }

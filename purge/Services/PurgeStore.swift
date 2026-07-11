@@ -805,14 +805,18 @@ final class PurgeStore: ObservableObject {
 
     func setLargeFileSelected(id: String, isSelected: Bool) {
         guard let index = largeFiles.firstIndex(where: { $0.id == id }) else { return }
-        largeFiles[index].isSelected = isSelected
+        var copy = largeFiles
+        copy[index].isSelected = isSelected
+        largeFiles = copy
     }
 
     func setAllLargeFilesSelected(_ selected: Bool, ids: [String]) {
         let idSet = Set(ids)
-        for index in largeFiles.indices where idSet.contains(largeFiles[index].id) {
-            largeFiles[index].isSelected = selected
+        var copy = largeFiles
+        for index in copy.indices where idSet.contains(copy[index].id) {
+            copy[index].isSelected = selected
         }
+        largeFiles = copy
     }
 
     func presentLargeFileDeletionSheet() {
