@@ -393,8 +393,8 @@ struct LargeFilesView: View {
     }
 
     private var reviewButtonTitle: String {
-        guard store.selectedLargeFileCount > 0 else { return "Review Selected" }
-        return "Review Selected (\(formatBytes(store.selectedLargeFileBytes)))"
+        guard store.selectedLargeFileCount > 0 else { return "Delete" }
+        return "Delete Selected (\(formatBytes(store.selectedLargeFileBytes)))"
     }
 }
 
@@ -611,8 +611,8 @@ struct LargeFilesHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
 
     private var reviewButtonTitle: String {
-        guard store.selectedLargeFileCount > 0 else { return "Review Selected" }
-        return "Review Selected (\(formatBytes(store.selectedLargeFileBytes)))"
+        guard store.selectedLargeFileCount > 0 else { return "Delete" }
+        return "Delete Selected (\(formatBytes(store.selectedLargeFileBytes)))"
     }
 
     var body: some View {
