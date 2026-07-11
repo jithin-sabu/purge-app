@@ -388,17 +388,34 @@ struct AnimatedDeleteActionLabel: View {
                 .contentTransition(reduceMotion ? .identity : .opacity)
 
             if hasSelection {
-                Text(" (")
-                    .transition(.opacity)
-                Text(formatBytes(selectedBytes))
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                Text(")")
-                    .transition(.opacity)
+                selectionSuffix
+                    .transition(suffixTransition)
             }
         }
         .animation(widthAnimation, value: hasSelection)
         .animation(textAnimation, value: selectedBytes)
+    }
+
+    private var selectionSuffix: some View {
+        HStack(spacing: 0) {
+            Text(" (")
+            Text(formatBytes(selectedBytes))
+                .monospacedDigit()
+                .contentTransition(reduceMotion ? .identity : .numericText())
+            Text(")")
+        }
+    }
+
+    /// The suffix enters by being revealed as the label grows (an opacity fade
+    /// reads cleanly there). On exit the label shrinks, which would otherwise
+    /// drag the fading suffix leftward over the title — so removal moves it out
+    /// toward the trailing edge instead, mirroring the way it came in.
+    private var suffixTransition: AnyTransition {
+        guard !reduceMotion else { return .identity }
+        return .asymmetric(
+            insertion: .opacity,
+            removal: .move(edge: .trailing).combined(with: .opacity)
+        )
     }
 }
 
