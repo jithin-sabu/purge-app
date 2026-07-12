@@ -18,6 +18,9 @@ struct SettingsView: View {
 
     @State private var isRunningScheduledCleanNow = false
     @State private var scheduledCleanNowMessage: String?
+    @State private var isCleaningHistoryExpanded = false
+    @State private var showClearHistoryConfirmation = false
+    @State private var selectedHistoryEntry: CleanupHistoryEntry?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -40,10 +43,26 @@ struct SettingsView: View {
         }
         .padding(.horizontal, settingsHorizontalContentInset)
         .padding(.top, contentTopPadding)
-        .padding(.bottom, AppDetailPageLayout.verticalPadding)
+        .padding(.bottom, contentBottomPadding)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(maxHeight: usesExternalScrollContainer ? nil : .infinity, alignment: .topLeading)
         .background(AppColors.bgBase)
+        .sheet(item: $selectedHistoryEntry) { entry in
+            CleanupHistoryDetailView(entry: entry)
+        }
+        .confirmationDialog(
+            "Clear cleaning history?",
+            isPresented: $showClearHistoryConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear history", role: .destructive) {
+                history.clear()
+                isCleaningHistoryExpanded = false
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all saved cleanup records from this Mac. It cannot be undone.")
+        }
         .onChange(of: devToolsStalenessThresholdRaw) { _ in
             Task { await store.scanAll() }
         }
@@ -247,66 +266,91 @@ struct SettingsView: View {
     /// of only in a passing notification.
     private var cleaningHistorySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Cleaning History")
-                .font(.headline)
+            HStack(alignment: .center) {
+                Text("Cleaning History")
+                    .font(.headline)
+
+                Spacer(minLength: 12)
+
+                Button {
+                    showClearHistoryConfirmation = true
+                } label: {
+                    Text("Clear history")
+                        .font(scheduleStatusLinkFont)
+                        .foregroundStyle(AppColors.textPrimary)
+                }
+                .buttonStyle(.plain)
+                .disabled(history.archive.entries.isEmpty)
+                .opacity(history.archive.entries.isEmpty ? 0.45 : 1)
+            }
 
             settingsSectionCard {
-                if recentHistoryEntries.isEmpty {
+                if displayedHistoryEntries.isEmpty {
                     Text("No cleans recorded yet. Automatic and manual cleans will show up here.")
                         .font(scheduleStatusSecondaryFont)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(16)
                 } else {
-                    ForEach(Array(recentHistoryEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(displayedHistoryEntries.enumerated()), id: \.element.id) { index, entry in
                         if index > 0 {
                             settingsSectionDivider
                         }
-                        cleaningHistoryRow(entry)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
+                        Button {
+                            selectedHistoryEntry = entry
+                        } label: {
+                            CleanupHistorySummaryRow(entry: entry)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if hasMoreHistoryEntries {
+                        settingsSectionDivider
+
+                        Button {
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                isCleaningHistoryExpanded.toggle()
+                            }
+                        } label: {
+                            cleaningHistoryExpandRow
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
     }
 
-    private var recentHistoryEntries: [CleanupHistoryEntry] {
-        Array(history.archive.entries.prefix(6))
-    }
-
-    private func cleaningHistoryRow(_ entry: CleanupHistoryEntry) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.trigger == .scheduled ? "Automatic clean" : "Manual clean")
-                    .font(scheduleStatusPrimaryFont)
-                    .foregroundStyle(.primary)
-
-                Text(Self.historyDateFormatter.string(from: entry.date))
-                    .font(scheduleStatusTertiaryFont)
-                    .foregroundStyle(.tertiary)
-            }
-
-            Spacer(minLength: 12)
-
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(formatBytes(entry.totalFreedBytes))
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.primary)
-
-                Text("\(entry.deletedItems.count) \(entry.deletedItems.count == 1 ? "item" : "items")")
-                    .font(scheduleStatusTertiaryFont)
-                    .foregroundStyle(.tertiary)
-            }
+    private var displayedHistoryEntries: [CleanupHistoryEntry] {
+        if isCleaningHistoryExpanded {
+            history.archive.entries
+        } else {
+            Array(history.archive.entries.prefix(6))
         }
     }
 
-    private static let historyDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    private var hasMoreHistoryEntries: Bool {
+        history.archive.entries.count > 6
+    }
+
+    private var cleaningHistoryExpandRow: some View {
+        HStack(spacing: 10) {
+            Text(isCleaningHistoryExpanded ? "Show less" : "Show all")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: isCleaningHistoryExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 12)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: AppStyle.Row.compactHeight)
+        .contentShape(Rectangle())
+    }
 
     private var devToolsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -505,6 +549,13 @@ struct SettingsView: View {
             return AppDetailPageLayout.scrollEdgeClearanceBelowHeader
         }
         return showsPageHeader ? AppDetailPageLayout.topContentInset : AppStyle.Spacing.medium
+    }
+
+    private var contentBottomPadding: CGFloat {
+        if usesExternalScrollContainer {
+            return AppDetailPageLayout.scrollEdgeClearanceBelowHeader
+        }
+        return AppDetailPageLayout.verticalPadding
     }
 
     private var currentDevToolsStalenessOption: DevToolsStalenessOption {
