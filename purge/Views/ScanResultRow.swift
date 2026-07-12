@@ -131,29 +131,22 @@ struct ScanResultRow: View {
             .modifier(ScanResultRowChrome(showsCardChrome: showsCardChrome, canSelectForBulk: canSelectForBulk))
     }
 
+    @ViewBuilder
     private var rowBody: some View {
-        HStack(alignment: .center, spacing: 12) {
+        let stack = HStack(alignment: .center, spacing: 12) {
             if showsRowCheckbox {
-                Toggle("", isOn: $isSelected)
+                // Non-interactive: the row's own tap gesture publishes selection.
+                // An interactive Toggle here routes clicks through AppKit's control
+                // path, which scrolls the clicked row into view and shifts the list.
+                Toggle("", isOn: .constant(isSelected))
                     .labelsHidden()
                     .toggleStyle(.checkbox)
                     .tint(AppColors.buttonPrimaryBg)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
 
-            if canTapRowToToggleSelection {
-                // Tap gesture instead of a Button: a Button in a macOS List row makes
-                // the List scroll the clicked row into view, shifting the whole list.
-                rowMainContent
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        isSelected.toggle()
-                    }
-                    .accessibilityAction {
-                        isSelected.toggle()
-                    }
-            } else {
-                rowMainContent
-            }
+            rowMainContent
 
             Spacer(minLength: 12)
 
@@ -161,6 +154,24 @@ struct ScanResultRow: View {
         }
         .padding(.horizontal, showsCardChrome ? AppStyle.Row.scanCardHorizontalPadding : 0)
         .padding(.vertical, showsCardChrome ? rowVerticalPadding : 8)
+
+        // The tap target must blanket the ENTIRE row, not just rowMainContent: a
+        // Button/interactive control in a macOS List row scrolls the clicked row
+        // into view, and any uncovered area (checkbox, spacer, trailing column)
+        // falls through to the List's own native row selection, which also
+        // scrolls. One whole-row gesture avoids both.
+        if canTapRowToToggleSelection {
+            stack
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isSelected.toggle()
+                }
+                .accessibilityAction {
+                    isSelected.toggle()
+                }
+        } else {
+            stack
+        }
     }
 
     private var rowMainContent: some View {

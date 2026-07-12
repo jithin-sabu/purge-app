@@ -3,6 +3,14 @@ import Foundation
 import SwiftUI
 import Combine
 
+/// Holds large-file selection separately from the `largeFiles` array so a toggle
+/// only re-renders the views observing this object (rows, select-all bar, delete
+/// button) — never the results List container, whose re-render reverts scroll.
+@MainActor
+final class LargeFileSelection: ObservableObject {
+    @Published var ids: Set<String> = []
+}
+
 @MainActor
 final class PurgeStore: ObservableObject {
     private enum StorageKeys {
@@ -86,6 +94,12 @@ final class PurgeStore: ObservableObject {
     @Published var simulatorDevices: [SimulatorDevice] = []
     @Published var projectGroups: [ProjectGroup] = []
     @Published var largeFiles: [LargeFile] = []
+    /// Large-file selection lives in its own observable object (NOT @Published on the
+    /// store) so toggling a row does not fire the store's objectWillChange and thus
+    /// does not re-render the results List container — a List re-render reverts the
+    /// scroll position. Only views that display selection (rows, select-all bar,
+    /// delete button) observe this object directly.
+    let largeFileSelection = LargeFileSelection()
     @Published var isScanningLargeFiles = false
     @Published var showLargeFileDeletionSheet = false
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
@@ -759,7 +773,8 @@ final class PurgeStore: ObservableObject {
     // MARK: - Large & Old Files
 
     var selectedLargeFiles: [LargeFile] {
-        largeFiles.filter(\.isSelected)
+        let ids = largeFileSelection.ids
+        return largeFiles.filter { ids.contains($0.id) }
     }
 
     var selectedLargeFileCount: Int {
@@ -782,6 +797,7 @@ final class PurgeStore: ObservableObject {
         let generation = largeFileScanGeneration
         isScanningLargeFiles = true
         largeFiles = []
+        largeFileSelection.ids.removeAll()
         defer {
             if largeFileScanGeneration == generation {
                 isScanningLargeFiles = false
@@ -804,19 +820,19 @@ final class PurgeStore: ObservableObject {
     }
 
     func setLargeFileSelected(id: String, isSelected: Bool) {
-        guard let index = largeFiles.firstIndex(where: { $0.id == id }) else { return }
-        var copy = largeFiles
-        copy[index].isSelected = isSelected
-        largeFiles = copy
+        if isSelected {
+            largeFileSelection.ids.insert(id)
+        } else {
+            largeFileSelection.ids.remove(id)
+        }
     }
 
     func setAllLargeFilesSelected(_ selected: Bool, ids: [String]) {
-        let idSet = Set(ids)
-        var copy = largeFiles
-        for index in copy.indices where idSet.contains(copy[index].id) {
-            copy[index].isSelected = selected
+        if selected {
+            largeFileSelection.ids.formUnion(ids)
+        } else {
+            largeFileSelection.ids.subtract(ids)
         }
-        largeFiles = copy
     }
 
     func presentLargeFileDeletionSheet() {
@@ -881,6 +897,7 @@ final class PurgeStore: ObservableObject {
             withAnimation(.easeInOut(duration: 0.2)) {
                 largeFiles.removeAll { deletedPaths.contains($0.id) }
             }
+            largeFileSelection.ids.subtract(deletedPaths)
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesFreed: report.totalDeleted,

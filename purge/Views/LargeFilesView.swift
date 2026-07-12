@@ -15,6 +15,10 @@ struct LargeFilesView: View {
     @AppStorage(LargeFileSizeThreshold.userDefaultsKey) private var minSizeMB: Int = LargeFileSizeThreshold.defaultOption.rawValue
     @AppStorage(LargeFileAgeThreshold.userDefaultsKey) private var minAgeDays: Int = LargeFileAgeThreshold.defaultOption.rawValue
 
+    /// Bumped when a scan finishes to reset the results List's identity (and thus
+    /// its scroll to the top). Kept out of selection so toggles never reset scroll.
+    @State private var scanGeneration = 0
+
     private var currentSort: SortOption {
         SortOption(rawValue: sortRaw) ?? .sizeDesc
     }
@@ -60,13 +64,29 @@ struct LargeFilesView: View {
         visibleFiles.map(\.id)
     }
 
-    private var selectAllState: SelectAllTriState {
-        let visible = visibleFiles
-        guard !visible.isEmpty else { return .none }
-        let selected = visible.filter(\.isSelected).count
-        if selected == 0 { return .none }
-        if selected == visible.count { return .all }
-        return .mixed
+    /// Indices into `store.largeFiles` in display (filtered + sorted) order. The
+    /// results List iterates these instead of `visibleFiles` so its ForEach data is
+    /// a plain `[Int]` that stays value-identical when only a row's selection flips
+    /// — that structural stability is what keeps the macOS List from re-scrolling
+    /// to its stuck "current row" on select (matches the App Caches list, which
+    /// iterates `sortedVisibleIndices()`). Iterating fresh `LargeFile` value copies
+    /// instead churns the data every toggle and reintroduces the scroll jump.
+    private var visibleIndices: [Int] {
+        let files = store.largeFiles
+        let filtered = files.indices.filter { i in
+            categoryFilterRaw == "all" || files[i].category.rawValue == categoryFilterRaw
+        }
+
+        switch currentSort {
+        case .sizeDesc: return filtered.sorted { files[$0].sizeBytes > files[$1].sizeBytes }
+        case .sizeAsc: return filtered.sorted { files[$0].sizeBytes < files[$1].sizeBytes }
+        case .dateNewest: return filtered.sorted { files[$0].lastUsed > files[$1].lastUsed }
+        case .dateOldest: return filtered.sorted { files[$0].lastUsed < files[$1].lastUsed }
+        case .nameAZ:
+            return filtered.sorted {
+                files[$0].displayName.localizedCaseInsensitiveCompare(files[$1].displayName) == .orderedAscending
+            }
+        }
     }
 
     var body: some View {
@@ -134,20 +154,7 @@ struct LargeFilesView: View {
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
             .disabled(isLoading)
 
-            Button {
-                store.presentLargeFileDeletionSheet()
-            } label: {
-                AnimatedDeleteActionLabel(
-                    inactiveTitle: "Delete Selected",
-                    activeTitle: "Delete Selected",
-                    selectedCount: store.selectedLargeFileCount,
-                    selectedBytes: store.selectedLargeFileBytes
-                )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-            }
-            .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
-            .disabled(store.selectedLargeFileCount == 0 || store.isDeleting)
+            LargeFileDeleteButton(selection: store.largeFileSelection)
         }
         .fixedSize()
     }
@@ -264,18 +271,15 @@ struct LargeFilesView: View {
     }
 
     private var selectAllRowChrome: some View {
-        HStack(alignment: .bottom) {
-            TriStateCheckbox(title: "Select All", state: selectAllState) {
-                toggleSelectAll()
-            }
-            .fixedSize()
-            .disabled(visibleFiles.isEmpty)
-
-            Spacer()
-
-            AppSortMenu(selection: sortOptionBinding)
-        }
-        .scanTabSelectAllRowLayout()
+        // A child view that observes the selection object, so its tri-state updates
+        // on selection WITHOUT re-rendering LargeFilesView (which would revert the
+        // list scroll). LargeFilesView only reads the stable object reference here.
+        LargeFileSelectAllBar(
+            selection: store.largeFileSelection,
+            visibleIDs: visibleIDs,
+            sort: sortOptionBinding,
+            onToggleAll: toggleSelectAll
+        )
     }
 
     private var listStack: some View {
@@ -309,16 +313,17 @@ struct LargeFilesView: View {
     private static let topAnchorID = "large-files-top"
 
     private var resultsList: some View {
-        ScrollViewReader { proxy in
-            resultsListContent
-                .onChange(of: isLoading) { loading in
-                    // A scan just finished populating the list.
-                    guard !loading else { return }
-                    DispatchQueue.main.async {
-                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
-                    }
-                }
-        }
+        // No ScrollViewReader/ScrollPosition binding: both revert the scroll to a
+        // stale committed offset on the first re-render after a wheel/trackpad
+        // scroll (verified by logging). We reset the List identity only when a scan
+        // finishes so fresh results start at the top, and leave scroll alone on
+        // every selection.
+        resultsListContent
+            .id(scanGeneration)
+            .onChange(of: isLoading) { loading in
+                guard !loading else { return }
+                scanGeneration &+= 1
+            }
     }
 
     private var resultsListContent: some View {
@@ -330,13 +335,21 @@ struct LargeFilesView: View {
                 .listRowSeparator(.hidden)
                 .id(Self.topAnchorID)
 
-            ForEach(visibleFiles) { file in
+            // Iterate stable `[Int]` indices (not fresh LargeFile copies) so the
+            // ForEach data doesn't churn on selection and the List stays put —
+            // see `visibleIndices`.
+            ForEach(visibleIndices, id: \.self) { index in
+                let file = store.largeFiles[index]
                 LargeFileRow(
                     file: file,
-                    isSelected: Binding(
-                        get: { file.isSelected },
-                        set: { store.setLargeFileSelected(id: file.id, isSelected: $0) }
-                    )
+                    selection: store.largeFileSelection,
+                    onToggle: {
+                        let id = file.id
+                        store.setLargeFileSelected(
+                            id: id,
+                            isSelected: !store.largeFileSelection.ids.contains(id)
+                        )
+                    }
                 )
                 .listRowInsets(ScanListRowInsets.standard)
                 .listRowBackground(Color.clear)
@@ -347,6 +360,12 @@ struct LargeFilesView: View {
             ScanListBottomSpacer()
         }
         .listStyle(.plain)
+        // On macOS, List rows are natively selectable even with no `selection:`
+        // binding: the first click engages NSTableView selection/focus and it
+        // scroll-to-visibles the clicked row (worse here than the scan tabs
+        // because these rows are taller). We drive selection ourselves via the
+        // row's `.onTapGesture`, so disable the List's own selection to stop it.
+        .disablingListSelection()
         .scrollContentBackground(.hidden)
         .background(AppColors.bgBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.largeFiles.map(\.id))
@@ -385,7 +404,8 @@ struct LargeFilesView: View {
     private func toggleSelectAll() {
         let ids = visibleIDs
         guard !ids.isEmpty else { return }
-        let allOn = visibleFiles.allSatisfy(\.isSelected)
+        let selected = store.largeFileSelection.ids
+        let allOn = ids.allSatisfy { selected.contains($0) }
         store.setAllLargeFilesSelected(!allOn, ids: ids)
     }
 
@@ -398,9 +418,97 @@ struct LargeFilesView: View {
 
 }
 
+private extension View {
+    /// Disables the List's own row selection (macOS 14+); a no-op on older systems.
+    /// We manage selection via each row's tap gesture, so the List must not also
+    /// select-and-scroll the clicked row.
+    @ViewBuilder
+    func disablingListSelection() -> some View {
+        if #available(macOS 14.0, *) {
+            selectionDisabled()
+        } else {
+            self
+        }
+    }
+
+}
+
+/// Delete button extracted so its count/label/enabled state observe the selection
+/// object directly — updating on selection without re-rendering the results List.
+private struct LargeFileDeleteButton: View {
+    @EnvironmentObject private var store: PurgeStore
+    @ObservedObject var selection: LargeFileSelection
+
+    var body: some View {
+        Button {
+            store.presentLargeFileDeletionSheet()
+        } label: {
+            AnimatedDeleteActionLabel(
+                inactiveTitle: "Delete Selected",
+                activeTitle: "Delete Selected",
+                selectedCount: store.selectedLargeFileCount,
+                selectedBytes: store.selectedLargeFileBytes
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+        .disabled(store.selectedLargeFileCount == 0 || store.isDeleting)
+    }
+}
+
+/// Select-all bar extracted from LargeFilesView so its tri-state can observe the
+/// selection object directly — updating on selection without re-rendering (and thus
+/// scroll-reverting) the results List.
+private struct LargeFileSelectAllBar: View {
+    @ObservedObject var selection: LargeFileSelection
+    let visibleIDs: [String]
+    @Binding var sort: SortOption
+    let onToggleAll: () -> Void
+
+    private var state: SelectAllTriState {
+        guard !visibleIDs.isEmpty else { return .none }
+        let selected = visibleIDs.filter { selection.ids.contains($0) }.count
+        if selected == 0 { return .none }
+        if selected == visibleIDs.count { return .all }
+        return .mixed
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom) {
+            TriStateCheckbox(title: "Select All", state: state) {
+                onToggleAll()
+            }
+            .fixedSize()
+            .disabled(visibleIDs.isEmpty)
+
+            Spacer()
+
+            AppSortMenu(selection: $sort)
+        }
+        .scanTabSelectAllRowLayout()
+    }
+}
+
 private struct LargeFileRow: View {
     let file: LargeFile
-    @Binding var isSelected: Bool
+    /// Observed so a toggle re-renders only the (visible) rows — not the List
+    /// container, whose re-render is what reverts the scroll position.
+    @ObservedObject var selection: LargeFileSelection
+    let onToggle: () -> Void
+
+    private var isSelected: Bool { selection.ids.contains(file.id) }
+
+    /// Fixed, uniform row height so the macOS List never has to *estimate* a row's
+    /// height. Estimated-vs-actual drift is what makes a click scroll the list: the
+    /// error accumulates over the off-screen rows above, so a click near the top
+    /// barely moves while a click far down jumps by the whole accumulated drift
+    /// (enough to throw the row out of view). Derived from the row's own font
+    /// metrics + vertical padding so it matches the natural height without clipping.
+    static let contentHeight: CGFloat = {
+        let textBlock = ScanResultRow.headlineOneLineHeight + 4 + ScanResultRow.subheadlineOneLineHeight
+        return max(AppStyle.Row.listIconFrameSize, textBlock) + 24
+    }()
     @State private var isHoveringLocation = false
 
     private var dateText: String {
@@ -424,19 +532,17 @@ private struct LargeFileRow: View {
     }
 
     var body: some View {
-        // Tap gesture instead of a Button: a Button in a macOS List row makes the
-        // List scroll the clicked row into view, shifting the whole list on select.
+        // The WHOLE row is one tap target (not a Button, not per-subview): a Button
+        // or interactive control in a macOS List row makes the List scroll the
+        // clicked row into view. Just as bad, any area NOT covered by a gesture
+        // (checkbox, spacer, size label) falls through to the List's own native
+        // row selection, which also scrolls the row in — so the tap must blanket
+        // the entire row. The thumbnail/location gestures inside rowMainContent
+        // still win at their own hit points.
         HStack(alignment: .center, spacing: 12) {
             checkboxVisual
 
             rowMainContent
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isSelected.toggle()
-                }
-                .accessibilityAction {
-                    isSelected.toggle()
-                }
 
             Spacer(minLength: 12)
 
@@ -446,37 +552,51 @@ private struct LargeFileRow: View {
                 .monospacedDigit()
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .frame(height: Self.contentHeight)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onToggle()
+        }
         .modifier(ScanRowCardChrome())
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction {
+            onToggle()
+        }
     }
 
-    /// Bound checkbox matches the scan rows used by App Caches and Dev Tools, so
-    /// selection publishes immediately and the header action updates on the same beat.
+    /// Non-interactive checkbox that only reflects selection state, so the whole
+    /// row is a single tap target and the checkmark fills on the same frame as
+    /// the tap (no competing hit target, no visible in-between state). An
+    /// interactive Toggle here routes clicks through AppKit's control path, which
+    /// scrolls the clicked row into view and shifts the whole list on select.
     private var checkboxVisual: some View {
-        Toggle("", isOn: $isSelected)
+        Toggle("", isOn: .constant(isSelected))
             .labelsHidden()
             .toggleStyle(.checkbox)
             .tint(AppColors.buttonPrimaryBg)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private var rowMainContent: some View {
         HStack(alignment: .center, spacing: 12) {
-            Button(action: quickLook) {
-                LargeFileThumbnailIcon(file: file)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { hovering in
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
+            // Tap gesture rather than a Button: a Button in a macOS List row makes
+            // the List scroll the clicked row into view on click, shifting the list.
+            LargeFileThumbnailIcon(file: file)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: quickLook)
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
                 }
-            }
-            .help("Quick Look")
-            .accessibilityLabel("Quick Look \(file.displayName)")
+                .help("Quick Look")
+                .accessibilityLabel("Quick Look \(file.displayName)")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction(.default, quickLook)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(file.displayName)
@@ -486,17 +606,18 @@ private struct LargeFileRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 6) {
-                    Button(action: revealInFinder) {
-                        Text(file.locationLabel)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .underline(isHoveringLocation)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .onHover { isHoveringLocation = $0 }
-                    .help("Show in Finder\n\(parentFolderPath)")
-                    .accessibilityLabel("Reveal in Finder, \(file.locationLabel)")
+                    Text(file.locationLabel)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .underline(isHoveringLocation)
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: revealInFinder)
+                        .onHover { isHoveringLocation = $0 }
+                        .help("Show in Finder\n\(parentFolderPath)")
+                        .accessibilityLabel("Reveal in Finder, \(file.locationLabel)")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction(.default, revealInFinder)
 
                     Text("·")
                         .foregroundStyle(.secondary)
@@ -623,20 +744,7 @@ struct LargeFilesHeaderActions: View {
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
             .disabled(store.isScanningLargeFiles)
 
-            Button {
-                store.presentLargeFileDeletionSheet()
-            } label: {
-                AnimatedDeleteActionLabel(
-                    inactiveTitle: "Delete Selected",
-                    activeTitle: "Delete Selected",
-                    selectedCount: store.selectedLargeFileCount,
-                    selectedBytes: store.selectedLargeFileBytes
-                )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-            }
-            .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
-            .disabled(store.selectedLargeFileCount == 0 || store.isDeleting)
+            LargeFileDeleteButton(selection: store.largeFileSelection)
         }
         .fixedSize()
     }
