@@ -203,10 +203,9 @@ final class DevScanner {
         guard FileManager.default.fileExists(atPath: devicesRoot.path) else { return [] }
         guard FileManager.default.isExecutableFile(atPath: Self.xcrunPath) else { return [] }
 
-        if let fromSimctl = await loadSimulatorsFromSimctl(devicesRoot: devicesRoot) {
-            return fromSimctl
-        }
-        return loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot)
+        let devices = await loadSimulatorsFromSimctl(devicesRoot: devicesRoot)
+            ?? loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot)
+        return devices.filter { !ExcludedPathsStore.isExcluded($0.folderURL) }
     }
 
     private static let xcrunPath = "/usr/bin/xcrun"
@@ -520,6 +519,7 @@ final class DevScanner {
             let existing = paths.filter {
                 FileManager.default.fileExists(atPath: $0.path)
                     && DeletionSafetyPolicy.isOfferedForCleanup($0)
+                    && !ExcludedPathsStore.isExcluded($0)
             }
             guard !existing.isEmpty else { return nil }
 
@@ -1015,6 +1015,9 @@ final class DevScanner {
         func addIfDir(kind: DeletableArtifactKind, url: URL) {
             guard fm.fileExists(atPath: url.path) else { return }
             guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { return }
+            // Also drops every artifact under an excluded project root, since the store
+            // matches ancestors — that is how a whole-project exclusion takes effect.
+            guard !ExcludedPathsStore.isExcluded(url) else { return }
             var isDir = false
             if let rv = try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory {
                 isDir = rv

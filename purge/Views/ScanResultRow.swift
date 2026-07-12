@@ -43,6 +43,8 @@ struct ScanResultRow: View {
     /// Clears a legacy manual category override. When nil, the corresponding
     /// badge is hidden.
     let onResetToAutomatic: (() -> Void)?
+    /// When nil, the row omits the "Exclude from scans" context-menu action.
+    var onExcludeFromScans: (() -> Void)?
     let isUserOverride: Bool
     /// When `false`, the row checkbox is disabled (e.g. high-risk items that should not participate in bulk select).
     var allowsBulkSelection: Bool = true
@@ -58,6 +60,7 @@ struct ScanResultRow: View {
     var usesCompactExplanation: Bool = false
 
     @Environment(\.scanRowPlaceholderAppearance) private var rendersAsPlaceholder
+    @State private var isContextMenuActive = false
 
     private var statusLabel: String {
         safetyInfo.level.displayName
@@ -117,6 +120,7 @@ struct ScanResultRow: View {
         reinstallSafety: ReinstallSafetyStatus? = nil,
         showUncommittedRepoChanges: Bool = false,
         onResetToAutomatic: (() -> Void)? = nil,
+        onExcludeFromScans: (() -> Void)? = nil,
         isUserOverride: Bool = false,
         allowsBulkSelection: Bool = true,
         showsBulkCheckbox: Bool = true,
@@ -135,6 +139,7 @@ struct ScanResultRow: View {
         self.reinstallSafety = reinstallSafety
         self.showUncommittedRepoChanges = showUncommittedRepoChanges
         self.onResetToAutomatic = onResetToAutomatic
+        self.onExcludeFromScans = onExcludeFromScans
         self.isUserOverride = isUserOverride
         self.allowsBulkSelection = allowsBulkSelection
         self.showsBulkCheckbox = showsBulkCheckbox
@@ -144,9 +149,36 @@ struct ScanResultRow: View {
         self.usesCompactExplanation = usesCompactExplanation
     }
 
+    @ViewBuilder
     var body: some View {
-        rowBody
-            .modifier(ScanResultRowChrome(showsCardChrome: showsCardChrome, canSelectForBulk: canSelectForBulk))
+        let row = rowBody
+            .modifier(
+                ScanResultRowChrome(
+                    showsCardChrome: showsCardChrome,
+                    canSelectForBulk: canSelectForBulk,
+                    showsContextMenuHighlight: isContextMenuActive
+                )
+            )
+            .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
+
+        if let onExcludeFromScans {
+            // Not SwiftUI's `.contextMenu`: that hands the menu to the enclosing
+            // NSTableView, which then paints its own blue contextual-menu highlight
+            // around the whole list row. Consuming the right-click ourselves keeps
+            // the table out of it; we draw our own neutral row emphasis instead.
+            row.overlay {
+                ScanRowContextMenu(
+                    isMenuActive: $isContextMenuActive,
+                    title: "Exclude from scans",
+                    action: onExcludeFromScans
+                )
+            }
+            // The overlay only answers a secondary click, which VoiceOver and the
+            // keyboard cannot produce; this exposes the same action to them.
+            .accessibilityAction(named: Text("Exclude from scans"), onExcludeFromScans)
+        } else {
+            row
+        }
     }
 
     @ViewBuilder
@@ -370,20 +402,131 @@ struct ScanResultRow: View {
     }
 }
 
+// MARK: - Row context menu
+
+/// Right-click menu that consumes the click so NSTableView never paints its blue row
+/// highlight. Left clicks pass through for normal row selection.
+struct ScanRowContextMenu: NSViewRepresentable {
+    @Binding var isMenuActive: Bool
+    let title: String
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator: NSObject, NSMenuDelegate {
+        var onMenuClosed: (() -> Void)?
+
+        func menuDidClose(_ menu: NSMenu) {
+            DispatchQueue.main.async { [weak self] in
+                self?.onMenuClosed?()
+            }
+        }
+    }
+
+    final class MenuHostView: NSView {
+        weak var menuDelegate: NSMenuDelegate?
+        var title = ""
+        var action: () -> Void = {}
+        var onMenuOpened: (() -> Void)?
+
+        override func rightMouseDown(with event: NSEvent) {
+            showMenu(for: event)
+        }
+
+        /// Control-click arrives as a left click with the control modifier.
+        override func mouseDown(with event: NSEvent) {
+            showMenu(for: event)
+        }
+
+        private func showMenu(for event: NSEvent) {
+            onMenuOpened?()
+            let menu = NSMenu()
+            let item = NSMenuItem(title: title, action: #selector(performAction), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            menu.delegate = menuDelegate
+            menu.popUp(positioning: nil, at: convert(event.locationInWindow, from: nil), in: self)
+        }
+
+        @objc private func performAction() {
+            action()
+        }
+
+        /// Claim secondary clicks only; every other event passes to the SwiftUI row beneath.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+            switch event.type {
+            case .rightMouseDown, .rightMouseUp:
+                return super.hitTest(point)
+            case .leftMouseDown, .leftMouseUp:
+                return event.modifierFlags.contains(.control) ? super.hitTest(point) : nil
+            default:
+                return nil
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> MenuHostView {
+        let view = MenuHostView()
+        view.title = title
+        view.action = action
+        wire(view: view, coordinator: context.coordinator)
+        return view
+    }
+
+    func updateNSView(_ nsView: MenuHostView, context: Context) {
+        nsView.title = title
+        nsView.action = action
+        wire(view: nsView, coordinator: context.coordinator)
+    }
+
+    private func wire(view: MenuHostView, coordinator: Coordinator) {
+        view.menuDelegate = coordinator
+        view.onMenuOpened = { isMenuActive = true }
+        coordinator.onMenuClosed = { isMenuActive = false }
+    }
+}
+
 // MARK: - Row chrome
 
 struct ScanRowCardChrome: ViewModifier {
     var showsCardChrome: Bool = true
     var canSelectForBulk: Bool = true
+    var showsContextMenuHighlight: Bool = false
+
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+    }
 
     func body(content: Content) -> some View {
         if showsCardChrome {
             content
-                .background(Color.primary.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous))
+                .background {
+                    cardShape
+                        .fill(
+                            showsContextMenuHighlight
+                                ? Color.primary.opacity(0.10)
+                                : Color.primary.opacity(0.05)
+                        )
+                }
+                .clipShape(cardShape)
+                .overlay {
+                    if showsContextMenuHighlight {
+                        cardShape
+                            .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+                    }
+                }
                 .opacity(canSelectForBulk ? 1 : 0.55)
         } else {
             content
+                .background {
+                    if showsContextMenuHighlight {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.primary.opacity(0.08))
+                    }
+                }
                 .opacity(canSelectForBulk ? 1 : 0.55)
         }
     }

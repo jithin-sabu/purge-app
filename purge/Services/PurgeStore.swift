@@ -166,6 +166,9 @@ final class PurgeStore: ObservableObject {
 
     /// Standardized paths with manual user categorizations. Mirrors `user_overrides.json`.
     @Published private(set) var userOverridePaths: Set<String> = UserOverridesStore.allOverriddenPaths()
+    /// Paths the user excluded from scans. Purely subtractive: the scanner drops these
+    /// after the allowlist gate, so nothing new ever becomes scannable or cleanable.
+    @Published private(set) var excludedPaths: Set<String> = ExcludedPathsStore.allExcludedPaths()
 
     private let cacheScanner = CacheScanner()
     private let devScanner = DevScanner()
@@ -2148,6 +2151,121 @@ final class PurgeStore: ObservableObject {
 
     private func refreshUserOverridePaths() {
         userOverridePaths = UserOverridesStore.allOverriddenPaths()
+    }
+
+    private func refreshExcludedPaths() {
+        excludedPaths = ExcludedPathsStore.allExcludedPaths()
+    }
+
+    /// Subtracts every location from future scans and drops the row. Only removes paths
+    /// the allowlist already approved.
+    func excludeFromScans(_ item: CacheItem) {
+        for url in item.paths {
+            ExcludedPathsStore.write(path: url, displayName: item.appName)
+        }
+        refreshExcludedPaths()
+
+        let itemID = item.id
+        let excluded = Set(item.paths.map { $0.standardizedFileURL.path })
+
+        // A mid-scan flush republishes `cacheItems` from the staged buffer, so the row
+        // has to leave the buffer too or the next flush brings it straight back. Match on
+        // path as well as id: a staged twin can carry not-yet-sized locations that the
+        // published row dropped, which shifts its path-derived id.
+        stagedGeneralCacheItems = stagedGeneralCacheItems.compactMap { staged in
+            guard staged.id != itemID else { return nil }
+            let remaining = staged.locations.filter {
+                !excluded.contains($0.path.standardizedFileURL.path)
+            }
+            guard !remaining.isEmpty else { return nil }
+            guard remaining.count != staged.locations.count else { return staged }
+            return staged.withLocations(remaining)
+        }
+        pendingCacheSizePaths.subtract(excluded)
+
+        scanSelection.cacheIDs.remove(itemID)
+        withAnimation {
+            cacheItems.removeAll { $0.id == itemID }
+        }
+    }
+
+    /// Subtracts every path backing a dev tool row and drops it. Only removes paths the
+    /// allowlist already approved.
+    func excludeFromScans(_ tool: DevTool) {
+        for url in tool.paths {
+            ExcludedPathsStore.write(path: url, displayName: tool.toolName)
+        }
+        refreshExcludedPaths()
+
+        let toolID = tool.id
+        // A pending size update re-adds a staged tool to `devTools` when it lands, so drop
+        // the staged copy and stop waiting on its size.
+        stagedDevToolsByID.removeValue(forKey: toolID)
+        pendingDevToolSizeIDs.remove(toolID)
+
+        scanSelection.devToolIDs.remove(toolID)
+        withAnimation {
+            devTools.removeAll { $0.id == toolID }
+        }
+    }
+
+    /// Subtracts a simulator device folder and drops it. Only removes paths the allowlist
+    /// already approved.
+    func excludeFromScans(_ device: SimulatorDevice) {
+        ExcludedPathsStore.write(
+            path: device.folderURL,
+            displayName: "\(device.deviceName) — \(device.runtimeVersion)"
+        )
+        refreshExcludedPaths()
+
+        let deviceID = device.id
+        // Same as dev tools: a staged simulator is re-appended once its size resolves.
+        stagedSimulatorsByID.removeValue(forKey: deviceID)
+
+        scanSelection.simulatorIDs.remove(deviceID)
+        withAnimation {
+            simulatorDevices.removeAll { $0.id == deviceID }
+        }
+    }
+
+    /// Subtracts one artifact folder; the group vanishes once empty. Only removes paths
+    /// the allowlist already approved.
+    func excludeProjectArtifactFromScans(groupID: String, artifactID: String) {
+        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
+        let group = projectGroups[indices.groupIndex]
+        let artifact = group.artifacts[indices.artifactIndex]
+        ExcludedPathsStore.write(
+            path: artifact.path,
+            displayName: "\(group.displayName) — \(artifact.kind.rowTag)"
+        )
+        refreshExcludedPaths()
+
+        scanSelection.artifactIDs.remove(artifactID)
+        withAnimation {
+            var groups = projectGroups
+            groups[indices.groupIndex].artifacts.removeAll { $0.id == artifactID }
+            projectGroups = groups.filter { !$0.artifacts.isEmpty }
+        }
+    }
+
+    /// Subtracts a project root; descendant paths stay excluded via `isExcluded`. Only
+    /// removes paths the allowlist already approved.
+    func excludeProjectGroupFromScans(groupID: String) {
+        guard let group = projectGroups.first(where: { $0.id == groupID }) else { return }
+        ExcludedPathsStore.write(path: group.rootPath, displayName: group.displayName)
+        refreshExcludedPaths()
+
+        scanSelection.artifactIDs.subtract(group.artifacts.map(\.id))
+        withAnimation {
+            projectGroups.removeAll { $0.id == groupID }
+        }
+    }
+
+    /// Drop an exclusion. The item reappears on the next scan, but only if it still
+    /// passes the normal allowlist gate.
+    func removeExclusion(path: URL) {
+        ExcludedPathsStore.remove(path: path)
+        refreshExcludedPaths()
     }
 
     /// Mark a row with a manual category. Persists `user_overrides.json` keyed

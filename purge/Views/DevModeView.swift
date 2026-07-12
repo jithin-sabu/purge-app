@@ -705,6 +705,7 @@ struct DevToolsView<PageHeader: View>: View {
                             reinstallSafety: tool.reinstallSafety,
                             showUncommittedRepoChanges: !isDevToolMetadataPending(tool) && toolShowsUncommitted(tool),
                             onResetToAutomatic: primaryPath != nil ? { store.resetDevToolToAutomatic(id: toolID) } : nil,
+                            onExcludeFromScans: { store.excludeFromScans(tool) },
                             isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false,
                             isMetadataPending: isDevToolMetadataPending(tool)
                         )
@@ -748,6 +749,7 @@ struct DevToolsView<PageHeader: View>: View {
                                     reinstallSafety: .notApplicable,
                                     showUncommittedRepoChanges: false,
                                     onResetToAutomatic: nil,
+                                    onExcludeFromScans: { store.excludeFromScans(device) },
                                     isUserOverride: false,
                                     allowsBulkSelection: true,
                                     isMetadataPending: isSimulatorMetadataPending(device),
@@ -930,6 +932,15 @@ struct DevToolsView<PageHeader: View>: View {
             .padding(.vertical, 2)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
             .frame(minHeight: AppStyle.Row.parentHeight)
+            // Header only: an overlay across the whole card would swallow the
+            // right-click meant for an individual artifact row.
+            .overlay {
+                ScanRowContextMenu(
+                    isMenuActive: .constant(false),
+                    title: "Exclude project from scans",
+                    action: { store.excludeProjectGroupFromScans(groupID: group.id) }
+                )
+            }
 
             if isExpanded {
                 projectArtifactRows(groupIndex: currentGroupIndex)
@@ -993,6 +1004,9 @@ struct DevToolsView<PageHeader: View>: View {
                     reinstallSafety: nil,
                     showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
                     onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifactID) },
+                    onExcludeFromScans: {
+                        store.excludeProjectArtifactFromScans(groupID: groupID, artifactID: artifactID)
+                    },
                     isUserOverride: store.userOverridePaths.contains(artifactPath),
                     showsBulkCheckbox: false,
                     isMetadataPending: isArtifactMetadataPending(art) || store.projectArtifactHasPendingSize(art),
