@@ -274,20 +274,24 @@ struct AppCleanSelectedButton: View {
     @EnvironmentObject private var store: PurgeStore
 
     var body: some View {
-        Button {
-            store.showDeletionSheet = true
-        } label: {
-            AnimatedDeleteActionLabel(
-                inactiveTitle: "Clean Selected",
-                activeTitle: "Clean Selected",
-                selectedCount: store.selectedCount,
-                selectedBytes: store.selectedTotalBytes
-            )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+        // Scan-tab selection lives in its own object; scope observes it so the
+        // count/label and enabled state update when a scan-tab selection changes.
+        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+            Button {
+                store.showDeletionSheet = true
+            } label: {
+                AnimatedDeleteActionLabel(
+                    inactiveTitle: "Clean Selected",
+                    activeTitle: "Clean Selected",
+                    selectedCount: store.selectedCount,
+                    selectedBytes: store.selectedTotalBytes
+                )
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+            }
+            .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+            .disabled(store.selectedCount == 0 || store.isDeleting)
         }
-        .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
-        .disabled(store.selectedCount == 0 || store.isDeleting)
     }
 }
 

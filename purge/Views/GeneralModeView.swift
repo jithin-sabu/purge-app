@@ -81,7 +81,8 @@ struct AppCachesView<PageHeader: View>: View {
     private var selectAllState: SelectAllTriState {
         let ix = eligibleSelectIndices
         guard !ix.isEmpty else { return .none }
-        let selected = ix.filter { items[$0].isSelected }
+        let selectedIDs = store.scanSelection.cacheIDs
+        let selected = ix.filter { selectedIDs.contains(items[$0].id) }
         if selected.count == ix.count { return .all }
         if selected.isEmpty { return .none }
         return .mixed
@@ -96,12 +97,14 @@ struct AppCachesView<PageHeader: View>: View {
     }
 
     private var selectedInScopeCount: Int {
-        eligibleSelectIndices.filter { items[$0].isSelected }.count
+        let selectedIDs = store.scanSelection.cacheIDs
+        return eligibleSelectIndices.filter { selectedIDs.contains(items[$0].id) }.count
     }
 
     private var selectedInScopeBytes: Int64 {
-        eligibleSelectIndices
-            .filter { items[$0].isSelected }
+        let selectedIDs = store.scanSelection.cacheIDs
+        return eligibleSelectIndices
+            .filter { selectedIDs.contains(items[$0].id) }
             .reduce(Int64(0)) { sum, index in sum + items[index].sizeBytes }
     }
 
@@ -196,36 +199,44 @@ struct AppCachesView<PageHeader: View>: View {
     }
 
     private var filterToolbarChrome: some View {
-        FilterSortToolbar(
-            safetyFilter: safetyFilterBinding,
-            sortOption: sortOptionBinding,
-            chipCounts: chipCounts,
-            selectedInScopeCount: selectedInScopeCount,
-            selectedInScopeBytes: selectedInScopeBytes,
-            isDeleting: store.isDeleting,
-            onCleanSelected: {
-                Task {
-                    await store.presentDeletionSheetResolvingGit(candidates: store.selectedGeneralDeletionCandidates)
-                }
-            },
-            useStackedLayout: true,
-            showsControlsRow: false
-        )
+        // Scoped to scanSelection so the selected count/clean button update on a
+        // toggle without re-rendering GeneralModeView (which reverts list scroll).
+        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+            FilterSortToolbar(
+                safetyFilter: safetyFilterBinding,
+                sortOption: sortOptionBinding,
+                chipCounts: chipCounts,
+                selectedInScopeCount: selectedInScopeCount,
+                selectedInScopeBytes: selectedInScopeBytes,
+                isDeleting: store.isDeleting,
+                onCleanSelected: {
+                    Task {
+                        await store.presentDeletionSheetResolvingGit(candidates: store.selectedGeneralDeletionCandidates)
+                    }
+                },
+                useStackedLayout: true,
+                showsControlsRow: false
+            )
+        }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
     /// Bottom edge of the blur zone — list rows fade under this row only.
     private var selectAllRowChrome: some View {
-        HStack(alignment: .bottom) {
-            TriStateCheckbox(title: "Select All", state: selectAllState) {
-                toggleSelectAll()
+        // Scoped so the tri-state updates on selection without re-rendering the
+        // container (which would revert list scroll).
+        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+            HStack(alignment: .bottom) {
+                TriStateCheckbox(title: "Select All", state: selectAllState) {
+                    toggleSelectAll()
+                }
+                .fixedSize()
+                .disabled(eligibleSelectIndices.isEmpty)
+                Spacer()
+                AppSortMenu(selection: sortOptionBinding)
             }
-            .fixedSize()
-            .disabled(eligibleSelectIndices.isEmpty)
-            Spacer()
-            AppSortMenu(selection: sortOptionBinding)
+            .scanTabSelectAllRowLayout()
         }
-        .scanTabSelectAllRowLayout()
     }
 
     private var scanControlsChrome: some View {
@@ -300,21 +311,34 @@ struct AppCachesView<PageHeader: View>: View {
             ForEach(sortedVisibleIndices(), id: \.self) { index in
                 let item = items[index]
                 let itemID = item.id
-                ScanResultRow(
-                    isSelected: $items[index].isSelected,
-                    primaryLabel: item.appName,
-                    formattedSize: item.formattedSize,
-                    safetyInfo: item.safetyInfo,
-                    brandIcon: .cacheItem(item),
-                    detailCaption: nil,
-                    reinstallSafety: reinstallDisplay(for: item),
-                    showUncommittedRepoChanges: item.gitStatus == .dirty,
-                    onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
-                    isUserOverride: item.locations.contains {
-                        store.userOverridePaths.contains($0.path.standardizedFileURL.path)
-                    },
-                    isMetadataPending: store.cacheItemHasPendingSize(item)
-                )
+                // Scope observes scanSelection so a toggle re-renders only the row,
+                // not the list container (which would revert scroll).
+                ScanSelectionScope(
+                    selection: store.scanSelection,
+                    isSelected: { $0.cacheIDs.contains(itemID) }
+                ) { selected in
+                    ScanResultRow(
+                        isSelected: selected,
+                        onToggle: {
+                            store.setCacheSelected(
+                                id: itemID,
+                                isSelected: !store.scanSelection.cacheIDs.contains(itemID)
+                            )
+                        },
+                        primaryLabel: item.appName,
+                        formattedSize: item.formattedSize,
+                        safetyInfo: item.safetyInfo,
+                        brandIcon: .cacheItem(item),
+                        detailCaption: nil,
+                        reinstallSafety: reinstallDisplay(for: item),
+                        showUncommittedRepoChanges: item.gitStatus == .dirty,
+                        onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
+                        isUserOverride: item.locations.contains {
+                            store.userOverridePaths.contains($0.path.standardizedFileURL.path)
+                        },
+                        isMetadataPending: store.cacheItemHasPendingSize(item)
+                    )
+                }
                 .listRowInsets(ScanListRowInsets.standard)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -372,11 +396,9 @@ struct AppCachesView<PageHeader: View>: View {
     private func toggleSelectAll() {
         let ix = eligibleSelectIndices
         guard !ix.isEmpty else { return }
-        let allOn = ix.allSatisfy { items[$0].isSelected }
-        let newVal = !allOn
-        for i in ix {
-            items[i].isSelected = newVal
-        }
+        let ids = ix.map { items[$0].id }
+        let allOn = ids.allSatisfy { store.scanSelection.cacheIDs.contains($0) }
+        store.setAllCachesSelected(!allOn, ids: ids)
     }
 
     private var emptyState: some View {

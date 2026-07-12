@@ -11,6 +11,26 @@ final class LargeFileSelection: ObservableObject {
     @Published var ids: Set<String> = []
 }
 
+/// Scan-tab selection (app caches, dev tools, simulators, project artifacts) kept in
+/// its own observable, held as a plain `let` on the store (NOT @Published), so a
+/// toggle re-renders only the views that display selection — never the results List
+/// container, whose re-render reverts the scroll position. Keyed by stable id so it
+/// survives the metadata-update passes that rebuild the item structs.
+@MainActor
+final class ScanSelection: ObservableObject {
+    @Published var cacheIDs: Set<String> = []
+    @Published var devToolIDs: Set<String> = []
+    @Published var simulatorIDs: Set<UUID> = []
+    @Published var artifactIDs: Set<String> = []
+
+    func removeAll() {
+        cacheIDs.removeAll()
+        devToolIDs.removeAll()
+        simulatorIDs.removeAll()
+        artifactIDs.removeAll()
+    }
+}
+
 @MainActor
 final class PurgeStore: ObservableObject {
     private enum StorageKeys {
@@ -100,6 +120,8 @@ final class PurgeStore: ObservableObject {
     /// scroll position. Only views that display selection (rows, select-all bar,
     /// delete button) observe this object directly.
     let largeFileSelection = LargeFileSelection()
+    /// See `ScanSelection` — decoupled selection for the App Caches / Dev Tools tabs.
+    let scanSelection = ScanSelection()
     @Published var isScanningLargeFiles = false
     @Published var showLargeFileDeletionSheet = false
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
@@ -186,15 +208,18 @@ final class PurgeStore: ObservableObject {
     /// Holds candidates between the primary sheet and the second high-risk alert.
     private var highRiskDeletionStagingCandidates: [DeletionCandidate]?
 
-    private static let maxReasonableLifetimeRecoveredBytes: Int64 = 100_000_000_000
+    /// A single clean reporting more than this is a bad size measurement, not a real recovery.
+    private static let maxReasonableSingleCleanBytes: Int64 = 2_000_000_000_000
+    /// Anything past this in defaults is corruption; the lifetime total itself is unbounded.
+    private static let maxStorableLifetimeRecoveredBytes: Int64 = 1_000_000_000_000_000
 
     var hasDisplayableLifetimeStats: Bool {
-        totalRecoveredBytes > 0 && totalRecoveredBytes <= Self.maxReasonableLifetimeRecoveredBytes
+        totalRecoveredBytes > 0
     }
 
     init() {
         var recovered = Int64(defaults.integer(forKey: StorageKeys.totalRecoveredBytes))
-        if recovered > Self.maxReasonableLifetimeRecoveredBytes {
+        if recovered > Self.maxStorableLifetimeRecoveredBytes {
             recovered = 0
             defaults.set(0, forKey: StorageKeys.totalRecoveredBytes)
         }
@@ -206,10 +231,10 @@ final class PurgeStore: ObservableObject {
     }
 
     var selectedTotalBytes: Int64 {
-        let selectedCaches = cacheItems.filter(\.isSelected).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let selectedTools = devTools.filter(\.isSelected).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let simSelected = simulatorDevices.filter(\.isSelected).reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
-        let projectSelected = projectGroups.flatMap(\.artifacts).filter(\.isSelected).reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let selectedCaches = cacheItems.filter { scanSelection.cacheIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let selectedTools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let simSelected = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }.reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
+        let projectSelected = projectGroups.flatMap(\.artifacts).filter { scanSelection.artifactIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
         return selectedCaches + selectedTools + simSelected + projectSelected
     }
 
@@ -319,10 +344,10 @@ final class PurgeStore: ObservableObject {
     }
 
     var selectedCount: Int {
-        let selectedCaches = cacheItems.filter(\.isSelected).count
-        let selectedTools = devTools.filter(\.isSelected).count
-        let selectedSims = simulatorDevices.filter(\.isSelected).count
-        let selectedProjects = projectGroups.flatMap(\.artifacts).filter(\.isSelected).count
+        let selectedCaches = cacheItems.filter { scanSelection.cacheIDs.contains($0.id) }.count
+        let selectedTools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.count
+        let selectedSims = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }.count
+        let selectedProjects = projectGroups.flatMap(\.artifacts).filter { scanSelection.artifactIDs.contains($0.id) }.count
         return selectedCaches + selectedTools + selectedSims + selectedProjects
     }
 
@@ -332,14 +357,14 @@ final class PurgeStore: ObservableObject {
 
     /// Selected caches eligible for manual delete (includes Not Sure when selected).
     var selectedGeneralDeletionCandidates: [DeletionCandidate] {
-        cacheItems.filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
+        cacheItems.filter { scanSelection.cacheIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
             .flatMap { DeletionCandidate.deletionCandidates(forCache: $0) }
             .sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
     /// Selected Dev Tools paths (standard caches + grouped project artifacts).
     var selectedDeveloperDeletionCandidates: [DeletionCandidate] {
-        let tools = devTools.filter(\.isSelected).filter(\.isDetected)
+        let tools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.filter(\.isDetected)
             .flatMap { tool in
                 tool.paths.map { path in
                     devToolDeletionCandidate(tool, path: path)
@@ -347,12 +372,12 @@ final class PurgeStore: ObservableObject {
             }
             .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
-        let sims = simulatorDevices.filter(\.isSelected)
+        let sims = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }
             .map(simulatorDeletionCandidate)
             .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
         let artifacts = projectGroups.flatMap(\.artifacts)
-            .filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
+            .filter { scanSelection.artifactIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
             .map(artifactDeletionCandidate)
 
         let merged = tools + sims + artifacts
@@ -361,19 +386,19 @@ final class PurgeStore: ObservableObject {
     }
 
     var deletionCandidates: [DeletionCandidate] {
-        let caches = cacheItems.filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
+        let caches = cacheItems.filter { scanSelection.cacheIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
             .flatMap { DeletionCandidate.deletionCandidates(forCache: $0) }
 
-        let tools = devTools.filter { $0.isSelected }.filter(\.isDetected)
+        let tools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.filter(\.isDetected)
             .flatMap { tool in tool.paths.map { devToolDeletionCandidate(tool, path: $0) } }
             .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
-        let sims = simulatorDevices.filter(\.isSelected)
+        let sims = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }
             .map(simulatorDeletionCandidate)
             .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
         let artifacts = projectGroups.flatMap(\.artifacts)
-            .filter { $0.isSelected && isManualDeletionCandidateEligible($0.safetyInfo) }
+            .filter { scanSelection.artifactIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
             .map(artifactDeletionCandidate)
 
         let unique = Dictionary(grouping: caches + tools + sims + artifacts, by: { $0.path }).compactMap { $0.value.first }
@@ -632,8 +657,7 @@ final class PurgeStore: ObservableObject {
                 }
                 let newSize = pathSizes.values.reduce(Int64(0), +)
                 let stillDetected = !remainingPaths.isEmpty && newSize > 0
-                let newSelected = tool.isSelected && stillDetected
-                if newSize == tool.sizeBytes, stillDetected == tool.isDetected, newSelected == tool.isSelected {
+                if newSize == tool.sizeBytes, stillDetected == tool.isDetected {
                     return tool
                 }
                 return DevTool(
@@ -643,12 +667,15 @@ final class PurgeStore: ObservableObject {
                     sizeBytes: newSize,
                     pathSizeBytesByPath: pathSizes,
                     lastModified: tool.lastModified,
-                    isSelected: newSelected,
+                    isSelected: false,
                     isDetected: stillDetected,
                     safetyInfo: tool.safetyInfo,
                     reinstallSafety: tool.reinstallSafety
                 )
             }
+            // Selection is id-keyed and separate; drop any tool that's no longer detected.
+            let detectedToolIDs = Set(devTools.filter(\.isDetected).map(\.id))
+            scanSelection.devToolIDs.formIntersection(detectedToolIDs)
 
             simulatorDevices.removeAll { deletedPaths.contains($0.folderURL.standardizedFileURL.path) }
 
@@ -669,27 +696,7 @@ final class PurgeStore: ObservableObject {
     }
 
     private func clearAllSelections() {
-        withAnimation {
-            for index in cacheItems.indices {
-                cacheItems[index].isSelected = false
-            }
-
-            for index in devTools.indices {
-                devTools[index].isSelected = false
-            }
-
-            for index in simulatorDevices.indices {
-                simulatorDevices[index].isSelected = false
-            }
-
-            var groupsCopy = projectGroups
-            for gIndex in groupsCopy.indices {
-                for aIndex in groupsCopy[gIndex].artifacts.indices {
-                    groupsCopy[gIndex].artifacts[aIndex].isSelected = false
-                }
-            }
-            projectGroups = groupsCopy
-        }
+        scanSelection.removeAll()
     }
 
     /// Drop any selections that the safety policy rejected so they don't keep
@@ -699,38 +706,22 @@ final class PurgeStore: ObservableObject {
         let skippedPaths = Set(skipped.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
         guard !skippedPaths.isEmpty else { return }
 
-        for index in cacheItems.indices {
-            let anySkipped = cacheItems[index].locations.contains {
-                skippedPaths.contains($0.path.standardizedFileURL.path)
-            }
-            if anySkipped {
-                cacheItems[index].isSelected = false
-            }
+        for item in cacheItems where item.locations.contains(where: { skippedPaths.contains($0.path.standardizedFileURL.path) }) {
+            scanSelection.cacheIDs.remove(item.id)
         }
 
-        for index in devTools.indices {
-            let toolPaths = devTools[index].paths.map { $0.standardizedFileURL.path }
-            if toolPaths.contains(where: { skippedPaths.contains($0) }) {
-                devTools[index].isSelected = false
-            }
+        for tool in devTools where tool.paths.contains(where: { skippedPaths.contains($0.standardizedFileURL.path) }) {
+            scanSelection.devToolIDs.remove(tool.id)
         }
 
-        for index in simulatorDevices.indices {
-            if skippedPaths.contains(simulatorDevices[index].folderURL.standardizedFileURL.path) {
-                simulatorDevices[index].isSelected = false
-            }
+        for device in simulatorDevices where skippedPaths.contains(device.folderURL.standardizedFileURL.path) {
+            scanSelection.simulatorIDs.remove(device.id)
         }
 
-        var groupsCopy = projectGroups
-        for gIndex in groupsCopy.indices {
-            for aIndex in groupsCopy[gIndex].artifacts.indices {
-                let path = groupsCopy[gIndex].artifacts[aIndex].path.standardizedFileURL.path
-                if skippedPaths.contains(path) {
-                    groupsCopy[gIndex].artifacts[aIndex].isSelected = false
-                }
-            }
+        for artifact in projectGroups.flatMap(\.artifacts)
+        where skippedPaths.contains(artifact.path.standardizedFileURL.path) {
+            scanSelection.artifactIDs.remove(artifact.id)
         }
-        projectGroups = groupsCopy
     }
 
     func requestUnknownDeletion(_ candidate: DeletionCandidate) {
@@ -1481,6 +1472,7 @@ final class PurgeStore: ObservableObject {
         pendingCacheSizePaths = []
         cacheItems = []
         stagedGeneralCacheItems = []
+        scanSelection.cacheIDs.removeAll()
         isEnrichingGeneral = false
     }
 
@@ -1495,6 +1487,9 @@ final class PurgeStore: ObservableObject {
         simulatorDevices = []
         stagedSimulatorsByID = [:]
         projectGroups = []
+        scanSelection.devToolIDs.removeAll()
+        scanSelection.simulatorIDs.removeAll()
+        scanSelection.artifactIDs.removeAll()
         devToolRepoStatusByPath = [:]
         isEnrichingDeveloper = false
     }
@@ -1672,7 +1667,6 @@ final class PurgeStore: ObservableObject {
             guard !sized.isEmpty else { return nil }
             var published = sized.count == item.locations.count ? item : item.withLocations(sized)
             if let previous = previousByID[published.id] {
-                published.isSelected = previous.isSelected
                 if previous.safetyInfo.level != published.safetyInfo.level {
                     published.safetyInfo = previous.safetyInfo
                     published.appName = previous.appName
@@ -1789,7 +1783,7 @@ final class PurgeStore: ObservableObject {
                     sizeBytes: update.sizeBytes,
                     pathSizeBytesByPath: update.pathSizeBytesByPath,
                     lastModified: update.lastModified,
-                    isSelected: tool.isSelected && update.sizeBytes > 0,
+                    isSelected: false,
                     isDetected: update.sizeBytes > 0,
                     safetyInfo: tool.safetyInfo,
                     reinstallSafety: tool.reinstallSafety
@@ -1803,6 +1797,7 @@ final class PurgeStore: ObservableObject {
                     }
                 } else if let existingIndex {
                     self.devTools.remove(at: existingIndex)
+                    self.scanSelection.devToolIDs.remove(id)
                 }
             }
 
@@ -2085,20 +2080,24 @@ final class PurgeStore: ObservableObject {
     }
 
     private func incrementRecoveredTotal(by bytes: Int64) {
-        guard bytes > 0 else { return }
-        let updated = totalRecoveredBytes + bytes
-        guard updated <= Self.maxReasonableLifetimeRecoveredBytes else { return }
+        guard bytes > 0, bytes <= Self.maxReasonableSingleCleanBytes else { return }
+        let updated = min(totalRecoveredBytes + bytes, Self.maxStorableLifetimeRecoveredBytes)
         totalRecoveredBytes = updated
         defaults.set(totalRecoveredBytes, forKey: StorageKeys.totalRecoveredBytes)
     }
 
     // MARK: - Project row selection bindings
 
+    func setCacheSelected(id: String, isSelected: Bool) {
+        if isSelected { scanSelection.cacheIDs.insert(id) } else { scanSelection.cacheIDs.remove(id) }
+    }
+
+    func setAllCachesSelected(_ selected: Bool, ids: [String]) {
+        if selected { scanSelection.cacheIDs.formUnion(ids) } else { scanSelection.cacheIDs.subtract(ids) }
+    }
+
     func setDevToolSelected(id: String, isSelected: Bool) {
-        guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
-        var copy = devTools
-        copy[index].isSelected = isSelected
-        devTools = copy
+        if isSelected { scanSelection.devToolIDs.insert(id) } else { scanSelection.devToolIDs.remove(id) }
     }
 
     private func projectArtifactIndices(groupID: String, artifactID: String) -> (groupIndex: Int, artifactIndex: Int)? {
@@ -2112,9 +2111,8 @@ final class PurgeStore: ObservableObject {
     func setProjectArtifactSelected(groupIndex: Int, artifactIndex: Int, isSelected: Bool) {
         guard projectGroups.indices.contains(groupIndex),
               projectGroups[groupIndex].artifacts.indices.contains(artifactIndex) else { return }
-        var copy = projectGroups
-        copy[groupIndex].artifacts[artifactIndex].isSelected = isSelected
-        projectGroups = copy
+        let id = projectGroups[groupIndex].artifacts[artifactIndex].id
+        if isSelected { scanSelection.artifactIDs.insert(id) } else { scanSelection.artifactIDs.remove(id) }
     }
 
     func setProjectArtifactSelected(groupID: String, artifactID: String, isSelected: Bool) {
@@ -2127,18 +2125,15 @@ final class PurgeStore: ObservableObject {
     }
 
     func setSimulatorDeviceSelected(id: UUID, isSelected: Bool) {
-        guard let index = simulatorDevices.firstIndex(where: { $0.id == id }) else { return }
-        var copy = simulatorDevices
-        copy[index].isSelected = isSelected
-        simulatorDevices = copy
+        if isSelected { scanSelection.simulatorIDs.insert(id) } else { scanSelection.simulatorIDs.remove(id) }
     }
 
     func setSimulatorGroupSelection(allSelected: Bool) {
-        var copy = simulatorDevices
-        for index in copy.indices {
-            copy[index].isSelected = allSelected
+        if allSelected {
+            scanSelection.simulatorIDs.formUnion(simulatorDevices.map(\.id))
+        } else {
+            scanSelection.simulatorIDs.subtract(simulatorDevices.map(\.id))
         }
-        simulatorDevices = copy
     }
 
     // MARK: - Categorization (per-row recategorize, manual mark, reset)
@@ -2299,10 +2294,10 @@ final class PurgeStore: ObservableObject {
         refreshUserOverridePaths()
 
         let resolved = resolvedAutomaticSafety(for: item)
+        scanSelection.cacheIDs.remove(item.id)
         withAnimation {
             cacheItems[index].safetyInfo = resolved
             cacheItems[index].appName = resolved.headline
-            cacheItems[index].isSelected = false
         }
     }
 
@@ -2319,9 +2314,9 @@ final class PurgeStore: ObservableObject {
             forDevToolLabel: label,
             primaryPath: primary
         )
+        scanSelection.devToolIDs.remove(tool.id)
         withAnimation {
             devTools[index].safetyInfo = info
-            devTools[index].isSelected = false
         }
     }
 
@@ -2343,9 +2338,9 @@ final class PurgeStore: ObservableObject {
             path: artifact.path,
             reinstallCommand: artifact.safetyInfo.reinstallCommand
         )
+        scanSelection.artifactIDs.remove(artifact.id)
         var groups = projectGroups
         groups[groupIndex].artifacts[artifactIndex].safetyInfo = info
-        groups[groupIndex].artifacts[artifactIndex].isSelected = false
         withAnimation {
             projectGroups = groups
         }

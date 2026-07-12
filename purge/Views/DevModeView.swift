@@ -254,7 +254,8 @@ struct DevToolsView<PageHeader: View>: View {
         guard !eligible.isEmpty else { return .none }
 
         let g = store.projectGroups[gi]
-        let selectedCount = eligible.filter { g.artifacts[$0].isSelected }.count
+        let selectedIDs = store.scanSelection.artifactIDs
+        let selectedCount = eligible.filter { selectedIDs.contains(g.artifacts[$0].id) }.count
         if selectedCount == 0 { return .none }
         if selectedCount == eligible.count { return .all }
         return .mixed
@@ -263,7 +264,8 @@ struct DevToolsView<PageHeader: View>: View {
     private func toggleProjectEligibleSelection(groupIndex gi: Int) {
         let eligible = eligibleArtifactIndices(forGroupIndex: gi)
         guard !eligible.isEmpty else { return }
-        let allOn = eligible.allSatisfy { store.projectGroups[gi].artifacts[$0].isSelected }
+        let selectedIDs = store.scanSelection.artifactIDs
+        let allOn = eligible.allSatisfy { selectedIDs.contains(store.projectGroups[gi].artifacts[$0].id) }
         let newVal = !allOn
         for ai in eligible {
             store.setProjectArtifactSelected(groupIndex: gi, artifactIndex: ai, isSelected: newVal)
@@ -338,10 +340,11 @@ struct DevToolsView<PageHeader: View>: View {
         let total = toolIx.count + pairs.count + simSafeIx.count
         guard total > 0 else { return .none }
 
+        let sel = store.scanSelection
         var selected = 0
-        for ti in toolIx where store.devTools[ti].isSelected { selected += 1 }
-        for p in pairs where store.projectGroups[p.0].artifacts[p.1].isSelected { selected += 1 }
-        for si in simSafeIx where store.simulatorDevices[si].isSelected { selected += 1 }
+        for ti in toolIx where sel.devToolIDs.contains(store.devTools[ti].id) { selected += 1 }
+        for p in pairs where sel.artifactIDs.contains(store.projectGroups[p.0].artifacts[p.1].id) { selected += 1 }
+        for si in simSafeIx where sel.simulatorIDs.contains(store.simulatorDevices[si].id) { selected += 1 }
 
         if selected == 0 { return .none }
         if selected == total { return .all }
@@ -349,21 +352,23 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var selectedInScopeCount: Int {
-        let toolIx = eligibleStandardToolIndices().filter { store.devTools[$0].isSelected }.count
-        let pairSelected = eligibleProjectArtifactPairs().filter { store.projectGroups[$0.0].artifacts[$0.1].isSelected }.count
-        let simSelected = visibleSimulatorIndices().filter { store.simulatorDevices[$0].isSelected }.count
+        let sel = store.scanSelection
+        let toolIx = eligibleStandardToolIndices().filter { sel.devToolIDs.contains(store.devTools[$0].id) }.count
+        let pairSelected = eligibleProjectArtifactPairs().filter { sel.artifactIDs.contains(store.projectGroups[$0.0].artifacts[$0.1].id) }.count
+        let simSelected = visibleSimulatorIndices().filter { sel.simulatorIDs.contains(store.simulatorDevices[$0].id) }.count
         return toolIx + pairSelected + simSelected
     }
 
     private var selectedInScopeBytes: Int64 {
+        let sel = store.scanSelection
         let toolBytes = eligibleStandardToolIndices()
-            .filter { store.devTools[$0].isSelected }
+            .filter { sel.devToolIDs.contains(store.devTools[$0].id) }
             .reduce(Int64(0)) { sum, index in sum + store.devTools[index].sizeBytes }
         let projectBytes = eligibleProjectArtifactPairs()
-            .filter { store.projectGroups[$0.0].artifacts[$0.1].isSelected }
+            .filter { sel.artifactIDs.contains(store.projectGroups[$0.0].artifacts[$0.1].id) }
             .reduce(Int64(0)) { sum, pair in sum + store.projectGroups[pair.0].artifacts[pair.1].sizeBytes }
         let simulatorBytes = visibleSimulatorIndices()
-            .filter { store.simulatorDevices[$0].isSelected }
+            .filter { sel.simulatorIDs.contains(store.simulatorDevices[$0].id) }
             .reduce(Int64(0)) { sum, index in sum + (store.simulatorDevices[index].sizeOnDisk ?? 0) }
         return toolBytes + projectBytes + simulatorBytes
     }
@@ -550,38 +555,46 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var filterToolbarChrome: some View {
-        FilterSortToolbar(
-            safetyFilter: safetyFilterBinding,
-            sortOption: sortOptionBinding,
-            chipCounts: chipCounts,
-            selectedInScopeCount: selectedInScopeCount,
-            selectedInScopeBytes: selectedInScopeBytes,
-            isDeleting: store.isDeleting,
-            onCleanSelected: {
-                Task {
-                    await store.presentDeletionSheetResolvingGit(
-                        candidates: store.selectedDeveloperDeletionCandidates
-                    )
-                }
-            },
-            useStackedLayout: true,
-            showsControlsRow: false
-        )
+        // Scoped to scanSelection so the selected count/clean button update on a
+        // toggle without re-rendering DevToolsView (which reverts list scroll).
+        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+            FilterSortToolbar(
+                safetyFilter: safetyFilterBinding,
+                sortOption: sortOptionBinding,
+                chipCounts: chipCounts,
+                selectedInScopeCount: selectedInScopeCount,
+                selectedInScopeBytes: selectedInScopeBytes,
+                isDeleting: store.isDeleting,
+                onCleanSelected: {
+                    Task {
+                        await store.presentDeletionSheetResolvingGit(
+                            candidates: store.selectedDeveloperDeletionCandidates
+                        )
+                    }
+                },
+                useStackedLayout: true,
+                showsControlsRow: false
+            )
+        }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
     /// Bottom edge of the blur zone — list rows fade under this row only.
     private var selectAllRowChrome: some View {
-        HStack(alignment: .bottom) {
-            TriStateCheckbox(title: "Select All", state: selectAllDeveloperState) {
-                toggleDeveloperSelectAll()
+        // Scoped so the tri-state updates on selection without re-rendering the
+        // container (which would revert list scroll).
+        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+            HStack(alignment: .bottom) {
+                TriStateCheckbox(title: "Select All", state: selectAllDeveloperState) {
+                    toggleDeveloperSelectAll()
+                }
+                .fixedSize()
+                .disabled(!hasEligibleSelectableRows)
+                Spacer()
+                AppSortMenu(selection: sortOptionBinding)
             }
-            .fixedSize()
-            .disabled(!hasEligibleSelectableRows)
-            Spacer()
-            AppSortMenu(selection: sortOptionBinding)
+            .scanTabSelectAllRowLayout()
         }
-        .scanTabSelectAllRowLayout()
     }
 
     private var scanControlsChrome: some View {
@@ -672,19 +685,30 @@ struct DevToolsView<PageHeader: View>: View {
                     let tool = store.devTools[index]
                     let toolID = tool.id
                     let primaryPath = tool.primaryOverridePath
-                    ScanResultRow(
-                        isSelected: bindingForStandardTool(id: toolID),
-                        primaryLabel: tool.safetyInfo.headline,
-                        formattedSize: tool.formattedSize,
-                        safetyInfo: tool.safetyInfo,
-                        brandIcon: .devTool(tool),
-                        detailCaption: nil,
-                        reinstallSafety: tool.reinstallSafety,
-                        showUncommittedRepoChanges: !isDevToolMetadataPending(tool) && toolShowsUncommitted(tool),
-                        onResetToAutomatic: primaryPath != nil ? { store.resetDevToolToAutomatic(id: toolID) } : nil,
-                        isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false,
-                        isMetadataPending: isDevToolMetadataPending(tool)
-                    )
+                    ScanSelectionScope(
+                        selection: store.scanSelection,
+                        isSelected: { $0.devToolIDs.contains(toolID) }
+                    ) { selected in
+                        ScanResultRow(
+                            isSelected: selected,
+                            onToggle: {
+                                store.setDevToolSelected(
+                                    id: toolID,
+                                    isSelected: !store.scanSelection.devToolIDs.contains(toolID)
+                                )
+                            },
+                            primaryLabel: tool.safetyInfo.headline,
+                            formattedSize: tool.formattedSize,
+                            safetyInfo: tool.safetyInfo,
+                            brandIcon: .devTool(tool),
+                            detailCaption: nil,
+                            reinstallSafety: tool.reinstallSafety,
+                            showUncommittedRepoChanges: !isDevToolMetadataPending(tool) && toolShowsUncommitted(tool),
+                            onResetToAutomatic: primaryPath != nil ? { store.resetDevToolToAutomatic(id: toolID) } : nil,
+                            isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false,
+                            isMetadataPending: isDevToolMetadataPending(tool)
+                        )
+                    }
                     .disabled(!tool.isDetected)
                     .opacity(tool.isDetected ? 1 : 0.45)
                     .listRowInsets(ScanListRowInsets.standard)
@@ -704,21 +728,32 @@ struct DevToolsView<PageHeader: View>: View {
 
                     ForEach(sortedVisibleSimulatorIndices().map { store.simulatorDevices[$0].id }, id: \.self) { deviceID in
                         if let device = store.simulatorDevices.first(where: { $0.id == deviceID }) {
-                            ScanResultRow(
-                                isSelected: bindingForSimulator(id: device.id),
-                                primaryLabel: device.safetyInfo.headline,
-                                formattedSize: device.formattedSize,
-                                safetyInfo: device.safetyInfo,
-                                brandIcon: .sfSymbol("ipad.and.iphone"),
-                                detailCaption: nil,
-                                reinstallSafety: .notApplicable,
-                                showUncommittedRepoChanges: false,
-                                onResetToAutomatic: nil,
-                                isUserOverride: false,
-                                allowsBulkSelection: true,
-                                isMetadataPending: isSimulatorMetadataPending(device),
-                                usesCompactExplanation: true
-                            )
+                            ScanSelectionScope(
+                                selection: store.scanSelection,
+                                isSelected: { $0.simulatorIDs.contains(device.id) }
+                            ) { selected in
+                                ScanResultRow(
+                                    isSelected: selected,
+                                    onToggle: {
+                                        store.setSimulatorDeviceSelected(
+                                            id: device.id,
+                                            isSelected: !store.scanSelection.simulatorIDs.contains(device.id)
+                                        )
+                                    },
+                                    primaryLabel: device.safetyInfo.headline,
+                                    formattedSize: device.formattedSize,
+                                    safetyInfo: device.safetyInfo,
+                                    brandIcon: .sfSymbol("ipad.and.iphone"),
+                                    detailCaption: nil,
+                                    reinstallSafety: .notApplicable,
+                                    showUncommittedRepoChanges: false,
+                                    onResetToAutomatic: nil,
+                                    isUserOverride: false,
+                                    allowsBulkSelection: true,
+                                    isMetadataPending: isSimulatorMetadataPending(device),
+                                    usesCompactExplanation: true
+                                )
+                            }
                             .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -818,17 +853,6 @@ struct DevToolsView<PageHeader: View>: View {
             && store.interactiveSafeCleanupRemovedPaths.contains(path)
     }
 
-    private func bindingForSimulator(id: UUID) -> Binding<Bool> {
-        Binding(
-            get: {
-                store.simulatorDevices.first(where: { $0.id == id })?.isSelected ?? false
-            },
-            set: { newVal in
-                store.setSimulatorDeviceSelected(id: id, isSelected: newVal)
-            }
-        )
-    }
-
     private var developerProjectsSectionHeader: some View {
         devToolsSectionHeader {
             Text("Developer Projects")
@@ -862,8 +886,12 @@ struct DevToolsView<PageHeader: View>: View {
         if let currentGroupIndex = store.projectGroups.firstIndex(where: { $0.id == group.id }) {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
-                TriStateCheckbox(title: "", state: projectSelectTriState(forGroupIndex: currentGroupIndex)) {
-                    toggleProjectEligibleSelection(groupIndex: currentGroupIndex)
+                // Scoped so the group tri-state reflects artifact selection changes
+                // without re-rendering the list container.
+                ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
+                    TriStateCheckbox(title: "", state: projectSelectTriState(forGroupIndex: currentGroupIndex)) {
+                        toggleProjectEligibleSelection(groupIndex: currentGroupIndex)
+                    }
                 }
                 .frame(width: 24)
 
@@ -944,22 +972,34 @@ struct DevToolsView<PageHeader: View>: View {
             let art = store.projectGroups[gi].artifacts[ai]
             let artifactPath = art.path.standardizedFileURL.path
 
-            ScanResultRow(
-                isSelected: bindingForArtifact(groupID: groupID, artifactID: artifactID),
-                primaryLabel: art.safetyInfo.headline,
-                formattedSize: art.formattedSize,
-                safetyInfo: art.safetyInfo,
-                brandIcon: nil,
-                detailCaption: nil,
-                reinstallSafety: nil,
-                showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
-                onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifactID) },
-                isUserOverride: store.userOverridePaths.contains(artifactPath),
-                showsBulkCheckbox: false,
-                isMetadataPending: isArtifactMetadataPending(art) || store.projectArtifactHasPendingSize(art),
-                showsCardChrome: false,
-                showsLeadingIcon: false
-            )
+            ScanSelectionScope(
+                selection: store.scanSelection,
+                isSelected: { $0.artifactIDs.contains(artifactID) }
+            ) { selected in
+                ScanResultRow(
+                    isSelected: selected,
+                    onToggle: {
+                        store.setProjectArtifactSelected(
+                            groupID: groupID,
+                            artifactID: artifactID,
+                            isSelected: !store.scanSelection.artifactIDs.contains(artifactID)
+                        )
+                    },
+                    primaryLabel: art.safetyInfo.headline,
+                    formattedSize: art.formattedSize,
+                    safetyInfo: art.safetyInfo,
+                    brandIcon: nil,
+                    detailCaption: nil,
+                    reinstallSafety: nil,
+                    showUncommittedRepoChanges: !isArtifactMetadataPending(art) && art.gitStatus == .dirty,
+                    onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifactID) },
+                    isUserOverride: store.userOverridePaths.contains(artifactPath),
+                    showsBulkCheckbox: false,
+                    isMetadataPending: isArtifactMetadataPending(art) || store.projectArtifactHasPendingSize(art),
+                    showsCardChrome: false,
+                    showsLeadingIcon: false
+                )
+            }
             .padding(.trailing, AppStyle.Spacing.xSmall)
             .padding(.leading, AppStyle.Row.projectArtifactLeadingInset)
             .transition(cleaningRowRemovalTransition)
@@ -976,44 +1016,23 @@ struct DevToolsView<PageHeader: View>: View {
         }
     }
 
-    private func bindingForStandardTool(id: String) -> Binding<Bool> {
-        Binding(
-            get: { store.devTools.first(where: { $0.id == id })?.isSelected ?? false },
-            set: { newVal in store.setDevToolSelected(id: id, isSelected: newVal) }
-        )
-    }
-
-    private func bindingForArtifact(groupID: String, artifactID: String) -> Binding<Bool> {
-        Binding(
-            get: {
-                store.projectGroups
-                    .first(where: { $0.id == groupID })?
-                    .artifacts
-                    .first(where: { $0.id == artifactID })?
-                    .isSelected ?? false
-            },
-            set: { newVal in store.setProjectArtifactSelected(groupID: groupID, artifactID: artifactID, isSelected: newVal) }
-        )
-    }
-
     private func toggleDeveloperSelectAll() {
         let toolsIx = eligibleStandardToolIndices()
         let pairs = eligibleProjectArtifactPairs()
         let simSafeIx = eligibleSimulatorIndicesForToolbarSelectAll()
         guard !toolsIx.isEmpty || !pairs.isEmpty || !simSafeIx.isEmpty else { return }
 
-        let allSimSafeSelected = simSafeIx.allSatisfy { store.simulatorDevices[$0].isSelected }
+        let sel = store.scanSelection
+        let allSimSafeSelected = simSafeIx.allSatisfy { sel.simulatorIDs.contains(store.simulatorDevices[$0].id) }
         let allOn =
-            toolsIx.allSatisfy { store.devTools[$0].isSelected } &&
-            pairs.allSatisfy { store.projectGroups[$0.0].artifacts[$0.1].isSelected } &&
+            toolsIx.allSatisfy { sel.devToolIDs.contains(store.devTools[$0].id) } &&
+            pairs.allSatisfy { sel.artifactIDs.contains(store.projectGroups[$0.0].artifacts[$0.1].id) } &&
             allSimSafeSelected
 
         let newVal = !allOn
-        var tools = store.devTools
         for ti in toolsIx {
-            tools[ti].isSelected = newVal
+            store.setDevToolSelected(id: store.devTools[ti].id, isSelected: newVal)
         }
-        store.devTools = tools
         for p in pairs {
             store.setProjectArtifactSelected(groupIndex: p.0, artifactIndex: p.1, isSelected: newVal)
         }

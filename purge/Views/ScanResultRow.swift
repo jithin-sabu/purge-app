@@ -12,8 +12,24 @@ extension EnvironmentValues {
     }
 }
 
+/// Observes `ScanSelection` and hands the current selected state to its content, so a
+/// toggle re-renders only this scope (and the row) — never the list container, whose
+/// re-render reverts scroll. Mirrors the LargeFileSelection decoupling.
+struct ScanSelectionScope<Content: View>: View {
+    @ObservedObject var selection: ScanSelection
+    let isSelected: (ScanSelection) -> Bool
+    @ViewBuilder let content: (Bool) -> Content
+
+    var body: some View {
+        content(isSelected(selection))
+    }
+}
+
 struct ScanResultRow: View {
-    @Binding var isSelected: Bool
+    /// Selection value + toggle callback (not a binding) so an observing scope can
+    /// publish selection without re-rendering the list container.
+    let isSelected: Bool
+    var onToggle: () -> Void = {}
     let primaryLabel: String
     let formattedSize: String
     let safetyInfo: SafetyInfo
@@ -91,7 +107,8 @@ struct ScanResultRow: View {
     }
 
     init(
-        isSelected: Binding<Bool>,
+        isSelected: Bool,
+        onToggle: @escaping () -> Void = {},
         primaryLabel: String,
         formattedSize: String,
         safetyInfo: SafetyInfo,
@@ -108,7 +125,8 @@ struct ScanResultRow: View {
         showsLeadingIcon: Bool = true,
         usesCompactExplanation: Bool = false
     ) {
-        self._isSelected = isSelected
+        self.isSelected = isSelected
+        self.onToggle = onToggle
         self.primaryLabel = primaryLabel
         self.formattedSize = formattedSize
         self.safetyInfo = safetyInfo
@@ -164,10 +182,10 @@ struct ScanResultRow: View {
             stack
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    isSelected.toggle()
+                    onToggle()
                 }
                 .accessibilityAction {
-                    isSelected.toggle()
+                    onToggle()
                 }
         } else {
             stack
@@ -394,7 +412,7 @@ private struct ScanResultRowPlaceholder: View {
 
     var body: some View {
         ScanResultRow(
-            isSelected: .constant(false),
+            isSelected: false,
             primaryLabel: Self.primaryLabel(for: seed),
             formattedSize: Self.formattedSize(for: seed),
             safetyInfo: Self.safetyInfo(for: seed, showsExtraBadges: showsExtraBadges),

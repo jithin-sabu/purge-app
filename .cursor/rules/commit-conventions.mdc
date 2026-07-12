@@ -1,18 +1,43 @@
 ---
-description: Commit message format per awesome-commit-conventions (Conventional Commits + SemVer)
+description: Simple, plain-language commit messages (Conventional Commits + SemVer)
 alwaysApply: true
 ---
 
 # Commit Conventions
 
-Follow [awesome-commit-conventions](https://github.com/khasky/awesome-commit-conventions) for all commit messages.
+Follow [awesome-commit-conventions](https://github.com/khasky/awesome-commit-conventions) for structure and versioning. **Write every message so a non-developer could understand it.**
+
+## Primary rule: simple and plain language
+
+Commit messages describe **what changed for the user or the app**, not how the code was changed.
+
+- Use everyday words — avoid jargon, acronyms, and internal names
+- Focus on the outcome: what works better, what was broken, what was added
+- Keep the summary free of class names, function names, file paths, and framework APIs
+- Save technical detail for the optional body, and only when it helps future readers
+
+**Good**
+
+```
+fix(settings): stop window flickering when opened
+feat(scheduler): add weekly cleaning preference
+fix(large-files): show correct size for very large files
+```
+
+**Avoid**
+
+```
+fix(settings): debounce NSWindow makeKeyAndOrderFront calls
+refactor(purge-store): extract ScanResultCache into dedicated actor
+fix(ui): update GeneralModeView.onAppear lifecycle hook
+```
 
 ## Format
 
 ```
 <type>(<scope>): <short summary>
 
-<body: why the change, what was wrong>
+<body: why the change, what was wrong — still in plain language>
 
 <footer: Closes #123, BREAKING CHANGE:, Co-authored-by:>
 ```
@@ -56,9 +81,10 @@ Global changes may omit scope: `build:`, `ci:`, `chore(release):`.
 ```
 feat(scheduler): add weekly cleaning preference
 fix(menu-bar): keep popover open during scan
-refactor(purge-store): simplify cache invalidation
+fix(large-files): show correct size for huge files
+refactor(purge-store): simplify how scan results are stored
 chore(release): bump version to 1.2.4
 docs: update security disclosure process
 ```
 
-Header = **what**. Body = **why**. Use `Closes #123` in footer when applicable.
+Header = **what** (in plain language). Body = **why**. Use `Closes #123` in footer when applicable.
