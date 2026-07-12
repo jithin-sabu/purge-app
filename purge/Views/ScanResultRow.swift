@@ -174,6 +174,9 @@ struct ScanResultRow: View {
                     action: onExcludeFromScans
                 )
             }
+            // The overlay only answers a secondary click, which VoiceOver and the
+            // keyboard cannot produce; this exposes the same action to them.
+            .accessibilityAction(named: Text("Exclude from scans"), onExcludeFromScans)
         } else {
             row
         }
@@ -448,7 +451,7 @@ struct ScanRowContextMenu: NSViewRepresentable {
             item.target = self
             menu.addItem(item)
             menu.delegate = menuDelegate
-            NSMenu.popUpContextMenu(menu, with: event, for: self)
+            menu.popUp(positioning: nil, at: convert(event.locationInWindow, from: nil), in: self)
         }
 
         @objc private func performAction() {

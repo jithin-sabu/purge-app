@@ -54,7 +54,16 @@ enum ExcludedPathsStore {
         else {
             return [:]
         }
-        return decoded
+        // Entries persisted before keys resolved symlinks are re-keyed on load, so an
+        // existing exclusion keeps matching instead of silently going stale.
+        return decoded.reduce(into: [String: ExcludedPathEntry]()) { result, pair in
+            let key = canonicalKey(forPath: URL(fileURLWithPath: pair.value.path))
+            result[key] = ExcludedPathEntry(
+                path: key,
+                displayName: pair.value.displayName,
+                dateAdded: pair.value.dateAdded
+            )
+        }
     }
 
     nonisolated private static func loadEntriesLocked() -> [String: ExcludedPathEntry] {
@@ -72,8 +81,12 @@ enum ExcludedPathsStore {
         loadedEntries = entries
     }
 
+    /// Resolves symlinks so a path reached through different chains (`/tmp/x` vs
+    /// `/private/tmp/x`, or a symlinked project root) yields one key. Every read and
+    /// write routes through here, including entries loaded from disk, so the ancestor
+    /// prefix match in `isExcluded` never compares a resolved path to an unresolved key.
     nonisolated private static func canonicalKey(forPath url: URL) -> String {
-        url.standardizedFileURL.path
+        url.standardizedFileURL.resolvingSymlinksInPath().path
     }
 
     nonisolated static func contains(path: URL) -> Bool {

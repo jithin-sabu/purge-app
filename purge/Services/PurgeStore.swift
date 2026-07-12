@@ -2168,6 +2168,23 @@ final class PurgeStore: ObservableObject {
         refreshExcludedPaths()
 
         let itemID = item.id
+        let excluded = Set(item.paths.map { $0.standardizedFileURL.path })
+
+        // A mid-scan flush republishes `cacheItems` from the staged buffer, so the row
+        // has to leave the buffer too or the next flush brings it straight back. Match on
+        // path as well as id: a staged twin can carry not-yet-sized locations that the
+        // published row dropped, which shifts its path-derived id.
+        stagedGeneralCacheItems = stagedGeneralCacheItems.compactMap { staged in
+            guard staged.id != itemID else { return nil }
+            let remaining = staged.locations.filter {
+                !excluded.contains($0.path.standardizedFileURL.path)
+            }
+            guard !remaining.isEmpty else { return nil }
+            guard remaining.count != staged.locations.count else { return staged }
+            return staged.withLocations(remaining)
+        }
+        pendingCacheSizePaths.subtract(excluded)
+
         scanSelection.cacheIDs.remove(itemID)
         withAnimation {
             cacheItems.removeAll { $0.id == itemID }
@@ -2182,6 +2199,11 @@ final class PurgeStore: ObservableObject {
         refreshExcludedPaths()
 
         let toolID = tool.id
+        // A pending size update re-adds a staged tool to `devTools` when it lands, so drop
+        // the staged copy and stop waiting on its size.
+        stagedDevToolsByID.removeValue(forKey: toolID)
+        pendingDevToolSizeIDs.remove(toolID)
+
         scanSelection.devToolIDs.remove(toolID)
         withAnimation {
             devTools.removeAll { $0.id == toolID }
@@ -2197,6 +2219,9 @@ final class PurgeStore: ObservableObject {
         refreshExcludedPaths()
 
         let deviceID = device.id
+        // Same as dev tools: a staged simulator is re-appended once its size resolves.
+        stagedSimulatorsByID.removeValue(forKey: deviceID)
+
         scanSelection.simulatorIDs.remove(deviceID)
         withAnimation {
             simulatorDevices.removeAll { $0.id == deviceID }
