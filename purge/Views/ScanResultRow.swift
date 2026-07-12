@@ -43,8 +43,7 @@ struct ScanResultRow: View {
     /// Clears a legacy manual category override. When nil, the corresponding
     /// badge is hidden.
     let onResetToAutomatic: (() -> Void)?
-    /// Adds the row's paths to the scan exclusions. When nil, no exclusion menu entry
-    /// is offered.
+    /// When nil, the row omits the "Exclude from scans" context-menu action.
     var onExcludeFromScans: (() -> Void)?
     let isUserOverride: Bool
     /// When `false`, the row checkbox is disabled (e.g. high-risk items that should not participate in bulk select).
@@ -405,11 +404,8 @@ struct ScanResultRow: View {
 
 // MARK: - Row context menu
 
-/// A single-item right-click menu for a scan row. It handles `rightMouseDown` itself
-/// and never forwards it, so the List's backing NSTableView never treats the row as a
-/// contextual-menu target and never draws the blue row highlight around it. Left clicks
-/// fall through untouched, so row selection still works. While the menu is open, the
-/// parent row shows a neutral emphasis ring via `isMenuActive`.
+/// Right-click menu that consumes the click so NSTableView never paints its blue row
+/// highlight. Left clicks pass through for normal row selection.
 struct ScanRowContextMenu: NSViewRepresentable {
     @Binding var isMenuActive: Bool
     let title: String

@@ -2157,10 +2157,8 @@ final class PurgeStore: ObservableObject {
         excludedPaths = ExcludedPathsStore.allExcludedPaths()
     }
 
-    /// Exclude every location of a row from future scans and drop it from the current
-    /// results. Derived summaries recompute from `cacheItems`, so no totals are adjusted
-    /// by hand. Exclusion never widens what is scannable — it only removes an already
-    /// allowlisted item.
+    /// Subtracts every location from future scans and drops the row. Only removes paths
+    /// the allowlist already approved.
     func excludeFromScans(_ item: CacheItem) {
         for url in item.paths {
             ExcludedPathsStore.write(path: url, displayName: item.appName)
@@ -2191,7 +2189,8 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Exclude every path backing a dev tool row and drop it from the current results.
+    /// Subtracts every path backing a dev tool row and drops it. Only removes paths the
+    /// allowlist already approved.
     func excludeFromScans(_ tool: DevTool) {
         for url in tool.paths {
             ExcludedPathsStore.write(path: url, displayName: tool.toolName)
@@ -2210,7 +2209,8 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Exclude a simulator's device folder and drop it from the current results.
+    /// Subtracts a simulator device folder and drops it. Only removes paths the allowlist
+    /// already approved.
     func excludeFromScans(_ device: SimulatorDevice) {
         ExcludedPathsStore.write(
             path: device.folderURL,
@@ -2228,8 +2228,8 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Exclude a single project artifact folder (e.g. one `node_modules`). The enclosing
-    /// group disappears too once its last artifact is gone.
+    /// Subtracts one artifact folder; the group vanishes once empty. Only removes paths
+    /// the allowlist already approved.
     func excludeProjectArtifactFromScans(groupID: String, artifactID: String) {
         guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
         let group = projectGroups[indices.groupIndex]
@@ -2248,8 +2248,8 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Exclude an entire project root. `ExcludedPathsStore` matches descendants, so every
-    /// artifact under the root stays out of future scans without needing its own entry.
+    /// Subtracts a project root; descendant paths stay excluded via `isExcluded`. Only
+    /// removes paths the allowlist already approved.
     func excludeProjectGroupFromScans(groupID: String) {
         guard let group = projectGroups.first(where: { $0.id == groupID }) else { return }
         ExcludedPathsStore.write(path: group.rootPath, displayName: group.displayName)

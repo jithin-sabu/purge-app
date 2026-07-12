@@ -379,9 +379,8 @@ struct SettingsView: View {
         }
     }
 
-    /// Paths the user removed from scanning. Purely subtractive: an excluded path is
-    /// dropped at discovery, and un-excluding it only makes it eligible again if it
-    /// still passes the normal safety allowlist.
+    /// Settings section for scan exclusions. Purely subtractive: un-excluding only restores
+    /// eligibility when the path still passes the normal allowlist gate.
     private var excludedAppsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Excluded from scans")

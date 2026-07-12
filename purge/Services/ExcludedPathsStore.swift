@@ -95,9 +95,8 @@ enum ExcludedPathsStore {
         return loadEntriesLocked()[canonicalKey(forPath: path)] != nil
     }
 
-    /// True when `url` is itself excluded, or lives inside an excluded folder.
-    /// Ancestor matching is component-wise so `/a/bc` is not treated as a child
-    /// of an excluded `/a/b`.
+    /// True when `url` is an excluded path or any descendant (component-wise prefix
+    /// match). Exclusions only subtract from allowlist-approved candidates.
     nonisolated static func isExcluded(_ url: URL) -> Bool {
         lock.lock()
         let keys = Set(loadEntriesLocked().keys)
