@@ -67,9 +67,12 @@ enum BrandIconMapping {
         "lungo": "lungo",
         "docker": "docker",
         "jetbrains": "jetbrains",
-        "zed": "zed",
+        "zed": "zedindustries",
         "electron": "electron",
         "ms-playwright": "playwright",
+        "adobe-media-cache-files": "adobe",
+        "adobe-media-cache": "adobe",
+        "adobe-camera-raw": "adobe",
         "cloudkit": "icloud",
         "cloudd": "icloud",
         "bird": "icloud",
@@ -118,6 +121,10 @@ enum BrandIconMapping {
         "iOS DeviceSupport": "Xcode",
         "android-studio": "Android Studio",
         "cleanmymac": "CleanMyMac",
+        "obsolete-vscode-extension": "Visual Studio Code",
+        "adobe-media-cache-files": "Adobe Premiere Pro",
+        "adobe-media-cache": "Adobe Premiere Pro",
+        "adobe-camera-raw": "Adobe Photoshop",
     ]
 
     private static let definitionKeyToBundleID: [String: String] = [
@@ -159,8 +166,9 @@ enum BrandIconMapping {
         "vscode": "visualstudiocode",
         "cursor": "cursor",
         "jetbrains": "jetbrains",
-        "zed": "zed",
+        "zed": "zedindustries",
         "electron": "electron",
+        "ms-playwright": "playwright",
         "DerivedData": "xcode",
         "archives": "xcode",
         "xcode": "xcode",
@@ -172,6 +180,13 @@ enum BrandIconMapping {
         "android-sdk": "androidstudio",
         "xcode-archives": "xcode",
         "xcode-app": "xcode",
+        "xcode-docs-cache": "xcode",
+        "npm-npx-cache": "nodedotjs",
+        "npm-logs": "nodedotjs",
+        "corepack-cache": "nodedotjs",
+        "obsolete-cursor-extension": "cursor",
+        "obsolete-vscode-extension": "visualstudiocode",
+        "zsh": "iterm2",
     ]
 
   // MARK: - Project artifact kinds

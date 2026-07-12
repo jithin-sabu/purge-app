@@ -4,6 +4,7 @@
  * Run: npm run generate:icons
  *
  * Uses simple-icons v14 for most brands and simple-icons-v16 for newer icons (e.g. cursor).
+ * Slugs missing from simple-icons can ship SVG sources in scripts/brand-icon-sources/.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -16,6 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const manifestPath = path.join(repoRoot, "purge/Resources/brand-icon-manifest.json");
 const outDir = path.join(repoRoot, "purge/Resources/BrandIcons");
+const supplementalDir = path.join(repoRoot, "scripts/brand-icon-sources");
 const size = 56;
 
 const iconPackages = [simpleIcons, simpleIconsV16];
@@ -41,12 +43,33 @@ function svgForIcon(icon, fillHex) {
   return `<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="${icon.path}" fill="#${fillHex}"/></svg>`;
 }
 
+async function renderSupplementalSvg(slug, variant) {
+  const suffix = variant === "dark" ? "-dark" : "";
+  const preferred = path.join(supplementalDir, `${slug}${suffix}.svg`);
+  const fallback = path.join(supplementalDir, `${slug}.svg`);
+  const svgPath = fs.existsSync(preferred) ? preferred : fallback;
+  if (!fs.existsSync(svgPath)) return false;
+
+  const outName = variant === "dark" ? `${slug}-dark.png` : `${slug}.png`;
+  await sharp(svgPath)
+    .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(path.join(outDir, outName));
+  return true;
+}
+
 let ok = 0;
 let failed = [];
 
 for (const slug of slugs) {
   const icon = iconForSlug(slug);
   if (!icon) {
+    const lightOk = await renderSupplementalSvg(slug, "light");
+    const darkOk = await renderSupplementalSvg(slug, "dark");
+    if (lightOk && darkOk) {
+      ok++;
+      continue;
+    }
     failed.push(slug);
     continue;
   }
