@@ -166,6 +166,9 @@ final class PurgeStore: ObservableObject {
 
     /// Standardized paths with manual user categorizations. Mirrors `user_overrides.json`.
     @Published private(set) var userOverridePaths: Set<String> = UserOverridesStore.allOverriddenPaths()
+    /// Paths the user excluded from scans. Purely subtractive: the scanner drops these
+    /// after the allowlist gate, so nothing new ever becomes scannable or cleanable.
+    @Published private(set) var excludedPaths: Set<String> = ExcludedPathsStore.allExcludedPaths()
 
     private let cacheScanner = CacheScanner()
     private let devScanner = DevScanner()
@@ -2148,6 +2151,96 @@ final class PurgeStore: ObservableObject {
 
     private func refreshUserOverridePaths() {
         userOverridePaths = UserOverridesStore.allOverriddenPaths()
+    }
+
+    private func refreshExcludedPaths() {
+        excludedPaths = ExcludedPathsStore.allExcludedPaths()
+    }
+
+    /// Exclude every location of a row from future scans and drop it from the current
+    /// results. Derived summaries recompute from `cacheItems`, so no totals are adjusted
+    /// by hand. Exclusion never widens what is scannable — it only removes an already
+    /// allowlisted item.
+    func excludeFromScans(_ item: CacheItem) {
+        for url in item.paths {
+            ExcludedPathsStore.write(path: url, displayName: item.appName)
+        }
+        refreshExcludedPaths()
+
+        let itemID = item.id
+        scanSelection.cacheIDs.remove(itemID)
+        withAnimation {
+            cacheItems.removeAll { $0.id == itemID }
+        }
+    }
+
+    /// Exclude every path backing a dev tool row and drop it from the current results.
+    func excludeFromScans(_ tool: DevTool) {
+        for url in tool.paths {
+            ExcludedPathsStore.write(path: url, displayName: tool.toolName)
+        }
+        refreshExcludedPaths()
+
+        let toolID = tool.id
+        scanSelection.devToolIDs.remove(toolID)
+        withAnimation {
+            devTools.removeAll { $0.id == toolID }
+        }
+    }
+
+    /// Exclude a simulator's device folder and drop it from the current results.
+    func excludeFromScans(_ device: SimulatorDevice) {
+        ExcludedPathsStore.write(
+            path: device.folderURL,
+            displayName: "\(device.deviceName) — \(device.runtimeVersion)"
+        )
+        refreshExcludedPaths()
+
+        let deviceID = device.id
+        scanSelection.simulatorIDs.remove(deviceID)
+        withAnimation {
+            simulatorDevices.removeAll { $0.id == deviceID }
+        }
+    }
+
+    /// Exclude a single project artifact folder (e.g. one `node_modules`). The enclosing
+    /// group disappears too once its last artifact is gone.
+    func excludeProjectArtifactFromScans(groupID: String, artifactID: String) {
+        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
+        let group = projectGroups[indices.groupIndex]
+        let artifact = group.artifacts[indices.artifactIndex]
+        ExcludedPathsStore.write(
+            path: artifact.path,
+            displayName: "\(group.displayName) — \(artifact.kind.rowTag)"
+        )
+        refreshExcludedPaths()
+
+        scanSelection.artifactIDs.remove(artifactID)
+        withAnimation {
+            var groups = projectGroups
+            groups[indices.groupIndex].artifacts.removeAll { $0.id == artifactID }
+            projectGroups = groups.filter { !$0.artifacts.isEmpty }
+        }
+    }
+
+    /// Exclude an entire project root. `ExcludedPathsStore` matches descendants, so every
+    /// artifact under the root stays out of future scans without needing its own entry.
+    func excludeProjectGroupFromScans(groupID: String) {
+        guard let group = projectGroups.first(where: { $0.id == groupID }) else { return }
+        ExcludedPathsStore.write(path: group.rootPath, displayName: group.displayName)
+        refreshExcludedPaths()
+
+        scanSelection.artifactIDs.subtract(group.artifacts.map(\.id))
+        withAnimation {
+            projectGroups.removeAll { $0.id == groupID }
+        }
+    }
+
+    /// Drop an exclusion. The item reappears on the next scan, but only if it still
+    /// passes the normal allowlist gate.
+    func removeExclusion(path: URL) {
+        ExcludedPathsStore.remove(path: path)
+        refreshExcludedPaths()
     }
 
     /// Mark a row with a manual category. Persists `user_overrides.json` keyed

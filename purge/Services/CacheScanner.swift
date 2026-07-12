@@ -139,6 +139,7 @@ final class CacheScanner {
             let url = location.url.standardizedFileURL
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { continue }
+            guard !ExcludedPathsStore.isExcluded(url) else { continue }
             let folderName = url.lastPathComponent
             let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
                 folderName: folderName,
@@ -193,6 +194,7 @@ final class CacheScanner {
 
             let pathKey = directory.standardizedFileURL.path
             guard DeletionSafetyPolicy.isOfferedForCleanup(directory) else { return nil }
+            guard !ExcludedPathsStore.isExcluded(directory) else { return nil }
             guard !collectedPaths.contains(pathKey) else { return nil }
             collectedPaths.insert(pathKey)
 
@@ -325,6 +327,7 @@ final class CacheScanner {
             let headline = "\(appName) Old Version \(version)"
             let pathKey = frameworkVersionURL.standardizedFileURL.path
             guard DeletionSafetyPolicy.isOfferedForCleanup(frameworkVersionURL) else { continue }
+            guard !ExcludedPathsStore.isExcluded(frameworkVersionURL) else { continue }
             guard !collectedPaths.contains(pathKey) else { continue }
             collectedPaths.insert(pathKey)
 
@@ -360,6 +363,7 @@ final class CacheScanner {
     ) -> CacheItem? {
         let pathKey = url.standardizedFileURL.path
         guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { return nil }
+        guard !ExcludedPathsStore.isExcluded(url) else { return nil }
         guard !collectedPaths.contains(pathKey) else { return nil }
         collectedPaths.insert(pathKey)
 

@@ -21,6 +21,9 @@ struct SettingsView: View {
     @State private var isCleaningHistoryExpanded = false
     @State private var showClearHistoryConfirmation = false
     @State private var selectedHistoryEntry: CleanupHistoryEntry?
+    /// Session cache of on-disk sizes for excluded paths, keyed by path. A `nil` value
+    /// means the path no longer exists.
+    @State private var excludedPathSizes: [String: Int64?] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -35,6 +38,7 @@ struct SettingsView: View {
                     appearanceSection
                     cleaningScheduleSection
                     devToolsSection
+                    excludedAppsSection
                     cleaningHistorySection
                 }
             }
@@ -373,6 +377,130 @@ struct SettingsView: View {
                 .padding(16)
             }
         }
+    }
+
+    /// Paths the user removed from scanning. Purely subtractive: an excluded path is
+    /// dropped at discovery, and un-excluding it only makes it eligible again if it
+    /// still passes the normal safety allowlist.
+    private var excludedAppsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Excluded from scans")
+                .font(.headline)
+
+            settingsSectionCard {
+                Text("Excluded paths are never scanned or cleaned. Right-click any scan result and choose 'Exclude from scans'.")
+                    .font(scheduleStatusSecondaryFont)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(16)
+
+                let entries = excludedEntries
+
+                if entries.isEmpty {
+                    settingsSectionDivider
+
+                    Text("Nothing excluded")
+                        .font(scheduleStatusPrimaryFont)
+                        .foregroundStyle(.secondary)
+                        .padding(16)
+                } else {
+                    ForEach(entries, id: \.path) { entry in
+                        settingsSectionDivider
+
+                        excludedPathRow(entry: entry)
+                    }
+
+                    settingsSectionDivider
+
+                    excludedTotalRow(entries: entries)
+                }
+            }
+        }
+    }
+
+    private var excludedEntries: [ExcludedPathEntry] {
+        ExcludedPathsStore.allEntries()
+    }
+
+    private func excludedPathRow(entry: ExcludedPathEntry) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.displayName)
+                    .font(scheduleStatusPrimaryFont)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(entry.path)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 12)
+
+            excludedSizeLabel(forPath: entry.path)
+
+            statusTextButton("Remove", isDisabled: false) {
+                removeExclusion(entry: entry)
+            }
+        }
+        .padding(16)
+        .task(id: entry.path) {
+            await loadExcludedSizeIfNeeded(forPath: entry.path)
+        }
+    }
+
+    @ViewBuilder
+    private func excludedSizeLabel(forPath path: String) -> some View {
+        if let resolved = excludedPathSizes[path] {
+            Text(resolved.map(formatBytes) ?? "Not found")
+                .font(scheduleStatusSecondaryFont)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        } else {
+            SkeletonBar(width: 56, height: 12)
+                .shimmering()
+        }
+    }
+
+    private func excludedTotalRow(entries: [ExcludedPathEntry]) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text("Total")
+                .font(scheduleStatusPrimaryFont)
+                .foregroundStyle(AppColors.textSecondary)
+
+            Spacer(minLength: 12)
+
+            Text(formatBytes(excludedTotalBytes(for: entries)))
+                .font(scheduleStatusPrimaryFont)
+                .foregroundStyle(.primary)
+                .monospacedDigit()
+        }
+        .padding(16)
+    }
+
+    /// Sums the sizes resolved so far; unresolved and missing paths count as zero.
+    private func excludedTotalBytes(for entries: [ExcludedPathEntry]) -> Int64 {
+        entries.reduce(into: 0) { total, entry in
+            total += (excludedPathSizes[entry.path] ?? nil) ?? 0
+        }
+    }
+
+    private func loadExcludedSizeIfNeeded(forPath path: String) async {
+        guard excludedPathSizes[path] == nil else { return }
+        let url = URL(fileURLWithPath: path)
+        let size = await Task.detached(priority: .utility) { () -> Int64? in
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+            return FolderSizing.directoryByteSize(at: url)
+        }.value
+        excludedPathSizes[path] = size
+    }
+
+    private func removeExclusion(entry: ExcludedPathEntry) {
+        store.removeExclusion(path: URL(fileURLWithPath: entry.path))
+        excludedPathSizes.removeValue(forKey: entry.path)
     }
 
     private func settingPickerRow<Option: Hashable>(

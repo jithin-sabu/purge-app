@@ -333,6 +333,7 @@ struct AppCachesView<PageHeader: View>: View {
                         reinstallSafety: reinstallDisplay(for: item),
                         showUncommittedRepoChanges: item.gitStatus == .dirty,
                         onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
+                        onExcludeFromScans: { store.excludeFromScans(item) },
                         isUserOverride: item.locations.contains {
                             store.userOverridePaths.contains($0.path.standardizedFileURL.path)
                         },
