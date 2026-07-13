@@ -385,34 +385,45 @@ enum DeletionSafetyPolicy {
         return relative.split(separator: "/").map(String.init)
     }
 
+    /// Index at which the `account-*/postbox/media` suffix starts within a
+    /// container-relative split, or `nil` when the split never reaches it.
+    ///
+    /// Most installs nest accounts under a distribution channel (`stable`,
+    /// `appstore`); some place `account-*` directly at the container root, so
+    /// that segment is optional. Nothing deeper is searched: the suffix must
+    /// begin at the root or one level below it, which keeps the match anchored
+    /// to the real layout rather than any `account-*/postbox/media` triple that
+    /// happens to appear further down.
+    private nonisolated static func telegramMediaSuffixStart(_ parts: [String]) -> Int? {
+        for start in 0...1 where parts.count >= start + 3 {
+            guard parts[start].hasPrefix("account-"),
+                  parts[start + 1] == "postbox",
+                  parts[start + 2] == "media" else { continue }
+            return start
+        }
+        return nil
+    }
+
     /// Whether `path` is the Telegram `.../account-*/postbox/media` cache
     /// directory itself, or a descendant of it.
     ///
     /// The account database lives directly in `postbox`, so touching anything
     /// shallower would log the user out or lose local data. Authorization
-    /// requires the full `<channel>/account-*/postbox/media` suffix — `postbox`
-    /// itself and every ancestor can never match.
+    /// requires the full `account-*/postbox/media` suffix — `postbox` itself,
+    /// `postbox/db`, and every ancestor can never match.
     nonisolated static func isWhitelistedTelegramMediaCachePath(_ path: String, home: String) -> Bool {
         guard let parts = telegramGroupContainerRelativeParts(path, home: home) else { return false }
-        // channel / account-* / postbox / media  (media itself, or a descendant of it)
-        guard parts.count >= 4 else { return false }
-        guard !parts[0].isEmpty,
-              parts[1].hasPrefix("account-"),
-              parts[2] == "postbox",
-              parts[3] == "media" else { return false }
-        return true
+        // [channel/] account-* / postbox / media  (media itself, or a descendant)
+        return telegramMediaSuffixStart(parts) != nil
     }
 
     /// Whether `path` is exactly the Telegram `media` directory (not a
     /// descendant). Used to clean the directory's contents while leaving the
     /// `media` directory itself in place.
     nonisolated static func isTelegramMediaCacheDirectory(_ path: String, home: String) -> Bool {
-        guard let parts = telegramGroupContainerRelativeParts(path, home: home) else { return false }
-        guard parts.count == 4 else { return false }
-        return !parts[0].isEmpty
-            && parts[1].hasPrefix("account-")
-            && parts[2] == "postbox"
-            && parts[3] == "media"
+        guard let parts = telegramGroupContainerRelativeParts(path, home: home),
+              let start = telegramMediaSuffixStart(parts) else { return false }
+        return parts.count == start + 3
     }
 
     nonisolated static func isWhitelistedStaleBrowserFrameworkPath(_ path: String) -> Bool {

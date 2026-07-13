@@ -362,6 +362,117 @@ struct TelegramMediaCacheTests {
             #expect(DeletionSafetyPolicy.isOfferedForCleanup(surfaced.url))
         }
     }
+
+    @Test
+    func accountsDirectlyUnderTheContainerRootAreAllowed() {
+        // The distribution-channel segment is optional; some installs keep
+        // `account-*` at the container root.
+        let media = TestPaths.homeURL(Self.container + ["account-7", "postbox", "media"])
+        #expect(DeletionSafetyPolicy.evaluate(media) == .allow)
+        #expect(DeletionSafetyPolicy.shouldDeleteContentsOnly(media))
+
+        let db = TestPaths.homeURL(Self.container + ["account-7", "postbox", "db"])
+        #expect(DeletionSafetyPolicy.evaluate(db) != .allow)
+    }
+
+    @Test
+    func accountSettingsFilesAreNeverAllowed() {
+        // Account-level settings/database files sit beside `postbox`, not below
+        // `media`, so no tier may reach them.
+        let settings = TestPaths.homeURL(
+            Self.container + ["stable", "account-1", "settings.db"]
+        )
+        #expect(DeletionSafetyPolicy.evaluate(settings) != .allow)
+
+        let accountDB = TestPaths.homeURL(
+            Self.container + ["stable", "account-1", "postbox", "db", "db_sqlite"]
+        )
+        #expect(DeletionSafetyPolicy.evaluate(accountDB) != .allow)
+    }
+
+    @Test
+    func mediaCannotTraverseOutToASiblingOfItself() {
+        // `..` traversal out of `media` must not stay authorized: the policy
+        // standardizes the path first, so the escape resolves to `postbox/db`
+        // and is refused.
+        let escape = Self.mediaURL(
+            channel: "stable", account: "account-1", extra: "..", "db"
+        )
+        #expect(escape.standardizedFileURL.path.hasSuffix("/postbox/db"))
+        #expect(DeletionSafetyPolicy.evaluate(escape) != .allow)
+
+        let escapeToPostbox = Self.mediaURL(channel: "stable", account: "account-1", extra: "..")
+        #expect(DeletionSafetyPolicy.evaluate(escapeToPostbox) != .allow)
+
+        // ...and a deeper traversal cannot climb back out to the container root.
+        let escapeToRoot = Self.mediaURL(
+            channel: "stable", account: "account-1", extra: "..", "..", ".."
+        )
+        #expect(DeletionSafetyPolicy.evaluate(escapeToRoot) != .allow)
+    }
+
+    @Test
+    func mediaSuffixIsNotMatchedAtArbitraryDepth() {
+        // A nested `account-*/postbox/media` triple buried deeper in the
+        // container is not the real media store and must not be authorized.
+        let deep = TestPaths.homeURL(
+            Self.container + ["stable", "extra", "account-1", "postbox", "media"]
+        )
+        #expect(DeletionSafetyPolicy.evaluate(deep) != .allow)
+    }
+}
+
+// MARK: - Group 3d: Telegram's two locations sit in different tiers
+
+@Suite("Telegram cache is Safe to Clean; Telegram media store is Check First")
+struct TelegramSafetyTierTests {
+    private static func level(folderName: String, path: URL) -> SafetyLevel? {
+        if let record = ExplanationDatabase.matchBundledDatabase(folderName: folderName) {
+            return record.safetyLevel
+        }
+        return SafetyTierList.evaluate(folderName: folderName, path: path)
+    }
+
+    @Test
+    func pureCacheUnderLibraryCachesIsSafeToClean() {
+        // ~/Library/Caches/ru.keepcoder.Telegram — an evictable HTTP-style cache.
+        // Worst case on deletion is a rebuild.
+        let file = TestPaths.homeURL(
+            "Library", "Caches", "ru.keepcoder.Telegram", "cache", "blob-1"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(file) == .allow)
+        #expect(Self.level(folderName: "ru.keepcoder.Telegram", path: file) == .safe)
+    }
+
+    @Test
+    func groupContainerMediaStoreIsCheckFirst() {
+        // The media store holds re-downloadable media, but also self-destruct and
+        // server-deleted content whose only copy is local — reviewable, never one-tap.
+        let media = TestPaths.homeURL([
+            "Library", "Group Containers", "6N38VWS5BX.ru.keepcoder.Telegram",
+            "stable", "account-1", "postbox", "media"
+        ])
+        #expect(DeletionSafetyPolicy.evaluate(media) == .allow)
+        #expect(
+            Self.level(folderName: CacheDiscoveryPaths.telegramMediaCacheKey, path: media) == .medium
+        )
+    }
+
+    @Test
+    func theTwoLocationsDoNotShareATier() {
+        let cacheLevel = Self.level(
+            folderName: "ru.keepcoder.Telegram",
+            path: TestPaths.homeURL("Library", "Caches", "ru.keepcoder.Telegram")
+        )
+        let mediaLevel = Self.level(
+            folderName: CacheDiscoveryPaths.telegramMediaCacheKey,
+            path: TestPaths.homeURL([
+                "Library", "Group Containers", "6N38VWS5BX.ru.keepcoder.Telegram",
+                "stable", "account-1", "postbox", "media"
+            ])
+        )
+        #expect(cacheLevel != mediaLevel)
+    }
 }
 
 // MARK: - Group 4: Whitelisted folder names inside home
