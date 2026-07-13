@@ -81,8 +81,6 @@ struct OnboardingFlowView: View {
         OnboardingWelcomeStep()
       case .permissions:
         OnboardingPermissionsStep()
-      case .preferences:
-        OnboardingPreferencesStep()
       case .firstScan:
         OnboardingFirstScanStep(
           revealController: revealController,
@@ -110,24 +108,19 @@ struct OnboardingFlowView: View {
     VStack(spacing: AppStyle.Spacing.small) {
       switch step {
       case .welcome:
-        OnboardingPrimaryButton(title: "Get started") {
+        OnboardingPrimaryButton(title: "Get started", systemImage: "arrow.forward") {
           advance(to: .permissions)
         }
       case .permissions:
         OnboardingPrimaryButton(
-          title: "Continue",
+          title: "Run my first scan",
+          systemImage: "magnifyingglass",
           isEnabled: store.hasFullDiskAccess
         ) {
-          continueFromPermissions()
+          startFirstScan()
         }
-        OnboardingSecondaryButton(title: "Skip for now", style: .outlined) {
-          continueFromPermissions()
-        }
-        .disabled(!store.hasFullDiskAccess)
-      case .preferences:
-        OnboardingPrimaryButton(title: "Looks good, continue") {
-          OnboardingPreferencesStep.applyToScheduledPreferences()
-          advance(to: .firstScan)
+        OnboardingSecondaryButton(title: "Skip for now") {
+          skipToHome()
         }
       case .results:
         VStack(spacing: AppStyle.Spacing.xxSmall) {
@@ -148,7 +141,7 @@ struct OnboardingFlowView: View {
         ) {
           startResultsCleanup()
         }
-        OnboardingSecondaryButton(title: "Review everything first", style: .outlined) {
+        OnboardingSecondaryButton(title: "Review everything first") {
           exitToReviewPath()
         }
         .disabled(isResultsCleaning)
@@ -167,10 +160,16 @@ struct OnboardingFlowView: View {
     return "Clean now"
   }
 
-  private func continueFromPermissions() {
+  private func startFirstScan() {
     store.refreshPermission()
     guard store.hasFullDiskAccess else { return }
-    advance(to: .preferences)
+    advance(to: .firstScan)
+  }
+
+  /// "Skip for now" drops straight into the app without scanning — the escape hatch stays
+  /// available even without Full Disk Access, which is exactly when someone reaches for it.
+  private func skipToHome() {
+    beginExitToHome()
   }
 
   private func exitToReviewPath() {
