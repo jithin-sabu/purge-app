@@ -68,6 +68,9 @@ struct PurgeApp: App {
     }
 
     init() {
+        // Must precede anything that touches user defaults — the gate reads the persisted domain to
+        // tell a clean install apart from an update.
+        FirstRunGate.resolve()
         LargeFileFilterDefaults.register()
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
     }
