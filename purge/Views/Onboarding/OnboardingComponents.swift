@@ -134,6 +134,8 @@ struct OnboardingPermissionRow: View {
   var statusText: String? = nil
   let action: () -> Void
 
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
   var body: some View {
     HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
       VStack(alignment: .leading, spacing: 4) {
@@ -183,8 +185,8 @@ struct OnboardingPermissionRow: View {
         .stroke(AppColors.borderSubtle)
     }
     .shadow(color: .black.opacity(0.15), radius: 15, x: -8, y: 8)
-    .animation(.easeInOut(duration: 0.2), value: isGranted)
-    .animation(.easeInOut(duration: 0.2), value: statusText)
+    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isGranted)
+    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: statusText)
   }
 }
 
