@@ -9,14 +9,17 @@ struct OnboardingScanFinding: Identifiable, Equatable {
   let id: String
   let title: String
   let formattedSize: String
+  /// Same brand artwork the in-app scan lists use, so onboarding rows aren't all generic folders.
+  let icon: AdaptiveBrandIconImage.Source
 }
 
 extension OnboardingScanFinding {
-  init(candidate: PurgeStore.DeletionCandidate) {
+  init(candidate: PurgeStore.DeletionCandidate, icon: AdaptiveBrandIconImage.Source) {
     self.init(
       id: candidate.path.standardizedFileURL.path,
       title: candidate.title,
-      formattedSize: candidate.formattedSize
+      formattedSize: candidate.formattedSize,
+      icon: icon
     )
   }
 }
@@ -25,119 +28,99 @@ struct OnboardingLayout {
   static let contentMaxWidth: CGFloat = 520
   static let horizontalPadding: CGFloat = 48
   static let verticalPadding: CGFloat = 40
-  static let buttonWidth: CGFloat = 260
+  static let buttonWidth: CGFloat = 240
   static let scrollingListMaxHeight: CGFloat = 460
   /// Fixed height for streamed scan rows so the list does not reflow per item.
   static let scanRowHeight: CGFloat = 56
 }
 
+/// Full-width capsule used for the onboarding footer actions — taller and larger-typed
+/// than `AppButtonStyle`, which is sized for in-app chrome.
+struct OnboardingCapsuleButtonStyle: ButtonStyle {
+  enum Variant {
+    case filled
+    case elevated
+  }
+
+  var variant: Variant = .filled
+
+  @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: 14, weight: .semibold, design: .rounded))
+      .tracking(0.15)
+      .foregroundStyle(variant == .filled ? AppColors.buttonPrimaryText : AppColors.textPrimary)
+      .frame(width: OnboardingLayout.buttonWidth)
+      .padding(.vertical, 8)
+      .background(background(isPressed: configuration.isPressed), in: Capsule(style: .continuous))
+      .overlay {
+        if variant == .elevated {
+          Capsule(style: .continuous)
+            .stroke(AppColors.borderSubtle)
+        }
+      }
+      .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
+      .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: isEnabled)
+  }
+
+  private func background(isPressed: Bool) -> Color {
+    switch variant {
+    case .filled:
+      return AppColors.buttonPrimaryBg
+    case .elevated:
+      return isPressed ? AppColors.bgOverlay : AppColors.bgElevated
+    }
+  }
+}
+
 struct OnboardingPrimaryButton: View {
   let title: String
+  var systemImage: String? = nil
   var isEnabled: Bool = true
   var isLoading: Bool = false
   let action: () -> Void
 
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
   var body: some View {
     Button(action: action) {
-      CleaningButtonLabel(
-        title: title,
-        systemImage: nil,
-        isCleaning: isLoading,
-        spinnerTint: .white
-      )
-        .frame(minWidth: OnboardingLayout.buttonWidth)
+      HStack(spacing: 8) {
+        Text(title)
+
+        if isLoading {
+          if reduceMotion {
+            Image(systemName: "clock")
+              .font(.system(size: 12, weight: .semibold))
+          } else {
+            ProgressView()
+              .controlSize(.small)
+              .scaleEffect(0.62)
+              .frame(width: 13, height: 13)
+              .tint(AppColors.buttonPrimaryText)
+          }
+        } else if let systemImage {
+          Image(systemName: systemImage)
+            .font(.system(size: 12, weight: .semibold))
+        }
+      }
     }
-    .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
-    .saturation(isEnabled && !isLoading ? 1 : 0)
+    .buttonStyle(OnboardingCapsuleButtonStyle(variant: .filled))
     .disabled(!isEnabled || isLoading)
     .keyboardShortcut(.return, modifiers: [])
-    .animation(.easeInOut(duration: 0.2), value: isEnabled && !isLoading)
   }
 }
 
 struct OnboardingSecondaryButton: View {
-  enum Style {
-    case plain
-    case outlined
-  }
-
   let title: String
-  var style: Style = .plain
   let action: () -> Void
 
   var body: some View {
-    Group {
-      if style == .outlined {
-        Button(action: action) {
-          Text(title)
-            .font(.body.weight(.semibold))
-            .frame(minWidth: OnboardingLayout.buttonWidth)
-        }
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
-      } else {
-        Button(action: action) {
-          Text(title)
-            .font(.subheadline.weight(.medium))
-            .frame(minWidth: OnboardingLayout.buttonWidth)
-            .padding(.vertical, 4)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-      }
+    Button(action: action) {
+      Text(title)
     }
-  }
-}
-
-struct OnboardingFeatureChip: View {
-  let symbol: String
-  let label: String
-
-  var body: some View {
-    VStack(spacing: 8) {
-      Image(systemName: symbol)
-        .font(.system(size: 22, weight: .semibold))
-        .foregroundStyle(AppColors.textPrimary)
-        .frame(width: 52, height: 52)
-        .background(AppColors.bgElevated, in: Circle())
-
-      Text(label)
-        .font(.subheadline.weight(.medium))
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity)
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(label)
-  }
-}
-
-/// Small rounded pill carrying a safety boundary message: a tinted icon plus muted text.
-struct OnboardingSafetyChip: View {
-  let symbol: String
-  let iconColor: Color
-  let label: String
-
-  var body: some View {
-    HStack(spacing: 6) {
-      Image(systemName: symbol)
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(iconColor)
-        .accessibilityHidden(true)
-
-      Text(label)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-    .padding(.horizontal, AppStyle.Spacing.small)
-    .padding(.vertical, AppStyle.Spacing.xSmall)
-    .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
-    .overlay {
-      RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-        .stroke(AppColors.borderSubtle)
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(label)
+    .buttonStyle(OnboardingCapsuleButtonStyle(variant: .elevated))
   }
 }
 
@@ -150,6 +133,8 @@ struct OnboardingPermissionRow: View {
   var isGranted: Bool = false
   var statusText: String? = nil
   let action: () -> Void
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
@@ -194,55 +179,14 @@ struct OnboardingPermissionRow: View {
     }
     .padding(.horizontal, AppStyle.Spacing.medium)
     .padding(.vertical, AppStyle.Spacing.small)
-    .animation(.easeInOut(duration: 0.2), value: isGranted)
-    .animation(.easeInOut(duration: 0.2), value: statusText)
-  }
-}
-
-struct OnboardingPermissionGroup<Content: View>: View {
-  @ViewBuilder let content: () -> Content
-
-  var body: some View {
-    VStack(spacing: 0) {
-      content()
-    }
     .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
     .overlay {
       RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
         .stroke(AppColors.borderSubtle)
     }
-  }
-}
-
-struct OnboardingToggleRow: View {
-  let title: String
-  var subtitle: String? = nil
-  @Binding var isOn: Bool
-
-  var body: some View {
-    HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title)
-          .font(.subheadline.weight(.medium))
-        if let subtitle {
-          Text(subtitle)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-      }
-      Spacer(minLength: 8)
-      Toggle("", isOn: $isOn)
-        .labelsHidden()
-        .toggleStyle(.switch)
-        .tint(AppColors.tagSafeText)
-    }
-    .padding(AppStyle.Spacing.small)
-    .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
-    .overlay {
-      RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-        .stroke(AppColors.borderSubtle)
-    }
+    .shadow(color: .black.opacity(0.15), radius: 15, x: -8, y: 8)
+    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isGranted)
+    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: statusText)
   }
 }
 
@@ -384,7 +328,7 @@ struct OnboardingStepTitle: View {
 
   var body: some View {
     Text(text)
-      .font(.system(size: 28, weight: .bold, design: .rounded))
+      .font(.system(size: 26, weight: .semibold, design: .rounded))
       .multilineTextAlignment(.center)
       .frame(maxWidth: .infinity, alignment: .center)
   }
@@ -401,7 +345,7 @@ struct OnboardingLoadingStepTitle: View {
 
   var body: some View {
     Text(displayText)
-      .font(.system(size: 28, weight: .bold, design: .rounded))
+      .font(.system(size: 26, weight: .semibold, design: .rounded))
       .multilineTextAlignment(.center)
       .frame(maxWidth: .infinity, alignment: .center)
       .accessibilityLabel("\(baseText).")

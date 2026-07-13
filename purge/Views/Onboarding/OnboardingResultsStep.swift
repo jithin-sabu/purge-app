@@ -51,9 +51,44 @@ extension PurgeStore {
   }
 
   func onboardingScanFindings(limit: Int = 12) -> [OnboardingScanFinding] {
-    manualSafeCleanupCandidates()
-      .prefix(limit)
-      .map { OnboardingScanFinding(candidate: $0) }
+    onboardingFindings(for: Array(manualSafeCleanupCandidates().prefix(limit)))
+  }
+
+  func onboardingFindings(for candidates: [DeletionCandidate]) -> [OnboardingScanFinding] {
+    let iconSources = onboardingIconSourcesByPath()
+
+    return candidates.map { candidate in
+      OnboardingScanFinding(
+        candidate: candidate,
+        icon: iconSources[candidate.path.standardizedFileURL.path] ?? .sfSymbol("folder.fill")
+      )
+    }
+  }
+
+  /// A `DeletionCandidate` keeps only a path, so map each path back to the scan result it came
+  /// from — that's what knows which brand icon to draw.
+  private func onboardingIconSourcesByPath() -> [String: AdaptiveBrandIconImage.Source] {
+    var sources: [String: AdaptiveBrandIconImage.Source] = [:]
+
+    for group in projectGroups {
+      for artifact in group.artifacts {
+        sources[artifact.path.standardizedFileURL.path] = .projectGroup(group)
+      }
+    }
+
+    for tool in devTools {
+      for path in tool.paths {
+        sources[path.standardizedFileURL.path] = .devTool(tool)
+      }
+    }
+
+    for item in cacheItems {
+      for location in item.locations {
+        sources[location.path.standardizedFileURL.path] = .cacheItem(item)
+      }
+    }
+
+    return sources
   }
 
   private static let browserDefinitionKeys: Set<String> = [

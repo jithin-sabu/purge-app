@@ -27,7 +27,7 @@ struct OnboardingFirstScanStep: View {
         LazyVStack(spacing: 8) {
           ForEach(revealController.revealedItems) { item in
             ScanListRow(
-              icon: .symbol("folder.fill"),
+              icon: .brand(item.icon),
               title: item.title,
               subtitle: nil,
               formattedSize: item.formattedSize,

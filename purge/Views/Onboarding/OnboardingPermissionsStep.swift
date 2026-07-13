@@ -9,9 +9,9 @@ struct OnboardingPermissionsStep: View {
 
   var body: some View {
     VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
-      OnboardingStepTitle(text: "A couple of quick permissions.")
+      OnboardingStepTitle(text: "A couple of quick permissions...")
 
-      OnboardingPermissionGroup {
+      VStack(spacing: AppStyle.Spacing.small) {
         OnboardingPermissionRow(
           title: "Full disk access",
           description: "Lets Purge find caches and junk across your entire Mac. Without this, scanning is limited.",
@@ -22,9 +22,6 @@ struct OnboardingPermissionsStep: View {
           action: requestFullDiskAccess
         )
         .onboardingBlurIn(index: 0)
-
-        Divider()
-          .padding(.leading, AppStyle.Spacing.medium)
 
         OnboardingPermissionRow(
           title: "Login item",
