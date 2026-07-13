@@ -23,7 +23,7 @@ struct OnboardingCleaningStep: View {
         VStack(spacing: 8) {
           ForEach(visibleItems) { item in
             ScanListRow(
-              icon: .symbol("folder.fill"),
+              icon: .brand(item.icon),
               title: item.title,
               subtitle: nil,
               formattedSize: item.formattedSize,
@@ -43,7 +43,7 @@ struct OnboardingCleaningStep: View {
     .onAppear {
       guard !cleaningStarted else { return }
       cleaningStarted = true
-      let items = Self.findings(from: pinnedCandidates)
+      let items = store.onboardingFindings(for: pinnedCandidates)
       initialItemCount = items.count
       visibleItems = items
       Task { await runCleaning() }
@@ -75,9 +75,5 @@ struct OnboardingCleaningStep: View {
     }
     try? await Task.sleep(nanoseconds: 300_000_000)
     onFinished(summary.freedBytes > 0 ? summary.freedBytes : expectedFreedBytes)
-  }
-
-  private static func findings(from candidates: [PurgeStore.DeletionCandidate]) -> [OnboardingScanFinding] {
-    candidates.map { OnboardingScanFinding(candidate: $0) }
   }
 }

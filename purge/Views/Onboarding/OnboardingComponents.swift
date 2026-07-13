@@ -9,14 +9,17 @@ struct OnboardingScanFinding: Identifiable, Equatable {
   let id: String
   let title: String
   let formattedSize: String
+  /// Same brand artwork the in-app scan lists use, so onboarding rows aren't all generic folders.
+  let icon: AdaptiveBrandIconImage.Source
 }
 
 extension OnboardingScanFinding {
-  init(candidate: PurgeStore.DeletionCandidate) {
+  init(candidate: PurgeStore.DeletionCandidate, icon: AdaptiveBrandIconImage.Source) {
     self.init(
       id: candidate.path.standardizedFileURL.path,
       title: candidate.title,
-      formattedSize: candidate.formattedSize
+      formattedSize: candidate.formattedSize,
+      icon: icon
     )
   }
 }

@@ -4,6 +4,7 @@ import SwiftUI
 enum ScanListRowIcon {
     case symbol(String)
     case image(NSImage)
+    case brand(AdaptiveBrandIconImage.Source)
 }
 
 struct ScanListRow<Footer: View>: View {
@@ -123,6 +124,8 @@ struct ScanListRow<Footer: View>: View {
                 .frame(width: 28, height: 28)
                 .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                 .opacity(0.88)
+        case .brand(let source):
+            AdaptiveBrandIconImage(source: source, cornerRadius: 4)
         }
     }
 }
