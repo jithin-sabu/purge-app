@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.2.8</title>
+      <pubDate>Mon, 13 Jul 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>13</sparkle:version>
+      <sparkle:shortVersionString>1.2.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>New: exclude folders from scans. Pick a folder in the scan results and Purge will leave it out of future scans. Excluded folders are listed in Settings with their current size, and excluding only ever narrows what Purge looks at.</li>
+          <li>Cleanup history is now viewable in Settings. Each clean opens a detail view showing what was moved to the trash and what was skipped, along with the space freed and the item count.</li>
+          <li>Onboarding now only appears on a fresh install, not after an update. The flow is shorter and its animations respect the reduced motion setting.</li>
+          <li>Telegram media cache detection is now more reliable across different account setups.</li>
+          <li>Selecting items is easier: tapping anywhere on a row now toggles it across more of the app, and the large files action button now reads "Delete Selected".</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.2.8/Purgev1.2.8.dmg"
+        sparkle:edSignature="Eb3BXouV5IcK618hltowUY5DRzBDC7hILMZEV6FLsLfvmCTtyqr2h7opjN/oyiyph8Vd0kPZIz2ZiyGmASFsDA=="
+        length="6917995"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.2.7</title>
       <pubDate>Wed, 08 Jul 2026 12:00:00 +0000</pubDate>
       <sparkle:version>12</sparkle:version>
