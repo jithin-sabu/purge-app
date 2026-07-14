@@ -12,7 +12,7 @@
   </p>
 
 <p>
-  <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/badge/platform-macOS%2013%2B-black?logo=apple&logoColor=white" alt="Platform: macOS 13+" /></a>
+  <a href="https://github.com/jithin-sabu/purge-app/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jithin-sabu/purge-app/build.yml?branch=main&label=build" alt="Build status" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jithin-sabu/purge-app?color=blue" alt="License: MIT" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><img src="https://img.shields.io/github/v/release/jithin-sabu/purge-app?label=latest&color=red" alt="Latest release" /></a>
   <a href="https://github.com/jithin-sabu/purge-app/releases"><img src="https://img.shields.io/github/downloads/jithin-sabu/purge-app/total?label=downloads&color=brightgreen" alt="Total downloads" /></a>
