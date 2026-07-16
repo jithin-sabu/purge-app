@@ -85,7 +85,6 @@ struct PurgeApp: App {
                 .environment(\.purgeAppDelegate, appDelegate)
                 .onAppear {
                     diskStore.refresh()
-                    Task { await trashStore.refresh() }
                     menuModel.attach(store: store)
                     MenuScanNotifier.configure()
                     ScheduledNotificationPresentationDelegate.shared.onCleanAction = { [weak menuModel] in

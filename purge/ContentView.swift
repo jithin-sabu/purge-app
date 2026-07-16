@@ -612,12 +612,18 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
             .onAppear {
                 diskStore.refresh()
             }
-            // Emptying happens in Finder, so coming back is the only signal we get that
-            // the trash and the volume may have changed. Re-read both.
+            // Backstop for anything the trash watcher cannot see, e.g. another volume's
+            // free space changing while Purge was in the background.
             .onChange(of: scenePhase) { phase in
                 guard phase == .active else { return }
                 diskStore.refresh()
                 Task { await trashStore.refresh() }
+            }
+            // The trash total moving is the signal that Purge (or Finder) just changed
+            // what is on the volume, so the chart is re-read from the same event rather
+            // than from each clean path remembering to ask.
+            .onChange(of: trashStore.trashBytes) { _ in
+                diskStore.refresh()
             }
             .onChange(of: store.isScanningGeneral) { scanning in
                 if !scanning { diskStore.refresh() }
@@ -632,7 +638,6 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
             // in the trash, still on the volume. The trash total is what changed.
             .onChange(of: store.lastDeletionReport?.id) { _ in
                 diskStore.refresh()
-                Task { await trashStore.refresh() }
             }
     }
 }
@@ -726,12 +731,17 @@ struct SidebarSummaryView: View {
 
             Spacer()
 
-            Text(formatBytes(trashStore.trashBytes))
-                .font(SummaryFont.value)
-                .foregroundStyle(trashStore.hasTrashContents ? .primary : .secondary)
-                .monospacedDigit()
-                .contentTransition(reduceMotion ? .identity : .numericText())
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
+            if trashStore.hasMeasured {
+                Text(formatBytes(trashStore.trashBytes))
+                    .font(SummaryFont.value)
+                    .foregroundStyle(trashStore.hasTrashContents ? .primary : .secondary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
+            } else {
+                safeToCleanValueLoadingIndicator
+                    .accessibilityLabel("Measuring trash")
+            }
 
             if trashStore.hasTrashContents {
                 Button("Open") { trashStore.openTrashInFinder() }
