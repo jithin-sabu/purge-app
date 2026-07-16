@@ -2,24 +2,40 @@ import AppKit
 import Combine
 import Foundation
 
-/// Why an Empty Trash attempt did not complete. Each case is surfaced to the user;
-/// none of them fail silently.
+/// Why an Empty Trash attempt did not complete. Nothing here fails silently: each
+/// case either tells the user something or is a choice they just made themselves.
 enum EmptyTrashFailure: Equatable {
     /// The user declined the automation prompt, or Purge was denied in
     /// Privacy & Security > Automation.
     case automationDenied
+    /// The user backed out of a confirmation. Not a problem to explain to them.
+    case cancelled
     /// Finder accepted the event but reported an error, or the event never landed.
     case finderError(String)
 
-    var message: String {
+    /// `nil` when the user already knows why nothing happened, because they chose it.
+    var message: String? {
         switch self {
         case .automationDenied:
             return """
             Purge needs permission to control Finder to empty the trash. Allow it in \
             System Settings > Privacy & Security > Automation, or empty the trash in Finder.
             """
+        case .cancelled:
+            return nil
         case .finderError(let detail):
             return "Finder could not empty the trash. \(detail)"
+        }
+    }
+
+    /// Whether to put the user in front of the trash so they can finish by hand.
+    /// Only when Purge cannot do it, never when the user chose to stop.
+    var suggestsOpeningFinder: Bool {
+        switch self {
+        case .automationDenied, .finderError:
+            return true
+        case .cancelled:
+            return false
         }
     }
 }

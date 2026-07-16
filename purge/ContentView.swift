@@ -754,7 +754,7 @@ struct SidebarSummaryView: View {
                 Task {
                     let emptied = await trashStore.emptyTrash()
                     diskStore.refresh()
-                    if !emptied, trashStore.lastFailure != nil {
+                    if !emptied, trashStore.lastFailure?.suggestsOpeningFinder == true {
                         trashStore.openTrashInFinder()
                     }
                 }
@@ -773,8 +773,8 @@ struct SidebarSummaryView: View {
     /// One line, and only when there is something true to say. Failures win over the
     /// shortfall note because the user needs to act on them.
     private var trashNote: String? {
-        if let failure = trashStore.lastFailure {
-            return failure.message
+        if let message = trashStore.lastFailure?.message {
+            return message
         }
         guard let outcome = trashStore.lastOutcome else { return nil }
         if outcome.reclaimedLessThanExpected {
