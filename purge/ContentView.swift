@@ -630,6 +630,7 @@ struct SidebarSummaryView: View {
     @EnvironmentObject var store: PurgeStore
     @EnvironmentObject var diskStore: DiskSummaryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
 
     private enum SummaryFont {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
@@ -812,10 +813,12 @@ struct SidebarSummaryView: View {
 
     private func startInteractiveSafeCleanup() {
         let candidates = store.manualSafeCleanupCandidates()
+        // A pending onboarding celebration owns the post-clean screen; presenting
+        // the live session too would stack two summaries on the same run.
         guard store.beginInteractiveSafeCleanup(
             candidates: candidates,
             reduceMotion: reduceMotion,
-            presentsLiveSession: true
+            presentsLiveSession: !pendingOnboardingCelebration
         ) else { return }
 
         Task { @MainActor in
