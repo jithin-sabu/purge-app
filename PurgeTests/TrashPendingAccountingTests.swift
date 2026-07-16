@@ -77,6 +77,22 @@ struct TrashPendingAccountingTests {
         #expect(mixed.bytesRemovedDirectly == 9_000)
     }
 
+    /// The hero is a ceiling, so its formatter must never round up past the truth.
+    @Test func ceilingFormatterRoundsDownNeverUp() {
+        // 1.29 GB must not become "1.3 GB", which would promise space that is not there.
+        #expect(formatBytesRoundedDown(1_290_000_000) == "1.2 GB")
+        #expect(formatBytesRoundedDown(1_999_999_999) == "1.9 GB")
+        #expect(formatBytesRoundedDown(999_999_999) == "999.9 MB")
+        #expect(formatBytesRoundedDown(4_900_000) == "4.9 MB")
+        #expect(formatBytesRoundedDown(0) == "0 bytes")
+    }
+
+    /// A whole-number result should not gain a pointless ".0".
+    @Test func ceilingFormatterKeepsWholeNumbersClean() {
+        #expect(formatBytesRoundedDown(2_000_000_000) == "2 GB")
+        #expect(formatBytesRoundedDown(500_000_000) == "500 MB")
+    }
+
     /// History written before this change stored a sum of moved sizes under a field
     /// named as if it were freed space. It must decode as moved and never as reclaimed.
     @Test func legacyHistoryEntryDecodesAsMovedAndNeverAsReclaimed() throws {

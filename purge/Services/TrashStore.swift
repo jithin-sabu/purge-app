@@ -30,6 +30,19 @@ private nonisolated final class DirectoryWatcher {
     }
 }
 
+/// Whether the trash can be counted at all.
+enum TrashAccess: Equatable {
+    /// No size pass has landed yet. Sizing shells out to `du`, which takes real time on a
+    /// large trash, and "0 bytes" during that window would claim the trash is empty when
+    /// the truth is that we have not looked yet.
+    case measuring
+    case readable
+    /// `~/.Trash` is TCC protected and unreadable without Full Disk Access. This must stay
+    /// distinct from an empty trash: reporting 0 here would be a claim about the user's
+    /// trash that Purge is in no position to make.
+    case unreadable
+}
+
 /// Owns the trash total and hands the user off to Finder to act on it.
 ///
 /// Purge deliberately cannot empty the trash. Deleting for good is the user's decision
@@ -44,10 +57,10 @@ private nonisolated final class DirectoryWatcher {
 @MainActor
 final class TrashStore: ObservableObject {
     @Published private(set) var trashBytes: Int64 = 0
-    /// `false` until the first size pass lands. Sizing shells out to `du`, which takes
-    /// real time on a large trash, and "0 bytes" during that window would claim the
-    /// trash is empty when the truth is that we have not looked yet.
-    @Published private(set) var hasMeasured = false
+    @Published private(set) var access: TrashAccess = .measuring
+    /// Trash total when the app last went to the background, so a drop can be compared
+    /// against the volume's free space on return.
+    private var trashBytesWhenBackgrounded: Int64?
 
     private let trashURL: URL?
     private var watcher: DirectoryWatcher?
@@ -72,21 +85,47 @@ final class TrashStore: ObservableObject {
         startWatching()
     }
 
-    var hasTrashContents: Bool { trashBytes > 0 }
+    var hasTrashContents: Bool { access == .readable && trashBytes > 0 }
 
+    /// Counts the trash only when it is actually readable. `du` reports 0 for a directory
+    /// it is not permitted to enter, which is indistinguishable from an empty trash, so
+    /// permission is probed first rather than inferred from the size.
     func refresh() async {
         guard let trashURL else { return }
         latestPass += 1
         let pass = latestPass
 
-        let bytes = await Task.detached(priority: .utility) {
-            FolderSizing.directoryByteSize(at: trashURL)
+        let reading: (isReadable: Bool, bytes: Int64) = await Task.detached(priority: .utility) {
+            do {
+                _ = try FileManager.default.contentsOfDirectory(
+                    at: trashURL,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsSubdirectoryDescendants]
+                )
+            } catch {
+                return (false, 0)
+            }
+            return (true, FolderSizing.directoryByteSize(at: trashURL))
         }.value
 
         // A newer pass started while `du` ran; its answer is the current one.
         guard pass == latestPass else { return }
-        trashBytes = bytes
-        hasMeasured = true
+        access = reading.isReadable ? .readable : .unreadable
+        trashBytes = reading.bytes
+    }
+
+    /// Snapshots the tally so a later foreground return can tell what changed while the
+    /// user was away, e.g. emptying the trash in Finder.
+    func markBackgrounded() {
+        trashBytesWhenBackgrounded = access == .readable ? trashBytes : nil
+    }
+
+    /// How much the trash shrank while the app was in the background. `nil` when nothing
+    /// was snapshotted, the trash is unreadable, or it did not shrink.
+    func trashDropSinceBackgrounded() -> Int64? {
+        guard access == .readable, let before = trashBytesWhenBackgrounded else { return nil }
+        let drop = before - trashBytes
+        return drop > 0 ? drop : nil
     }
 
     func openTrashInFinder() {

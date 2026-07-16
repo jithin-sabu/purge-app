@@ -5,6 +5,7 @@
 //  Created by Jithin Sabu on 05/05/26.
 //
 
+import AppKit
 import SwiftUI
 
 struct ContentView: View {
@@ -605,19 +606,29 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @EnvironmentObject private var trashStore: TrashStore
-    @Environment(\.scenePhase) private var scenePhase
 
     func body(content: Content) -> some View {
         content
             .onAppear {
                 diskStore.refresh()
             }
-            // Backstop for anything the trash watcher cannot see, e.g. another volume's
-            // free space changing while Purge was in the background.
-            .onChange(of: scenePhase) { phase in
-                guard phase == .active else { return }
-                diskStore.refresh()
-                Task { await trashStore.refresh() }
+            // The user empties the trash in Finder, comes back, and the numbers update on
+            // their own. Purge confirms the outcome without performing it.
+            //
+            // `scenePhase` is useless for this on macOS: it reports `.active` once at
+            // launch and never transitions when another app takes focus (probe-proven),
+            // so the app-level notifications are the only signal that actually fires.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+                diskStore.markBackgrounded()
+                trashStore.markBackgrounded()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                Task {
+                    // Size the trash first: the free-space note is only interpretable
+                    // alongside what the trash gave up.
+                    await trashStore.refresh()
+                    diskStore.refreshAfterForegroundReturn()
+                }
             }
             // The trash total moving is the signal that Purge (or Finder) just changed
             // what is on the volume, so the chart is re-read from the same event rather
@@ -653,6 +664,8 @@ struct SidebarSummaryView: View {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
         static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
         static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
+        static let heroLabel = Font.system(size: 11, weight: .semibold, design: .rounded)
+        static let hero = Font.system(size: 26, weight: .bold, design: .rounded)
     }
 
     var body: some View {
@@ -660,16 +673,16 @@ struct SidebarSummaryView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
-                diskBar
+                hero
 
-                trashRow
-                    .padding(.top, AppStyle.Spacing.xSmall)
-
-                stats
+                reclaimableRows
                     .padding(.top, AppStyle.Spacing.small)
-                    .padding(.bottom, AppStyle.Spacing.small)
 
                 cleanButton
+                    .padding(.top, AppStyle.Spacing.small)
+
+                volumeFooter
+                    .padding(.top, AppStyle.Spacing.xSmall)
             }
             .padding(.horizontal, AppStyle.Spacing.small)
             .padding(.bottom, 10)
@@ -677,90 +690,138 @@ struct SidebarSummaryView: View {
         }
     }
 
-    private var diskBar: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            GeometryReader { geo in
-                let width = geo.size.width
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.08))
-                        .frame(height: 8)
+    /// Purge's subject is reclaimable space, so the panel leads with it. Free space is
+    /// the volume's business and macOS already reports it in Storage settings, so it sits
+    /// at the bottom as context.
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Reclaimable")
+                .font(SummaryFont.heroLabel)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
 
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.3))
-                        .frame(width: usedFraction * width, height: 8)
+            Text(heroText)
+                .font(SummaryFont.hero)
+                .foregroundStyle(reclaimableBytes > 0 ? .primary : .secondary)
+                .monospacedDigit()
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: reclaimableBytes)
+        }
+        .accessibilityElement(children: .combine)
+    }
 
-                    if safeRecoverableFraction > 0 {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(AppColors.tagSafeBg.opacity(0.5))
-                            .frame(width: safeRecoverableFraction * width, height: 8)
-                            .offset(x: max(0, (usedFraction - safeRecoverableFraction) * width))
-                    }
-                }
+    /// The two rows never double count. Cleaning transfers bytes out of "safe to clean"
+    /// and into the trash rather than adding to the total, so the sum stays put across a
+    /// clean, which is exactly right: nothing was reclaimed by moving it.
+    ///
+    /// "Up to" carries the two-step ceiling. Neither component becomes free space until
+    /// the trash is emptied, and this rounds down so the figure can only ever be beaten.
+    private var reclaimableBytes: Int64 {
+        trashStore.hasTrashContents ? trashStore.trashBytes + store.safeRecoverableBytes
+                                    : store.safeRecoverableBytes
+    }
+
+    private var heroText: String {
+        guard reclaimableBytes > 0 else { return "0 bytes" }
+        return "up to \(formatBytesRoundedDown(reclaimableBytes))"
+    }
+
+    @ViewBuilder
+    private var reclaimableRows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Hidden when the trash is empty or unreadable: an "In your trash" total is a
+            // claim about the trash, and with no Full Disk Access Purge cannot make one.
+            if showsTrashRow {
+                Divider()
+                summaryRow(
+                    label: "In your trash",
+                    value: formatBytes(trashStore.trashBytes),
+                    isProminent: true,
+                    animationValue: trashStore.trashBytes,
+                    isLoading: trashStore.access == .measuring
+                )
             }
-            .frame(height: 8)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(diskBarAccessibilityLabel)
 
-            HStack {
-                Text(formatBytes(diskStore.usedDiskBytes) + " used")
-                    .font(SummaryFont.diskCaption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(formatBytes(diskStore.freeDiskBytes) + " free")
-                    .font(SummaryFont.diskCaption)
-                    .foregroundStyle(.secondary)
-            }
+            Divider()
+            summaryRow(
+                label: "Safe to clean",
+                value: formatBytes(store.safeRecoverableBytes),
+                isProminent: store.safeRecoverableBytes > 0,
+                animationValue: store.safeRecoverableBytes,
+                isLoading: isSafeToCleanSummaryLoading
+            )
         }
     }
 
-    /// Sits directly under the capacity chart because the trash total is what
-    /// reconciles against it: these bytes are still counted as used above.
-    /// Purge shows the number and opens the door. Emptying is the user's call, made in
-    /// Finder, which owns the trash and asks its own warning first.
-    private var trashRow: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "trash")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 14, alignment: .center)
+    private var showsTrashRow: Bool {
+        switch trashStore.access {
+        case .measuring: return true
+        case .readable: return trashStore.trashBytes > 0
+        case .unreadable: return false
+        }
+    }
 
-            Text("In trash")
+    private func summaryRow(
+        label: String,
+        value: String,
+        isProminent: Bool,
+        animationValue: Int64,
+        isLoading: Bool
+    ) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
                 .font(SummaryFont.label)
                 .foregroundStyle(.secondary)
 
             Spacer()
 
-            if trashStore.hasMeasured {
-                Text(formatBytes(trashStore.trashBytes))
+            if isLoading {
+                safeToCleanValueLoadingIndicator
+                    .accessibilityLabel("Measuring")
+            } else {
+                Text(value)
                     .font(SummaryFont.value)
-                    .foregroundStyle(trashStore.hasTrashContents ? .primary : .secondary)
+                    .foregroundStyle(isProminent ? .primary : .secondary)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
-            } else {
-                safeToCleanValueLoadingIndicator
-                    .accessibilityLabel("Measuring trash")
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: animationValue)
+            }
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Volume state, reported as observation rather than as anything Purge did.
+    @ViewBuilder
+    private var volumeFooter: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let increase = diskStore.freeSpaceIncreaseBytes {
+                Text("Free space is up \(formatBytes(increase))")
+                    .font(SummaryFont.diskCaption)
+                    .foregroundStyle(.secondary)
+
+                if showsPinnedBlocksNote {
+                    Text("Some space is still held by open files or APFS snapshots and will be reclaimed later.")
+                        .font(SummaryFont.diskCaption)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
-            if trashStore.hasTrashContents {
-                Button("Open") { trashStore.openTrashInFinder() }
-                    .font(SummaryFont.diskCaption)
-                    .buttonStyle(.link)
-                    .accessibilityLabel("Open Trash in Finder")
-            }
+            Text("\(formatBytes(diskStore.freeDiskBytes)) free of \(formatBytes(diskStore.totalDiskBytes))")
+                .font(SummaryFont.diskCaption)
+                .foregroundStyle(.tertiary)
         }
     }
 
-    private var diskBarAccessibilityLabel: String {
-        var parts = [
-            "\(formatBytes(diskStore.usedDiskBytes)) used",
-            "\(formatBytes(diskStore.freeDiskBytes)) free",
-        ]
-        if store.safeRecoverableBytes > 0 {
-            parts.append("\(formatBytes(store.safeRecoverableBytes)) safe to clean shown on disk bar")
-        }
-        return parts.joined(separator: ", ")
+    /// True only when the trash actually gave up more than the volume got back. That gap
+    /// is the one thing pinned blocks genuinely explain, so the line is only shown when
+    /// the inequality really holds.
+    private var showsPinnedBlocksNote: Bool {
+        guard let increase = diskStore.freeSpaceIncreaseBytes,
+              let drop = trashStore.trashDropSinceBackgrounded()
+        else { return false }
+        return drop - increase >= VolumeCapacityReader.noiseFloorBytes
     }
 
     private var isSafeToCleanSummaryLoading: Bool {
@@ -769,53 +830,6 @@ struct SidebarSummaryView: View {
             || store.scanPhase == .cancelling
             || store.isEnrichingGeneral
             || store.isEnrichingDeveloper
-    }
-
-    private var stats: some View {
-        statRow(
-            symbol: SafetyLevel.safe.symbolName(filled: true),
-            label: SafetyLevel.safe.displayName,
-            value: formatBytes(store.safeRecoverableBytes),
-            color: AppColors.tagSafeText,
-            valueColor: store.safeRecoverableBytes > 0 ? .primary : .secondary,
-            animationValue: store.safeRecoverableBytes,
-            isValueLoading: isSafeToCleanSummaryLoading
-        )
-    }
-
-    private func statRow(
-        symbol: String,
-        label: String,
-        value: String,
-        color: Color,
-        valueColor: Color,
-        animationValue: Int64,
-        isValueLoading: Bool = false
-    ) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(color)
-                .frame(width: 14, alignment: .center)
-
-            Text(label)
-                .font(SummaryFont.label)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            if isValueLoading {
-                safeToCleanValueLoadingIndicator
-                    .accessibilityLabel("Scanning")
-            } else {
-                Text(value)
-                    .font(SummaryFont.value)
-                    .foregroundStyle(valueColor)
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: animationValue)
-            }
-        }
     }
 
     @ViewBuilder
@@ -855,18 +869,20 @@ struct SidebarSummaryView: View {
         store.safeRecoverableBytes > 0
     }
 
+    /// States the amount it will actually move, so a small clean reads as small rather
+    /// than as a generic opportunity.
     private var cleanButtonTitle: String {
         if store.isInteractiveSafeCleanupInProgress {
             return "Cleaning..."
         }
-        return canCleanSafeItems ? "Clean Safe Items" : "All clean"
+        return canCleanSafeItems ? "Clean \(formatBytes(store.safeRecoverableBytes))" : "Nothing to clean"
     }
 
+    /// No checkmark when there is nothing to clean: an empty result is a fact, not an
+    /// achievement to award.
     private var cleanButtonSystemImage: String? {
-        if store.isInteractiveSafeCleanupInProgress {
-            return nil
-        }
-        return canCleanSafeItems ? "sparkles" : "checkmark.circle.fill"
+        guard !store.isInteractiveSafeCleanupInProgress, canCleanSafeItems else { return nil }
+        return "sparkles"
     }
 
     private func startInteractiveSafeCleanup() {
@@ -889,18 +905,6 @@ struct SidebarSummaryView: View {
         }
     }
 
-    private var usedFraction: Double {
-        guard diskStore.totalDiskBytes > 0 else { return 0 }
-        return min(1.0, Double(diskStore.usedDiskBytes) / Double(diskStore.totalDiskBytes))
-    }
-
-    private var safeRecoverableFraction: Double {
-        guard diskStore.totalDiskBytes > 0 else { return 0 }
-        return min(
-            usedFraction,
-            Double(store.safeRecoverableBytes) / Double(diskStore.totalDiskBytes)
-        )
-    }
 }
 
 #Preview {
