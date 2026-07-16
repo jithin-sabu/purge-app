@@ -50,11 +50,14 @@ final class CleanupHistoryStore: ObservableObject {
             CleanupHistorySkippedItemDTO(path: $0.path, reason: $0.reason, isUserVisible: $0.isUserVisible)
         }
 
-        let freed = report.actualFreedBytes > 0 ? report.actualFreedBytes : report.totalDeleted
+        // Reclaimed is recorded only when the volume actually moved. A clean that only
+        // trashes files reclaims nothing until the trash is emptied, so this is
+        // usually nil, and that is the honest answer.
         let entry = CleanupHistoryEntry(
             date: report.timestamp,
             trigger: trigger,
-            totalFreedBytes: freed,
+            bytesMovedToTrash: report.bytesMovedToTrash,
+            bytesReclaimedOnVolume: report.reportableBytesReclaimedOnVolume,
             deletedItems: items,
             skippedItems: skipped
         )

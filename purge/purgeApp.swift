@@ -43,6 +43,7 @@ struct PurgeApp: App {
     @NSApplicationDelegateAdaptor(PurgeAppDelegate.self) private var appDelegate
     @StateObject private var store = PurgeStore()
     @StateObject private var diskStore = DiskSummaryStore()
+    @StateObject private var trashStore = TrashStore()
     @StateObject private var menuModel = MenuViewModel()
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
@@ -80,9 +81,11 @@ struct PurgeApp: App {
             AppRootView()
                 .environmentObject(store)
                 .environmentObject(diskStore)
+                .environmentObject(trashStore)
                 .environment(\.purgeAppDelegate, appDelegate)
                 .onAppear {
                     diskStore.refresh()
+                    Task { await trashStore.refresh() }
                     menuModel.attach(store: store)
                     MenuScanNotifier.configure()
                     ScheduledNotificationPresentationDelegate.shared.onCleanAction = { [weak menuModel] in
@@ -120,6 +123,7 @@ struct PurgeApp: App {
             MenuBarContentView(model: menuModel)
                 .environmentObject(store)
                 .environmentObject(diskStore)
+                .environmentObject(trashStore)
         } label: {
             MenuBarStatusIcon()
         }

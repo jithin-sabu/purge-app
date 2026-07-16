@@ -166,7 +166,7 @@ struct MenuBarContentView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 16))
                         .foregroundStyle(MenuPalette.success)
-                    Text("Cleaned \(menuBytes(bytes))")
+                    Text("Moved \(menuBytes(bytes)) to trash")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(AppColors.textPrimary)
                     Spacer(minLength: 0)

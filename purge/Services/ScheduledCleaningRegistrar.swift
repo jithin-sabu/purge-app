@@ -6,8 +6,39 @@ import UserNotifications
 /// eligible), persisted so Settings can show what the schedule last did.
 struct LastScheduledCleanOutcome: Codable, Equatable {
     let date: Date
-    let freedBytes: Int64
+    /// Bytes moved to the trash by that run, pending until the trash is emptied.
+    let bytesMovedToTrash: Int64
     let deletedCount: Int
+
+    init(date: Date, bytesMovedToTrash: Int64, deletedCount: Int) {
+        self.date = date
+        self.bytesMovedToTrash = bytesMovedToTrash
+        self.deletedCount = deletedCount
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case date, bytesMovedToTrash, deletedCount
+        /// Pre-measurement field, holding the same sum under a misleading name.
+        case freedBytes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.date = try container.decode(Date.self, forKey: .date)
+        self.deletedCount = try container.decode(Int.self, forKey: .deletedCount)
+        if let moved = try container.decodeIfPresent(Int64.self, forKey: .bytesMovedToTrash) {
+            self.bytesMovedToTrash = moved
+        } else {
+            self.bytesMovedToTrash = try container.decode(Int64.self, forKey: .freedBytes)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(date, forKey: .date)
+        try container.encode(bytesMovedToTrash, forKey: .bytesMovedToTrash)
+        try container.encode(deletedCount, forKey: .deletedCount)
+    }
 }
 
 /// macOS scheduling: repeating local reminders plus a graceful sweep when the app becomes active.
@@ -45,7 +76,7 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     private func recordOutcome(_ summary: PurgeStore.ScheduledCleaningSummary, at date: Date) {
         let outcome = LastScheduledCleanOutcome(
             date: date,
-            freedBytes: summary.freedBytes,
+            bytesMovedToTrash: summary.bytesMovedToTrash,
             deletedCount: summary.deletedCount
         )
         lastOutcome = outcome

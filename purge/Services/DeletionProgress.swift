@@ -12,7 +12,8 @@ enum DeletionProgressEvent: Sendable {
 /// ~120ms so `@Published` state is never updated per item.
 final class DeletionProgressBuffer: @unchecked Sendable {
     struct Snapshot: Equatable {
-        var bytesFreed: Int64 = 0
+        /// Running sum of sizes moved to the trash, not space reclaimed.
+        var bytesMovedToTrash: Int64 = 0
         var itemsCompleted: Int = 0
         var currentItemName: String?
     }
@@ -27,7 +28,7 @@ final class DeletionProgressBuffer: @unchecked Sendable {
         case .itemStarted(let name):
             current.currentItemName = name
         case .itemDeleted(let sizeBytes):
-            current.bytesFreed += sizeBytes
+            current.bytesMovedToTrash += sizeBytes
             current.itemsCompleted += 1
         }
     }
@@ -60,13 +61,14 @@ final class DeletionSession: ObservableObject, Identifiable {
     let startedAt: Date?
 
     @Published private(set) var phase: Phase
-    @Published private(set) var bytesFreed: Int64 = 0
+    @Published private(set) var bytesMovedToTrash: Int64 = 0
     @Published private(set) var itemsCompleted: Int = 0
     @Published private(set) var currentItemName: String?
 
     /// Final engine results — valid once `phase == .complete`. The displayed
-    /// total is exactly `finalBytesFreed`; nothing is recomputed in the view.
-    private(set) var finalBytesFreed: Int64 = 0
+    /// total is exactly `finalBytesMovedToTrash`; nothing is recomputed in the view.
+    /// This is what was moved to the trash, never a claim about reclaimed space.
+    private(set) var finalBytesMovedToTrash: Int64 = 0
     private(set) var elapsedSeconds: Double = 0
     private(set) var failedCount: Int = 0
     private(set) var movedToTrashCount: Int = 0
@@ -80,8 +82,8 @@ final class DeletionSession: ObservableObject, Identifiable {
         self.phase = .cleaning
     }
 
-    private init(freedBytes: Int64, startedAt: Date?) {
-        self.totalBytes = freedBytes
+    private init(movedBytes: Int64, startedAt: Date?) {
+        self.totalBytes = movedBytes
         self.totalItems = 0
         self.isLiveRun = false
         self.startedAt = startedAt
@@ -89,14 +91,14 @@ final class DeletionSession: ObservableObject, Identifiable {
     }
 
     static func completed(
-        freedBytes: Int64,
+        bytesMovedToTrash: Int64,
         elapsedSeconds: Double,
         movedToTrashCount: Int,
         failedItems: [CleanFailureItem],
         startedAt: Date? = nil
     ) -> DeletionSession {
-        let session = DeletionSession(freedBytes: freedBytes, startedAt: startedAt)
-        session.finalBytesFreed = freedBytes
+        let session = DeletionSession(movedBytes: bytesMovedToTrash, startedAt: startedAt)
+        session.finalBytesMovedToTrash = bytesMovedToTrash
         session.elapsedSeconds = elapsedSeconds
         session.movedToTrashCount = movedToTrashCount
         session.failedItems = failedItems
@@ -106,19 +108,19 @@ final class DeletionSession: ObservableObject, Identifiable {
 
     func applyProgress(_ snapshot: DeletionProgressBuffer.Snapshot) {
         guard phase == .cleaning else { return }
-        if bytesFreed != snapshot.bytesFreed { bytesFreed = snapshot.bytesFreed }
+        if bytesMovedToTrash != snapshot.bytesMovedToTrash { bytesMovedToTrash = snapshot.bytesMovedToTrash }
         if itemsCompleted != snapshot.itemsCompleted { itemsCompleted = snapshot.itemsCompleted }
         if currentItemName != snapshot.currentItemName { currentItemName = snapshot.currentItemName }
     }
 
     func completeRun(
-        bytesFreed finalBytes: Int64,
+        bytesMovedToTrash finalBytes: Int64,
         elapsedSeconds engineElapsed: Double,
         failedItems: [CleanFailureItem],
         movedToTrashCount: Int
     ) {
         guard phase == .cleaning else { return }
-        finalBytesFreed = finalBytes
+        finalBytesMovedToTrash = finalBytes
         if let startedAt {
             elapsedSeconds = Date().timeIntervalSince(startedAt)
         } else {
@@ -130,9 +132,9 @@ final class DeletionSession: ObservableObject, Identifiable {
         phase = .complete
     }
 
-    func removeResolvedFailure(id: UUID, additionalFreedBytes: Int64) {
+    func removeResolvedFailure(id: UUID, additionalMovedBytes: Int64) {
         failedItems.removeAll { $0.id == id }
         failedCount = failedItems.count
-        finalBytesFreed += additionalFreedBytes
+        finalBytesMovedToTrash += additionalMovedBytes
     }
 }

@@ -76,9 +76,9 @@ struct ContentView: View {
                 .zIndex(90)
             }
 
-            if isLifecycleActive, let freedBytes = store.onboardingCelebrationFreedBytes {
-                OnboardingCelebrationView(freedBytes: freedBytes) {
-                    completeOnboardingCelebration(freedBytes: freedBytes)
+            if isLifecycleActive, let movedBytes = store.onboardingCelebrationMovedToTrashBytes {
+                OnboardingCelebrationView(bytesMovedToTrash: movedBytes) {
+                    completeOnboardingCelebration()
                 }
                 .transition(.opacity)
                 .zIndex(100)
@@ -243,10 +243,9 @@ struct ContentView: View {
         }
     }
 
-    private func completeOnboardingCelebration(freedBytes: Int64) {
-        _ = freedBytes
+    private func completeOnboardingCelebration() {
         pendingOnboardingCelebration = false
-        store.onboardingCelebrationFreedBytes = nil
+        store.onboardingCelebrationMovedToTrashBytes = nil
         diskStore.refresh()
     }
 
@@ -605,6 +604,7 @@ struct ContentView: View {
 private struct DiskSummaryRefreshModifier: ViewModifier {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
+    @EnvironmentObject private var trashStore: TrashStore
 
     func body(content: Content) -> some View {
         content
@@ -620,8 +620,11 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
             .onChange(of: store.isScanningLargeFiles) { scanning in
                 if !scanning { diskStore.refresh() }
             }
+            // After a clean the chart barely moves, which is the point: the bytes are
+            // in the trash, still on the volume. The trash total is what changed.
             .onChange(of: store.lastDeletionReport?.id) { _ in
                 diskStore.refresh()
+                Task { await trashStore.refresh() }
             }
     }
 }
@@ -629,8 +632,10 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
 struct SidebarSummaryView: View {
     @EnvironmentObject var store: PurgeStore
     @EnvironmentObject var diskStore: DiskSummaryStore
+    @EnvironmentObject var trashStore: TrashStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
+    @State private var showsEmptyTrashConfirm = false
 
     private enum SummaryFont {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
@@ -644,6 +649,9 @@ struct SidebarSummaryView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 diskBar
+
+                trashRow
+                    .padding(.top, AppStyle.Spacing.xSmall)
 
                 stats
                     .padding(.top, AppStyle.Spacing.small)
@@ -692,6 +700,90 @@ struct SidebarSummaryView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Sits directly under the capacity chart because the trash total is what
+    /// reconciles against it: these bytes are still counted as used above.
+    @ViewBuilder
+    private var trashRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "trash")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14, alignment: .center)
+
+                Text("In trash")
+                    .font(SummaryFont.label)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Text(formatBytes(trashStore.trashBytes))
+                    .font(SummaryFont.value)
+                    .foregroundStyle(trashStore.hasTrashContents ? .primary : .secondary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
+
+                if trashStore.isEmptying {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Emptying trash")
+                } else if trashStore.hasTrashContents {
+                    Button("Empty") { showsEmptyTrashConfirm = true }
+                        .font(SummaryFont.diskCaption)
+                        .buttonStyle(.link)
+                        .accessibilityLabel("Empty Trash")
+                }
+            }
+
+            if let note = trashNote {
+                Text(note)
+                    .font(SummaryFont.diskCaption)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .confirmationDialog(
+            "Empty the Trash?",
+            isPresented: $showsEmptyTrashConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Empty Trash", role: .destructive) {
+                Task {
+                    let emptied = await trashStore.emptyTrash()
+                    diskStore.refresh()
+                    if !emptied, trashStore.lastFailure != nil {
+                        trashStore.openTrashInFinder()
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                """
+                This permanently deletes everything in your trash, including files you \
+                put there yourself, not only the items Purge moved. This cannot be undone.
+                """
+            )
+        }
+    }
+
+    /// One line, and only when there is something true to say. Failures win over the
+    /// shortfall note because the user needs to act on them.
+    private var trashNote: String? {
+        if let failure = trashStore.lastFailure {
+            return failure.message
+        }
+        guard let outcome = trashStore.lastOutcome else { return nil }
+        if outcome.reclaimedLessThanExpected {
+            return "Some space is still held by open files or APFS snapshots and will be reclaimed later."
+        }
+        guard let reclaimed = outcome.bytesReclaimedOnVolume,
+              reclaimed >= VolumeCapacityReader.noiseFloorBytes
+        else { return nil }
+        return "\(formatBytes(reclaimed)) reclaimed."
     }
 
     private var diskBarAccessibilityLabel: String {
@@ -849,6 +941,7 @@ struct SidebarSummaryView: View {
     ContentView()
         .environmentObject(makePreviewStore())
         .environmentObject(DiskSummaryStore())
+        .environmentObject(TrashStore())
 }
 
 private func makePreviewStore() -> PurgeStore {
