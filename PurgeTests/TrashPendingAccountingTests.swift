@@ -77,28 +77,6 @@ struct TrashPendingAccountingTests {
         #expect(mixed.bytesRemovedDirectly == 9_000)
     }
 
-    @Test func emptyTrashFlagsShortfallWhenVolumeGivesBackLess() {
-        let pinned = EmptyTrashOutcome(
-            bytesInTrashBefore: 10_000_000_000,
-            bytesReclaimedOnVolume: 2_000_000_000
-        )
-        #expect(pinned.reclaimedLessThanExpected)
-
-        let clean = EmptyTrashOutcome(
-            bytesInTrashBefore: 10_000_000_000,
-            bytesReclaimedOnVolume: 10_000_000_000
-        )
-        #expect(!clean.reclaimedLessThanExpected)
-    }
-
-    @Test func unmeasuredEmptyDoesNotClaimAShortfall() {
-        let unmeasured = EmptyTrashOutcome(
-            bytesInTrashBefore: 10_000_000_000,
-            bytesReclaimedOnVolume: nil
-        )
-        #expect(!unmeasured.reclaimedLessThanExpected)
-    }
-
     /// History written before this change stored a sum of moved sizes under a field
     /// named as if it were freed space. It must decode as moved and never as reclaimed.
     @Test func legacyHistoryEntryDecodesAsMovedAndNeverAsReclaimed() throws {

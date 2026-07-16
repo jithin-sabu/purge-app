@@ -605,11 +605,19 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @EnvironmentObject private var trashStore: TrashStore
+    @Environment(\.scenePhase) private var scenePhase
 
     func body(content: Content) -> some View {
         content
             .onAppear {
                 diskStore.refresh()
+            }
+            // Emptying happens in Finder, so coming back is the only signal we get that
+            // the trash and the volume may have changed. Re-read both.
+            .onChange(of: scenePhase) { phase in
+                guard phase == .active else { return }
+                diskStore.refresh()
+                Task { await trashStore.refresh() }
             }
             .onChange(of: store.isScanningGeneral) { scanning in
                 if !scanning { diskStore.refresh() }
@@ -635,7 +643,6 @@ struct SidebarSummaryView: View {
     @EnvironmentObject var trashStore: TrashStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
-    @State private var showsEmptyTrashConfirm = false
 
     private enum SummaryFont {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
@@ -704,86 +711,35 @@ struct SidebarSummaryView: View {
 
     /// Sits directly under the capacity chart because the trash total is what
     /// reconciles against it: these bytes are still counted as used above.
-    @ViewBuilder
+    /// Purge shows the number and opens the door. Emptying is the user's call, made in
+    /// Finder, which owns the trash and asks its own warning first.
     private var trashRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: "trash")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14, alignment: .center)
+        HStack(spacing: 6) {
+            Image(systemName: "trash")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 14, alignment: .center)
 
-                Text("In trash")
-                    .font(SummaryFont.label)
-                    .foregroundStyle(.secondary)
+            Text("In trash")
+                .font(SummaryFont.label)
+                .foregroundStyle(.secondary)
 
-                Spacer()
+            Spacer()
 
-                Text(formatBytes(trashStore.trashBytes))
-                    .font(SummaryFont.value)
-                    .foregroundStyle(trashStore.hasTrashContents ? .primary : .secondary)
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
+            Text(formatBytes(trashStore.trashBytes))
+                .font(SummaryFont.value)
+                .foregroundStyle(trashStore.hasTrashContents ? .primary : .secondary)
+                .monospacedDigit()
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
 
-                if trashStore.isEmptying {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("Emptying trash")
-                } else if trashStore.hasTrashContents {
-                    Button("Empty") { showsEmptyTrashConfirm = true }
-                        .font(SummaryFont.diskCaption)
-                        .buttonStyle(.link)
-                        .accessibilityLabel("Empty Trash")
-                }
-            }
-
-            if let note = trashNote {
-                Text(note)
+            if trashStore.hasTrashContents {
+                Button("Open") { trashStore.openTrashInFinder() }
                     .font(SummaryFont.diskCaption)
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .buttonStyle(.link)
+                    .accessibilityLabel("Open Trash in Finder")
             }
         }
-        .confirmationDialog(
-            "Empty the Trash?",
-            isPresented: $showsEmptyTrashConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Empty Trash", role: .destructive) {
-                Task {
-                    let emptied = await trashStore.emptyTrash()
-                    diskStore.refresh()
-                    if !emptied, trashStore.lastFailure?.suggestsOpeningFinder == true {
-                        trashStore.openTrashInFinder()
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                """
-                This permanently deletes everything in your trash, including files you \
-                put there yourself, not only the items Purge moved. This cannot be undone.
-                """
-            )
-        }
-    }
-
-    /// One line, and only when there is something true to say. Failures win over the
-    /// shortfall note because the user needs to act on them.
-    private var trashNote: String? {
-        if let message = trashStore.lastFailure?.message {
-            return message
-        }
-        guard let outcome = trashStore.lastOutcome else { return nil }
-        if outcome.reclaimedLessThanExpected {
-            return "Some space is still held by open files or APFS snapshots and will be reclaimed later."
-        }
-        guard let reclaimed = outcome.bytesReclaimedOnVolume,
-              reclaimed >= VolumeCapacityReader.noiseFloorBytes
-        else { return nil }
-        return "\(formatBytes(reclaimed)) reclaimed."
     }
 
     private var diskBarAccessibilityLabel: String {
