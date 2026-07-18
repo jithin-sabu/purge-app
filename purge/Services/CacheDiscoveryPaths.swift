@@ -214,7 +214,7 @@ enum CacheDiscoveryPaths {
         var results: [URL] = []
         for bundleDir in bundleDirs {
             let bundleID = bundleDir.lastPathComponent
-            guard !protectedContainerBundleIDs.contains(bundleID) else { continue }
+            guard !DeletionSafetyPolicy.isProtectedContainerBundleID(bundleID) else { continue }
             let cachesRoot = bundleDir
                 .appendingPathComponent("Data/Library/Caches", isDirectory: true)
             guard fm.fileExists(atPath: cachesRoot.path) else { continue }
