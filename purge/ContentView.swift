@@ -666,7 +666,6 @@ struct SidebarSummaryView: View {
     @EnvironmentObject var trashStore: TrashStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
-    @State private var showEmptyTrashConfirmation = false
 
     private enum SummaryFont {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
@@ -736,18 +735,6 @@ struct SidebarSummaryView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppStyle.Spacing.small)
         .background(cardBackground)
-        .confirmationDialog(
-            "Empty the trash?",
-            isPresented: $showEmptyTrashConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Empty Trash", role: .destructive) {
-                emptyTrash()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently deletes everything in your Trash. It cannot be undone.")
-        }
     }
 
     /// Safe-to-clean is what the Clean button actually moves, so it leads the card as the
@@ -759,20 +746,35 @@ struct SidebarSummaryView: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
-            Text(heroAmountText)
-                .font(SummaryFont.hero)
-                .foregroundStyle(safeToCleanBytes > 0 ? .primary : .secondary)
-                .monospacedDigit()
-                .contentTransition(reduceMotion ? .identity : .numericText())
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: safeToCleanBytes)
+            if isSafeToCleanLoading {
+                ScanningStatusText()
+            } else {
+                Text(heroAmountText)
+                    .font(SummaryFont.hero)
+                    .foregroundStyle(safeToCleanBytes > 0 ? .primary : .secondary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: safeToCleanBytes)
+            }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(heroAccessibilityLabel)
+        .accessibilityLabel(isSafeToCleanLoading ? "Safe to clean, measuring" : heroAccessibilityLabel)
     }
 
     private var safeToCleanBytes: Int64 {
         store.safeRecoverableBytes
     }
+
+    /// Before the first size pass lands the number would read a misleading 0, so the hero
+    /// shows a measuring indicator until a real total is available.
+    private var isSafeToCleanLoading: Bool {
+        guard store.safeRecoverableBytes == 0 else { return false }
+        return store.scanPhase == .scanning
+            || store.scanPhase == .cancelling
+            || store.isEnrichingGeneral
+            || store.isEnrichingDeveloper
+    }
+
 
     private var heroAmountText: String {
         guard safeToCleanBytes > 0 else { return "0" }
@@ -788,57 +790,26 @@ struct SidebarSummaryView: View {
     /// inline outline Empty action. Structural differentiation only — no colour tiers.
     private var inTrashRow: some View {
         HStack(spacing: 6) {
-            // Label and value combine into one accessibility element; the Empty button
-            // stays separate so it keeps its own action and label.
-            HStack(spacing: 6) {
-                Text("In trash")
-                    .font(SummaryFont.label)
-                    .foregroundStyle(.secondary)
+            Text("In trash")
+                .font(SummaryFont.label)
+                .foregroundStyle(.secondary)
 
-                Spacer()
+            Spacer()
 
-                if trashStore.access == .measuring {
-                    safeToCleanValueLoadingIndicator
-                        .accessibilityLabel("Measuring")
-                } else {
-                    Text(formatBytes(trashStore.trashBytes))
-                        .font(SummaryFont.value)
-                        .foregroundStyle(trashStore.trashBytes > 0 ? .primary : .secondary)
-                        .monospacedDigit()
-                        .contentTransition(reduceMotion ? .identity : .numericText())
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
-                }
+            if trashStore.access == .measuring {
+                safeToCleanValueLoadingIndicator
+                    .accessibilityLabel("Measuring")
+            } else {
+                Text(formatBytes(trashStore.trashBytes))
+                    .font(SummaryFont.value)
+                    .foregroundStyle(trashStore.trashBytes > 0 ? .primary : .secondary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
             }
-            .accessibilityElement(children: .combine)
-
-            emptyTrashButton
         }
         .padding(.vertical, 5)
-    }
-
-    /// Outline, not filled: the one permanent action in the app reads as secondary to the
-    /// reversible Clean above it. Muted border and text, trash glyph plus label.
-    private var emptyTrashButton: some View {
-        Button {
-            showEmptyTrashConfirmation = true
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "trash")
-                Text("Empty")
-            }
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .foregroundStyle(AppColors.textSecondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(!trashStore.hasTrashContents)
-        .accessibilityLabel("Empty trash")
-        .accessibilityHint("Permanently deletes everything in your Trash. This cannot be undone.")
+        .accessibilityElement(children: .combine)
     }
 
     /// The two-step ceiling, stated once at the foot of the card as context, not an action.
@@ -851,15 +822,10 @@ struct SidebarSummaryView: View {
         Text("up to \(formatBytesRoundedDown(reclaimableTotalBytes)) reclaimable in total")
             .font(SummaryFont.diskCaption)
             .foregroundStyle(.tertiary)
+            .monospacedDigit()
+            .contentTransition(reduceMotion ? .identity : .numericText())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: reclaimableTotalBytes)
             .frame(maxWidth: .infinity, alignment: .center)
-    }
-
-    /// TODO: connect the actual empty-trash call. No in-app permanent-delete path exists
-    /// yet (it was deliberately removed previously); this stub presents the confirmed
-    /// action without removing any files. See PR description.
-    private func emptyTrash() {
-        // Intentionally not implemented — the underlying empty-trash service call needs
-        // to be built or connected.
     }
 
     /// Used space and free space as two segments of one volume, drawn from the same
@@ -1032,6 +998,85 @@ struct SidebarSummaryView: View {
         }
     }
 
+}
+
+/// While the safe-to-clean total is still being measured, the hero shows the same
+/// playful cycling status words as the menu-bar scan hero, each swap drifting up with a
+/// blur-fade. Driven by a common-modes timer so the cycle survives any tracking run loop,
+/// and torn down on disappear so a scan that outlives the view doesn't keep it animating.
+private struct ScanningStatusText: View {
+    private static let words = [
+        "Pondering…",
+        "Rummaging…",
+        "Snooping around…",
+        "Dusting shelves…",
+        "Sifting…",
+        "Counting crumbs…",
+        "Peeking in caches…",
+        "Lifting the rug…",
+    ]
+
+    @State private var index = Int.random(in: 0 ..< ScanningStatusText.words.count)
+    @State private var cycleTimer: Timer?
+
+    var body: some View {
+        // ZStack so the outgoing and incoming words overlap while animating rather than
+        // reflowing side by side.
+        ZStack(alignment: .leading) {
+            Text(Self.words[index])
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .id(index)
+                .transition(.asymmetric(
+                    insertion: .heroStatusBlurFade(offsetY: 5),
+                    removal: .heroStatusBlurFade(offsetY: -5)
+                ))
+        }
+        .frame(height: 24, alignment: .leading)
+        .accessibilityLabel("Measuring")
+        .onAppear { startCycling() }
+        .onDisappear { stopCycling() }
+    }
+
+    private func startCycling() {
+        stopCycling()
+        let timer = Timer(timeInterval: 1.6, repeats: true) { _ in
+            withAnimation(MenuViewModel.swapAnimation) {
+                index = (index + 1) % Self.words.count
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        cycleTimer = timer
+    }
+
+    private func stopCycling() {
+        cycleTimer?.invalidate()
+        cycleTimer = nil
+    }
+}
+
+/// Blur + fade + small vertical drift for the hero status word swap. Local to this file;
+/// the menu bar keeps its own equivalent behind a fileprivate transition.
+private struct HeroStatusBlurFadeModifier: ViewModifier {
+    let radius: CGFloat
+    let opacity: Double
+    let offsetY: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: radius)
+            .opacity(opacity)
+            .offset(y: offsetY)
+    }
+}
+
+extension AnyTransition {
+    fileprivate static func heroStatusBlurFade(offsetY: CGFloat) -> AnyTransition {
+        .modifier(
+            active: HeroStatusBlurFadeModifier(radius: 6, opacity: 0, offsetY: offsetY),
+            identity: HeroStatusBlurFadeModifier(radius: 0, opacity: 1, offsetY: 0)
+        )
+    }
 }
 
 #Preview {
