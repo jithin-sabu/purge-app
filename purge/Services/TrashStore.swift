@@ -65,12 +65,18 @@ final class TrashStore: ObservableObject {
     private let trashURL: URL?
     private var watcher: DirectoryWatcher?
     private var debounceTask: Task<Void, Never>?
+    private var retryTask: Task<Void, Never>?
     /// Guards against a slow size pass overwriting a newer one.
     private var latestPass = 0
 
     /// Sizing the trash shells out to `du`, and emptying a large trash fires many events
     /// in a row, so coalesce them into one pass.
     private static let debounce = Duration.milliseconds(400)
+
+    /// How long to wait before re-measuring after a size pass came back empty-handed on a
+    /// non-empty trash. A scan or a deletion spawns many `du` processes at once, and a
+    /// starved trash measurement returns 0; this lets the load clear before trying again.
+    private static let retryDelay = Duration.milliseconds(1200)
 
     init() {
         trashURL = try? FileManager.default.url(
@@ -79,9 +85,12 @@ final class TrashStore: ObservableObject {
             appropriateFor: nil,
             create: false
         )
+        TrashDebugLog.log(
+            "=== TrashStore init pid=\(ProcessInfo.processInfo.processIdentifier) trashURL=\(trashURL?.path ?? "nil") ==="
+        )
         // Own the first read here rather than leaning on a view's onAppear, so the number
         // is right from launch no matter which screen mounts first.
-        Task { await refresh() }
+        Task { await refresh(trigger: "init") }
         startWatching()
     }
 
@@ -90,34 +99,145 @@ final class TrashStore: ObservableObject {
     /// Counts the trash only when it is actually readable. `du` reports 0 for a directory
     /// it is not permitted to enter, which is indistinguishable from an empty trash, so
     /// permission is probed first rather than inferred from the size.
-    func refresh() async {
+    ///
+    /// A 0-byte reading is only trusted when the trash directory is genuinely empty. `du`
+    /// also reports 0 when it fails or is starved — which happens during scans and deletions,
+    /// where many `du` processes run at once and the watcher fires a burst of refreshes. On
+    /// a non-empty trash that measured 0, the old total is kept and a retry is scheduled,
+    /// rather than flashing the count to zero. A directory listing that fails under the same
+    /// load gets the identical treatment: only a permission denial means "unreadable".
+    func refresh(trigger: String = "direct") async {
         guard let trashURL else { return }
         latestPass += 1
         let pass = latestPass
+        TrashDebugLog.log(
+            "pass=\(pass) start trigger=\(trigger) current access=\(access) trashBytes=\(trashBytes)"
+        )
 
-        let reading: (isReadable: Bool, bytes: Int64) = await Task.detached(priority: .utility) {
+        let reading: TrashReading = await Task.detached(priority: .utility) {
+            let entries: [URL]
             do {
-                _ = try FileManager.default.contentsOfDirectory(
+                entries = try FileManager.default.contentsOfDirectory(
                     at: trashURL,
                     includingPropertiesForKeys: nil,
                     options: [.skipsSubdirectoryDescendants]
                 )
             } catch {
-                return (false, 0)
+                let denial = Self.isPermissionDenial(error)
+                TrashDebugLog.log(
+                    "pass=\(pass) listing FAILED permissionDenial=\(denial) error=\(String(reflecting: error))"
+                )
+                return denial ? .permissionDenied : .readFailed
             }
-            return (true, FolderSizing.directoryByteSize(at: trashURL))
+            if entries.isEmpty {
+                TrashDebugLog.log("pass=\(pass) listing EMPTY (0 entries)")
+                return .empty
+            }
+            let duStart = Date()
+            let measured = FolderSizing.directoryByteSize(at: trashURL)
+            let preview = entries.prefix(5).map(\.lastPathComponent).joined(separator: ", ")
+            TrashDebugLog.log(
+                "pass=\(pass) listing \(entries.count) entries [\(preview)\(entries.count > 5 ? ", …" : "")] "
+                + "du measured=\(measured) bytes in \(String(format: "%.2f", -duStart.timeIntervalSinceNow))s"
+            )
+            return .nonEmpty(measuredBytes: measured)
         }.value
 
         // A newer pass started while `du` ran; its answer is the current one.
-        guard pass == latestPass else { return }
-        access = reading.isReadable ? .readable : .unreadable
-        trashBytes = reading.bytes
+        guard pass == latestPass else {
+            TrashDebugLog.log("pass=\(pass) DISCARDED (stale; latest=\(latestPass))")
+            return
+        }
+
+        let resolution = Self.resolveMeasurement(reading)
+        switch resolution {
+        case .unreadable:
+            retryTask?.cancel()
+            access = .unreadable
+            trashBytes = 0
+        case .apply(let bytes):
+            retryTask?.cancel()
+            access = .readable
+            trashBytes = bytes
+        case .keepAndRetry:
+            // Keep the last good total (staying in `.measuring` if none has ever landed, so
+            // the UI never claims the trash is empty) and re-measure once the load clears.
+            if trashBytes > 0 {
+                access = .readable
+            }
+            scheduleRetry()
+        }
+        TrashDebugLog.log(
+            "pass=\(pass) resolved \(resolution) -> published access=\(access) trashBytes=\(trashBytes)"
+        )
+    }
+
+    /// What one look at the trash directory found, before deciding what it means for the
+    /// published state.
+    nonisolated enum TrashReading: Equatable, Sendable {
+        /// The directory listing was refused for lack of permission (no Full Disk Access).
+        case permissionDenied
+        /// The directory listing failed for some other, transient reason — file-descriptor
+        /// exhaustion or interruption under the load of a scan or a clean. Says nothing
+        /// about what is in the trash.
+        case readFailed
+        case empty
+        case nonEmpty(measuredBytes: Int64)
+    }
+
+    /// What a size pass means for the published state, computed purely so it can be tested
+    /// without a real trash directory. Two subtleties it captures: a 0-byte reading is only
+    /// the truth when the trash is genuinely empty (`du` also reports 0 when it fails or is
+    /// starved — routine during scans and deletions), and only a permission denial may be
+    /// reported as "unreadable" — that state zeroes the total and claims the user lacks
+    /// Full Disk Access, which a transient read failure under load is no evidence of.
+    enum TrashMeasurement: Equatable {
+        /// Trash unreadable (no Full Disk Access); report as such.
+        case unreadable
+        /// A trustworthy readable total to publish; `bytes` is 0 only for a genuinely empty trash.
+        case apply(bytes: Int64)
+        /// The pass came back empty-handed — a failed listing, or `du` measuring 0 on a
+        /// non-empty trash. Keep the current total and re-measure rather than resetting to zero.
+        case keepAndRetry
+    }
+
+    nonisolated static func resolveMeasurement(_ reading: TrashReading) -> TrashMeasurement {
+        switch reading {
+        case .permissionDenied:
+            return .unreadable
+        case .readFailed:
+            return .keepAndRetry
+        case .empty:
+            return .apply(bytes: 0)
+        case .nonEmpty(let measuredBytes):
+            return measuredBytes > 0 ? .apply(bytes: measuredBytes) : .keepAndRetry
+        }
+    }
+
+    /// Whether a `contentsOfDirectory` failure means the trash is off limits (TCC / POSIX
+    /// permission denial) as opposed to a transient failure under load. Walks the
+    /// underlying-error chain because the permission code is often one level down.
+    nonisolated static func isPermissionDenial(_ error: Error) -> Bool {
+        var current: NSError? = error as NSError
+        while let nsError = current {
+            if nsError.domain == NSCocoaErrorDomain,
+               nsError.code == CocoaError.fileReadNoPermission.rawValue {
+                return true
+            }
+            if nsError.domain == NSPOSIXErrorDomain,
+               nsError.code == Int(EACCES) || nsError.code == Int(EPERM) {
+                return true
+            }
+            current = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return false
     }
 
     /// Snapshots the tally so a later foreground return can tell what changed while the
     /// user was away, e.g. emptying the trash in Finder.
     func markBackgrounded() {
         trashBytesWhenBackgrounded = access == .readable ? trashBytes : nil
+        TrashDebugLog.log("markBackgrounded snapshot=\(trashBytesWhenBackgrounded.map(String.init) ?? "nil")")
     }
 
     /// How much the trash shrank while the app was in the background. `nil` when nothing
@@ -136,8 +256,10 @@ final class TrashStore: ObservableObject {
     private func startWatching() {
         guard let trashURL else { return }
         watcher = DirectoryWatcher(url: trashURL) { [weak self] in
+            TrashDebugLog.log("watcher event")
             Task { @MainActor in self?.scheduleRefresh() }
         }
+        TrashDebugLog.log("watcher \(watcher == nil ? "FAILED to start" : "started")")
     }
 
     private func scheduleRefresh() {
@@ -145,7 +267,20 @@ final class TrashStore: ObservableObject {
         debounceTask = Task { @MainActor in
             try? await Task.sleep(for: Self.debounce)
             guard !Task.isCancelled else { return }
-            await refresh()
+            await refresh(trigger: "watcher-debounced")
+        }
+    }
+
+    /// Re-measures after a starved size pass. Only one retry is ever pending; a later
+    /// success (or a fresh watcher-driven refresh) cancels it. If the retry also comes
+    /// back empty-handed, `refresh()` schedules another, so this self-terminates once the
+    /// competing `du` load clears.
+    private func scheduleRetry() {
+        retryTask?.cancel()
+        retryTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.retryDelay)
+            guard !Task.isCancelled else { return }
+            await refresh(trigger: "retry")
         }
     }
 }
