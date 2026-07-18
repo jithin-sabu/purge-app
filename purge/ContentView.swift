@@ -666,6 +666,7 @@ struct SidebarSummaryView: View {
     @EnvironmentObject var trashStore: TrashStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
+    @State private var showEmptyTrashConfirmation = false
 
     private enum SummaryFont {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
@@ -712,129 +713,153 @@ struct SidebarSummaryView: View {
         .background(cardBackground)
     }
 
-    /// The reclaimable numbers and the one action that moves them, grouped so the button
-    /// reads as closing the block of rows it acts on.
+    /// Safe-to-clean is the hero the Clean button honors. The trash sits below as its own
+    /// secondary path with its own action, so the two never read as one summed total.
     private var reclaimableCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             hero
 
-            // The one hairline in this card: it sets the headline off from the breakdown
-            // it totals. The two rows below sit flush with no divider between them.
+            cleanButton
+                .padding(.top, AppStyle.Spacing.small)
+
+            // The one hairline in this card: it sets the trash off as a separate path
+            // below the primary action rather than another line of the same total.
             Divider()
                 .padding(.top, AppStyle.Spacing.small)
 
-            reclaimableRows
+            inTrashRow
                 .padding(.top, AppStyle.Spacing.xxSmall)
 
-            cleanButton
-                .padding(.top, AppStyle.Spacing.small)
+            totalFootnote
+                .padding(.top, AppStyle.Spacing.xxSmall)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppStyle.Spacing.small)
         .background(cardBackground)
+        .confirmationDialog(
+            "Empty the trash?",
+            isPresented: $showEmptyTrashConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Empty Trash", role: .destructive) {
+                emptyTrash()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes everything in your Trash. It cannot be undone.")
+        }
     }
 
-    /// Purge's subject is reclaimable space, so its card leads with the headline figure —
-    /// the qualifier sits behind the number so the number carries the claim.
+    /// Safe-to-clean is what the Clean button actually moves, so it leads the card as the
+    /// hero — the number carries the claim and the button below repeats it verbatim.
     private var hero: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text("Reclaimable")
+            Text("Safe to Clean")
                 .font(SummaryFont.heroLabel)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                if reclaimableBytes > 0 {
-                    Text("up to")
-                        .font(SummaryFont.heroPrefix)
-                        .foregroundStyle(.tertiary)
-                }
-
-                Text(heroAmountText)
-                    .font(SummaryFont.hero)
-                    .foregroundStyle(reclaimableBytes > 0 ? .primary : .secondary)
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: reclaimableBytes)
-            }
+            Text(heroAmountText)
+                .font(SummaryFont.hero)
+                .foregroundStyle(safeToCleanBytes > 0 ? .primary : .secondary)
+                .monospacedDigit()
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: safeToCleanBytes)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(heroAccessibilityLabel)
     }
 
-    /// The two rows never double count. Cleaning transfers bytes out of "safe to clean"
-    /// and into the trash rather than adding to the total, so the sum stays put across a
-    /// clean, which is exactly right: nothing was reclaimed by moving it.
-    ///
-    /// "Up to" carries the two-step ceiling. Neither component becomes free space until
-    /// the trash is emptied, and this rounds down so the figure can only ever be beaten.
-    private var reclaimableBytes: Int64 {
-        trashStore.hasTrashContents ? trashStore.trashBytes + store.safeRecoverableBytes
-                                    : store.safeRecoverableBytes
+    private var safeToCleanBytes: Int64 {
+        store.safeRecoverableBytes
     }
 
     private var heroAmountText: String {
-        guard reclaimableBytes > 0 else { return "0" }
-        return formatBytesRoundedDown(reclaimableBytes)
+        guard safeToCleanBytes > 0 else { return "0" }
+        return formatBytes(safeToCleanBytes)
     }
 
     private var heroAccessibilityLabel: String {
-        guard reclaimableBytes > 0 else { return "Reclaimable 0" }
-        return "Reclaimable up to \(formatBytesRoundedDown(reclaimableBytes))"
+        guard safeToCleanBytes > 0 else { return "Safe to clean 0" }
+        return "Safe to clean \(formatBytes(safeToCleanBytes))"
     }
 
-    @ViewBuilder
-    private var reclaimableRows: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Both rows are always present so the breakdown stays stable. An empty (or not
-            // yet readable) trash shows 0 rather than vanishing; the measuring indicator
-            // covers the window before the first size pass lands.
-            summaryRow(
-                label: "In Trash",
-                value: formatBytes(trashStore.trashBytes),
-                isProminent: trashStore.trashBytes > 0,
-                animationValue: trashStore.trashBytes,
-                isLoading: trashStore.access == .measuring
-            )
-
-            summaryRow(
-                label: "Safe to Clean",
-                value: formatBytes(store.safeRecoverableBytes),
-                isProminent: store.safeRecoverableBytes > 0,
-                animationValue: store.safeRecoverableBytes,
-                isLoading: isSafeToCleanSummaryLoading
-            )
-        }
-    }
-
-    private func summaryRow(
-        label: String,
-        value: String,
-        isProminent: Bool,
-        animationValue: Int64,
-        isLoading: Bool
-    ) -> some View {
+    /// The trash as a secondary path: same secondary-row weight as elsewhere, plus an
+    /// inline outline Empty action. Structural differentiation only — no colour tiers.
+    private var inTrashRow: some View {
         HStack(spacing: 6) {
-            Text(label)
-                .font(SummaryFont.label)
-                .foregroundStyle(.secondary)
+            // Label and value combine into one accessibility element; the Empty button
+            // stays separate so it keeps its own action and label.
+            HStack(spacing: 6) {
+                Text("In trash")
+                    .font(SummaryFont.label)
+                    .foregroundStyle(.secondary)
 
-            Spacer()
+                Spacer()
 
-            if isLoading {
-                safeToCleanValueLoadingIndicator
-                    .accessibilityLabel("Measuring")
-            } else {
-                Text(value)
-                    .font(SummaryFont.value)
-                    .foregroundStyle(isProminent ? .primary : .secondary)
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: animationValue)
+                if trashStore.access == .measuring {
+                    safeToCleanValueLoadingIndicator
+                        .accessibilityLabel("Measuring")
+                } else {
+                    Text(formatBytes(trashStore.trashBytes))
+                        .font(SummaryFont.value)
+                        .foregroundStyle(trashStore.trashBytes > 0 ? .primary : .secondary)
+                        .monospacedDigit()
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
+                }
             }
+            .accessibilityElement(children: .combine)
+
+            emptyTrashButton
         }
         .padding(.vertical, 5)
-        .accessibilityElement(children: .combine)
+    }
+
+    /// Outline, not filled: the one permanent action in the app reads as secondary to the
+    /// reversible Clean above it. Muted border and text, trash glyph plus label.
+    private var emptyTrashButton: some View {
+        Button {
+            showEmptyTrashConfirmation = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "trash")
+                Text("Empty")
+            }
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(AppColors.textSecondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!trashStore.hasTrashContents)
+        .accessibilityLabel("Empty trash")
+        .accessibilityHint("Permanently deletes everything in your Trash. This cannot be undone.")
+    }
+
+    /// The two-step ceiling, stated once at the foot of the card as context, not an action.
+    /// Rounds down so the figure can only ever be beaten, and sums both paths at render time.
+    private var reclaimableTotalBytes: Int64 {
+        store.safeRecoverableBytes + trashStore.trashBytes
+    }
+
+    private var totalFootnote: some View {
+        Text("up to \(formatBytesRoundedDown(reclaimableTotalBytes)) reclaimable in total")
+            .font(SummaryFont.diskCaption)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// TODO: connect the actual empty-trash call. No in-app permanent-delete path exists
+    /// yet (it was deliberately removed previously); this stub presents the confirmed
+    /// action without removing any files. See PR description.
+    private func emptyTrash() {
+        // Intentionally not implemented — the underlying empty-trash service call needs
+        // to be built or connected.
     }
 
     /// Used space and free space as two segments of one volume, drawn from the same
@@ -940,14 +965,6 @@ struct SidebarSummaryView: View {
         "\(formatStorageBytes(usedDiskBytes)) used of \(formatStorageBytes(diskStore.totalDiskBytes))"
     }
 
-    private var isSafeToCleanSummaryLoading: Bool {
-        guard store.safeRecoverableBytes == 0 else { return false }
-        return store.scanPhase == .scanning
-            || store.scanPhase == .cancelling
-            || store.isEnrichingGeneral
-            || store.isEnrichingDeveloper
-    }
-
     @ViewBuilder
     private var safeToCleanValueLoadingIndicator: some View {
         if reduceMotion {
@@ -970,7 +987,7 @@ struct SidebarSummaryView: View {
         } label: {
             CleaningButtonLabel(
                 title: cleanButtonTitle,
-                systemImage: canCleanSafeItems ? "trash.fill" : nil,
+                systemImage: nil,
                 isCleaning: store.isInteractiveSafeCleanupInProgress,
                 spinnerTint: AppColors.buttonPrimaryText
             )
