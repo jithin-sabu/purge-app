@@ -665,11 +665,13 @@ struct SidebarSummaryView: View {
         static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
         static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
         static let heroLabel = Font.system(size: 11, weight: .semibold, design: .rounded)
-        static let hero = Font.system(size: 26, weight: .bold, design: .rounded)
+        /// Qualifier sits behind the figure so the number carries the reclaimable claim.
+        static let heroPrefix = Font.system(size: 13, weight: .medium, design: .rounded)
+        static let hero = Font.system(size: 20, weight: .bold, design: .rounded)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
@@ -678,15 +680,17 @@ struct SidebarSummaryView: View {
                 reclaimableRows
                     .padding(.top, AppStyle.Spacing.small)
 
+                // Tight to the breakdown above so the button groups with the rows it
+                // acts on. The slack falls below instead, where the footer hairline
+                // makes the button read as closing the content block.
                 cleanButton
-                    .padding(.top, AppStyle.Spacing.small)
-
-                volumeFooter
-                    .padding(.top, AppStyle.Spacing.xSmall)
+                    .padding(.top, AppStyle.Spacing.xxSmall)
             }
             .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.bottom, 10)
-            .padding(.top, 6)
+            .padding(.top, 14)
+            .padding(.bottom, AppStyle.Spacing.small)
+
+            volumeFooter
         }
     }
 
@@ -700,14 +704,23 @@ struct SidebarSummaryView: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
-            Text(heroText)
-                .font(SummaryFont.hero)
-                .foregroundStyle(reclaimableBytes > 0 ? .primary : .secondary)
-                .monospacedDigit()
-                .contentTransition(reduceMotion ? .identity : .numericText())
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: reclaimableBytes)
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                if reclaimableBytes > 0 {
+                    Text("up to")
+                        .font(SummaryFont.heroPrefix)
+                        .foregroundStyle(.tertiary)
+                }
+
+                Text(heroAmountText)
+                    .font(SummaryFont.hero)
+                    .foregroundStyle(reclaimableBytes > 0 ? .primary : .secondary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: reclaimableBytes)
+            }
         }
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(heroAccessibilityLabel)
     }
 
     /// The two rows never double count. Cleaning transfers bytes out of "safe to clean"
@@ -721,22 +734,27 @@ struct SidebarSummaryView: View {
                                     : store.safeRecoverableBytes
     }
 
-    private var heroText: String {
-        guard reclaimableBytes > 0 else { return "0 bytes" }
-        return "up to \(formatBytesRoundedDown(reclaimableBytes))"
+    private var heroAmountText: String {
+        guard reclaimableBytes > 0 else { return "0" }
+        return formatBytesRoundedDown(reclaimableBytes)
+    }
+
+    private var heroAccessibilityLabel: String {
+        guard reclaimableBytes > 0 else { return "Reclaimable 0" }
+        return "Reclaimable up to \(formatBytesRoundedDown(reclaimableBytes))"
     }
 
     @ViewBuilder
     private var reclaimableRows: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Hidden when the trash is empty or unreadable: an "In your trash" total is a
-            // claim about the trash, and with no Full Disk Access Purge cannot make one.
+            // Shown at zero when empty so the breakdown stays stable. Hidden only when
+            // trash is unreadable: without Full Disk Access Purge cannot claim a total.
             if showsTrashRow {
                 Divider()
                 summaryRow(
                     label: "In your trash",
                     value: formatBytes(trashStore.trashBytes),
-                    isProminent: true,
+                    isProminent: trashStore.trashBytes > 0,
                     animationValue: trashStore.trashBytes,
                     isLoading: trashStore.access == .measuring
                 )
@@ -755,8 +773,7 @@ struct SidebarSummaryView: View {
 
     private var showsTrashRow: Bool {
         switch trashStore.access {
-        case .measuring: return true
-        case .readable: return trashStore.trashBytes > 0
+        case .measuring, .readable: return true
         case .unreadable: return false
         }
     }
@@ -791,37 +808,58 @@ struct SidebarSummaryView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Volume state, reported as observation rather than as anything Purge did.
-    @ViewBuilder
+    /// Volume state, reported as observation rather than as anything Purge did. Pinned to
+    /// the panel base as a fixed footer — set off by a hairline and a faint tint one step
+    /// off the panel surface — so free space reads as context, never as an action. The tint
+    /// bleeds full width past the panel's inner padding, then re-pads its own contents.
     private var volumeFooter: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if let increase = diskStore.freeSpaceIncreaseBytes {
-                Text("Free space is up \(formatBytes(increase))")
-                    .font(SummaryFont.diskCaption)
-                    .foregroundStyle(.secondary)
-
-                if showsPinnedBlocksNote {
-                    Text("Some space is still held by open files or APFS snapshots and will be reclaimed later.")
-                        .font(SummaryFont.diskCaption)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            diskUsageBar
 
             Text("\(formatBytes(diskStore.freeDiskBytes)) free of \(formatBytes(diskStore.totalDiskBytes))")
                 .font(SummaryFont.diskCaption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.xSmall)
+        .background(AppColors.bgElevated)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(AppColors.borderSubtle)
+                .frame(height: 0.5)
         }
     }
 
-    /// True only when the trash actually gave up more than the volume got back. That gap
-    /// is the one thing pinned blocks genuinely explain, so the line is only shown when
-    /// the inequality really holds.
-    private var showsPinnedBlocksNote: Bool {
-        guard let increase = diskStore.freeSpaceIncreaseBytes,
-              let drop = trashStore.trashDropSinceBackgrounded()
-        else { return false }
-        return drop - increase >= VolumeCapacityReader.noiseFloorBytes
+    /// Used space as a proportion of the volume, drawn from the same free/total figures as
+    /// the caption. The track is the border hairline and the fill is muted text rather than
+    /// an accent, so the bar stays observational — not progress toward a goal.
+    private var diskUsageBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule(style: .continuous)
+                    .fill(AppColors.borderSubtle)
+
+                Capsule(style: .continuous)
+                    .fill(AppColors.textSecondary)
+                    .frame(width: geo.size.width * diskUsageFraction)
+            }
+        }
+        .frame(height: 5)
+        .accessibilityElement()
+        .accessibilityLabel(diskUsageAccessibilityLabel)
+    }
+
+    private var diskUsageFraction: CGFloat {
+        let total = diskStore.totalDiskBytes
+        guard total > 0 else { return 0 }
+        let used = max(0, total - diskStore.freeDiskBytes)
+        return min(1, CGFloat(Double(used) / Double(total)))
+    }
+
+    private var diskUsageAccessibilityLabel: String {
+        let used = max(0, diskStore.totalDiskBytes - diskStore.freeDiskBytes)
+        return "\(formatBytes(used)) used of \(formatBytes(diskStore.totalDiskBytes))"
     }
 
     private var isSafeToCleanSummaryLoading: Bool {
@@ -854,7 +892,7 @@ struct SidebarSummaryView: View {
         } label: {
             CleaningButtonLabel(
                 title: cleanButtonTitle,
-                systemImage: cleanButtonSystemImage,
+                systemImage: nil,
                 isCleaning: store.isInteractiveSafeCleanupInProgress
             )
                 .frame(maxWidth: .infinity)
@@ -876,13 +914,6 @@ struct SidebarSummaryView: View {
             return "Cleaning..."
         }
         return canCleanSafeItems ? "Clean \(formatBytes(store.safeRecoverableBytes))" : "Nothing to clean"
-    }
-
-    /// No checkmark when there is nothing to clean: an empty result is a fact, not an
-    /// achievement to award.
-    private var cleanButtonSystemImage: String? {
-        guard !store.isInteractiveSafeCleanupInProgress, canCleanSafeItems else { return nil }
-        return "sparkles"
     }
 
     private func startInteractiveSafeCleanup() {
