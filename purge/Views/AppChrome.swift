@@ -22,7 +22,7 @@ struct AppBrandMark: View {
 
 /// Sidebar column insets — brand mark and nav selection share the same leading edge.
 enum SidebarLayout {
-    static let width: CGFloat = 210
+    static let width: CGFloat = 250
     static let horizontalInset: CGFloat = 8
     static let navRowInnerPadding: CGFloat = 8
     static let selectionCornerRadius: CGFloat = 8

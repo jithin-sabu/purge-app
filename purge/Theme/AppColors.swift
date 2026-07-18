@@ -10,6 +10,11 @@ enum AppColors {
     static let bgOverlay = Color(light: .hex(0xFFFFFF), dark: .hex(0x2A2B33))
     static let borderSubtle = Color(light: .hex(0xE2E3E6), dark: .hex(0x2E2F37))
 
+    // MARK: - Storage bar
+
+    static let storageBarUsed = Color(light: .hex(0x8A8C96), dark: .hex(0xCACCD6))
+    static let storageBarFree = Color(light: .hex(0xD6D7DA), dark: .hex(0x4C4E5A))
+
     // MARK: - Text
 
     static let textPrimary = Color(light: .hex(0x1A1B1F), dark: .hex(0xF2F2F3))

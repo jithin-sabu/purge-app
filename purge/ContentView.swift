@@ -664,6 +664,7 @@ struct SidebarSummaryView: View {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
         static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
         static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
+        static let cardTitle = Font.system(size: 12, weight: .semibold, design: .rounded)
         static let heroLabel = Font.system(size: 11, weight: .semibold, design: .rounded)
         /// Qualifier sits behind the figure so the number carries the reclaimable claim.
         static let heroPrefix = Font.system(size: 13, weight: .medium, design: .rounded)
@@ -671,32 +672,58 @@ struct SidebarSummaryView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                hero
-
-                reclaimableRows
-                    .padding(.top, AppStyle.Spacing.small)
-
-                // Tight to the breakdown above so the button groups with the rows it
-                // acts on. The slack falls below instead, where the footer hairline
-                // makes the button read as closing the content block.
-                cleanButton
-                    .padding(.top, AppStyle.Spacing.xxSmall)
-            }
-            .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.top, 14)
-            .padding(.bottom, AppStyle.Spacing.small)
-
-            volumeFooter
+        VStack(spacing: AppStyle.Spacing.small) {
+            storageCard
+            reclaimableCard
         }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.bottom, AppStyle.Spacing.small)
     }
 
-    /// Purge's subject is reclaimable space, so the panel leads with it. Free space is
-    /// the volume's business and macOS already reports it in Storage settings, so it sits
-    /// at the bottom as context.
+    /// Rounded surface shared by both panels, one step above the sidebar so each card
+    /// reads as its own object rather than a region of the sidebar.
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            .fill(AppColors.bgElevated)
+    }
+
+    /// Volume state, reported as observation rather than as anything Purge did. Free space
+    /// is the volume's business and macOS already reports it in Storage settings, so it
+    /// leads the panel purely as context above the reclaimable numbers that Purge acts on.
+    private var storageCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Storage")
+                .font(SummaryFont.cardTitle)
+                .foregroundStyle(.secondary)
+
+            storageBar
+
+            storageLegend
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppStyle.Spacing.small)
+        .background(cardBackground)
+    }
+
+    /// The reclaimable numbers and the one action that moves them, grouped so the button
+    /// reads as closing the block of rows it acts on.
+    private var reclaimableCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            hero
+
+            reclaimableRows
+                .padding(.top, AppStyle.Spacing.small)
+
+            cleanButton
+                .padding(.top, AppStyle.Spacing.small)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppStyle.Spacing.small)
+        .background(cardBackground)
+    }
+
+    /// Purge's subject is reclaimable space, so its card leads with the headline figure —
+    /// the qualifier sits behind the number so the number carries the claim.
     private var hero: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("Reclaimable")
@@ -750,19 +777,21 @@ struct SidebarSummaryView: View {
             // Shown at zero when empty so the breakdown stays stable. Hidden only when
             // trash is unreadable: without Full Disk Access Purge cannot claim a total.
             if showsTrashRow {
-                Divider()
                 summaryRow(
-                    label: "In your trash",
+                    label: "In Trash",
                     value: formatBytes(trashStore.trashBytes),
                     isProminent: trashStore.trashBytes > 0,
                     animationValue: trashStore.trashBytes,
                     isLoading: trashStore.access == .measuring
                 )
+
+                // The only hairline: it separates the two rows. Nothing above In Trash or
+                // below Safe to Clean.
+                Divider()
             }
 
-            Divider()
             summaryRow(
-                label: "Safe to clean",
+                label: "Safe to Clean",
                 value: formatBytes(store.safeRecoverableBytes),
                 isProminent: store.safeRecoverableBytes > 0,
                 animationValue: store.safeRecoverableBytes,
@@ -808,58 +837,95 @@ struct SidebarSummaryView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Volume state, reported as observation rather than as anything Purge did. Pinned to
-    /// the panel base as a fixed footer — set off by a hairline and a faint tint one step
-    /// off the panel surface — so free space reads as context, never as an action. The tint
-    /// bleeds full width past the panel's inner padding, then re-pads its own contents.
-    private var volumeFooter: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            diskUsageBar
+    /// Used space and free space as two segments of one volume, drawn from the same
+    /// free/total figures as the legend. The fills are muted greys rather than an accent,
+    /// so the bar stays observational — not progress toward a goal. The lighter used block
+    /// is inset over the darker full-width track so the two segments read as one meter
+    /// rather than two capsules butted together.
+    private var storageBar: some View {
+        GeometryReader { geo in
+            // One bar split into used and free. Only the outer ends are rounded; the inner
+            // edges where they meet are square, so a uniform card-coloured gap divides them
+            // without tapering.
+            let gap: CGFloat = 4
+            let r = Self.storageBarRadius
+            let usable = max(0, geo.size.width - gap)
+            let usedWidth = usable * diskUsageFraction
+            HStack(spacing: gap) {
+                UnevenRoundedRectangle(
+                    topLeadingRadius: r,
+                    bottomLeadingRadius: r,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0,
+                    style: .continuous
+                )
+                .fill(AppColors.storageBarUsed)
+                .frame(width: usedWidth)
 
-            Text("\(formatBytes(diskStore.freeDiskBytes)) free of \(formatBytes(diskStore.totalDiskBytes))")
-                .font(SummaryFont.diskCaption)
-                .foregroundStyle(.secondary)
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 0,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: r,
+                    topTrailingRadius: r,
+                    style: .continuous
+                )
+                .fill(AppColors.storageBarFree)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.xSmall)
-        .background(AppColors.bgElevated)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(AppColors.borderSubtle)
-                .frame(height: 0.5)
+        .frame(height: 16)
+        .accessibilityElement()
+        .accessibilityLabel(diskUsageAccessibilityLabel)
+    }
+
+    /// Squared-off corner, not a capsule: the bar reads as a container the used block
+    /// fills, matching the reference meter rather than a progress pill.
+    private static let storageBarRadius: CGFloat = 6
+
+    private var storageLegend: some View {
+        HStack(spacing: 0) {
+            storageLegendItem(
+                color: AppColors.storageBarUsed,
+                text: "\(formatBytes(usedDiskBytes)) used",
+                isProminent: true
+            )
+
+            Spacer(minLength: 8)
+
+            storageLegendItem(
+                color: AppColors.storageBarFree,
+                text: "\(formatBytes(diskStore.freeDiskBytes)) free",
+                isProminent: false
+            )
         }
     }
 
-    /// Used space as a proportion of the volume, drawn from the same free/total figures as
-    /// the caption. The track is the border hairline and the fill is muted text rather than
-    /// an accent, so the bar stays observational — not progress toward a goal.
-    private var diskUsageBar: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule(style: .continuous)
-                    .fill(AppColors.borderSubtle)
+    private func storageLegendItem(color: Color, text: String, isProminent: Bool) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
 
-                Capsule(style: .continuous)
-                    .fill(AppColors.textSecondary)
-                    .frame(width: geo.size.width * diskUsageFraction)
-            }
+            Text(text)
+                .font(SummaryFont.diskCaption)
+                .foregroundStyle(isProminent ? .secondary : .tertiary)
+                .monospacedDigit()
+                .lineLimit(1)
         }
-        .frame(height: 5)
-        .accessibilityElement()
-        .accessibilityLabel(diskUsageAccessibilityLabel)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var usedDiskBytes: Int64 {
+        max(0, diskStore.totalDiskBytes - diskStore.freeDiskBytes)
     }
 
     private var diskUsageFraction: CGFloat {
         let total = diskStore.totalDiskBytes
         guard total > 0 else { return 0 }
-        let used = max(0, total - diskStore.freeDiskBytes)
-        return min(1, CGFloat(Double(used) / Double(total)))
+        return min(1, CGFloat(Double(usedDiskBytes) / Double(total)))
     }
 
     private var diskUsageAccessibilityLabel: String {
-        let used = max(0, diskStore.totalDiskBytes - diskStore.freeDiskBytes)
-        return "\(formatBytes(used)) used of \(formatBytes(diskStore.totalDiskBytes))"
+        "\(formatBytes(usedDiskBytes)) used of \(formatBytes(diskStore.totalDiskBytes))"
     }
 
     private var isSafeToCleanSummaryLoading: Bool {
@@ -892,14 +958,15 @@ struct SidebarSummaryView: View {
         } label: {
             CleaningButtonLabel(
                 title: cleanButtonTitle,
-                systemImage: nil,
-                isCleaning: store.isInteractiveSafeCleanupInProgress
+                systemImage: canCleanSafeItems ? "trash.fill" : nil,
+                isCleaning: store.isInteractiveSafeCleanupInProgress,
+                spinnerTint: AppColors.buttonPrimaryText
             )
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
         }
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
         .disabled(!canCleanSafeItems || store.isDeleting || store.isInteractiveSafeCleanupInProgress)
     }
 
