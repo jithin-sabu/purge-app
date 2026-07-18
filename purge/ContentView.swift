@@ -626,7 +626,7 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
                 Task {
                     // Size the trash first: the free-space note is only interpretable
                     // alongside what the trash gave up.
-                    await trashStore.refresh()
+                    await trashStore.refresh(trigger: "foreground-return")
                     diskStore.refreshAfterForegroundReturn()
                 }
             }
@@ -648,6 +648,13 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
             // After a clean the chart barely moves, which is the point: the bytes are
             // in the trash, still on the volume. The trash total is what changed.
             .onChange(of: store.lastDeletionReport?.id) { _ in
+                if let report = store.lastDeletionReport {
+                    TrashDebugLog.log(
+                        "clean finished: movedToTrash=\(report.bytesMovedToTrash) "
+                        + "removedDirectly=\(report.bytesRemovedDirectly) "
+                        + "deleted=\(report.deletedItems.count) failed=\(report.failedItems.count)"
+                    )
+                }
                 diskStore.refresh()
             }
     }
@@ -711,8 +718,13 @@ struct SidebarSummaryView: View {
         VStack(alignment: .leading, spacing: 0) {
             hero
 
-            reclaimableRows
+            // The one hairline in this card: it sets the headline off from the breakdown
+            // it totals. The two rows below sit flush with no divider between them.
+            Divider()
                 .padding(.top, AppStyle.Spacing.small)
+
+            reclaimableRows
+                .padding(.top, AppStyle.Spacing.xxSmall)
 
             cleanButton
                 .padding(.top, AppStyle.Spacing.small)
@@ -774,21 +786,16 @@ struct SidebarSummaryView: View {
     @ViewBuilder
     private var reclaimableRows: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Shown at zero when empty so the breakdown stays stable. Hidden only when
-            // trash is unreadable: without Full Disk Access Purge cannot claim a total.
-            if showsTrashRow {
-                summaryRow(
-                    label: "In Trash",
-                    value: formatBytes(trashStore.trashBytes),
-                    isProminent: trashStore.trashBytes > 0,
-                    animationValue: trashStore.trashBytes,
-                    isLoading: trashStore.access == .measuring
-                )
-
-                // The only hairline: it separates the two rows. Nothing above In Trash or
-                // below Safe to Clean.
-                Divider()
-            }
+            // Both rows are always present so the breakdown stays stable. An empty (or not
+            // yet readable) trash shows 0 rather than vanishing; the measuring indicator
+            // covers the window before the first size pass lands.
+            summaryRow(
+                label: "In Trash",
+                value: formatBytes(trashStore.trashBytes),
+                isProminent: trashStore.trashBytes > 0,
+                animationValue: trashStore.trashBytes,
+                isLoading: trashStore.access == .measuring
+            )
 
             summaryRow(
                 label: "Safe to Clean",
@@ -797,13 +804,6 @@ struct SidebarSummaryView: View {
                 animationValue: store.safeRecoverableBytes,
                 isLoading: isSafeToCleanSummaryLoading
             )
-        }
-    }
-
-    private var showsTrashRow: Bool {
-        switch trashStore.access {
-        case .measuring, .readable: return true
-        case .unreadable: return false
         }
     }
 
@@ -885,7 +885,8 @@ struct SidebarSummaryView: View {
         HStack(spacing: 0) {
             storageLegendItem(
                 color: AppColors.storageBarUsed,
-                text: "\(formatBytes(usedDiskBytes)) used",
+                amount: formatStorageBytes(usedDiskBytes),
+                suffix: "used",
                 isProminent: true
             )
 
@@ -893,23 +894,34 @@ struct SidebarSummaryView: View {
 
             storageLegendItem(
                 color: AppColors.storageBarFree,
-                text: "\(formatBytes(diskStore.freeDiskBytes)) free",
+                amount: formatStorageBytes(diskStore.freeDiskBytes),
+                suffix: "free",
                 isProminent: false
             )
         }
     }
 
-    private func storageLegendItem(color: Color, text: String, isProminent: Bool) -> some View {
+    private func storageLegendItem(
+        color: Color,
+        amount: String,
+        suffix: String,
+        isProminent: Bool
+    ) -> some View {
         HStack(spacing: 5) {
             Circle()
                 .fill(color)
                 .frame(width: 6, height: 6)
 
-            Text(text)
-                .font(SummaryFont.diskCaption)
-                .foregroundStyle(isProminent ? .secondary : .tertiary)
-                .monospacedDigit()
-                .lineLimit(1)
+            HStack(spacing: 0) {
+                Text(amount)
+                    .monospacedDigit()
+                    .tracking(-0.4)
+
+                Text(" \(suffix)")
+            }
+            .font(SummaryFont.diskCaption)
+            .foregroundStyle(isProminent ? .secondary : .tertiary)
+            .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
     }
@@ -925,7 +937,7 @@ struct SidebarSummaryView: View {
     }
 
     private var diskUsageAccessibilityLabel: String {
-        "\(formatBytes(usedDiskBytes)) used of \(formatBytes(diskStore.totalDiskBytes))"
+        "\(formatStorageBytes(usedDiskBytes)) used of \(formatStorageBytes(diskStore.totalDiskBytes))"
     }
 
     private var isSafeToCleanSummaryLoading: Bool {
