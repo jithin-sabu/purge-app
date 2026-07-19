@@ -30,6 +30,10 @@ nonisolated enum TrashDebugLog {
     static let fileURL: URL = directoryURL.appendingPathComponent("trash-debug.log")
 
     static func log(_ message: String) {
+        // Debug-only: this instrumentation records trash filenames and raw filesystem
+        // errors and never rotates, so it must not write in a shipped build. Compiled out
+        // entirely in release rather than left to grow in the user's Application Support.
+#if DEBUG
         let now = Date()
         queue.async {
             let line = "\(formatter.string(from: now)) \(message)\n"
@@ -43,5 +47,6 @@ nonisolated enum TrashDebugLog {
                 try? data.write(to: fileURL)
             }
         }
+#endif
     }
 }

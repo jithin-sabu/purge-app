@@ -799,6 +799,12 @@ struct SidebarSummaryView: View {
             if trashStore.access == .measuring {
                 safeToCleanValueLoadingIndicator
                     .accessibilityLabel("Measuring")
+            } else if trashStore.access == .unreadable {
+                // No Full Disk Access: the trash size is genuinely unknown, so say so
+                // rather than showing a zero that would read as an empty trash.
+                Text("Unavailable")
+                    .font(SummaryFont.value)
+                    .foregroundStyle(.secondary)
             } else {
                 Text(formatBytes(trashStore.trashBytes))
                     .font(SummaryFont.value)
@@ -819,7 +825,11 @@ struct SidebarSummaryView: View {
     }
 
     private var totalFootnote: some View {
-        Text("up to \(formatBytesRoundedDown(reclaimableTotalBytes)) reclaimable in total")
+        // When the trash is unreadable its bytes are unknown, so "in total" would be a claim
+        // Purge can't stand behind — the caption drops to the safe figure alone and says so.
+        Text(trashStore.access == .unreadable
+            ? "up to \(formatBytesRoundedDown(store.safeRecoverableBytes)) reclaimable, trash not counted"
+            : "up to \(formatBytesRoundedDown(reclaimableTotalBytes)) reclaimable in total")
             .font(SummaryFont.diskCaption)
             .foregroundStyle(.tertiary)
             .monospacedDigit()
@@ -1016,6 +1026,8 @@ private struct ScanningStatusText: View {
         "Lifting the rug…",
     ]
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var index = Int.random(in: 0 ..< ScanningStatusText.words.count)
     @State private var cycleTimer: Timer?
 
@@ -1036,10 +1048,16 @@ private struct ScanningStatusText: View {
         .accessibilityLabel("Measuring")
         .onAppear { startCycling() }
         .onDisappear { stopCycling() }
+        // Reduce Motion holds one word still; toggling it mid-scan stops or resumes the
+        // cycle without waiting for the view to re-appear.
+        .onChange(of: reduceMotion) { _ in startCycling() }
     }
 
+    /// No-op under Reduce Motion: the word is left static rather than drifting between
+    /// phrases. `stopCycling()` first so flipping the preference on tears down a live timer.
     private func startCycling() {
         stopCycling()
+        guard !reduceMotion else { return }
         let timer = Timer(timeInterval: 1.6, repeats: true) { _ in
             withAnimation(MenuViewModel.swapAnimation) {
                 index = (index + 1) % Self.words.count

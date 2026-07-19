@@ -8,8 +8,8 @@ enum SpaceContextTranslation {
     let photos = max(1, Int((Double(bytes) / Double(MediaSizeReference.bytesPerPhoto)).rounded()))
     let formatted = NumberFormatter.localizedString(from: NSNumber(value: photos), number: .decimal)
     if photos == 1 {
-      return "That's about \(formatted) photo worth of space."
+      return "That's about \(formatted) photo's worth of space."
     }
-    return "That's about \(formatted) photos worth of space."
+    return "That's about \(formatted) photos' worth of space."
   }
 }
