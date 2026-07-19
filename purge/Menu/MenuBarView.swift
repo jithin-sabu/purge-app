@@ -120,6 +120,19 @@ struct MenuBarContentView: View {
                     .opacity(MenuLayout.mutedStatusOpacity)
                     .transition(Self.heroTransition)
 
+            case .needsPermission:
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 13))
+                        .foregroundStyle(AppColors.textSecondary)
+                    Text("Full Disk Access needed")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppColors.textPrimary)
+                    Spacer(minLength: 0)
+                }
+                .opacity(MenuLayout.mutedStatusOpacity)
+                .transition(Self.heroTransition)
+
             case .clear(let lastScanned):
                 HStack(spacing: 8) {
                     Text("You're all clear")

@@ -780,13 +780,15 @@ final class PurgeStore: ObservableObject {
     }
 
     func scanLargeFilesIfNeeded() async {
-        guard PermissionChecker().canScanLargeFiles() else { return }
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
         guard !isScanningLargeFiles, !hasCompletedLargeFileScan else { return }
         await scanLargeFiles()
     }
 
     func scanLargeFiles() async {
-        guard PermissionChecker().canScanLargeFiles() else { return }
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
         largeFileScanGeneration += 1
         let generation = largeFileScanGeneration
         isScanningLargeFiles = true
@@ -911,6 +913,8 @@ final class PurgeStore: ObservableObject {
     }
 
     func scanGeneral() async {
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
         scanGeneration += 1
         let generation = scanGeneration
         scanPhase = .scanning
@@ -920,6 +924,8 @@ final class PurgeStore: ObservableObject {
     }
 
     func scanDeveloper() async {
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
         scanGeneration += 1
         let generation = scanGeneration
         scanPhase = .scanning
@@ -929,6 +935,10 @@ final class PurgeStore: ObservableObject {
     }
 
     func scanAll() async {
+        // Every scan path funnels through here or the standalone variants; without
+        // FDA the walk of user content folders would fire per-folder TCC prompts.
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
         let previousTask = scanTask
         let previousGeneration = scanGeneration
         if let previousTask, !previousTask.isCancelled {
@@ -1212,7 +1222,8 @@ final class PurgeStore: ObservableObject {
 
     @discardableResult
     func performScheduledClean() async -> ScheduledCleaningSummary {
-        guard ScheduledCleaningPreferenceStore.shared.isEnabled else {
+        refreshPermission()
+        guard ScheduledCleaningPreferenceStore.shared.isEnabled, hasFullDiskAccess else {
             return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
         }
         return await performSafeCleanup(

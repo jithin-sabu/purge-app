@@ -7,6 +7,7 @@ import SwiftUI
 /// without a backing scan: the cold/default state is `checking`.
 enum MenuState: Equatable {
     case checking
+    case needsPermission
     case clear(lastScanned: Date)
     case ready(bytes: Int64, lastScanned: Date)
     case cleaning(cleaned: Int64, total: Int64)
@@ -59,7 +60,7 @@ final class MenuViewModel: ObservableObject {
     var isBusy: Bool {
         switch state {
         case .checking, .cleaning, .cleaned: return true
-        case .clear, .ready: return store?.isDeleting ?? false
+        case .clear, .ready, .needsPermission: return store?.isDeleting ?? false
         }
     }
 
@@ -99,7 +100,7 @@ final class MenuViewModel: ObservableObject {
                 // Cleaning owns its own state flow; everything else settles
                 // to the fresh numbers (including the first `.checking`).
                 switch state {
-                case .checking, .ready, .clear: resolveAfterScan()
+                case .checking, .ready, .clear, .needsPermission: resolveAfterScan()
                 case .cleaning, .cleaned: break
                 }
             }
@@ -141,6 +142,12 @@ final class MenuViewModel: ObservableObject {
     /// Only falls back to a blocking scan when there is nothing to show yet.
     func menuDidOpen() {
         guard let store else { return }
+        // Re-probe on every open while blocked on permission: if the user has
+        // granted FDA since, this scans; otherwise it stays on the same state.
+        if case .needsPermission = state {
+            runScan(forced: true)
+            return
+        }
         // A finished scan can be invisible here: completion arrives via a
         // debounced sink on RunLoop.main, and menu tracking stalls the main
         // queue — opening the menu inside that window (or holding it open
@@ -217,6 +224,11 @@ final class MenuViewModel: ObservableObject {
         // throw away that scan's progress just to redo the same work.
         guard let store, backgroundRefreshTask == nil, !store.isDeleting,
               !store.isScanningAll else { return }
+        store.refreshPermission()
+        guard store.hasFullDiskAccess else {
+            setState(.needsPermission)
+            return
+        }
         backgroundRefreshTask = Task { @MainActor [weak self] in
             // The store-scan subscription settles the visible state.
             await store.scanAll()
@@ -236,6 +248,15 @@ final class MenuViewModel: ObservableObject {
         if case .cleaning = state { return }
         if store.isDeleting { return }
         if isBusy, !forced { return }
+
+        // Without FDA, `scanAll` bails without ever flipping `isScanningAll`,
+        // so the completion sink would leave `.checking` up forever. Surface
+        // the permission state instead of a spinner that can't finish.
+        store.refreshPermission()
+        guard store.hasFullDiskAccess else {
+            setState(.needsPermission)
+            return
+        }
 
         cancelBackgroundRefresh()
         activeWorkTask?.cancel()
