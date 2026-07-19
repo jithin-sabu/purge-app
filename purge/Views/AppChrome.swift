@@ -22,7 +22,7 @@ struct AppBrandMark: View {
 
 /// Sidebar column insets — brand mark and nav selection share the same leading edge.
 enum SidebarLayout {
-    static let width: CGFloat = 210
+    static let width: CGFloat = 240
     static let horizontalInset: CGFloat = 8
     static let navRowInnerPadding: CGFloat = 8
     static let selectionCornerRadius: CGFloat = 8
@@ -321,6 +321,8 @@ struct CleaningButtonLabel: View {
             }
 
             Text(title)
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: title)
         }
         .labelStyle(.titleAndIcon)
     }
@@ -490,7 +492,7 @@ struct SafeCleanupCelebrationOverlay: View {
         _footerVisible = State(initialValue: mountsComplete)
         _progressGroupVisible = State(initialValue: !mountsComplete)
         _confettiArmed = State(initialValue: mountsComplete)
-        _displayedBytes = State(initialValue: mountsComplete ? session.finalBytesFreed : 0)
+        _displayedBytes = State(initialValue: mountsComplete ? session.finalBytesMovedToTrash : 0)
         _displayedFraction = State(initialValue: mountsComplete ? 1 : 0)
         _tagline = State(initialValue: mountsComplete ? TimeTagline.select(for: session.elapsedSeconds) : nil)
         _boltFlashToken = State(
@@ -608,8 +610,8 @@ struct SafeCleanupCelebrationOverlay: View {
             guard phase == .complete else { return }
             beginCompletionSequence()
         }
-        .onChange(of: session.bytesFreed) { newValue in
-            mirrorLiveProgress(bytesFreed: newValue)
+        .onChange(of: session.bytesMovedToTrash) { newValue in
+            mirrorLiveProgress(bytesMovedToTrash: newValue)
         }
         .onDisappear { sequenceTask?.cancel() }
         .environment(\.colorScheme, .dark)
@@ -638,8 +640,11 @@ struct SafeCleanupCelebrationOverlay: View {
         .accessibilityLabel("Cleaning, \(formatBytes(displayedBytes)) of \(formatBytes(session.totalBytes))")
     }
 
+    /// The completion line states what happened and what has not happened yet. The
+    /// files are in the trash and still on the volume; nothing is reclaimed until the
+    /// trash is emptied, so this must never read as an achievement.
     private var subtitleText: String {
-        subtitleShowsComplete ? "moved to Trash" : "of \(formatBytes(session.totalBytes))"
+        subtitleShowsComplete ? "moved to trash, not yet reclaimed" : "of \(formatBytes(session.totalBytes))"
     }
 
     private var currentItemText: String {
@@ -650,14 +655,14 @@ struct SafeCleanupCelebrationOverlay: View {
         guard !retryingFailureIDs.contains(item.id) else { return }
         retryingFailureIDs.insert(item.id)
         Task {
-            let freedBytes = await store.retryCleanFailure(item, session: session)
+            let movedBytes = await store.retryCleanFailure(item, session: session)
             retryingFailureIDs.remove(item.id)
-            guard let freedBytes else { return }
+            guard let movedBytes else { return }
             if reduceMotion {
-                displayedBytes += freedBytes
+                displayedBytes += movedBytes
             } else {
                 withAnimation(.easeOut(duration: 0.3)) {
-                    displayedBytes += freedBytes
+                    displayedBytes += movedBytes
                 }
             }
         }
@@ -672,11 +677,11 @@ struct SafeCleanupCelebrationOverlay: View {
     /// Reserves comparison-line space from the selected total during cleaning;
     /// switches to the exact engine result at completion.
     private var comparisonBytes: Int64 {
-        session.phase == .complete ? session.finalBytesFreed : session.totalBytes
+        session.phase == .complete ? session.finalBytesMovedToTrash : session.totalBytes
     }
 
     private var showsConfetti: Bool {
-        confettiArmed && session.finalBytesFreed >= Self.confettiThresholdBytes && !reduceMotion
+        confettiArmed && session.finalBytesMovedToTrash >= Self.confettiThresholdBytes && !reduceMotion
     }
 
     private func handleAppear() {
@@ -700,17 +705,17 @@ struct SafeCleanupCelebrationOverlay: View {
         }
     }
 
-    private func mirrorLiveProgress(bytesFreed: Int64) {
+    private func mirrorLiveProgress(bytesMovedToTrash: Int64) {
         guard session.phase == .cleaning, !didBeginCompletion else { return }
         let fraction = session.totalBytes > 0
-            ? min(1.0, Double(bytesFreed) / Double(session.totalBytes))
+            ? min(1.0, Double(bytesMovedToTrash) / Double(session.totalBytes))
             : 0
         if reduceMotion {
-            displayedBytes = bytesFreed
+            displayedBytes = bytesMovedToTrash
             displayedFraction = fraction
         } else {
             withAnimation(.easeOut(duration: 0.3)) {
-                displayedBytes = bytesFreed
+                displayedBytes = bytesMovedToTrash
                 displayedFraction = fraction
             }
         }
@@ -721,7 +726,7 @@ struct SafeCleanupCelebrationOverlay: View {
         didBeginCompletion = true
 
         sequenceTask = Task { @MainActor in
-            let finalBytes = session.finalBytesFreed
+            let finalBytes = session.finalBytesMovedToTrash
             tagline = TimeTagline.select(for: session.elapsedSeconds)
             if let tagline {
                 TimeTagline.store(tagline)

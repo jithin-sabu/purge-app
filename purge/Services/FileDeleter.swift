@@ -52,17 +52,38 @@ nonisolated struct SkippedDeletionItem: Identifiable, Hashable {
 
 nonisolated struct DeletionReport: Identifiable {
     let id = UUID()
-    let totalDeleted: Int64
+    /// Sum of the sizes of items moved to the trash. This is what was *moved*, not
+    /// what was reclaimed: the files still occupy the volume until the trash is
+    /// emptied. Never present this as freed space.
+    let bytesMovedToTrash: Int64
+    /// Sum of the sizes of items removed outright rather than trashed (simulators,
+    /// via `simctl delete`). These bytes really are gone, so they are not pending.
+    let bytesRemovedDirectly: Int64
     let deletedItems: [DeletedItem]
     let failedItems: [FailedDeletionItem]
     let skippedItems: [SkippedDeletionItem]
-    let volumeCapacity: Int64
-    let availableCapacityBefore: Int64
-    let availableCapacityAfter: Int64
+    /// Volume readings taken immediately before and after the run. `nil` when the
+    /// volume could not be read, which stays distinct from a reading of zero.
+    let capacityBefore: VolumeCapacity?
+    let capacityAfter: VolumeCapacity?
     let timestamp: Date
 
-    var actualFreedBytes: Int64 {
-        max(0, availableCapacityAfter - availableCapacityBefore)
+    /// The measured volume delta, the only number that may be called reclaimed.
+    /// `nil` when it was never measured. May be negative or near zero: a trash move
+    /// frees nothing, and other processes write while we measure.
+    var bytesReclaimedOnVolume: Int64? {
+        guard let capacityBefore, let capacityAfter else { return nil }
+        return capacityAfter.availableBytes - capacityBefore.availableBytes
+    }
+
+    /// The measured delta, but only when it clears measurement noise. `nil` means
+    /// "we cannot claim anything", which is not the same as "zero was reclaimed",
+    /// and must never be filled in with `bytesMovedToTrash`.
+    var reportableBytesReclaimedOnVolume: Int64? {
+        guard let measured = bytesReclaimedOnVolume,
+              measured >= VolumeCapacityReader.noiseFloorBytes
+        else { return nil }
+        return measured
     }
 
     var movedToTrashCount: Int {
@@ -83,12 +104,13 @@ nonisolated final class FileDeleter: Sendable {
         pathToExpectedSizeBytes: [String: Int64] = [:],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
-        var totalDeleted: Int64 = 0
+        var bytesMovedToTrash: Int64 = 0
+        var bytesRemovedDirectly: Int64 = 0
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
         var skippedItems: [SkippedDeletionItem] = []
         let volumeURL = FileManager.default.homeDirectoryForCurrentUser
-        let capacityBefore = volumeCapacitySnapshot(for: volumeURL)
+        let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
 
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path
@@ -128,7 +150,7 @@ nonisolated final class FileDeleter: Sendable {
                     }
 
                     if didDeleteAnyContent {
-                        totalDeleted += size
+                        bytesMovedToTrash += size
                         deletedItems.append(DeletedItem(
                             path: url.path,
                             sizeBytes: size,
@@ -139,7 +161,7 @@ nonisolated final class FileDeleter: Sendable {
                 } else if let udid = Self.coreSimulatorDeviceUDID(from: url) {
                     switch Self.deleteCoreSimulatorDevice(udid: udid) {
                     case .success:
-                        totalDeleted += size
+                        bytesRemovedDirectly += size
                         deletedItems.append(DeletedItem(
                             path: url.path,
                             sizeBytes: size,
@@ -159,7 +181,7 @@ nonisolated final class FileDeleter: Sendable {
                 } else {
                     do {
                         try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                        totalDeleted += size
+                        bytesMovedToTrash += size
                         deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
                         onProgress?(.itemDeleted(sizeBytes: size))
                     } catch {
@@ -186,15 +208,15 @@ nonisolated final class FileDeleter: Sendable {
             }
         }
 
-        let capacityAfter = volumeCapacitySnapshot(for: volumeURL)
+        let capacityAfter = VolumeCapacityReader.read(for: volumeURL)
         let report = DeletionReport(
-            totalDeleted: totalDeleted,
+            bytesMovedToTrash: bytesMovedToTrash,
+            bytesRemovedDirectly: bytesRemovedDirectly,
             deletedItems: deletedItems,
             failedItems: failedItems,
             skippedItems: skippedItems,
-            volumeCapacity: capacityAfter.total,
-            availableCapacityBefore: capacityBefore.available,
-            availableCapacityAfter: capacityAfter.available,
+            capacityBefore: capacityBefore,
+            capacityAfter: capacityAfter,
             timestamp: Date()
         )
         return report
@@ -208,12 +230,12 @@ nonisolated final class FileDeleter: Sendable {
         pathToExpectedSizeBytes: [String: Int64] = [:],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
-        var totalDeleted: Int64 = 0
+        var bytesMovedToTrash: Int64 = 0
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
         var skippedItems: [SkippedDeletionItem] = []
         let volumeURL = FileManager.default.homeDirectoryForCurrentUser
-        let capacityBefore = volumeCapacitySnapshot(for: volumeURL)
+        let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
 
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path
@@ -233,7 +255,7 @@ nonisolated final class FileDeleter: Sendable {
             let size = pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.singleFileSize(at: url)
             do {
                 try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                totalDeleted += size
+                bytesMovedToTrash += size
                 deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
                 onProgress?(.itemDeleted(sizeBytes: size))
             } catch {
@@ -247,15 +269,15 @@ nonisolated final class FileDeleter: Sendable {
             }
         }
 
-        let capacityAfter = volumeCapacitySnapshot(for: volumeURL)
+        let capacityAfter = VolumeCapacityReader.read(for: volumeURL)
         let report = DeletionReport(
-            totalDeleted: totalDeleted,
+            bytesMovedToTrash: bytesMovedToTrash,
+            bytesRemovedDirectly: 0,
             deletedItems: deletedItems,
             failedItems: failedItems,
             skippedItems: skippedItems,
-            volumeCapacity: capacityAfter.total,
-            availableCapacityBefore: capacityBefore.available,
-            availableCapacityAfter: capacityAfter.available,
+            capacityBefore: capacityBefore,
+            capacityAfter: capacityAfter,
             timestamp: Date()
         )
         return report
@@ -326,7 +348,7 @@ nonisolated final class FileDeleter: Sendable {
             }
             return .failure(.unknown)
         }
-        return .success(report.totalDeleted)
+        return .success(report.bytesMovedToTrash + report.bytesRemovedDirectly)
     }
 
     private func recordDeletionFailure(
@@ -350,13 +372,5 @@ nonisolated final class FileDeleter: Sendable {
             reason: reason,
             sizeBytes: sizeBytes
         ))
-    }
-
-    private func volumeCapacitySnapshot(for url: URL) -> (total: Int64, available: Int64) {
-        let values = try? url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey])
-        return (
-            Int64(values?.volumeTotalCapacity ?? 0),
-            Int64(values?.volumeAvailableCapacityForImportantUsage ?? 0)
-        )
     }
 }

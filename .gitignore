@@ -8,3 +8,4 @@ xcuserdata/
 *.profraw
 .claude/
 release.sh
+.cursor/rules/commit-conventions.mdc

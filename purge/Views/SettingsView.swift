@@ -263,7 +263,7 @@ struct SettingsView: View {
             """
         }
         let noun = summary.deletedCount == 1 ? "item" : "items"
-        return "Moved \(summary.deletedCount) \(noun) to Trash, clearing about \(formatBytes(summary.freedBytes))."
+        return "Moved \(summary.deletedCount) \(noun) to Trash, about \(formatBytes(summary.bytesMovedToTrash)). Empty the trash to reclaim the space."
     }
 
     /// Recent cleanup activity, so scheduled cleans are visible in the app instead
@@ -636,7 +636,7 @@ struct SettingsView: View {
             return "Ran on \(formattedDate(outcome.date)) — nothing safe to clean."
         }
         let noun = outcome.deletedCount == 1 ? "item" : "items"
-        return "Ran on \(formattedDate(outcome.date)) — cleared \(formatBytes(outcome.freedBytes)) (\(outcome.deletedCount) \(noun))."
+        return "Ran on \(formattedDate(outcome.date)) — moved \(formatBytes(outcome.bytesMovedToTrash)) to trash (\(outcome.deletedCount) \(noun))."
     }
 
     private func scheduleStatusLabel(_ title: String, showsDueDot: Bool = false) -> some View {

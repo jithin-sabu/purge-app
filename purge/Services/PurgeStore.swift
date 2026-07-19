@@ -34,7 +34,9 @@ final class ScanSelection: ObservableObject {
 @MainActor
 final class PurgeStore: ObservableObject {
     private enum StorageKeys {
-        static let totalRecoveredBytes = "totalRecoveredBytes"
+        /// Key name predates the trash-pending model and is load-bearing for
+        /// `FirstRunGate`'s reset list; the value it holds is bytes moved to trash.
+        static let totalMovedToTrashBytes = "totalRecoveredBytes"
         static let lastScanCompletedAt = "lastScanCompletedAt"
         static let lastScanSafeRecoverableBytes = "lastScanSafeRecoverableBytes"
     }
@@ -150,12 +152,14 @@ final class PurgeStore: ObservableObject {
     /// Already-complete session for the sidebar safe cleanup celebration.
     @Published private(set) var interactiveSafeCleanupSession: DeletionSession?
     /// When set, `ContentView` shows the onboarding celebration overlay instead of the standard deletion summary.
-    @Published var onboardingCelebrationFreedBytes: Int64?
+    @Published var onboardingCelebrationMovedToTrashBytes: Int64?
     @Published private(set) var interactiveSafeCleanupTargetPaths: Set<String> = []
     @Published private(set) var interactiveSafeCleanupRemovedPaths: Set<String> = []
-    @Published private(set) var interactiveSafeCleanupFreedBytes: Int64?
+    @Published private(set) var interactiveSafeCleanupMovedToTrashBytes: Int64?
     @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
-    @Published var totalRecoveredBytes: Int64 = 0
+    /// Lifetime bytes Purge has moved to the trash. Not a reclaim figure: most of it
+    /// only becomes free space once the user empties the trash.
+    @Published var totalMovedToTrashBytes: Int64 = 0
     @Published private(set) var lastScanCompletedAt: Date?
     @Published private(set) var lastScanSafeRecoverableBytes: Int64?
 
@@ -214,19 +218,19 @@ final class PurgeStore: ObservableObject {
     /// A single clean reporting more than this is a bad size measurement, not a real recovery.
     private static let maxReasonableSingleCleanBytes: Int64 = 2_000_000_000_000
     /// Anything past this in defaults is corruption; the lifetime total itself is unbounded.
-    private static let maxStorableLifetimeRecoveredBytes: Int64 = 1_000_000_000_000_000
+    private static let maxStorableLifetimeMovedBytes: Int64 = 1_000_000_000_000_000
 
     var hasDisplayableLifetimeStats: Bool {
-        totalRecoveredBytes > 0
+        totalMovedToTrashBytes > 0
     }
 
     init() {
-        var recovered = Int64(defaults.integer(forKey: StorageKeys.totalRecoveredBytes))
-        if recovered > Self.maxStorableLifetimeRecoveredBytes {
-            recovered = 0
-            defaults.set(0, forKey: StorageKeys.totalRecoveredBytes)
+        var moved = Int64(defaults.integer(forKey: StorageKeys.totalMovedToTrashBytes))
+        if moved > Self.maxStorableLifetimeMovedBytes {
+            moved = 0
+            defaults.set(0, forKey: StorageKeys.totalMovedToTrashBytes)
         }
-        totalRecoveredBytes = recovered
+        totalMovedToTrashBytes = moved
         lastScanCompletedAt = defaults.object(forKey: StorageKeys.lastScanCompletedAt) as? Date
         if defaults.object(forKey: StorageKeys.lastScanSafeRecoverableBytes) != nil {
             lastScanSafeRecoverableBytes = Int64(defaults.integer(forKey: StorageKeys.lastScanSafeRecoverableBytes))
@@ -283,7 +287,7 @@ final class PurgeStore: ObservableObject {
     }
 
     var isInteractiveSafeCleanupInProgress: Bool {
-        !interactiveSafeCleanupTargetPaths.isEmpty && interactiveSafeCleanupFreedBytes == nil
+        !interactiveSafeCleanupTargetPaths.isEmpty && interactiveSafeCleanupMovedToTrashBytes == nil
     }
 
     /// `true` while the cleanup overlay is in its cleaning phase — used to gate
@@ -554,24 +558,19 @@ final class PurgeStore: ObservableObject {
                 onProgress: onProgress
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
-            let freedBytes: Int64
-            if trigger == .manual {
-                freedBytes = report.totalDeleted
-            } else {
-                freedBytes = report.actualFreedBytes > 0 ? report.actualFreedBytes : report.totalDeleted
-            }
-            incrementRecoveredTotal(by: freedBytes)
+            let movedBytes = report.bytesMovedToTrash
+            incrementMovedToTrashTotal(by: movedBytes)
             deselectSkippedItems(report.skippedItems)
             reflectDeletionReportInScanState(report)
             clearAllSelections()
             if defaults.bool(forKey: Self.pendingOnboardingCelebrationKey) {
-                publishOnboardingCelebrationIfNeeded(freedBytes: freedBytes)
+                publishOnboardingCelebrationIfNeeded(movedToTrashBytes: movedBytes)
             } else {
                 lastDeletionReport = report
             }
             progressPoller?.cancel()
             session?.completeRun(
-                bytesFreed: report.totalDeleted,
+                bytesMovedToTrash: movedBytes,
                 elapsedSeconds: elapsedSeconds,
                 failedItems: report.userVisibleFailures,
                 movedToTrashCount: report.movedToTrashCount
@@ -600,27 +599,27 @@ final class PurgeStore: ObservableObject {
             expectedSizeBytes: item.sizeBytes
         )
         switch result {
-        case .success(let freedBytes):
-            session.removeResolvedFailure(id: item.id, additionalFreedBytes: freedBytes)
-            incrementRecoveredTotal(by: freedBytes)
+        case .success(let movedBytes):
+            session.removeResolvedFailure(id: item.id, additionalMovedBytes: movedBytes)
+            incrementMovedToTrashTotal(by: movedBytes)
             let deleted = DeletedItem(
                 path: item.path,
-                sizeBytes: freedBytes,
+                sizeBytes: movedBytes,
                 displayName: item.displayName
             )
             reflectDeletionReportInScanState(
                 DeletionReport(
-                    totalDeleted: freedBytes,
+                    bytesMovedToTrash: movedBytes,
+                    bytesRemovedDirectly: 0,
                     deletedItems: [deleted],
                     failedItems: [],
                     skippedItems: [],
-                    volumeCapacity: 0,
-                    availableCapacityBefore: 0,
-                    availableCapacityAfter: 0,
+                    capacityBefore: nil,
+                    capacityAfter: nil,
                     timestamp: Date()
                 )
             )
-            return freedBytes
+            return movedBytes
         case .failure:
             return nil
         }
@@ -883,7 +882,7 @@ final class PurgeStore: ObservableObject {
                 onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
-            incrementRecoveredTotal(by: report.totalDeleted)
+            incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
             lastDeletionReport = report
             let deletedPaths = Set(report.deletedItems.map {
                 URL(fileURLWithPath: $0.path).standardizedFileURL.path
@@ -894,7 +893,7 @@ final class PurgeStore: ObservableObject {
             largeFileSelection.ids.subtract(deletedPaths)
             progressPoller.cancel()
             liveSession.completeRun(
-                bytesFreed: report.totalDeleted,
+                bytesMovedToTrash: report.bytesMovedToTrash,
                 elapsedSeconds: elapsedSeconds,
                 failedItems: report.userVisibleFailures,
                 movedToTrashCount: report.movedToTrashCount
@@ -1201,7 +1200,8 @@ final class PurgeStore: ObservableObject {
 
     struct ScheduledCleaningSummary {
         let deletedCount: Int
-        let freedBytes: Int64
+        /// Bytes moved to the trash, pending until the trash is emptied.
+        let bytesMovedToTrash: Int64
         /// Real engine time for the deletion run, in seconds.
         var elapsedSeconds: Double = 0
         var movedToTrashCount: Int = 0
@@ -1213,7 +1213,7 @@ final class PurgeStore: ObservableObject {
     @discardableResult
     func performScheduledClean() async -> ScheduledCleaningSummary {
         guard ScheduledCleaningPreferenceStore.shared.isEnabled else {
-            return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
         return await performSafeCleanup(
             historyTrigger: .scheduled,
@@ -1238,7 +1238,7 @@ final class PurgeStore: ObservableObject {
             pinnedCandidates: pinnedCandidates,
             onProgress: onProgress
         )
-        publishOnboardingCelebrationIfNeeded(freedBytes: summary.freedBytes)
+        publishOnboardingCelebrationIfNeeded(movedToTrashBytes: summary.bytesMovedToTrash)
         return summary
     }
 
@@ -1253,7 +1253,7 @@ final class PurgeStore: ObservableObject {
 
         errorMessage = nil
         interactiveSafeCleanupRemovalTask?.cancel()
-        interactiveSafeCleanupFreedBytes = nil
+        interactiveSafeCleanupMovedToTrashBytes = nil
         interactiveSafeCleanupTargetPaths = Set(orderedPaths)
         let startedAt = Date()
         interactiveCleanupStartedAt = startedAt
@@ -1305,13 +1305,13 @@ final class PurgeStore: ObservableObject {
     }
 
     func completeInteractiveSafeCleanup(summary: ScheduledCleaningSummary) {
-        interactiveSafeCleanupFreedBytes = summary.freedBytes
+        interactiveSafeCleanupMovedToTrashBytes = summary.bytesMovedToTrash
         interactiveSafeCleanupProgressPoller?.cancel()
         interactiveSafeCleanupProgressPoller = nil
         interactiveSafeCleanupProgressBuffer = nil
         if let liveSession = interactiveSafeCleanupSession, liveSession.isLiveRun {
             liveSession.completeRun(
-                bytesFreed: summary.freedBytes,
+                bytesMovedToTrash: summary.bytesMovedToTrash,
                 elapsedSeconds: summary.elapsedSeconds,
                 failedItems: summary.failedItems,
                 movedToTrashCount: summary.movedToTrashCount
@@ -1321,7 +1321,7 @@ final class PurgeStore: ObservableObject {
                 Date().timeIntervalSince($0)
             } ?? summary.elapsedSeconds
             interactiveSafeCleanupSession = .completed(
-                freedBytes: summary.freedBytes,
+                bytesMovedToTrash: summary.bytesMovedToTrash,
                 elapsedSeconds: elapsedSeconds,
                 movedToTrashCount: summary.movedToTrashCount,
                 failedItems: summary.failedItems,
@@ -1340,7 +1340,7 @@ final class PurgeStore: ObservableObject {
         interactiveCleanupStartedAt = nil
         interactiveSafeCleanupTargetPaths = []
         interactiveSafeCleanupRemovedPaths = []
-        interactiveSafeCleanupFreedBytes = nil
+        interactiveSafeCleanupMovedToTrashBytes = nil
         interactiveSafeCleanupSession = nil
     }
 
@@ -1362,9 +1362,9 @@ final class PurgeStore: ObservableObject {
 
     static let pendingOnboardingCelebrationKey = "onboarding.pendingCelebration"
 
-    private func publishOnboardingCelebrationIfNeeded(freedBytes: Int64) {
+    private func publishOnboardingCelebrationIfNeeded(movedToTrashBytes: Int64) {
         guard defaults.bool(forKey: Self.pendingOnboardingCelebrationKey) else { return }
-        onboardingCelebrationFreedBytes = freedBytes
+        onboardingCelebrationMovedToTrashBytes = movedToTrashBytes
     }
 
     private func performSafeCleanup(
@@ -1401,11 +1401,11 @@ final class PurgeStore: ObservableObject {
             if scheduledNotifications {
                 await ScheduledCleanupNotifier.notifyNothingEligible()
             }
-            return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
 
         guard !isDeleting else {
-            return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
 
         isDeleting = true
@@ -1421,13 +1421,8 @@ final class PurgeStore: ObservableObject {
                 onProgress: onProgress
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
-            let freedBytes: Int64
-            if historyTrigger == .manual {
-                freedBytes = report.totalDeleted
-            } else {
-                freedBytes = report.actualFreedBytes > 0 ? report.actualFreedBytes : report.totalDeleted
-            }
-            incrementRecoveredTotal(by: freedBytes)
+            let movedBytes = report.bytesMovedToTrash
+            incrementMovedToTrashTotal(by: movedBytes)
             reflectDeletionReportInScanState(report)
             CleanupHistoryStore.shared.append(trigger: historyTrigger, report: report)
             if clearSelectionsAfterCleanup {
@@ -1435,13 +1430,13 @@ final class PurgeStore: ObservableObject {
             }
             if scheduledNotifications {
                 await ScheduledCleanupNotifier.notifyScheduledCleanFinished(
-                    freedBytes: freedBytes,
+                    bytesMovedToTrash: movedBytes,
                     deletedCount: report.deletedItems.count
                 )
             }
             return ScheduledCleaningSummary(
                 deletedCount: report.deletedItems.count,
-                freedBytes: freedBytes,
+                bytesMovedToTrash: movedBytes,
                 elapsedSeconds: elapsedSeconds,
                 movedToTrashCount: report.movedToTrashCount,
                 failedItems: report.userVisibleFailures
@@ -1452,7 +1447,7 @@ final class PurgeStore: ObservableObject {
             } else {
                 errorMessage = "Unable to clean safe items. Please try again."
             }
-            return ScheduledCleaningSummary(deletedCount: 0, freedBytes: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
     }
 
@@ -2082,11 +2077,11 @@ final class PurgeStore: ObservableObject {
         return ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
     }
 
-    private func incrementRecoveredTotal(by bytes: Int64) {
+    private func incrementMovedToTrashTotal(by bytes: Int64) {
         guard bytes > 0, bytes <= Self.maxReasonableSingleCleanBytes else { return }
-        let updated = min(totalRecoveredBytes + bytes, Self.maxStorableLifetimeRecoveredBytes)
-        totalRecoveredBytes = updated
-        defaults.set(totalRecoveredBytes, forKey: StorageKeys.totalRecoveredBytes)
+        let updated = min(totalMovedToTrashBytes + bytes, Self.maxStorableLifetimeMovedBytes)
+        totalMovedToTrashBytes = updated
+        defaults.set(totalMovedToTrashBytes, forKey: StorageKeys.totalMovedToTrashBytes)
     }
 
     // MARK: - Project row selection bindings

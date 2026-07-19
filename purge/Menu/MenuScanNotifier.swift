@@ -40,11 +40,11 @@ enum MenuScanNotifier {
         await deliver(content)
     }
 
-    static func notifyCleaned(freedBytes bytes: Int64) async {
+    static func notifyCleaned(bytesMovedToTrash bytes: Int64) async {
         guard await ScheduledCleanupNotifier.requestAuthorizationIfNeeded() else { return }
         let content = UNMutableNotificationContent()
-        content.title = "Cleaned \(formatBytes(bytes))"
-        content.body = "Moved to Trash."
+        content.title = "Moved \(formatBytes(bytes)) to Trash"
+        content.body = "Empty the trash to reclaim the space."
         content.sound = .default
         await deliver(content)
     }

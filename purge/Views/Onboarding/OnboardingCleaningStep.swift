@@ -57,7 +57,7 @@ struct OnboardingCleaningStep: View {
   }
 
   private func runCleaning() async {
-    let expectedFreedBytes = pinnedCandidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    let expectedMovedBytes = pinnedCandidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
 
     async let cleanTask = store.performManualSafeCleanNow(pinnedCandidates: pinnedCandidates)
 
@@ -74,6 +74,6 @@ struct OnboardingCleaningStep: View {
       visibleItems = []
     }
     try? await Task.sleep(nanoseconds: 300_000_000)
-    onFinished(summary.freedBytes > 0 ? summary.freedBytes : expectedFreedBytes)
+    onFinished(summary.bytesMovedToTrash > 0 ? summary.bytesMovedToTrash : expectedMovedBytes)
   }
 }
