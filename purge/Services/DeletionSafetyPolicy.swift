@@ -36,10 +36,25 @@ enum DeletionSafetyPolicy {
         "/Library/Logs/DiagnosticReports"
     ]
 
-    /// macOS-protected folders under ~/Library/Caches that cannot be removed even with Full Disk Access.
+    /// Folders under ~/Library/Caches that must never be offered for cleanup.
+    ///
+    /// CloudKit and FamilyCircle are macOS-protected (the OS refuses to remove
+    /// them even with Full Disk Access). The account/identity daemon caches are
+    /// deletable, but wiping them makes accountsd/akd/identityservicesd lose
+    /// their cached authorization state and re-hit the login keychain for every
+    /// service — the notorious storm of "… wants to use the login keychain"
+    /// password prompts. Never offer them; the space is negligible anyway.
     nonisolated static let protectedSystemCacheFolderNames: Set<String> = [
         "CloudKit",
-        "FamilyCircle"
+        "FamilyCircle",
+        "com.apple.accountsd",
+        "com.apple.appleaccountd",
+        "com.apple.amsaccountsd",
+        "com.apple.akd",
+        "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent",
+        "com.apple.identityservicesd",
+        "com.apple.iCloudHelper",
+        "com.apple.icloudwebd"
     ]
 
     /// macOS-managed folders under ~/Library/Logs that the OS refuses to remove even with
@@ -55,6 +70,27 @@ enum DeletionSafetyPolicy {
         "com.apple.homed",
         "com.apple.HomeKit"
     ]
+
+    /// Container bundle-ID prefixes covering Apple's account, authentication,
+    /// and password stack (Passwords.app, AuthKit, Apple ID, Apple Pay, and
+    /// Internet Accounts extensions). Clearing their caches forces the identity
+    /// daemons to re-authorize against the login keychain, triggering repeated
+    /// keychain password prompts — never offer them.
+    nonisolated static let protectedContainerBundleIDPrefixes: [String] = [
+        "com.apple.Passwords",
+        "com.apple.AuthKit",
+        "com.apple.AppleAccount",
+        "com.apple.Accounts",
+        "com.apple.PassKit",
+        "com.apple.Internet-Accounts"
+    ]
+
+    /// Whether a container bundle ID belongs to the protected set, by exact
+    /// match or protected prefix.
+    nonisolated static func isProtectedContainerBundleID(_ bundleID: String) -> Bool {
+        if protectedContainerBundleIDs.contains(bundleID) { return true }
+        return protectedContainerBundleIDPrefixes.contains { bundleID.hasPrefix($0) }
+    }
 
     /// Folder names allowed to be removed when located anywhere inside the user's home.
     ///
@@ -325,7 +361,7 @@ enum DeletionSafetyPolicy {
         guard let bundleID = relative.split(separator: "/").first.map(String.init) else {
             return false
         }
-        return protectedContainerBundleIDs.contains(bundleID)
+        return isProtectedContainerBundleID(bundleID)
     }
 
     nonisolated static func isWhitelistedApplicationSupportCachePath(_ path: String, home: String) -> Bool {
@@ -367,7 +403,7 @@ enum DeletionSafetyPolicy {
               parts[1] == "Data",
               parts[2] == "Library",
               parts[3] == "Caches" else { return false }
-        if protectedContainerBundleIDs.contains(parts[0]) { return false }
+        if isProtectedContainerBundleID(parts[0]) { return false }
         return true
     }
 

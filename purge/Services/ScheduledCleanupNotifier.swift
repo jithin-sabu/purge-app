@@ -13,12 +13,12 @@ enum ScheduledCleanupNotifier {
         await deliver(title: "Scheduled clean finished", body: "Nothing matched your safe settings yet. We’ll try again later.")
     }
 
-    static func notifyScheduledCleanFinished(freedBytes: Int64, deletedCount: Int) async {
-        let space = formatBytes(freedBytes)
+    static func notifyScheduledCleanFinished(bytesMovedToTrash: Int64, deletedCount: Int) async {
+        let space = formatBytes(bytesMovedToTrash)
         let noun = deletedCount == 1 ? "item" : "items"
         await deliver(
             title: "Scheduled clean finished",
-            body: "Moved \(deletedCount) \(noun) to Trash, clearing about \(space)."
+            body: "Moved \(deletedCount) \(noun) to Trash, about \(space). Empty the trash to reclaim the space."
         )
     }
 

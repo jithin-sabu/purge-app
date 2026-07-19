@@ -54,7 +54,7 @@ struct FileDeleterOffMainTests {
         )
 
         #expect(report.deletedItems.count == 1)
-        #expect(report.totalDeleted == 1024)
+        #expect(report.bytesMovedToTrash == 1024)
         #expect(!fm.fileExists(atPath: dir.path))
         #expect(flag.events >= 2)
         #expect(!flag.hitMainThread)

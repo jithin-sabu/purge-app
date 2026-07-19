@@ -10,7 +10,7 @@ struct OnboardingFlowView: View {
 
   @State private var step: OnboardingStep = .welcome
   @StateObject private var revealController = OnboardingScanRevealController()
-  @State private var celebrationFreedBytes: Int64 = 0
+  @State private var celebrationMovedToTrashBytes: Int64 = 0
   @State private var pinnedCleanupCandidates: [PurgeStore.DeletionCandidate] = []
   @State private var resultsSnapshot: OnboardingResultsSnapshot?
   @State private var isResultsCleaning = false
@@ -89,12 +89,12 @@ struct OnboardingFlowView: View {
       case .results:
         OnboardingResultsStep(snapshot: resultsSnapshot)
       case .cleaning:
-        OnboardingCleaningStep(pinnedCandidates: pinnedCleanupCandidates) { freedBytes in
-          celebrationFreedBytes = freedBytes
+        OnboardingCleaningStep(pinnedCandidates: pinnedCleanupCandidates) { movedBytes in
+          celebrationMovedToTrashBytes = movedBytes
           advance(to: .celebration)
         }
       case .celebration:
-        OnboardingCelebrationView(freedBytes: celebrationFreedBytes) {
+        OnboardingCelebrationView(bytesMovedToTrash: celebrationMovedToTrashBytes) {
           finishOnboarding()
         }
       }
@@ -260,7 +260,7 @@ struct OnboardingFlowView: View {
 
   private func clearCleanupPresentationState() {
     pendingCelebration = false
-    store.onboardingCelebrationFreedBytes = nil
+    store.onboardingCelebrationMovedToTrashBytes = nil
     store.lastDeletionReport = nil
   }
 
@@ -282,4 +282,5 @@ struct OnboardingFlowView: View {
   )
   .environmentObject(PurgeStore())
   .environmentObject(DiskSummaryStore())
+  .environmentObject(TrashStore())
 }

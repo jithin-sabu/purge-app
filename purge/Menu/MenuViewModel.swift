@@ -327,11 +327,11 @@ final class MenuViewModel: ObservableObject {
         ramp.cancel()
         guard !Task.isCancelled else { return }
 
-        setState(.cleaned(bytes: summary.freedBytes))
+        setState(.cleaned(bytes: summary.bytesMovedToTrash))
         if cleanFromNotification {
             cleanFromNotification = false
             if !isPanelVisible {
-                Task { await MenuScanNotifier.notifyCleaned(freedBytes: summary.freedBytes) }
+                Task { await MenuScanNotifier.notifyCleaned(bytesMovedToTrash: summary.bytesMovedToTrash) }
             }
         }
 

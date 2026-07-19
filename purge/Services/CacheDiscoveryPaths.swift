@@ -43,11 +43,6 @@ enum CacheDiscoveryPaths {
         "com.apple.sharedfilelist"
     ]
 
-    /// Bundle IDs under `~/Library/Containers` whose caches must not be removed.
-    nonisolated static var protectedContainerBundleIDs: Set<String> {
-        DeletionSafetyPolicy.protectedContainerBundleIDs
-    }
-
     /// Returns every cache candidate path under `~/Library/Application Support/<appRoot>/`.
     nonisolated static func applicationSupportCacheURLs(in appRoot: URL) -> [URL] {
         let fm = FileManager.default
@@ -214,7 +209,7 @@ enum CacheDiscoveryPaths {
         var results: [URL] = []
         for bundleDir in bundleDirs {
             let bundleID = bundleDir.lastPathComponent
-            guard !protectedContainerBundleIDs.contains(bundleID) else { continue }
+            guard !DeletionSafetyPolicy.isProtectedContainerBundleID(bundleID) else { continue }
             let cachesRoot = bundleDir
                 .appendingPathComponent("Data/Library/Caches", isDirectory: true)
             guard fm.fileExists(atPath: cachesRoot.path) else { continue }

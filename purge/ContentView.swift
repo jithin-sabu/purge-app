@@ -5,6 +5,7 @@
 //  Created by Jithin Sabu on 05/05/26.
 //
 
+import AppKit
 import SwiftUI
 
 struct ContentView: View {
@@ -76,9 +77,9 @@ struct ContentView: View {
                 .zIndex(90)
             }
 
-            if isLifecycleActive, let freedBytes = store.onboardingCelebrationFreedBytes {
-                OnboardingCelebrationView(freedBytes: freedBytes) {
-                    completeOnboardingCelebration(freedBytes: freedBytes)
+            if isLifecycleActive, let movedBytes = store.onboardingCelebrationMovedToTrashBytes {
+                OnboardingCelebrationView(bytesMovedToTrash: movedBytes) {
+                    completeOnboardingCelebration()
                 }
                 .transition(.opacity)
                 .zIndex(100)
@@ -243,10 +244,9 @@ struct ContentView: View {
         }
     }
 
-    private func completeOnboardingCelebration(freedBytes: Int64) {
-        _ = freedBytes
+    private func completeOnboardingCelebration() {
         pendingOnboardingCelebration = false
-        store.onboardingCelebrationFreedBytes = nil
+        store.onboardingCelebrationMovedToTrashBytes = nil
         diskStore.refresh()
     }
 
@@ -609,10 +609,35 @@ struct ContentView: View {
 private struct DiskSummaryRefreshModifier: ViewModifier {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
+    @EnvironmentObject private var trashStore: TrashStore
 
     func body(content: Content) -> some View {
         content
             .onAppear {
+                diskStore.refresh()
+            }
+            // The user empties the trash in Finder, comes back, and the numbers update on
+            // their own. Purge confirms the outcome without performing it.
+            //
+            // `scenePhase` is useless for this on macOS: it reports `.active` once at
+            // launch and never transitions when another app takes focus (probe-proven),
+            // so the app-level notifications are the only signal that actually fires.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
+                diskStore.markBackgrounded()
+                trashStore.markBackgrounded()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                Task {
+                    // Size the trash first: the free-space note is only interpretable
+                    // alongside what the trash gave up.
+                    await trashStore.refresh(trigger: "foreground-return")
+                    diskStore.refreshAfterForegroundReturn()
+                }
+            }
+            // The trash total moving is the signal that Purge (or Finder) just changed
+            // what is on the volume, so the chart is re-read from the same event rather
+            // than from each clean path remembering to ask.
+            .onChange(of: trashStore.trashBytes) { _ in
                 diskStore.refresh()
             }
             .onChange(of: store.isScanningGeneral) { scanning in
@@ -624,7 +649,16 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
             .onChange(of: store.isScanningLargeFiles) { scanning in
                 if !scanning { diskStore.refresh() }
             }
+            // After a clean the chart barely moves, which is the point: the bytes are
+            // in the trash, still on the volume. The trash total is what changed.
             .onChange(of: store.lastDeletionReport?.id) { _ in
+                if let report = store.lastDeletionReport {
+                    TrashDebugLog.log(
+                        "clean finished: movedToTrash=\(report.bytesMovedToTrash) "
+                        + "removedDirectly=\(report.bytesRemovedDirectly) "
+                        + "deleted=\(report.deletedItems.count) failed=\(report.failedItems.count)"
+                    )
+                }
                 diskStore.refresh()
             }
     }
@@ -633,6 +667,7 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
 struct SidebarSummaryView: View {
     @EnvironmentObject var store: PurgeStore
     @EnvironmentObject var diskStore: DiskSummaryStore
+    @EnvironmentObject var trashStore: TrashStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
 
@@ -640,76 +675,103 @@ struct SidebarSummaryView: View {
         static let label = Font.system(size: 12, weight: .medium, design: .rounded)
         static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
         static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
+        static let cardTitle = Font.system(size: 12, weight: .semibold, design: .rounded)
+        static let heroLabel = Font.system(size: 11, weight: .semibold, design: .rounded)
+        /// Qualifier sits behind the figure so the number carries the reclaimable claim.
+        static let heroPrefix = Font.system(size: 13, weight: .medium, design: .rounded)
+        static let hero = Font.system(size: 20, weight: .bold, design: .rounded)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: AppStyle.Spacing.small) {
+            storageCard
+            reclaimableCard
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.bottom, AppStyle.Spacing.small)
+    }
+
+    /// Rounded surface shared by both panels, one step above the sidebar so each card
+    /// reads as its own object rather than a region of the sidebar.
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            .fill(AppColors.bgElevated)
+    }
+
+    /// Volume state, reported as observation rather than as anything Purge did. Free space
+    /// is the volume's business and macOS already reports it in Storage settings, so it
+    /// leads the panel purely as context above the reclaimable numbers that Purge acts on.
+    private var storageCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Storage")
+                .font(SummaryFont.cardTitle)
+                .foregroundStyle(.secondary)
+
+            storageBar
+
+            storageLegend
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppStyle.Spacing.small)
+        .background(cardBackground)
+    }
+
+    /// Safe-to-clean is the hero the Clean button honors. The trash sits below as its own
+    /// secondary path with its own action, so the two never read as one summed total.
+    private var reclaimableCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            hero
+
+            cleanButton
+                .padding(.top, AppStyle.Spacing.small)
+
+            // The one hairline in this card: it sets the trash off as a separate path
+            // below the primary action rather than another line of the same total.
             Divider()
+                .padding(.top, AppStyle.Spacing.small)
 
-            VStack(alignment: .leading, spacing: 6) {
-                diskBar
+            inTrashRow
+                .padding(.top, AppStyle.Spacing.xxSmall)
 
-                stats
-                    .padding(.top, AppStyle.Spacing.small)
-                    .padding(.bottom, AppStyle.Spacing.small)
-
-                cleanButton
-            }
-            .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.bottom, 10)
-            .padding(.top, 6)
+            totalFootnote
+                .padding(.top, AppStyle.Spacing.xxSmall)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppStyle.Spacing.small)
+        .background(cardBackground)
     }
 
-    private var diskBar: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            GeometryReader { geo in
-                let width = geo.size.width
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.08))
-                        .frame(height: 8)
+    /// Safe-to-clean is what the Clean button actually moves, so it leads the card as the
+    /// hero — the number carries the claim and the button below repeats it verbatim.
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Safe to Clean")
+                .font(SummaryFont.heroLabel)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
 
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.primary.opacity(0.3))
-                        .frame(width: usedFraction * width, height: 8)
-
-                    if safeRecoverableFraction > 0 {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(AppColors.tagSafeBg.opacity(0.5))
-                            .frame(width: safeRecoverableFraction * width, height: 8)
-                            .offset(x: max(0, (usedFraction - safeRecoverableFraction) * width))
-                    }
-                }
-            }
-            .frame(height: 8)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(diskBarAccessibilityLabel)
-
-            HStack {
-                Text(formatBytes(diskStore.usedDiskBytes) + " used")
-                    .font(SummaryFont.diskCaption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(formatBytes(diskStore.freeDiskBytes) + " free")
-                    .font(SummaryFont.diskCaption)
-                    .foregroundStyle(.secondary)
+            if isSafeToCleanLoading {
+                ScanningStatusText()
+            } else {
+                Text(heroAmountText)
+                    .font(SummaryFont.hero)
+                    .foregroundStyle(safeToCleanBytes > 0 ? .primary : .secondary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: safeToCleanBytes)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(isSafeToCleanLoading ? "Safe to clean, measuring" : heroAccessibilityLabel)
     }
 
-    private var diskBarAccessibilityLabel: String {
-        var parts = [
-            "\(formatBytes(diskStore.usedDiskBytes)) used",
-            "\(formatBytes(diskStore.freeDiskBytes)) free",
-        ]
-        if store.safeRecoverableBytes > 0 {
-            parts.append("\(formatBytes(store.safeRecoverableBytes)) safe to clean shown on disk bar")
-        }
-        return parts.joined(separator: ", ")
+    private var safeToCleanBytes: Int64 {
+        store.safeRecoverableBytes
     }
 
-    private var isSafeToCleanSummaryLoading: Bool {
+    /// Before the first size pass lands the number would read a misleading 0, so the hero
+    /// shows a measuring indicator until a real total is available.
+    private var isSafeToCleanLoading: Bool {
         guard store.safeRecoverableBytes == 0 else { return false }
         return store.scanPhase == .scanning
             || store.scanPhase == .cancelling
@@ -717,51 +779,170 @@ struct SidebarSummaryView: View {
             || store.isEnrichingDeveloper
     }
 
-    private var stats: some View {
-        statRow(
-            symbol: SafetyLevel.safe.symbolName(filled: true),
-            label: SafetyLevel.safe.displayName,
-            value: formatBytes(store.safeRecoverableBytes),
-            color: AppColors.tagSafeText,
-            valueColor: store.safeRecoverableBytes > 0 ? .primary : .secondary,
-            animationValue: store.safeRecoverableBytes,
-            isValueLoading: isSafeToCleanSummaryLoading
-        )
+
+    private var heroAmountText: String {
+        guard safeToCleanBytes > 0 else { return "0" }
+        return formatBytes(safeToCleanBytes)
     }
 
-    private func statRow(
-        symbol: String,
-        label: String,
-        value: String,
-        color: Color,
-        valueColor: Color,
-        animationValue: Int64,
-        isValueLoading: Bool = false
-    ) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(color)
-                .frame(width: 14, alignment: .center)
+    private var heroAccessibilityLabel: String {
+        guard safeToCleanBytes > 0 else { return "Safe to clean 0" }
+        return "Safe to clean \(formatBytes(safeToCleanBytes))"
+    }
 
-            Text(label)
+    /// The trash as a secondary path: same secondary-row weight as elsewhere, plus an
+    /// inline outline Empty action. Structural differentiation only — no colour tiers.
+    private var inTrashRow: some View {
+        HStack(spacing: 6) {
+            Text("In trash")
                 .font(SummaryFont.label)
                 .foregroundStyle(.secondary)
 
             Spacer()
 
-            if isValueLoading {
+            if trashStore.access == .measuring {
                 safeToCleanValueLoadingIndicator
-                    .accessibilityLabel("Scanning")
-            } else {
-                Text(value)
+                    .accessibilityLabel("Measuring")
+            } else if trashStore.access == .unreadable {
+                // No Full Disk Access: the trash size is genuinely unknown, so say so
+                // rather than showing a zero that would read as an empty trash.
+                Text("Unavailable")
                     .font(SummaryFont.value)
-                    .foregroundStyle(valueColor)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(formatBytes(trashStore.trashBytes))
+                    .font(SummaryFont.value)
+                    .foregroundStyle(trashStore.trashBytes > 0 ? .primary : .secondary)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: animationValue)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
             }
         }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The two-step ceiling, stated once at the foot of the card as context, not an action.
+    /// Rounds down so the figure can only ever be beaten, and sums both paths at render time.
+    private var reclaimableTotalBytes: Int64 {
+        store.safeRecoverableBytes + trashStore.trashBytes
+    }
+
+    private var totalFootnote: some View {
+        // When the trash is unreadable its bytes are unknown, so "in total" would be a claim
+        // Purge can't stand behind — the caption drops to the safe figure alone and says so.
+        Text(trashStore.access == .unreadable
+            ? "up to \(formatBytesRoundedDown(store.safeRecoverableBytes)) reclaimable, trash not counted"
+            : "up to \(formatBytesRoundedDown(reclaimableTotalBytes)) reclaimable in total")
+            .font(SummaryFont.diskCaption)
+            .foregroundStyle(.tertiary)
+            .monospacedDigit()
+            .contentTransition(reduceMotion ? .identity : .numericText())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: reclaimableTotalBytes)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// Used space and free space as two segments of one volume, drawn from the same
+    /// free/total figures as the legend. The fills are muted greys rather than an accent,
+    /// so the bar stays observational — not progress toward a goal. The lighter used block
+    /// is inset over the darker full-width track so the two segments read as one meter
+    /// rather than two capsules butted together.
+    private var storageBar: some View {
+        GeometryReader { geo in
+            // One bar split into used and free. Only the outer ends are rounded; the inner
+            // edges where they meet are square, so a uniform card-coloured gap divides them
+            // without tapering.
+            let gap: CGFloat = 4
+            let r = Self.storageBarRadius
+            let usable = max(0, geo.size.width - gap)
+            let usedWidth = usable * diskUsageFraction
+            HStack(spacing: gap) {
+                UnevenRoundedRectangle(
+                    topLeadingRadius: r,
+                    bottomLeadingRadius: r,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0,
+                    style: .continuous
+                )
+                .fill(AppColors.storageBarUsed)
+                .frame(width: usedWidth)
+
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 0,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: r,
+                    topTrailingRadius: r,
+                    style: .continuous
+                )
+                .fill(AppColors.storageBarFree)
+            }
+        }
+        .frame(height: 16)
+        .accessibilityElement()
+        .accessibilityLabel(diskUsageAccessibilityLabel)
+    }
+
+    /// Squared-off corner, not a capsule: the bar reads as a container the used block
+    /// fills, matching the reference meter rather than a progress pill.
+    private static let storageBarRadius: CGFloat = 6
+
+    private var storageLegend: some View {
+        HStack(spacing: 0) {
+            storageLegendItem(
+                color: AppColors.storageBarUsed,
+                amount: formatStorageBytes(usedDiskBytes),
+                suffix: "used",
+                isProminent: true
+            )
+
+            Spacer(minLength: 8)
+
+            storageLegendItem(
+                color: AppColors.storageBarFree,
+                amount: formatStorageBytes(diskStore.freeDiskBytes),
+                suffix: "free",
+                isProminent: false
+            )
+        }
+    }
+
+    private func storageLegendItem(
+        color: Color,
+        amount: String,
+        suffix: String,
+        isProminent: Bool
+    ) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+
+            HStack(spacing: 0) {
+                Text(amount)
+                    .monospacedDigit()
+                    .tracking(-0.4)
+
+                Text(" \(suffix)")
+            }
+            .font(SummaryFont.diskCaption)
+            .foregroundStyle(isProminent ? .secondary : .tertiary)
+            .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var usedDiskBytes: Int64 {
+        max(0, diskStore.totalDiskBytes - diskStore.freeDiskBytes)
+    }
+
+    private var diskUsageFraction: CGFloat {
+        let total = diskStore.totalDiskBytes
+        guard total > 0 else { return 0 }
+        return min(1, CGFloat(Double(usedDiskBytes) / Double(total)))
+    }
+
+    private var diskUsageAccessibilityLabel: String {
+        "\(formatStorageBytes(usedDiskBytes)) used of \(formatStorageBytes(diskStore.totalDiskBytes))"
     }
 
     @ViewBuilder
@@ -786,14 +967,15 @@ struct SidebarSummaryView: View {
         } label: {
             CleaningButtonLabel(
                 title: cleanButtonTitle,
-                systemImage: cleanButtonSystemImage,
-                isCleaning: store.isInteractiveSafeCleanupInProgress
+                systemImage: nil,
+                isCleaning: store.isInteractiveSafeCleanupInProgress,
+                spinnerTint: AppColors.buttonPrimaryText
             )
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
         }
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
         .disabled(!canCleanSafeItems || store.isDeleting || store.isInteractiveSafeCleanupInProgress)
     }
 
@@ -801,18 +983,13 @@ struct SidebarSummaryView: View {
         store.safeRecoverableBytes > 0
     }
 
+    /// States the amount it will actually move, so a small clean reads as small rather
+    /// than as a generic opportunity.
     private var cleanButtonTitle: String {
         if store.isInteractiveSafeCleanupInProgress {
             return "Cleaning..."
         }
-        return canCleanSafeItems ? "Clean Safe Items" : "All clean"
-    }
-
-    private var cleanButtonSystemImage: String? {
-        if store.isInteractiveSafeCleanupInProgress {
-            return nil
-        }
-        return canCleanSafeItems ? "sparkles" : "checkmark.circle.fill"
+        return canCleanSafeItems ? "Clean \(formatBytes(store.safeRecoverableBytes))" : "Nothing to clean"
     }
 
     private func startInteractiveSafeCleanup() {
@@ -835,16 +1012,91 @@ struct SidebarSummaryView: View {
         }
     }
 
-    private var usedFraction: Double {
-        guard diskStore.totalDiskBytes > 0 else { return 0 }
-        return min(1.0, Double(diskStore.usedDiskBytes) / Double(diskStore.totalDiskBytes))
+}
+
+/// While the safe-to-clean total is still being measured, the hero shows the same
+/// playful cycling status words as the menu-bar scan hero, each swap drifting up with a
+/// blur-fade. Driven by a common-modes timer so the cycle survives any tracking run loop,
+/// and torn down on disappear so a scan that outlives the view doesn't keep it animating.
+private struct ScanningStatusText: View {
+    private static let words = [
+        "Pondering…",
+        "Rummaging…",
+        "Snooping around…",
+        "Dusting shelves…",
+        "Sifting…",
+        "Counting crumbs…",
+        "Peeking in caches…",
+        "Lifting the rug…",
+    ]
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var index = Int.random(in: 0 ..< ScanningStatusText.words.count)
+    @State private var cycleTimer: Timer?
+
+    var body: some View {
+        // ZStack so the outgoing and incoming words overlap while animating rather than
+        // reflowing side by side.
+        ZStack(alignment: .leading) {
+            Text(Self.words[index])
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .id(index)
+                .transition(.asymmetric(
+                    insertion: .heroStatusBlurFade(offsetY: 5),
+                    removal: .heroStatusBlurFade(offsetY: -5)
+                ))
+        }
+        .frame(height: 24, alignment: .leading)
+        .accessibilityLabel("Measuring")
+        .onAppear { startCycling() }
+        .onDisappear { stopCycling() }
+        // Reduce Motion holds one word still; toggling it mid-scan stops or resumes the
+        // cycle without waiting for the view to re-appear.
+        .onChange(of: reduceMotion) { _ in startCycling() }
     }
 
-    private var safeRecoverableFraction: Double {
-        guard diskStore.totalDiskBytes > 0 else { return 0 }
-        return min(
-            usedFraction,
-            Double(store.safeRecoverableBytes) / Double(diskStore.totalDiskBytes)
+    /// No-op under Reduce Motion: the word is left static rather than drifting between
+    /// phrases. `stopCycling()` first so flipping the preference on tears down a live timer.
+    private func startCycling() {
+        stopCycling()
+        guard !reduceMotion else { return }
+        let timer = Timer(timeInterval: 1.6, repeats: true) { _ in
+            withAnimation(MenuViewModel.swapAnimation) {
+                index = (index + 1) % Self.words.count
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        cycleTimer = timer
+    }
+
+    private func stopCycling() {
+        cycleTimer?.invalidate()
+        cycleTimer = nil
+    }
+}
+
+/// Blur + fade + small vertical drift for the hero status word swap. Local to this file;
+/// the menu bar keeps its own equivalent behind a fileprivate transition.
+private struct HeroStatusBlurFadeModifier: ViewModifier {
+    let radius: CGFloat
+    let opacity: Double
+    let offsetY: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: radius)
+            .opacity(opacity)
+            .offset(y: offsetY)
+    }
+}
+
+extension AnyTransition {
+    fileprivate static func heroStatusBlurFade(offsetY: CGFloat) -> AnyTransition {
+        .modifier(
+            active: HeroStatusBlurFadeModifier(radius: 6, opacity: 0, offsetY: offsetY),
+            identity: HeroStatusBlurFadeModifier(radius: 0, opacity: 1, offsetY: 0)
         )
     }
 }
@@ -853,6 +1105,7 @@ struct SidebarSummaryView: View {
     ContentView()
         .environmentObject(makePreviewStore())
         .environmentObject(DiskSummaryStore())
+        .environmentObject(TrashStore())
 }
 
 private func makePreviewStore() -> PurgeStore {

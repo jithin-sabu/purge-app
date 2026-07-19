@@ -130,6 +130,54 @@ struct ProtectedSystemCachesTests {
         #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
     }
 
+    @Test(arguments: [
+        "com.apple.accountsd",
+        "com.apple.appleaccountd",
+        "com.apple.amsaccountsd",
+        "com.apple.akd",
+        "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent",
+        "com.apple.identityservicesd",
+        "com.apple.iCloudHelper",
+        "com.apple.icloudwebd",
+    ])
+    func keychainSensitiveDaemonCaches(folderName: String) {
+        // Wiping these makes the identity daemons re-authorize against the login
+        // keychain, causing repeated keychain password prompts after a clean.
+        let url = TestPaths.homeURL("Library", "Caches", folderName)
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
+
+        let child = TestPaths.homeURL("Library", "Caches", folderName, "nested")
+        #expect(DeletionSafetyPolicy.evaluate(child) == .blockedNeverDelete)
+    }
+
+    @Test(arguments: [
+        "com.apple.Passwords",
+        "com.apple.Passwords-Settings.extension",
+        "com.apple.AuthKit.AKDiagnosticExtension",
+        "com.apple.AuthKitUI.AKAppSSOExtension",
+        "com.apple.AppleAccountUI.AAUIFollowUpExtension",
+        "com.apple.AccountsUISettings.AppIntents",
+        "com.apple.PassKit.PaymentAuthorizationUIExtension",
+        "com.apple.Internet-Accounts-Settings.extension",
+    ])
+    func identityStackContainerCaches(bundleID: String) {
+        let url = TestPaths.homeURL(
+            "Library", "Containers", bundleID, "Data", "Library", "Caches"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
+    }
+
+    @Test
+    func unrelatedContainerCachesRemainOffered() {
+        // The prefix guard must not swallow ordinary third-party containers.
+        let url = TestPaths.homeURL(
+            "Library", "Containers", "com.example.SomeApp", "Data", "Library", "Caches"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    }
+
     @Test
     func diagnosticReportsForNewHardwareIsNeverOffered() {
         // macOS surfaces this sibling of DiagnosticReports inside the Application Logs

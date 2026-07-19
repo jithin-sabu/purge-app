@@ -144,20 +144,20 @@ struct AboutView: View {
 
     private var lifetimeStatsContent: some View {
         VStack(spacing: 8) {
-            Text("Lifetime cleaned")
+            Text("Lifetime moved to trash")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .multilineTextAlignment(.center)
                 .accessibilityHidden(true)
 
-            Text(formatBytes(store.totalRecoveredBytes))
+            Text(formatBytes(store.totalMovedToTrashBytes))
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .multilineTextAlignment(.center)
-                .accessibilityLabel("Lifetime cleaned, \(formatBytes(store.totalRecoveredBytes))")
+                .accessibilityLabel("Lifetime moved to trash, \(formatBytes(store.totalMovedToTrashBytes))")
 
-            if let comparisonItem = LifetimeSizeComparison.item(for: store.totalRecoveredBytes) {
+            if let comparisonItem = LifetimeSizeComparison.item(for: store.totalMovedToTrashBytes) {
                 LifetimeSizeComparisonChip(item: comparisonItem)
                     .padding(.top, 4)
             }
