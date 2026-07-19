@@ -1,30 +1,12 @@
 import Foundation
 
 nonisolated struct PermissionChecker {
-    /// Returns true when the Large Files feature can read common user content folders.
-    /// These locations do not require Full Disk Access; they are separate from Library cache scans.
-    func canScanLargeFiles() -> Bool {
-        let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser
-        let probeFolders = ["Downloads", "Documents", "Desktop", "Movies", "Music", "Pictures"]
-
-        for folder in probeFolders {
-            let url = home.appendingPathComponent(folder, isDirectory: true)
-            guard fm.fileExists(atPath: url.path) else { continue }
-            do {
-                _ = try fm.contentsOfDirectory(
-                    at: url,
-                    includingPropertiesForKeys: nil,
-                    options: [.skipsSubdirectoryDescendants]
-                )
-            } catch {
-                return false
-            }
-        }
-        return true
-    }
-
     /// Returns true when protected Library locations used by deep cache scans are readable.
+    /// This is the app's only permission probe: with Full Disk Access granted, every
+    /// scanned location (including Downloads/Documents/Desktop) is readable without
+    /// per-folder TCC prompts, so nothing may list user content folders before this
+    /// returns true — listing them without FDA is exactly what makes macOS show
+    /// "Purge would like to access files in your … folder" dialogs.
     func hasFullDiskAccess() -> Bool {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let probes: [URL] = [

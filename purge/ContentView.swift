@@ -320,7 +320,11 @@ struct ContentView: View {
                 fullDiskAccessPrompt
             }
         case .largeFiles:
-            largeFilesTabBody
+            if store.hasFullDiskAccess {
+                largeFilesTabBody
+            } else {
+                fullDiskAccessPrompt
+            }
         case .settings:
             settingsTabBody
         }

@@ -56,12 +56,3 @@ struct LargeFileScanPolicyTests {
         #expect(roots.contains("Documents"))
     }
 }
-
-@Suite("Large file permission checks")
-struct LargeFilePermissionTests {
-    @Test
-    func canScanLargeFilesWithoutFullDiskAccess() {
-        let checker = PermissionChecker()
-        #expect(checker.canScanLargeFiles())
-    }
-}
