@@ -41,6 +41,16 @@ enum AppStyle {
     }
 }
 
+extension View {
+    /// Shared style for explanatory helper text in Settings, so caption styling
+    /// can never drift between sections.
+    func settingsCaption() -> some View {
+        self.font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 /// Hairline separator inset from card edges (matches card content horizontal padding).
 struct InsetCardDivider: View {
     var horizontalInset: CGFloat = AppStyle.Spacing.medium

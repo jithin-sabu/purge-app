@@ -160,8 +160,7 @@ struct SettingsView: View {
             settingsSectionCard {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(scheduleSummary)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .settingsCaption()
                         .contentTransition(scheduleTextTransition)
                         .animation(scheduleTextAnimation, value: scheduleSummary)
                 }
@@ -371,8 +370,7 @@ struct SettingsView: View {
                     )
 
                     Text(currentDevToolsStalenessOption.description)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .settingsCaption()
                 }
                 .padding(16)
             }
@@ -388,9 +386,7 @@ struct SettingsView: View {
 
             settingsSectionCard {
                 Text("Excluded paths are never scanned or cleaned. Right-click any scan result and choose 'Exclude from scans'.")
-                    .font(scheduleStatusSecondaryFont)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .settingsCaption()
                     .padding(16)
 
                 let entries = excludedEntries
@@ -602,41 +598,19 @@ struct SettingsView: View {
     }
 
     private func lastCleanStatusRow(referenceDate: Date) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 16, alignment: .center)
-                .padding(.top, 1)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                scheduleStatusLabel("Last clean")
-
-                if let outcome = registrar.lastOutcome {
-                    Text(lastCleanPrimaryText(for: outcome))
-                        .font(scheduleStatusPrimaryFont)
-                        .foregroundStyle(.primary)
-
-                    Text(relativeDateText(for: outcome.date, referenceDate: referenceDate))
-                        .font(scheduleStatusTertiaryFont)
-                        .foregroundStyle(.tertiary)
-                } else {
-                    Text("No scheduled clean has run yet.")
-                        .font(scheduleStatusPrimaryFont)
-                        .foregroundStyle(.primary)
-                }
-            }
-        }
+        Text(lastCleanSummaryText(referenceDate: referenceDate))
+            .settingsCaption()
     }
 
-    private func lastCleanPrimaryText(for outcome: LastScheduledCleanOutcome) -> String {
-        guard outcome.deletedCount > 0 else {
-            return "Ran on \(formattedDate(outcome.date)) — nothing safe to clean."
+    private func lastCleanSummaryText(referenceDate: Date) -> String {
+        guard let outcome = registrar.lastOutcome else {
+            return "Last clean: no scheduled clean has run yet."
         }
-        let noun = outcome.deletedCount == 1 ? "item" : "items"
-        return "Ran on \(formattedDate(outcome.date)) — moved \(formatBytes(outcome.bytesMovedToTrash)) to trash (\(outcome.deletedCount) \(noun))."
+        let relative = relativeDateText(for: outcome.date, referenceDate: referenceDate)
+        guard outcome.deletedCount > 0 else {
+            return "Last clean: nothing safe to clean, \(relative)."
+        }
+        return "Last clean: \(formatBytes(outcome.bytesMovedToTrash)) moved to trash, \(relative)."
     }
 
     private func scheduleStatusLabel(_ title: String, showsDueDot: Bool = false) -> some View {
