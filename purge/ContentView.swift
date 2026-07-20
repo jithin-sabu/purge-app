@@ -702,12 +702,14 @@ struct SidebarSummaryView: View {
     /// is the volume's business and macOS already reports it in Storage settings, so it
     /// leads the panel purely as context above the reclaimable numbers that Purge acts on.
     private var storageCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Storage")
                 .font(SummaryFont.cardTitle)
                 .foregroundStyle(.secondary)
+                .padding(.bottom, 10)
 
             storageBar
+                .padding(.bottom, 6)
 
             storageLegend
         }
@@ -852,7 +854,7 @@ struct SidebarSummaryView: View {
             // One bar split into used and free. Only the outer ends are rounded; the inner
             // edges where they meet are square, so a uniform card-coloured gap divides them
             // without tapering.
-            let gap: CGFloat = 4
+            let gap: CGFloat = 3
             let r = Self.storageBarRadius
             let usable = max(0, geo.size.width - gap)
             let usedWidth = usable * diskUsageFraction
@@ -884,7 +886,7 @@ struct SidebarSummaryView: View {
 
     /// Squared-off corner, not a capsule: the bar reads as a container the used block
     /// fills, matching the reference meter rather than a progress pill.
-    private static let storageBarRadius: CGFloat = 6
+    private static let storageBarRadius: CGFloat = 4
 
     private var storageLegend: some View {
         HStack(spacing: 0) {
