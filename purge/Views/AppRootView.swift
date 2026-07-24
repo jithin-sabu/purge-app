@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct AppRootView: View {
@@ -8,17 +9,24 @@ struct AppRootView: View {
   @EnvironmentObject private var diskStore: DiskSummaryStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+  /// Onboarding cannot be completed without Full Disk Access, so this only catches installs that
+  /// arrived past onboarding without it: an update from a pre-onboarding build, or access revoked
+  /// in System Settings. Everything downstream can then assume access is granted.
+  private var showsAccessGate: Bool {
+    hasCompletedOnboarding && !store.hasFullDiskAccess
+  }
+
   private var showsAppChrome: Bool {
-    hasCompletedOnboarding || isOnboardingExitingToHome
+    (hasCompletedOnboarding || isOnboardingExitingToHome) && !showsAccessGate
   }
 
   private var showsMainApp: Bool {
-    hasCompletedOnboarding || isMainAppRevealed || reduceMotion
+    (hasCompletedOnboarding || isMainAppRevealed || reduceMotion) && !showsAccessGate
   }
 
   var body: some View {
     ZStack {
-      ContentView(isLifecycleActive: hasCompletedOnboarding)
+      ContentView(isLifecycleActive: hasCompletedOnboarding && store.hasFullDiskAccess)
         .opacity(showsMainApp ? 1 : 0)
         .blur(radius: showsMainApp ? 0 : OnboardingTransitions.dismissBlurRadius)
         .allowsHitTesting(showsMainApp)
@@ -29,9 +37,16 @@ struct AppRootView: View {
           isExitingToHome: $isOnboardingExitingToHome
         )
         .allowsHitTesting(!isOnboardingExitingToHome)
+      } else if showsAccessGate {
+        FullDiskAccessGateView(onGranted: startScanAfterAccessGranted)
       }
     }
     .toolbar(showsAppChrome ? .visible : .hidden, for: .windowToolbar)
+    // Returning from System Settings is the moment access typically changes, and `scenePhase`
+    // never reports it on macOS (probe-proven), so the app-level notification is the signal.
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      store.refreshPermission()
+    }
     .onAppear {
       isMainAppRevealed = hasCompletedOnboarding
     }
@@ -49,6 +64,13 @@ struct AppRootView: View {
         isMainAppRevealed = false
       }
     }
+  }
+
+  /// The gate hands over to a working app: nothing else re-checks access, so the first scan is
+  /// started here rather than left to `ContentView`, which was mounted (and bailed) without it.
+  private func startScanAfterAccessGranted() {
+    guard store.hasFullDiskAccess, !store.isScanningAll else { return }
+    Task { await store.scanAll() }
   }
 
   private func revealMainAppAfterMount() {

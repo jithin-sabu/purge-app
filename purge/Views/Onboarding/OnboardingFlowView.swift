@@ -6,7 +6,6 @@ struct OnboardingFlowView: View {
   @EnvironmentObject private var store: PurgeStore
   @EnvironmentObject private var diskStore: DiskSummaryStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.scenePhase) private var scenePhase
 
   @State private var step: OnboardingStep = .welcome
   @StateObject private var revealController = OnboardingScanRevealController()
@@ -58,10 +57,6 @@ struct OnboardingFlowView: View {
     minHeight: AppWindowLayout.minHeight
   )
   .tint(AppColors.textPrimary)
-  .onChange(of: scenePhase) { phase in
-    guard phase == .active, step == .permissions else { return }
-    store.refreshPermission()
-  }
   }
 
   private var showsFooter: Bool {
@@ -119,9 +114,6 @@ struct OnboardingFlowView: View {
         ) {
           startFirstScan()
         }
-        OnboardingSecondaryButton(title: "Skip for now") {
-          skipToHome()
-        }
       case .results:
         VStack(spacing: AppStyle.Spacing.xxSmall) {
           Text("Your documents, photos, and projects are never touched.")
@@ -164,12 +156,6 @@ struct OnboardingFlowView: View {
     store.refreshPermission()
     guard store.hasFullDiskAccess else { return }
     advance(to: .firstScan)
-  }
-
-  /// "Skip for now" drops straight into the app without scanning — the escape hatch stays
-  /// available even without Full Disk Access, which is exactly when someone reaches for it.
-  private func skipToHome() {
-    beginExitToHome()
   }
 
   private func exitToReviewPath() {

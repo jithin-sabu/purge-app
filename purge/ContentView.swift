@@ -176,15 +176,6 @@ struct ContentView: View {
             .detailColumnCompactTop()
     }
 
-    private var fullDiskAccessPrompt: some View {
-        PermissionPromptView {
-            store.refreshPermission()
-            if store.hasFullDiskAccess && !isRunningPreview {
-                Task { await store.scanAll() }
-            }
-        }
-    }
-
     private func scanIfNeeded() async {
         guard isLifecycleActive, !isRunningPreview else { return }
         // The menu bar model kicks off the launch scan; racing a second
@@ -307,24 +298,14 @@ struct ContentView: View {
         switch store.selectedTab {
         case .about:
             aboutTabBody
+        // No access checks here by design: `AppRootView` will not show the app at all without
+        // Full Disk Access, so every tab can assume it. See `FullDiskAccessGateView`.
         case .appCaches:
-            if store.hasFullDiskAccess {
-                appCachesTabBody
-            } else {
-                fullDiskAccessPrompt
-            }
+            appCachesTabBody
         case .devTools:
-            if store.hasFullDiskAccess {
-                devToolsTabBody
-            } else {
-                fullDiskAccessPrompt
-            }
+            devToolsTabBody
         case .largeFiles:
-            if store.hasFullDiskAccess {
-                largeFilesTabBody
-            } else {
-                fullDiskAccessPrompt
-            }
+            largeFilesTabBody
         case .settings:
             settingsTabBody
         }
@@ -879,14 +860,13 @@ struct SidebarSummaryView: View {
                 .fill(AppColors.storageBarFree)
             }
         }
-        .frame(height: 16)
+        .frame(height: 10)
         .accessibilityElement()
         .accessibilityLabel(diskUsageAccessibilityLabel)
     }
 
-    /// Squared-off corner, not a capsule: the bar reads as a container the used block
-    /// fills, matching the reference meter rather than a progress pill.
-    private static let storageBarRadius: CGFloat = 4
+    /// Half the bar height, so the outer ends read as a full capsule/pill.
+    private static let storageBarRadius: CGFloat = 5
 
     private var storageLegend: some View {
         HStack(spacing: 0) {

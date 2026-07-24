@@ -14,7 +14,7 @@ struct OnboardingPermissionsStep: View {
       VStack(spacing: AppStyle.Spacing.small) {
         OnboardingPermissionRow(
           title: "Full disk access",
-          description: "Lets Purge find caches and junk across your entire Mac. Without this, scanning is limited.",
+          description: "Lets Purge find caches and junk across your entire Mac. Nothing can be scanned without it.",
           badgeText: "Required",
           badgeTone: .accent,
           buttonTitle: "Open settings",
@@ -49,7 +49,7 @@ struct OnboardingPermissionsStep: View {
       }
 
       if !store.hasFullDiskAccess {
-        Text("Full Disk Access is required before your first scan.")
+        Text("Grant Full Disk Access to continue — it's the one thing Purge can't work without.")
           .font(.caption)
           .foregroundStyle(AppColors.tagCheckText)
       }

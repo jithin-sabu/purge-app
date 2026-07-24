@@ -125,7 +125,9 @@ struct MenuBarContentView: View {
                     Image(systemName: "lock.shield")
                         .font(.system(size: 13))
                         .foregroundStyle(AppColors.textSecondary)
-                    Text("Full Disk Access needed")
+                    // Points at the one place access is granted — the window gate — rather
+                    // than offering a second permission surface here.
+                    Text("Open Purge to grant access")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(AppColors.textPrimary)
                     Spacer(minLength: 0)
