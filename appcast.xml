@@ -3,6 +3,28 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.2.9</title>
+      <pubDate>Sat, 25 Jul 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>14</sparkle:version>
+      <sparkle:shortVersionString>1.2.9</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>The sidebar summary is rebuilt. There are now two cards: Storage, with a used and free bar, and a reclaimable card that leads with Safe to Clean, shows how much is sitting in the trash, and gives the combined total underneath.</li>
+          <li>The clean button names the exact amount it will move instead of reading "Clean Safe Items".</li>
+          <li>Full Disk Access is handled in one place. When access is missing, the whole window waits on a single screen rather than each tab prompting separately, and it continues on its own once you turn Purge on in System Settings.</li>
+          <li>Cleaning during the first run no longer shows two success screens. Only the onboarding celebration appears.</li>
+          <li>Account and identity caches, including the Passwords, AuthKit, Apple ID and Apple Pay containers, are never offered for cleaning. Removing them caused repeated login keychain password prompts afterwards.</li>
+          <li>Cleaning says "moved to trash, not yet reclaimed" rather than reporting space freed, since nothing is reclaimed until the trash is emptied. Cleanup history records the same distinction.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.2.9/Purgev1.2.9.dmg"
+        sparkle:edSignature="LUa3x13qnEdQljZrBIK3uwExcq9366adVWYy2pn8GXKtCQf9qt6SNOdYVo7Stz26xd7HPZaAzX5tQUnqZ+2BDg==" 
+        length="6917994"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.2.8</title>
       <pubDate>Mon, 13 Jul 2026 12:00:00 +0000</pubDate>
       <sparkle:version>13</sparkle:version>

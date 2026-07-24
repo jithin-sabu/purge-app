@@ -8,4 +8,10 @@ xcuserdata/
 *.profraw
 .claude/
 release.sh
+
+# Export / packaging artifacts
+*.app/
+DistributionSummary.plist
+ExportOptions.plist
+Packaging.log
 .cursor/rules/commit-conventions.mdc
