@@ -1316,6 +1316,14 @@ final class PurgeStore: ObservableObject {
     }
 
     func completeInteractiveSafeCleanup(summary: ScheduledCleaningSummary) {
+        // A pending onboarding celebration already owns the post-clean screen. Since no
+        // live session was presented for this run, synthesizing a completed session here
+        // would stack the standard summary beneath the celebration, surfacing a second
+        // screen once the celebration is dismissed. Tear down the interactive state only.
+        if defaults.bool(forKey: Self.pendingOnboardingCelebrationKey) {
+            cancelInteractiveSafeCleanup()
+            return
+        }
         interactiveSafeCleanupMovedToTrashBytes = summary.bytesMovedToTrash
         interactiveSafeCleanupProgressPoller?.cancel()
         interactiveSafeCleanupProgressPoller = nil
