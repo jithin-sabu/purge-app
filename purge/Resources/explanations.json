@@ -86,8 +86,8 @@
   {
     "key": "cloudkit",
     "display_name": "iCloud Data Sync",
-    "tag": "safe",
-    "explanation": "This folder holds temporary data that helps your Mac sync information with iCloud. Deleting it is generally safe, but some apps may need to re-sync their data from iCloud afterwards.",
+    "tag": "medium",
+    "explanation": "This holds the data your Mac uses to sync with iCloud. Nothing is lost from iCloud, but apps will need to re-sync their data afterwards, which can take time on a slow connection.",
     "bundle_ids": [],
     "aliases": [
       "CloudKit"
@@ -110,8 +110,8 @@
   {
     "key": "accountsd",
     "display_name": "Apple Accounts Service",
-    "tag": "safe",
-    "explanation": "This folder supports the system service that manages your Apple ID and connected accounts. Deleting it is usually safe but your Mac may need a moment to rebuild it when you next sign in.",
+    "tag": "medium",
+    "explanation": "This supports the system service that manages your Apple ID and connected accounts. Deleting it can sign accounts out and ask you to sign in again.",
     "bundle_ids": [
       "com.apple.accountsd"
     ],
@@ -123,8 +123,8 @@
   {
     "key": "akd",
     "display_name": "Apple Key Service",
-    "tag": "safe",
-    "explanation": "This is used by a background Apple service that handles authentication and security keys. Deleting it is generally safe but your Mac may need to re-verify some credentials afterwards.",
+    "tag": "medium",
+    "explanation": "This is used by the Apple background service that handles authentication and security keys. Deleting it can prompt you to re-authenticate.",
     "bundle_ids": [
       "com.apple.akd"
     ],
@@ -136,8 +136,8 @@
   {
     "key": "amp-library-agent",
     "display_name": "Apple Music Library",
-    "tag": "safe",
-    "explanation": "This folder stores temporary data for your Apple Music library. Deleting it is safe but Apple Music may take a little longer to load your library the next time you open it.",
+    "tag": "medium",
+    "explanation": "Temporary data for your Apple Music library. Nothing is lost, but Apple Music may take a while to rebuild your library view.",
     "bundle_ids": [
       "com.apple.AMPLibraryAgent"
     ],
@@ -149,8 +149,8 @@
   {
     "key": "amsaccountsd",
     "display_name": "App Store Accounts",
-    "tag": "safe",
-    "explanation": "This supports the App Store's sign-in and account system. It is safe to delete and will be rebuilt automatically when you next use the App Store.",
+    "tag": "medium",
+    "explanation": "This supports the App Store's sign-in and account system. Deleting it can prompt you to sign in to the App Store again.",
     "bundle_ids": [
       "com.apple.amsaccountsd"
     ],
@@ -188,8 +188,8 @@
   {
     "key": "appleaccountd",
     "display_name": "Apple ID Service",
-    "tag": "safe",
-    "explanation": "This folder is used by the service that manages your Apple ID on your Mac. Deleting it is safe but your Mac may briefly need to re-verify your Apple ID.",
+    "tag": "medium",
+    "explanation": "This is used by the service that manages your Apple ID on your Mac. Deleting it can prompt you to sign in to your Apple ID again.",
     "bundle_ids": [
       "com.apple.appleaccountd"
     ],
@@ -242,8 +242,8 @@
   {
     "key": "authentication-services",
     "display_name": "Sign In with Apple",
-    "tag": "safe",
-    "explanation": "This supports the 'Sign in with Apple' feature used by apps and websites. Deleting it is safe but you may need to re-authenticate with some services.",
+    "tag": "medium",
+    "explanation": "This supports the 'Sign in with Apple' feature used by apps and websites. Deleting it can sign you out and require signing in again.",
     "bundle_ids": [
       "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
     ],
@@ -268,8 +268,8 @@
   {
     "key": "bird",
     "display_name": "iCloud Drive Sync",
-    "tag": "safe",
-    "explanation": "This folder is used by the background service that keeps iCloud Drive in sync with your Mac. Deleting it is generally safe but iCloud may need a moment to re-index your files.",
+    "tag": "medium",
+    "explanation": "This is used by the service that keeps iCloud Drive in sync with your Mac. Nothing is lost from iCloud, but your Mac will re-check and re-download file state afterwards.",
     "bundle_ids": [
       "com.apple.bird"
     ],
@@ -307,8 +307,8 @@
   {
     "key": "cloudd",
     "display_name": "iCloud Background Service",
-    "tag": "safe",
-    "explanation": "This is used by a background service that handles iCloud data on your Mac. Deleting it is generally safe but iCloud may need a short time to re-sync.",
+    "tag": "medium",
+    "explanation": "This is used by the background service that handles iCloud data on your Mac. Nothing is lost from iCloud, but your Mac will need to re-sync afterwards.",
     "bundle_ids": [
       "com.apple.cloudd"
     ],
@@ -346,8 +346,8 @@
   {
     "key": "dataaccessd",
     "display_name": "Contacts & Calendar Sync",
-    "tag": "safe",
-    "explanation": "This folder stores temporary data for the service that syncs your contacts and calendars. Deleting it is safe but your Mac may need to re-sync some data from your accounts.",
+    "tag": "medium",
+    "explanation": "This is used by the service that syncs your contacts and calendars. Nothing is lost from your accounts, but your Mac re-downloads them, and they may be briefly missing while it does.",
     "bundle_ids": [
       "com.apple.dataaccess.dataaccessd"
     ],
@@ -372,8 +372,8 @@
   {
     "key": "duetexpertd",
     "display_name": "Siri Intelligence Engine",
-    "tag": "safe",
-    "explanation": "This is used by Apple's on-device intelligence system that powers Siri Suggestions and app predictions. It is safe to delete and will be rebuilt over time.",
+    "tag": "medium",
+    "explanation": "Apple's on-device intelligence that powers Siri Suggestions and app predictions. Deleting it resets what it has learned about how you use your Mac.",
     "bundle_ids": [
       "com.apple.duetexpertd"
     ],
@@ -437,8 +437,8 @@
   {
     "key": "findmy",
     "display_name": "Find My Service",
-    "tag": "safe",
-    "explanation": "This folder stores temporary data used by the Find My service to track your Apple devices. Deleting it is safe but Find My may take a moment to re-sync location data.",
+    "tag": "medium",
+    "explanation": "Temporary data used by Find My to track your Apple devices. Nothing is lost, but device locations may take a while to reappear.",
     "bundle_ids": [
       "com.apple.findmy.fmipcore"
     ],
@@ -477,8 +477,8 @@
   {
     "key": "homed",
     "display_name": "Apple Home & HomeKit",
-    "tag": "safe",
-    "explanation": "This folder stores temporary data for the Home app and your connected smart home devices. Deleting it is safe but the Home app may need a moment to re-load your devices.",
+    "tag": "medium",
+    "explanation": "Temporary data for the Home app and your connected smart home devices. Nothing is unpaired, but the Home app may be slow or incomplete until it re-syncs.",
     "bundle_ids": [
       "com.apple.homed",
       "com.apple.HomeKit"
@@ -492,8 +492,8 @@
   {
     "key": "icloud-notification-agent",
     "display_name": "iCloud Notifications",
-    "tag": "safe",
-    "explanation": "This stores temporary data for iCloud notifications on your Mac. It is safe to delete and will be recreated automatically.",
+    "tag": "medium",
+    "explanation": "Temporary data for iCloud notifications. It is rebuilt automatically, but iCloud notifications can be delayed until it is.",
     "bundle_ids": [
       "com.apple.iCloudNotificationAgent"
     ],
@@ -505,8 +505,8 @@
   {
     "key": "itunes",
     "display_name": "iTunes & Apple Music",
-    "tag": "safe",
-    "explanation": "This folder contains temporary data from iTunes and Apple Music, including artwork and media previews. Deleting it is safe but album artwork and previews may need to reload.",
+    "tag": "medium",
+    "explanation": "Temporary data from iTunes and Apple Music, including artwork and media previews. Nothing is lost, but artwork is re-downloaded as you browse.",
     "bundle_ids": [
       "com.apple.iTunes",
       "com.apple.itunescloudd"
@@ -533,8 +533,8 @@
   {
     "key": "nsurlsessiond",
     "display_name": "Background Downloads",
-    "tag": "safe",
-    "explanation": "This folder stores temporary data for apps that download content in the background. Deleting it is safe, though any paused background downloads may need to restart.",
+    "tag": "medium",
+    "explanation": "This holds state for apps that download content in the background. Deleting it can interrupt downloads in progress, which then have to start over.",
     "bundle_ids": [
       "com.apple.nsurlsessiond"
     ],
@@ -573,8 +573,8 @@
   {
     "key": "proactive-eventtracker",
     "display_name": "Siri Suggestions Data",
-    "tag": "safe",
-    "explanation": "This stores information that helps Siri Suggestions learn your habits and routines. Deleting it is safe; Siri Suggestions will simply re-learn your patterns over time.",
+    "tag": "medium",
+    "explanation": "This is what Siri Suggestions has learned about your habits and routines. Deleting it resets those personalised suggestions until Siri learns them again.",
     "bundle_ids": [
       "com.apple.proactive.eventtracker"
     ],
@@ -639,8 +639,8 @@
   {
     "key": "spotlight",
     "display_name": "Spotlight Search",
-    "tag": "safe",
-    "explanation": "This folder stores temporary data that helps Spotlight search your Mac quickly. Deleting it is safe but Spotlight may run slower until it rebuilds its data.",
+    "tag": "medium",
+    "explanation": "This is the data Spotlight uses to search your Mac. Nothing is lost, but search results will be slow or incomplete until macOS finishes rebuilding the index, which can take a while.",
     "bundle_ids": [
       "com.apple.Spotlight"
     ],
@@ -789,8 +789,8 @@
   {
     "key": "family-circle",
     "display_name": "Family Sharing Service",
-    "tag": "safe",
-    "explanation": "This is temporary data used by Apple's Family Sharing feature. It is safe to delete and will be rebuilt automatically.",
+    "tag": "medium",
+    "explanation": "Temporary data for Family Sharing. Nothing is lost, but family and sharing settings may take a moment to re-sync.",
     "bundle_ids": [],
     "aliases": [
       "FamilyCircle"
@@ -839,7 +839,7 @@
     "key": "node-modules",
     "display_name": "Node.js Packages",
     "tag": "safe",
-    "explanation": "Code libraries installed for developer projects. Safe to remove for stale projects \u2014 run npm install to restore them anytime.",
+    "explanation": "Code libraries installed for developer projects. Safe to remove for stale projects — run npm install to restore them anytime.",
     "bundle_ids": [],
     "aliases": [
       "node_modules"
@@ -920,7 +920,7 @@
     "key": "archives",
     "display_name": "App Archives",
     "tag": "medium",
-    "explanation": "Archived builds created by development tools. Check contents before deleting \u2014 may contain important project archives.",
+    "explanation": "Archived builds created by development tools. Check contents before deleting — may contain important project archives.",
     "bundle_ids": [],
     "aliases": [
       "Archives"
@@ -943,8 +943,8 @@
   {
     "key": "storekitagent",
     "display_name": "In-App Purchase Service",
-    "tag": "safe",
-    "explanation": "This stores temporary data for in-app purchases and App Store transactions. Deleting it is safe but apps may need to re-verify purchase status the next time you open them.",
+    "tag": "medium",
+    "explanation": "Temporary data for in-app purchases and App Store transactions. Nothing is lost, but apps may ask you to restore purchases or sign in again.",
     "bundle_ids": [
       "com.apple.storekitagent"
     ],
@@ -983,8 +983,11 @@
     "key": "DerivedData",
     "display_name": "Xcode Build Files",
     "tag": "safe",
-    "aliases": ["DerivedData", "deriveddata"],
-    "explanation": "Temporary files Xcode creates while building apps. Always safe to delete \u2014 your next build will just take a little longer.",
+    "aliases": [
+      "DerivedData",
+      "deriveddata"
+    ],
+    "explanation": "Temporary files Xcode creates while building apps. Always safe to delete — your next build will just take a little longer.",
     "scope": "dev_tools"
   },
   {
@@ -1284,7 +1287,7 @@
     "key": "vagrant",
     "display_name": "Vagrant Box Cache",
     "tag": "medium",
-    "explanation": "Virtual machine images used by Vagrant. Safe to delete if unused \u2014 re-downloading takes a while.",
+    "explanation": "Virtual machine images used by Vagrant. Safe to delete if unused — re-downloading takes a while.",
     "bundle_ids": [],
     "aliases": [
       "vagrant",
@@ -1344,7 +1347,11 @@
   {
     "key": "iossimulators",
     "display_name": "iOS Simulators",
-    "aliases": ["CoreSimulator", "Devices", "iossimulators"],
+    "aliases": [
+      "CoreSimulator",
+      "Devices",
+      "iossimulators"
+    ],
     "tag": "safe",
     "explanation": "Virtual iPhone and iPad devices used for app testing in Xcode. Safe to delete. Xcode will re-download them if you need them again, which may take a few minutes.",
     "scope": "dev_tools"
@@ -1551,7 +1558,7 @@
     "key": "android-build",
     "display_name": "Android Build Output",
     "tag": "medium",
-    "explanation": "Compiled Android app files. Safe to delete \u2014 your project will rebuild automatically next time.",
+    "explanation": "Compiled Android app files. Safe to delete — your project will rebuild automatically next time.",
     "bundle_ids": [],
     "aliases": [
       "build/intermediates",
@@ -1605,7 +1612,7 @@
     "key": "rust-target",
     "display_name": "Rust Build Output",
     "tag": "medium",
-    "explanation": "Compiled Rust project files. Safe to delete \u2014 your project will recompile automatically on the next build.",
+    "explanation": "Compiled Rust project files. Safe to delete — your project will recompile automatically on the next build.",
     "bundle_ids": [],
     "aliases": [
       "target",
@@ -1644,7 +1651,7 @@
     "key": "xcode-archives",
     "display_name": "Xcode App Archives",
     "tag": "medium",
-    "explanation": "Archived Xcode builds for App Store submission. Cannot be recovered once deleted \u2014 only remove if you no longer need them.",
+    "explanation": "Archived Xcode builds for App Store submission. Cannot be recovered once deleted — only remove if you no longer need them.",
     "bundle_ids": [],
     "aliases": [
       "Archives",
@@ -1656,7 +1663,7 @@
     "key": "xcode-device-support",
     "display_name": "Xcode iOS Device Support",
     "tag": "medium",
-    "explanation": "Files Xcode downloads to support debugging on specific devices. Safe to delete \u2014 Xcode will re-download them if needed.",
+    "explanation": "Files Xcode downloads to support debugging on specific devices. Safe to delete — Xcode will re-download them if needed.",
     "bundle_ids": [],
     "aliases": [
       "iOS DeviceSupport",
@@ -1684,7 +1691,7 @@
     "key": "nvm-cache",
     "display_name": "nvm Node.js Versions",
     "tag": "medium",
-    "explanation": "Node.js versions managed by nvm. Safe to delete unused versions \u2014 avoid removing versions your projects depend on.",
+    "explanation": "Node.js versions managed by nvm. Safe to delete unused versions — avoid removing versions your projects depend on.",
     "bundle_ids": [],
     "aliases": [
       ".nvm",
@@ -2073,8 +2080,8 @@
   {
     "key": "1password",
     "display_name": "1Password",
-    "tag": "safe",
-    "explanation": "Temporary files stored by 1Password. Safe to delete and 1Password will rebuild them automatically when you next open it.",
+    "tag": "medium",
+    "explanation": "Temporary data stored by 1Password. Your vaults are safe, but 1Password may need to re-sync and ask you to unlock again.",
     "bundle_ids": [
       "com.1password.1password"
     ],
@@ -2088,8 +2095,8 @@
   {
     "key": "dropbox",
     "display_name": "Dropbox",
-    "tag": "safe",
-    "explanation": "Temporary sync files stored by Dropbox. Deleting them is generally safe but Dropbox may need a moment to re-verify your synced files.",
+    "tag": "medium",
+    "explanation": "Temporary sync data stored by Dropbox. Your files are safe, but Dropbox will re-verify your whole synced folder afterwards, which can take a long time on large accounts.",
     "bundle_ids": [
       "com.dropbox.DropboxMacFileHelper"
     ],
@@ -2102,8 +2109,8 @@
   {
     "key": "google-drive",
     "display_name": "Google Drive",
-    "tag": "safe",
-    "explanation": "Temporary files stored by Google Drive for syncing. Deleting them is safe but Google Drive may need to re-check your synced files.",
+    "tag": "medium",
+    "explanation": "Temporary sync data stored by Google Drive. Your files are safe, but Drive will re-check your synced content afterwards and may re-download parts of it.",
     "bundle_ids": [
       "com.google.GoogleDrive"
     ],
@@ -2116,8 +2123,8 @@
   {
     "key": "onedrive",
     "display_name": "Microsoft OneDrive",
-    "tag": "safe",
-    "explanation": "Temporary files stored by OneDrive for syncing. Safe to delete but OneDrive may re-verify your synced files afterwards.",
+    "tag": "medium",
+    "explanation": "Temporary sync data stored by OneDrive. Your files are safe, but OneDrive will re-verify your synced folder afterwards, which can take a while.",
     "bundle_ids": [
       "com.microsoft.OneDrive"
     ],
@@ -2525,8 +2532,8 @@
   {
     "key": "apple-maps",
     "display_name": "Apple Maps",
-    "tag": "safe",
-    "explanation": "Temporary map tiles and location data stored by Apple Maps. Safe to delete and Maps will re-download tiles as you browse.",
+    "tag": "medium",
+    "explanation": "Downloaded map tiles and location data stored by Apple Maps. Nothing is lost, but Maps re-downloads tiles as you use it and any offline maps need downloading again.",
     "bundle_ids": [
       "com.apple.Maps"
     ],
@@ -2539,8 +2546,8 @@
   {
     "key": "apple-photos",
     "display_name": "Apple Photos",
-    "tag": "safe",
-    "explanation": "Temporary thumbnail and preview data stored by Apple Photos. Safe to delete but Photos may take a while to rebuild previews for your entire library.",
+    "tag": "medium",
+    "explanation": "Thumbnail and preview data stored by Apple Photos. No photos are deleted, but Photos has to regenerate every thumbnail, which can take a long time on a large library.",
     "bundle_ids": [
       "com.apple.Photos"
     ],
@@ -2553,8 +2560,8 @@
   {
     "key": "apple-mail",
     "display_name": "Apple Mail",
-    "tag": "safe",
-    "explanation": "Temporary files stored by Apple Mail including message previews. Deleting them is safe but Mail may take a moment to reload some message previews.",
+    "tag": "medium",
+    "explanation": "Temporary files and message previews stored by Apple Mail. No mail is deleted, but Mail re-indexes afterwards and search can be incomplete until it finishes.",
     "bundle_ids": [
       "com.apple.mail"
     ],
@@ -2567,8 +2574,8 @@
   {
     "key": "apple-music-app",
     "display_name": "Apple Music App",
-    "tag": "safe",
-    "explanation": "Temporary files stored by the Apple Music app. Safe to delete and Apple Music will rebuild them as you listen.",
+    "tag": "medium",
+    "explanation": "Temporary files stored by the Apple Music app. Nothing is lost, but artwork and library data are rebuilt as you use the app.",
     "bundle_ids": [
       "com.apple.Music"
     ],
@@ -2593,8 +2600,8 @@
   {
     "key": "screen-time",
     "display_name": "Screen Time",
-    "tag": "safe",
-    "explanation": "Temporary data used by Screen Time to track app usage. Safe to delete but your usage history and reports may be partially reset.",
+    "tag": "medium",
+    "explanation": "The data Screen Time uses to track app usage. Deleting it clears usage history and reports, and they do not come back.",
     "bundle_ids": [
       "com.apple.ScreenTimeAgent"
     ],
@@ -2728,8 +2735,8 @@
   {
     "key": "spotlight-profiles-cache",
     "display_name": "Spotlight Profile Cache",
-    "tag": "safe",
-    "explanation": "Spotlight index profile data. Safe to delete; Spotlight rebuilds its index automatically.",
+    "tag": "medium",
+    "explanation": "Spotlight index profile data. Nothing is lost, but Spotlight rebuilds it afterwards and search can be slower or incomplete in the meantime.",
     "bundle_ids": [],
     "aliases": [],
     "scope": "app_caches"

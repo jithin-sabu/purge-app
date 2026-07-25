@@ -72,9 +72,12 @@ enum SafetyTierList {
         "com.microsoft.teams"
     ]
 
-    /// Folders that involve user data or syncing.
-    /// Safe to delete technically but may cause inconvenience.
+    /// Folders that involve user data, syncing, or an index the system has to
+    /// rebuild. Safe to delete technically, but each one costs the user
+    /// something visible afterwards — a re-sync, a re-index, or a sign-in — so
+    /// they are excluded from one-click and scheduled cleanup.
     nonisolated static let checkFirst: Set<String> = [
+        "com.apple.Spotlight",
         "com.apple.mail",
         "com.apple.Photos",
         "com.apple.Music",
@@ -104,9 +107,14 @@ enum SafetyTierList {
                 || pathLower.contains("/crashpad/completed")
                 || pathLower.contains("/linkthumbnail")
                 || pathLower.contains("/chatmedia")
-                || pathLower.contains("/appinstallationbinarydeltas")
-                || (pathLower.contains("/spotlight/") && pathLower.contains("/profiles/")) {
+                || pathLower.contains("/appinstallationbinarydeltas") {
                 return .safe
+            }
+            // Spotlight index data regenerates on its own, but search is slow or
+            // incomplete until it does — a visible inconvenience, so never part
+            // of one-click cleanup.
+            if pathLower.contains("/spotlight/") || pathLower.contains("com.apple.spotlight") {
+                return .medium
             }
             if pathLower.contains(".app/contents/frameworks/") && pathLower.contains("/versions/") {
                 return .medium
@@ -127,15 +135,6 @@ enum SafetyTierList {
 
         if lower.hasSuffix(".shipit") {
             return .safe
-        }
-
-        if lower == "profile" || lower == "profiles" {
-            if let path {
-                let pathLower = path.standardizedFileURL.path.lowercased()
-                if pathLower.contains("/spotlight/") || pathLower.contains("com.apple.spotlight") {
-                    return .safe
-                }
-            }
         }
 
         // Check definitely safe folder names
