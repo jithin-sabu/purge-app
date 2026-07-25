@@ -44,6 +44,13 @@ enum DeletionSafetyPolicy {
     /// their cached authorization state and re-hit the login keychain for every
     /// service — the notorious storm of "… wants to use the login keychain"
     /// password prompts. Never offer them; the space is negligible anyway.
+    ///
+    /// This exact-name set is the record of daemons we have actually caught
+    /// causing prompts. It is deliberately paired with
+    /// `protectedSystemCacheFolderFragments`: an exact list alone has to be
+    /// extended once per newly discovered daemon, and every gap between
+    /// discoveries is a prompt storm for the user. The fragment rule closes the
+    /// class so a name we have not seen yet is refused by default.
     nonisolated static let protectedSystemCacheFolderNames: Set<String> = [
         "CloudKit",
         "FamilyCircle",
@@ -54,7 +61,36 @@ enum DeletionSafetyPolicy {
         "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent",
         "com.apple.identityservicesd",
         "com.apple.iCloudHelper",
-        "com.apple.icloudwebd"
+        "com.apple.icloudwebd",
+        // Caught deleting these in the wild; each forces a re-authorization
+        // against the Apple ID and a fresh login-keychain prompt.
+        "com.apple.itunescloudd",
+        "com.apple.iCloudNotificationAgent",
+        "PassKit"
+    ]
+
+    /// Case-insensitive fragments that mark a `~/Library/Caches` top-level
+    /// folder as identity, authentication, or payment state.
+    ///
+    /// Matching is substring, not prefix, because the offenders are spread
+    /// across naming conventions (`com.apple.amsaccountsd`,
+    /// `com.apple.iCloudNotificationAgent`, bare `PassKit`). Fragments are kept
+    /// specific enough to avoid ordinary words — `authkit`/`authentication`
+    /// rather than a bare `auth`, which would also swallow "Author".
+    ///
+    /// Over-matching here is the safe direction: the folder is simply not
+    /// offered, and these caches are negligible in size.
+    nonisolated static let protectedSystemCacheFolderFragments: [String] = [
+        "account",
+        "icloud",
+        "itunescloud",
+        "appleid",
+        "authkit",
+        "authentication",
+        "authorization",
+        "identityservice",
+        "keychain",
+        "passkit"
     ]
 
     /// macOS-managed folders under ~/Library/Logs that the OS refuses to remove even with
@@ -335,7 +371,15 @@ enum DeletionSafetyPolicy {
 
         let relative = String(path.dropFirst(cachesPrefix.count + 1))
         let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
-        return protectedSystemCacheFolderNames.contains(topFolder)
+        return isProtectedSystemCacheFolderName(topFolder)
+    }
+
+    /// Whether a `~/Library/Caches` top-level folder name is protected, by exact
+    /// match or by identity/auth/payment fragment.
+    nonisolated static func isProtectedSystemCacheFolderName(_ folderName: String) -> Bool {
+        if protectedSystemCacheFolderNames.contains(folderName) { return true }
+        let lower = folderName.lowercased()
+        return protectedSystemCacheFolderFragments.contains { lower.contains($0) }
     }
 
     nonisolated static func isProtectedLogFolder(_ url: URL) -> Bool {

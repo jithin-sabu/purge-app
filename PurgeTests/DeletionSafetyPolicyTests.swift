@@ -200,6 +200,118 @@ struct ProtectedSystemCachesTests {
     }
 }
 
+// MARK: - Group 2b: Apple identity caches that caused real keychain prompts
+
+@Suite("Apple ID / iCloud / payment caches are never offered")
+struct IdentityCacheProtectionTests {
+    /// Folders Purge was observed deleting on a real machine, each of which
+    /// forces a daemon to re-authorize against the Apple ID and re-prompt for
+    /// the login keychain password. Regression guard: these must stay blocked.
+    @Test(arguments: [
+        "com.apple.itunescloudd",
+        "com.apple.iCloudNotificationAgent",
+        "PassKit",
+    ])
+    func observedOffendersAreBlocked(folderName: String) {
+        let url = TestPaths.homeURL("Library", "Caches", folderName)
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
+
+        let child = TestPaths.homeURL("Library", "Caches", folderName, "nested", "blob")
+        #expect(DeletionSafetyPolicy.evaluate(child) == .blockedNeverDelete)
+    }
+
+    /// The fragment rule exists so a daemon we have never seen is refused by
+    /// default rather than after the next prompt storm.
+    @Test(arguments: [
+        "com.apple.accountsd2",
+        "com.apple.AccountPolicyHelper",
+        "com.apple.iCloudDriveFileProvider",
+        "com.apple.itunescloudkitd",
+        "com.apple.AppleIDSettings",
+        "com.apple.AuthKitUI",
+        "com.apple.AuthenticationServicesAgent",
+        "com.apple.AuthorizationHost",
+        "com.apple.identityservicesd.helper",
+        "com.apple.KeychainCircle",
+        "com.apple.PassKitCore",
+        "SomeVendorAccountSync",
+    ])
+    func unlistedIdentityCachesAreBlockedByFragment(folderName: String) {
+        let url = TestPaths.homeURL("Library", "Caches", folderName)
+        #expect(
+            DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete,
+            "should be blocked by fragment: \(folderName)"
+        )
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url))
+    }
+
+    /// Every declared exact name must actually be refused — catches an entry
+    /// added to the set but shadowed by a later allowlist rule.
+    @Test
+    func everyDeclaredProtectedNameIsBlocked() {
+        for name in DeletionSafetyPolicy.protectedSystemCacheFolderNames {
+            let url = TestPaths.homeURL("Library", "Caches", name)
+            #expect(
+                DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete,
+                "declared protected name not blocked: \(name)"
+            )
+        }
+    }
+
+    /// Every declared fragment must actually be wired into the guard.
+    @Test
+    func everyDeclaredFragmentIsWired() {
+        for fragment in DeletionSafetyPolicy.protectedSystemCacheFolderFragments {
+            let name = "com.example.\(fragment)service"
+            #expect(
+                DeletionSafetyPolicy.isProtectedSystemCacheFolderName(name),
+                "fragment not wired: \(fragment)"
+            )
+            let url = TestPaths.homeURL("Library", "Caches", name)
+            #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
+        }
+    }
+
+    /// The fragments must stay narrow enough that ordinary caches — the bulk of
+    /// what Purge is for — keep flowing through.
+    @Test(arguments: [
+        "com.apple.Safari",
+        "ru.keepcoder.Telegram",
+        "com.spotify.client",
+        "com.tinyspeck.slackmacgap",
+        "Homebrew",
+        "Yarn",
+        "ms-playwright",
+        "com.google.Chrome",
+        // "Author" contains "auth" — proof the fragments avoid a bare "auth".
+        "com.apple.iBooksAuthor",
+        "com.adobe.AuthoringTools",
+    ])
+    func ordinaryCachesRemainOffered(folderName: String) {
+        let url = TestPaths.homeURL("Library", "Caches", folderName)
+        #expect(
+            DeletionSafetyPolicy.evaluate(url) == .allow,
+            "over-blocked an ordinary cache: \(folderName)"
+        )
+    }
+
+    /// The guard is scoped to `~/Library/Caches` top-level folders; a matching
+    /// name deeper inside an unrelated allowlisted cache must not be affected.
+    @Test
+    func fragmentDoesNotBlockNestedNamesElsewhere() {
+        let nested = TestPaths.homeURL(
+            "Library", "Caches", "com.google.Chrome", "accounts", "index"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(nested) == .allow)
+
+        let derivedData = TestPaths.homeURL(
+            "Library", "Developer", "Xcode", "DerivedData", "MyAccountApp-abc", "Build"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(derivedData) == .allow)
+    }
+}
+
 // MARK: - Group 3: Whitelisted absolute prefixes
 
 @Suite("Whitelisted paths return .allow")
