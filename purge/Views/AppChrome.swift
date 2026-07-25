@@ -44,6 +44,9 @@ enum AppDetailPageLayout {
     /// first card sits a small gap below it; `contentMargins` alone can't reduce that
     /// part of the inset (negative values clamp).
     static let scanTabBarSpacing: CGFloat = -22
+    /// Clear band under the Select All row so the first card doesn't crowd it as it
+    /// scrolls underneath (macOS 26 draws a hard scroll edge instead of the old fade).
+    static let scanTabSelectAllBottomPadding: CGFloat = 14
     /// Approximate height of `AppSectionPageHeader` (top inset + title + bottom padding).
     static let pageTitleChromeHeight: CGFloat = topContentInset + 24 + AppStyle.Spacing.small
     /// Extra line when a subtitle is shown (spacing + subheadline).
@@ -135,7 +138,7 @@ extension View {
     func scanTabSelectAllRowLayout() -> some View {
         padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, AppStyle.Spacing.xSmall)
-            .padding(.bottom, AppStyle.Spacing.xxSmall)
+            .padding(.bottom, AppDetailPageLayout.scanTabSelectAllBottomPadding)
     }
 }
 
