@@ -234,9 +234,7 @@ struct MenuBarContentView: View {
     // MARK: Formatting
 
     private func openPurge() {
-        NSApp.activate(ignoringOtherApps: true)
-        // Skip the status-bar window; target the app's real window.
-        NSApp.windows.first { $0.canBecomeMain }?.makeKeyAndOrderFront(nil)
+        MainWindowLocator.revealAppWindow()
     }
 
     private func menuBytes(_ bytes: Int64) -> String {
