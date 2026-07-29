@@ -44,13 +44,18 @@ struct AboutView: View {
         .frame(maxWidth: 560)
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-        .padding(
-            .top,
-            usesExternalScrollContainer
-                ? AppDetailPageLayout.scrollEdgeClearanceBelowHeader
-                : (showsPageHeader ? AppStyle.Spacing.medium : AppDetailPageLayout.topContentInset)
-        )
+        .padding(.top, scrollContentTopPadding)
         .padding(.bottom, AppDetailPageLayout.verticalPadding)
+    }
+
+    private var scrollContentTopPadding: CGFloat {
+        if usesExternalScrollContainer {
+            // macOS 26 reserves this clearance inside the scroll-edge bar instead, so that
+            // content scrolling up dissolves below the title rather than at its baseline.
+            if #available(macOS 26.0, *) { return 0 }
+            return AppDetailPageLayout.clearanceBelowHeader
+        }
+        return showsPageHeader ? AppStyle.Spacing.medium : AppDetailPageLayout.topContentInset
     }
 
     private var appIdentitySection: some View {

@@ -647,14 +647,17 @@ struct SettingsView: View {
 
     private var contentTopPadding: CGFloat {
         if usesExternalScrollContainer {
-            return AppDetailPageLayout.scrollEdgeClearanceBelowHeader
+            // macOS 26 reserves this clearance inside the scroll-edge bar instead, so that
+            // rows scrolling up dissolve below the title rather than at its baseline.
+            if #available(macOS 26.0, *) { return 0 }
+            return AppDetailPageLayout.clearanceBelowHeader
         }
         return showsPageHeader ? AppDetailPageLayout.topContentInset : AppStyle.Spacing.medium
     }
 
     private var contentBottomPadding: CGFloat {
         if usesExternalScrollContainer {
-            return AppDetailPageLayout.scrollEdgeClearanceBelowHeader
+            return AppStyle.Spacing.large
         }
         return AppDetailPageLayout.verticalPadding
     }

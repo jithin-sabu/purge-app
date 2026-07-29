@@ -36,8 +36,13 @@ enum AppDetailPageLayout {
     /// Space below the title bar before page content begins.
     static let topContentInset: CGFloat = 20
     static let verticalPadding: CGFloat = 12
-    /// Clear band below a `safeAreaBar` page header before the scroll edge blur ramps up.
-    static let scrollEdgeClearanceBelowHeader: CGFloat = 24
+    /// Remaining clear band below a `safeAreaBar` page header before content begins.
+    /// `AppSectionPageHeader` already pads `Spacing.small` under the title, so this tops
+    /// that up to `topContentInset` — the gap under the title then matches the one above
+    /// it and the band reads centered on the title. On macOS 26 it lives inside the bar
+    /// (see `detailPageScrollEdge`) so the scroll edge effect spans it; older systems pad
+    /// it onto the scroll content instead.
+    static let clearanceBelowHeader: CGFloat = topContentInset - AppStyle.Spacing.small
     /// Cancels the default soft scroll-edge inset so list cards sit tight under Select All.
     static let scanTabScrollContentTopCompensation: CGFloat = -20
     /// Pulls `List` content up under the Select All bar's safe-area reservation so the
@@ -70,16 +75,61 @@ extension View {
             )
     }
 
-    /// An invisible page-header sized bar reserves space so cards blur as they pass
-    /// underneath, while the visible animated title is owned by the persistent parent overlay.
+    /// A page-header sized bar reserves the band the title occupies (the visible animated
+    /// title is owned by the persistent parent overlay, so this copy is invisible) and
+    /// carries the clearance below it. Its translucent surface is tied to scroll position:
+    /// absent at the top so the band is flush with the page background, fading in as
+    /// content starts passing underneath. The system scroll edge effect doesn't render on
+    /// these pages (the detail column pulls its content up under the hidden title bar), so
+    /// the material is driven here instead.
     func detailPageScrollEdge(title: String) -> some View {
-        safeAreaBar(edge: .top, spacing: 0) {
-            AppSectionPageHeader(title: title)
-                .opacity(0)
-                .accessibilityHidden(true)
-                .allowsHitTesting(false)
-        }
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        modifier(DetailPageScrollEdgeModifier(title: title))
+    }
+}
+
+@available(macOS 26.0, *)
+private struct DetailPageScrollEdgeModifier: ViewModifier {
+    let title: String
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// 0 at rest, 1 once content has scrolled far enough to need a surface behind the title.
+    @State private var surfaceProgress: CGFloat = 0
+
+    /// Short ramp: the surface should be there as soon as anything slides under the title.
+    private static let rampDistance: CGFloat = 12
+    /// Even fully ramped the glass stays partial — enough to separate the title from the
+    /// rows behind it without settling into a panel.
+    private static let maxSurfaceOpacity: CGFloat = 0.55
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                let target = min(1, max(0, offset / Self.rampDistance))
+                guard abs(target - surfaceProgress) > 0.01 else { return }
+                if reduceMotion {
+                    surfaceProgress = target
+                } else {
+                    withAnimation(.easeOut(duration: 0.18)) { surfaceProgress = target }
+                }
+            }
+            .safeAreaBar(edge: .top, spacing: 0) {
+                AppSectionPageHeader(title: title)
+                    .padding(.bottom, AppDetailPageLayout.clearanceBelowHeader)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity)
+                    .background {
+                        // Ultra thin, not regular: the band should read as blurred glass with
+                        // the rows still legible through it, not as an opaque panel.
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
+                            .opacity(surfaceProgress * Self.maxSurfaceOpacity)
+                    }
+            }
+            .scrollEdgeEffectHidden(true, for: .top)
     }
 }
 
