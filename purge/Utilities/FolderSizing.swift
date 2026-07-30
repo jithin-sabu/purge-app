@@ -76,7 +76,15 @@ enum FolderSizing {
     }
 
     nonisolated static func directoryByteSize(at url: URL) -> Int64 {
-        directorySizes(at: [url])[url.standardizedFileURL.path] ?? 0
+        directoryByteSizeIfMeasurable(at: url) ?? 0
+    }
+
+    /// `nil` when `du` produced no reading for `url` at all — it was denied, interrupted, or
+    /// never ran. That is a different fact from `0`, which `du` prints only for a directory
+    /// it read and found empty, and callers that must tell "empty" from "could not look"
+    /// (the trash total, where 0 is a claim about the user's files) need the distinction.
+    nonisolated static func directoryByteSizeIfMeasurable(at url: URL) -> Int64? {
+        directorySizes(at: [url])[url.standardizedFileURL.path]
     }
 
     nonisolated static func singleFileSize(at url: URL) -> Int64 {

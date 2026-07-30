@@ -596,6 +596,9 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
         content
             .onAppear {
                 diskStore.refresh()
+                // This view mounts once Full Disk Access is granted, which may be long after
+                // TrashStore's first pass ran blind against a trash it could not read.
+                Task { await trashStore.refresh(trigger: "content-appear") }
             }
             // The user empties the trash in Finder, comes back, and the numbers update on
             // their own. Purge confirms the outcome without performing it.
