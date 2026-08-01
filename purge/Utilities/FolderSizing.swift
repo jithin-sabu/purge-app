@@ -5,34 +5,35 @@ enum FolderSizing {
     static let duChunkSize = 64
     private static let maxConcurrentDuChunks = 10
 
+    /// A chunk walking a deep tree can legitimately take minutes, so this is loose. It exists
+    /// only so a `du` that never returns cannot wedge the scan permanently.
+    private static let duChunkTimeout: TimeInterval = 300
+
     nonisolated static func directorySizesForChunk(_ chunk: [URL]) -> [String: Int64] {
         guard !chunk.isEmpty else { return [:] }
 
-        var result: [String: Int64] = [:]
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
-        process.arguments = ["-sk"] + chunk.map { $0.standardizedFileURL.path }
-
-        let outPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-
-            let output = String(data: data, encoding: .utf8) ?? ""
-            for line in output.split(separator: "\n") {
-                guard let tab = line.firstIndex(of: "\t") else { continue }
-                let kbStr = line[line.startIndex..<tab]
-                let path = String(line[line.index(after: tab)...])
-                if let kilobytes = Int64(kbStr) {
-                    result[path] = kilobytes * 1024
-                }
-            }
-        } catch {
+        // `du` writes one "Permission denied" line per unreadable directory, so stderr can run
+        // to megabytes on a broad scan. ProcessRunner drains it concurrently; leaving it
+        // undrained would block `du` on a full pipe and hang the read below.
+        guard let output = ProcessRunner.run(
+            executablePath: "/usr/bin/du",
+            arguments: ["-sk"] + chunk.map { $0.standardizedFileURL.path },
+            timeout: duChunkTimeout
+        ) else {
             // Omit paths in this chunk; callers default to 0.
+            return [:]
+        }
+
+        // Partial output from a timed-out or non-zero run is still worth keeping: `du` prints
+        // each total as it finishes, and a denied subpath makes it exit non-zero regardless.
+        var result: [String: Int64] = [:]
+        for line in output.stdoutText.split(separator: "\n") {
+            guard let tab = line.firstIndex(of: "\t") else { continue }
+            let kbStr = line[line.startIndex..<tab]
+            let path = String(line[line.index(after: tab)...])
+            if let kilobytes = Int64(kbStr) {
+                result[path] = kilobytes * 1024
+            }
         }
 
         return result

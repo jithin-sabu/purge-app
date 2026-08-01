@@ -298,30 +298,30 @@ nonisolated final class FileDeleter: Sendable {
         case failure(String)
     }
 
+    /// Deleting a large device is real disk work, so this is generous — but still bounded, so a
+    /// wedged CoreSimulator cannot leave the delete run hanging forever.
+    private static let simctlDeleteTimeout: TimeInterval = 120
+
     private static func deleteCoreSimulatorDevice(udid: String) -> SimctlDeleteResult {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        process.arguments = ["simctl", "delete", udid]
-
-        let errPipe = Pipe()
-        process.standardError = errPipe
-        process.standardOutput = Pipe()
-
-        do {
-            try process.run()
-        } catch {
-            return .failure(error.localizedDescription)
+        guard let result = ProcessRunner.run(
+            executablePath: "/usr/bin/xcrun",
+            arguments: ["simctl", "delete", udid],
+            timeout: simctlDeleteTimeout
+        ) else {
+            return .failure("Could not launch xcrun")
         }
-        process.waitUntilExit()
-        if process.terminationStatus == 0 {
+
+        if result.timedOut {
+            return .failure("simctl delete timed out after \(Int(simctlDeleteTimeout))s")
+        }
+        if result.status == 0 {
             return .success
         }
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-        let errText = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let errText, !errText.isEmpty {
+        let errText = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !errText.isEmpty {
             return .failure(errText)
         }
-        return .failure("simctl delete failed (exit \(process.terminationStatus))")
+        return .failure("simctl delete failed (exit \(result.status))")
     }
 
     /// Retries deletion for a single previously failed item.

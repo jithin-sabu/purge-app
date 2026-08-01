@@ -210,26 +210,19 @@ final class DevScanner {
 
     private static let xcrunPath = "/usr/bin/xcrun"
 
+    /// CoreSimulator can take a while to answer on a cold first call; past this the plist
+    /// fallback is a better answer than a stalled scan.
+    private static let simctlListTimeout: TimeInterval = 30
+
     private func loadSimulatorsFromSimctl(devicesRoot: URL) async -> [SimulatorDevice]? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: Self.xcrunPath)
-        process.arguments = ["simctl", "list", "devices", "--json"]
+        let result = await ProcessRunner.runAsync(
+            executablePath: Self.xcrunPath,
+            arguments: ["simctl", "list", "devices", "--json"],
+            timeout: Self.simctlListTimeout
+        )
+        guard let result, result.succeeded else { return nil }
 
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = errPipe
-
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-
-        let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let data = result.stdout
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let devicesMap = root["devices"] as? [String: Any] else {
             return nil

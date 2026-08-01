@@ -116,31 +116,21 @@ actor GitStatusChecker {
         }
     }
 
+    /// `git status` on a huge or network-mounted worktree can crawl; past this, "unknown" beats
+    /// holding the scan open.
+    private static let gitStatusTimeout: TimeInterval = 60
+
     /// Returns `.unknown` only if Git is unavailable; empty porcelain means `.clean`.
     private static func invokeGit(repository: URL) -> GitWorktreeStatus {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", repository.path, "status", "--porcelain"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-        } catch {
+        guard let result = ProcessRunner.run(
+            executablePath: "/usr/bin/git",
+            arguments: ["-C", repository.path, "status", "--porcelain"],
+            timeout: gitStatusTimeout
+        ), result.succeeded else {
             return .unknown
         }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            return .unknown
-        }
-
-        let output = String(data: data, encoding: .utf8) ?? ""
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? .clean : .dirty
     }
 }
