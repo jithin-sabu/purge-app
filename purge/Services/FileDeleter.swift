@@ -241,7 +241,12 @@ nonisolated final class FileDeleter: Sendable {
             let standardizedPath = url.standardizedFileURL.path
             let friendlyTitle = pathToDisplayName[standardizedPath]
 
-            guard LargeFileScanPolicy.isEligibleForDeletion(url) else {
+            // AI model components live in hidden runtime directories that the
+            // large-file policy deliberately refuses, so they carry their own
+            // equally narrow gate.
+            let isEligible = LargeFileScanPolicy.isEligibleForDeletion(url)
+                || AIModelScanPolicy.isEligibleForDeletion(url)
+            guard isEligible else {
                 skippedItems.append(SkippedDeletionItem(
                     path: url.path,
                     displayName: friendlyTitle,
