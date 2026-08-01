@@ -106,6 +106,13 @@ struct LargeFile: Identifiable, Hashable {
         self.componentPaths = (componentPaths ?? [path]).map(\.standardizedFileURL)
         self.id = path.standardizedFileURL.path
     }
+    /// Whether this row may leave the list, given the paths a delete run
+    /// actually removed. Multi-part rows survive a partial delete: a model whose
+    /// manifest trashed but whose blobs didn't still occupies the disk.
+    func isFullyRemoved(byDeleting deletedPaths: Set<String>) -> Bool {
+        componentPaths.allSatisfy { deletedPaths.contains($0.path) }
+    }
+
     var displayName: String { displayNameOverride ?? path.lastPathComponent }
     var formattedSize: String { formatBytes(sizeBytes) }
     var locationLabel: String {

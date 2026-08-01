@@ -115,6 +115,40 @@ struct AIModelScanTests {
         ))
     }
 
+    @Test("A model survives a delete that only got part of the way")
+    func partiallyDeletedModelStaysListed() throws {
+        let home = try makeOllamaHome(models: ["gemma4": ["aaa", "bbb"]])
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let model = try #require(AIModelScanner.ollamaModels(home: home, environment: [:]).first)
+
+        // The manifest trashes first, so this is the realistic failure: Ollama
+        // has already stopped listing the model, but a blob is still on disk.
+        // Dropping the row here would strand those bytes for good — blobs are
+        // only ever discovered through a manifest that no longer exists.
+        let manifestOnly: Set<String> = [model.componentPaths[0].path]
+        #expect(!model.isFullyRemoved(byDeleting: manifestOnly))
+
+        let allButLast = Set(model.componentPaths.dropLast().map(\.path))
+        #expect(!model.isFullyRemoved(byDeleting: allButLast))
+
+        let everything = Set(model.componentPaths.map(\.path))
+        #expect(model.isFullyRemoved(byDeleting: everything))
+    }
+
+    @Test("A single-file row clears on its own path")
+    func plainFileClearsWhenItsPathIsDeleted() {
+        let file = LargeFile(
+            path: URL(fileURLWithPath: "/Users/someone/Movies/clip.mov"),
+            sizeBytes: 1024,
+            lastUsed: Date(),
+            category: .video
+        )
+        #expect(file.isFullyRemoved(byDeleting: ["/Users/someone/Movies/clip.mov"]))
+        #expect(!file.isFullyRemoved(byDeleting: []))
+        #expect(!file.isFullyRemoved(byDeleting: ["/Users/someone/Movies/other.mov"]))
+    }
+
     @Test("Ordinary large files still stand for exactly one path")
     func plainFilesHaveSingleComponent() {
         let file = LargeFile(

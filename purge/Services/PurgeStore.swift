@@ -911,10 +911,20 @@ final class PurgeStore: ObservableObject {
             let deletedPaths = Set(report.deletedItems.map {
                 URL(fileURLWithPath: $0.path).standardizedFileURL.path
             })
+            // A row is gone only when every path it stood for is gone. Matching
+            // on `id` alone would drop a model as soon as its manifest trashed,
+            // even if a multi-gigabyte blob failed and still occupies the disk —
+            // and since blobs are only ever discovered through their manifest, a
+            // later scan could never surface it again. Rows that deleted
+            // partially stay listed and stay selected, so a retry can finish the
+            // job (the already-trashed manifest is skipped as non-existent).
+            let clearedRowIDs = Set(
+                largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) }.map(\.id)
+            )
             withAnimation(.easeInOut(duration: 0.2)) {
-                largeFiles.removeAll { deletedPaths.contains($0.id) }
+                largeFiles.removeAll { clearedRowIDs.contains($0.id) }
             }
-            largeFileSelection.ids.subtract(deletedPaths)
+            largeFileSelection.ids.subtract(clearedRowIDs)
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,
