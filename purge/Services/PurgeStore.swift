@@ -177,6 +177,7 @@ final class PurgeStore: ObservableObject {
     private let cacheScanner = CacheScanner()
     private let devScanner = DevScanner()
     private let largeFileScanner = LargeFileScanner()
+    private let aiModelScanner = AIModelScanner()
     private let fileDeleter = FileDeleter()
     private let defaults = UserDefaults.standard
     private let gitChecker = GitStatusChecker()
@@ -802,6 +803,16 @@ final class PurgeStore: ObservableObject {
         let minBytes = LargeFileSizeThreshold.current().bytes
         let staleDays = LargeFileAgeThreshold.currentThresholdDays()
         var collected: [LargeFile] = []
+
+        // Models resolve from a handful of manifests, so they land almost
+        // instantly — running them ahead of the file walk puts the biggest
+        // items on screen first instead of after a full home-directory sweep.
+        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
+            guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
+            collected.append(model)
+        }
+        largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
+
         for await file in largeFileScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
             collected.append(file)
@@ -844,13 +855,24 @@ final class PurgeStore: ObservableObject {
         let targets = selectedLargeFiles
         guard !targets.isEmpty, !isDeleting else { return }
 
-        let urls = targets.map { $0.path.standardizedFileURL }
+        // A row can stand for several files (an AI model is a manifest plus its
+        // blobs), so expand to components here. Component order matters: the
+        // manifest goes first, so an interrupted delete leaves orphaned blobs
+        // rather than a model Ollama still lists but can no longer run.
+        var urls: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
         for file in targets {
-            let key = file.path.standardizedFileURL.path
-            pathToDisplayName[key] = file.displayName
-            pathToExpectedSizeBytes[key] = file.sizeBytes
+            for component in file.componentPaths {
+                urls.append(component)
+                pathToDisplayName[component.path] = file.displayName
+            }
+            // Only single-file rows can claim a known size up front; for
+            // multi-part rows each component is measured as it goes so the
+            // total doesn't count the row's bytes once per component.
+            if file.componentPaths.count == 1, let only = file.componentPaths.first {
+                pathToExpectedSizeBytes[only.path] = file.sizeBytes
+            }
         }
 
         // Present the cleanup overlay in its cleaning phase and poll per-item
@@ -889,10 +911,20 @@ final class PurgeStore: ObservableObject {
             let deletedPaths = Set(report.deletedItems.map {
                 URL(fileURLWithPath: $0.path).standardizedFileURL.path
             })
+            // A row is gone only when every path it stood for is gone. Matching
+            // on `id` alone would drop a model as soon as its manifest trashed,
+            // even if a multi-gigabyte blob failed and still occupies the disk —
+            // and since blobs are only ever discovered through their manifest, a
+            // later scan could never surface it again. Rows that deleted
+            // partially stay listed and stay selected, so a retry can finish the
+            // job (the already-trashed manifest is skipped as non-existent).
+            let clearedRowIDs = Set(
+                largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) }.map(\.id)
+            )
             withAnimation(.easeInOut(duration: 0.2)) {
-                largeFiles.removeAll { deletedPaths.contains($0.id) }
+                largeFiles.removeAll { clearedRowIDs.contains($0.id) }
             }
-            largeFileSelection.ids.subtract(deletedPaths)
+            largeFileSelection.ids.subtract(clearedRowIDs)
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,

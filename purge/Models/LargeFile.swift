@@ -8,6 +8,7 @@ enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable {
     case pdf
     case archive
     case document
+    case aiModel
     case other
 
     var id: String { rawValue }
@@ -20,6 +21,7 @@ enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable {
         case .pdf: return "PDFs"
         case .archive: return "Archives"
         case .document: return "Documents"
+        case .aiModel: return "AI Models"
         case .other: return "Other"
         }
     }
@@ -32,6 +34,7 @@ enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable {
         case .pdf: return "doc.richtext"
         case .archive: return "archivebox"
         case .document: return "doc.text"
+        case .aiModel: return "cpu"
         case .other: return "doc"
         }
     }
@@ -64,6 +67,20 @@ struct LargeFile: Identifiable, Hashable {
     let category: LargeFileCategory
     var isSelected: Bool = false
 
+    /// Set when the file name on disk isn't what the user calls the thing. An
+    /// Ollama model lives at `manifests/registry.ollama.ai/library/gemma4/latest`
+    /// but the user knows it as `gemma4:latest`.
+    let displayNameOverride: String?
+
+    /// Shown instead of a directory path for rows whose real location is an
+    /// implementation detail — "Ollama" reads better than `~/.ollama/models/…`.
+    let sourceLabel: String?
+
+    /// Every path that must be removed for this row to be gone. Ordinary files
+    /// own exactly one; an AI model spans a manifest plus the blobs it alone
+    /// references.
+    let componentPaths: [URL]
+
     /// Stored (not computed) so identity checks in row bindings, sorting, and list
     /// animations don't re-standardize the URL on every access — the repeated cost
     /// made selection feel delayed compared to App Caches.
@@ -74,18 +91,33 @@ struct LargeFile: Identifiable, Hashable {
         sizeBytes: Int64,
         lastUsed: Date,
         category: LargeFileCategory,
-        isSelected: Bool = false
+        isSelected: Bool = false,
+        displayNameOverride: String? = nil,
+        sourceLabel: String? = nil,
+        componentPaths: [URL]? = nil
     ) {
         self.path = path
         self.sizeBytes = sizeBytes
         self.lastUsed = lastUsed
         self.category = category
         self.isSelected = isSelected
+        self.displayNameOverride = displayNameOverride
+        self.sourceLabel = sourceLabel
+        self.componentPaths = (componentPaths ?? [path]).map(\.standardizedFileURL)
         self.id = path.standardizedFileURL.path
     }
-    var displayName: String { path.lastPathComponent }
+    /// Whether this row may leave the list, given the paths a delete run
+    /// actually removed. Multi-part rows survive a partial delete: a model whose
+    /// manifest trashed but whose blobs didn't still occupies the disk.
+    func isFullyRemoved(byDeleting deletedPaths: Set<String>) -> Bool {
+        componentPaths.allSatisfy { deletedPaths.contains($0.path) }
+    }
+
+    var displayName: String { displayNameOverride ?? path.lastPathComponent }
     var formattedSize: String { formatBytes(sizeBytes) }
-    var locationLabel: String { displayDirectoryPath(for: path.deletingLastPathComponent()) }
+    var locationLabel: String {
+        sourceLabel ?? displayDirectoryPath(for: path.deletingLastPathComponent())
+    }
 }
 
 enum LargeFileSizeThreshold: Int, CaseIterable, Identifiable {
