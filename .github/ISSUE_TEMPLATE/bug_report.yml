@@ -1,0 +1,57 @@
+name: Bug report
+description: Something isn't working the way it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. If this is a **security or data-loss issue**
+        (a path that could be deleted when it shouldn't be, or a way around the
+        safety allowlist), please use a [private security advisory](https://github.com/jithin-sabu/purge-app/security/advisories/new)
+        instead of this form. See [SECURITY.md](https://github.com/jithin-sabu/purge-app/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: Tell us what you saw
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Purge
+        2. Go to '...'
+        3. Click on '...'
+    validations:
+      required: false
+  - type: input
+    id: purge-version
+    attributes:
+      label: Purge version
+      description: Found on the About screen
+      placeholder: e.g. 1.4.0
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: e.g. macOS 14.5
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or screen recording
+      description: Drag and drop images or paste crash logs/console output here.
+    validations:
+      required: false

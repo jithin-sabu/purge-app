@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security or data-loss issue
+    url: https://github.com/jithin-sabu/purge-app/security/advisories/new
+    about: Do not open a public issue for vulnerabilities or unsafe deletion paths. Use a private security advisory instead.

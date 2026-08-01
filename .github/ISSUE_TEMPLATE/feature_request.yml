@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an idea or improvement for Purge
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the situation, not just the feature. What is missing or annoying today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+      description: Your proposed solution, if you have one in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches or workarounds you've thought about.
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        Purge is intentionally scoped around trash-by-default, allowlist-based
+        cleanup, and no destructive shortcuts. Features that fit that model are
+        more likely to land — see [CONTRIBUTING.md](https://github.com/jithin-sabu/purge-app/blob/main/CONTRIBUTING.md).
