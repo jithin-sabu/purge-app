@@ -7,6 +7,11 @@ struct LargeFilesView: View {
 
     let isLoading: Bool
     let onScan: () -> Void
+    /// Owned by the parent rather than held as local `@State` so the page header's
+    /// "N files · X GB to review" subtitle — which `ContentView` renders outside this
+    /// view — counts the same rows the list is actually showing. With the query
+    /// private to this view the header kept advertising the full unfiltered scan.
+    @Binding var searchQuery: String
     var showsPageHeader = true
     var usesExternalScrollContainer = false
 
@@ -38,14 +43,28 @@ struct LargeFilesView: View {
         LargeFileAgeThreshold(rawValue: minAgeDays) ?? .defaultOption
     }
 
+    /// Which categories get a chip. Intentionally keyed off the full scan result and
+    /// not the query, so chips don't appear and vanish under the pointer as the user
+    /// types — a chip that reads 0 is steadier than a row that reflows every keystroke.
     private var availableCategories: [LargeFileCategory] {
         let present = Set(store.largeFiles.map(\.category))
         return LargeFileCategory.allCases.filter { present.contains($0) }
     }
 
+    /// Everything matching the query, before the category chip narrows it further.
+    /// This is what the chip counts are drawn from.
+    private var searchMatches: [LargeFile] {
+        store.largeFiles.filter { $0.matches(searchQuery: searchQuery) }
+    }
+
+    private var hasActiveQuery: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     private var visibleFiles: [LargeFile] {
         let filtered = store.largeFiles.filter { file in
-            categoryFilterRaw == "all" || file.category.rawValue == categoryFilterRaw
+            (categoryFilterRaw == "all" || file.category.rawValue == categoryFilterRaw)
+                && file.matches(searchQuery: searchQuery)
         }
 
         switch currentSort {
@@ -74,7 +93,8 @@ struct LargeFilesView: View {
     private var visibleIndices: [Int] {
         let files = store.largeFiles
         let filtered = files.indices.filter { i in
-            categoryFilterRaw == "all" || files[i].category.rawValue == categoryFilterRaw
+            (categoryFilterRaw == "all" || files[i].category.rawValue == categoryFilterRaw)
+                && files[i].matches(searchQuery: searchQuery)
         }
 
         switch currentSort {
@@ -164,19 +184,23 @@ struct LargeFilesView: View {
             HStack(spacing: 8) {
                 thresholdMenu
                 ageMenu
-                Spacer()
+                Spacer(minLength: 12)
+                LargeFileSearchField(query: $searchQuery)
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
-                    categoryChip(id: "all", title: "All", systemImage: "square.grid.2x2", count: store.largeFiles.count)
+                    // Counts are search-filtered but not category-filtered, so the
+                    // chips answer "where did my matches land?" while a query is
+                    // active instead of advertising rows the query already hid.
+                    categoryChip(id: "all", title: "All", systemImage: "square.grid.2x2", count: searchMatches.count)
                     ForEach(availableCategories) { category in
                         categoryChip(
                             id: category.rawValue,
                             title: category.displayName,
                             systemImage: category.symbolName,
-                            count: store.largeFiles.filter { $0.category == category }.count
+                            count: searchMatches.filter { $0.category == category }.count
                         )
                     }
                 }
@@ -388,10 +412,27 @@ struct LargeFilesView: View {
         VStack(spacing: 4) {
             Text("Nothing here.")
                 .font(.headline)
-            Text("No files match this filter.")
-                .foregroundStyle(.secondary)
+            // Name the query when there is one: with a search field in the chrome the
+            // generic "this filter" leaves the user guessing whether it was the query,
+            // the category, or the size threshold that emptied the list.
+            if hasActiveQuery {
+                Text("No files match \"\(searchQuery)\".")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .multilineTextAlignment(.center)
+                Button("Clear Search") {
+                    searchQuery = ""
+                }
+                .buttonStyle(.link)
+                .padding(.top, 2)
+            } else {
+                Text("No files match this filter.")
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
     }
 
     private var scanningPlaceholder: some View {
@@ -487,6 +528,92 @@ private struct LargeFileSelectAllBar: View {
             AppSortMenu(selection: $sort)
         }
         .scanTabSelectAllRowLayout()
+    }
+}
+
+/// Search field for the Large Files controls row. Deliberately hand-built rather
+/// than `.searchable`: that modifier hangs its field off the enclosing navigation
+/// chrome, which would put it outside this view entirely and give it a different
+/// look on each of the two containers `LargeFilesView` renders into. Geometry and
+/// tokens here are copied from `FilterChip` so it reads as one control family with
+/// the size and last-used menus sitting beside it.
+private struct LargeFileSearchField: View {
+    @Binding var query: String
+
+    @FocusState private var isFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Matches FilterChip's metrics so the row's controls share a baseline.
+    private static let horizontalPadding: CGFloat = 10
+    private static let verticalPadding: CGFloat = 5
+    private static let labelSize: CGFloat = 13
+
+    private var hasText: Bool { !query.isEmpty }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .imageScale(.small)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 14, height: 14)
+                .accessibilityHidden(true)
+
+            TextField("Search", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: Self.labelSize))
+                .foregroundStyle(AppColors.textPrimary)
+                .focused($isFocused)
+                .accessibilityLabel("Search large files by name")
+                // Escape clears rather than just unfocusing: an emptied field is the
+                // state the user wants back, and it's the one AppKit search fields
+                // give them.
+                .onExitCommand {
+                    if hasText {
+                        query = ""
+                    } else {
+                        isFocused = false
+                    }
+                }
+
+            // A real Button is fine here — unlike the result rows, this field lives
+            // in the controls chrome and never inside the List, so it can't trigger
+            // the scroll-to-clicked-row behaviour that forces rows to use tap gestures.
+            if hasText {
+                Button {
+                    query = ""
+                    isFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(AppColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .help("Clear search")
+                .accessibilityLabel("Clear search")
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, Self.horizontalPadding)
+        .padding(.vertical, Self.verticalPadding)
+        .frame(width: 220)
+        .background {
+            Capsule(style: .continuous)
+                .fill(AppColors.bgElevated)
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(
+                    isFocused ? AppColors.buttonPrimaryBg : AppColors.borderSubtle,
+                    lineWidth: 1
+                )
+        }
+        .contentShape(Capsule(style: .continuous))
+        // Clicking anywhere in the capsule focuses the field, not just the glyph-width
+        // of text already typed.
+        .onTapGesture { isFocused = true }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
     }
 }
 
@@ -813,7 +940,7 @@ struct LargeFileDeletionConfirmSheet: View {
 }
 
 #Preview("Large Files") {
-    LargeFilesView(isLoading: false, onScan: {})
+    LargeFilesView(isLoading: false, onScan: {}, searchQuery: .constant(""))
         .environmentObject(PurgeStore())
         .frame(width: 720, height: 560)
 }
