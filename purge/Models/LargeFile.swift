@@ -86,6 +86,21 @@ struct LargeFile: Identifiable, Hashable {
     /// made selection feel delayed compared to App Caches.
     let id: String
 
+    /// Everything a search query is matched against, joined once at init for the
+    /// same reason `id` is stored: it's read for every row on every keystroke, so
+    /// rebuilding it per access would re-walk the URL hundreds of times a character.
+    ///
+    /// Holds the display name, the raw parent path, and the `sourceLabel` when there
+    /// is one — so a query finds a row by what it's called *or* where it lives. The
+    /// last two differ for labelled rows: an Ollama model shows "Ollama" but sits in
+    /// `~/.ollama/models`, and both should be findable. Deliberately uses the raw
+    /// path rather than `locationLabel`/`displayDirectoryPath`: that helper resolves
+    /// the home directory through FileManager and is MainActor-isolated under this
+    /// target's default isolation, and `LargeFile` is built inside the scanners'
+    /// detached tasks. The raw path matches the same words anyway ("Downloads" hits
+    /// either form) — only the `~` prefix differs, which nobody searches for.
+    let searchHaystack: String
+
     init(
         path: URL,
         sizeBytes: Int64,
@@ -104,7 +119,31 @@ struct LargeFile: Identifiable, Hashable {
         self.displayNameOverride = displayNameOverride
         self.sourceLabel = sourceLabel
         self.componentPaths = (componentPaths ?? [path]).map(\.standardizedFileURL)
-        self.id = path.standardizedFileURL.path
+        let standardized = path.standardizedFileURL
+        self.id = standardized.path
+        self.searchHaystack = [
+            displayNameOverride ?? path.lastPathComponent,
+            standardized.deletingLastPathComponent().path,
+            sourceLabel,
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n")
+    }
+
+    /// Whether this row should stay visible for `query`. Whitespace splits the query
+    /// into terms that must *all* match somewhere in `searchHaystack`, so "wedding
+    /// mov" finds the file regardless of what sits between the two words — matching
+    /// the whole string verbatim would find nothing. An all-whitespace or empty query
+    /// matches everything, so callers don't special-case the unfiltered list.
+    ///
+    /// Case- and diacritic-insensitive: someone typing "resume" should still find
+    /// `Résumé.pdf`.
+    func matches(searchQuery query: String) -> Bool {
+        let terms = query.split(whereSeparator: \.isWhitespace)
+        guard !terms.isEmpty else { return true }
+        return terms.allSatisfy { term in
+            searchHaystack.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
     }
     /// Whether this row may leave the list, given the paths a delete run
     /// actually removed. Multi-part rows survive a partial delete: a model whose

@@ -19,6 +19,13 @@ struct ContentView: View {
     @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("filter.largeFiles") private var largeFilesCategoryFilterRaw: String = "all"
+
+    /// Large Files search text. Held here rather than inside `LargeFilesView` so the
+    /// page header subtitle can be filtered by it too, and deliberately `@State`
+    /// rather than `@AppStorage` like the filters beside it: a query that survived
+    /// relaunch would silently hide most of the list on next open, with the only clue
+    /// a few characters in a field the user has long forgotten typing.
+    @State private var largeFilesSearchQuery = ""
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
@@ -390,6 +397,7 @@ struct ContentView: View {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
                     onScan: { Task { await store.scanLargeFiles() } },
+                    searchQuery: $largeFilesSearchQuery,
                     showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
@@ -397,6 +405,7 @@ struct ContentView: View {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
                     onScan: { Task { await store.scanLargeFiles() } },
+                    searchQuery: $largeFilesSearchQuery,
                     showsPageHeader: false
                 )
             }
@@ -460,9 +469,13 @@ struct ContentView: View {
         return "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable"
     }
 
+    /// Mirrors the filtering `LargeFilesView` applies to its list, so the subtitle
+    /// counts the rows the user can actually see. Must stay in step with the search
+    /// and category predicates over there.
     private var largeFilesVisibleForSubtitle: [LargeFile] {
         store.largeFiles.filter { file in
-            largeFilesCategoryFilterRaw == "all" || file.category.rawValue == largeFilesCategoryFilterRaw
+            (largeFilesCategoryFilterRaw == "all" || file.category.rawValue == largeFilesCategoryFilterRaw)
+                && file.matches(searchQuery: largeFilesSearchQuery)
         }
     }
 
