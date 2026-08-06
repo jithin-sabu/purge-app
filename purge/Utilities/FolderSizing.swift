@@ -13,6 +13,9 @@ enum FolderSizing {
     /// total, and the scanners legitimately call this concurrently.
     private nonisolated static let duChunkLimiter = DispatchSemaphore(value: maxConcurrentDuChunks)
 
+    /// How often a caller queued on `duChunkLimiter` re-checks for cancellation.
+    private nonisolated static let limiterPollInterval: DispatchTimeInterval = .milliseconds(100)
+
     /// A chunk walking a deep tree can legitimately take minutes, so this is loose. It exists
     /// only so a `du` that never returns cannot wedge the scan permanently.
     private static let duChunkTimeout: TimeInterval = 300
@@ -63,7 +66,25 @@ enum FolderSizing {
 
         for chunk in chunks {
             if Task.isCancelled { break }
-            duChunkLimiter.wait()
+
+            // Timed acquisition, not `wait()`. The limiter is process-wide, so this can be
+            // queued behind a permit held by an *unrelated* scan whose chunk runs all the
+            // way to `duChunkTimeout`. An indefinite wait would keep a cancelled scan
+            // parked here for that long — on a cooperative-pool thread, which is the
+            // resource the bounded fan-out in `DevScanner.buildProjectGroups` exists to
+            // protect.
+            var acquired = false
+            while !acquired && !Task.isCancelled {
+                acquired = duChunkLimiter.wait(timeout: .now() + limiterPollInterval) == .success
+            }
+            guard acquired else { break }
+            // Cancelled between acquiring and dispatching: the permit must go back, or a
+            // process-wide slot is lost for the lifetime of the app.
+            guard !Task.isCancelled else {
+                duChunkLimiter.signal()
+                break
+            }
+
             group.enter()
             DispatchQueue.global(qos: .utility).async {
                 defer {

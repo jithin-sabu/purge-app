@@ -98,6 +98,30 @@ struct FolderSizingConcurrencyTests {
         }
     }
 
+    /// The `du` limiter is process-wide, so a permit abandoned by a cancelled call is lost for
+    /// the lifetime of the process — enough cancellations and sizing would wedge permanently.
+    /// `directorySizes` bails out on cancellation at two points, one of which happens while
+    /// holding a permit, so it has to hand that permit back.
+    ///
+    /// Cancelling more times than there are permits and then measuring normally is the check:
+    /// if any path leaked, capacity would be exhausted and the final call would never return.
+    @Test("Cancelled sizing calls do not leak limiter permits")
+    func cancellationDoesNotLeakLimiterPermits() async throws {
+        let (root, paths) = try makeTree(directories: FolderSizing.duChunkSize * 3, bytesEach: 4 * 1024)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // More iterations than `maxConcurrentDuChunks` (10).
+        for _ in 0..<14 {
+            let task = Task.detached { _ = FolderSizing.directorySizes(at: paths) }
+            task.cancel()
+            _ = await task.value
+        }
+
+        // Would hang rather than fail if permits had leaked.
+        let sizes = FolderSizing.directorySizes(at: paths)
+        #expect(sizes.count == paths.count, "measured \(sizes.count) of \(paths.count) after cancellations")
+    }
+
     /// `du` prints one "Permission denied" line per unreadable directory. That output lands on
     /// stderr, so a runner that leaves stderr undrained wedges the child on a full pipe once the
     /// tree is broad enough — the same deadlock as stdout, just quieter.
