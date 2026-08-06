@@ -29,7 +29,7 @@ enum NodePackageManager: String, Hashable, Sendable {
     }
 }
 
-enum ProjectType: Hashable, Sendable {
+nonisolated enum ProjectType: Hashable, Sendable {
     case node
     case rust
     case flutter
@@ -51,7 +51,7 @@ enum ProjectType: Hashable, Sendable {
 }
 
 /// High-level grouping of removable folders tied to one project directory.
-enum DeletableArtifactKind: String, Hashable, Sendable {
+nonisolated enum DeletableArtifactKind: String, Hashable, Sendable {
     case nodeModules = "node_modules"
     case venv
     case dotGradle = ".gradle"
@@ -87,7 +87,7 @@ enum DeletableArtifactKind: String, Hashable, Sendable {
 }
 
 /// One folder under a detected project shown in lists and selectable for deletion.
-struct ProjectCacheArtifact: Identifiable, Hashable {
+nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {
     var id: String { path.path }
 
     let kind: DeletableArtifactKind
@@ -111,7 +111,7 @@ struct ProjectCacheArtifact: Identifiable, Hashable {
 }
 
 /// A collapsible Dev Tools group: multiple artifacts under one project root.
-struct ProjectGroup: Identifiable, Hashable {
+nonisolated struct ProjectGroup: Identifiable, Hashable {
     var id: String { rootPath.path }
 
     let displayName: String

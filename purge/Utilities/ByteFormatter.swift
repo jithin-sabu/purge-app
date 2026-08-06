@@ -1,6 +1,6 @@
 import Foundation
 
-func formatBytes(_ bytes: Int64) -> String {
+nonisolated func formatBytes(_ bytes: Int64) -> String {
     guard bytes > 0 else { return "0 bytes" }
 
     let formatter = ByteCountFormatter()
@@ -38,7 +38,7 @@ func formatStorageBytes(_ bytes: Int64) -> String {
 /// `formatBytes` rounds to nearest, which would turn 1.29 GB into "1.3 GB" and quietly
 /// promise more than exists. An "up to" figure has to under-promise by construction: the
 /// measured outcome must always be able to meet or beat it.
-func formatBytesRoundedDown(_ bytes: Int64) -> String {
+nonisolated func formatBytesRoundedDown(_ bytes: Int64) -> String {
     guard bytes > 0 else { return "0 bytes" }
 
     let units: [(threshold: Int64, suffix: String)] = [

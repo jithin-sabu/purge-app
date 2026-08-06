@@ -65,7 +65,14 @@ private enum MenuLayout {
 /// while the panel is open, because only real menu tracking pins it.
 struct MenuBarContentView: View {
     @ObservedObject var model: MenuViewModel
-    @EnvironmentObject private var store: PurgeStore
+    /// Deliberately a plain reference, NOT `@EnvironmentObject`: this panel renders
+    /// entirely from `model.state` and touches the store only to hand it to
+    /// `model.attach`. Observing it subscribed the panel to every `PurgeStore`
+    /// publish, and because the `.window` panel hierarchy stays mounted while
+    /// closed, each publish drove AppKit's `NSStatusItem` replicant redraw — which
+    /// rasterises the status item's view tree into a bitmap on the main thread.
+    /// During a scan that was the single largest main-thread cost in the app.
+    let store: PurgeStore
     /// The panel hierarchy stays alive while the panel is hidden (the `.window`
     /// panel is reused across opens), so every repeating timer in this view
     /// must be gated on this flag or it keeps waking the app while closed.

@@ -8,7 +8,10 @@ import Foundation
 /// a model without Ollama noticing — the manifest would still claim the model
 /// is installed. Blobs are also shared between models, so the reclaimable size
 /// of a model is only the blobs no other manifest references.
-final class AIModelScanner {
+/// `nonisolated` for the same reason as `LargeFileScanner` — see the note there.
+/// Without it the `Task.detached` in `scanStream` hops back to the main actor and
+/// this runs its manifest walk on the UI thread.
+nonisolated final class AIModelScanner {
     func scanStream(minBytes: Int64, staleDays: Int) -> AsyncStream<LargeFile> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {

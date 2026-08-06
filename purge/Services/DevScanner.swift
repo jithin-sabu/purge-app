@@ -9,7 +9,9 @@ enum DeveloperScanEvent {
     case simulatorSizeResolved(id: UUID, sizeBytes: Int64)
 }
 
-final class DevScanner {
+/// `nonisolated` for the same reason as `CacheScanner` — a probe confirmed
+/// `runDeveloperScan` was executing on the main thread despite `Task.detached`.
+nonisolated final class DevScanner {
     private struct DevToolSizeJob {
         let toolID: String
         let toolLabel: String
@@ -925,72 +927,97 @@ final class DevScanner {
     ) async -> (groups: [ProjectGroup], artifactsSized: Int) {
         guard !discovered.isEmpty else { return ([], 0) }
 
+        // Bounded rather than one task per discovered root. `sizeProjectGroup` blocks its
+        // thread inside `FolderSizing.directorySizes` (a `DispatchGroup.wait`), so an
+        // unbounded group parks one cooperative-pool thread per project — and the pool is
+        // core-count sized and already shared with the cache scan's fan-out. The `du`
+        // subprocess count is capped separately and process-wide by `FolderSizing`.
         return await withTaskGroup(of: (ProjectGroup?, Int).self) { group in
-            for (rootURL, types) in discovered {
-                group.addTask { [rootURL, types] in
-                    let rows = DevScanner.collectArtifacts(projectRoot: rootURL, types: types)
-                    guard !rows.isEmpty else { return (nil, 0) }
+            var pending = discovered.makeIterator()
+            var inFlight = 0
 
-                    let artifactPaths = rows.map(\.path)
-                    let sizesByPath = FolderSizing.directorySizes(at: artifactPaths)
-
-                    var sized: [ProjectCacheArtifact] = []
-                    for row in rows {
-                        let pathKey = row.path.standardizedFileURL.path
-                        let bytes = sizesByPath[pathKey] ?? 0
-                        let modified = FolderSizing.contentModificationDate(at: row.path)
-                        sized.append(
-                            ProjectCacheArtifact(
-                                kind: row.kind,
-                                path: row.path,
-                                projectRoot: row.projectRoot,
-                                sizeBytes: bytes,
-                                lastModified: modified,
-                                isSelected: false,
-                                safetyInfo: row.safetyInfo,
-                                reinstallSafety: row.reinstallSafety,
-                                gitStatus: .unknown
-                            )
-                        )
-                    }
-                    sized.sort { $0.sizeBytes > $1.sizeBytes }
-
-                    let staleDays = DevToolsStalenessOption.currentThresholdDays()
-                    let now = Date()
-                    let staleArtifacts: [ProjectCacheArtifact]
-                    if staleDays == DevToolsStalenessOption.showAll.rawValue {
-                        staleArtifacts = sized
-                    } else {
-                        staleArtifacts = sized.filter {
-                            Self.daysBetween($0.lastModified, now) >= staleDays
-                        }
-                    }
-
-                    guard !staleArtifacts.isEmpty else { return (nil, rows.count) }
-
-                    return (
-                        ProjectGroup(
-                            displayName: rootURL.lastPathComponent,
-                            rootPath: rootURL,
-                            inferredTypes: types,
-                            artifacts: staleArtifacts
-                        ),
-                        rows.count
-                    )
+            while inFlight < Self.maxConcurrentProjectSizings, let next = pending.next() {
+                group.addTask { [next] in
+                    DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1)
                 }
+                inFlight += 1
             }
 
             var groups: [ProjectGroup] = []
             var artifactsSized = 0
-            for await result in group {
+            while let result = await group.next() {
                 artifactsSized += result.1
                 if let g = result.0 {
                     groups.append(g)
                     continuation?.yield(.projectGroupFound(g))
                 }
+                if Task.isCancelled { continue }
+                if let next = pending.next() {
+                    group.addTask { [next] in
+                        DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1)
+                    }
+                }
             }
             return (groups, artifactsSized)
         }
+    }
+
+    /// How many project roots may be sized at once. See `buildProjectGroups`.
+    private static let maxConcurrentProjectSizings = 4
+
+    private nonisolated static func sizeProjectGroup(
+        rootURL: URL,
+        types: [ProjectType]
+    ) -> (ProjectGroup?, Int) {
+        let rows = DevScanner.collectArtifacts(projectRoot: rootURL, types: types)
+        guard !rows.isEmpty else { return (nil, 0) }
+
+        let artifactPaths = rows.map(\.path)
+        let sizesByPath = FolderSizing.directorySizes(at: artifactPaths)
+
+        var sized: [ProjectCacheArtifact] = []
+        for row in rows {
+            let pathKey = row.path.standardizedFileURL.path
+            let bytes = sizesByPath[pathKey] ?? 0
+            let modified = FolderSizing.contentModificationDate(at: row.path)
+            sized.append(
+                ProjectCacheArtifact(
+                    kind: row.kind,
+                    path: row.path,
+                    projectRoot: row.projectRoot,
+                    sizeBytes: bytes,
+                    lastModified: modified,
+                    isSelected: false,
+                    safetyInfo: row.safetyInfo,
+                    reinstallSafety: row.reinstallSafety,
+                    gitStatus: .unknown
+                )
+            )
+        }
+        sized.sort { $0.sizeBytes > $1.sizeBytes }
+
+        let staleDays = DevToolsStalenessOption.currentThresholdDays()
+        let now = Date()
+        let staleArtifacts: [ProjectCacheArtifact]
+        if staleDays == DevToolsStalenessOption.showAll.rawValue {
+            staleArtifacts = sized
+        } else {
+            staleArtifacts = sized.filter {
+                Self.daysBetween($0.lastModified, now) >= staleDays
+            }
+        }
+
+        guard !staleArtifacts.isEmpty else { return (nil, rows.count) }
+
+        return (
+            ProjectGroup(
+                displayName: rootURL.lastPathComponent,
+                rootPath: rootURL,
+                inferredTypes: types,
+                artifacts: staleArtifacts
+            ),
+            rows.count
+        )
     }
 
     private struct SizedArtifactIntermediate {

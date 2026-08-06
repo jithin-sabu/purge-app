@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-func displayDirectoryPath(for directoryURL: URL) -> String {
+nonisolated func displayDirectoryPath(for directoryURL: URL) -> String {
     let directory = directoryURL.standardizedFileURL
     let path = directory.path
     let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
@@ -12,7 +12,7 @@ func displayDirectoryPath(for directoryURL: URL) -> String {
 }
 
 /// Friendly application name for a bundle identifier, or `nil` if no installed app matches.
-func appDisplayName(forBundleID bundleID: String) -> String? {
+nonisolated func appDisplayName(forBundleID bundleID: String) -> String? {
     guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
         return nil
     }

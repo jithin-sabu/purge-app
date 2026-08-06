@@ -24,13 +24,29 @@ struct AppRootView: View {
     (hasCompletedOnboarding || isMainAppRevealed || reduceMotion) && !showsAccessGate
   }
 
+  /// Whether `ContentView` should exist at all. Distinct from `showsMainApp`, which only
+  /// controls its opacity during the onboarding hand-off.
+  private var showsMainAppContent: Bool {
+    hasCompletedOnboarding || isOnboardingExitingToHome
+  }
+
   var body: some View {
     ZStack {
-      ContentView(isLifecycleActive: hasCompletedOnboarding && store.hasFullDiskAccess)
-        .opacity(showsMainApp ? 1 : 0)
-        .blur(radius: showsMainApp ? 0 : OnboardingTransitions.dismissBlurRadius)
-        .allowsHitTesting(showsMainApp)
-        .accessibilityHidden(!showsMainApp)
+      // Mounted only once it is about to be needed. Keeping it in the hierarchy for the
+      // whole of onboarding meant the full main app — including the App Caches list and
+      // every one of its rows — was laid out and rendered behind the onboarding overlay
+      // at `opacity(0)`, competing with the step transitions for the main thread.
+      // Profiling the onboarding flow showed `ScanResultRow` and
+      // `AppCachesView.cacheResultsListContent` bodies running while onboarding was on
+      // screen. The pre-mount before the reveal is preserved: `isOnboardingExitingToHome`
+      // flips first, and `revealMainAppAfterMount` already waits 120ms before fading in.
+      if showsMainAppContent {
+        ContentView(isLifecycleActive: hasCompletedOnboarding && store.hasFullDiskAccess)
+          .opacity(showsMainApp ? 1 : 0)
+          .blur(radius: showsMainApp ? 0 : OnboardingTransitions.dismissBlurRadius)
+          .allowsHitTesting(showsMainApp)
+          .accessibilityHidden(!showsMainApp)
+      }
       if !hasCompletedOnboarding {
         OnboardingFlowView(
           hasCompletedOnboarding: $hasCompletedOnboarding,

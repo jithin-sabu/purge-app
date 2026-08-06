@@ -2,8 +2,19 @@ import Foundation
 
 /// Shared folder sizing so scans can call this from background tasks without hopping through `MainActor`.
 enum FolderSizing {
-    static let duChunkSize = 64
+    nonisolated static let duChunkSize = 64
     private static let maxConcurrentDuChunks = 10
+
+    /// Process-wide, deliberately **not** per call.
+    ///
+    /// A per-call semaphore caps one `directorySizes` invocation at ten `du` processes but
+    /// says nothing about how many invocations run at once — N concurrent callers meant up
+    /// to 10N subprocesses. `du` is I/O-bound on a single disk, so the useful limit is a
+    /// total, and the scanners legitimately call this concurrently.
+    private nonisolated static let duChunkLimiter = DispatchSemaphore(value: maxConcurrentDuChunks)
+
+    /// How often a caller queued on `duChunkLimiter` re-checks for cancellation.
+    private nonisolated static let limiterPollInterval: DispatchTimeInterval = .milliseconds(100)
 
     /// A chunk walking a deep tree can legitimately take minutes, so this is loose. It exists
     /// only so a `du` that never returns cannot wedge the scan permanently.
@@ -51,16 +62,33 @@ enum FolderSizing {
 
         var result: [String: Int64] = [:]
         let lock = NSLock()
-        let semaphore = DispatchSemaphore(value: maxConcurrentDuChunks)
         let group = DispatchGroup()
 
         for chunk in chunks {
             if Task.isCancelled { break }
-            semaphore.wait()
+
+            // Timed acquisition, not `wait()`. The limiter is process-wide, so this can be
+            // queued behind a permit held by an *unrelated* scan whose chunk runs all the
+            // way to `duChunkTimeout`. An indefinite wait would keep a cancelled scan
+            // parked here for that long — on a cooperative-pool thread, which is the
+            // resource the bounded fan-out in `DevScanner.buildProjectGroups` exists to
+            // protect.
+            var acquired = false
+            while !acquired && !Task.isCancelled {
+                acquired = duChunkLimiter.wait(timeout: .now() + limiterPollInterval) == .success
+            }
+            guard acquired else { break }
+            // Cancelled between acquiring and dispatching: the permit must go back, or a
+            // process-wide slot is lost for the lifetime of the app.
+            guard !Task.isCancelled else {
+                duChunkLimiter.signal()
+                break
+            }
+
             group.enter()
             DispatchQueue.global(qos: .utility).async {
                 defer {
-                    semaphore.signal()
+                    duChunkLimiter.signal()
                     group.leave()
                 }
                 let partial = directorySizesForChunk(chunk)

@@ -300,6 +300,12 @@ struct ContentView: View {
         .background(AppColors.bgBase)
     }
 
+    // Deliberately a plain `switch`, i.e. the incoming tab is built fresh. Keeping
+    // visited tabs mounted in a ZStack and toggling opacity was tried and measured: it
+    // helped the first few switches but was a net regression (p95 33ms → 50ms with all
+    // tabs mounted, 41ms with just the two scan tabs), because a mounted tab still
+    // re-evaluates its body on every store publish. Don't re-propose it without new
+    // measurements.
     @ViewBuilder
     private var tabBody: some View {
         switch store.selectedTab {
@@ -496,7 +502,7 @@ struct ContentView: View {
 
     private var appCachesVisibleItems: [CacheItem] {
         store.cacheItems.filter {
-            appCachesSafetyFilter.matches($0.safetyInfo) && !isVisuallyRemovedBySafeCleanup($0)
+            appCachesSafetyFilter.matches($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
         }
     }
 
@@ -571,33 +577,14 @@ struct ContentView: View {
     private func devToolVisible(_ tool: DevTool) -> Bool {
         tool.isDetected &&
             devToolsSafetyFilter.matches(tool.safetyInfo) &&
-            !isVisuallyRemovedBySafeCleanup(tool)
+            !store.isVisuallyRemovedBySafeCleanup(tool)
     }
 
     private func projectArtifactVisible(_ artifact: ProjectCacheArtifact) -> Bool {
         devToolsSafetyFilter.matches(artifact.safetyInfo) &&
-            !isVisuallyRemovedBySafeCleanup(artifact)
+            !store.isVisuallyRemovedBySafeCleanup(artifact)
     }
 
-    private func isVisuallyRemovedBySafeCleanup(_ item: CacheItem) -> Bool {
-        let rowPaths = Set(item.locations.map { $0.path.standardizedFileURL.path })
-        let targetedPaths = rowPaths.intersection(store.interactiveSafeCleanupTargetPaths)
-        guard !targetedPaths.isEmpty else { return false }
-        return targetedPaths.isSubset(of: store.interactiveSafeCleanupRemovedPaths)
-    }
-
-    private func isVisuallyRemovedBySafeCleanup(_ tool: DevTool) -> Bool {
-        let rowPaths = Set(tool.paths.map { $0.standardizedFileURL.path })
-        let targetedPaths = rowPaths.intersection(store.interactiveSafeCleanupTargetPaths)
-        guard !targetedPaths.isEmpty else { return false }
-        return targetedPaths.isSubset(of: store.interactiveSafeCleanupRemovedPaths)
-    }
-
-    private func isVisuallyRemovedBySafeCleanup(_ artifact: ProjectCacheArtifact) -> Bool {
-        let path = artifact.path.standardizedFileURL.path
-        return store.interactiveSafeCleanupTargetPaths.contains(path)
-            && store.interactiveSafeCleanupRemovedPaths.contains(path)
-    }
 }
 
 private struct DiskSummaryRefreshModifier: ViewModifier {
@@ -757,7 +744,7 @@ struct SidebarSummaryView: View {
                     .foregroundStyle(safeToCleanBytes > 0 ? .primary : .secondary)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: safeToCleanBytes)
+                    .animation(countingAnimation, value: safeToCleanBytes)
             }
         }
         .accessibilityElement(children: .combine)
@@ -768,14 +755,30 @@ struct SidebarSummaryView: View {
         store.safeRecoverableBytes
     }
 
-    /// Before the first size pass lands the number would read a misleading 0, so the hero
-    /// shows a measuring indicator until a real total is available.
-    private var isSafeToCleanLoading: Bool {
-        guard store.safeRecoverableBytes == 0 else { return false }
-        return store.scanPhase == .scanning
+    /// While a scan is running the totals are re-published on a fixed ~140ms beat, so a
+    /// 0.45s eased roll would be retargeted a third of the way through its curve on every
+    /// tick — the digits never reach the ease-out and the climb reads as a stutter rather
+    /// than a count. A linear roll matched to the publish cadence hands off cleanly from
+    /// one tick to the next, so the figure rises continuously; the longer eased curve is
+    /// kept for the settled value, where there is a real start and end to ease between.
+    private var countingAnimation: Animation? {
+        guard !reduceMotion else { return nil }
+        return isCountingUp
+            ? .linear(duration: PurgeStore.scanFlushIntervalSeconds)
+            : .easeInOut(duration: 0.45)
+    }
+
+    private var isCountingUp: Bool {
+        store.scanPhase == .scanning
             || store.scanPhase == .cancelling
             || store.isEnrichingGeneral
             || store.isEnrichingDeveloper
+    }
+
+    /// Before the first size pass lands the number would read a misleading 0, so the hero
+    /// shows a measuring indicator until a real total is available.
+    private var isSafeToCleanLoading: Bool {
+        store.safeRecoverableBytes == 0 && isCountingUp
     }
 
 
@@ -837,7 +840,7 @@ struct SidebarSummaryView: View {
             .foregroundStyle(.tertiary)
             .monospacedDigit()
             .contentTransition(reduceMotion ? .identity : .numericText())
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: reclaimableTotalBytes)
+            .animation(countingAnimation, value: reclaimableTotalBytes)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 

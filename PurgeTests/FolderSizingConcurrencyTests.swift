@@ -60,6 +60,68 @@ struct FolderSizingConcurrencyTests {
         }
     }
 
+    /// The `du` concurrency limiter is process-wide, not per call — a per-call semaphore capped
+    /// one `directorySizes` invocation at ten subprocesses but let N concurrent callers reach
+    /// 10N, which is what the Dev Tools project sizing did (one unbounded task per project root).
+    /// Sharing one semaphore across callers means each call's `DispatchGroup.wait` now also waits
+    /// on permits held by *other* calls, so this checks that every caller still gets a complete,
+    /// correctly-attributed result rather than dropping chunks or returning early.
+    @Test("Concurrent directorySizes callers each get complete results")
+    func concurrentCallersEachGetCompleteResults() async throws {
+        let callers = 6
+        let dirsPerCaller = FolderSizing.duChunkSize + 8 // forces >1 chunk per caller
+        var trees: [(root: URL, paths: [URL])] = []
+        for _ in 0..<callers {
+            trees.append(try makeTree(directories: dirsPerCaller, bytesEach: 4 * 1024))
+        }
+        defer {
+            for tree in trees { try? FileManager.default.removeItem(at: tree.root) }
+        }
+
+        let results = await withTaskGroup(
+            of: (Int, [String: Int64]).self,
+            returning: [(Int, [String: Int64])].self
+        ) { group in
+            for (index, tree) in trees.enumerated() {
+                group.addTask { (index, FolderSizing.directorySizes(at: tree.paths)) }
+            }
+            return await group.reduce(into: []) { $0.append($1) }
+        }
+
+        #expect(results.count == callers)
+        for (index, sizes) in results {
+            let expected = trees[index].paths
+            #expect(sizes.count == expected.count, "caller \(index) measured \(sizes.count) of \(expected.count)")
+            for path in expected {
+                #expect(sizes[path.standardizedFileURL.path] ?? 0 > 0, "caller \(index) lost \(path.lastPathComponent)")
+            }
+        }
+    }
+
+    /// The `du` limiter is process-wide, so a permit abandoned by a cancelled call is lost for
+    /// the lifetime of the process — enough cancellations and sizing would wedge permanently.
+    /// `directorySizes` bails out on cancellation at two points, one of which happens while
+    /// holding a permit, so it has to hand that permit back.
+    ///
+    /// Cancelling more times than there are permits and then measuring normally is the check:
+    /// if any path leaked, capacity would be exhausted and the final call would never return.
+    @Test("Cancelled sizing calls do not leak limiter permits")
+    func cancellationDoesNotLeakLimiterPermits() async throws {
+        let (root, paths) = try makeTree(directories: FolderSizing.duChunkSize * 3, bytesEach: 4 * 1024)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // More iterations than `maxConcurrentDuChunks` (10).
+        for _ in 0..<14 {
+            let task = Task.detached { _ = FolderSizing.directorySizes(at: paths) }
+            task.cancel()
+            _ = await task.value
+        }
+
+        // Would hang rather than fail if permits had leaked.
+        let sizes = FolderSizing.directorySizes(at: paths)
+        #expect(sizes.count == paths.count, "measured \(sizes.count) of \(paths.count) after cancellations")
+    }
+
     /// `du` prints one "Permission denied" line per unreadable directory. That output lands on
     /// stderr, so a runner that leaves stderr undrained wedges the child on a full pipe once the
     /// tree is broad enough — the same deadlock as stdout, just quieter.

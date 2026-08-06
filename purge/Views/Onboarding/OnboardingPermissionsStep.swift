@@ -70,8 +70,11 @@ struct OnboardingPermissionsStep: View {
     withAnimation(.easeInOut(duration: 0.2)) {
       didOpenFullDiskAccessSettings = true
     }
+    // No re-check here: this only opens System Settings, so access cannot have been
+    // granted yet, and the probe lists three Library directories on the main thread.
+    // `pollFullDiskAccess` is already running for this step and picks the grant up
+    // within a second, off the main actor.
     openFullDiskAccessSettings()
-    refreshFullDiskAccess()
   }
 
   private func enableLoginItem() {
@@ -84,8 +87,13 @@ struct OnboardingPermissionsStep: View {
 
   private func pollFullDiskAccess() async {
     while !Task.isCancelled {
-      await MainActor.run {
-        refreshFullDiskAccess()
+      // Probes off the main actor and publishes only on a change, so the once-a-second
+      // poll cannot stutter the step's animations. See `probeFullDiskAccess`.
+      let granted = await store.probeFullDiskAccess()
+      if granted != store.hasFullDiskAccess {
+        withAnimation(.easeInOut(duration: 0.2)) {
+          store.applyFullDiskAccess(granted)
+        }
       }
 
       do {
@@ -93,12 +101,6 @@ struct OnboardingPermissionsStep: View {
       } catch {
         break
       }
-    }
-  }
-
-  private func refreshFullDiskAccess() {
-    withAnimation(.easeInOut(duration: 0.2)) {
-      store.refreshPermission()
     }
   }
 }

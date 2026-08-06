@@ -186,6 +186,21 @@ enum DeletionSafetyPolicy {
         ]
     }
 
+    /// The user's home path, resolved once. `FileManager.homeDirectoryForCurrentUser`
+    /// plus `standardizedFileURL` was previously re-run inside every protection check,
+    /// several times per item, on every flush — it cannot change while the app runs.
+    nonisolated static let cachedHomePath: String =
+        FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+
+    /// Prebuilt for `cachedHomePath`, which is the only value production ever passes.
+    /// The uncached form allocated ~20 interpolated strings per call, per item, per flush.
+    private nonisolated static let cachedWhitelistedPrefixes: [String] =
+        whitelistedAbsolutePrefixes(home: cachedHomePath)
+
+    nonisolated static func whitelistedPrefixes(home: String) -> [String] {
+        home == cachedHomePath ? cachedWhitelistedPrefixes : whitelistedAbsolutePrefixes(home: home)
+    }
+
     /// Absolute paths (and their descendants) we are explicitly authorized to delete.
     ///
     /// Audit note: every entry below resolves to a regenerable cache, build
@@ -279,10 +294,33 @@ enum DeletionSafetyPolicy {
     }
 
     /// Whether Purge may offer this path for manual or scheduled cleanup (no admin prompt).
+    ///
+    /// Memoised by path. The verdict is a pure function of the path and the static
+    /// allowlists — nothing here reads size, mtime, or user state — so a repeat lookup
+    /// can only produce the same answer. This matters because `filterCacheItems` runs
+    /// over the *entire* accumulated result set on every scan flush, so without a cache
+    /// the policy was re-evaluated (items x flushes) times on the main thread; profiling
+    /// a scan put essentially the whole per-flush cost inside this one call.
     nonisolated static func isOfferedForCleanup(_ url: URL) -> Bool {
-        if requiresAdminPrivileges(for: url) { return false }
-        return evaluate(url) == .allow
+        let key = url.standardizedFileURL.path
+
+        offeredForCleanupLock.lock()
+        let cached = offeredForCleanupCache[key]
+        offeredForCleanupLock.unlock()
+        if let cached { return cached }
+
+        // Evaluated outside the lock: the scanners call this concurrently, and holding
+        // the lock across the evaluation would serialise them onto one another.
+        let verdict = !requiresAdminPrivileges(for: url) && evaluate(url) == .allow
+
+        offeredForCleanupLock.lock()
+        offeredForCleanupCache[key] = verdict
+        offeredForCleanupLock.unlock()
+        return verdict
     }
+
+    private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]
+    private nonisolated static let offeredForCleanupLock = NSLock()
 
     nonisolated static func filterCacheItems(_ items: [CacheItem]) -> [CacheItem] {
         items.compactMap(filterCacheItem)
@@ -354,7 +392,7 @@ enum DeletionSafetyPolicy {
 
     nonisolated static func shouldDeleteContentsOnly(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path
-        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let home = cachedHomePath
         if contentsOnlyPrefixes(home: home).contains(path) { return true }
         // Clear the Telegram media cache's contents but leave the `media`
         // directory itself (and everything above it) in place.
@@ -364,7 +402,7 @@ enum DeletionSafetyPolicy {
 
     nonisolated static func isProtectedSystemCache(_ url: URL) -> Bool {
         let standardized = url.standardizedFileURL
-        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let home = cachedHomePath
         let cachesPrefix = "\(home)/Library/Caches"
         let path = standardized.path
         guard path.hasPrefix(cachesPrefix + "/") else { return false }
@@ -384,7 +422,7 @@ enum DeletionSafetyPolicy {
 
     nonisolated static func isProtectedLogFolder(_ url: URL) -> Bool {
         let standardized = url.standardizedFileURL
-        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let home = cachedHomePath
         let logsPrefix = "\(home)/Library/Logs"
         let path = standardized.path
         guard path == logsPrefix || path.hasPrefix(logsPrefix + "/") else { return false }
@@ -396,7 +434,7 @@ enum DeletionSafetyPolicy {
 
     nonisolated static func isProtectedAppContainer(_ url: URL) -> Bool {
         let standardized = url.standardizedFileURL
-        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let home = cachedHomePath
         let containersPrefix = "\(home)/Library/Containers/"
         let path = standardized.path
         guard path.hasPrefix(containersPrefix) else { return false }
@@ -529,8 +567,7 @@ enum DeletionSafetyPolicy {
     nonisolated static func evaluate(_ url: URL) -> DeletionSafetyDecision {
         let standardized = url.standardizedFileURL
         let path = standardized.path
-        let homeURL = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
-        let home = homeURL.path
+        let home = cachedHomePath
 
         if isProtectedSystemCache(standardized)
             || isProtectedAppContainer(standardized)
@@ -538,7 +575,7 @@ enum DeletionSafetyPolicy {
             return .blockedNeverDelete
         }
 
-        for allowed in whitelistedAbsolutePrefixes(home: home) {
+        for allowed in whitelistedPrefixes(home: home) {
             if path == allowed || path.hasPrefix(allowed + "/") {
                 return .allow
             }

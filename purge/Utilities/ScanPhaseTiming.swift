@@ -1,7 +1,7 @@
 import Foundation
 
 /// Temporary scan instrumentation — logs lines prefixed with `PURGE-TIMING:` for profiling.
-enum ScanPhaseTiming {
+nonisolated enum ScanPhaseTiming {
     static func log(_ message: String) {
         #if DEBUG
         print("PURGE-TIMING: \(message)")

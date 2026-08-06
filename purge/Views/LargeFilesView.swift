@@ -392,7 +392,7 @@ struct LargeFilesView: View {
         .disablingListSelection()
         .scrollContentBackground(.hidden)
         .background(AppColors.bgBase)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.largeFiles.map(\.id))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.largeFilesRevision)
     }
 
     private var emptyState: some View {

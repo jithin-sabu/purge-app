@@ -46,22 +46,40 @@ final class BrandIconService {
 
     private let imageCache = NSCache<NSString, NSImage>()
 
+    /// Fully-resolved row icons, keyed by the row's icon identity plus appearance.
+    ///
+    /// Resolution is not cheap: a miss walks the bundled-asset lookup, then Launch
+    /// Services, then up to nine `fileExists` probes. `AdaptiveBrandIconImage` resolves
+    /// inside `body`, so without this every re-render of a visible row repeated that
+    /// work on the main thread — and during a scan the rows re-render on every flush.
+    private var rowIconCache: [String: BrandRowIcon] = [:]
+
+    /// Installed-app lookups, **including misses** (`nil`). The miss is the expensive
+    /// case — it is the one that runs the full nine-probe filesystem walk and finds
+    /// nothing — so caching only hits would leave the hot path uncached.
+    private var installedAppIconCache: [String: NSImage?] = [:]
+
     private init() {}
 
     // MARK: - Public API
 
     func rowIcon(forCacheItem item: CacheItem, appearance: BrandIconAppearance) -> BrandRowIcon {
-        if let key = item.definitionKey, let image = resolve(definitionKey: key, appearance: appearance) {
-            return .bitmap(image)
+        // Keyed on what resolution actually reads, not on the item: size and timestamps
+        // churn constantly during a scan but never change which icon a row gets.
+        let key = "c|\(appearance)|\(item.definitionKey ?? "")|\(item.bundleID)|\(item.appName)"
+        return cachedRowIcon(key: key) {
+            if let key = item.definitionKey, let image = resolve(definitionKey: key, appearance: appearance) {
+                return .bitmap(image)
+            }
+            if let key = ExplanationDatabase.definitionKey(forFolderName: item.bundleID),
+               let image = resolve(definitionKey: key, appearance: appearance) {
+                return .bitmap(image)
+            }
+            if let image = resolve(appName: item.appName, bundleID: item.bundleID, appearance: appearance) {
+                return .bitmap(image)
+            }
+            return .symbol(Self.fallbackFolderSymbolName)
         }
-        if let key = ExplanationDatabase.definitionKey(forFolderName: item.bundleID),
-           let image = resolve(definitionKey: key, appearance: appearance) {
-            return .bitmap(image)
-        }
-        if let image = resolve(appName: item.appName, bundleID: item.bundleID, appearance: appearance) {
-            return .bitmap(image)
-        }
-        return .symbol(Self.fallbackFolderSymbolName)
     }
 
     func rowIcon(forCacheItem item: CacheItem, colorScheme: ColorScheme) -> BrandRowIcon {
@@ -69,10 +87,12 @@ final class BrandIconService {
     }
 
     func rowIcon(forDevTool tool: DevTool, appearance: BrandIconAppearance) -> BrandRowIcon {
-        if let image = resolve(definitionKey: tool.definitionKey, appearance: appearance) {
-            return .bitmap(image)
+        cachedRowIcon(key: "t|\(appearance)|\(tool.definitionKey)") {
+            if let image = resolve(definitionKey: tool.definitionKey, appearance: appearance) {
+                return .bitmap(image)
+            }
+            return .symbol(Self.fallbackFolderSymbolName)
         }
-        return .symbol(Self.fallbackFolderSymbolName)
     }
 
     func rowIcon(forDevTool tool: DevTool, colorScheme: ColorScheme) -> BrandRowIcon {
@@ -80,6 +100,16 @@ final class BrandIconService {
     }
 
     func rowIcon(forProjectGroup group: ProjectGroup, appearance: BrandIconAppearance) -> BrandRowIcon {
+        // The dominant artifact can change as sizes land mid-scan, so it belongs in the
+        // key rather than being pinned to whatever was largest on first resolve.
+        let dominantPath = group.artifacts.max(by: { $0.sizeBytes < $1.sizeBytes })?.path.path ?? ""
+        let key = "g|\(appearance)|\(dominantPath)|\(group.inferredTypes.map(String.init(describing:)).joined(separator: ","))"
+        return cachedRowIcon(key: key) {
+            uncachedRowIcon(forProjectGroup: group, appearance: appearance)
+        }
+    }
+
+    private func uncachedRowIcon(forProjectGroup group: ProjectGroup, appearance: BrandIconAppearance) -> BrandRowIcon {
         if let dominant = group.artifacts.max(by: { $0.sizeBytes < $1.sizeBytes }) {
             if let slug = BrandIconMapping.slug(forArtifactKind: dominant.kind),
                let image = bundledBrandImage(slug: slug, appearance: appearance) {
@@ -102,6 +132,15 @@ final class BrandIconService {
     }
 
     // MARK: - Resolution
+
+    private func cachedRowIcon(key: String, resolve: () -> BrandRowIcon) -> BrandRowIcon {
+        if let cached = rowIconCache[key] {
+            return cached
+        }
+        let icon = resolve()
+        rowIconCache[key] = icon
+        return icon
+    }
 
     private func resolve(definitionKey key: String, appearance: BrandIconAppearance) -> NSImage? {
         if !BrandIconMapping.isBundleOnlyDefinitionKey(key),
@@ -184,16 +223,31 @@ final class BrandIconService {
 
     func installedAppIcon(bundleID: String) -> NSImage? {
         guard !bundleID.isEmpty else { return nil }
-        if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-            return NSWorkspace.shared.icon(forFile: appURL.path)
+        let cacheKey = "b|\(bundleID)"
+        if let cached = installedAppIconCache[cacheKey] {
+            return cached
         }
-        return nil
+        var image: NSImage?
+        if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            image = NSWorkspace.shared.icon(forFile: appURL.path)
+        }
+        installedAppIconCache[cacheKey] = image
+        return image
     }
 
     func installedAppIcon(appName: String) -> NSImage? {
         let trimmed = appName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+        let cacheKey = "n|\(trimmed)"
+        if let cached = installedAppIconCache[cacheKey] {
+            return cached
+        }
+        let image = uncachedInstalledAppIcon(trimmedAppName: trimmed)
+        installedAppIconCache[cacheKey] = image
+        return image
+    }
 
+    private func uncachedInstalledAppIcon(trimmedAppName trimmed: String) -> NSImage? {
         var candidates = [trimmed]
         if !trimmed.hasSuffix(".app") {
             candidates.append("\(trimmed).app")
