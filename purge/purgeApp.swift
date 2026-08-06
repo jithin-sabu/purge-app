@@ -119,7 +119,7 @@ struct PurgeApp: App {
         }
 
         MenuBarExtra {
-            MenuBarContentView(model: menuModel)
+            MenuBarContentView(model: menuModel, store: store)
                 .environmentObject(store)
                 .environmentObject(diskStore)
                 .environmentObject(trashStore)

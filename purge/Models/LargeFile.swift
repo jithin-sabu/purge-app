@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable {
+nonisolated enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable {
     case video
     case audio
     case image
@@ -59,7 +59,7 @@ enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-struct LargeFile: Identifiable, Hashable {
+nonisolated struct LargeFile: Identifiable, Hashable {
     let path: URL
     let sizeBytes: Int64
     /// Most recent of last-accessed and last-modified. The file's last touched time.

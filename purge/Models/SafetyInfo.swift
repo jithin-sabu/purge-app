@@ -11,7 +11,7 @@ import SwiftUI
 /// fallback for a folder the resolver could not identify, and such items are
 /// dropped at the scan-results assembly boundary (see
 /// `canSurfaceInScanResults`).
-enum SafetyLevel: String, CaseIterable, Codable, Hashable {
+nonisolated enum SafetyLevel: String, CaseIterable, Codable, Hashable {
     case safe
     case medium
     case unknown
@@ -40,6 +40,10 @@ enum SafetyLevel: String, CaseIterable, Codable, Hashable {
         }
     }
 
+    /// The type is `nonisolated` so scanners can build it off the main actor; this one
+    /// member reads `AppColors`, which is main-actor state, and is only ever called from
+    /// a view body.
+    @MainActor
     var color: Color {
         switch self {
         case .safe: return AppColors.tagSafeText
@@ -61,7 +65,7 @@ enum SafetyLevel: String, CaseIterable, Codable, Hashable {
     }
 }
 
-struct SafetyInfo: Hashable {
+nonisolated struct SafetyInfo: Hashable {
     let level: SafetyLevel
     let headline: String
     let explanation: String

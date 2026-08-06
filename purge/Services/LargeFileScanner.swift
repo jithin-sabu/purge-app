@@ -1,6 +1,13 @@
 import Foundation
 
-final class LargeFileScanner {
+/// `nonisolated` is load-bearing, not tidiness. The project builds with
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so without it this type — and the
+/// `static run` below — are implicitly main-actor isolated, and the `Task.detached`
+/// in `scanStream` immediately hops *back* to the main actor. A probe confirmed
+/// `run` executing with `Thread.isMainThread == true`, i.e. the entire
+/// home-directory walk was blocking the UI; it measured as a ~1.15s freeze on
+/// first switch to the Large Files tab.
+nonisolated final class LargeFileScanner {
     func scanStream(minBytes: Int64, staleDays: Int) -> AsyncStream<LargeFile> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {

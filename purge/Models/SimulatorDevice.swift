@@ -1,6 +1,6 @@
 import Foundation
 
-struct SimulatorDevice: Identifiable, Hashable {
+nonisolated struct SimulatorDevice: Identifiable, Hashable {
     let id: UUID
     let deviceName: String
     let runtimeVersion: String

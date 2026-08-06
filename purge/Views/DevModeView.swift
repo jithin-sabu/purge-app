@@ -99,7 +99,7 @@ struct DevToolsView<PageHeader: View>: View {
 
     private func groupHasVisibleArtifacts(_ group: ProjectGroup) -> Bool {
         group.artifacts.contains {
-            artifactVisible($0.safetyInfo) && !isVisuallyRemovedBySafeCleanup($0)
+            artifactVisible($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
         }
     }
 
@@ -137,7 +137,7 @@ struct DevToolsView<PageHeader: View>: View {
     private func standardToolVisible(_ index: Int) -> Bool {
         guard store.devTools[index].isDetected else { return false }
         return artifactVisible(store.devTools[index].safetyInfo)
-            && !isVisuallyRemovedBySafeCleanup(store.devTools[index])
+            && !store.isVisuallyRemovedBySafeCleanup(store.devTools[index])
     }
 
     private func filteredStandardToolIndices() -> [Int] {
@@ -282,7 +282,7 @@ struct DevToolsView<PageHeader: View>: View {
         let g = store.projectGroups[gi]
         let raw = g.artifacts.indices.filter {
             artifactVisible(g.artifacts[$0].safetyInfo)
-                && !isVisuallyRemovedBySafeCleanup(g.artifacts[$0])
+                && !store.isVisuallyRemovedBySafeCleanup(g.artifacts[$0])
         }
         switch currentSort {
         case .sizeDesc:
@@ -319,7 +319,7 @@ struct DevToolsView<PageHeader: View>: View {
             for ai in store.projectGroups[gi].artifacts.indices {
                 let art = store.projectGroups[gi].artifacts[ai]
                 guard artifactVisible(art.safetyInfo) else { continue }
-                guard !isVisuallyRemovedBySafeCleanup(art) else { continue }
+                guard !store.isVisuallyRemovedBySafeCleanup(art) else { continue }
                 guard isEligibleForManualBulkSelection(art.safetyInfo) else { continue }
                 pairs.append((gi, ai))
             }
@@ -473,7 +473,7 @@ struct DevToolsView<PageHeader: View>: View {
         for gi in filteredProjectGroupIndices() {
             let g = store.projectGroups[gi]
             for ai in g.artifacts.indices where artifactVisible(g.artifacts[ai].safetyInfo)
-                && !isVisuallyRemovedBySafeCleanup(g.artifacts[ai]) {
+                && !store.isVisuallyRemovedBySafeCleanup(g.artifacts[ai]) {
                 sum += g.artifacts[ai].sizeBytes
             }
         }
@@ -840,19 +840,6 @@ struct DevToolsView<PageHeader: View>: View {
                 insertion: .identity,
                 removal: .opacity.combined(with: .move(edge: .trailing))
             )
-    }
-
-    private func isVisuallyRemovedBySafeCleanup(_ tool: DevTool) -> Bool {
-        let rowPaths = Set(tool.paths.map { $0.standardizedFileURL.path })
-        let targetedPaths = rowPaths.intersection(store.interactiveSafeCleanupTargetPaths)
-        guard !targetedPaths.isEmpty else { return false }
-        return targetedPaths.isSubset(of: store.interactiveSafeCleanupRemovedPaths)
-    }
-
-    private func isVisuallyRemovedBySafeCleanup(_ artifact: ProjectCacheArtifact) -> Bool {
-        let path = artifact.path.standardizedFileURL.path
-        return store.interactiveSafeCleanupTargetPaths.contains(path)
-            && store.interactiveSafeCleanupRemovedPaths.contains(path)
     }
 
     private var developerProjectsSectionHeader: some View {

@@ -12,7 +12,7 @@ enum AIModelScanPolicy {
         case ollama
         case lmStudio
 
-        var displayName: String {
+        nonisolated var displayName: String {
             switch self {
             case .ollama: return "Ollama"
             case .lmStudio: return "LM Studio"

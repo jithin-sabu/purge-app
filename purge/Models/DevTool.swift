@@ -1,6 +1,6 @@
 import Foundation
 
-struct DevTool: Identifiable, Hashable {
+nonisolated struct DevTool: Identifiable, Hashable {
     /// Canonical `explanations.json` key used for safety copy and grouping.
     let definitionKey: String
     let toolName: String
@@ -13,13 +13,10 @@ struct DevTool: Identifiable, Hashable {
     var safetyInfo: SafetyInfo
     let reinstallSafety: ReinstallSafetyStatus
 
-    var id: String {
-        let pathKey = paths
-            .map { $0.standardizedFileURL.path }
-            .sorted()
-            .joined(separator: "|")
-        return "dev:\(definitionKey):\(pathKey)"
-    }
+    /// Built once at init. Every access previously standardized each path (a filesystem
+    /// stat), sorted, and joined — and `id` is read per row and per selection lookup
+    /// during SwiftUI body evaluation. All inputs are `let`, so this cannot go stale.
+    let id: String
 
     /// Path used as the user-override key. Defaults to the first declared path
     /// because a tool entry typically resolves to a single canonical folder.
@@ -51,5 +48,10 @@ struct DevTool: Identifiable, Hashable {
         self.isDetected = isDetected
         self.safetyInfo = safetyInfo
         self.reinstallSafety = reinstallSafety
+        let pathKey = paths
+            .map { $0.standardizedFileURL.path }
+            .sorted()
+            .joined(separator: "|")
+        self.id = "dev:\(definitionKey):\(pathKey)"
     }
 }

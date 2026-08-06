@@ -111,11 +111,35 @@ final class PurgeStore: ObservableObject {
     }
 
     @Published var selectedTab: Tab = .appCaches
-    @Published var cacheItems: [CacheItem] = []
-    @Published var devTools: [DevTool] = []
+    @Published var cacheItems: [CacheItem] = [] {
+        didSet {
+            invalidateSafeCleanupSummary()
+            cacheItemsRevision &+= 1
+        }
+    }
+    /// Cheap stand-in for "the set of cache rows changed", for use as an
+    /// `.animation(_:value:)` key — see `largeFilesRevision` for the same pattern.
+    @Published private(set) var cacheItemsRevision = 0
+    @Published var devTools: [DevTool] = [] {
+        didSet {
+            invalidateSafeCleanupSummary()
+            devToolsRevision &+= 1
+        }
+    }
+    @Published private(set) var devToolsRevision = 0
     @Published var simulatorDevices: [SimulatorDevice] = []
-    @Published var projectGroups: [ProjectGroup] = []
-    @Published var largeFiles: [LargeFile] = []
+    @Published var projectGroups: [ProjectGroup] = [] {
+        didSet { invalidateSafeCleanupSummary() }
+    }
+    @Published var largeFiles: [LargeFile] = [] {
+        didSet { largeFilesRevision &+= 1 }
+    }
+    /// Cheap stand-in for "the set of large-file rows changed", for use as an
+    /// `.animation(_:value:)` key. The list previously animated on
+    /// `largeFiles.map(\.id)`, which allocated and then compared an array of every
+    /// row's path string on each body evaluation; this is O(1) and, being driven from
+    /// `didSet`, also catches in-place edits that an id list would miss.
+    @Published private(set) var largeFilesRevision = 0
     /// Large-file selection lives in its own observable object (NOT @Published on the
     /// store) so toggling a row does not fire the store's objectWillChange and thus
     /// does not re-render the results List container — a List re-render reverts the
@@ -127,7 +151,9 @@ final class PurgeStore: ObservableObject {
     @Published var isScanningLargeFiles = false
     @Published var showLargeFileDeletionSheet = false
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
-    @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:]
+    @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:] {
+        didSet { invalidateSafeCleanupSummary() }
+    }
     @Published var isScanningGeneral = false
     @Published var isScanningDeveloper = false
     @Published private(set) var isScanningProjects = false
@@ -183,7 +209,10 @@ final class PurgeStore: ObservableObject {
     private let gitChecker = GitStatusChecker()
 
     private enum ScanCoalesce {
-        static let debounceNanoseconds: UInt64 = 150_000_000
+        /// One publish every ~8 frames. Fast enough that the count reads as live,
+        /// slow enough that each tick's `.numericText()` roll finishes before the
+        /// next value lands rather than being retargeted mid-flight.
+        static let flushInterval: Duration = .milliseconds(140)
         static let flushThreshold = 100
     }
 
@@ -257,7 +286,30 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Memoised `safeCleanupSummary`, cleared by `didSet` on each of the four inputs it
+    /// reads. Invalidating from `didSet` rather than at the call sites means subscript
+    /// writes (`cacheItems[i].safetyInfo = …`) invalidate too, so no mutation path can
+    /// silently leave a stale total behind.
+    private var cachedSafeCleanupSummary: SafeCleanupSummary?
+
+    fileprivate func invalidateSafeCleanupSummary() {
+        cachedSafeCleanupSummary = nil
+    }
+
+    /// The sidebar hero, the Clean button title, and the footnote all read this, several
+    /// times each per render, and the render re-runs on every scan flush. Recomputing was
+    /// a full sweep of every cache item, dev tool, and project artifact each time —
+    /// including a `standardizedFileURL` per dev-tool path, which is the expensive part.
     var safeCleanupSummary: SafeCleanupSummary {
+        if let cached = cachedSafeCleanupSummary {
+            return cached
+        }
+        let summary = computeSafeCleanupSummary()
+        cachedSafeCleanupSummary = summary
+        return summary
+    }
+
+    private func computeSafeCleanupSummary() -> SafeCleanupSummary {
         var summary = SafeCleanupSummary()
         summary.appCacheBytes = cacheItems.reduce(Int64(0)) { total, item in
             guard item.safetyInfo.level == .safe,
@@ -289,6 +341,46 @@ final class PurgeStore: ObservableObject {
 
     var isInteractiveSafeCleanupInProgress: Bool {
         !interactiveSafeCleanupTargetPaths.isEmpty && interactiveSafeCleanupMovedToTrashBytes == nil
+    }
+
+    // MARK: - Interactive safe-cleanup row hiding
+
+    /// Whether a row should be hidden because an interactive safe cleanup already
+    /// removed everything it targeted.
+    ///
+    /// The leading `isEmpty` check is the important part. These helpers are called once
+    /// per item inside the views' `visibleIndices`, which SwiftUI re-evaluates many times
+    /// per render — and the old per-view copies standardized every row path first, which
+    /// stats the filesystem. Profiling attributed a large share of the tab-switch stall
+    /// to exactly that. No cleanup is running for the overwhelming majority of renders,
+    /// and when the target set is empty the answer is `false` for every row, so the
+    /// guard skips the whole scan.
+    func isVisuallyRemovedBySafeCleanup(paths: [String]) -> Bool {
+        guard !interactiveSafeCleanupTargetPaths.isEmpty else { return false }
+        var sawTarget = false
+        for path in paths where interactiveSafeCleanupTargetPaths.contains(path) {
+            sawTarget = true
+            if !interactiveSafeCleanupRemovedPaths.contains(path) { return false }
+        }
+        return sawTarget
+    }
+
+    func isVisuallyRemovedBySafeCleanup(_ item: CacheItem) -> Bool {
+        isVisuallyRemovedBySafeCleanup(paths: item.standardizedPaths)
+    }
+
+    func isVisuallyRemovedBySafeCleanup(_ tool: DevTool) -> Bool {
+        guard !interactiveSafeCleanupTargetPaths.isEmpty else { return false }
+        return isVisuallyRemovedBySafeCleanup(
+            paths: tool.paths.map { $0.standardizedFileURL.path }
+        )
+    }
+
+    func isVisuallyRemovedBySafeCleanup(_ artifact: ProjectCacheArtifact) -> Bool {
+        guard !interactiveSafeCleanupTargetPaths.isEmpty else { return false }
+        let path = artifact.path.standardizedFileURL.path
+        return interactiveSafeCleanupTargetPaths.contains(path)
+            && interactiveSafeCleanupRemovedPaths.contains(path)
     }
 
     /// `true` while the cleanup overlay is in its cleaning phase — used to gate
@@ -939,6 +1031,25 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Runs the access probe off the main actor.
+    ///
+    /// The probe lists `~/Library/Safari`, `~/Library/Containers`, and
+    /// `~/Library/Application Support`; on a real machine those hold hundreds of
+    /// entries, so it is genuine filesystem work. The onboarding permissions step polls
+    /// it once a second while on screen, and running it inline on the main actor showed
+    /// up in profiles as a periodic hitch during exactly the phase users described as
+    /// laggy. Publishing the result is left to the caller so it can animate the change.
+    nonisolated func probeFullDiskAccess() async -> Bool {
+        await Task.detached(priority: .utility) {
+            PermissionChecker().hasFullDiskAccess()
+        }.value
+    }
+
+    func applyFullDiskAccess(_ granted: Bool) {
+        guard hasFullDiskAccess != granted else { return }
+        hasFullDiskAccess = granted
+    }
+
     func refreshPermission() {
         hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
     }
@@ -1545,10 +1656,18 @@ final class PurgeStore: ObservableObject {
 
     // MARK: - Scan stream coalescing
 
-    private final class CacheScanCoalesceBuffers {
+    /// Shared state for the scan flush throttle. See `scheduleFlush(_:generation:flush:)`.
+    private protocol ScanCoalesceBuffer: AnyObject {
+        var debounceTask: Task<Void, Never>? { get set }
+        var lastFlushAt: ContinuousClock.Instant? { get set }
+        var eventCount: Int { get }
+    }
+
+    private final class CacheScanCoalesceBuffers: ScanCoalesceBuffer {
         var pendingFound: [CacheItem] = []
         var pendingSizeUpdates: [String: (sizeBytes: Int64, lastModified: Date)] = [:]
         var debounceTask: Task<Void, Never>?
+        var lastFlushAt: ContinuousClock.Instant?
 
         var eventCount: Int { pendingFound.count + pendingSizeUpdates.count }
 
@@ -1574,12 +1693,13 @@ final class PurgeStore: ObservableObject {
         let lastModified: Date
     }
 
-    private final class DeveloperScanCoalesceBuffers {
+    private final class DeveloperScanCoalesceBuffers: ScanCoalesceBuffer {
         var pendingTools: [String: DevTool] = [:]
         var pendingToolSizes: [String: DevToolSizeUpdate] = [:]
         var pendingSimulators: [UUID: SimulatorDevice] = [:]
         var pendingSimulatorSizes: [UUID: Int64] = [:]
         var debounceTask: Task<Void, Never>?
+        var lastFlushAt: ContinuousClock.Instant?
 
         var eventCount: Int {
             pendingTools.count + pendingToolSizes.count + pendingSimulators.count + pendingSimulatorSizes.count
@@ -1625,9 +1745,10 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    private final class ProjectGroupCoalesceBuffers {
+    private final class ProjectGroupCoalesceBuffers: ScanCoalesceBuffer {
         var pendingGroups: [String: ProjectGroup] = [:]
         var debounceTask: Task<Void, Never>?
+        var lastFlushAt: ContinuousClock.Instant?
 
         var eventCount: Int { pendingGroups.count }
 
@@ -1642,20 +1763,53 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    private func scheduleCacheScanFlush(coalesce: CacheScanCoalesceBuffers, generation: Int) {
+    /// Publishes buffered scan events on a steady cadence.
+    ///
+    /// This is a throttle, not a reset-debounce, and the distinction is the whole point.
+    /// The previous version cancelled and re-armed the timer on every event, so a scan
+    /// producing events faster than the interval never reached the deadline — the only
+    /// thing that ever fired was the event-count threshold. Flushes therefore landed in
+    /// irregular clumps (a burst of 100 events could publish in 20ms or in two seconds),
+    /// and the sidebar total lurched and stuttered between them instead of counting up.
+    ///
+    /// Anchoring the next deadline to the *previous flush* rather than to the latest
+    /// event keeps updates on a fixed beat whatever the event rate, which is what lets
+    /// the hero figure animate smoothly.
+    private func scheduleFlush<Buffer: ScanCoalesceBuffer>(
+        _ coalesce: Buffer,
+        generation: Int,
+        flush: @escaping (Buffer) -> Void
+    ) {
+        // Backstop: a very fast producer still yields to the UI every `flushThreshold`
+        // events rather than letting the buffer grow unbounded until the next tick.
         if coalesce.eventCount >= ScanCoalesce.flushThreshold {
             coalesce.debounceTask?.cancel()
             coalesce.debounceTask = nil
-            flushCacheScanBuffers(coalesce: coalesce, animate: false)
+            coalesce.lastFlushAt = .now
+            flush(coalesce)
             return
         }
 
-        coalesce.debounceTask?.cancel()
+        // A tick is already queued for this window — it will pick up everything
+        // buffered since. Re-arming here is exactly the bug described above.
+        guard coalesce.debounceTask == nil else { return }
+
+        let earliest = (coalesce.lastFlushAt ?? .now) + ScanCoalesce.flushInterval
+        let delay = max(.zero, ContinuousClock.Instant.now.duration(to: earliest))
+
         coalesce.debounceTask = Task { @MainActor [weak self, weak coalesce] in
-            try? await Task.sleep(nanoseconds: ScanCoalesce.debounceNanoseconds)
+            try? await Task.sleep(for: delay)
             guard let self, let coalesce, !Task.isCancelled else { return }
+            coalesce.debounceTask = nil
             guard self.scanGeneration == generation else { return }
-            self.flushCacheScanBuffers(coalesce: coalesce, animate: false)
+            coalesce.lastFlushAt = .now
+            flush(coalesce)
+        }
+    }
+
+    private func scheduleCacheScanFlush(coalesce: CacheScanCoalesceBuffers, generation: Int) {
+        scheduleFlush(coalesce, generation: generation) { [weak self] buffer in
+            self?.flushCacheScanBuffers(coalesce: buffer, animate: false)
         }
     }
 
@@ -1773,19 +1927,8 @@ final class PurgeStore: ObservableObject {
     }
 
     private func scheduleDeveloperScanFlush(coalesce: DeveloperScanCoalesceBuffers, generation: Int) {
-        if coalesce.eventCount >= ScanCoalesce.flushThreshold {
-            coalesce.debounceTask?.cancel()
-            coalesce.debounceTask = nil
-            flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
-            return
-        }
-
-        coalesce.debounceTask?.cancel()
-        coalesce.debounceTask = Task { @MainActor [weak self, weak coalesce] in
-            try? await Task.sleep(nanoseconds: ScanCoalesce.debounceNanoseconds)
-            guard let self, let coalesce, !Task.isCancelled else { return }
-            guard self.scanGeneration == generation else { return }
-            self.flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
+        scheduleFlush(coalesce, generation: generation) { [weak self] buffer in
+            self?.flushDeveloperScanBuffers(coalesce: buffer, animate: false)
         }
     }
 
@@ -1892,19 +2035,8 @@ final class PurgeStore: ObservableObject {
     }
 
     private func scheduleProjectGroupFlush(coalesce: ProjectGroupCoalesceBuffers, generation: Int) {
-        if coalesce.eventCount >= ScanCoalesce.flushThreshold {
-            coalesce.debounceTask?.cancel()
-            coalesce.debounceTask = nil
-            flushProjectGroupBuffers(coalesce: coalesce, animate: false)
-            return
-        }
-
-        coalesce.debounceTask?.cancel()
-        coalesce.debounceTask = Task { @MainActor [weak self, weak coalesce] in
-            try? await Task.sleep(nanoseconds: ScanCoalesce.debounceNanoseconds)
-            guard let self, let coalesce, !Task.isCancelled else { return }
-            guard self.scanGeneration == generation else { return }
-            self.flushProjectGroupBuffers(coalesce: coalesce, animate: false)
+        scheduleFlush(coalesce, generation: generation) { [weak self] buffer in
+            self?.flushProjectGroupBuffers(coalesce: buffer, animate: false)
         }
     }
 
@@ -1940,8 +2072,11 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Read once per row per render, so it must not touch the filesystem — the item
+    /// already carries its standardized paths.
     func cacheItemHasPendingSize(_ item: CacheItem) -> Bool {
-        item.locations.contains { pendingCacheSizePaths.contains($0.path.standardizedFileURL.path) }
+        guard !pendingCacheSizePaths.isEmpty else { return false }
+        return item.standardizedPaths.contains { pendingCacheSizePaths.contains($0) }
     }
 
     func projectArtifactHasPendingSize(_ artifact: ProjectCacheArtifact) -> Bool {

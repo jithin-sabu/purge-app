@@ -9,7 +9,9 @@ enum DeveloperScanEvent {
     case simulatorSizeResolved(id: UUID, sizeBytes: Int64)
 }
 
-final class DevScanner {
+/// `nonisolated` for the same reason as `CacheScanner` — a probe confirmed
+/// `runDeveloperScan` was executing on the main thread despite `Task.detached`.
+nonisolated final class DevScanner {
     private struct DevToolSizeJob {
         let toolID: String
         let toolLabel: String

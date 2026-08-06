@@ -7,7 +7,12 @@ enum CacheScanEvent {
     case sizeResolved(path: String, sizeBytes: Int64, lastModified: Date)
 }
 
-final class CacheScanner {
+/// `nonisolated` is load-bearing — see the note on `LargeFileScanner`. Under
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` this type would be implicitly
+/// main-actor isolated, so the `Task.detached` in `scanGeneralStream` hopped straight
+/// back and ran the whole cache discovery + sizing pass on the UI thread. A probe
+/// confirmed `runGeneralScan` executing with `Thread.isMainThread == true`.
+nonisolated final class CacheScanner {
     private struct SizeJob {
         let path: URL
     }

@@ -2,7 +2,7 @@ import Foundation
 
 /// Shared folder sizing so scans can call this from background tasks without hopping through `MainActor`.
 enum FolderSizing {
-    static let duChunkSize = 64
+    nonisolated static let duChunkSize = 64
     private static let maxConcurrentDuChunks = 10
 
     /// A chunk walking a deep tree can legitimately take minutes, so this is loose. It exists
