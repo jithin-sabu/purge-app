@@ -186,14 +186,6 @@ enum DeletionSafetyPolicy {
         ]
     }
 
-    /// Absolute paths (and their descendants) we are explicitly authorized to delete.
-    ///
-    /// Audit note: every entry below resolves to a regenerable cache, build
-    /// artifact, or log directory — nothing here holds non-recoverable user
-    /// data. A handful of entries are flagged `AUDIT` where the folder holds
-    /// re-creatable but not-instantly-regenerated state; those are surfaced as
-    /// "Check First" by their classifiers (never silently downgraded to Safe),
-    /// and are called out here so the risk stays visible.
     /// The user's home path, resolved once. `FileManager.homeDirectoryForCurrentUser`
     /// plus `standardizedFileURL` was previously re-run inside every protection check,
     /// several times per item, on every flush — it cannot change while the app runs.
@@ -209,6 +201,14 @@ enum DeletionSafetyPolicy {
         home == cachedHomePath ? cachedWhitelistedPrefixes : whitelistedAbsolutePrefixes(home: home)
     }
 
+    /// Absolute paths (and their descendants) we are explicitly authorized to delete.
+    ///
+    /// Audit note: every entry below resolves to a regenerable cache, build
+    /// artifact, or log directory — nothing here holds non-recoverable user
+    /// data. A handful of entries are flagged `AUDIT` where the folder holds
+    /// re-creatable but not-instantly-regenerated state; those are surfaced as
+    /// "Check First" by their classifiers (never silently downgraded to Safe),
+    /// and are called out here so the risk stays visible.
     nonisolated static func whitelistedAbsolutePrefixes(home: String) -> [String] {
         [
             "\(home)/Library/Caches",

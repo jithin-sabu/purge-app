@@ -5,6 +5,14 @@ enum FolderSizing {
     nonisolated static let duChunkSize = 64
     private static let maxConcurrentDuChunks = 10
 
+    /// Process-wide, deliberately **not** per call.
+    ///
+    /// A per-call semaphore caps one `directorySizes` invocation at ten `du` processes but
+    /// says nothing about how many invocations run at once — N concurrent callers meant up
+    /// to 10N subprocesses. `du` is I/O-bound on a single disk, so the useful limit is a
+    /// total, and the scanners legitimately call this concurrently.
+    private nonisolated static let duChunkLimiter = DispatchSemaphore(value: maxConcurrentDuChunks)
+
     /// A chunk walking a deep tree can legitimately take minutes, so this is loose. It exists
     /// only so a `du` that never returns cannot wedge the scan permanently.
     private static let duChunkTimeout: TimeInterval = 300
@@ -51,16 +59,15 @@ enum FolderSizing {
 
         var result: [String: Int64] = [:]
         let lock = NSLock()
-        let semaphore = DispatchSemaphore(value: maxConcurrentDuChunks)
         let group = DispatchGroup()
 
         for chunk in chunks {
             if Task.isCancelled { break }
-            semaphore.wait()
+            duChunkLimiter.wait()
             group.enter()
             DispatchQueue.global(qos: .utility).async {
                 defer {
-                    semaphore.signal()
+                    duChunkLimiter.signal()
                     group.leave()
                 }
                 let partial = directorySizesForChunk(chunk)

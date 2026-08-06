@@ -216,6 +216,17 @@ final class PurgeStore: ObservableObject {
         static let flushThreshold = 100
     }
 
+    /// The scan-flush cadence in seconds, derived from `ScanCoalesce.flushInterval`.
+    ///
+    /// The sidebar hero rolls its digits with a linear animation matched to this beat so
+    /// each tick hands off to the next instead of being retargeted mid-curve. Derived
+    /// rather than restated so retuning the interval cannot silently desynchronise the
+    /// animation from the publish rate.
+    static let scanFlushIntervalSeconds: Double = {
+        let components = ScanCoalesce.flushInterval.components
+        return Double(components.seconds) + Double(components.attoseconds) * 1e-18
+    }()
+
     /// Cancels stale async simulator sizing when a new dev scan starts.
     private var simulatorSizingGeneration = 0
     private var scanGeneration = 0
@@ -370,10 +381,7 @@ final class PurgeStore: ObservableObject {
     }
 
     func isVisuallyRemovedBySafeCleanup(_ tool: DevTool) -> Bool {
-        guard !interactiveSafeCleanupTargetPaths.isEmpty else { return false }
-        return isVisuallyRemovedBySafeCleanup(
-            paths: tool.paths.map { $0.standardizedFileURL.path }
-        )
+        isVisuallyRemovedBySafeCleanup(paths: tool.standardizedPaths)
     }
 
     func isVisuallyRemovedBySafeCleanup(_ artifact: ProjectCacheArtifact) -> Bool {

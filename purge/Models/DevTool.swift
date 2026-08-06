@@ -18,6 +18,10 @@ nonisolated struct DevTool: Identifiable, Hashable {
     /// during SwiftUI body evaluation. All inputs are `let`, so this cannot go stale.
     let id: String
 
+    /// Standardized `paths`, in order. Same reasoning as `id`: the safe-cleanup row-hiding
+    /// check reads these per tool per render while a cleanup is running.
+    let standardizedPaths: [String]
+
     /// Path used as the user-override key. Defaults to the first declared path
     /// because a tool entry typically resolves to a single canonical folder.
     var primaryOverridePath: URL? { paths.first }
@@ -48,10 +52,8 @@ nonisolated struct DevTool: Identifiable, Hashable {
         self.isDetected = isDetected
         self.safetyInfo = safetyInfo
         self.reinstallSafety = reinstallSafety
-        let pathKey = paths
-            .map { $0.standardizedFileURL.path }
-            .sorted()
-            .joined(separator: "|")
-        self.id = "dev:\(definitionKey):\(pathKey)"
+        let standardized = paths.map { $0.standardizedFileURL.path }
+        self.standardizedPaths = standardized
+        self.id = "dev:\(definitionKey):\(standardized.sorted().joined(separator: "|"))"
     }
 }

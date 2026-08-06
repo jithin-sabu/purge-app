@@ -763,7 +763,9 @@ struct SidebarSummaryView: View {
     /// kept for the settled value, where there is a real start and end to ease between.
     private var countingAnimation: Animation? {
         guard !reduceMotion else { return nil }
-        return isCountingUp ? .linear(duration: 0.14) : .easeInOut(duration: 0.45)
+        return isCountingUp
+            ? .linear(duration: PurgeStore.scanFlushIntervalSeconds)
+            : .easeInOut(duration: 0.45)
     }
 
     private var isCountingUp: Bool {

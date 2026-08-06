@@ -70,10 +70,11 @@ struct OnboardingPermissionsStep: View {
     withAnimation(.easeInOut(duration: 0.2)) {
       didOpenFullDiskAccessSettings = true
     }
+    // No re-check here: this only opens System Settings, so access cannot have been
+    // granted yet, and the probe lists three Library directories on the main thread.
+    // `pollFullDiskAccess` is already running for this step and picks the grant up
+    // within a second, off the main actor.
     openFullDiskAccessSettings()
-    withAnimation(.easeInOut(duration: 0.2)) {
-      store.refreshPermission()
-    }
   }
 
   private func enableLoginItem() {

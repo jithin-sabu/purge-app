@@ -109,6 +109,14 @@ struct ScannerOffMainTests {
         #expect(ungrouped.withLocations([location]).id == ungrouped.id)
     }
 
+    /// The sidebar hero's counting animation is tuned to the scan flush cadence, so the
+    /// exposed seconds value must actually match `ScanCoalesce.flushInterval`. A wrong
+    /// `Duration` decomposition here would silently desynchronise the digit roll.
+    @MainActor
+    @Test func scanFlushIntervalIsExposedInSeconds() {
+        #expect(abs(PurgeStore.scanFlushIntervalSeconds - 0.14) < 0.0001)
+    }
+
     /// `DevTool.id` is likewise stored now; it must still be order-independent across
     /// `paths`, because that is what made it a stable identity in the first place.
     @Test func devToolIdIsStableRegardlessOfPathOrder() {
