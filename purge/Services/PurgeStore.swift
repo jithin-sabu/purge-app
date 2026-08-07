@@ -11,6 +11,52 @@ final class LargeFileSelection: ObservableObject {
     @Published var ids: Set<String> = []
 }
 
+/// Duplicate groups found among the Large Files results, kept in its own
+/// observable for the same reason as `LargeFileSelection`: rows and chips can
+/// observe it without the results List container re-rendering.
+///
+/// `index` is assigned exactly once per pass, when the whole pass finishes,
+/// rather than streamed group by group. That keeps the number of re-renders of
+/// `LargeFilesView` (which owns the chip counts) to one, and `isChecking` covers
+/// the wait in the meantime.
+@MainActor
+final class LargeFileDuplicateIndex: ObservableObject {
+    @Published private(set) var index = DuplicateIndex.empty
+    @Published private(set) var isChecking = false
+
+    /// Exposed so `LargeFilesView` can mirror the index into `@State` and
+    /// re-render on the one assignment per pass, rather than observing the whole
+    /// object and re-rendering the results List on every `isChecking` flip too.
+    var indexPublisher: AnyPublisher<DuplicateIndex, Never> {
+        $index.eraseToAnyPublisher()
+    }
+
+    func beginChecking() {
+        index = .empty
+        isChecking = true
+    }
+
+    func finish(with index: DuplicateIndex) {
+        self.index = index
+        isChecking = false
+    }
+
+    func cancelChecking() {
+        isChecking = false
+    }
+
+    func reset() {
+        index = .empty
+        isChecking = false
+    }
+
+    /// Drops rows a delete removed, and any group left with a single copy.
+    func removeFiles(ids removed: Set<String>) {
+        guard !removed.isEmpty, !index.isEmpty else { return }
+        index = index.removing(fileIDs: removed)
+    }
+}
+
 /// Scan-tab selection (app caches, dev tools, simulators, project artifacts) kept in
 /// its own observable, held as a plain `let` on the store (NOT @Published), so a
 /// toggle re-renders only the views that display selection — never the results List
@@ -146,6 +192,9 @@ final class PurgeStore: ObservableObject {
     /// scroll position. Only views that display selection (rows, select-all bar,
     /// delete button) observe this object directly.
     let largeFileSelection = LargeFileSelection()
+    /// Duplicate groups among `largeFiles`, likewise in its own observable so the
+    /// badges and the Duplicates chip can update without re-rendering the List.
+    let largeFileDuplicates = LargeFileDuplicateIndex()
     /// See `ScanSelection` — decoupled selection for the App Caches / Dev Tools tabs.
     let scanSelection = ScanSelection()
     @Published var isScanningLargeFiles = false
@@ -204,6 +253,7 @@ final class PurgeStore: ObservableObject {
     private let devScanner = DevScanner()
     private let largeFileScanner = LargeFileScanner()
     private let aiModelScanner = AIModelScanner()
+    private let duplicateDetector = DuplicateFileDetector()
     private let fileDeleter = FileDeleter()
     private let defaults = UserDefaults.standard
     private let gitChecker = GitStatusChecker()
@@ -232,6 +282,9 @@ final class PurgeStore: ObservableObject {
     private var scanGeneration = 0
     private var largeFileScanGeneration = 0
     private var hasCompletedLargeFileScan = false
+    /// The in-flight duplicate pass, so a new scan can abandon gigabytes of
+    /// hashing nobody is waiting for any more.
+    private var duplicateScanTask: Task<Void, Never>?
     /// All cache items discovered so far in the current scan, including rows whose
     /// sizes are still unresolved. Only rows with a resolved non-zero size are
     /// published to `cacheItems`, so visible sections grow monotonically during a scan.
@@ -879,6 +932,22 @@ final class PurgeStore: ObservableObject {
         selectedLargeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
+    /// Duplicate groups the current selection would wipe out completely — every
+    /// copy checked, nothing left behind.
+    ///
+    /// Purge does not choose which copy survives (issue #17 is explicit that
+    /// picking which user document dies is not the app's judgement to make), so
+    /// this exists only to say plainly what the selection does before it happens.
+    var duplicateGroupsFullyConsumedBySelection: [DuplicateGroup] {
+        let index = largeFileDuplicates.index
+        guard !index.isEmpty else { return [] }
+        let selected = largeFileSelection.ids
+        guard !selected.isEmpty else { return [] }
+        return index.groups.filter { group in
+            group.fileIDs.allSatisfy { selected.contains($0) }
+        }
+    }
+
     func scanLargeFilesIfNeeded() async {
         refreshPermission()
         guard hasFullDiskAccess else { return }
@@ -894,6 +963,9 @@ final class PurgeStore: ObservableObject {
         isScanningLargeFiles = true
         largeFiles = []
         largeFileSelection.ids.removeAll()
+        duplicateScanTask?.cancel()
+        duplicateScanTask = nil
+        largeFileDuplicates.reset()
         defer {
             if largeFileScanGeneration == generation {
                 isScanningLargeFiles = false
@@ -923,6 +995,30 @@ final class PurgeStore: ObservableObject {
         guard largeFileScanGeneration == generation else { return }
         largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
         hasCompletedLargeFileScan = true
+        startDuplicateScan(for: largeFiles, generation: generation)
+    }
+
+    /// Looks for byte-identical copies among the finished scan results.
+    ///
+    /// Deliberately *after* the scan rather than inside it: hashing a pair of
+    /// 4 GB videos takes real time, and holding "Scanning…" open for it would
+    /// make every scan feel slower to pay for insight the user can wait a beat
+    /// for. The list is complete and usable while this runs.
+    private func startDuplicateScan(for files: [LargeFile], generation: Int) {
+        guard !files.isEmpty else { return }
+        largeFileDuplicates.beginChecking()
+        duplicateScanTask = Task { [duplicateDetector, largeFileDuplicates] in
+            let index = await duplicateDetector.findDuplicates(in: files)
+            guard !Task.isCancelled, self.largeFileScanGeneration == generation else {
+                largeFileDuplicates.cancelChecking()
+                return
+            }
+            // Rows deleted while the pass was running must not come back as
+            // badges on rows that no longer exist.
+            let live = Set(self.largeFiles.map(\.id))
+            let vanished = Set(index.groupIDByFileID.keys.filter { !live.contains($0) })
+            largeFileDuplicates.finish(with: index.removing(fileIDs: vanished))
+        }
     }
 
     func setLargeFileSelected(id: String, isSelected: Bool) {
@@ -1025,6 +1121,9 @@ final class PurgeStore: ObservableObject {
                 largeFiles.removeAll { clearedRowIDs.contains($0.id) }
             }
             largeFileSelection.ids.subtract(clearedRowIDs)
+            // A group of two that just lost a member is no longer a duplicate;
+            // leaving the survivor badged "2 copies" would misdescribe the disk.
+            largeFileDuplicates.removeFiles(ids: clearedRowIDs)
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,

@@ -70,6 +70,7 @@ struct ContentView: View {
         .sheet(isPresented: $store.showLargeFileDeletionSheet) {
             LargeFileDeletionConfirmSheet(
                 files: store.selectedLargeFiles,
+                fullyConsumedDuplicateGroups: store.duplicateGroupsFullyConsumedBySelection,
                 onCancel: { store.dismissLargeFileDeletionSheet() },
                 onConfirm: { Task { await store.confirmLargeFileDeletion() } }
             )
@@ -476,12 +477,16 @@ struct ContentView: View {
     }
 
     /// Mirrors the filtering `LargeFilesView` applies to its list, so the subtitle
-    /// counts the rows the user can actually see. Must stay in step with the search
-    /// and category predicates over there.
+    /// counts the rows the user can actually see. The category predicate is shared
+    /// through `LargeFileCategoryFilter` rather than restated, because restating it
+    /// is how the header once ended up advertising a different list than the one on
+    /// screen.
     private var largeFilesVisibleForSubtitle: [LargeFile] {
-        store.largeFiles.filter { file in
-            (largeFilesCategoryFilterRaw == "all" || file.category.rawValue == largeFilesCategoryFilterRaw)
-                && file.matches(searchQuery: largeFilesSearchQuery)
+        let duplicates = store.largeFileDuplicates.index
+        return store.largeFiles.filter { file in
+            LargeFileCategoryFilter.includes(
+                file, rawValue: largeFilesCategoryFilterRaw, duplicates: duplicates
+            ) && file.matches(searchQuery: largeFilesSearchQuery)
         }
     }
 

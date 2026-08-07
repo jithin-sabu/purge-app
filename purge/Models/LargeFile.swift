@@ -159,6 +159,35 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     }
 }
 
+/// The chip filter over the Large Files list, shared by `LargeFilesView` (which
+/// draws the list) and `ContentView` (which draws the "N files · X GB to review"
+/// page header outside it). Both must narrow the rows identically or the header
+/// advertises a different list than the one on screen — a drift that has already
+/// happened once and is exactly what this type exists to prevent.
+///
+/// Duplicates is a pseudo-category rather than a `LargeFileCategory` case: a
+/// duplicate cuts across every category, and reusing the one persisted filter key
+/// keeps the chips single-select without a second piece of state.
+nonisolated enum LargeFileCategoryFilter {
+    static let all = "all"
+    static let duplicates = "duplicates"
+
+    static func includes(_ file: LargeFile, rawValue: String, duplicates index: DuplicateIndex) -> Bool {
+        switch rawValue {
+        case all:
+            return true
+        case Self.duplicates:
+            // The filter persists across launches, so a stored "duplicates" can
+            // outlive the scan that produced the groups. Falling back to "all"
+            // beats relaunching into a permanently empty list.
+            guard !index.isEmpty else { return true }
+            return index.groupIDByFileID[file.id] != nil
+        default:
+            return file.category.rawValue == rawValue
+        }
+    }
+}
+
 enum LargeFileSizeThreshold: Int, CaseIterable, Identifiable {
     case mb5 = 5
     case mb50 = 50
