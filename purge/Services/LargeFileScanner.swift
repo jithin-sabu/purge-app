@@ -60,12 +60,12 @@ final class LargeFileScanner {
                     guard days >= staleDays else { continue }
                 }
 
-                // Never list a file the filesystem will refuse to give up. Offering
-                // it can only end in "couldn't be cleaned", so it does not belong in
-                // the list at all. The check runs last because it costs a syscall and
-                // only a handful of files get this far.
-                if values?.isUserImmutable == true || values?.isSystemImmutable == true { continue }
-                if FileProtection.isRootlessProtected(fileURL) { continue }
+                // Never list a file the filesystem will refuse to give up — its own
+                // flags or its directory's. Offering it can only end in "couldn't be
+                // cleaned", so it does not belong in the list at all. The check runs
+                // last because it costs syscalls and only a handful of files, already
+                // past the size and staleness filters, get this far.
+                if FileProtection.blocksRemoval(fileURL) { continue }
 
                 continuation.yield(
                     LargeFile(

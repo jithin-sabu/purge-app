@@ -17,8 +17,21 @@ nonisolated enum FileProtection {
         }
     }
 
+    /// Removing a file means unlinking it from its directory, so an immutable
+    /// *parent* refuses the removal even when the file itself looks ordinary —
+    /// verified: `trashItem` then fails with `NSFileWriteNoPermissionError`
+    /// while the file still reports as mutable.
+    ///
+    /// The parent is checked for immutability only, deliberately. A directory
+    /// can carry `com.apple.rootless` and still hand its contents over freely —
+    /// the per-user temp directory is marked `com.apple.rootless: folders` and
+    /// files inside it trash without complaint. Testing the parent for rootless
+    /// would condemn every one of them.
     static func blocksRemoval(_ url: URL) -> Bool {
-        isImmutable(url) || isRootlessProtected(url)
+        if isImmutable(url) || isRootlessProtected(url) { return true }
+        let parent = url.deletingLastPathComponent()
+        guard parent.path != url.path else { return false }
+        return isImmutable(parent)
     }
 }
 
@@ -112,8 +125,9 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     /// Maps a deletion error to a user-facing reason. When Full Disk Access is
     /// already granted a permission error clearly isn't about FDA — but that on
     /// its own says nothing about macOS protecting the file, so we only claim
-    /// protection when the file really is immutable or SIP-marked. Anything else
-    /// is honestly unknown, and offering a retry beats inventing a cause.
+    /// protection when the file — or the directory holding it — really is
+    /// immutable or SIP-marked. Anything else is honestly unknown, and offering
+    /// a retry beats inventing a cause.
     static func resolved(
         from error: Error,
         path: String,

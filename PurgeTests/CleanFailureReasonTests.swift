@@ -73,6 +73,33 @@ struct CleanFailureReasonTests {
         )
     }
 
+    /// Removal unlinks a file from its directory, so an immutable directory
+    /// refuses it even though the file itself reads as perfectly ordinary.
+    /// `trashItem` fails here with `NSFileWriteNoPermissionError`, which would
+    /// otherwise be reported as "try again" — a retry that can never succeed.
+    @Test func fileInsideAnImmutableDirectoryIsReportedAsSystemProtected() throws {
+        let fm = FileManager.default
+        let directory = fm.temporaryDirectory
+            .appendingPathComponent("purge-protected-dir-\(UUID().uuidString)")
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("payload.bin")
+        try Data("x".utf8).write(to: file)
+        defer {
+            try? fm.setAttributes([.immutable: false], ofItemAtPath: directory.path)
+            try? fm.removeItem(at: directory)
+        }
+        try fm.setAttributes([.immutable: true], ofItemAtPath: directory.path)
+
+        #expect(!FileProtection.isImmutable(file))
+        #expect(FileProtection.blocksRemoval(file))
+
+        let error = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError)
+        #expect(
+            CleanFailureReason.resolved(from: error, path: file.path, fullDiskAccessGranted: true)
+                == .systemProtected
+        )
+    }
+
     @Test func ordinaryFileIsNotTreatedAsProtected() throws {
         let file = try Self.makeTemporaryFile()
         defer { try? FileManager.default.removeItem(at: file) }
