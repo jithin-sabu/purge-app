@@ -47,6 +47,23 @@ struct FinderRevealTests {
         )
     }
 
+    /// `hasPrefix` is a string test, not a path test: a sibling home whose name merely
+    /// starts with the current user's would otherwise abbreviate to `~2/cache` — a label
+    /// pointing at a folder that does not exist, on a menu item that deletes things.
+    @Test func siblingHomeWithAPrefixNameIsNotAbbreviated() {
+        let sibling = URL(fileURLWithPath: home.path + "2/cache")
+        let title = FinderReveal.menuTitle(for: ScanRowLocation(url: sibling, sizeBytes: nil))
+
+        #expect(title == sibling.standardizedFileURL.path)
+        #expect(!title.hasPrefix("~"))
+    }
+
+    /// The guard above must not cost the ordinary case: the home directory itself still
+    /// abbreviates, since there is no remainder to check for a separator.
+    @Test func homeDirectoryItselfAbbreviatesToTilde() {
+        #expect(FinderReveal.menuTitle(for: ScanRowLocation(url: home)) == "~")
+    }
+
     /// The submenu labels a location by its path; a trailing slash would make two
     /// spellings of the same folder look like two different rows.
     @Test func trailingSlashIsNormalized() {

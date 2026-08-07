@@ -951,6 +951,17 @@ struct DevToolsView<PageHeader: View>: View {
                     ]
                 }
             }
+            // The overlay only answers a secondary click, which VoiceOver and the
+            // keyboard cannot produce.
+            .accessibilityAction(named: Text("Exclude project from scans")) {
+                store.excludeProjectGroupFromScans(groupID: group.id)
+            }
+            .accessibilityAction(named: Text("Show in Finder")) {
+                FinderReveal.show(group.rootPath)
+            }
+            .accessibilityAction(named: Text("Copy Path")) {
+                FinderReveal.copyPaths([group.rootPath])
+            }
 
             if isExpanded {
                 projectArtifactRows(groupIndex: currentGroupIndex)

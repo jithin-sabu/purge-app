@@ -460,10 +460,12 @@ struct ScanResultRow: View {
 /// Exposes the right-click actions to VoiceOver and the keyboard, which cannot produce
 /// a secondary click.
 ///
-/// "Show in Finder" is a single action with a fixed name even when the row has several
-/// locations: `accessibilityAction(named:)` needs its label during `body`, so naming one
-/// action per location would force the path/size formatting we deliberately defer to
-/// right-click. It reveals the largest location — the one the visual submenu lists first.
+/// The Finder actions keep fixed names even when the row has several locations:
+/// `accessibilityAction(named:)` needs its label during `body`, so naming one action per
+/// location — or pluralizing "Copy Path" by counting them — would force the evaluation
+/// and formatting we deliberately defer to right-click. "Show in Finder" therefore
+/// reveals the largest location (the one the visual submenu lists first), and "Copy Path"
+/// copies every location, matching what the menu's "Copy Paths" does.
 private struct ScanRowAccessibilityActions: ViewModifier {
     let onExcludeFromScans: (() -> Void)?
     let revealLocations: (() -> [ScanRowLocation])?
@@ -472,6 +474,7 @@ private struct ScanRowAccessibilityActions: ViewModifier {
         content
             .modifier(OptionalAction(name: "Exclude from scans", handler: onExcludeFromScans))
             .modifier(OptionalAction(name: "Show in Finder", handler: revealHandler))
+            .modifier(OptionalAction(name: "Copy Path", handler: copyPathsHandler))
     }
 
     private var revealHandler: (() -> Void)? {
@@ -480,6 +483,13 @@ private struct ScanRowAccessibilityActions: ViewModifier {
             let largest = revealLocations().max { ($0.sizeBytes ?? 0) < ($1.sizeBytes ?? 0) }
             guard let largest else { return }
             FinderReveal.show(largest.url)
+        }
+    }
+
+    private var copyPathsHandler: (() -> Void)? {
+        guard let revealLocations else { return nil }
+        return {
+            FinderReveal.copyPaths(revealLocations().map(\.url))
         }
     }
 
