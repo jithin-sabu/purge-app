@@ -1,9 +1,45 @@
 import Foundation
 
+/// Whether the filesystem itself will refuse to give a file up, no matter what
+/// permissions Purge holds. This is the only thing that justifies telling
+/// someone macOS protects a file — an ordinary permission error does not.
+nonisolated enum FileProtection {
+    static func isImmutable(_ url: URL) -> Bool {
+        let values = try? url.resourceValues(forKeys: [.isUserImmutableKey, .isSystemImmutableKey])
+        return values?.isUserImmutable == true || values?.isSystemImmutable == true
+    }
+
+    /// SIP marks its own files with a `com.apple.rootless` xattr.
+    static func isRootlessProtected(_ url: URL) -> Bool {
+        url.withUnsafeFileSystemRepresentation { pointer in
+            guard let pointer else { return false }
+            return getxattr(pointer, "com.apple.rootless", nil, 0, 0, XATTR_NOFOLLOW) >= 0
+        }
+    }
+
+    /// Removing a file means unlinking it from its directory, so an immutable
+    /// *parent* refuses the removal even when the file itself looks ordinary —
+    /// verified: `trashItem` then fails with `NSFileWriteNoPermissionError`
+    /// while the file still reports as mutable.
+    ///
+    /// The parent is checked for immutability only, deliberately. A directory
+    /// can carry `com.apple.rootless` and still hand its contents over freely —
+    /// the per-user temp directory is marked `com.apple.rootless: folders` and
+    /// files inside it trash without complaint. Testing the parent for rootless
+    /// would condemn every one of them.
+    static func blocksRemoval(_ url: URL) -> Bool {
+        if isImmutable(url) || isRootlessProtected(url) { return true }
+        let parent = url.deletingLastPathComponent()
+        guard parent.path != url.path else { return false }
+        return isImmutable(parent)
+    }
+}
+
 nonisolated enum CleanFailureReason: Equatable, Error {
     case needsFullDiskAccess
     case inUse
     case systemProtected
+    case safetySkipped
     case unknown
 
     var explanation: String {
@@ -14,8 +50,10 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             "An app is still using this. Quit it and clean again."
         case .systemProtected:
             "macOS protects this one and won't let it be removed."
+        case .safetySkipped:
+            "Purge left this one alone to stay on the safe side."
         case .unknown:
-            "This one couldn't be removed."
+            "This one couldn't be removed. Try again."
         }
     }
 
@@ -27,6 +65,8 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             "app.badge.fill"
         case .systemProtected:
             "lock.shield.fill"
+        case .safetySkipped:
+            "hand.raised.fill"
         case .unknown:
             "exclamationmark.circle.fill"
         }
@@ -82,14 +122,20 @@ nonisolated enum CleanFailureReason: Equatable, Error {
         return .unknown
     }
 
-    /// Maps a deletion error to a user-facing reason, upgrading permission errors to
-    /// `systemProtected` when Full Disk Access is already granted.
-    static func resolved(from error: Error, fullDiskAccessGranted: Bool) -> CleanFailureReason? {
+    /// Maps a deletion error to a user-facing reason. When Full Disk Access is
+    /// already granted a permission error clearly isn't about FDA — but that on
+    /// its own says nothing about macOS protecting the file, so we only claim
+    /// protection when the file — or the directory holding it — really is
+    /// immutable or SIP-marked. Anything else is honestly unknown, and offering
+    /// a retry beats inventing a cause.
+    static func resolved(
+        from error: Error,
+        path: String,
+        fullDiskAccessGranted: Bool
+    ) -> CleanFailureReason? {
         guard let reason = from(error: error) else { return nil }
-        if fullDiskAccessGranted, reason == .needsFullDiskAccess {
-            return .systemProtected
-        }
-        return reason
+        guard fullDiskAccessGranted, reason == .needsFullDiskAccess else { return reason }
+        return FileProtection.blocksRemoval(URL(fileURLWithPath: path)) ? .systemProtected : .unknown
     }
 
     private static func isFileNotFound(_ error: NSError) -> Bool {
@@ -140,7 +186,7 @@ struct CleanFailureItem: Identifiable, Equatable {
             id: skipped.id,
             path: skipped.path,
             displayName: skipped.displayName,
-            reason: .systemProtected,
+            reason: .safetySkipped,
             sizeBytes: 0
         )
     }

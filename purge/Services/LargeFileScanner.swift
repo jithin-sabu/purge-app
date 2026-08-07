@@ -20,7 +20,8 @@ final class LargeFileScanner {
         let now = Date()
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
-            .contentAccessDateKey, .contentModificationDateKey, .isPackageKey
+            .contentAccessDateKey, .contentModificationDateKey, .isPackageKey,
+            .isUserImmutableKey, .isSystemImmutableKey
         ]
 
         for root in LargeFileScanPolicy.scanRoots(home: home) {
@@ -58,6 +59,13 @@ final class LargeFileScanner {
                     let days = Calendar.current.dateComponents([.day], from: lastUsed, to: now).day ?? 0
                     guard days >= staleDays else { continue }
                 }
+
+                // Never list a file the filesystem will refuse to give up — its own
+                // flags or its directory's. Offering it can only end in "couldn't be
+                // cleaned", so it does not belong in the list at all. The check runs
+                // last because it costs syscalls and only a handful of files, already
+                // past the size and staleness filters, get this far.
+                if FileProtection.blocksRemoval(fileURL) { continue }
 
                 continuation.yield(
                     LargeFile(
