@@ -71,14 +71,19 @@ In **Settings → Developer Projects**, choose **Consider stale after** (1 month
 Find space-hogging personal files without digging through folders:
 
 - Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**
-- Skips managed libraries (Photos, iMovie, Music, and similar) and hidden folders
+- Skips managed libraries (Photos, iMovie, Music, and similar), hidden folders, and project folders like `node_modules`, `Pods`, `DerivedData` and build output. Deleting a single file out of a dependency tree only breaks the install, so those belong in Dev Tools, which removes them a folder at a time
+- **Search** filters the list as you type, matching the file name, the folder it sits in, and its source label
 - Filter by **size** (5 MB to 1 GB) and **last used** (any time up to over 1 year ago)
-- Category chips for videos, audio, images, PDFs, archives, documents, and other files
+- Category chips for videos, audio, images, PDFs, archives, documents, AI models, and other files
 - Sort by size, date, or name; select files and review before deleting
 - **Quick Look** preview and **Reveal in Finder** from each row
 - Deletions move files to **Trash**, so nothing is permanently erased
 
 Large Files is separate from cache cleanup: these are your personal files, not rebuildable caches.
+
+#### Local AI models
+
+Models you downloaded with **Ollama** or **LM Studio** are often the largest files on a Mac and are easy to forget. They appear in Large Files under the **AI Models** category, one row per model, named the way you installed it. Purge understands Ollama's content-addressed storage, so a model's size counts only the bytes that would actually be reclaimed rather than blobs shared with another model.
 
 ### Safety labels
 
@@ -97,25 +102,34 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 
 ### Cleaning
 
-- **Clean Safe Items**: one-click cleanup from the sidebar; only Safe to Clean items, with git and lockfile checks
+- **Clean**: one-click cleanup from the sidebar. The button names the exact amount it will move, and only touches Safe to Clean items, with git and lockfile checks
 - **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete
-- **Clean Safe Files Now**: same safe cleanup from the menu bar
+- **Clean Safe Files**: same safe cleanup from the menu bar
 - **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning**, choose **How often** (weekly, monthly, or every 3 months) and **Untouched for** (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
 - All deletions move items to **Trash**, not permanent removal
 
 ### Settings
 
 - **Appearance**: Light, Dark, or System
-- **Cleaning Schedule**: automatic safe cleanup with frequency, staleness threshold, and next-clean date
+- **Cleaning Schedule**: automatic safe cleanup with frequency, staleness threshold, next-clean date, and a button to run a scheduled clean immediately to confirm it works
 - **Developer Projects**: stale-project threshold for developer artifact scanning
+- **Excluded from scans**: folders you've told Purge to leave alone, each with its current size. Right-click any scan result and choose **Exclude from scans** to add one. Excluding only ever narrows what Purge looks at
+- **Cleaning History**: every automatic and manual clean, with the space freed and the item count. Open one to see what was moved to the Trash and what was skipped
 
 ### More
 
-- **First-run onboarding**: welcome, permissions (Full Disk Access and optional login item), auto-clean preference, first scan, results review, and a safe clean walkthrough
+- **First-run onboarding**: welcome, permissions (Full Disk Access and optional login item), first scan, results review, and a safe clean walkthrough
 - **Menu bar companion**: recoverable space at a glance, quick open, scan/clean actions, and all-time cleaned total
 - **Disk summary**: sidebar shows used/free space and how much is safe to recover
-- **Scan All**: rescans App Caches and Dev Tools together (⇧⌘R)
-- **Update check**: the About screen checks GitHub releases and points you to the latest version
+- **In-app updates**: the About screen checks for, downloads, and installs new versions
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| ⌘R | Rescan the current tab |
+| ⇧⌘R | Scan All: rescan App Caches and Dev Tools together |
+| ⌘1–⌘3 | Filter by All, Safe to Clean, or Check First |
 
 ---
 
@@ -184,31 +198,23 @@ Purge needs Full Disk Access to scan your cache folders.
 
 ## Updating
 
-Purge isn't on the Mac App Store, so it doesn't update itself automatically. Instead, it checks for you and makes updating a quick manual swap.
+Purge updates itself in place. Open the **About** screen and click **Check for Updates**: if a newer version exists, Purge downloads it, verifies its signature, installs it, and relaunches. You don't need to visit the release page or drag anything.
+
+Purge does not check on its own. Updates only happen when you ask for them, and nothing is contacted in the background.
+
+Updates are delivered through [Sparkle](https://sparkle-project.org), the standard update framework for Mac apps outside the App Store. Each update is signed with a key that lives only on the developer's machine, and Purge refuses any download that doesn't carry a matching signature.
 
 ### Updating with Homebrew
 
-If you installed through Homebrew, updating is one command:
+If you installed through Homebrew, you can update from the terminal instead:
 
 ```bash
 brew upgrade --cask purge
 ```
 
-That pulls the latest release and swaps in the new version. Your settings, schedule, and history are untouched. The rest of this section covers updating a manual download.
+Either route is fine. Your settings, cleaning schedule, and history are kept whichever way you update; they live separately from the app. You won't need to grant Full Disk Access again either, since the permission stays with Purge.
 
-### Checking for a new version
-
-Open the **About** screen inside Purge and use **Check for Updates**. It compares your version against the latest GitHub release. If a newer one exists, it points you to the release page so you can download it. This is a notifier only: it doesn't download or install the update for you.
-
-You can also just visit the [releases page](https://github.com/jithin-sabu/purge-app/releases/latest) anytime.
-
-### Installing the update
-
-1. Download the latest `.dmg` from the release page
-2. Open it and drag Purge into your Applications folder
-3. When asked, choose **Replace** to overwrite the old version
-
-That's it. Your settings, cleaning schedule, and history are kept; they live separately from the app, so replacing the app doesn't touch them. You won't need to grant Full Disk Access again either; the permission stays with Purge.
+You can also browse past versions on the [releases page](https://github.com/jithin-sabu/purge-app/releases) anytime.
 
 
 ---
@@ -220,8 +226,10 @@ Prefer to build Purge yourself instead of downloading the release? Here is how.
 ### Prerequisites
 
 - macOS 13.0 or later
-- **Xcode 15 or later** (from the Mac App Store)
+- **Xcode 16 or later** (from the Mac App Store). The project format and its default-actor-isolation build setting need Xcode 16; earlier versions won't open it
 - [Node.js](https://nodejs.org) 18+ and npm, only needed if you want to regenerate brand icons
+
+Dependencies are resolved by Swift Package Manager when you first build. The only one is [Sparkle](https://github.com/sparkle-project/Sparkle), which handles in-app updates.
 
 ### Step 1: Clone the repo
 
@@ -264,8 +272,10 @@ npm run generate:icons
 ### Running the tests
 
 ```bash
-xcodebuild -project purge.xcodeproj -scheme purge -destination 'platform=macOS' test
+xcodebuild test -project purge.xcodeproj -scheme purge -destination 'platform=macOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
+
+The signing flags matter: without a development certificate on the machine, the test build fails before a single test runs. Continuous integration builds the same way.
 
 ---
 
@@ -294,8 +304,17 @@ Purge deletes files, so safety is the point. A few things worth knowing:
 - **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
 - **Open source**: The full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
 - **Notarized by Apple**: The app is signed and notarized, so macOS can verify it hasn't been tampered with since release.
+- **Signed updates**: In-app updates are verified against a signing key before they are installed. An update that isn't signed by that key is refused, so a compromised download can't become a compromised install.
 
 Found a safety gap or a path that could be deleted when it shouldn't be? Please report it. See [SECURITY.md](SECURITY.md) for how.
+
+---
+
+## Contributing
+
+Bug reports, safety findings, and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers how to set up the project and what makes a change easy to review. Anything touching the safety allowlist, the never-delete protections, or the scanning logic gets extra scrutiny and takes longer to review, which is deliberate.
+
+Security issues are the exception: report those privately through [SECURITY.md](SECURITY.md) rather than opening an issue.
 
 ---
 
