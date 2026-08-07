@@ -24,13 +24,21 @@ struct LargeFileScanPolicyTests {
         #expect(LargeFileScanPolicy.isEligibleForDeletion(url))
     }
 
+    /// Both paths are refused by cache safety, but by different rules, and the
+    /// distinction is deliberate. `~/Movies` is a `neverDeletePrefixes` entry, so
+    /// the folder *and every descendant* are never-delete. `~/Downloads` is only a
+    /// `neverDeleteExactPaths` entry — the folder itself is protected, while a file
+    /// inside it falls through to the default refusal, `.blockedNotWhitelisted`.
+    /// That is what keeps whitelisted caches nested under Downloads reachable.
+    /// What matters for both is the same: neither is ever offered for cleanup.
     @Test
     func cacheSafetyStillBlocksPersonalMediaPaths() {
         let downloads = home.appendingPathComponent("Downloads/movie.mkv")
         let movies = home.appendingPathComponent("Movies/movie.mp4")
 
-        #expect(DeletionSafetyPolicy.evaluate(downloads) == .blockedNeverDelete)
+        #expect(DeletionSafetyPolicy.evaluate(downloads) == .blockedNotWhitelisted)
         #expect(DeletionSafetyPolicy.evaluate(movies) == .blockedNeverDelete)
+        #expect(DeletionSafetyPolicy.evaluate(home.appendingPathComponent("Downloads")) == .blockedNeverDelete)
         #expect(!DeletionSafetyPolicy.isOfferedForCleanup(downloads))
         #expect(!DeletionSafetyPolicy.isOfferedForCleanup(movies))
     }
