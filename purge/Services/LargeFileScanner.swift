@@ -1,6 +1,15 @@
 import Foundation
 
-final class LargeFileScanner {
+nonisolated final class LargeFileScanner {
+    /// Records which thread the walk actually ran on, for the regression test.
+    ///
+    /// This needs a runtime probe rather than a compile-time guarantee: the
+    /// project builds in Swift 5 language mode, where isolation is not
+    /// enforced, so dropping `nonisolated` from this class silently moves the
+    /// whole filesystem walk back onto the main thread and nothing fails to
+    /// compile. Written once per scan, read only by tests.
+    nonisolated(unsafe) static var ranOnMainThread: Bool?
+
     func scanStream(minBytes: Int64, staleDays: Int) -> AsyncStream<LargeFile> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
@@ -34,6 +43,7 @@ final class LargeFileScanner {
             ) else { continue }
 
             while let next = enumerator.nextObject() {
+                if ranOnMainThread == nil { ranOnMainThread = pthread_main_np() != 0 }
                 if Task.isCancelled { break }
                 guard let fileURL = next as? URL else { continue }
 

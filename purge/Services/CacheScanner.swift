@@ -7,7 +7,7 @@ enum CacheScanEvent {
     case sizeResolved(path: String, sizeBytes: Int64, lastModified: Date)
 }
 
-final class CacheScanner {
+nonisolated final class CacheScanner {
     private struct SizeJob {
         let path: URL
     }

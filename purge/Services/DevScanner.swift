@@ -9,7 +9,7 @@ enum DeveloperScanEvent {
     case simulatorSizeResolved(id: UUID, sizeBytes: Int64)
 }
 
-final class DevScanner {
+nonisolated final class DevScanner {
     private struct DevToolSizeJob {
         let toolID: String
         let toolLabel: String
