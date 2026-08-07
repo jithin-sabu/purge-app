@@ -45,6 +45,10 @@ struct ScanResultRow: View {
     let onResetToAutomatic: (() -> Void)?
     /// When nil, the row omits the "Exclude from scans" context-menu action.
     var onExcludeFromScans: (() -> Void)?
+    /// Folders this row would delete, for the "Show in Finder" context-menu action.
+    /// A closure, not an array: it is only evaluated on right-click, so no row pays
+    /// for path standardization or size formatting during `body`.
+    var revealLocations: (() -> [ScanRowLocation])?
     let isUserOverride: Bool
     /// When `false`, the row checkbox is disabled (e.g. high-risk items that should not participate in bulk select).
     var allowsBulkSelection: Bool = true
@@ -121,6 +125,7 @@ struct ScanResultRow: View {
         showUncommittedRepoChanges: Bool = false,
         onResetToAutomatic: (() -> Void)? = nil,
         onExcludeFromScans: (() -> Void)? = nil,
+        revealLocations: (() -> [ScanRowLocation])? = nil,
         isUserOverride: Bool = false,
         allowsBulkSelection: Bool = true,
         showsBulkCheckbox: Bool = true,
@@ -140,6 +145,7 @@ struct ScanResultRow: View {
         self.showUncommittedRepoChanges = showUncommittedRepoChanges
         self.onResetToAutomatic = onResetToAutomatic
         self.onExcludeFromScans = onExcludeFromScans
+        self.revealLocations = revealLocations
         self.isUserOverride = isUserOverride
         self.allowsBulkSelection = allowsBulkSelection
         self.showsBulkCheckbox = showsBulkCheckbox
@@ -161,7 +167,7 @@ struct ScanResultRow: View {
             )
             .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
 
-        if let onExcludeFromScans {
+        if onExcludeFromScans != nil || revealLocations != nil {
             // Not SwiftUI's `.contextMenu`: that hands the menu to the enclosing
             // NSTableView, which then paints its own blue contextual-menu highlight
             // around the whole list row. Consuming the right-click ourselves keeps
@@ -169,16 +175,63 @@ struct ScanResultRow: View {
             row.overlay {
                 ScanRowContextMenu(
                     isMenuActive: $isContextMenuActive,
-                    title: "Exclude from scans",
-                    action: onExcludeFromScans
+                    entries: contextMenuEntries
                 )
             }
             // The overlay only answers a secondary click, which VoiceOver and the
-            // keyboard cannot produce; this exposes the same action to them.
-            .accessibilityAction(named: Text("Exclude from scans"), onExcludeFromScans)
+            // keyboard cannot produce; this exposes the same actions to them.
+            .modifier(
+                ScanRowAccessibilityActions(
+                    onExcludeFromScans: onExcludeFromScans,
+                    revealLocations: revealLocations
+                )
+            )
         } else {
             row
         }
+    }
+
+    /// Built on right-click, not during `body` — see `ScanRowContextMenu.entries`.
+    private func contextMenuEntries() -> [ScanRowMenuEntry] {
+        var entries: [ScanRowMenuEntry] = []
+
+        if let onExcludeFromScans {
+            entries.append(.action(title: "Exclude from scans", handler: onExcludeFromScans))
+        }
+
+        // Largest first, so the submenu leads with the folder holding the bulk.
+        let locations = (revealLocations?() ?? [])
+            .sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
+        guard !locations.isEmpty else { return entries }
+
+        if !entries.isEmpty {
+            entries.append(.separator)
+        }
+
+        if locations.count == 1 {
+            let url = locations[0].url
+            entries.append(.action(title: "Show in Finder") { FinderReveal.show(url) })
+        } else {
+            entries.append(
+                .submenu(
+                    title: "Show in Finder",
+                    entries: locations.map { location in
+                        .action(title: FinderReveal.menuTitle(for: location)) {
+                            FinderReveal.show(location.url)
+                        }
+                    }
+                )
+            )
+        }
+
+        let urls = locations.map(\.url)
+        entries.append(
+            .action(title: urls.count == 1 ? "Copy Path" : "Copy Paths") {
+                FinderReveal.copyPaths(urls)
+            }
+        )
+
+        return entries
     }
 
     @ViewBuilder
@@ -402,14 +455,88 @@ struct ScanResultRow: View {
     }
 }
 
+// MARK: - Row accessibility actions
+
+/// Exposes the right-click actions to VoiceOver and the keyboard, which cannot produce
+/// a secondary click.
+///
+/// The Finder actions keep fixed names even when the row has several locations:
+/// `accessibilityAction(named:)` needs its label during `body`, so naming one action per
+/// location — or pluralizing "Copy Path" by counting them — would force the evaluation
+/// and formatting we deliberately defer to right-click. "Show in Finder" therefore
+/// reveals the largest location (the one the visual submenu lists first), and "Copy Path"
+/// copies every location, matching what the menu's "Copy Paths" does.
+private struct ScanRowAccessibilityActions: ViewModifier {
+    let onExcludeFromScans: (() -> Void)?
+    let revealLocations: (() -> [ScanRowLocation])?
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(OptionalAction(name: "Exclude from scans", handler: onExcludeFromScans))
+            .modifier(OptionalAction(name: "Show in Finder", handler: revealHandler))
+            .modifier(OptionalAction(name: "Copy Path", handler: copyPathsHandler))
+    }
+
+    private var revealHandler: (() -> Void)? {
+        guard let revealLocations else { return nil }
+        return {
+            let largest = revealLocations().max { ($0.sizeBytes ?? 0) < ($1.sizeBytes ?? 0) }
+            guard let largest else { return }
+            FinderReveal.show(largest.url)
+        }
+    }
+
+    private var copyPathsHandler: (() -> Void)? {
+        guard let revealLocations else { return nil }
+        return {
+            FinderReveal.copyPaths(revealLocations().map(\.url))
+        }
+    }
+
+    private struct OptionalAction: ViewModifier {
+        let name: String
+        let handler: (() -> Void)?
+
+        func body(content: Content) -> some View {
+            if let handler {
+                content.accessibilityAction(named: Text(name), handler)
+            } else {
+                content
+            }
+        }
+    }
+}
+
 // MARK: - Row context menu
+
+/// One entry in a scan row's right-click menu.
+enum ScanRowMenuEntry {
+    case action(title: String, handler: () -> Void)
+    case submenu(title: String, entries: [ScanRowMenuEntry])
+    case separator
+}
+
+/// Retains a menu item's closure: `NSMenuItem.target` is weak, so the host view holds
+/// these for the lifetime of the open menu.
+private final class ScanRowMenuActionTarget: NSObject {
+    private let handler: () -> Void
+
+    init(handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc func fire() {
+        handler()
+    }
+}
 
 /// Right-click menu that consumes the click so NSTableView never paints its blue row
 /// highlight. Left clicks pass through for normal row selection.
 struct ScanRowContextMenu: NSViewRepresentable {
     @Binding var isMenuActive: Bool
-    let title: String
-    let action: () -> Void
+    /// Evaluated on right-click, never during `body`. Building entries eagerly would
+    /// standardize paths and format sizes on every render of every visible row.
+    let entries: () -> [ScanRowMenuEntry]
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -427,9 +554,11 @@ struct ScanRowContextMenu: NSViewRepresentable {
 
     final class MenuHostView: NSView {
         weak var menuDelegate: NSMenuDelegate?
-        var title = ""
-        var action: () -> Void = {}
+        var entries: () -> [ScanRowMenuEntry] = { [] }
         var onMenuOpened: (() -> Void)?
+
+        /// Keeps each item's action target alive while the menu is up.
+        private var actionTargets: [ScanRowMenuActionTarget] = []
 
         override func rightMouseDown(with event: NSEvent) {
             showMenu(for: event)
@@ -441,17 +570,45 @@ struct ScanRowContextMenu: NSViewRepresentable {
         }
 
         private func showMenu(for event: NSEvent) {
+            let entries = entries()
+            guard !entries.isEmpty else { return }
             onMenuOpened?()
+            actionTargets.removeAll()
             let menu = NSMenu()
-            let item = NSMenuItem(title: title, action: #selector(performAction), keyEquivalent: "")
-            item.target = self
-            menu.addItem(item)
+            // Items carry explicit targets; without this, AppKit's validation path
+            // would grey out the submenu parents.
+            menu.autoenablesItems = false
+            populate(menu, with: entries)
             menu.delegate = menuDelegate
             menu.popUp(positioning: nil, at: convert(event.locationInWindow, from: nil), in: self)
         }
 
-        @objc private func performAction() {
-            action()
+        private func populate(_ menu: NSMenu, with entries: [ScanRowMenuEntry]) {
+            for entry in entries {
+                switch entry {
+                case .separator:
+                    menu.addItem(.separator())
+
+                case .action(let title, let handler):
+                    let target = ScanRowMenuActionTarget(handler: handler)
+                    actionTargets.append(target)
+                    let item = NSMenuItem(
+                        title: title,
+                        action: #selector(ScanRowMenuActionTarget.fire),
+                        keyEquivalent: ""
+                    )
+                    item.target = target
+                    menu.addItem(item)
+
+                case .submenu(let title, let subEntries):
+                    let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                    let subMenu = NSMenu(title: title)
+                    subMenu.autoenablesItems = false
+                    populate(subMenu, with: subEntries)
+                    item.submenu = subMenu
+                    menu.addItem(item)
+                }
+            }
         }
 
         /// Claim secondary clicks only; every other event passes to the SwiftUI row beneath.
@@ -470,15 +627,13 @@ struct ScanRowContextMenu: NSViewRepresentable {
 
     func makeNSView(context: Context) -> MenuHostView {
         let view = MenuHostView()
-        view.title = title
-        view.action = action
+        view.entries = entries
         wire(view: view, coordinator: context.coordinator)
         return view
     }
 
     func updateNSView(_ nsView: MenuHostView, context: Context) {
-        nsView.title = title
-        nsView.action = action
+        nsView.entries = entries
         wire(view: nsView, coordinator: context.coordinator)
     }
 
