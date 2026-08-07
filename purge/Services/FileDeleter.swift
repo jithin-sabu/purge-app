@@ -365,6 +365,7 @@ nonisolated final class FileDeleter: Sendable {
     ) {
         guard let reason = CleanFailureReason.resolved(
             from: error,
+            path: path,
             fullDiskAccessGranted: PermissionChecker().hasFullDiskAccess()
         ) else {
             NSLog("Purge: item already gone, skipping %@", path)

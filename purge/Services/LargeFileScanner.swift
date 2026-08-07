@@ -20,7 +20,8 @@ final class LargeFileScanner {
         let now = Date()
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
-            .contentAccessDateKey, .contentModificationDateKey, .isPackageKey
+            .contentAccessDateKey, .contentModificationDateKey, .isPackageKey,
+            .isUserImmutableKey, .isSystemImmutableKey
         ]
 
         for root in LargeFileScanPolicy.scanRoots(home: home) {
@@ -58,6 +59,13 @@ final class LargeFileScanner {
                     let days = Calendar.current.dateComponents([.day], from: lastUsed, to: now).day ?? 0
                     guard days >= staleDays else { continue }
                 }
+
+                // Never list a file the filesystem will refuse to give up. Offering
+                // it can only end in "couldn't be cleaned", so it does not belong in
+                // the list at all. The check runs last because it costs a syscall and
+                // only a handful of files get this far.
+                if values?.isUserImmutable == true || values?.isSystemImmutable == true { continue }
+                if FileProtection.isRootlessProtected(fileURL) { continue }
 
                 continuation.yield(
                     LargeFile(

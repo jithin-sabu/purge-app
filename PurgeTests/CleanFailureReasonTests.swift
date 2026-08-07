@@ -37,24 +37,71 @@ struct CleanFailureReasonTests {
         (NSPOSIXErrorDomain, Int(EPERM)),
         (NSCocoaErrorDomain, NSFileWriteNoPermissionError),
     ])
-    func upgradesPermissionErrorsWhenFullDiskAccessGranted(domain: String, code: Int) {
+    func permissionErrorOnAnOrdinaryFileIsUnknownWhenFullDiskAccessGranted(
+        domain: String,
+        code: Int
+    ) throws {
         let error = NSError(domain: domain, code: code)
+        let file = try Self.makeTemporaryFile()
+        defer { try? FileManager.default.removeItem(at: file) }
+
         #expect(CleanFailureReason.from(error: error) == .needsFullDiskAccess)
+        // An ordinary user file is not protected by macOS, so we must not say it is.
         #expect(
-            CleanFailureReason.resolved(from: error, fullDiskAccessGranted: true)
-                == .systemProtected
+            CleanFailureReason.resolved(from: error, path: file.path, fullDiskAccessGranted: true)
+                == .unknown
         )
         #expect(
-            CleanFailureReason.resolved(from: error, fullDiskAccessGranted: false)
+            CleanFailureReason.resolved(from: error, path: file.path, fullDiskAccessGranted: false)
                 == .needsFullDiskAccess
         )
+    }
+
+    @Test func immutableFileIsReportedAsSystemProtected() throws {
+        let file = try Self.makeTemporaryFile()
+        defer {
+            try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: file.path)
+            try? FileManager.default.removeItem(at: file)
+        }
+        try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: file.path)
+
+        #expect(FileProtection.blocksRemoval(file))
+        let error = NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM))
+        #expect(
+            CleanFailureReason.resolved(from: error, path: file.path, fullDiskAccessGranted: true)
+                == .systemProtected
+        )
+    }
+
+    @Test func ordinaryFileIsNotTreatedAsProtected() throws {
+        let file = try Self.makeTemporaryFile()
+        defer { try? FileManager.default.removeItem(at: file) }
+        #expect(!FileProtection.blocksRemoval(file))
     }
 
     @Test func preservesNonPermissionReasonsWhenFullDiskAccessGranted() {
         let busy = NSError(domain: NSPOSIXErrorDomain, code: Int(EBUSY))
         #expect(
-            CleanFailureReason.resolved(from: busy, fullDiskAccessGranted: true) == .inUse
+            CleanFailureReason.resolved(from: busy, path: "/tmp/none", fullDiskAccessGranted: true)
+                == .inUse
         )
+    }
+
+    @Test func safetySkipsAreNotDescribedAsSystemProtection() {
+        let skipped = SkippedDeletionItem(
+            path: "/tmp/example",
+            displayName: "example",
+            reason: "This file was skipped for safety",
+            isUserVisible: true
+        )
+        #expect(CleanFailureItem(skipped: skipped).reason == .safetySkipped)
+    }
+
+    private static func makeTemporaryFile() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-protection-\(UUID().uuidString)")
+        try Data("x".utf8).write(to: url)
+        return url
     }
 }
 
