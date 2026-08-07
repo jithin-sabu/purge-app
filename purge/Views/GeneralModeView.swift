@@ -344,6 +344,11 @@ struct AppCachesView<PageHeader: View>: View {
                         showUncommittedRepoChanges: item.gitStatus == .dirty,
                         onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },
                         onExcludeFromScans: { store.excludeFromScans(item) },
+                        revealLocations: {
+                            item.locations.map {
+                                ScanRowLocation(url: $0.path, sizeBytes: $0.sizeBytes)
+                            }
+                        },
                         // `standardizedPaths` is precomputed on the item; deriving it here
                         // meant a filesystem stat per location, per row, per render.
                         isUserOverride: item.standardizedPaths.contains {

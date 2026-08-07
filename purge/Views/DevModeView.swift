@@ -706,6 +706,17 @@ struct DevToolsView<PageHeader: View>: View {
                             showUncommittedRepoChanges: !isDevToolMetadataPending(tool) && toolShowsUncommitted(tool),
                             onResetToAutomatic: primaryPath != nil ? { store.resetDevToolToAutomatic(id: toolID) } : nil,
                             onExcludeFromScans: { store.excludeFromScans(tool) },
+                            revealLocations: {
+                                // `standardizedPaths` is precomputed and parallel to `paths`,
+                                // and is the key `pathSizeBytesByPath` uses.
+                                zip(tool.paths, tool.standardizedPaths).map { path, key in
+                                    ScanRowLocation(
+                                        url: path,
+                                        sizeBytes: tool.pathSizeBytesByPath[key]
+                                            ?? (tool.paths.count == 1 ? tool.sizeBytes : nil)
+                                    )
+                                }
+                            },
                             isUserOverride: primaryPath.map { store.userOverridePaths.contains($0.standardizedFileURL.path) } ?? false,
                             isMetadataPending: isDevToolMetadataPending(tool)
                         )
@@ -750,6 +761,9 @@ struct DevToolsView<PageHeader: View>: View {
                                     showUncommittedRepoChanges: false,
                                     onResetToAutomatic: nil,
                                     onExcludeFromScans: { store.excludeFromScans(device) },
+                                    revealLocations: {
+                                        [ScanRowLocation(url: device.folderURL, sizeBytes: device.sizeOnDisk)]
+                                    },
                                     isUserOverride: false,
                                     allowsBulkSelection: true,
                                     isMetadataPending: isSimulatorMetadataPending(device),
@@ -922,11 +936,20 @@ struct DevToolsView<PageHeader: View>: View {
             // Header only: an overlay across the whole card would swallow the
             // right-click meant for an individual artifact row.
             .overlay {
-                ScanRowContextMenu(
-                    isMenuActive: .constant(false),
-                    title: "Exclude project from scans",
-                    action: { store.excludeProjectGroupFromScans(groupID: group.id) }
-                )
+                ScanRowContextMenu(isMenuActive: .constant(false)) {
+                    [
+                        .action(title: "Exclude project from scans") {
+                            store.excludeProjectGroupFromScans(groupID: group.id)
+                        },
+                        .separator,
+                        .action(title: "Show in Finder") {
+                            FinderReveal.show(group.rootPath)
+                        },
+                        .action(title: "Copy Path") {
+                            FinderReveal.copyPaths([group.rootPath])
+                        }
+                    ]
+                }
             }
 
             if isExpanded {
@@ -993,6 +1016,9 @@ struct DevToolsView<PageHeader: View>: View {
                     onResetToAutomatic: { store.resetProjectArtifactToAutomatic(groupID: groupID, artifactID: artifactID) },
                     onExcludeFromScans: {
                         store.excludeProjectArtifactFromScans(groupID: groupID, artifactID: artifactID)
+                    },
+                    revealLocations: {
+                        [ScanRowLocation(url: art.path, sizeBytes: art.sizeBytes)]
                     },
                     isUserOverride: store.userOverridePaths.contains(artifactPath),
                     showsBulkCheckbox: false,
