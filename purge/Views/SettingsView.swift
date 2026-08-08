@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var store: PurgeStore
+    @EnvironmentObject private var updater: PurgeUpdater
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var registrar = ScheduledCleaningRegistrar.shared
@@ -39,6 +40,7 @@ struct SettingsView: View {
                     cleaningScheduleSection
                     devToolsSection
                     excludedAppsSection
+                    updatesSection
                     cleaningHistorySection
                 }
             }
@@ -197,6 +199,55 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var updatesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center) {
+                    Text("Updates")
+                        .font(.headline)
+
+                    Spacer(minLength: 12)
+
+                    Toggle("Check for updates automatically", isOn: automaticUpdateChecksBinding)
+                        .toggleStyle(.switch)
+                        .tint(AppColors.tagSafeText)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Updates")
+                        .font(.headline)
+
+                    Toggle("Check for updates automatically", isOn: automaticUpdateChecksBinding)
+                        .toggleStyle(.switch)
+                        .tint(AppColors.tagSafeText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            settingsSectionCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(updatesSummary)
+                        .settingsCaption()
+                }
+                .padding(16)
+            }
+        }
+    }
+
+    private var updatesSummary: String {
+        """
+        Purge checks once a day and shows the update window when a new version is available. \
+        Nothing is installed without your confirmation, and every download is signature-checked.
+        """
+    }
+
+    private var automaticUpdateChecksBinding: Binding<Bool> {
+        Binding(
+            get: { updater.automaticallyChecksForUpdates },
+            set: { updater.setAutomaticallyChecksForUpdates($0) }
+        )
     }
 
     /// Verification affordance: runs the real scheduled-clean pipeline now (same
