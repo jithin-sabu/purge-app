@@ -93,7 +93,6 @@ nonisolated final class DuplicateFileDetector {
     /// two models legitimately sharing blobs are not duplicates of each other.
     private static func bucketBySize(_ files: [LargeFile]) -> [(Int64, [Candidate])] {
         var bySize: [Int64: [Candidate]] = [:]
-        var seenInodes = Set<String>()
 
         for file in files {
             if Task.isCancelled { return [] }
@@ -106,16 +105,22 @@ nonisolated final class DuplicateFileDetector {
             guard values.isRegularFile == true else { continue }
             guard let size = values.fileSize.map(Int64.init), size > 0 else { continue }
 
-            // Two names for one inode are one file. Keep the first and drop the
-            // rest: reporting them as duplicates would promise space that
-            // deleting either one cannot free.
+            // Skip anything with more than one name on disk. Trashing such a path
+            // frees nothing — the inode survives under its other links — so it
+            // cannot contribute the reclaimable space a duplicate group promises.
             //
-            // Uses device + inode rather than `.fileResourceIdentifierKey`,
-            // whose value is an opaque object only comparable with `isEqual:` —
-            // there is no documented way to derive a stable hash key from it.
-            if let key = inodeKey(for: url) {
-                guard seenInodes.insert(key).inserted else { continue }
-            }
+            // The link count catches this whether or not the other name is
+            // somewhere the scan looked, which deduplicating by inode within this
+            // list could not: a copy hard-linked to a path outside the scan roots
+            // would still have been offered as free space.
+            //
+            // The cost is a genuine miss — an ordinary file and a hard-linked one
+            // with identical contents are a real duplicate, and this drops the
+            // pair rather than show a group where deleting the wrong member frees
+            // nothing. Silence is the right side to err on: hard links are rare in
+            // the folders Large Files scans, and overstating recoverable space is
+            // the failure this feature cannot afford.
+            guard linkCount(for: url) == 1 else { continue }
 
             bySize[size, default: []].append(Candidate(fileID: file.id, url: url))
         }
@@ -191,13 +196,14 @@ nonisolated final class DuplicateFileDetector {
         return Task.isCancelled ? [:] : results
     }
 
-    /// `device:inode` for a path, the pair that identifies one file on disk no
-    /// matter how many hard links point at it.
-    private static func inodeKey(for url: URL) -> String? {
+    /// How many names on disk point at this file. 1 for an ordinary file; more
+    /// once it has been hard-linked. Unreadable attributes report 1, the same way
+    /// the rest of this pass treats a file it cannot inspect — the content digest
+    /// still has to agree before anything is called a duplicate.
+    private static func linkCount(for url: URL) -> Int {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let inode = attrs[.systemFileNumber] as? NSNumber,
-              let device = attrs[.systemNumber] as? NSNumber else { return nil }
-        return "\(device.uint64Value):\(inode.uint64Value)"
+              let links = attrs[.referenceCount] as? NSNumber else { return 1 }
+        return links.intValue
     }
 
     // MARK: - Digests

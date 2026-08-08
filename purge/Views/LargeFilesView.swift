@@ -15,7 +15,7 @@ struct LargeFilesView: View {
     var showsPageHeader = true
     var usesExternalScrollContainer = false
 
-    @AppStorage(LargeFileFilterDefaults.categoryKey) private var categoryFilterRaw: String = "all"
+    @AppStorage(LargeFileFilterDefaults.categoryKey) private var categoryFilterRaw = LargeFileCategoryFilter.all
     @AppStorage("sort.largeFiles") private var sortRaw: String = SortOption.sizeDesc.rawValue
     @AppStorage(LargeFileSizeThreshold.userDefaultsKey) private var minSizeMB: Int = LargeFileSizeThreshold.defaultOption.rawValue
     @AppStorage(LargeFileAgeThreshold.userDefaultsKey) private var minAgeDays: Int = LargeFileAgeThreshold.defaultOption.rawValue
@@ -105,9 +105,13 @@ struct LargeFilesView: View {
         }
 
         switch currentSort {
-        // Already ordered by reclaimable space, biggest first.
-        case .sizeDesc: return sections
-        case .sizeAsc: return sections.reversed()
+        // Sorted on the reclaimable figure the group header shows, not on the
+        // index's own ordering: the two agree today, but only the header's number
+        // is derived from the rows actually rendered.
+        case .sizeDesc:
+            return sections.sorted { $0.displayedReclaimableBytes > $1.displayedReclaimableBytes }
+        case .sizeAsc:
+            return sections.sorted { $0.displayedReclaimableBytes < $1.displayedReclaimableBytes }
         case .dateNewest: return sections.sorted { lastUsed($0) > lastUsed($1) }
         case .dateOldest: return sections.sorted { lastUsed($0) < lastUsed($1) }
         case .nameAZ:
@@ -246,7 +250,12 @@ struct LargeFilesView: View {
                     // Counts are search-filtered but not category-filtered, so the
                     // chips answer "where did my matches land?" while a query is
                     // active instead of advertising rows the query already hid.
-                    categoryChip(id: "all", title: "All", systemImage: "square.grid.2x2", count: searchMatches.count)
+                    categoryChip(
+                        id: LargeFileCategoryFilter.all,
+                        title: "All",
+                        systemImage: "square.grid.2x2",
+                        count: searchMatches.count
+                    )
 
                     // Sits right after "All" rather than among the categories: a
                     // duplicate cuts across every category, and it's the one chip
@@ -256,7 +265,11 @@ struct LargeFilesView: View {
                             id: Self.duplicatesFilterID,
                             title: "Duplicates",
                             systemImage: "square.on.square",
-                            count: searchMatches.filter { duplicateIndex.groupIDByFileID[$0.id] != nil }.count,
+                            // Counted from the sections the list would draw, not
+                            // from the query matches: a query matching one copy
+                            // expands to its whole group, so counting matches
+                            // directly would advertise fewer rows than appear.
+                            count: duplicateSections.reduce(0) { $0 + $1.displayedCopyCount },
                             tier: .checkFirst
                         )
                     }
@@ -456,8 +469,7 @@ struct LargeFilesView: View {
                 // toggles, so the List doesn't churn and revert its scroll.
                 ForEach(duplicateSections, id: \.groupID) { section in
                     DuplicateGroupCard(
-                        group: section.group,
-                        memberIndices: section.memberIndices,
+                        section: section,
                         files: store.largeFiles,
                         selection: store.largeFileSelection,
                         onToggle: toggleSelection(forFileID:)
@@ -775,10 +787,10 @@ private struct LargeFileSearchField: View {
 /// duplicates read as unrelated files in the first place. It also keeps the
 /// height arithmetic exact — see `height`.
 private struct DuplicateGroupCard: View {
-    let group: DuplicateGroup
-    /// Indices into `files`, so the ForEach data stays value-identical across
-    /// selection toggles.
-    let memberIndices: [Int]
+    /// Carries the group and its rendered members together, so the header's copy
+    /// count and reclaimable figure are derived from the rows below it rather
+    /// than from the index, which can briefly disagree.
+    let section: LargeFileCategoryFilter.Section
     let files: [LargeFile]
     /// Observed by the child rows, not here — the container itself must not
     /// re-render on selection.
@@ -793,7 +805,7 @@ private struct DuplicateGroupCard: View {
     /// makes a click scroll the list — the estimate/actual drift accumulates over
     /// the rows above. Every term is a fixed constant, so the sum is exact.
     private var height: CGFloat {
-        let rows = CGFloat(memberIndices.count)
+        let rows = CGFloat(section.displayedCopyCount)
         return Self.padding * 2
             + Self.headerHeight
             + Self.innerSpacing
@@ -805,7 +817,7 @@ private struct DuplicateGroupCard: View {
         VStack(alignment: .leading, spacing: Self.innerSpacing) {
             header
 
-            ForEach(memberIndices, id: \.self) { index in
+            ForEach(section.memberIndices, id: \.self) { index in
                 let file = files[index]
                 LargeFileRow(
                     file: file,
@@ -831,7 +843,9 @@ private struct DuplicateGroupCard: View {
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(group.copyCount) identical copies, \(formatBytes(group.sizeBytes)) each")
+        .accessibilityLabel(
+            "\(section.displayedCopyCount) identical copies, \(formatBytes(section.group.sizeBytes)) each"
+        )
     }
 
     private var header: some View {
@@ -841,14 +855,14 @@ private struct DuplicateGroupCard: View {
                 .foregroundStyle(AppColors.tagCheckText)
                 .accessibilityHidden(true)
 
-            Text("\(group.copyCount) identical copies · \(formatBytes(group.sizeBytes)) each")
+            Text("\(section.displayedCopyCount) identical copies · \(formatBytes(section.group.sizeBytes)) each")
                 .foregroundStyle(AppColors.textSecondary)
 
             Spacer(minLength: 8)
 
             // States the prize without naming a winner: which copy to keep is the
             // user's call, so this never says "delete the one in Downloads".
-            Text("Keep one to free \(formatBytes(group.reclaimableBytes))")
+            Text("Keep one to free \(formatBytes(section.displayedReclaimableBytes))")
                 .foregroundStyle(AppColors.textTertiary)
         }
         .font(AppStyle.Typography.metadataEmphasis)
@@ -1221,6 +1235,20 @@ struct LargeFileDeletionConfirmSheet: View {
         .frame(minWidth: 560, minHeight: 420)
     }
 
+    /// How many fully-selected groups get named before the note switches to a
+    /// count. A Select All over a scan full of duplicates can consume dozens of
+    /// groups, and this note sits in a sheet with no maximum height — naming them
+    /// all would push the buttons off the bottom of the screen.
+    private static let namedConsumedGroupLimit = 3
+
+    private var namedConsumedGroups: [DuplicateGroup] {
+        Array(fullyConsumedDuplicateGroups.prefix(Self.namedConsumedGroupLimit))
+    }
+
+    private var remainingConsumedGroupCount: Int {
+        max(fullyConsumedDuplicateGroups.count - Self.namedConsumedGroupLimit, 0)
+    }
+
     /// Deliberately a note, not a blocker: deleting every copy is a legitimate
     /// thing to want. It just shouldn't happen by accident after a Select All.
     private var allCopiesWarning: some View {
@@ -1230,10 +1258,13 @@ struct LargeFileDeletionConfirmSheet: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(fullyConsumedDuplicateGroups) { group in
+                ForEach(namedConsumedGroups) { group in
                     Text("You're deleting all \(group.copyCount) copies of \(groupLabel(group)). No copy will remain.")
                         .lineLimit(2)
                         .truncationMode(.middle)
+                }
+                if remainingConsumedGroupCount > 0 {
+                    Text("…and \(remainingConsumedGroupCount) more sets where every copy is selected.")
                 }
             }
             .font(.subheadline)

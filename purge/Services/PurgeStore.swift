@@ -1009,7 +1009,12 @@ final class PurgeStore: ObservableObject {
         largeFileDuplicates.beginChecking()
         duplicateScanTask = Task { [duplicateDetector, largeFileDuplicates] in
             let index = await duplicateDetector.findDuplicates(in: files)
-            guard !Task.isCancelled, self.largeFileScanGeneration == generation else {
+            // A superseded pass returns without touching the index at all: by the
+            // time it gets here a newer scan has already called `beginChecking()`,
+            // and clearing the flag would strand the newer pass with no
+            // "Checking for duplicates…" status while it is still running.
+            guard self.largeFileScanGeneration == generation else { return }
+            guard !Task.isCancelled else {
                 largeFileDuplicates.cancelChecking()
                 return
             }

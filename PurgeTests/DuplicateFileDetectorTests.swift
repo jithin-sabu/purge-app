@@ -142,6 +142,28 @@ struct DuplicateFileDetectorTests {
         #expect(index.isEmpty)
     }
 
+    /// The harder case: an ordinary file whose contents match a hard-linked pair.
+    /// Pairing it with either link would offer space that trashing that link
+    /// cannot free, because the inode survives under the other name — so the
+    /// linked paths are excluded outright and nothing is reported.
+    @Test
+    func aFileMatchingAHardLinkedPairIsNotOfferedAsReclaimable() async throws {
+        let root = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let payload = filler(96 * 1024)
+        let independent = try write(payload, to: root.appendingPathComponent("independent.iso"))
+        let linked = try write(payload, to: root.appendingPathComponent("linked.iso"))
+        let alias = root.appendingPathComponent("linked-alias.iso")
+        try FileManager.default.linkItem(at: linked, to: alias)
+
+        let index = await DuplicateFileDetector().findDuplicates(in: [
+            largeFile(at: independent), largeFile(at: linked), largeFile(at: alias),
+        ])
+
+        #expect(index.isEmpty)
+    }
+
     /// AI-model rows stand for a manifest plus blobs they may legitimately share
     /// with other models. There is no single file to digest, and two models
     /// sharing a blob are not copies of each other.
@@ -246,6 +268,60 @@ struct DuplicateFileDetectorTests {
 
         #expect(restated.groups.first?.sizeBytes == 5_500_000)
         #expect(restated.groups.first?.reclaimableBytes == 5_500_000)
+    }
+
+    /// The card header must describe the rows beneath it, not the index. The two
+    /// come apart when a row leaves `largeFiles` before the index is pruned, and a
+    /// box showing two cards under a "3 identical copies" header would overstate
+    /// what deleting frees.
+    @Test
+    func sectionCountsAndSizesComeFromTheRowsItRenders() {
+        let group = DuplicateGroup(
+            id: "digest", fileIDs: ["/a", "/b", "/c"], sizeBytes: 1_000
+        )
+        let rows = ["/a", "/b"].map {
+            LargeFile(
+                path: URL(fileURLWithPath: $0), sizeBytes: 1_000, lastUsed: Date(), category: .other
+            )
+        }
+        let sections = LargeFileCategoryFilter.duplicateSections(
+            in: rows, query: "", duplicates: DuplicateIndex(groups: [group])
+        )
+
+        let section = try? #require(sections.first)
+        #expect(section?.displayedCopyCount == 2)
+        #expect(section?.displayedReclaimableBytes == 1_000)
+        // The index still believes there are three.
+        #expect(section?.group.copyCount == 3)
+    }
+
+    /// A query matching one copy expands to the whole group, so anything counting
+    /// the rows on screen has to count sections, not query matches.
+    @Test
+    func aQueryMatchingOneCopyStillYieldsTheWholeGroup() {
+        let rows = [
+            LargeFile(
+                path: URL(fileURLWithPath: "/wedding-final.mov"),
+                sizeBytes: 1_000, lastUsed: Date(), category: .video
+            ),
+            LargeFile(
+                path: URL(fileURLWithPath: "/IMG_4021.mov"),
+                sizeBytes: 1_000, lastUsed: Date(), category: .video
+            ),
+        ]
+        let group = DuplicateGroup(
+            id: "digest", fileIDs: rows.map(\.id), sizeBytes: 1_000
+        )
+        let index = DuplicateIndex(groups: [group])
+
+        let sections = LargeFileCategoryFilter.duplicateSections(
+            in: rows, query: "wedding", duplicates: index
+        )
+
+        #expect(sections.count == 1)
+        #expect(sections.first?.displayedCopyCount == 2)
+        // Only one row matches the query on its own.
+        #expect(rows.filter { $0.matches(searchQuery: "wedding") }.count == 1)
     }
 
     /// Groups are laid out most-reclaimable first, which is the order the

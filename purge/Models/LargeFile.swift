@@ -196,6 +196,19 @@ nonisolated enum LargeFileCategoryFilter {
         let groupID: String
         let group: DuplicateGroup
         let memberIndices: [Int]
+
+        /// What the card actually renders. Derived from `memberIndices` rather
+        /// than `group.copyCount` so the header can never claim more copies than
+        /// there are rows beneath it — the two come apart if a row leaves the list
+        /// before the index is pruned.
+        var displayedCopyCount: Int { memberIndices.count }
+
+        /// Space freed by keeping one of the rendered copies. Ordering the list
+        /// reads this rather than `group.reclaimableBytes` for the same reason:
+        /// groups must sort by the number the header shows.
+        var displayedReclaimableBytes: Int64 {
+            Int64(max(displayedCopyCount - 1, 0)) * group.sizeBytes
+        }
     }
 
     /// The duplicate groups the list should draw, ordered most-reclaimable first,
