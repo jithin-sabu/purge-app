@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.3.2</title>
+      <pubDate>Sat, 08 Aug 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>17</sparkle:version>
+      <sparkle:shortVersionString>1.3.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>New: duplicate detection in Large Files. Byte-identical files are grouped together, so the same video saved under two names reads as one set rather than two unrelated space hogs. Each group shows how many copies exist and how much keeping one would free. Nothing is called a duplicate without a full content match, and Purge never picks which copy survives.</li>
+          <li>Purge now checks for updates once a day and opens the update window when a new version is available. Earlier versions only checked when you asked from the About screen. Nothing is downloaded or installed without your confirmation, and the check can be turned off in Settings, under Updates.</li>
+          <li>Show in Finder and Copy Path are now on the right-click menu for App Caches and Dev Tools rows, so you can see exactly what a row would delete. Rows covering several folders get a submenu listing each location with its size, largest first.</li>
+          <li>Paths under a home folder with a similar name no longer abbreviate wrongly, which could label a menu item with a folder that does not exist.</li>
+          <li>Show in Finder and Copy Path are now available to VoiceOver users, who cannot produce a right-click.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.3.2/Purgev1.3.2.dmg"
+        sparkle:edSignature="QbgXEjTHe2BzKPrnI8OYMGt+OlZjzqi8BDurnhbTF/NEPkE9+I1j4m7I8Bkn/bOtmvn5pUEAacLvEzZt/3aqDg=="
+        length="7266897"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.3.1</title>
       <pubDate>Fri, 07 Aug 2026 12:00:00 +0000</pubDate>
       <sparkle:version>16</sparkle:version>
