@@ -327,8 +327,18 @@ enum LargeFileAgeThreshold: Int, CaseIterable, Identifiable {
 
 enum LargeFileFilterDefaults {
     private static let legacySizeKey = "largeFiles.minSizeMB"
+    static let categoryKey = "filter.largeFiles"
 
     static func register(userDefaults: UserDefaults = .standard) {
+        // Duplicates is a way of looking at a scan, not a standing preference:
+        // it only means anything once a scan has found groups, and landing in it
+        // on launch shows an empty list until one has. The category chips share
+        // this key, so the persisted value is dropped back to "all" here rather
+        // than being written differently at the tap site.
+        if userDefaults.string(forKey: categoryKey) == LargeFileCategoryFilter.duplicates {
+            userDefaults.set(LargeFileCategoryFilter.all, forKey: categoryKey)
+        }
+
         if userDefaults.object(forKey: LargeFileSizeThreshold.userDefaultsKey) == nil,
            userDefaults.object(forKey: legacySizeKey) != nil {
             let legacySize = userDefaults.integer(forKey: legacySizeKey)

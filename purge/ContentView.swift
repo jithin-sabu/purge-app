@@ -18,7 +18,7 @@ struct ContentView: View {
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
     @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.all.rawValue
-    @AppStorage("filter.largeFiles") private var largeFilesCategoryFilterRaw: String = "all"
+    @AppStorage(LargeFileFilterDefaults.categoryKey) private var largeFilesCategoryFilterRaw: String = "all"
 
     /// Large Files search text. Held here rather than inside `LargeFilesView` so the
     /// page header subtitle can be filtered by it too, and deliberately `@State`

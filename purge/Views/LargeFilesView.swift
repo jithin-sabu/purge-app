@@ -15,7 +15,7 @@ struct LargeFilesView: View {
     var showsPageHeader = true
     var usesExternalScrollContainer = false
 
-    @AppStorage("filter.largeFiles") private var categoryFilterRaw: String = "all"
+    @AppStorage(LargeFileFilterDefaults.categoryKey) private var categoryFilterRaw: String = "all"
     @AppStorage("sort.largeFiles") private var sortRaw: String = SortOption.sizeDesc.rawValue
     @AppStorage(LargeFileSizeThreshold.userDefaultsKey) private var minSizeMB: Int = LargeFileSizeThreshold.defaultOption.rawValue
     @AppStorage(LargeFileAgeThreshold.userDefaultsKey) private var minAgeDays: Int = LargeFileAgeThreshold.defaultOption.rawValue
@@ -74,9 +74,10 @@ struct LargeFilesView: View {
     }
 
     /// Whether the Duplicates chip is the active filter *and* has something to
-    /// show. The chip shares `categoryFilterRaw`, which persists across launches,
-    /// so a stored `"duplicates"` can outlive the scan that produced the groups —
-    /// without this the user would relaunch into a permanently empty list.
+    /// show. The two come apart within a session: a fresh Scan empties the index
+    /// while the chip is still selected, and without this guard the list would
+    /// show nothing until the duplicate pass finished. Across launches the filter
+    /// is reset in `LargeFileFilterDefaults.register()` instead.
     private var isDuplicatesFilterActive: Bool {
         LargeFileCategoryFilter.isDuplicatesActive(
             rawValue: categoryFilterRaw, duplicates: duplicateIndex
