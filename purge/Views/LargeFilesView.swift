@@ -85,10 +85,36 @@ struct LargeFilesView: View {
     }
 
     /// The groups the list draws as containers, each holding its copies.
+    ///
+    /// The sort menu reorders whole groups here rather than individual rows —
+    /// copies stay together either way, since splitting them up is the thing the
+    /// grouping exists to prevent.
     private var duplicateSections: [LargeFileCategoryFilter.Section] {
-        LargeFileCategoryFilter.duplicateSections(
+        let sections = LargeFileCategoryFilter.duplicateSections(
             in: store.largeFiles, query: searchQuery, duplicates: duplicateIndex
         )
+        let files = store.largeFiles
+
+        // "Newest"/"Oldest" rank a group by its most recently touched copy: that
+        // is the one that says whether the set is still in use.
+        func lastUsed(_ section: LargeFileCategoryFilter.Section) -> Date {
+            section.memberIndices.map { files[$0].lastUsed }.max() ?? .distantPast
+        }
+        func name(_ section: LargeFileCategoryFilter.Section) -> String {
+            section.memberIndices.first.map { files[$0].displayName } ?? ""
+        }
+
+        switch currentSort {
+        // Already ordered by reclaimable space, biggest first.
+        case .sizeDesc: return sections
+        case .sizeAsc: return sections.reversed()
+        case .dateNewest: return sections.sorted { lastUsed($0) > lastUsed($1) }
+        case .dateOldest: return sections.sorted { lastUsed($0) < lastUsed($1) }
+        case .nameAZ:
+            return sections.sorted {
+                name($0).localizedCaseInsensitiveCompare(name($1)) == .orderedAscending
+            }
+        }
     }
 
     /// Rows in display order. Derived from `visibleIndices` so the two can never
@@ -350,9 +376,6 @@ struct LargeFilesView: View {
             selection: store.largeFileSelection,
             visibleIDs: visibleIDs,
             sort: sortOptionBinding,
-            // Under Duplicates the grouping *is* the order, so the sort menu would
-            // be a control that does nothing.
-            showsSortMenu: !isDuplicatesFilterActive,
             onToggleAll: toggleSelectAll
         )
     }
@@ -387,6 +410,21 @@ struct LargeFilesView: View {
     /// first appearance can reset scroll position to the first row.
     private static let topAnchorID = "large-files-top"
 
+    /// Identity of the results List. Changes on scan completion so fresh results
+    /// start at the top, and *also* when the list switches between flat rows and
+    /// duplicate group containers.
+    ///
+    /// That second term is load-bearing. The swap changes every row's height and
+    /// the total content length under a scroll offset the List otherwise keeps, so
+    /// landing on Duplicates left the first group scrolled up beneath the Select
+    /// All bar with the soft scroll-edge material missing — a flat dark band
+    /// instead of the translucent one every other tab shows. Switching to another
+    /// chip and back "fixed" it only because that rebuilt the rows by hand. A
+    /// fresh identity does it properly, on the transition itself.
+    private var resultsListIdentity: String {
+        "\(scanGeneration)-\(isDuplicatesFilterActive ? "grouped" : "flat")"
+    }
+
     private var resultsList: some View {
         // No ScrollViewReader/ScrollPosition binding: both revert the scroll to a
         // stale committed offset on the first re-render after a wheel/trackpad
@@ -394,7 +432,7 @@ struct LargeFilesView: View {
         // finishes so fresh results start at the top, and leave scroll alone on
         // every selection.
         resultsListContent
-            .id(scanGeneration)
+            .id(resultsListIdentity)
             .onChange(of: isLoading) { loading in
                 guard !loading else { return }
                 scanGeneration &+= 1
@@ -612,7 +650,6 @@ private struct LargeFileSelectAllBar: View {
     @ObservedObject var selection: LargeFileSelection
     let visibleIDs: [String]
     @Binding var sort: SortOption
-    var showsSortMenu = true
     let onToggleAll: () -> Void
 
     private var state: SelectAllTriState {
@@ -633,9 +670,13 @@ private struct LargeFileSelectAllBar: View {
 
             Spacer()
 
-            if showsSortMenu {
-                AppSortMenu(selection: $sort)
-            }
+            // Always present, even under Duplicates where it reorders whole groups
+            // rather than rows. Its absence would shrink this bar, and the scan-tab
+            // scroll-edge constants (`scanTabBarSpacing`, the content-margin
+            // compensation) are absolute offsets tuned against a fixed bar height —
+            // a shorter bar pulls the first card up underneath it and smears the
+            // soft edge into a gradient.
+            AppSortMenu(selection: $sort)
         }
         .scanTabSelectAllRowLayout()
     }
