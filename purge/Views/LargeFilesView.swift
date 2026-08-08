@@ -15,7 +15,7 @@ struct LargeFilesView: View {
     var showsPageHeader = true
     var usesExternalScrollContainer = false
 
-    @AppStorage("filter.largeFiles") private var categoryFilterRaw: String = "all"
+    @AppStorage(LargeFileFilterDefaults.categoryKey) private var categoryFilterRaw = LargeFileCategoryFilter.all
     @AppStorage("sort.largeFiles") private var sortRaw: String = SortOption.sizeDesc.rawValue
     @AppStorage(LargeFileSizeThreshold.userDefaultsKey) private var minSizeMB: Int = LargeFileSizeThreshold.defaultOption.rawValue
     @AppStorage(LargeFileAgeThreshold.userDefaultsKey) private var minAgeDays: Int = LargeFileAgeThreshold.defaultOption.rawValue
@@ -23,6 +23,18 @@ struct LargeFilesView: View {
     /// Bumped when a scan finishes to reset the results List's identity (and thus
     /// its scroll to the top). Kept out of selection so toggles never reset scroll.
     @State private var scanGeneration = 0
+
+    /// Mirror of `store.largeFileDuplicates.index`, kept as local state rather
+    /// than by `@ObservedObject`-ing the index object: this view owns the chip
+    /// counts and the filter, so it has to re-render when groups land — but it
+    /// must *not* also re-render on every `isChecking` flip, because a re-render
+    /// of this view reverts the results List's scroll position. The store assigns
+    /// the index exactly once per pass, so this fires exactly once.
+    @State private var duplicateIndex: DuplicateIndex = .empty
+
+    /// Pseudo-category shared with the real category chips via `categoryFilterRaw`,
+    /// so chip selection stays single-select without a second piece of state.
+    private static let duplicatesFilterID = LargeFileCategoryFilter.duplicates
 
     private var currentSort: SortOption {
         SortOption(rawValue: sortRaw) ?? .sizeDesc
@@ -61,22 +73,59 @@ struct LargeFilesView: View {
         !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    private var visibleFiles: [LargeFile] {
-        let filtered = store.largeFiles.filter { file in
-            (categoryFilterRaw == "all" || file.category.rawValue == categoryFilterRaw)
-                && file.matches(searchQuery: searchQuery)
+    /// Whether the Duplicates chip is the active filter *and* has something to
+    /// show. The two come apart within a session: a fresh Scan empties the index
+    /// while the chip is still selected, and without this guard the list would
+    /// show nothing until the duplicate pass finished. Across launches the filter
+    /// is reset in `LargeFileFilterDefaults.register()` instead.
+    private var isDuplicatesFilterActive: Bool {
+        LargeFileCategoryFilter.isDuplicatesActive(
+            rawValue: categoryFilterRaw, duplicates: duplicateIndex
+        )
+    }
+
+    /// The groups the list draws as containers, each holding its copies.
+    ///
+    /// The sort menu reorders whole groups here rather than individual rows —
+    /// copies stay together either way, since splitting them up is the thing the
+    /// grouping exists to prevent.
+    private var duplicateSections: [LargeFileCategoryFilter.Section] {
+        let sections = LargeFileCategoryFilter.duplicateSections(
+            in: store.largeFiles, query: searchQuery, duplicates: duplicateIndex
+        )
+        let files = store.largeFiles
+
+        // "Newest"/"Oldest" rank a group by its most recently touched copy: that
+        // is the one that says whether the set is still in use.
+        func lastUsed(_ section: LargeFileCategoryFilter.Section) -> Date {
+            section.memberIndices.map { files[$0].lastUsed }.max() ?? .distantPast
+        }
+        func name(_ section: LargeFileCategoryFilter.Section) -> String {
+            section.memberIndices.first.map { files[$0].displayName } ?? ""
         }
 
         switch currentSort {
-        case .sizeDesc: return filtered.sorted { $0.sizeBytes > $1.sizeBytes }
-        case .sizeAsc: return filtered.sorted { $0.sizeBytes < $1.sizeBytes }
-        case .dateNewest: return filtered.sorted { $0.lastUsed > $1.lastUsed }
-        case .dateOldest: return filtered.sorted { $0.lastUsed < $1.lastUsed }
+        // Sorted on the reclaimable figure the group header shows, not on the
+        // index's own ordering: the two agree today, but only the header's number
+        // is derived from the rows actually rendered.
+        case .sizeDesc:
+            return sections.sorted { $0.displayedReclaimableBytes > $1.displayedReclaimableBytes }
+        case .sizeAsc:
+            return sections.sorted { $0.displayedReclaimableBytes < $1.displayedReclaimableBytes }
+        case .dateNewest: return sections.sorted { lastUsed($0) > lastUsed($1) }
+        case .dateOldest: return sections.sorted { lastUsed($0) < lastUsed($1) }
         case .nameAZ:
-            return filtered.sorted {
-                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            return sections.sorted {
+                name($0).localizedCaseInsensitiveCompare(name($1)) == .orderedAscending
             }
         }
+    }
+
+    /// Rows in display order. Derived from `visibleIndices` so the two can never
+    /// disagree about what the list is showing.
+    private var visibleFiles: [LargeFile] {
+        let files = store.largeFiles
+        return visibleIndices.map { files[$0] }
     }
 
     private var visibleIDs: [String] {
@@ -92,10 +141,14 @@ struct LargeFilesView: View {
     /// instead churns the data every toggle and reintroduces the scroll jump.
     private var visibleIndices: [Int] {
         let files = store.largeFiles
-        let filtered = files.indices.filter { i in
-            (categoryFilterRaw == "all" || files[i].category.rawValue == categoryFilterRaw)
-                && files[i].matches(searchQuery: searchQuery)
-        }
+        let filtered = LargeFileCategoryFilter.visibleIndices(
+            in: files, rawValue: categoryFilterRaw, query: searchQuery, duplicates: duplicateIndex
+        )
+
+        // Under the Duplicates chip the rows are laid out group by group, which
+        // the shared filter has already done. The sort menu doesn't apply — the
+        // grouping *is* the order.
+        if isDuplicatesFilterActive { return filtered }
 
         switch currentSort {
         case .sizeDesc: return filtered.sorted { files[$0].sizeBytes > files[$1].sizeBytes }
@@ -118,6 +171,9 @@ struct LargeFilesView: View {
             }
         }
         .background(AppColors.bgBase)
+        .onReceive(store.largeFileDuplicates.indexPublisher) { index in
+            duplicateIndex = index
+        }
     }
 
     private var standardBody: some View {
@@ -194,7 +250,32 @@ struct LargeFilesView: View {
                     // Counts are search-filtered but not category-filtered, so the
                     // chips answer "where did my matches land?" while a query is
                     // active instead of advertising rows the query already hid.
-                    categoryChip(id: "all", title: "All", systemImage: "square.grid.2x2", count: searchMatches.count)
+                    categoryChip(
+                        id: LargeFileCategoryFilter.all,
+                        title: "All",
+                        systemImage: "square.grid.2x2",
+                        count: searchMatches.count
+                    )
+
+                    // Sits right after "All" rather than among the categories: a
+                    // duplicate cuts across every category, and it's the one chip
+                    // that answers "what here is redundant?".
+                    if !duplicateIndex.isEmpty {
+                        categoryChip(
+                            id: Self.duplicatesFilterID,
+                            title: "Duplicates",
+                            systemImage: "square.on.square",
+                            // Counted from the sections the list would draw, not
+                            // from the query matches: a query matching one copy
+                            // expands to its whole group, so counting matches
+                            // directly would advertise fewer rows than appear.
+                            count: duplicateSections.reduce(0) { $0 + $1.displayedCopyCount },
+                            tier: .checkFirst
+                        )
+                    }
+
+                    LargeFileDuplicateStatus(duplicates: store.largeFileDuplicates)
+
                     ForEach(availableCategories) { category in
                         categoryChip(
                             id: category.rawValue,
@@ -267,7 +348,13 @@ struct LargeFilesView: View {
         .accessibilityValue(ageThreshold.menuButtonLabel)
     }
 
-    private func categoryChip(id: String, title: String, systemImage: String, count: Int) -> some View {
+    private func categoryChip(
+        id: String,
+        title: String,
+        systemImage: String,
+        count: Int,
+        tier: FilterChipTier = .neutral
+    ) -> some View {
         let isOn = categoryFilterRaw == id
         return Button {
             selectCategory(id)
@@ -276,7 +363,7 @@ struct LargeFilesView: View {
                 style: .tab,
                 label: title,
                 isSelected: isOn,
-                tier: .neutral,
+                tier: tier,
                 leadingSystemImage: systemImage,
                 count: count
             )
@@ -336,6 +423,21 @@ struct LargeFilesView: View {
     /// first appearance can reset scroll position to the first row.
     private static let topAnchorID = "large-files-top"
 
+    /// Identity of the results List. Changes on scan completion so fresh results
+    /// start at the top, and *also* when the list switches between flat rows and
+    /// duplicate group containers.
+    ///
+    /// That second term is load-bearing. The swap changes every row's height and
+    /// the total content length under a scroll offset the List otherwise keeps, so
+    /// landing on Duplicates left the first group scrolled up beneath the Select
+    /// All bar with the soft scroll-edge material missing — a flat dark band
+    /// instead of the translucent one every other tab shows. Switching to another
+    /// chip and back "fixed" it only because that rebuilt the rows by hand. A
+    /// fresh identity does it properly, on the transition itself.
+    private var resultsListIdentity: String {
+        "\(scanGeneration)-\(isDuplicatesFilterActive ? "grouped" : "flat")"
+    }
+
     private var resultsList: some View {
         // No ScrollViewReader/ScrollPosition binding: both revert the scroll to a
         // stale committed offset on the first re-render after a wheel/trackpad
@@ -343,7 +445,7 @@ struct LargeFilesView: View {
         // finishes so fresh results start at the top, and leave scroll alone on
         // every selection.
         resultsListContent
-            .id(scanGeneration)
+            .id(resultsListIdentity)
             .onChange(of: isLoading) { loading in
                 guard !loading else { return }
                 scanGeneration &+= 1
@@ -359,26 +461,41 @@ struct LargeFilesView: View {
                 .listRowSeparator(.hidden)
                 .id(Self.topAnchorID)
 
-            // Iterate stable `[Int]` indices (not fresh LargeFile copies) so the
-            // ForEach data doesn't churn on selection and the List stays put —
-            // see `visibleIndices`.
-            ForEach(visibleIndices, id: \.self) { index in
-                let file = store.largeFiles[index]
-                LargeFileRow(
-                    file: file,
-                    selection: store.largeFileSelection,
-                    onToggle: {
-                        let id = file.id
-                        store.setLargeFileSelected(
-                            id: id,
-                            isSelected: !store.largeFileSelection.ids.contains(id)
-                        )
-                    }
-                )
-                .listRowInsets(ScanListRowInsets.standard)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .transition(reduceMotion ? .opacity : .scanRowInsertion)
+            if isDuplicatesFilterActive {
+                // One List row per *group*: the copies live inside the container,
+                // so a set of duplicates reads as one thing. Iterating group ids
+                // ([String]) keeps the same property that `[Int]` indices give the
+                // flat list — the ForEach data is value-identical across selection
+                // toggles, so the List doesn't churn and revert its scroll.
+                ForEach(duplicateSections, id: \.groupID) { section in
+                    DuplicateGroupCard(
+                        section: section,
+                        files: store.largeFiles,
+                        selection: store.largeFileSelection,
+                        onToggle: toggleSelection(forFileID:)
+                    )
+                    .listRowInsets(ScanListRowInsets.standard)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .transition(reduceMotion ? .opacity : .scanRowInsertion)
+                }
+            } else {
+                // Iterate stable `[Int]` indices (not fresh LargeFile copies) so the
+                // ForEach data doesn't churn on selection and the List stays put —
+                // see `visibleIndices`.
+                ForEach(visibleIndices, id: \.self) { index in
+                    let file = store.largeFiles[index]
+                    LargeFileRow(
+                        file: file,
+                        selection: store.largeFileSelection,
+                        duplicateCopyCount: duplicateIndex.copyCount(forFileID: file.id),
+                        onToggle: { toggleSelection(forFileID: file.id) }
+                    )
+                    .listRowInsets(ScanListRowInsets.standard)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .transition(reduceMotion ? .opacity : .scanRowInsertion)
+                }
             }
 
             ScanListBottomSpacer()
@@ -442,6 +559,13 @@ struct LargeFilesView: View {
             .accessibilityLabel("Scanning large files")
     }
 
+    private func toggleSelection(forFileID id: String) {
+        store.setLargeFileSelected(
+            id: id,
+            isSelected: !store.largeFileSelection.ids.contains(id)
+        )
+    }
+
     private func toggleSelectAll() {
         let ids = visibleIDs
         guard !ids.isEmpty else { return }
@@ -498,6 +622,39 @@ private struct LargeFileDeleteButton: View {
     }
 }
 
+/// "Checking for duplicates…" status that sits at the end of the chips row while
+/// the hashing pass runs.
+///
+/// Its own view, observing the index object directly, so the flag flipping on and
+/// off doesn't re-render `LargeFilesView` — which would revert the results List's
+/// scroll position for a purely cosmetic status change.
+private struct LargeFileDuplicateStatus: View {
+    @ObservedObject var duplicates: LargeFileDuplicateIndex
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if duplicates.isChecking {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                        .frame(width: 12, height: 12)
+                    Text("Checking for duplicates…")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
+                .padding(.leading, 4)
+                .transition(.opacity)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: duplicates.isChecking)
+    }
+}
+
 /// Select-all bar extracted from LargeFilesView so its tri-state can observe the
 /// selection object directly — updating on selection without re-rendering (and thus
 /// scroll-reverting) the results List.
@@ -525,6 +682,12 @@ private struct LargeFileSelectAllBar: View {
 
             Spacer()
 
+            // Always present, even under Duplicates where it reorders whole groups
+            // rather than rows. Its absence would shrink this bar, and the scan-tab
+            // scroll-edge constants (`scanTabBarSpacing`, the content-margin
+            // compensation) are absolute offsets tuned against a fixed bar height —
+            // a shorter bar pulls the first card up underneath it and smears the
+            // soft edge into a gradient.
             AppSortMenu(selection: $sort)
         }
         .scanTabSelectAllRowLayout()
@@ -617,11 +780,112 @@ private struct LargeFileSearchField: View {
     }
 }
 
+/// One duplicate group drawn as a container holding its copies.
+///
+/// This is a single List row, not a Section: the copies are the *contents* of one
+/// box, and letting the List lay them out as siblings is what made a set of
+/// duplicates read as unrelated files in the first place. It also keeps the
+/// height arithmetic exact — see `height`.
+private struct DuplicateGroupCard: View {
+    /// Carries the group and its rendered members together, so the header's copy
+    /// count and reclaimable figure are derived from the rows below it rather
+    /// than from the index, which can briefly disagree.
+    let section: LargeFileCategoryFilter.Section
+    let files: [LargeFile]
+    /// Observed by the child rows, not here — the container itself must not
+    /// re-render on selection.
+    let selection: LargeFileSelection
+    let onToggle: (String) -> Void
+
+    private static let headerHeight: CGFloat = 20
+    private static let innerSpacing: CGFloat = 6
+    private static let padding: CGFloat = 10
+
+    /// Explicit, because the macOS List estimating this row's height is what
+    /// makes a click scroll the list — the estimate/actual drift accumulates over
+    /// the rows above. Every term is a fixed constant, so the sum is exact.
+    private var height: CGFloat {
+        let rows = CGFloat(section.displayedCopyCount)
+        return Self.padding * 2
+            + Self.headerHeight
+            + Self.innerSpacing
+            + rows * LargeFileRow.contentHeight
+            + max(rows - 1, 0) * Self.innerSpacing
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Self.innerSpacing) {
+            header
+
+            ForEach(section.memberIndices, id: \.self) { index in
+                let file = files[index]
+                LargeFileRow(
+                    file: file,
+                    selection: selection,
+                    // No badge inside the box: the container header already says
+                    // how many copies there are, and repeating it on every card
+                    // is noise.
+                    duplicateCopyCount: nil,
+                    isNested: true,
+                    onToggle: { onToggle(file.id) }
+                )
+            }
+        }
+        .padding(Self.padding)
+        .frame(height: height)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+                .fill(AppColors.bgElevated)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(
+            "\(section.displayedCopyCount) identical copies, \(formatBytes(section.group.sizeBytes)) each"
+        )
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "square.on.square")
+                .imageScale(.small)
+                .foregroundStyle(AppColors.tagCheckText)
+                .accessibilityHidden(true)
+
+            Text("\(section.displayedCopyCount) identical copies · \(formatBytes(section.group.sizeBytes)) each")
+                .foregroundStyle(AppColors.textSecondary)
+
+            Spacer(minLength: 8)
+
+            // States the prize without naming a winner: which copy to keep is the
+            // user's call, so this never says "delete the one in Downloads".
+            Text("Keep one to free \(formatBytes(section.displayedReclaimableBytes))")
+                .foregroundStyle(AppColors.textTertiary)
+        }
+        .font(AppStyle.Typography.metadataEmphasis)
+        .lineLimit(1)
+        .frame(height: Self.headerHeight)
+        .padding(.horizontal, 4)
+    }
+}
+
 private struct LargeFileRow: View {
     let file: LargeFile
     /// Observed so a toggle re-renders only the (visible) rows — not the List
     /// container, whose re-render is what reverts the scroll position.
     @ObservedObject var selection: LargeFileSelection
+    /// How many byte-identical copies of this file the scan found, nil when it
+    /// isn't part of a duplicate group. Passed as a plain value rather than by
+    /// observing the index object: it only changes when the whole index does, and
+    /// `LargeFilesView` already re-renders for that.
+    let duplicateCopyCount: Int?
+    /// Set when the row sits inside a `DuplicateGroupCard`. The card already
+    /// supplies a raised surface, so the row needs its own outline to stay
+    /// legible as a distinct item rather than dissolving into the container.
+    var isNested: Bool = false
     let onToggle: () -> Void
 
     private var isSelected: Bool { selection.ids.contains(file.id) }
@@ -685,6 +949,12 @@ private struct LargeFileRow: View {
             onToggle()
         }
         .modifier(ScanRowCardChrome())
+        .overlay {
+            if isNested {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+                    .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+            }
+        }
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction {
@@ -750,6 +1020,14 @@ private struct LargeFileRow: View {
                         .foregroundStyle(.secondary)
                     Text("Last used \(dateText)")
                         .foregroundStyle(.secondary)
+                        .layoutPriority(-1)
+
+                    if let duplicateCopyCount {
+                        AppBadge(text: "\(duplicateCopyCount) copies", tone: .warning)
+                            .fixedSize()
+                            .help("\(duplicateCopyCount) files in this scan have identical contents.")
+                            .accessibilityLabel("\(duplicateCopyCount) identical copies found")
+                    }
                 }
                 .font(.subheadline)
                 .lineLimit(1)
@@ -879,11 +1157,26 @@ struct LargeFilesHeaderActions: View {
 
 struct LargeFileDeletionConfirmSheet: View {
     let files: [LargeFile]
+    /// Duplicate groups the selection would erase entirely. Purge never picks
+    /// which copy survives — issue #17 is explicit that this is the user's call —
+    /// so this only states plainly what the current selection does.
+    var fullyConsumedDuplicateGroups: [DuplicateGroup] = []
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
     private var totalBytes: Int64 {
         files.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+
+    /// Names the copies in a fully-selected group by, well, their name: the row
+    /// label of the first copy, since every copy has identical content and any of
+    /// them identifies the thing being lost.
+    private func groupLabel(_ group: DuplicateGroup) -> String {
+        guard let fileID = group.fileIDs.first,
+              let file = files.first(where: { $0.id == fileID }) else {
+            return "these files"
+        }
+        return file.displayName
     }
 
     var body: some View {
@@ -919,6 +1212,10 @@ struct LargeFileDeletionConfirmSheet: View {
             .listStyle(.plain)
             .frame(minHeight: 220)
 
+            if !fullyConsumedDuplicateGroups.isEmpty {
+                allCopiesWarning
+            }
+
             HStack {
                 Text("Total: \(formatBytes(totalBytes))")
                     .font(.subheadline.weight(.medium))
@@ -936,6 +1233,50 @@ struct LargeFileDeletionConfirmSheet: View {
         }
         .padding()
         .frame(minWidth: 560, minHeight: 420)
+    }
+
+    /// How many fully-selected groups get named before the note switches to a
+    /// count. A Select All over a scan full of duplicates can consume dozens of
+    /// groups, and this note sits in a sheet with no maximum height — naming them
+    /// all would push the buttons off the bottom of the screen.
+    private static let namedConsumedGroupLimit = 3
+
+    private var namedConsumedGroups: [DuplicateGroup] {
+        Array(fullyConsumedDuplicateGroups.prefix(Self.namedConsumedGroupLimit))
+    }
+
+    private var remainingConsumedGroupCount: Int {
+        max(fullyConsumedDuplicateGroups.count - Self.namedConsumedGroupLimit, 0)
+    }
+
+    /// Deliberately a note, not a blocker: deleting every copy is a legitimate
+    /// thing to want. It just shouldn't happen by accident after a Select All.
+    private var allCopiesWarning: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(AppColors.tagCheckText)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(namedConsumedGroups) { group in
+                    Text("You're deleting all \(group.copyCount) copies of \(groupLabel(group)). No copy will remain.")
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+                if remainingConsumedGroupCount > 0 {
+                    Text("…and \(remainingConsumedGroupCount) more sets where every copy is selected.")
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(AppColors.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+                .fill(AppColors.tagCheckBg)
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 

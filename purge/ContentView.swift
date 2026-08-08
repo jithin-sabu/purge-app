@@ -18,7 +18,7 @@ struct ContentView: View {
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
     @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.all.rawValue
     @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.all.rawValue
-    @AppStorage("filter.largeFiles") private var largeFilesCategoryFilterRaw: String = "all"
+    @AppStorage(LargeFileFilterDefaults.categoryKey) private var largeFilesCategoryFilterRaw = LargeFileCategoryFilter.all
 
     /// Large Files search text. Held here rather than inside `LargeFilesView` so the
     /// page header subtitle can be filtered by it too, and deliberately `@State`
@@ -26,6 +26,14 @@ struct ContentView: View {
     /// relaunch would silently hide most of the list on next open, with the only clue
     /// a few characters in a field the user has long forgotten typing.
     @State private var largeFilesSearchQuery = ""
+
+    /// Mirror of `store.largeFileDuplicates.index`, needed because the page header
+    /// subtitle counts the same rows the Duplicates filter shows. The index lives
+    /// in its own observable that this view does not observe (deliberately — see
+    /// `LargeFileDuplicateIndex`), and nothing else re-renders `ContentView` when
+    /// a duplicate pass lands, so without this the subtitle kept quoting the
+    /// pre-grouping count.
+    @State private var largeFilesDuplicateIndex: DuplicateIndex = .empty
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
@@ -38,6 +46,9 @@ struct ContentView: View {
         }
         .task {
             await runStartupMaintenance()
+        }
+        .onReceive(store.largeFileDuplicates.indexPublisher) { index in
+            largeFilesDuplicateIndex = index
         }
         .onChange(of: scenePhase) { phase in
             guard isLifecycleActive, phase == .active, !isRunningPreview else { return }
@@ -70,6 +81,7 @@ struct ContentView: View {
         .sheet(isPresented: $store.showLargeFileDeletionSheet) {
             LargeFileDeletionConfirmSheet(
                 files: store.selectedLargeFiles,
+                fullyConsumedDuplicateGroups: store.duplicateGroupsFullyConsumedBySelection,
                 onCancel: { store.dismissLargeFileDeletionSheet() },
                 onConfirm: { Task { await store.confirmLargeFileDeletion() } }
             )
@@ -476,13 +488,18 @@ struct ContentView: View {
     }
 
     /// Mirrors the filtering `LargeFilesView` applies to its list, so the subtitle
-    /// counts the rows the user can actually see. Must stay in step with the search
-    /// and category predicates over there.
+    /// counts the rows the user can actually see. The category predicate is shared
+    /// through `LargeFileCategoryFilter` rather than restated, because restating it
+    /// is how the header once ended up advertising a different list than the one on
+    /// screen.
     private var largeFilesVisibleForSubtitle: [LargeFile] {
-        store.largeFiles.filter { file in
-            (largeFilesCategoryFilterRaw == "all" || file.category.rawValue == largeFilesCategoryFilterRaw)
-                && file.matches(searchQuery: largeFilesSearchQuery)
-        }
+        let files = store.largeFiles
+        return LargeFileCategoryFilter.visibleIndices(
+            in: files,
+            rawValue: largeFilesCategoryFilterRaw,
+            query: largeFilesSearchQuery,
+            duplicates: largeFilesDuplicateIndex
+        ).map { files[$0] }
     }
 
     private var largeFilesPageSubtitle: String {

@@ -159,6 +159,111 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     }
 }
 
+/// The chip filter over the Large Files list, shared by `LargeFilesView` (which
+/// draws the list) and `ContentView` (which draws the "N files · X GB to review"
+/// page header outside it). Both must narrow the rows identically or the header
+/// advertises a different list than the one on screen — a drift that has already
+/// happened once and is exactly what this type exists to prevent.
+///
+/// Duplicates is a pseudo-category rather than a `LargeFileCategory` case: a
+/// duplicate cuts across every category, and reusing the one persisted filter key
+/// keeps the chips single-select without a second piece of state.
+nonisolated enum LargeFileCategoryFilter {
+    static let all = "all"
+    static let duplicates = "duplicates"
+
+    static func includes(_ file: LargeFile, rawValue: String, duplicates index: DuplicateIndex) -> Bool {
+        switch rawValue {
+        case all:
+            return true
+        case Self.duplicates:
+            // The filter persists across launches, so a stored "duplicates" can
+            // outlive the scan that produced the groups. Falling back to "all"
+            // beats relaunching into a permanently empty list.
+            guard !index.isEmpty else { return true }
+            return index.groupIDByFileID[file.id] != nil
+        default:
+            return file.category.rawValue == rawValue
+        }
+    }
+
+    static func isDuplicatesActive(rawValue: String, duplicates index: DuplicateIndex) -> Bool {
+        rawValue == duplicates && !index.isEmpty
+    }
+
+    /// One duplicate group's rows, as indices into the array they came from.
+    struct Section {
+        let groupID: String
+        let group: DuplicateGroup
+        let memberIndices: [Int]
+
+        /// What the card actually renders. Derived from `memberIndices` rather
+        /// than `group.copyCount` so the header can never claim more copies than
+        /// there are rows beneath it — the two come apart if a row leaves the list
+        /// before the index is pruned.
+        var displayedCopyCount: Int { memberIndices.count }
+
+        /// Space freed by keeping one of the rendered copies. Ordering the list
+        /// reads this rather than `group.reclaimableBytes` for the same reason:
+        /// groups must sort by the number the header shows.
+        var displayedReclaimableBytes: Int64 {
+            Int64(max(displayedCopyCount - 1, 0)) * group.sizeBytes
+        }
+    }
+
+    /// The duplicate groups the list should draw, ordered most-reclaimable first,
+    /// members in path order.
+    ///
+    /// A search query is matched against the *group*, not each copy: the point of
+    /// a group is to show every copy of a thing at once, and a box that hid one of
+    /// them because its filename didn't contain the query would misrepresent what
+    /// is on disk. Searching "wedding" surfaces the whole set even if one copy is
+    /// called `IMG_4021.mov`.
+    static func duplicateSections(
+        in files: [LargeFile],
+        query: String,
+        duplicates index: DuplicateIndex
+    ) -> [Section] {
+        guard !index.isEmpty else { return [] }
+
+        var indicesByFileID: [String: Int] = [:]
+        indicesByFileID.reserveCapacity(files.count)
+        for i in files.indices where index.groupIDByFileID[files[i].id] != nil {
+            indicesByFileID[files[i].id] = i
+        }
+
+        return index.groups.compactMap { group in
+            let members = group.fileIDs.compactMap { indicesByFileID[$0] }
+            // A group whose copies have since been deleted is no longer a group.
+            guard members.count > 1 else { return nil }
+            guard members.contains(where: { files[$0].matches(searchQuery: query) }) else { return nil }
+            return Section(groupID: group.id, group: group, memberIndices: members)
+        }
+    }
+
+    /// Indices of the rows the list shows. Ordered when the Duplicates filter is
+    /// active (copies laid out group by group); source order otherwise, leaving
+    /// the caller's sort menu to arrange them.
+    ///
+    /// Shared by `LargeFilesView` and by the page header `ContentView` draws
+    /// outside it, so the two cannot disagree about what is on screen.
+    static func visibleIndices(
+        in files: [LargeFile],
+        rawValue: String,
+        query: String,
+        duplicates index: DuplicateIndex
+    ) -> [Int] {
+        if isDuplicatesActive(rawValue: rawValue, duplicates: index) {
+            return duplicateSections(in: files, query: query, duplicates: index)
+                .flatMap(\.memberIndices)
+        }
+        return files.indices.filter { i in
+            includes(files[i], rawValue: rawValue, duplicates: index)
+                && files[i].matches(searchQuery: query)
+        }
+    }
+}
+
 enum LargeFileSizeThreshold: Int, CaseIterable, Identifiable {
     case mb5 = 5
     case mb50 = 50
@@ -235,8 +340,18 @@ enum LargeFileAgeThreshold: Int, CaseIterable, Identifiable {
 
 enum LargeFileFilterDefaults {
     private static let legacySizeKey = "largeFiles.minSizeMB"
+    static let categoryKey = "filter.largeFiles"
 
     static func register(userDefaults: UserDefaults = .standard) {
+        // Duplicates is a way of looking at a scan, not a standing preference:
+        // it only means anything once a scan has found groups, and landing in it
+        // on launch shows an empty list until one has. The category chips share
+        // this key, so the persisted value is dropped back to "all" here rather
+        // than being written differently at the tap site.
+        if userDefaults.string(forKey: categoryKey) == LargeFileCategoryFilter.duplicates {
+            userDefaults.set(LargeFileCategoryFilter.all, forKey: categoryKey)
+        }
+
         if userDefaults.object(forKey: LargeFileSizeThreshold.userDefaultsKey) == nil,
            userDefaults.object(forKey: legacySizeKey) != nil {
             let legacySize = userDefaults.integer(forKey: legacySizeKey)
