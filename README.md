@@ -291,6 +291,8 @@ The signing flags matter: without a development certificate on the machine, the 
 
 Purge runs entirely on your Mac. Scans, explanations, manual overrides, and cleanup history stay in local Application Support. Nothing is uploaded.
 
+The one time Purge talks to the network is the update check: once a day it fetches a small XML file from GitHub to see whether a newer version is available. It sends nothing about you or your Mac, and you can turn it off in **Settings → Updates**.
+
 Purge never reads or sends file contents.
 
 ---
