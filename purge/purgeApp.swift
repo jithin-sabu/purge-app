@@ -82,6 +82,7 @@ struct PurgeApp: App {
                 .environmentObject(store)
                 .environmentObject(diskStore)
                 .environmentObject(trashStore)
+                .environmentObject(appDelegate.updater)
                 .environment(\.purgeAppDelegate, appDelegate)
                 .onAppear {
                     diskStore.refresh()
