@@ -186,6 +186,69 @@ nonisolated enum LargeFileCategoryFilter {
             return file.category.rawValue == rawValue
         }
     }
+
+    static func isDuplicatesActive(rawValue: String, duplicates index: DuplicateIndex) -> Bool {
+        rawValue == duplicates && !index.isEmpty
+    }
+
+    /// One duplicate group's rows, as indices into the array they came from.
+    struct Section {
+        let groupID: String
+        let group: DuplicateGroup
+        let memberIndices: [Int]
+    }
+
+    /// The duplicate groups the list should draw, ordered most-reclaimable first,
+    /// members in path order.
+    ///
+    /// A search query is matched against the *group*, not each copy: the point of
+    /// a group is to show every copy of a thing at once, and a box that hid one of
+    /// them because its filename didn't contain the query would misrepresent what
+    /// is on disk. Searching "wedding" surfaces the whole set even if one copy is
+    /// called `IMG_4021.mov`.
+    static func duplicateSections(
+        in files: [LargeFile],
+        query: String,
+        duplicates index: DuplicateIndex
+    ) -> [Section] {
+        guard !index.isEmpty else { return [] }
+
+        var indicesByFileID: [String: Int] = [:]
+        indicesByFileID.reserveCapacity(files.count)
+        for i in files.indices where index.groupIDByFileID[files[i].id] != nil {
+            indicesByFileID[files[i].id] = i
+        }
+
+        return index.groups.compactMap { group in
+            let members = group.fileIDs.compactMap { indicesByFileID[$0] }
+            // A group whose copies have since been deleted is no longer a group.
+            guard members.count > 1 else { return nil }
+            guard members.contains(where: { files[$0].matches(searchQuery: query) }) else { return nil }
+            return Section(groupID: group.id, group: group, memberIndices: members)
+        }
+    }
+
+    /// Indices of the rows the list shows. Ordered when the Duplicates filter is
+    /// active (copies laid out group by group); source order otherwise, leaving
+    /// the caller's sort menu to arrange them.
+    ///
+    /// Shared by `LargeFilesView` and by the page header `ContentView` draws
+    /// outside it, so the two cannot disagree about what is on screen.
+    static func visibleIndices(
+        in files: [LargeFile],
+        rawValue: String,
+        query: String,
+        duplicates index: DuplicateIndex
+    ) -> [Int] {
+        if isDuplicatesActive(rawValue: rawValue, duplicates: index) {
+            return duplicateSections(in: files, query: query, duplicates: index)
+                .flatMap(\.memberIndices)
+        }
+        return files.indices.filter { i in
+            includes(files[i], rawValue: rawValue, duplicates: index)
+                && files[i].matches(searchQuery: query)
+        }
+    }
 }
 
 enum LargeFileSizeThreshold: Int, CaseIterable, Identifiable {

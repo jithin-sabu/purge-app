@@ -1017,7 +1017,11 @@ final class PurgeStore: ObservableObject {
             // badges on rows that no longer exist.
             let live = Set(self.largeFiles.map(\.id))
             let vanished = Set(index.groupIDByFileID.keys.filter { !live.contains($0) })
-            largeFileDuplicates.finish(with: index.removing(fileIDs: vanished))
+            largeFileDuplicates.finish(
+                with: index
+                    .removing(fileIDs: vanished)
+                    .withDisplaySizes(from: self.largeFiles)
+            )
         }
     }
 

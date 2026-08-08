@@ -482,12 +482,13 @@ struct ContentView: View {
     /// is how the header once ended up advertising a different list than the one on
     /// screen.
     private var largeFilesVisibleForSubtitle: [LargeFile] {
-        let duplicates = store.largeFileDuplicates.index
-        return store.largeFiles.filter { file in
-            LargeFileCategoryFilter.includes(
-                file, rawValue: largeFilesCategoryFilterRaw, duplicates: duplicates
-            ) && file.matches(searchQuery: largeFilesSearchQuery)
-        }
+        let files = store.largeFiles
+        return LargeFileCategoryFilter.visibleIndices(
+            in: files,
+            rawValue: largeFilesCategoryFilterRaw,
+            query: largeFilesSearchQuery,
+            duplicates: store.largeFileDuplicates.index
+        ).map { files[$0] }
     }
 
     private var largeFilesPageSubtitle: String {

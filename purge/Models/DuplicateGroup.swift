@@ -15,8 +15,10 @@ nonisolated struct DuplicateGroup: Identifiable, Hashable {
     /// from run to run.
     let fileIDs: [String]
 
-    /// Logical size of a single copy. Every member has the same one — that is
-    /// what put them in the same bucket.
+    /// Size of a single copy. Detection sets this to the logical file size (what
+    /// the members were bucketed on); `DuplicateIndex.withDisplaySizes(from:)`
+    /// then restates it in the allocated bytes the rows show, so a group header
+    /// and the cards inside it never quote different numbers.
     let sizeBytes: Int64
 
     var copyCount: Int { fileIDs.count }
@@ -94,6 +96,31 @@ nonisolated struct DuplicateIndex: Equatable {
     /// the most reclaimable group on top. Non-members sort last.
     func groupRank(forFileID fileID: String) -> Int {
         rankByFileID[fileID] ?? .max
+    }
+
+    /// Restates every group's size in the same bytes the list shows, and re-ranks
+    /// the groups accordingly.
+    ///
+    /// Detection buckets on *logical* size, because that is what identical files
+    /// agree on across volumes and compression settings. The rows, though, show
+    /// `totalFileAllocatedSize` — what the file actually occupies. On a compressed
+    /// file the two differ (an 8.5 MB project file taking 5.5 MB on disk), and a
+    /// group header quoting "8.5 MB each" above cards reading "5.5 MB" is worse
+    /// than either number alone: it also overstates what deleting would free.
+    ///
+    /// Takes the smallest copy's size, so the promised saving is never larger than
+    /// what the delete actually returns.
+    func withDisplaySizes(from files: [LargeFile]) -> DuplicateIndex {
+        guard !isEmpty else { return self }
+        var sizeByFileID: [String: Int64] = [:]
+        for file in files where groupIDByFileID[file.id] != nil {
+            sizeByFileID[file.id] = file.sizeBytes
+        }
+        let restated = groups.map { group -> DuplicateGroup in
+            guard let size = group.fileIDs.compactMap({ sizeByFileID[$0] }).min() else { return group }
+            return DuplicateGroup(id: group.id, fileIDs: group.fileIDs, sizeBytes: size)
+        }
+        return DuplicateIndex(groups: restated)
     }
 
     /// Drops files that no longer exist and any group left with fewer than two

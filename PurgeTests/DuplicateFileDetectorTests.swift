@@ -224,6 +224,30 @@ struct DuplicateFileDetectorTests {
         #expect(pruned.copyCount(forFileID: "/c") == nil)
     }
 
+    /// Detection buckets on logical size; the rows show allocated size. A group
+    /// header must quote the same number as the cards inside it, and must never
+    /// promise more space than deleting returns.
+    @Test
+    func groupSizesAreRestatedInTheBytesTheRowsShow() {
+        let group = DuplicateGroup(
+            id: "digest", fileIDs: ["/a.aep", "/b.aep"], sizeBytes: 8_500_000
+        )
+        // Compressed on disk: 8.5 MB of content occupying 5.5 MB.
+        let rows = ["/a.aep", "/b.aep"].map {
+            LargeFile(
+                path: URL(fileURLWithPath: $0),
+                sizeBytes: 5_500_000,
+                lastUsed: Date(),
+                category: .other
+            )
+        }
+
+        let restated = DuplicateIndex(groups: [group]).withDisplaySizes(from: rows)
+
+        #expect(restated.groups.first?.sizeBytes == 5_500_000)
+        #expect(restated.groups.first?.reclaimableBytes == 5_500_000)
+    }
+
     /// Groups are laid out most-reclaimable first, which is the order the
     /// Duplicates filter lays rows out in.
     @Test
