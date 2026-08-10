@@ -890,6 +890,15 @@ private struct LargeFileRow: View {
 
     private var isSelected: Bool { selection.ids.contains(file.id) }
 
+    /// Copies *other than this row*. The row is itself one of the group's members,
+    /// so a badge carrying the group total reads as "and this many more elsewhere"
+    /// and overstates by one (issue #29). Nil for a group of one, which the index
+    /// never produces but the arithmetic shouldn't assume.
+    private var otherCopyCount: Int? {
+        guard let duplicateCopyCount, duplicateCopyCount > 1 else { return nil }
+        return duplicateCopyCount - 1
+    }
+
     /// Fixed, uniform row height so the macOS List never has to *estimate* a row's
     /// height. Estimated-vs-actual drift is what makes a click scroll the list: the
     /// error accumulates over the off-screen rows above, so a click near the top
@@ -1022,11 +1031,12 @@ private struct LargeFileRow: View {
                         .foregroundStyle(.secondary)
                         .layoutPriority(-1)
 
-                    if let duplicateCopyCount {
-                        AppBadge(text: "\(duplicateCopyCount) copies", tone: .warning)
+                    if let otherCopyCount {
+                        let noun = otherCopyCount == 1 ? "copy" : "copies"
+                        AppBadge(text: "\(otherCopyCount) other \(noun)", tone: .warning)
                             .fixedSize()
-                            .help("\(duplicateCopyCount) files in this scan have identical contents.")
-                            .accessibilityLabel("\(duplicateCopyCount) identical copies found")
+                            .help("\(otherCopyCount + 1) files in this scan have identical contents, including this one.")
+                            .accessibilityLabel("\(otherCopyCount) other identical \(noun) found")
                     }
                 }
                 .font(.subheadline)

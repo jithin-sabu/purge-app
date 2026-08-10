@@ -231,7 +231,7 @@ struct DuplicateFileDetectorTests {
     // MARK: - Index bookkeeping
 
     /// After a delete, a group of two that lost a member is no longer a duplicate.
-    /// Leaving the survivor badged "2 copies" would misdescribe the disk.
+    /// Leaving the survivor badged "1 other copy" would misdescribe the disk.
     @Test
     func pruningAGroupBelowTwoCopiesDropsItEntirely() {
         let pair = DuplicateGroup(id: "digest-pair", fileIDs: ["/a", "/b"], sizeBytes: 100)
