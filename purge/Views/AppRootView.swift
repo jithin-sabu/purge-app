@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct AppRootView: View {
-  @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+  @AppStorage(OnboardingGate.userDefaultsKey) private var hasCompletedOnboarding = false
   @State private var isOnboardingExitingToHome = false
   @State private var isMainAppRevealed = false
   @EnvironmentObject private var store: PurgeStore

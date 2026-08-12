@@ -13,12 +13,27 @@ import UserNotifications
 final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
     let updater = PurgeUpdater()
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        LaunchContext.captureLaunchKind()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The open-application event reaches one of the two launch callbacks; which
+        // one varies, so ask again.
+        LaunchContext.captureLaunchKind()
         // Apply the saved appearance before the first paint to avoid a launch flash.
         AppAppearance.apply(AppearanceMode.current)
         // Not in the window's `onAppear`: menu-bar-only mode can launch windowless,
         // and the status item still needs live models behind it.
         AppBootstrapper.bootstrapOnce()
+
+        if LaunchContext.shouldSuppressInitialWindow(
+            hidesDockIcon: StartupPreferenceStore.shared.hidesDockIcon,
+            launchedAsLoginItem: LaunchContext.launchedAsLoginItem,
+            hasCompletedOnboarding: OnboardingGate.hasCompletedOnboarding
+        ) {
+            InitialWindowSuppressor.suppressInitialWindow()
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -95,6 +110,12 @@ struct PurgeApp: App {
         FirstRunGate.resolve()
         LargeFileFilterDefaults.register()
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
+        // As early as the app can act, so a login launch in menu-bar-only mode
+        // never flashes into the Dock before hiding itself again.
+        DockIconPolicy.apply(
+            hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon(),
+            host: NSApplication.shared
+        )
     }
 
     var body: some Scene {
