@@ -77,6 +77,9 @@ struct MenuBarContentView: View {
     /// panel is reused across opens), so every repeating timer in this view
     /// must be gated on this flag or it keeps waking the app while closed.
     @State private var panelIsVisible = false
+    /// Handed to `AppWindowPresenter` so "Open Purge" can create a window after a
+    /// windowless launch, not just raise an existing one.
+    @Environment(\.openWindow) private var openWindow
 
     private enum Metrics {
         static let panelWidth: CGFloat = 240
@@ -112,7 +115,10 @@ struct MenuBarContentView: View {
             onWindow: { model.panelWindow = $0 },
             onVisibilityChange: { panelIsVisible = $0 }
         ))
-        .task { model.attach(store: store) }
+        .task {
+            model.attach(store: store)
+            AppWindowPresenter.registerOpenWindowAction(openWindow)
+        }
     }
 
     // MARK: Status region (hero)
@@ -241,7 +247,7 @@ struct MenuBarContentView: View {
     // MARK: Formatting
 
     private func openPurge() {
-        MainWindowLocator.revealAppWindow()
+        AppWindowPresenter.reveal()
     }
 
     private func menuBytes(_ bytes: Int64) -> String {

@@ -25,6 +25,23 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         CleaningQuitGuard.shouldAllowTermination() ? .terminateNow : .terminateCancel
     }
 
+    /// Purge lives in the menu bar; closing the window is not quitting. This is
+    /// already the default with a `MenuBarExtra`, but menu-bar-only mode should
+    /// not rest on a default that could change.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    /// Covers opening Purge from Finder or Spotlight while it is already running
+    /// — the only "click the app" route left once the Dock icon is hidden.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        guard !hasVisibleWindows else { return true }
+        // No window object to raise: let SwiftUI make one rather than guessing.
+        guard AppWindowPresenter.plan(windows: sender.windows) == .reveal else { return true }
+        AppWindowPresenter.reveal()
+        return false
+    }
+
     func checkForUpdates() {
         updater.checkForUpdates()
     }
@@ -81,7 +98,7 @@ struct PurgeApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: AppWindowID.main) {
             AppRootView()
                 .environmentObject(store)
                 .environmentObject(diskStore)
