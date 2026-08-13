@@ -95,35 +95,14 @@ struct SettingsView: View {
     }
 
     private var appearanceSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Appearance")
-                .font(.headline)
-
-            settingsSectionCard {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center, spacing: 24) {
-                        appearanceDescription
-
-                        Spacer(minLength: 12)
-
-                        appearanceOptions
-                    }
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        appearanceDescription
-                        appearanceOptions
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(16)
+        settingsSection("Appearance") {
+            settingsControlRow(
+                title: "Theme",
+                caption: "Choose a light or dark look, or match your system setting."
+            ) {
+                appearanceOptions
             }
         }
-    }
-
-    private var appearanceDescription: some View {
-        Text("Choose a light or dark look, or match your system setting.")
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var appearanceOptions: some View {
@@ -144,59 +123,26 @@ struct SettingsView: View {
     }
 
     private var startupSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Startup")
-                .font(.headline)
+        settingsSection("Startup") {
+            settingsToggleRow(
+                title: "Launch Purge at login",
+                caption: "Purge starts quietly with your Mac and waits in the menu bar.",
+                warning: loginItemFailed ? "Couldn't enable this. Check Login Items in System Settings." : nil,
+                isOn: launchAtLoginBinding
+            )
 
-            // Two peer toggles, so both sit in the card as rows. The header-row
-            // idiom the other sections use is for hanging a single control off a
-            // title, and would rank one of these above the other for no reason.
-            settingsSectionCard {
-                startupToggleRow(
-                    title: "Launch Purge at login",
-                    caption: "Purge starts quietly with your Mac and waits in the menu bar.",
-                    warning: loginItemFailed ? "Couldn't enable this. Check Login Items in System Settings." : nil,
-                    isOn: launchAtLoginBinding
-                )
-                .padding(16)
+            settingsSectionDivider
 
-                settingsSectionDivider
-
-                startupToggleRow(
-                    title: "Hide Dock icon",
-                    caption: """
-                        Purge runs from the menu bar only. Click the menu bar icon to open \
-                        this window again. The app menu is gone while the Dock icon is \
-                        hidden, so ⌘Q won't quit — use Quit in the menu bar dropdown.
-                        """,
-                    isOn: hideDockIconBinding
-                )
-                .padding(16)
-            }
+            settingsToggleRow(
+                title: "Hide Dock icon",
+                caption: """
+                    Purge runs from the menu bar only. Click the menu bar icon to open \
+                    this window again. The app menu is gone while the Dock icon is \
+                    hidden, so ⌘Q won't quit — use Quit in the menu bar dropdown.
+                    """,
+                isOn: hideDockIconBinding
+            )
         }
-    }
-
-    private func startupToggleRow(
-        title: String,
-        caption: String,
-        warning: String? = nil,
-        isOn: Binding<Bool>
-    ) -> some View {
-        Toggle(isOn: isOn) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                Text(caption)
-                    .settingsCaption()
-                if let warning {
-                    Text(warning)
-                        .font(.caption)
-                        .foregroundStyle(AppColors.tagCheckText)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .toggleStyle(.switch)
-        .tint(AppColors.tagSafeText)
     }
 
     private var launchAtLoginBinding: Binding<Bool> {
@@ -216,104 +162,51 @@ struct SettingsView: View {
     }
 
     private var cleaningScheduleSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center) {
-                    Text("Cleaning Schedule")
-                        .font(.headline)
+        settingsSection("Cleaning Schedule") {
+            settingsToggleRow(
+                title: "Run automatic cleaning",
+                caption: scheduleSummary,
+                captionAnimatesTextChanges: true,
+                isOn: autoCleanEnabledBinding
+            )
 
-                    Spacer(minLength: 12)
+            settingsSectionDivider
 
-                    Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
-                        .toggleStyle(.switch)
-                        .tint(AppColors.tagSafeText)
+            settingsPickerRow(
+                title: "How often",
+                selection: $prefs.frequency,
+                options: ScheduledCleaningFrequency.allCases,
+                optionLabel: \.displayName
+            )
+            .disabled(!prefs.isEnabled)
+
+            settingsSectionDivider
+
+            TimelineView(.periodic(from: Date(), by: 60)) { context in
+                ScheduleStatusAnimatedHeight(
+                    reduceMotion: reduceMotion,
+                    animation: scheduleLayoutAnimation
+                ) {
+                    cleaningScheduleStatusCard(referenceDate: context.date)
                 }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Cleaning Schedule")
-                        .font(.headline)
-
-                    Toggle("Run automatic cleaning", isOn: autoCleanEnabledBinding)
-                        .toggleStyle(.switch)
-                        .tint(AppColors.tagSafeText)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
             }
 
-            settingsSectionCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(scheduleSummary)
-                        .settingsCaption()
-                        .contentTransition(scheduleTextTransition)
-                        .animation(scheduleTextAnimation, value: scheduleSummary)
-                }
-                .padding(16)
-
+            if prefs.isEnabled && developerModeEnabled {
                 settingsSectionDivider
 
-                settingPickerRow(
-                    title: "How often",
-                    selection: $prefs.frequency,
-                    options: ScheduledCleaningFrequency.allCases,
-                    optionLabel: \.displayName
-                )
-                .padding(16)
-                .disabled(!prefs.isEnabled)
-
-                settingsSectionDivider
-
-                TimelineView(.periodic(from: Date(), by: 60)) { context in
-                    ScheduleStatusAnimatedHeight(
-                        reduceMotion: reduceMotion,
-                        animation: scheduleLayoutAnimation
-                    ) {
-                        cleaningScheduleStatusCard(referenceDate: context.date)
-                    }
-                    .padding(16)
-                }
-
-                if prefs.isEnabled && developerModeEnabled {
-                    settingsSectionDivider
-
-                    runScheduledCleanNowRow
-                        .padding(16)
-                }
+                runScheduledCleanNowRow
             }
         }
     }
 
     private var updatesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center) {
-                    Text("Updates")
-                        .font(.headline)
-
-                    Spacer(minLength: 12)
-
-                    Toggle("Check for updates automatically", isOn: automaticUpdateChecksBinding)
-                        .toggleStyle(.switch)
-                        .tint(AppColors.tagSafeText)
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Updates")
-                        .font(.headline)
-
-                    Toggle("Check for updates automatically", isOn: automaticUpdateChecksBinding)
-                        .toggleStyle(.switch)
-                        .tint(AppColors.tagSafeText)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            settingsSectionCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(updatesSummary)
-                        .settingsCaption()
-                }
-                .padding(16)
-            }
+        settingsSection("Updates") {
+            settingsToggleRow(
+                title: "Check for updates automatically",
+                caption: updatesSummary,
+                isOn: automaticUpdateChecksBinding
+            )
         }
     }
 
@@ -335,26 +228,15 @@ struct SettingsView: View {
     /// safe rules and staleness thresholds) so users don't have to wait out a full
     /// interval to confirm automatic cleaning works.
     private var runScheduledCleanNowRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 12) {
-                runScheduledCleanNowCopy
-                Spacer(minLength: 12)
-                runScheduledCleanNowButton
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                runScheduledCleanNowCopy
-                runScheduledCleanNowButton
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        settingsControlRow(
+            title: "Test the schedule",
+            caption: """
+                Run a scheduled clean right now to confirm it works. It uses the same safe \
+                rules above and counts as this period's clean.
+                """
+        ) {
+            runScheduledCleanNowButton
         }
-    }
-
-    private var runScheduledCleanNowCopy: some View {
-        Text("Run a scheduled clean right now to confirm it works. It uses the same safe rules above and counts as this period's clean.")
-            .font(scheduleStatusSecondaryFont)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var runScheduledCleanNowButton: some View {
@@ -400,26 +282,14 @@ struct SettingsView: View {
     /// Recent cleanup activity, so scheduled cleans are visible in the app instead
     /// of only in a passing notification.
     private var cleaningHistorySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center) {
-                Text("Cleaning History")
-                    .font(.headline)
-
-                Spacer(minLength: 12)
-
-                Button {
-                    showClearHistoryConfirmation = true
-                } label: {
-                    Text("Clear history")
-                        .font(scheduleStatusLinkFont)
-                        .foregroundStyle(AppColors.textPrimary)
-                }
-                .buttonStyle(.plain)
-                .disabled(history.archive.entries.isEmpty)
-                .opacity(history.archive.entries.isEmpty ? 0.45 : 1)
+        // The only header-level control in Settings: it acts on the whole list
+        // below, not on a single setting, so it can't live on a row.
+        settingsSection("Cleaning History") {
+            statusTextButton("Clear history", isDisabled: history.archive.entries.isEmpty) {
+                showClearHistoryConfirmation = true
             }
-
-            settingsSectionCard {
+        } content: {
+            Group {
                 if displayedHistoryEntries.isEmpty {
                     Text("No cleans recorded yet. Automatic and manual cleans will show up here.")
                         .font(scheduleStatusSecondaryFont)
@@ -488,59 +358,46 @@ struct SettingsView: View {
     }
 
     private var devToolsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Developer Projects")
-                .font(.headline)
-
-            settingsSectionCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    settingPickerRow(
-                        title: "Consider stale after",
-                        selection: devToolsStalenessSelectionBinding,
-                        options: DevToolsStalenessOption.allCases,
-                        optionLabel: \.label
-                    )
-
-                    Text(currentDevToolsStalenessOption.description)
-                        .settingsCaption()
-                }
-                .padding(16)
-            }
+        settingsSection("Developer Projects") {
+            settingsPickerRow(
+                title: "Consider stale after",
+                caption: currentDevToolsStalenessOption.description,
+                selection: devToolsStalenessSelectionBinding,
+                options: DevToolsStalenessOption.allCases,
+                optionLabel: \.label
+            )
         }
     }
 
     /// Settings section for scan exclusions. Purely subtractive: un-excluding only restores
     /// eligibility when the path still passes the normal allowlist gate.
     private var excludedAppsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Excluded from scans")
-                .font(.headline)
+        settingsSection("Excluded from scans") {
+            settingsRowLabel(
+                title: "Excluded paths",
+                caption: "Excluded paths are never scanned or cleaned. Right-click any scan result and choose 'Exclude from scans'."
+            )
+            .padding(16)
 
-            settingsSectionCard {
-                Text("Excluded paths are never scanned or cleaned. Right-click any scan result and choose 'Exclude from scans'.")
-                    .settingsCaption()
+            let entries = excludedEntries
+
+            if entries.isEmpty {
+                settingsSectionDivider
+
+                Text("Nothing excluded")
+                    .font(scheduleStatusPrimaryFont)
+                    .foregroundStyle(.secondary)
                     .padding(16)
-
-                let entries = excludedEntries
-
-                if entries.isEmpty {
+            } else {
+                ForEach(entries, id: \.path) { entry in
                     settingsSectionDivider
 
-                    Text("Nothing excluded")
-                        .font(scheduleStatusPrimaryFont)
-                        .foregroundStyle(.secondary)
-                        .padding(16)
-                } else {
-                    ForEach(entries, id: \.path) { entry in
-                        settingsSectionDivider
-
-                        excludedPathRow(entry: entry)
-                    }
-
-                    settingsSectionDivider
-
-                    excludedTotalRow(entries: entries)
+                    excludedPathRow(entry: entry)
                 }
+
+                settingsSectionDivider
+
+                excludedTotalRow(entries: entries)
             }
         }
     }
@@ -630,40 +487,113 @@ struct SettingsView: View {
         excludedPathSizes.removeValue(forKey: entry.path)
     }
 
-    private func settingPickerRow<Option: Hashable>(
+    // MARK: - Shared settings layout
+    //
+    // Every section in Settings speaks the same language: a plain headline above a
+    // card, and inside the card one row per setting — title, optional caption
+    // underneath, control on the trailing edge. Section headers never carry a
+    // setting's own control (the only exception is Cleaning History's "Clear
+    // history", which acts on the whole list rather than on one setting).
+
+    private func settingsSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        settingsSection(title, accessory: { EmptyView() }, content: content)
+    }
+
+    private func settingsSection<Accessory: View, Content: View>(
+        _ title: String,
+        @ViewBuilder accessory: () -> Accessory,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
+                Text(title)
+                    .font(.headline)
+
+                Spacer(minLength: 12)
+
+                accessory()
+            }
+
+            settingsSectionCard(content: content)
+        }
+    }
+
+    /// Title plus supporting copy, the left half of every settings row.
+    private func settingsRowLabel(
         title: String,
+        caption: String?,
+        warning: String? = nil,
+        animatesCaptionChanges: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+
+            if let caption {
+                Text(caption)
+                    .settingsCaption()
+                    .contentTransition(animatesCaptionChanges ? scheduleTextTransition : .identity)
+                    .animation(animatesCaptionChanges ? scheduleTextAnimation : nil, value: caption)
+            }
+
+            if let warning {
+                Text(warning)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.tagCheckText)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func settingsToggleRow(
+        title: String,
+        caption: String? = nil,
+        warning: String? = nil,
+        captionAnimatesTextChanges: Bool = false,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            settingsRowLabel(
+                title: title,
+                caption: caption,
+                warning: warning,
+                animatesCaptionChanges: captionAnimatesTextChanges
+            )
+        }
+        .toggleStyle(.switch)
+        .tint(AppColors.tagSafeText)
+        .padding(16)
+    }
+
+    private func settingsControlRow<Control: View>(
+        title: String,
+        caption: String? = nil,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            settingsRowLabel(title: title, caption: caption)
+
+            control()
+        }
+        .padding(16)
+    }
+
+    private func settingsPickerRow<Option: Hashable>(
+        title: String,
+        caption: String? = nil,
         selection: Binding<Option>,
         options: [Option],
         optionLabel: @escaping (Option) -> String
     ) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack {
-                Text(title)
-                    .foregroundStyle(AppColors.textSecondary)
-
-                Spacer(minLength: 12)
-
-                SettingsMenuPicker(
-                    selection: selection,
-                    options: options,
-                    optionLabel: optionLabel,
-                    accessibilityTitle: title
-                )
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .foregroundStyle(AppColors.textSecondary)
-
-                SettingsMenuPicker(
-                    selection: selection,
-                    options: options,
-                    optionLabel: optionLabel,
-                    accessibilityTitle: title,
-                    fillsWidth: true
-                )
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        settingsControlRow(title: title, caption: caption) {
+            SettingsMenuPicker(
+                selection: selection,
+                options: options,
+                optionLabel: optionLabel,
+                accessibilityTitle: title
+            )
         }
     }
 

@@ -29,7 +29,7 @@ enum AppColors {
 
     // MARK: - Safety tags
 
-    static let tagSafeText = Color(light: .hex(0x1A7A43), dark: .hex(0x5FD98A))
+    static let tagSafeText = Color(light: .hex(0x34C759), dark: .hex(0x63D86D))
     static let tagSafeBg = Color(light: .hex(0xE5F5EB), dark: .hex(0x1B2E22))
     static let tagCheckText = Color(light: .hex(0x9C6300), dark: .hex(0xF2B84B))
     static let tagCheckBg = Color(light: .hex(0xFBEED8), dark: .hex(0x332910))
