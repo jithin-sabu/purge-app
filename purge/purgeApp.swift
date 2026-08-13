@@ -28,9 +28,12 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         AppBootstrapper.bootstrapOnce()
 
         if LaunchContext.shouldSuppressInitialWindow(
-            hidesDockIcon: StartupPreferenceStore.shared.hidesDockIcon,
+            // Read the key directly rather than touching `.shared`: building the
+            // store calls `SMAppService.mainApp.status`, an out-of-process read we
+            // have no use for at launch.
+            hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon(),
             launchedAsLoginItem: LaunchContext.launchedAsLoginItem,
-            hasCompletedOnboarding: OnboardingGate.hasCompletedOnboarding
+            hasCompletedOnboarding: FirstRunGate.hasCompletedOnboarding
         ) {
             InitialWindowSuppressor.suppressInitialWindow()
         }
@@ -52,7 +55,7 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         guard !hasVisibleWindows else { return true }
         // No window object to raise: let SwiftUI make one rather than guessing.
-        guard AppWindowPresenter.plan(windows: sender.windows) == .reveal else { return true }
+        guard !AppWindowPresenter.needsNewWindow(windows: sender.windows) else { return true }
         AppWindowPresenter.reveal()
         return false
     }
@@ -77,10 +80,10 @@ extension EnvironmentValues {
 struct PurgeApp: App {
     @NSApplicationDelegateAdaptor(PurgeAppDelegate.self) private var appDelegate
     // Adopted from `AppEnvironment`, not created here: these outlive the window.
-    @StateObject private var store = AppEnvironment.shared.store
-    @StateObject private var diskStore = AppEnvironment.shared.diskStore
-    @StateObject private var trashStore = AppEnvironment.shared.trashStore
-    @StateObject private var menuModel = AppEnvironment.shared.menuModel
+    @StateObject private var store = AppEnvironment.store
+    @StateObject private var diskStore = AppEnvironment.diskStore
+    @StateObject private var trashStore = AppEnvironment.trashStore
+    @StateObject private var menuModel = AppEnvironment.menuModel
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
     @State private var systemThemeObserver: NSObjectProtocol?
@@ -112,10 +115,7 @@ struct PurgeApp: App {
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
         // As early as the app can act, so a login launch in menu-bar-only mode
         // never flashes into the Dock before hiding itself again.
-        DockIconPolicy.apply(
-            hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon(),
-            host: NSApplication.shared
-        )
+        DockIconPolicy.apply(hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon())
     }
 
     var body: some Scene {

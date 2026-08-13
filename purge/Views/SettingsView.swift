@@ -169,7 +169,6 @@ struct SettingsView: View {
                         this window again. The app menu is gone while the Dock icon is \
                         hidden, so ⌘Q won't quit — use Quit in the menu bar dropdown.
                         """,
-                    warning: nil,
                     isOn: hideDockIconBinding
                 )
                 .padding(16)
@@ -180,7 +179,7 @@ struct SettingsView: View {
     private func startupToggleRow(
         title: String,
         caption: String,
-        warning: String?,
+        warning: String? = nil,
         isOn: Binding<Bool>
     ) -> some View {
         Toggle(isOn: isOn) {

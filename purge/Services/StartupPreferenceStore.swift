@@ -23,19 +23,6 @@ struct SystemLoginItem: LoginItemControlling {
     func unregister() { LoginItemRegistrar.unregister() }
 }
 
-@MainActor
-protocol DockIconPolicyApplying {
-    func apply(hidesDockIcon: Bool)
-}
-
-struct SystemDockIconPolicy: DockIconPolicyApplying {
-    nonisolated init() {}
-
-    func apply(hidesDockIcon: Bool) {
-        DockIconPolicy.apply(hidesDockIcon: hidesDockIcon)
-    }
-}
-
 /// Backs the Startup section of Settings: launch at login, and whether Purge
 /// lives in the menu bar only.
 @MainActor
@@ -48,7 +35,9 @@ final class StartupPreferenceStore: ObservableObject {
 
     private let ud: UserDefaults
     private let loginItem: LoginItemControlling
-    private let dockPolicy: DockIconPolicyApplying
+    /// A closure rather than a protocol: one call, one argument, no state — a
+    /// protocol plus a wrapper struct would be more names than behaviour.
+    private let applyDockPolicy: @MainActor (Bool) -> Void
 
     @Published private(set) var hidesDockIcon: Bool
 
@@ -60,11 +49,11 @@ final class StartupPreferenceStore: ObservableObject {
     init(
         userDefaults: UserDefaults = .standard,
         loginItem: LoginItemControlling = SystemLoginItem(),
-        dockPolicy: DockIconPolicyApplying = SystemDockIconPolicy()
+        applyDockPolicy: @escaping @MainActor (Bool) -> Void = { DockIconPolicy.apply(hidesDockIcon: $0) }
     ) {
         ud = userDefaults
         self.loginItem = loginItem
-        self.dockPolicy = dockPolicy
+        self.applyDockPolicy = applyDockPolicy
 
         ud.register(defaults: [UDKeys.hideDockIcon: false])
         hidesDockIcon = ud.bool(forKey: UDKeys.hideDockIcon)
@@ -73,14 +62,20 @@ final class StartupPreferenceStore: ObservableObject {
 
     /// Re-reads the system's answer. Call when Settings appears and when the app
     /// becomes active, so a change made in System Settings shows up here.
+    /// Guarded against re-publishing an unchanged value: this runs on every app
+    /// activation while Settings is open, and `@Published` fires `objectWillChange`
+    /// even when the value is identical — which would re-evaluate the whole
+    /// settings body for nothing.
     func refreshLoginItemStatus() {
-        launchesAtLogin = loginItem.isRegistered
+        let current = loginItem.isRegistered
+        guard current != launchesAtLogin else { return }
+        launchesAtLogin = current
     }
 
     func setHidesDockIcon(_ hidden: Bool) {
         hidesDockIcon = hidden
         ud.set(hidden, forKey: UDKeys.hideDockIcon)
-        dockPolicy.apply(hidesDockIcon: hidden)
+        applyDockPolicy(hidden)
     }
 
     /// Returns whether the login item ended up in the requested state.

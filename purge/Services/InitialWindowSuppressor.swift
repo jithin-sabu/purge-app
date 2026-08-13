@@ -12,24 +12,19 @@ import AppKit
 /// couple of runloop turns and then never again.
 @MainActor
 enum InitialWindowSuppressor {
-    private static var remainingAttempts = 0
 
     /// Closes the launch window now and for the next turn or two, in case SwiftUI
     /// creates it slightly after `applicationDidFinishLaunching`.
     static func suppressInitialWindow() {
-        remainingAttempts = 2
         closeAppWindows()
-        scheduleNextAttempt()
+        scheduleClose(remaining: 2)
     }
 
-    private static func scheduleNextAttempt() {
-        guard remainingAttempts > 0 else { return }
-        remainingAttempts -= 1
-        DispatchQueue.main.async {
-            MainActor.assumeIsolated {
-                closeAppWindows()
-                scheduleNextAttempt()
-            }
+    private static func scheduleClose(remaining: Int) {
+        guard remaining > 0 else { return }
+        onNextRunloopTurn {
+            closeAppWindows()
+            scheduleClose(remaining: remaining - 1)
         }
     }
 

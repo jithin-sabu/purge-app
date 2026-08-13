@@ -43,16 +43,16 @@ struct AppWindowPresenterTests {
             Self.makeStatusBarStyleWindow(),
             Self.makeAppWindow(),
         ]
-        #expect(AppWindowPresenter.plan(windows: windows) == .reveal)
+        #expect(!AppWindowPresenter.needsNewWindow(windows: windows))
     }
 
     /// A window the user closed stays in `NSApp.windows`, so this must still be
-    /// `.reveal` — opening a second one is the visible bug.
+    /// raised rather than rebuilt — opening a second one is the visible bug.
     @Test("A closed window still counts as one to raise")
     func closedWindowIsStillRevealable() {
         let window = Self.makeAppWindow()
         #expect(!window.isVisible)
-        #expect(AppWindowPresenter.plan(windows: [window]) == .reveal)
+        #expect(!AppWindowPresenter.needsNewWindow(windows: [window]))
     }
 
     /// The windowless-launch state: menu bar chrome only.
@@ -63,11 +63,11 @@ struct AppWindowPresenterTests {
             Self.makeMenuBarPanel(),
             Self.makeStatusBarStyleWindow(),
         ]
-        #expect(AppWindowPresenter.plan(windows: windows) == .create)
+        #expect(AppWindowPresenter.needsNewWindow(windows: windows))
     }
 
     @Test("No windows at all means a window has to be created")
     func emptyWindowListRequiresCreation() {
-        #expect(AppWindowPresenter.plan(windows: []) == .create)
+        #expect(AppWindowPresenter.needsNewWindow(windows: []))
     }
 }

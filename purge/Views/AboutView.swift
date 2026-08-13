@@ -4,7 +4,7 @@ import SwiftUI
 struct AboutView: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.purgeAppDelegate) private var appDelegate
-    @AppStorage(OnboardingGate.userDefaultsKey) private var hasCompletedOnboarding = false
+    @AppStorage(FirstRunGate.onboardingCompletedKey) private var hasCompletedOnboarding = false
     @AppStorage(DeveloperMode.userDefaultsKey) private var developerModeEnabled = false
     /// Counts rapid taps on the app icon; reaching the threshold toggles developer mode.
     @State private var iconTapCount = 0

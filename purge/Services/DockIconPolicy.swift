@@ -1,5 +1,20 @@
 import AppKit
 
+/// Runs `work` after the current runloop turn.
+///
+/// Load-bearing wherever it appears here. AppKit rebuilds the main menu and
+/// redoes activation as part of an activation-policy change, and anything ordered
+/// in the same turn gets undone — the visible symptom is the window dropping
+/// behind whatever app is next in the stack the instant the switch is flipped.
+/// The same hop is what lets a newly created window come forward, and what gives
+/// SwiftUI a turn to materialise a scene before it is closed again.
+@MainActor
+func onNextRunloopTurn(_ work: @escaping () -> Void) {
+    DispatchQueue.main.async {
+        MainActor.assumeIsolated(work)
+    }
+}
+
 /// The parts of `NSApplication` that switching the Dock icon on and off touches.
 ///
 /// Exists so the call *ordering* below can be tested — the ordering is the whole
@@ -12,16 +27,7 @@ protocol ActivationPolicyHost: AnyObject {
 
     @discardableResult
     func setPolicy(_ policy: NSApplication.ActivationPolicy) -> Bool
-    func prepareWindowForReveal()
-    func activateApp()
-    func orderWindowFront()
-
-    /// Runs `work` after the current runloop turn.
-    ///
-    /// Not cosmetic. AppKit rebuilds the main menu and redoes activation as part
-    /// of a policy change, and anything ordered in the same turn gets undone — the
-    /// visible symptom is the window dropping behind whatever app is next in the
-    /// stack the instant the switch is flipped.
+    func revealWindow()
     func afterCurrentRunloopTurn(_ work: @escaping () -> Void)
 }
 
@@ -35,23 +41,12 @@ extension NSApplication: ActivationPolicyHost {
         setActivationPolicy(policy)
     }
 
-    func prepareWindowForReveal() {
-        guard let window = MainWindowLocator.appWindow(in: windows) else { return }
-        MainWindowLocator.prepareForReveal(window)
-    }
-
-    func activateApp() {
-        activate(ignoringOtherApps: true)
-    }
-
-    func orderWindowFront() {
-        MainWindowLocator.appWindow(in: windows)?.makeKeyAndOrderFront(nil)
+    func revealWindow() {
+        MainWindowLocator.revealAppWindow()
     }
 
     func afterCurrentRunloopTurn(_ work: @escaping () -> Void) {
-        DispatchQueue.main.async {
-            MainActor.assumeIsolated(work)
-        }
+        onNextRunloopTurn(work)
     }
 }
 
@@ -73,15 +68,13 @@ enum DockIconPolicy {
         guard host.setPolicy(target) else { return }
 
         // Hiding with no window open: nothing to bring forward, and activating would
-        // steal focus to show the user nothing.
+        // steal focus to show the user nothing. Showing always reveals, because that
+        // is what puts the app menu back at the top of the screen without a stray
+        // extra click — `revealAppWindow` activates even when there is no window.
         if hidesDockIcon && !host.hasRevealableWindow { return }
 
         host.afterCurrentRunloopTurn {
-            host.prepareWindowForReveal()
-            // Unconditional when showing the Dock icon again: this is what puts the
-            // app menu back at the top of the screen without a stray extra click.
-            host.activateApp()
-            host.orderWindowFront()
+            host.revealWindow()
         }
     }
 

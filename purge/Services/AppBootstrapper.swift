@@ -16,11 +16,16 @@ enum AppBootstrapper {
     private static var hasBootstrapped = false
 
     /// Idempotent: safe to call from more than one launch path.
-    static func bootstrapOnce(env: AppEnvironment = .shared) {
+    static func bootstrapOnce() {
         guard !hasBootstrapped else { return }
         hasBootstrapped = true
 
-        env.diskStore.refresh()
+        let env = AppEnvironment.self
+
+        // No `diskStore.refresh()` here: the store refreshes in its own init, and
+        // `DiskSummaryRefreshModifier` refreshes again when the window appears.
+        // A third read would put the expensive APFS capacity key on the path to
+        // first paint for a value that cannot have changed since init.
         env.menuModel.attach(store: env.store)
         MenuScanNotifier.configure()
         ScheduledNotificationPresentationDelegate.shared.onCleanAction = { [weak menuModel = env.menuModel] in

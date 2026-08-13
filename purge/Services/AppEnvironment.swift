@@ -7,13 +7,9 @@ import Foundation
 /// moved here and `PurgeApp` now adopts these instances rather than creating them.
 /// `AppBootstrapper` wires them up from the app delegate.
 @MainActor
-final class AppEnvironment {
-    static let shared = AppEnvironment()
-
-    let store = PurgeStore()
-    let diskStore = DiskSummaryStore()
-    let trashStore = TrashStore()
-    let menuModel = MenuViewModel()
-
-    private init() {}
+enum AppEnvironment {
+    static let store = PurgeStore()
+    static let diskStore = DiskSummaryStore()
+    static let trashStore = TrashStore()
+    static let menuModel = MenuViewModel()
 }

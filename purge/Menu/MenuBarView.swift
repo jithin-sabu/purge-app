@@ -31,8 +31,19 @@ enum MenuPalette {
 struct MenuBarStatusIcon: View {
     private static let barHeight: CGFloat = 14
 
+    /// Handed to `AppWindowPresenter` so "Open Purge" can create a window after a
+    /// windowless launch, not just raise an existing one.
+    ///
+    /// Registered from the label rather than the panel content: the label renders
+    /// at launch and never goes away, whereas a `.window`-style panel isn't built
+    /// until the user first opens it — which would leave the presenter without an
+    /// action for anything arriving before that, such as opening Purge from
+    /// Spotlight while it runs windowless.
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
         Image(nsImage: Self.image)
+            .task { AppWindowPresenter.registerOpenWindowAction(openWindow) }
     }
 
     static let image: NSImage = {
@@ -77,9 +88,6 @@ struct MenuBarContentView: View {
     /// panel is reused across opens), so every repeating timer in this view
     /// must be gated on this flag or it keeps waking the app while closed.
     @State private var panelIsVisible = false
-    /// Handed to `AppWindowPresenter` so "Open Purge" can create a window after a
-    /// windowless launch, not just raise an existing one.
-    @Environment(\.openWindow) private var openWindow
 
     private enum Metrics {
         static let panelWidth: CGFloat = 240
@@ -115,10 +123,7 @@ struct MenuBarContentView: View {
             onWindow: { model.panelWindow = $0 },
             onVisibilityChange: { panelIsVisible = $0 }
         ))
-        .task {
-            model.attach(store: store)
-            AppWindowPresenter.registerOpenWindowAction(openWindow)
-        }
+        .task { model.attach(store: store) }
     }
 
     // MARK: Status region (hero)

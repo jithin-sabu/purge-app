@@ -31,9 +31,10 @@ struct StartupPreferenceStoreTests {
         }
     }
 
-    private final class SpyDockPolicy: DockIconPolicyApplying {
+    /// Collects what the store asked the dock policy to do.
+    private final class DockPolicySpy {
         private(set) var applied: [Bool] = []
-        func apply(hidesDockIcon: Bool) { applied.append(hidesDockIcon) }
+        func record(_ hidden: Bool) { applied.append(hidden) }
     }
 
     /// Guards the promise that this feature changes nothing for anyone who does
@@ -46,7 +47,7 @@ struct StartupPreferenceStoreTests {
         let store = StartupPreferenceStore(
             userDefaults: defaults,
             loginItem: FakeLoginItem(),
-            dockPolicy: SpyDockPolicy()
+            applyDockPolicy: { _ in }
         )
 
         #expect(!store.hidesDockIcon)
@@ -56,12 +57,12 @@ struct StartupPreferenceStoreTests {
     func hidingPersistsAndApplies() {
         let (defaults, name) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: name) }
-        let policy = SpyDockPolicy()
+        let policy = DockPolicySpy()
 
         let store = StartupPreferenceStore(
             userDefaults: defaults,
             loginItem: FakeLoginItem(),
-            dockPolicy: policy
+            applyDockPolicy: { policy.record($0) }
         )
         store.setHidesDockIcon(true)
 
@@ -79,7 +80,7 @@ struct StartupPreferenceStoreTests {
         let store = StartupPreferenceStore(
             userDefaults: defaults,
             loginItem: FakeLoginItem(),
-            dockPolicy: SpyDockPolicy()
+            applyDockPolicy: { _ in }
         )
 
         #expect(store.hidesDockIcon)
@@ -95,7 +96,7 @@ struct StartupPreferenceStoreTests {
         let store = StartupPreferenceStore(
             userDefaults: defaults,
             loginItem: loginItem,
-            dockPolicy: SpyDockPolicy()
+            applyDockPolicy: { _ in }
         )
         #expect(!store.launchesAtLogin)
 
@@ -117,7 +118,7 @@ struct StartupPreferenceStoreTests {
         let store = StartupPreferenceStore(
             userDefaults: defaults,
             loginItem: loginItem,
-            dockPolicy: SpyDockPolicy()
+            applyDockPolicy: { _ in }
         )
         let succeeded = store.setLaunchesAtLogin(true)
 
@@ -135,7 +136,7 @@ struct StartupPreferenceStoreTests {
         let store = StartupPreferenceStore(
             userDefaults: defaults,
             loginItem: loginItem,
-            dockPolicy: SpyDockPolicy()
+            applyDockPolicy: { _ in }
         )
         let succeeded = store.setLaunchesAtLogin(false)
 

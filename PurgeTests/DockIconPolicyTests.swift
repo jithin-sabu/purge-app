@@ -13,9 +13,7 @@ struct DockIconPolicyTests {
     private final class FakeHost: ActivationPolicyHost {
         enum Call: Equatable {
             case setPolicy(NSApplication.ActivationPolicy)
-            case prepare
-            case activate
-            case orderFront
+            case reveal
         }
 
         var currentActivationPolicy: NSApplication.ActivationPolicy = .regular
@@ -32,9 +30,7 @@ struct DockIconPolicyTests {
             return true
         }
 
-        func prepareWindowForReveal() { calls.append(.prepare) }
-        func activateApp() { calls.append(.activate) }
-        func orderWindowFront() { calls.append(.orderFront) }
+        func revealWindow() { calls.append(.reveal) }
 
         /// Synchronous so the test does not have to spin a runloop. The real hop
         /// is covered by manual verification, not here.
@@ -46,12 +42,12 @@ struct DockIconPolicyTests {
         let host = FakeHost()
         DockIconPolicy.apply(hidesDockIcon: true, host: host)
 
-        #expect(host.calls == [.setPolicy(.accessory), .prepare, .activate, .orderFront])
+        #expect(host.calls == [.setPolicy(.accessory), .reveal])
     }
 
-    /// Activating here would pull focus to the app just to show the user nothing.
+    /// Revealing here would pull focus to the app just to show the user nothing.
     @Test("Hiding with no window open changes policy and stops there")
-    func hidingWithoutAWindowDoesNotActivate() {
+    func hidingWithoutAWindowDoesNotReveal() {
         let host = FakeHost()
         host.hasRevealableWindow = false
 
@@ -60,17 +56,18 @@ struct DockIconPolicyTests {
         #expect(host.calls == [.setPolicy(.accessory)])
     }
 
-    /// The unconditional activate is what puts the app menu back at the top of
-    /// the screen; without it the menu bar belongs to whatever app was frontmost.
-    @Test("Showing the Dock icon again activates even with no window")
-    func showingAlwaysActivates() {
+    /// Revealing activates even when there is no window, and that activation is
+    /// what puts the app menu back at the top of the screen; without it the menu
+    /// bar belongs to whatever app was frontmost.
+    @Test("Showing the Dock icon again reveals even with no window")
+    func showingAlwaysReveals() {
         let host = FakeHost()
         host.currentActivationPolicy = .accessory
         host.hasRevealableWindow = false
 
         DockIconPolicy.apply(hidesDockIcon: false, host: host)
 
-        #expect(host.calls == [.setPolicy(.regular), .prepare, .activate, .orderFront])
+        #expect(host.calls == [.setPolicy(.regular), .reveal])
     }
 
     @Test("Applying the policy already in effect does nothing at all")
