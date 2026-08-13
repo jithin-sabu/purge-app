@@ -38,7 +38,11 @@ codesign --verify --deep --strict "$APP"
 for nested in Autoupdate Updater.app XPCServices/Installer.xpc XPCServices/Downloader.xpc; do
   path="$APP/Contents/Frameworks/Sparkle.framework/Versions/Current/$nested"
   [ -e "$path" ] || continue
-  codesign -dvvv "$path" 2>&1 | grep -q "^Timestamp=" \
+  # Capture first: piping straight into `grep -q` lets grep exit after its
+  # first match and SIGPIPE codesign, which pipefail then reports as codesign
+  # itself failing even though the timestamp was right there in the output.
+  info="$(codesign -dvvv "$path" 2>&1)"
+  echo "$info" | grep -q "^Timestamp=" \
     || { echo "$nested has no secure timestamp; re-sign inside-out before continuing." >&2; exit 1; }
 done
 
