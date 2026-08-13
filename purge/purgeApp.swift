@@ -13,13 +13,51 @@ import UserNotifications
 final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
     let updater = PurgeUpdater()
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        LaunchContext.captureLaunchKind()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The open-application event reaches one of the two launch callbacks; which
+        // one varies, so ask again.
+        LaunchContext.captureLaunchKind()
         // Apply the saved appearance before the first paint to avoid a launch flash.
         AppAppearance.apply(AppearanceMode.current)
+        // Not in the window's `onAppear`: menu-bar-only mode can launch windowless,
+        // and the status item still needs live models behind it.
+        AppBootstrapper.bootstrapOnce()
+
+        if LaunchContext.shouldSuppressInitialWindow(
+            // Read the key directly rather than touching `.shared`: building the
+            // store calls `SMAppService.mainApp.status`, an out-of-process read we
+            // have no use for at launch.
+            hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon(),
+            launchedAsLoginItem: LaunchContext.launchedAsLoginItem,
+            hasCompletedOnboarding: FirstRunGate.hasCompletedOnboarding
+        ) {
+            InitialWindowSuppressor.suppressInitialWindow()
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         CleaningQuitGuard.shouldAllowTermination() ? .terminateNow : .terminateCancel
+    }
+
+    /// Purge lives in the menu bar; closing the window is not quitting. This is
+    /// already the default with a `MenuBarExtra`, but menu-bar-only mode should
+    /// not rest on a default that could change.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    /// Covers opening Purge from Finder or Spotlight while it is already running
+    /// — the only "click the app" route left once the Dock icon is hidden.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        guard !hasVisibleWindows else { return true }
+        // No window object to raise: let SwiftUI make one rather than guessing.
+        guard !AppWindowPresenter.needsNewWindow(windows: sender.windows) else { return true }
+        AppWindowPresenter.reveal()
+        return false
     }
 
     func checkForUpdates() {
@@ -41,10 +79,11 @@ extension EnvironmentValues {
 @main
 struct PurgeApp: App {
     @NSApplicationDelegateAdaptor(PurgeAppDelegate.self) private var appDelegate
-    @StateObject private var store = PurgeStore()
-    @StateObject private var diskStore = DiskSummaryStore()
-    @StateObject private var trashStore = TrashStore()
-    @StateObject private var menuModel = MenuViewModel()
+    // Adopted from `AppEnvironment`, not created here: these outlive the window.
+    @StateObject private var store = AppEnvironment.store
+    @StateObject private var diskStore = AppEnvironment.diskStore
+    @StateObject private var trashStore = AppEnvironment.trashStore
+    @StateObject private var menuModel = AppEnvironment.menuModel
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
     @State private var systemThemeObserver: NSObjectProtocol?
@@ -74,10 +113,13 @@ struct PurgeApp: App {
         FirstRunGate.resolve()
         LargeFileFilterDefaults.register()
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
+        // As early as the app can act, so a login launch in menu-bar-only mode
+        // never flashes into the Dock before hiding itself again.
+        DockIconPolicy.apply(hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon())
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: AppWindowID.main) {
             AppRootView()
                 .environmentObject(store)
                 .environmentObject(diskStore)
@@ -85,16 +127,8 @@ struct PurgeApp: App {
                 .environmentObject(appDelegate.updater)
                 .environment(\.purgeAppDelegate, appDelegate)
                 .onAppear {
-                    diskStore.refresh()
-                    menuModel.attach(store: store)
-                    MenuScanNotifier.configure()
-                    ScheduledNotificationPresentationDelegate.shared.onCleanAction = { [weak menuModel] in
-                        menuModel?.performCleanFromNotification()
-                    }
-                    ScheduledCleaningRegistrar.shared.attach(store: store)
-                    CleaningQuitGuard.isCleaningActive = { [weak store] in
-                        store?.isManualCleaningInProgress ?? false
-                    }
+                    // Model/service wiring lives in `AppBootstrapper` — it has to run
+                    // windowless. Only the window-scoped appearance work is left here.
                     applyAppAppearance()
                     systemThemeObserver = AppAppearance.addSystemThemeObserver {
                         guard appearanceMode == .system else { return }

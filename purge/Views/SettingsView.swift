@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var updater: PurgeUpdater
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
+    @ObservedObject private var startup = StartupPreferenceStore.shared
     @ObservedObject private var registrar = ScheduledCleaningRegistrar.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage(DevToolsStalenessOption.userDefaultsKey)
@@ -17,6 +18,7 @@ struct SettingsView: View {
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
     var usesExternalScrollContainer = false
 
+    @State private var loginItemFailed = false
     @State private var isRunningScheduledCleanNow = false
     @State private var scheduledCleanNowMessage: String?
     @State private var isCleaningHistoryExpanded = false
@@ -36,6 +38,7 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 18) {
+                    startupSection
                     appearanceSection
                     cleaningScheduleSection
                     devToolsSection
@@ -53,6 +56,12 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(maxHeight: usesExternalScrollContainer ? nil : .infinity, alignment: .topLeading)
         .background(AppColors.bgBase)
+        .onAppear { startup.refreshLoginItemStatus() }
+        // The user can turn the login item off in System Settings without telling
+        // us; re-read on the way back in so the switch isn't stale.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            startup.refreshLoginItemStatus()
+        }
         .sheet(item: $selectedHistoryEntry) { entry in
             CleanupHistoryDetailView(entry: entry)
         }
@@ -132,6 +141,78 @@ struct SettingsView: View {
 
     private var currentAppearanceMode: AppearanceMode {
         AppearanceMode(rawValue: appearanceModeRaw) ?? .system
+    }
+
+    private var startupSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Startup")
+                .font(.headline)
+
+            // Two peer toggles, so both sit in the card as rows. The header-row
+            // idiom the other sections use is for hanging a single control off a
+            // title, and would rank one of these above the other for no reason.
+            settingsSectionCard {
+                startupToggleRow(
+                    title: "Launch Purge at login",
+                    caption: "Purge starts quietly with your Mac and waits in the menu bar.",
+                    warning: loginItemFailed ? "Couldn't enable this. Check Login Items in System Settings." : nil,
+                    isOn: launchAtLoginBinding
+                )
+                .padding(16)
+
+                settingsSectionDivider
+
+                startupToggleRow(
+                    title: "Hide Dock icon",
+                    caption: """
+                        Purge runs from the menu bar only. Click the menu bar icon to open \
+                        this window again. The app menu is gone while the Dock icon is \
+                        hidden, so ⌘Q won't quit — use Quit in the menu bar dropdown.
+                        """,
+                    isOn: hideDockIconBinding
+                )
+                .padding(16)
+            }
+        }
+    }
+
+    private func startupToggleRow(
+        title: String,
+        caption: String,
+        warning: String? = nil,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                Text(caption)
+                    .settingsCaption()
+                if let warning {
+                    Text(warning)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.tagCheckText)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch)
+        .tint(AppColors.tagSafeText)
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { startup.launchesAtLogin },
+            set: { newValue in
+                loginItemFailed = !startup.setLaunchesAtLogin(newValue)
+            }
+        )
+    }
+
+    private var hideDockIconBinding: Binding<Bool> {
+        Binding(
+            get: { startup.hidesDockIcon },
+            set: { startup.setHidesDockIcon($0) }
+        )
     }
 
     private var cleaningScheduleSection: some View {

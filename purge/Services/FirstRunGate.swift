@@ -12,6 +12,13 @@ import Foundation
 /// this launch's.
 enum FirstRunGate {
     static let onboardingCompletedKey = "hasCompletedOnboarding"
+
+    /// For callers with no view to hang `@AppStorage` off — the launch path has to
+    /// know this before deciding whether it may start windowless.
+    static var hasCompletedOnboarding: Bool {
+        UserDefaults.standard.bool(forKey: onboardingCompletedKey)
+    }
+
     static let firstSeenVersionKey = "install.firstSeenVersion"
     static let firstSeenAtKey = "install.firstSeenAt"
 

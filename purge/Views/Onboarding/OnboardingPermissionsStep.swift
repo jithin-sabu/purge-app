@@ -3,7 +3,9 @@ import SwiftUI
 struct OnboardingPermissionsStep: View {
   @EnvironmentObject private var store: PurgeStore
 
-  @State private var loginItemRegistered = false
+  /// Shared with Settings so the two surfaces cannot disagree about whether the
+  /// login item is on.
+  @ObservedObject private var startup = StartupPreferenceStore.shared
   @State private var loginItemFailed = false
   @State private var didOpenFullDiskAccessSettings = false
 
@@ -29,7 +31,7 @@ struct OnboardingPermissionsStep: View {
           badgeText: "Optional",
           badgeTone: .neutral,
           buttonTitle: "Enable login item",
-          isGranted: loginItemRegistered,
+          isGranted: startup.launchesAtLogin,
           statusText: loginItemFailed ? "Not enabled" : nil,
           action: enableLoginItem
         )
@@ -62,7 +64,7 @@ struct OnboardingPermissionsStep: View {
   }
 
   private func refreshLoginItemStatus() {
-    loginItemRegistered = LoginItemRegistrar.isRegistered
+    startup.refreshLoginItemStatus()
     loginItemFailed = false
   }
 
@@ -78,10 +80,8 @@ struct OnboardingPermissionsStep: View {
   }
 
   private func enableLoginItem() {
-    let registered = LoginItemRegistrar.register()
     withAnimation(.easeInOut(duration: 0.2)) {
-      loginItemRegistered = registered
-      loginItemFailed = !registered
+      loginItemFailed = !startup.setLaunchesAtLogin(true)
     }
   }
 
