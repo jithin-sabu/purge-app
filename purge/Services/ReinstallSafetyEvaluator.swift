@@ -1,76 +1,63 @@
 import Foundation
 
 enum ReinstallSafetyEvaluator {
-    nonisolated private static func hasFile(_ dir: URL, _ name: String) -> Bool {
-        FileManager.default.fileExists(atPath: dir.appendingPathComponent(name).path)
+    nonisolated private static func exists(_ dir: URL, _ relative: String) -> Bool {
+        let url = dir.appendingPathComponent(relative).standardizedFileURL
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
-    /// Parent folder relative to artifact (for `something/node_modules` parent is project root).
+    /// Whether a removed artifact can be brought back cleanly.
+    ///
+    /// Both checks are resolved against the artifact's own parent directory, which is
+    /// the project root for a top-level folder like `node_modules` and a subdirectory
+    /// for a nested one like `ios/Pods`. Rules use `..` where the evidence lives a
+    /// level up (sbt's `project/target`, Bundler's `vendor/bundle`).
     nonisolated static func evaluate(artifactKind: DeletableArtifactKind, artifactURL: URL) -> ReinstallSafetyStatus {
-        switch artifactKind {
-        case .nodeModules:
-            let parent = artifactURL.deletingLastPathComponent()
-            guard hasFile(parent, "package.json") else { return .missingLockfile }
-            let hasLock = hasFile(parent, "package-lock.json")
-                || hasFile(parent, "npm-shrinkwrap.json")
-                || hasFile(parent, "yarn.lock")
-                || hasFile(parent, "pnpm-lock.yaml")
-            return hasLock ? .reinstallable : .missingLockfile
-
-        case .venv:
-            let parent = artifactURL.deletingLastPathComponent()
-            let ok = hasFile(parent, "requirements.txt") || hasFile(parent, "pyproject.toml")
-            return ok ? .reinstallable : .missingLockfile
-
-        case .target:
-            let parent = artifactURL.deletingLastPathComponent()
-            return hasFile(parent, "Cargo.toml") ? .reinstallable : .missingLockfile
-
-        case .dotGradle:
-            let parent = artifactURL.deletingLastPathComponent()
-            let ok = gradleEvidenceExists(in: parent)
-            return ok ? .reinstallable : .missingLockfile
-
-        case .pods:
-            let podsParent = artifactURL.deletingLastPathComponent()
-            return hasFile(podsParent, "Podfile.lock") ? .reinstallable : .missingLockfile
-
-        case .dartTool, .flutterBuild:
-            let parent = artifactURL.deletingLastPathComponent()
-            guard hasFile(parent, "pubspec.yaml") else { return .missingLockfile }
-            return hasFile(parent, "pubspec.lock") ? .reinstallable : .missingLockfile
-        }
+        status(for: ProjectArtifactCatalog.rules(forKind: artifactKind), artifactURL: artifactURL)
     }
 
-    nonisolated private static func gradleEvidenceExists(in projectRoot: URL) -> Bool {
-        if hasFile(projectRoot, "build.gradle") || hasFile(projectRoot, "build.gradle.kts")
-            || hasFile(projectRoot, "settings.gradle") || hasFile(projectRoot, "settings.gradle.kts") {
-            return true
-        }
-        let android = projectRoot.appendingPathComponent("android", isDirectory: true)
-        return hasFile(android, "build.gradle") || hasFile(android, "build.gradle.kts")
-    }
-
+    /// Used when a folder is being deleted without a scan row behind it, so the only
+    /// thing known about it is its name.
+    ///
+    /// Every rule sharing that folder name is considered, not just the first one found.
+    /// `target` belongs to Rust, Maven and sbt, and `_build` to both Elixir and Dune;
+    /// picking one arbitrarily would report "no lockfile" for a perfectly rebuildable
+    /// project simply because a different ecosystem happened to be listed first.
     nonisolated static func evaluateByFolderNameDeleting(path: URL) -> ReinstallSafetyStatus {
         let name = path.lastPathComponent.lowercased()
-        switch name {
-        case "node_modules":
-            return evaluate(artifactKind: .nodeModules, artifactURL: path)
-        case "venv", ".venv":
-            let parent = path.deletingLastPathComponent()
-            return hasFile(parent, "requirements.txt") || hasFile(parent, "pyproject.toml")
-                ? .reinstallable : .missingLockfile
-        case ".gradle":
-            let parent = path.deletingLastPathComponent()
-            return gradleEvidenceExists(in: parent) ? .reinstallable : .missingLockfile
-        case "target":
-            return evaluate(artifactKind: .target, artifactURL: path)
-        case "pods":
-            return evaluate(artifactKind: .pods, artifactURL: path)
-        case "deriveddata":
-            return .notApplicable
-        default:
-            return .notApplicable
+        let matching = ProjectArtifactCatalog.rules.filter {
+            URL(fileURLWithPath: $0.folder).lastPathComponent.lowercased() == name
         }
+        return status(for: matching, artifactURL: path)
+    }
+
+    /// A kind can carry several rules (Python's `venv` and `.venv`, Zig's two cache
+    /// folder names). Any single rule finding complete evidence is enough.
+    ///
+    /// Rules that require no evidence at all are skipped rather than returned on, so
+    /// the verdict does not depend on the order rules happen to sit in the catalog.
+    /// Only when *no* rule asked for evidence does this report `.notApplicable`.
+    nonisolated private static func status(
+        for rules: [ProjectArtifactRule],
+        artifactURL: URL
+    ) -> ReinstallSafetyStatus {
+        guard !rules.isEmpty else { return .notApplicable }
+        let parent = artifactURL.deletingLastPathComponent()
+        var anyRuleWantedEvidence = false
+
+        for rule in rules {
+            guard !rule.rebuildMarkers.isEmpty || !rule.lockfiles.isEmpty else { continue }
+            anyRuleWantedEvidence = true
+
+            if !rule.rebuildMarkers.isEmpty {
+                guard rule.rebuildMarkers.contains(where: { exists(parent, $0) }) else { continue }
+            }
+            if !rule.lockfiles.isEmpty {
+                guard rule.lockfiles.contains(where: { exists(parent, $0) }) else { continue }
+            }
+            return .reinstallable
+        }
+
+        return anyRuleWantedEvidence ? .missingLockfile : .notApplicable
     }
 }

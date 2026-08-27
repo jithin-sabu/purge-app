@@ -43,11 +43,15 @@ extension SafetyInfo {
         )
     }
 
-    /// Safety for project artifacts shown after staleness filtering — always Safe to Clean unless user-overridden.
+    /// Safety for project artifacts shown after staleness filtering. Safe to Clean by
+    /// default, unless the user has overridden this exact path, or the artifact's rule
+    /// declares a stricter tier (Unity and Unreal are Check First because rebuilding
+    /// them costs real time even though it is automatic).
     nonisolated static func forStaleProjectArtifact(
         kind: DeletableArtifactKind,
         path: URL,
-        reinstallCommand: String? = nil
+        reinstallCommand: String? = nil,
+        level: SafetyLevel = .safe
     ) -> SafetyInfo {
         let base = fromExplanationDatabase(
             key: kind.explanationKey,
@@ -57,7 +61,7 @@ extension SafetyInfo {
         )
         if UserOverridesStore.read(path: path) != nil { return base }
         return SafetyInfo(
-            level: .safe,
+            level: level,
             headline: base.headline,
             explanation: base.explanation,
             recoverySteps: base.recoverySteps,
