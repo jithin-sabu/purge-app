@@ -15,3 +15,9 @@ DistributionSummary.plist
 ExportOptions.plist
 Packaging.log
 .cursor/rules/commit-conventions.mdc
+
+# Local release-note drafts (the shipped copy lives in the GitHub release)
+RELEASE_NOTES_*.md
+
+# Local Command Code tooling state (not part of the app)
+.commandcode/
