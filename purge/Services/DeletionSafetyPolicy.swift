@@ -179,6 +179,7 @@ enum DeletionSafetyPolicy {
     /// nested below them remain reachable through the whitelist.
     nonisolated static func neverDeleteExactPaths(home: String) -> [String] {
         [
+            "\(home)/Library",
             "\(home)/Library/Application Support",
             "\(home)/Documents",
             "\(home)/Desktop",
@@ -236,6 +237,21 @@ enum DeletionSafetyPolicy {
             "\(home)/.zcompdump",
             "\(home)/.cargo/registry",
             "\(home)/.pub-cache",
+            // Hex is Elixir/Erlang's package registry; `packages` is a pure download
+            // cache, re-fetched by `mix deps.get`. `~/.mix` is deliberately NOT listed:
+            // it holds installed Mix archives (tools the user chose to install), not a cache.
+            "\(home)/.hex/packages",
+            "\(home)/.cache/rebar3",
+            "\(home)/.nuget/packages",
+            "\(home)/.bun/install/cache",
+            "\(home)/.cabal/packages",
+            "\(home)/Library/Caches/org.swift.swiftpm",
+            "\(home)/.swiftpm/cache",
+            // AUDIT: `.stack` also holds downloaded GHC compilers, and `~/.cache/bazel`
+            // can be tens of GB. Both re-download rather than being lost, but the next
+            // build is very slow — surfaced as Check First, never Safe.
+            "\(home)/.stack",
+            "\(home)/.cache/bazel",
             "\(home)/.flutter",
             // NOTE: `~/Library/Application Support/MobileSync/Backup` (iPhone/iPad
             // backups) is deliberately NOT on the allowlist. Those backups are
@@ -295,14 +311,25 @@ enum DeletionSafetyPolicy {
 
     /// Whether Purge may offer this path for manual or scheduled cleanup (no admin prompt).
     ///
-    /// Memoised by path. The verdict is a pure function of the path and the static
-    /// allowlists — nothing here reads size, mtime, or user state — so a repeat lookup
-    /// can only produce the same answer. This matters because `filterCacheItems` runs
-    /// over the *entire* accumulated result set on every scan flush, so without a cache
-    /// the policy was re-evaluated (items x flushes) times on the main thread; profiling
-    /// a scan put essentially the whole per-flush cost inside this one call.
+    /// Memoised by path, because `filterCacheItems` runs over the *entire* accumulated
+    /// result set on every scan flush; without a cache the policy was re-evaluated
+    /// (items x flushes) times on the main thread, which profiling showed to be
+    /// essentially the whole per-flush cost.
+    ///
+    /// What may be cached is narrower than it looks. `evaluate` now reads the disk, to
+    /// check whether a project marker sits above a generically-named folder. That is
+    /// safe to memoise: a `mix.exs` or `composer.json` identifies a project for as long
+    /// as the project exists, so the answer cannot flip mid-session.
+    ///
+    /// Refusals are the exception and are deliberately kept *outside* the cache. Whether
+    /// a `.terraform` folder holds state changes the moment someone runs `terraform
+    /// apply`, so a verdict cached before that would keep offering a folder that has
+    /// since become dangerous. It is re-checked on every call, and only for the handful
+    /// of folder names that declare a refusal at all.
     nonisolated static func isOfferedForCleanup(_ url: URL) -> Bool {
         let key = url.standardizedFileURL.path
+
+        if projectArtifactRefusesDeletion(url) { return false }
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
@@ -564,6 +591,53 @@ enum DeletionSafetyPolicy {
         return true
     }
 
+    /// Whether this path is a build artifact of a real project sitting right above it.
+    ///
+    /// This is the mechanism that lets Purge offer folders whose *names* are far too
+    /// generic to ever allow globally — `bin`, `obj`, `vendor`, `Temp`, and Unity's
+    /// `Library`. Nothing is allowed on the strength of its name. The folder only
+    /// qualifies when the directory it sits in is demonstrably a project of the matching
+    /// kind, proven by a marker file such as `mix.exs`, `composer.json`, or a `.csproj`.
+    ///
+    /// Deliberately evaluated *after* the never-delete guards in `evaluate`, so a project
+    /// checked out inside Pictures, Music, or Mail still exposes nothing.
+    /// Whether any rule matching this folder name refuses it because of what is inside.
+    ///
+    /// Intentionally not memoised: unlike a project marker, the contents this looks for
+    /// can appear between one scan and the next.
+    nonisolated static func projectArtifactRefusesDeletion(_ url: URL) -> Bool {
+        let standardized = url.standardizedFileURL
+        guard let candidates = ProjectArtifactCatalog.rulesByFolderName[standardized.lastPathComponent] else {
+            return false
+        }
+        return candidates.contains { $0.refusesArtifact(at: standardized) }
+    }
+
+    nonisolated static func isWhitelistedProjectArtifactPath(_ url: URL, home: String) -> Bool {
+        let standardized = url.standardizedFileURL
+        let path = standardized.path
+        guard path == home || path.hasPrefix(home + "/") else { return false }
+
+        guard let candidates = ProjectArtifactCatalog.rulesByFolderName[standardized.lastPathComponent] else {
+            return false
+        }
+
+        for rule in candidates {
+            // Walk back up by however many components the rule's folder spans, so
+            // `ios/Pods` anchors on the Xcode project root rather than on `ios`.
+            let depth = rule.folder.split(separator: "/").count
+            var root = standardized
+            for _ in 0..<depth { root = root.deletingLastPathComponent() }
+            guard root.path.hasPrefix(home + "/") || root.path == home else { continue }
+            guard rule.matchesRoot(root) else { continue }
+            // Checked here rather than only in the scanner so that no caller can route
+            // around it: a `.terraform` folder holding state is never deletable.
+            guard !rule.refusesArtifact(at: standardized) else { continue }
+            return true
+        }
+        return false
+    }
+
     nonisolated static func evaluate(_ url: URL) -> DeletionSafetyDecision {
         let standardized = url.standardizedFileURL
         let path = standardized.path
@@ -609,6 +683,12 @@ enum DeletionSafetyPolicy {
 
         let inHome = path == home || path.hasPrefix(home + "/")
         if inHome && whitelistedFolderNames.contains(standardized.lastPathComponent) {
+            return .allow
+        }
+        // Deliberately below the never-delete guards, exactly like the folder-name rule
+        // above it: this matches on a name plus nearby evidence, not on an audited
+        // absolute path, so the protections for Pictures, Music, Mail and the rest win.
+        if isWhitelistedProjectArtifactPath(standardized, home: home) {
             return .allow
         }
 

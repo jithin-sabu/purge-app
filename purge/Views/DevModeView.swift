@@ -240,7 +240,42 @@ struct DevToolsView<PageHeader: View>: View {
         true
     }
 
+    /// Resolves a group by identity rather than by position.
+    ///
+    /// The row helpers below are read from closures that SwiftUI re-invokes on its own
+    /// schedule — `ScanSelectionScope` exists precisely so a selection change re-renders
+    /// the checkbox without rebuilding the whole list. A rescan replaces `projectGroups`
+    /// wholesale, so a position captured when the row was first built can point past the
+    /// end of the new array by the time such a closure runs. Identity survives that;
+    /// a position does not.
+    private func projectGroupIndex(forID id: String) -> Int? {
+        store.projectGroups.firstIndex { $0.id == id }
+    }
+
+    private func eligibleArtifactIndices(forGroupID id: String) -> [Int] {
+        guard let gi = projectGroupIndex(forID: id) else { return [] }
+        return eligibleArtifactIndices(forGroupIndex: gi)
+    }
+
+    private func projectSelectTriState(forGroupID id: String) -> SelectAllTriState {
+        guard let gi = projectGroupIndex(forID: id) else { return .none }
+        return projectSelectTriState(forGroupIndex: gi)
+    }
+
+    private func toggleProjectEligibleSelection(groupID id: String) {
+        guard let gi = projectGroupIndex(forID: id) else { return }
+        toggleProjectEligibleSelection(groupIndex: gi)
+    }
+
+    private func visibleGroupByteTotal(groupID id: String) -> Int64 {
+        guard let gi = projectGroupIndex(forID: id) else { return 0 }
+        return visibleGroupByteTotal(groupIndex: gi)
+    }
+
     private func eligibleArtifactIndices(forGroupIndex gi: Int) -> [Int] {
+        // Defence in depth: the id-addressed entry points above are the supported route,
+        // but a stale index must degrade to an empty result rather than trap.
+        guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
         return g.artifacts.indices.filter { ai in
             let art = g.artifacts[ai]
@@ -251,7 +286,7 @@ struct DevToolsView<PageHeader: View>: View {
 
     private func projectSelectTriState(forGroupIndex gi: Int) -> SelectAllTriState {
         let eligible = eligibleArtifactIndices(forGroupIndex: gi)
-        guard !eligible.isEmpty else { return .none }
+        guard !eligible.isEmpty, store.projectGroups.indices.contains(gi) else { return .none }
 
         let g = store.projectGroups[gi]
         let selectedIDs = store.scanSelection.artifactIDs
@@ -263,9 +298,10 @@ struct DevToolsView<PageHeader: View>: View {
 
     private func toggleProjectEligibleSelection(groupIndex gi: Int) {
         let eligible = eligibleArtifactIndices(forGroupIndex: gi)
-        guard !eligible.isEmpty else { return }
+        guard !eligible.isEmpty, store.projectGroups.indices.contains(gi) else { return }
+        let group = store.projectGroups[gi]
         let selectedIDs = store.scanSelection.artifactIDs
-        let allOn = eligible.allSatisfy { selectedIDs.contains(store.projectGroups[gi].artifacts[$0].id) }
+        let allOn = eligible.allSatisfy { selectedIDs.contains(group.artifacts[$0].id) }
         let newVal = !allOn
         for ai in eligible {
             store.setProjectArtifactSelected(groupIndex: gi, artifactIndex: ai, isSelected: newVal)
@@ -273,12 +309,15 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private func visibleGroupByteTotal(groupIndex gi: Int) -> Int64 {
-        sortedVisibleArtifactIndices(forGroup: gi).reduce(Int64(0)) { sum, ai in
-            sum + store.projectGroups[gi].artifacts[ai].sizeBytes
+        guard store.projectGroups.indices.contains(gi) else { return 0 }
+        let group = store.projectGroups[gi]
+        return sortedVisibleArtifactIndices(forGroup: gi).reduce(Int64(0)) { sum, ai in
+            sum + group.artifacts[ai].sizeBytes
         }
     }
 
     private func sortedVisibleArtifactIndices(forGroup gi: Int) -> [Int] {
+        guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
         let raw = g.artifacts.indices.filter {
             artifactVisible(g.artifacts[$0].safetyInfo)
@@ -892,8 +931,8 @@ struct DevToolsView<PageHeader: View>: View {
                 // Scoped so the group tri-state reflects artifact selection changes
                 // without re-rendering the list container.
                 ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
-                    TriStateCheckbox(title: "", state: projectSelectTriState(forGroupIndex: currentGroupIndex)) {
-                        toggleProjectEligibleSelection(groupIndex: currentGroupIndex)
+                    TriStateCheckbox(title: "", state: projectSelectTriState(forGroupID: group.id)) {
+                        toggleProjectEligibleSelection(groupID: group.id)
                     }
                 }
                 .frame(width: 24)
@@ -911,7 +950,7 @@ struct DevToolsView<PageHeader: View>: View {
                         Text(group.displayName)
                             .font(AppStyle.Typography.rowTitle)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(formatBytes(visibleGroupByteTotal(groupIndex: currentGroupIndex)))
+                        Text(formatBytes(visibleGroupByteTotal(groupID: group.id)))
                             .font(AppStyle.Typography.rowTitle)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()

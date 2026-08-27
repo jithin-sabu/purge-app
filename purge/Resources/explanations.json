@@ -2740,5 +2740,435 @@
     "bundle_ids": [],
     "aliases": [],
     "scope": "app_caches"
+  },
+  {
+    "key": "elixir-build",
+    "display_name": "Elixir Build Output",
+    "tag": "safe",
+    "explanation": "Compiled output created by Mix, the build tool for Elixir and Erlang projects. Safe to delete and rebuilt from your own source code the next time you compile.",
+    "bundle_ids": [],
+    "aliases": [
+      "_build",
+      "elixir-build"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "elixir-deps",
+    "display_name": "Elixir Dependencies",
+    "tag": "safe",
+    "explanation": "Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete and re-downloaded on your next build, which needs an internet connection.",
+    "bundle_ids": [],
+    "aliases": [
+      "elixir-deps"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "hex-packages",
+    "display_name": "Hex Package Cache",
+    "tag": "safe",
+    "explanation": "Downloaded Elixir and Erlang packages kept by Hex so repeat builds do not re-download them. Safe to delete and re-downloaded on your next build.",
+    "bundle_ids": [],
+    "aliases": [
+      "Hex Package Cache",
+      ".hex"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "rebar3-cache",
+    "display_name": "Rebar3 Cache",
+    "tag": "safe",
+    "explanation": "Downloaded packages and build plugins kept by Rebar3, the Erlang build tool. Safe to delete and re-downloaded on your next build.",
+    "bundle_ids": [],
+    "aliases": [
+      "Rebar3 Cache",
+      "rebar3"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "next-build",
+    "display_name": "Next.js Build Output",
+    "tag": "safe",
+    "explanation": "Compiled pages and assets produced by Next.js. Safe to delete and rebuilt the next time you run or build the site.",
+    "bundle_ids": [],
+    "aliases": [
+      ".next"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "nuxt-build",
+    "display_name": "Nuxt Build Cache",
+    "tag": "safe",
+    "explanation": "Temporary build files created by Nuxt. Safe to delete and rebuilt the next time you run or build the site.",
+    "bundle_ids": [],
+    "aliases": [
+      ".nuxt"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "nuxt-output",
+    "display_name": "Nuxt Output",
+    "tag": "safe",
+    "explanation": "The built site Nuxt produces for deployment. Safe to delete and rebuilt on your next build.",
+    "bundle_ids": [],
+    "aliases": [
+      ".output"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "sveltekit-build",
+    "display_name": "SvelteKit Build Cache",
+    "tag": "safe",
+    "explanation": "Generated files SvelteKit keeps between builds. Safe to delete and rebuilt the next time you run the project.",
+    "bundle_ids": [],
+    "aliases": [
+      ".svelte-kit"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "astro-build",
+    "display_name": "Astro Build Cache",
+    "tag": "safe",
+    "explanation": "Temporary build files created by Astro. Safe to delete and rebuilt on your next build.",
+    "bundle_ids": [],
+    "aliases": [
+      ".astro"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "angular-cache",
+    "display_name": "Angular Build Cache",
+    "tag": "safe",
+    "explanation": "Build cache kept by the Angular CLI to make repeat builds faster. Safe to delete and rebuilt automatically.",
+    "bundle_ids": [],
+    "aliases": [
+      ".angular"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "pytest-cache",
+    "display_name": "pytest Cache",
+    "tag": "safe",
+    "explanation": "Test results and lookup data cached by pytest. Safe to delete and recreated the next time you run your tests.",
+    "bundle_ids": [],
+    "aliases": [
+      ".pytest_cache"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "tox-environments",
+    "display_name": "tox Environments",
+    "tag": "safe",
+    "explanation": "Throwaway Python environments tox builds to run tests in. Safe to delete and rebuilt on your next tox run, which re-downloads packages.",
+    "bundle_ids": [],
+    "aliases": [
+      ".tox"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "swiftpm-build",
+    "display_name": "Swift Package Build",
+    "tag": "safe",
+    "explanation": "Compiled output from Swift Package Manager. Safe to delete and rebuilt by your next swift build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "maven-target",
+    "display_name": "Maven Build Output",
+    "tag": "safe",
+    "explanation": "Compiled classes and packaged output produced by Maven. Safe to delete and rebuilt by your next build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "gradle-build",
+    "display_name": "Gradle Build Output",
+    "tag": "safe",
+    "explanation": "Compiled output produced by a Gradle build. Safe to delete and rebuilt by your next build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "sbt-target",
+    "display_name": "sbt Build Output",
+    "tag": "safe",
+    "explanation": "Compiled output produced by sbt for a Scala project. Safe to delete and rebuilt by your next build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "dotnet-bin",
+    "display_name": "NET Build Output",
+    "tag": "safe",
+    "explanation": "Compiled programs and libraries produced by a .NET build. Safe to delete and rebuilt by your next dotnet build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "dotnet-obj",
+    "display_name": "NET Intermediate Files",
+    "tag": "safe",
+    "explanation": "Temporary files .NET creates while compiling. Safe to delete and recreated on your next build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "composer-vendor",
+    "display_name": "PHP Packages",
+    "tag": "safe",
+    "explanation": "Third-party PHP packages downloaded by Composer. Safe to delete and re-downloaded by composer install, which needs an internet connection.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "bundler-vendor",
+    "display_name": "Ruby Gems",
+    "tag": "safe",
+    "explanation": "Ruby gems installed into the project by Bundler. Safe to delete and reinstalled by bundle install, which needs an internet connection.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "stack-work",
+    "display_name": "Stack Build Output",
+    "tag": "safe",
+    "explanation": "Compiled output and dependencies kept by Stack for a Haskell project. Safe to delete and rebuilt by your next build, which can take a while.",
+    "bundle_ids": [],
+    "aliases": [
+      ".stack-work"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "cabal-dist",
+    "display_name": "Cabal Build Output",
+    "tag": "safe",
+    "explanation": "Compiled output produced by Cabal for a Haskell project. Safe to delete and rebuilt by your next build, which can take a while.",
+    "bundle_ids": [],
+    "aliases": [
+      "dist-newstyle"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "zig-cache",
+    "display_name": "Zig Build Cache",
+    "tag": "safe",
+    "explanation": "Compilation cache kept by Zig. Safe to delete and rebuilt on your next build.",
+    "bundle_ids": [],
+    "aliases": [
+      ".zig-cache"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "zig-out",
+    "display_name": "Zig Build Output",
+    "tag": "safe",
+    "explanation": "Finished programs and libraries produced by a Zig build. Safe to delete and rebuilt on your next build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "dune-build",
+    "display_name": "Dune Build Output",
+    "tag": "safe",
+    "explanation": "Compiled output produced by Dune for an OCaml project. Safe to delete and rebuilt by your next build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "cmake-build",
+    "display_name": "CMake Build Output",
+    "tag": "safe",
+    "explanation": "Compiled output and build configuration produced by CMake. Safe to delete, though you will need to configure and build the project again.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "terraform-plugins",
+    "display_name": "Terraform Plugins",
+    "tag": "safe",
+    "explanation": "Provider plugins and modules Terraform downloads for a workspace. Safe to delete and re-downloaded by terraform init.",
+    "bundle_ids": [],
+    "aliases": [
+      ".terraform"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "godot-cache",
+    "display_name": "Godot Project Cache",
+    "tag": "safe",
+    "explanation": "Imported assets and editor data Godot keeps for a project. Safe to delete and rebuilt the next time you open the project.",
+    "bundle_ids": [],
+    "aliases": [
+      ".godot"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "unity-library",
+    "display_name": "Unity Library Folder",
+    "tag": "medium",
+    "explanation": "Unity's imported-asset database for this project. It rebuilds itself, but reimporting a large project can take a long time, so check before removing it.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "unity-temp",
+    "display_name": "Unity Temp Folder",
+    "tag": "medium",
+    "explanation": "Scratch files Unity writes while the editor is running. Recreated automatically, but do not remove it while the project is open in Unity.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "unreal-intermediate",
+    "display_name": "Unreal Intermediate Files",
+    "tag": "medium",
+    "explanation": "Generated build files Unreal creates while compiling a project. They come back on the next build, which will take longer than usual.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "unreal-derived-data",
+    "display_name": "Unreal Derived Data Cache",
+    "tag": "medium",
+    "explanation": "Cooked assets and compiled shaders Unreal caches for a project. Rebuilt automatically, but the first build afterwards can be very slow.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "nuget-packages",
+    "display_name": "NuGet Package Cache",
+    "tag": "safe",
+    "explanation": "Downloaded .NET packages kept by NuGet so repeat builds do not re-download them. Safe to delete and re-downloaded on your next build.",
+    "bundle_ids": [],
+    "aliases": [
+      "NuGet Packages"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "stack-global",
+    "display_name": "Stack Global Cache",
+    "tag": "medium",
+    "explanation": "Compilers and packages Stack downloads for Haskell projects. Safe to delete, but the next build re-downloads a lot and can be slow.",
+    "bundle_ids": [],
+    "aliases": [
+      "Stack Cache"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "cabal-packages",
+    "display_name": "Cabal Package Cache",
+    "tag": "safe",
+    "explanation": "Haskell packages downloaded by Cabal. Safe to delete and re-downloaded on your next build.",
+    "bundle_ids": [],
+    "aliases": [
+      "Cabal Packages"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "bazel-cache",
+    "display_name": "Bazel Build Cache",
+    "tag": "medium",
+    "explanation": "Build outputs Bazel caches between builds. Safe to delete, though the next build starts from scratch and can be slow.",
+    "bundle_ids": [],
+    "aliases": [
+      "Bazel Cache"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "swiftpm-cache",
+    "display_name": "Swift Package Cache",
+    "tag": "safe",
+    "explanation": "Package checkouts Swift Package Manager shares between projects. Safe to delete and re-downloaded on your next build.",
+    "bundle_ids": [],
+    "aliases": [
+      "Swift Package Cache"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
+  },
+  {
+    "key": "venv",
+    "display_name": "Python Environment",
+    "tag": "safe",
+    "explanation": "A self-contained Python environment holding packages installed for one project. Safe to delete and recreated by reinstalling from requirements.txt or pyproject.toml, which needs an internet connection.",
+    "bundle_ids": [],
+    "aliases": [
+      "venv",
+      ".venv"
+    ],
+    "scope": "dev_tools",
+    "staleness_aware": true
   }
 ]

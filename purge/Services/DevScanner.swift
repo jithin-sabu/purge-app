@@ -414,6 +414,21 @@ nonisolated final class DevScanner {
             ("Yarn Cache", [home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true)]),
             ("Gradle Cache", [home.appendingPathComponent(".gradle/caches", isDirectory: true)]),
             ("Flutter Cache", [home.appendingPathComponent(".flutter", isDirectory: true)]),
+            ("Hex Package Cache", [home.appendingPathComponent(".hex/packages", isDirectory: true)]),
+            ("Rebar3 Cache", [home.appendingPathComponent(".cache/rebar3", isDirectory: true)]),
+            ("NuGet Packages", [home.appendingPathComponent(".nuget/packages", isDirectory: true)]),
+            // `~/.deno` deliberately not listed: `deno upgrade` and `deno install` put the
+            // deno binary and script shims in `~/.deno/bin`, so offering it would offer
+            // the toolchain itself. DENO_DIR (the real cache) lives under Library/Caches.
+            ("Deno Cache", [home.appendingPathComponent("Library/Caches/deno", isDirectory: true)]),
+            ("Bun Cache", [home.appendingPathComponent(".bun/install/cache", isDirectory: true)]),
+            ("Cabal Packages", [home.appendingPathComponent(".cabal/packages", isDirectory: true)]),
+            ("Stack Cache", [home.appendingPathComponent(".stack", isDirectory: true)]),
+            ("Bazel Cache", [home.appendingPathComponent(".cache/bazel", isDirectory: true)]),
+            ("Swift Package Cache", [
+                home.appendingPathComponent("Library/Caches/org.swift.swiftpm", isDirectory: true),
+                home.appendingPathComponent(".swiftpm/cache", isDirectory: true)
+            ]),
             ("Android SDK .gradle", [home.appendingPathComponent(".android", isDirectory: true)]),
             ("Docker Desktop", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)]),
 
@@ -766,16 +781,12 @@ nonisolated final class DevScanner {
         var directoriesWalked = 0
 
         func shouldSkipDescending(into name: String) -> Bool {
+            // Never walk *into* a folder that is itself a removable artifact, or into
+            // heavy vendor/VCS folders. Derived from the catalog so a new ecosystem
+            // cannot accidentally leave the walker descending into its own build output.
+            if ProjectArtifactCatalog.artifactFolderNames.contains(name) { return true }
             switch name {
-            case ".git", "node_modules", "Pods", "DerivedData", ".gradle":
-                return true
-            case ".dart_tool":
-                return true
-            case "venv", ".venv":
-                return true
-            case "target":
-                return true
-            case "build":
+            case ".git", "DerivedData":
                 return true
             case "android", "ios":
                 return true
@@ -784,33 +795,58 @@ nonisolated final class DevScanner {
             }
         }
 
+        /// Markers that identify a project type by plain file existence. Types needing
+        /// more than a filename check (Xcode bundles, Gradle's nested `android/`
+        /// folder, extension globs) are handled separately below.
         func listTypes(at directory: URL) -> [ProjectType] {
             var result: Set<ProjectType> = []
 
-            let packageJSON = directory.appendingPathComponent("package.json").path
-            if fm.fileExists(atPath: packageJSON) {
-                result.insert(.node)
+            func anyExists(_ names: [String]) -> Bool {
+                names.contains { fm.fileExists(atPath: directory.appendingPathComponent($0).path) }
             }
 
-            if fm.fileExists(atPath: directory.appendingPathComponent("Cargo.toml").path) {
-                result.insert(.rust)
-            }
-
-            if fm.fileExists(atPath: directory.appendingPathComponent("pubspec.yaml").path) {
-                result.insert(.flutter)
-            }
-
-            if fm.fileExists(atPath: directory.appendingPathComponent("requirements.txt").path)
-                || fm.fileExists(atPath: directory.appendingPathComponent("pyproject.toml").path) {
-                result.insert(.python)
+            let simpleMarkers: [(ProjectType, [String])] = [
+                (.node, ["package.json"]),
+                (.rust, ["Cargo.toml"]),
+                (.flutter, ["pubspec.yaml"]),
+                (.python, ["requirements.txt", "pyproject.toml", "tox.ini"]),
+                (.elixir, ["mix.exs"]),
+                (.swiftPackage, ["Package.swift"]),
+                (.maven, ["pom.xml"]),
+                (.sbt, ["build.sbt"]),
+                (.composer, ["composer.json"]),
+                (.bundler, ["Gemfile"]),
+                (.haskellStack, ["stack.yaml"]),
+                (.zig, ["build.zig"]),
+                (.ocamlDune, ["dune-project"]),
+                (.cmake, ["CMakeLists.txt"]),
+                (.godot, ["project.godot"]),
+                (.unity, ["ProjectSettings/ProjectVersion.txt"]),
+            ]
+            for (type, markers) in simpleMarkers where anyExists(markers) {
+                result.insert(type)
             }
 
             if hasGradleMarker(in: directory) {
+                // Every Gradle project has a `.gradle` folder, which this type owns.
                 result.insert(.androidGradle)
+                // `.gradleJVM` additionally offers the root `build/` folder and suggests
+                // `./gradlew build`. Android projects are excluded: their build output is
+                // per-module rather than at the root, and the row would duplicate the
+                // Gradle entry above under a label and command that do not fit.
+                let isAndroid = anyExists(["android/build.gradle", "android/build.gradle.kts"])
+                    || fm.fileExists(atPath: directory.appendingPathComponent("app/src/main/AndroidManifest.xml").path)
+                if !isAndroid, anyExists(["build.gradle", "build.gradle.kts"]) {
+                    result.insert(.gradleJVM)
+                }
             }
 
             if containsXcodeBundle(in: directory) {
                 result.insert(.xcode)
+            }
+
+            for type in extensionMarkedTypes(in: directory) {
+                result.insert(type)
             }
 
             return Array(result).sorted { String(describing: $0) < String(describing: $1) }
@@ -890,6 +926,35 @@ nonisolated final class DevScanner {
             detail: "\(artifactsSized) artifacts sized, \(groups.count) project groups"
         )
         return groups
+    }
+
+    /// Project types identified by a file *extension* rather than an exact name.
+    /// One directory listing serves all of them, since listing is the expensive part.
+    private func extensionMarkedTypes(in directory: URL) -> [ProjectType] {
+        guard let children = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else {
+            return []
+        }
+
+        var found: Set<ProjectType> = []
+        for child in children {
+            switch child.pathExtension.lowercased() {
+            case "csproj", "fsproj", "vbproj", "sln":
+                found.insert(.dotnet)
+            case "cabal":
+                found.insert(.haskellCabal)
+            case "tf":
+                found.insert(.terraform)
+            case "uproject":
+                found.insert(.unreal)
+            default:
+                continue
+            }
+        }
+        return Array(found)
     }
 
     private func containsXcodeBundle(in directory: URL) -> Bool {
@@ -1020,7 +1085,7 @@ nonisolated final class DevScanner {
         )
     }
 
-    private struct SizedArtifactIntermediate {
+    struct SizedArtifactIntermediate {
         let kind: DeletableArtifactKind
         let path: URL
         let projectRoot: URL
@@ -1028,11 +1093,12 @@ nonisolated final class DevScanner {
         let reinstallSafety: ReinstallSafetyStatus
     }
 
-    private nonisolated static func collectArtifacts(projectRoot root: URL, types: [ProjectType]) -> [SizedArtifactIntermediate] {
+    nonisolated static func collectArtifacts(projectRoot root: URL, types: [ProjectType]) -> [SizedArtifactIntermediate] {
         let fm = FileManager.default
         var artifacts: [SizedArtifactIntermediate] = []
+        let detected = Set(types)
 
-        func addIfDir(kind: DeletableArtifactKind, url: URL) {
+        func addIfDir(rule: ProjectArtifactRule, url: URL) {
             guard fm.fileExists(atPath: url.path) else { return }
             guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { return }
             // Also drops every artifact under an excluded project root, since the store
@@ -1044,16 +1110,17 @@ nonisolated final class DevScanner {
             }
             guard isDir else { return }
 
-            let reinstall = Self.reinstallCommand(kind: kind, root: root)
+            let reinstall = Self.reinstallCommand(rule: rule, root: root)
             let safety = SafetyInfo.forStaleProjectArtifact(
-                kind: kind,
+                kind: rule.kind,
                 path: url,
-                reinstallCommand: reinstall
+                reinstallCommand: reinstall,
+                level: rule.level
             )
-            let reinstallStatus = ReinstallSafetyEvaluator.evaluate(artifactKind: kind, artifactURL: url)
+            let reinstallStatus = ReinstallSafetyEvaluator.evaluate(artifactKind: rule.kind, artifactURL: url)
             artifacts.append(
                 SizedArtifactIntermediate(
-                    kind: kind,
+                    kind: rule.kind,
                     path: url,
                     projectRoot: root,
                     safetyInfo: safety,
@@ -1062,51 +1129,14 @@ nonisolated final class DevScanner {
             )
         }
 
-        var hasNode = false
-        var hasRust = false
-        var hasFlutter = false
-        var hasPython = false
-        var hasAndroidGradle = false
-        var hasXcode = false
-        for t in types {
-            switch t {
-            case .node: hasNode = true
-            case .rust: hasRust = true
-            case .flutter: hasFlutter = true
-            case .python: hasPython = true
-            case .androidGradle: hasAndroidGradle = true
-            case .xcode: hasXcode = true
-            }
-        }
-
-        if hasNode,
-           fm.fileExists(atPath: root.appendingPathComponent("package.json").path) {
-            addIfDir(kind: .nodeModules, url: root.appendingPathComponent("node_modules", isDirectory: true))
-        }
-
-        if hasRust,
-           fm.fileExists(atPath: root.appendingPathComponent("Cargo.toml").path) {
-            addIfDir(kind: .target, url: root.appendingPathComponent("target", isDirectory: true))
-        }
-
-        if hasFlutter,
-           fm.fileExists(atPath: root.appendingPathComponent("pubspec.yaml").path) {
-            addIfDir(kind: .dartTool, url: root.appendingPathComponent(".dart_tool", isDirectory: true))
-            addIfDir(kind: .flutterBuild, url: root.appendingPathComponent("build", isDirectory: true))
-        }
-
-        if hasPython {
-            addIfDir(kind: .venv, url: root.appendingPathComponent("venv", isDirectory: true))
-            addIfDir(kind: .venv, url: root.appendingPathComponent(".venv", isDirectory: true))
-        }
-
-        if hasAndroidGradle {
-            addIfDir(kind: .dotGradle, url: root.appendingPathComponent(".gradle", isDirectory: true))
-        }
-
-        if hasXcode {
-            addIfDir(kind: .pods, url: root.appendingPathComponent("Pods", isDirectory: true))
-            addIfDir(kind: .pods, url: root.appendingPathComponent("ios").appendingPathComponent("Pods", isDirectory: true))
+        for rule in ProjectArtifactCatalog.rules where detected.contains(rule.projectType) {
+            // The rule's own anchor is re-checked even though `listTypes` already matched
+            // the project type, because one type can cover several markers: a Python
+            // project with `requirements.txt` but no `tox.ini` must not offer `.tox`.
+            guard rule.matchesRoot(root) else { continue }
+            let artifact = root.appendingPathComponent(rule.folder, isDirectory: true)
+            guard !rule.refusesArtifact(at: artifact) else { continue }
+            addIfDir(rule: rule, url: artifact)
         }
 
         var unique: [String: SizedArtifactIntermediate] = [:]
@@ -1116,25 +1146,23 @@ nonisolated final class DevScanner {
         return Array(unique.values)
     }
 
-    private nonisolated static func reinstallCommand(kind: DeletableArtifactKind, root: URL) -> String? {
-        switch kind {
-        case .nodeModules:
+    private nonisolated static func reinstallCommand(rule: ProjectArtifactRule, root: URL) -> String? {
+        switch rule.reinstall {
+        case .command(let template):
+            return template.replacingOccurrences(of: "{root}", with: root.path)
+        case .guidance(let text):
+            return text
+        case .nodePackageManager:
             let pm = NodePackageManager.detect(in: root)
             return "cd \"\(root.path)\" && \(pm.installCommand)"
-        case .target:
-            return "cd \"\(root.path)\" && cargo build"
-        case .venv:
-            return "Use your usual steps to recreate the Python environment for this folder."
-        case .dotGradle:
-            return "Run your usual project build so Android or Java tools fetch what they need again."
-        case .pods:
+        case .cocoaPods:
             let ios = root.appendingPathComponent("ios", isDirectory: true)
             if FileManager.default.fileExists(atPath: ios.appendingPathComponent("Podfile").path) {
                 return "cd \"\(ios.path)\" && pod install"
             }
             return "cd \"\(root.path)\" && pod install"
-        case .dartTool, .flutterBuild:
-            return "cd \"\(root.path)\" && flutter pub get"
+        case .none:
+            return nil
         }
     }
 }
