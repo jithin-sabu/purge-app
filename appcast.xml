@@ -3,6 +3,25 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.4.0</title>
+      <pubDate>Fri, 28 Aug 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>19</sparkle:version>
+      <sparkle:shortVersionString>1.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Purge now finds leftover build files for 23 kinds of project, up from 6. Elixir and Erlang, Maven, Gradle, sbt, .NET, PHP, Ruby, Haskell, Zig, OCaml, CMake, Swift packages, Terraform, Godot, Unity and Unreal are all recognized now, along with the folders Next.js, Nuxt, SvelteKit, Astro and Angular leave behind and the caches kept by pytest, mypy, ruff and tox. Every row names the command that brings the folder back. This release also fixes a crash when scanning a second time, where starting a new scan while results from an earlier one were still on screen could quit Purge.</li>
+          <li>Many of the new folders have ordinary names like bin, obj, vendor and Library, so Purge no longer decides anything from a folder's name alone. A folder is offered only when the directory holding it is provably a project of the matching kind, proven by a real project file sitting beside it, so your own folders that happen to share those names are never listed. Unity, Unreal and Terraform go a step further and are listed as Check First rather than Safe to Clean, shown for review but never removed by one-click or scheduled cleaning, and a Terraform folder holding infrastructure state is not offered at all.</li>
+          <li>Size comparisons now measure against computing history rather than photos and hours of video, so a result reads as "82x the original DOOM" or "19 CDs". They appear on the results screen, after a scan finishes, and against your lifetime total in About.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.4.0/Purgev1.4.0.dmg"
+        sparkle:edSignature="rKLLh10I0PCb7U5qA1czuav731UzS4c+LY6hd6w+8HwXezlbBmuZkhEZfUWdi5IPLoSj0OR75xcRwoJb1EnrAw=="
+        length="7308587"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.3.3</title>
       <pubDate>Thu, 13 Aug 2026 12:00:00 +0000</pubDate>
       <sparkle:version>18</sparkle:version>
