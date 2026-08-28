@@ -848,27 +848,26 @@ private struct DuplicateGroupCard: View {
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(
-            "\(section.displayedCopyCount) identical copies, \(formatBytes(section.group.sizeBytes)) each"
-        )
+        .accessibilityLabel("\(section.displayedCopyCount) identical copies")
     }
 
     private var header: some View {
         HStack(spacing: 6) {
+            // Same colour as the title beside it: this marks the card as a group,
+            // it isn't a warning, so it shouldn't pull the eye the way the yellow
+            // check tint did.
             Image(systemName: "square.on.square")
                 .imageScale(.small)
-                .foregroundStyle(AppColors.tagCheckText)
+                .foregroundStyle(AppColors.textSecondary)
                 .accessibilityHidden(true)
 
-            Text("\(section.displayedCopyCount) identical copies · \(formatBytes(section.group.sizeBytes)) each")
+            // No size here. Every copy is the same size and each row already shows
+            // it, so a "9.4 MB each" and a "free 9.4 MB" on the header just repeated
+            // the one number the rows carry — three sizes for a two-copy set.
+            Text("\(section.displayedCopyCount) identical copies")
                 .foregroundStyle(AppColors.textSecondary)
 
-            Spacer(minLength: 8)
-
-            // States the prize without naming a winner: which copy to keep is the
-            // user's call, so this never says "delete the one in Downloads".
-            Text("Keep one to free \(formatBytes(section.displayedReclaimableBytes))")
-                .foregroundStyle(AppColors.textTertiary)
+            Spacer(minLength: 0)
         }
         .font(AppStyle.Typography.metadataEmphasis)
         .lineLimit(1)
