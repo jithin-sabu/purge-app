@@ -290,6 +290,8 @@ struct DuplicateFileDetectorTests {
 
         let section = try? #require(sections.first)
         #expect(section?.displayedCopyCount == 2)
+        // Removable copies exclude the one keeper, matching the reclaimable bytes.
+        #expect(section?.displayedReclaimableCount == 1)
         #expect(section?.displayedReclaimableBytes == 1_000)
         // The index still believes there are three.
         #expect(section?.group.copyCount == 3)
