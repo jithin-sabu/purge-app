@@ -265,11 +265,16 @@ struct LargeFilesView: View {
                             id: Self.duplicatesFilterID,
                             title: "Duplicates",
                             systemImage: "square.on.square",
+                            // The count of *removable* copies — one keeper per
+                            // group excluded — so it answers "what here is
+                            // redundant?" and agrees with the reclaimable bytes
+                            // rather than double-counting the copy worth keeping.
+                            //
                             // Counted from the sections the list would draw, not
                             // from the query matches: a query matching one copy
                             // expands to its whole group, so counting matches
                             // directly would advertise fewer rows than appear.
-                            count: duplicateSections.reduce(0) { $0 + $1.displayedCopyCount },
+                            count: duplicateSections.reduce(0) { $0 + $1.displayedReclaimableCount },
                             tier: .checkFirst
                         )
                     }

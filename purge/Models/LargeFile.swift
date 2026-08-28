@@ -203,6 +203,13 @@ nonisolated enum LargeFileCategoryFilter {
         /// before the index is pruned.
         var displayedCopyCount: Int { memberIndices.count }
 
+        /// How many copies here are *removable* — every rendered copy but the one
+        /// worth keeping. This is what the Duplicates chip counts: counting all
+        /// copies would include the keeper and overstate the redundancy, the same
+        /// way `group.reclaimableBytes` excludes one copy from the space it
+        /// promises. Derived from the rendered rows so it can never exceed them.
+        var displayedReclaimableCount: Int { max(displayedCopyCount - 1, 0) }
+
         /// Space freed by keeping one of the rendered copies. Ordering the list
         /// reads this rather than `group.reclaimableBytes` for the same reason:
         /// groups must sort by the number the header shows.
