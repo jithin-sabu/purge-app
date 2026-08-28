@@ -746,6 +746,9 @@ nonisolated final class DevScanner {
         let roots = [
             home,
             home.appendingPathComponent("Developer", isDirectory: true),
+            home.appendingPathComponent("developer", isDirectory: true),
+            home.appendingPathComponent("Development", isDirectory: true),
+            home.appendingPathComponent("development", isDirectory: true),
             home.appendingPathComponent("Documents", isDirectory: true),
             home.appendingPathComponent("Desktop", isDirectory: true),
             home.appendingPathComponent("Downloads", isDirectory: true),
