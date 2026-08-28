@@ -75,6 +75,7 @@ Find space-hogging personal files without digging through folders:
 - **Search** filters the list as you type, matching the file name, the folder it sits in, and its source label
 - Filter by **size** (5 MB to 1 GB) and **last used** (any time up to over 1 year ago)
 - Category chips for videos, audio, images, PDFs, archives, documents, AI models, and other files
+- **Duplicates**: a byte-for-byte scan finds identical copies, groups them together, and shows how much you'd reclaim by keeping one. A **Duplicates** chip gathers them in one place; Purge never picks which copy to keep — that's your call
 - Sort by size, date, or name; select files and review before deleting
 - **Quick Look** preview and **Reveal in Finder** from each row
 - Deletions move files to **Trash**, so nothing is permanently erased
@@ -105,13 +106,13 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 - **Clean**: one-click cleanup from the sidebar. The button names the exact amount it will move, and only touches Safe to Clean items, with git and lockfile checks
 - **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete
 - **Clean Safe Files**: same safe cleanup from the menu bar
-- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning**, choose **How often** (weekly, monthly, or every 3 months) and **Untouched for** (30 days to 12 months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
+- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning** and choose **How often** (weekly, monthly, or every 3 months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
 - All deletions move items to **Trash**, not permanent removal
 
 ### Settings
 
 - **Appearance**: Light, Dark, or System
-- **Cleaning Schedule**: automatic safe cleanup with frequency, staleness threshold, next-clean date, and a button to run a scheduled clean immediately to confirm it works
+- **Cleaning Schedule**: automatic safe cleanup with a frequency, the next-clean date, and a summary of the last clean
 - **Developer Projects**: stale-project threshold for developer artifact scanning
 - **Excluded from scans**: folders you've told Purge to leave alone, each with its current size. Right-click any scan result and choose **Exclude from scans** to add one. Excluding only ever narrows what Purge looks at
 - **Cleaning History**: every automatic and manual clean, with the space freed and the item count. Open one to see what was moved to the Trash and what was skipped
@@ -119,7 +120,7 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 ### More
 
 - **First-run onboarding**: welcome, permissions (Full Disk Access and optional login item), first scan, results review, and a safe clean walkthrough
-- **Menu bar companion**: recoverable space at a glance, quick open, scan/clean actions, and all-time cleaned total
+- **Menu bar companion**: recoverable space at a glance, quick open, and scan/clean actions
 - **Disk summary**: sidebar shows used/free space and how much is safe to recover
 - **In-app updates**: the About screen checks for, downloads, and installs new versions
 
@@ -127,8 +128,8 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 
 | Shortcut | Action |
 |----------|--------|
-| ⌘R | Rescan the current tab |
-| ⇧⌘R | Scan All: rescan App Caches and Dev Tools together |
+| ⌘R | Scan — rescan App Caches and Dev Tools |
+| ⇧⌘R | Scan All — the same rescan, from any tab |
 | ⌘1–⌘3 | Filter by All, Safe to Clean, or Check First |
 
 ---
