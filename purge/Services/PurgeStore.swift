@@ -57,6 +57,22 @@ final class LargeFileDuplicateIndex: ObservableObject {
     }
 }
 
+/// One duplicate set in the cleanup review: its copies and the keeper suggested
+/// for them. `id` is the group id, so the sheet can key its per-set keeper choice.
+nonisolated struct DuplicateCopySet: Identifiable {
+    let id: String
+    let copies: [LargeFile]
+    let suggestedKeeperID: String
+}
+
+/// A pending "keep one of each, delete the rest" review across every duplicate
+/// set. `id` is derived from the sets so `.sheet(item:)` doesn't re-present the
+/// same review, but changes when the sets do (a scan or an earlier delete).
+nonisolated struct DuplicateCleanupRequest: Identifiable {
+    let sets: [DuplicateCopySet]
+    var id: String { sets.map(\.id).joined(separator: "|") }
+}
+
 /// Scan-tab selection (app caches, dev tools, simulators, project artifacts) kept in
 /// its own observable, held as a plain `let` on the store (NOT @Published), so a
 /// toggle re-renders only the views that display selection — never the results List
@@ -199,6 +215,9 @@ final class PurgeStore: ObservableObject {
     let scanSelection = ScanSelection()
     @Published var isScanningLargeFiles = false
     @Published var showLargeFileDeletionSheet = false
+    /// The duplicate-cleanup review awaiting confirmation, or nil when closed.
+    /// Drives a `.sheet(item:)`.
+    @Published var pendingDuplicateCleanup: DuplicateCleanupRequest?
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:] {
         didSet { invalidateSafeCleanupSummary() }
@@ -1055,9 +1074,50 @@ final class PurgeStore: ObservableObject {
         showLargeFileDeletionSheet = false
     }
 
+    /// Opens the duplicate-cleanup review: one keeper suggested per set, every
+    /// other copy bound for Trash. Nothing deletes here — the review names the rule
+    /// and shows the kept copy against the trashed ones, and the keeper is
+    /// changeable, so the app never removes a copy the user hasn't seen and agreed
+    /// to (issue #17).
+    func requestDuplicateCleanup() {
+        let index = largeFileDuplicates.index
+        guard !index.isEmpty else { return }
+        let byID = Dictionary(largeFiles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let sets: [DuplicateCopySet] = index.groups.compactMap { group in
+            let copies = group.fileIDs.compactMap { byID[$0] }
+            guard copies.count > 1 else { return nil }
+            let keeper = DuplicateKeeper.suggestedKeeperID(among: copies) ?? copies[0].id
+            return DuplicateCopySet(id: group.id, copies: copies, suggestedKeeperID: keeper)
+        }
+        guard !sets.isEmpty else { return }
+        pendingDuplicateCleanup = DuplicateCleanupRequest(sets: sets)
+    }
+
+    func dismissDuplicateCleanup() {
+        pendingDuplicateCleanup = nil
+    }
+
+    /// Trashes every copy except the chosen keeper in each set. `keeperByGroupID`
+    /// carries the user's final pick per set (defaulting to the suggestion). Runs
+    /// through the same delete path as the selection flow, so it gets the same
+    /// Trash safety, progress overlay, and history entry.
+    func confirmDuplicateCleanup(keeperByGroupID: [String: String]) async {
+        guard let request = pendingDuplicateCleanup else { return }
+        pendingDuplicateCleanup = nil
+        var targets: [LargeFile] = []
+        for copySet in request.sets {
+            let keeper = keeperByGroupID[copySet.id] ?? copySet.suggestedKeeperID
+            targets.append(contentsOf: copySet.copies.filter { $0.id != keeper })
+        }
+        await performLargeFileDeletion(targets: targets)
+    }
+
     func confirmLargeFileDeletion() async {
         showLargeFileDeletionSheet = false
-        let targets = selectedLargeFiles
+        await performLargeFileDeletion(targets: selectedLargeFiles)
+    }
+
+    private func performLargeFileDeletion(targets: [LargeFile]) async {
         guard !targets.isEmpty, !isDeleting else { return }
 
         // A row can stand for several files (an AI model is a manifest plus its

@@ -394,7 +394,10 @@ struct LargeFilesView: View {
             selection: store.largeFileSelection,
             visibleIDs: visibleIDs,
             sort: sortOptionBinding,
-            onToggleAll: toggleSelectAll
+            onToggleAll: toggleSelectAll,
+            onKeepOneOfEach: isDuplicatesFilterActive
+                ? { store.requestDuplicateCleanup() }
+                : nil
         )
     }
 
@@ -668,6 +671,9 @@ private struct LargeFileSelectAllBar: View {
     let visibleIDs: [String]
     @Binding var sort: SortOption
     let onToggleAll: () -> Void
+    /// Shown only under the Duplicates filter: selects every copy but one per group
+    /// and opens the delete confirmation. nil elsewhere.
+    var onKeepOneOfEach: (() -> Void)?
 
     private var state: SelectAllTriState {
         guard !visibleIDs.isEmpty else { return .none }
@@ -686,6 +692,22 @@ private struct LargeFileSelectAllBar: View {
             .disabled(visibleIDs.isEmpty)
 
             Spacer()
+
+            if let onKeepOneOfEach {
+                // Sits with the sort control, not beside "Select All": both are
+                // AppButtonStyle boxes, so grouping them keeps the boxed controls on
+                // one baseline instead of one box riding proud of the plain-text
+                // checkbox. A real Button is fine here — the bar is above the List,
+                // not inside it, so it can't trigger the scroll-to-clicked-row jump
+                // the rows guard against.
+                Button(action: onKeepOneOfEach) {
+                    Label("Delete extra copies", systemImage: "trash")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .fixedSize()
+                .help("Keep one copy of each set and review the rest before deleting")
+            }
 
             // Always present, even under Duplicates where it reorders whole groups
             // rather than rows. Its absence would shrink this bar, and the scan-tab
@@ -1291,6 +1313,196 @@ struct LargeFileDeletionConfirmSheet: View {
                 .fill(AppColors.tagCheckBg)
         )
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The dialog's primary button: a solid red fill with white text, the standard
+/// destructive treatment. Metrics track `AppButtonStyle(.bordered)` so it and
+/// Cancel keep one height.
+private struct SolidDestructiveButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                    .fill(AppColors.destructiveFill)
+            )
+            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
+    }
+}
+
+/// Reviews a "keep one of each, delete the rest" before anything moves.
+///
+/// This is where the selection method is visible: it names the rule up top and,
+/// per set, marks the copy being kept against the ones going to Trash. The keeper
+/// is a tap away from changing, so a user who disagrees with the suggestion moves
+/// it here rather than cancelling and hunting through the list.
+struct DuplicateCleanupSheet: View {
+    let request: DuplicateCleanupRequest
+    let onCancel: () -> Void
+    let onConfirm: ([String: String]) -> Void
+
+    @State private var keeperByGroup: [String: String]
+
+    init(
+        request: DuplicateCleanupRequest,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping ([String: String]) -> Void
+    ) {
+        self.request = request
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+        _keeperByGroup = State(
+            initialValue: Dictionary(
+                uniqueKeysWithValues: request.sets.map { ($0.id, $0.suggestedKeeperID) }
+            )
+        )
+    }
+
+    private func keeperID(for set: DuplicateCopySet) -> String {
+        keeperByGroup[set.id] ?? set.suggestedKeeperID
+    }
+
+    /// One copy per set is kept, the rest go, so this never changes as keepers move.
+    private var deleteCount: Int {
+        request.sets.reduce(0) { $0 + $1.copies.count - 1 }
+    }
+
+    private var reclaimedBytes: Int64 {
+        request.sets.reduce(Int64(0)) { total, set in
+            let keeper = keeperID(for: set)
+            return total + set.copies.filter { $0.id != keeper }.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+                Text("Delete extra copies")
+                    .font(AppStyle.Typography.pageTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+
+                Text("Every copy is identical, so keeping any one is safe. Purge keeps the copy in a real folder over one in Downloads, a cache, or a build folder, and prefers the original name. The rest go to Trash. Tap a copy to keep it instead.")
+                    .font(.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            ScrollView {
+                LazyVStack(spacing: AppStyle.Spacing.small) {
+                    ForEach(request.sets) { set in
+                        setCard(set)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(minHeight: 280)
+
+            HStack(spacing: AppStyle.Spacing.small) {
+                Text("Keeping \(request.sets.count), freeing \(formatBytes(reclaimedBytes))")
+                    .font(AppStyle.Typography.metadataEmphasis)
+                    .foregroundStyle(AppColors.textSecondary)
+
+                Spacer()
+
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(AppButtonStyle(variant: .bordered))
+                    .keyboardShortcut(.cancelAction)
+
+                Button("Move \(deleteCount) to Trash") {
+                    onConfirm(keeperByGroup)
+                }
+                .buttonStyle(SolidDestructiveButtonStyle())
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(AppStyle.Spacing.large)
+        .frame(minWidth: 580, minHeight: 500)
+        .background(AppColors.bgBase)
+    }
+
+    /// One duplicate set as a card, matching the duplicate rows on the tab: a
+    /// header naming the file and its size, then a row per copy.
+    private func setCard(_ set: DuplicateCopySet) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
+                Text(set.copies.first?.displayName ?? "Duplicate set")
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: AppStyle.Spacing.xSmall)
+                Text("\(formatBytes(set.copies.first?.sizeBytes ?? 0)) each")
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+            .padding(.horizontal, AppStyle.Spacing.small)
+            .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+
+            ForEach(Array(set.copies.enumerated()), id: \.element.id) { index, file in
+                if index > 0 {
+                    Rectangle()
+                        .fill(AppColors.borderSubtle)
+                        .frame(height: 0.5)
+                }
+                copyRow(set: set, file: file)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private func copyRow(set: DuplicateCopySet, file: LargeFile) -> some View {
+        let isKeeper = keeperID(for: set) == file.id
+        // Copies in a set share a name, so the folder is what tells them apart.
+        return HStack(spacing: AppStyle.Spacing.small) {
+            Image(systemName: isKeeper ? "largecircle.fill.circle" : "circle")
+                .foregroundStyle(isKeeper ? AppColors.buttonPrimaryBg : AppColors.textTertiary)
+                .accessibilityHidden(true)
+
+            Text(file.path.deletingLastPathComponent().path)
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(isKeeper ? AppColors.textPrimary : AppColors.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: AppStyle.Spacing.xSmall)
+
+            statusTag(isKeeper: isKeeper)
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+        .contentShape(Rectangle())
+        .onTapGesture { keeperByGroup[set.id] = file.id }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(file.path.deletingLastPathComponent().path)
+        .accessibilityValue(isKeeper ? "Keeping" : "Moving to Trash")
+        .accessibilityAddTraits(isKeeper ? [.isSelected] : [])
+    }
+
+    /// Reuses the app's tag palette: green for the copy that stays, red for the
+    /// ones headed to Trash, so the plan reads at a glance.
+    private func statusTag(isKeeper: Bool) -> some View {
+        Text(isKeeper ? "Keep" : "Trash")
+            .font(AppStyle.Typography.metadataEmphasis)
+            .foregroundStyle(isKeeper ? AppColors.tagSafeText : AppColors.tagDangerText)
+            .padding(.horizontal, AppStyle.Spacing.xSmall)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isKeeper ? AppColors.tagSafeBg : AppColors.tagDangerBg)
+            )
     }
 }
 
