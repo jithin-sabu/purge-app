@@ -86,6 +86,13 @@ struct ContentView: View {
                 onConfirm: { Task { await store.confirmLargeFileDeletion() } }
             )
         }
+        .sheet(item: $store.pendingDuplicateCleanup) { request in
+            DuplicateCleanupSheet(
+                request: request,
+                onCancel: { store.dismissDuplicateCleanup() },
+                onConfirm: { keepers in Task { await store.confirmDuplicateCleanup(keeperByGroupID: keepers) } }
+            )
+        }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
             if isLifecycleActive, let session = store.interactiveSafeCleanupSession {

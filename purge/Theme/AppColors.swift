@@ -35,6 +35,9 @@ enum AppColors {
     static let tagCheckBg = Color(light: .hex(0xFBEED8), dark: .hex(0x332910))
     static let tagDangerText = Color(light: .hex(0xC5392E), dark: .hex(0xF2685C))
     static let tagDangerBg = Color(light: .hex(0xFBE6E3), dark: .hex(0x321B19))
+    /// Bright, saturated red for a solid destructive button fill (white text on
+    /// top). The muted `tagDangerText` reads salmon-pale as a fill on dark.
+    static let destructiveFill = Color(light: .hex(0xE5322A), dark: .hex(0xFF3B30))
     static let tagUnsureText = Color(light: .hex(0x5C5E66), dark: .hex(0xA7A9B2))
     static let tagUnsureBg = Color(light: .hex(0xEDEDEF), dark: .hex(0x26272D))
 
