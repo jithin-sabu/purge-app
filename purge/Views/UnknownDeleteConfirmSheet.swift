@@ -22,79 +22,118 @@ struct UnknownDeleteConfirmSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "questionmark.circle.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(.gray)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("We are not sure what this is")
-                        .font(.title3.weight(.bold))
-                    Text("Purge could not identify this file. Only delete it if you know what it is. We cannot put it back afterward.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            header
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
                 Text(primaryTitle)
-                    .font(.headline)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 if candidates.count > 1 {
-                    Text("\(candidates.count) locations will be removed:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text("\(candidates.count) locations will be removed.")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
                 }
+            }
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(candidates, id: \.path) { item in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(locationLabel(for: item))
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(3)
-                                Text(item.formattedSize)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+            ScrollView {
+                LazyVStack(spacing: AppStyle.Spacing.small) {
+                    ForEach(candidates, id: \.path) { item in
+                        locationCard(item)
                     }
                 }
-                .frame(maxHeight: 180)
-
-                Text("Combined size: \(formatBytes(totalBytes))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Divider()
-
-                Text(SafetyLevel.unknown.displayName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(SafetyLevel.unknown.color)
-
-                Text(sharedExplanation)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 2)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.secondary.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(minHeight: 200)
 
-            Spacer(minLength: 0)
+            explanationCard
 
-            HStack {
+            HStack(spacing: AppStyle.Spacing.small) {
+                Text("Freeing \(formatBytes(totalBytes))")
+                    .font(AppStyle.Typography.metadataEmphasis)
+                    .foregroundStyle(AppColors.textSecondary)
+
                 Spacer()
+
                 Button("Cancel", action: onCancel)
+                    .buttonStyle(AppButtonStyle(variant: .bordered))
                     .keyboardShortcut(.cancelAction)
-                Button("Continue…", role: .destructive, action: onConfirm)
+
+                Button("Continue") {
+                    onConfirm()
+                }
+                .buttonStyle(SolidDestructiveButtonStyle())
+                .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
-        .frame(minWidth: 480, minHeight: 360)
+        .padding(AppStyle.Spacing.large)
+        .frame(minWidth: 520, minHeight: 460)
+        .background(AppColors.bgBase)
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: AppStyle.Spacing.small) {
+            Image(systemName: "questionmark.circle.fill")
+                .font(.system(size: 26))
+                .foregroundStyle(AppColors.tagCheckText)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                Text("We're not sure what this is")
+                    .font(AppStyle.Typography.pageTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                Text("Purge couldn't identify this file. Only delete it if you know what it is. It can't be put back afterward.")
+                    .font(.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func locationCard(_ item: PurgeStore.DeletionCandidate) -> some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Text(locationLabel(for: item))
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(item.formattedSize)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private var explanationCard: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            Text(SafetyLevel.unknown.displayName)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.tagDangerText)
+
+            if !sharedExplanation.isEmpty {
+                Text(sharedExplanation)
+                    .font(.callout)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppStyle.Spacing.small)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+                .fill(AppColors.tagDangerBg)
+        )
     }
 }

@@ -1334,6 +1334,26 @@ struct AppButtonStyle: ButtonStyle {
     }
 }
 
+/// A delete confirmation's primary button: a solid red fill with white text, the
+/// standard destructive treatment shared by every "move to Trash" sheet. Metrics
+/// track `AppButtonStyle(.bordered)` so it and Cancel keep one height.
+struct SolidDestructiveButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                    .fill(AppColors.destructiveFill)
+            )
+            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
+    }
+}
+
 /// Chip title that reserves semibold width so selection doesn't shift neighbors.
 struct AppChipTitle: View {
     let text: String

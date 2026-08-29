@@ -1215,60 +1215,100 @@ struct LargeFileDeletionConfirmSheet: View {
         return file.displayName
     }
 
+    private var sortedFiles: [LargeFile] {
+        files.sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Move selected files to Trash?")
-                .font(.title3.weight(.semibold))
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+                Text("Move selected files to Trash?")
+                    .font(AppStyle.Typography.pageTitle)
+                    .foregroundStyle(AppColors.textPrimary)
 
-            Text("These are personal files you selected. Purge will move only these files to Trash.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            List(files.sorted { $0.sizeBytes > $1.sizeBytes }) { file in
-                HStack(spacing: 10) {
-                    Image(systemName: file.category.symbolName)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(file.displayName)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text(file.path.deletingLastPathComponent().path)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Spacer()
-                    Text(file.formattedSize)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
+                Text("These are your own files. Purge moves only the ones you picked to Trash, and you can put them back if you change your mind.")
+                    .font(.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .listStyle(.plain)
-            .frame(minHeight: 220)
+
+            ScrollView {
+                LazyVStack(spacing: AppStyle.Spacing.small) {
+                    ForEach(sortedFiles) { file in
+                        fileCard(file)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(minHeight: 260)
 
             if !fullyConsumedDuplicateGroups.isEmpty {
                 allCopiesWarning
             }
 
-            HStack {
-                Text("Total: \(formatBytes(totalBytes))")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+            HStack(spacing: AppStyle.Spacing.small) {
+                Text("Freeing \(formatBytes(totalBytes))")
+                    .font(AppStyle.Typography.metadataEmphasis)
+                    .foregroundStyle(AppColors.textSecondary)
+
                 Spacer()
+
                 Button("Cancel", action: onCancel)
+                    .buttonStyle(AppButtonStyle(variant: .bordered))
                     .keyboardShortcut(.cancelAction)
-                Button("Move to Trash", role: .destructive) {
+
+                Button("Move \(files.count) to Trash") {
                     onConfirm()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(SolidDestructiveButtonStyle())
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding()
-        .frame(minWidth: 560, minHeight: 420)
+        .padding(AppStyle.Spacing.large)
+        .frame(minWidth: 580, minHeight: 500)
+        .background(AppColors.bgBase)
+    }
+
+    /// One selected file as a card, matching the scan rows: its icon, name, and
+    /// folder, with the size on the right.
+    private func fileCard(_ file: LargeFile) -> some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Image(systemName: file.category.symbolName)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.displayName)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(file.path.deletingLastPathComponent().path)
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.xSmall)
+
+            Text(file.formattedSize)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
     }
 
     /// How many fully-selected groups get named before the note switches to a
@@ -1313,26 +1353,6 @@ struct LargeFileDeletionConfirmSheet: View {
                 .fill(AppColors.tagCheckBg)
         )
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// The dialog's primary button: a solid red fill with white text, the standard
-/// destructive treatment. Metrics track `AppButtonStyle(.bordered)` so it and
-/// Cancel keep one height.
-private struct SolidDestructiveButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                    .fill(AppColors.destructiveFill)
-            )
-            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
     }
 }
 
