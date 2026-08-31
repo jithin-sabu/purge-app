@@ -604,6 +604,18 @@ private extension View {
         }
     }
 
+    /// Suppresses the system focus ring on the search field (macOS 14+); a no-op on
+    /// older systems. The field draws its own capsule border on focus, and the ring
+    /// drawn on top of it stayed after the field lost focus.
+    @ViewBuilder
+    func focusEffectDisabledIfAvailable() -> some View {
+        if #available(macOS 14.0, *) {
+            focusEffectDisabled()
+        } else {
+            self
+        }
+    }
+
 }
 
 /// Delete button extracted so its count/label/enabled state observe the selection
@@ -732,6 +744,9 @@ private struct LargeFileSearchField: View {
 
     @FocusState private var isFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Local mouse-down monitor installed only while the field is focused; see
+    /// `installOutsideClickResign`.
+    @State private var outsideClickMonitor: Any?
 
     /// Matches FilterChip's metrics so the row's controls share a baseline.
     private static let horizontalPadding: CGFloat = 10
@@ -753,6 +768,7 @@ private struct LargeFileSearchField: View {
                 .font(.system(size: Self.labelSize))
                 .foregroundStyle(AppColors.textPrimary)
                 .focused($isFocused)
+                .focusEffectDisabledIfAvailable()
                 .accessibilityLabel("Search large files by name")
                 // Escape clears rather than just unfocusing: an emptied field is the
                 // state the user wants back, and it's the one AppKit search fields
@@ -804,6 +820,38 @@ private struct LargeFileSearchField: View {
         .onTapGesture { isFocused = true }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
+        .onChange(of: isFocused) { focused in
+            if focused {
+                installOutsideClickResign()
+            } else {
+                removeOutsideClickResign()
+            }
+        }
+        .onDisappear { removeOutsideClickResign() }
+    }
+
+    /// Clicks outside this capsule must drop focus, but SwiftUI leaves a focused
+    /// TextField's first responder in place when the click lands on anything
+    /// non-focusable — list rows, buttons, empty space — which is why the capsule
+    /// border used to stick around. While focused, a local monitor resigns first
+    /// responder for any mouse-down that didn't land on the field editor itself.
+    private func installOutsideClickResign() {
+        guard outsideClickMonitor == nil else { return }
+        outsideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            guard let window = event.window,
+                  let hitView = window.contentView?.hitTest(event.locationInWindow),
+                  hitView !== window.firstResponder
+            else { return event }
+            window.makeFirstResponder(nil)
+            return event
+        }
+    }
+
+    private func removeOutsideClickResign() {
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
     }
 }
 
