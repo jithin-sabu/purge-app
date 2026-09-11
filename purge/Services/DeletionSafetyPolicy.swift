@@ -277,7 +277,9 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/Cursor/CachedData",
             "\(home)/Library/Application Support/Cursor/User/workspaceStorage",
             "\(home)/Library/Caches/JetBrains",
-            "\(home)/Library/Application Support/JetBrains",
+            // NOTE: `~/Library/Application Support/JetBrains` is deliberately NOT on
+            // the allowlist. It holds installed plugins and all IDE settings (not a
+            // cache), so it must never be scanned, sized, or deleted.
             // AUDIT: `Zed/db` is Zed's local state database (not a pure cache).
             // Re-created on next launch but may reset local editor state —
             // Check First, not Safe.
@@ -646,6 +648,16 @@ enum DeletionSafetyPolicy {
         if isProtectedSystemCache(standardized)
             || isProtectedAppContainer(standardized)
             || isProtectedLogFolder(standardized) {
+            return .blockedNeverDelete
+        }
+
+        // ~/Library/Application Support/JetBrains holds installed plugins and all
+        // IDE settings, not caches. Refuse it and every descendant up front, before
+        // isWhitelistedApplicationSupportCachePath can allow a subfolder that merely
+        // ends in "Cache" (e.g. a plugin's own cache dir). ~/Library/Caches/JetBrains
+        // is the real, rebuildable cache and is unaffected by this guard.
+        let jetBrainsAppSupport = "\(home)/Library/Application Support/JetBrains"
+        if path == jetBrainsAppSupport || path.hasPrefix(jetBrainsAppSupport + "/") {
             return .blockedNeverDelete
         }
 

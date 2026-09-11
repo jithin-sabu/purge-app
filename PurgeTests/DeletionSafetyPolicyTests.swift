@@ -365,6 +365,31 @@ struct WhitelistedAbsolutePrefixesTests {
         let url = TestPaths.homeURL("Library", "Application Support", "Cursor", "Cache")
         #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
     }
+
+    // ~/Library/Application Support/JetBrains holds plugins and settings, not caches.
+    // It must be refused whole and deep, even for descendants named "Cache" that the
+    // generic Application Support rule would otherwise allow. The real cache under
+    // ~/Library/Caches/JetBrains stays allowed.
+    @Test
+    func jetBrainsApplicationSupportRootIsBlocked() {
+        let url = TestPaths.homeURL("Library", "Application Support", "JetBrains")
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
+    }
+
+    @Test
+    func jetBrainsApplicationSupportCacheDescendantIsBlocked() {
+        let url = TestPaths.homeURL(
+            "Library", "Application Support", "JetBrains",
+            "IntelliJIdea2024.1", "plugins", "some-plugin", "Cache"
+        )
+        #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
+    }
+
+    @Test
+    func jetBrainsCachesFolderStaysAllowed() {
+        let url = TestPaths.homeURL("Library", "Caches", "JetBrains")
+        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    }
 }
 
 // MARK: - Group 3b: Adobe media caches under Application Support
