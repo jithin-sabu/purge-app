@@ -75,7 +75,7 @@ Find space-hogging personal files without digging through folders:
 - **Search** filters the list as you type, matching the file name, the folder it sits in, and its source label
 - Filter by **size** (5 MB to 1 GB) and **last used** (any time up to over 1 year ago)
 - Category chips for videos, audio, images, PDFs, archives, documents, AI models, and other files
-- **Duplicates**: a byte-for-byte scan finds identical copies, groups them together, and shows how much you'd reclaim by keeping one. A **Duplicates** chip gathers them in one place; Purge never picks which copy to keep — that's your call
+- **Duplicates**: a byte-for-byte scan finds identical copies, groups them together, and shows how much you'd reclaim by keeping one. A **Duplicates** chip gathers them in one place. **Keep one of each** clears a whole tab of duplicates in one go. It suggests a copy to keep per set and marks the rest for Trash, and you can move the keeper to a different copy before anything is deleted. Nothing is removed until you review and confirm
 - Sort by size, date, or name; select files and review before deleting
 - **Quick Look** preview and **Reveal in Finder** from each row
 - Deletions move files to **Trash**, so nothing is permanently erased
@@ -85,6 +85,16 @@ Large Files is separate from cache cleanup: these are your personal files, not r
 #### Local AI models
 
 Models you downloaded with **Ollama** or **LM Studio** are often the largest files on a Mac and are easy to forget. They appear in Large Files under the **AI Models** category, one row per model, named the way you installed it. Purge understands Ollama's content-addressed storage, so a model's size counts only the bytes that would actually be reclaimed rather than blobs shared with another model.
+
+### App Uninstaller
+
+Dragging an app to the Trash leaves most of it behind: caches, preferences, containers, saved state, logs, and login helpers pile up on disk. The Uninstaller removes the app and those leftovers in one pass.
+
+- Lists the apps you installed in **Applications** and **~/Applications**, skipping system apps and Purge itself. Each tile shows what an uninstall would free: the app bundle plus its removable leftovers
+- Select one or more apps, then review a per-app sheet that lists every item with its path and size and a safety label
+- Matching is strict, so uninstalling one app can't sweep in files shared across a vendor's apps. Exact bundle-id and app-group matches arrive checked; looser name-only matches arrive unchecked for you to confirm
+- A running app is asked to quit first, and only gracefully. If it won't, it's left installed and the rest of the batch still goes through
+- Everything confirmed moves to **Trash** through the same delete engine as the rest of Purge, so it can all come back
 
 ### Safety labels
 
@@ -106,7 +116,7 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 - **Clean**: one-click cleanup from the sidebar. The button names the exact amount it will move, and only touches Safe to Clean items, with git and lockfile checks
 - **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete
 - **Clean Safe Files**: same safe cleanup from the menu bar
-- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning** and choose **How often** (weekly, monthly, or every 3 months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
+- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning** and choose **How often** (weekly, monthly, every 3 months, or a **Custom** interval you set in days, weeks, or months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
 - All deletions move items to **Trash**, not permanent removal
 
 ### Settings
