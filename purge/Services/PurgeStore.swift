@@ -1350,6 +1350,11 @@ final class PurgeStore: ObservableObject {
     private func performUninstall(app: InstalledApp, targets: [UninstallItem]) async {
         guard !targets.isEmpty, !isDeleting else { return }
 
+        // A running app holds its bundle open, so quit it first: otherwise the
+        // bundle can trash while the process keeps running from the copy in the
+        // Trash, and its files may be locked. Best-effort and graceful.
+        await quitRunningApp(app)
+
         var urls: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
@@ -1416,6 +1421,21 @@ final class PurgeStore: ObservableObject {
         } catch {
             manualDeletionSession = nil
             errorMessage = "Unable to remove \(app.name). Please try again."
+        }
+    }
+
+    /// Asks a running app to quit and waits up to ~2s for it to close its files.
+    /// Graceful `terminate()`, never force: an app with unsaved work gets its own
+    /// chance to prompt. If it will not quit we proceed anyway, since trashing a
+    /// running bundle still succeeds.
+    private func quitRunningApp(_ app: InstalledApp) async {
+        guard let bundleID = app.bundleID else { return }
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        guard !running.isEmpty else { return }
+        for instance in running { instance.terminate() }
+        for _ in 0..<20 {
+            if NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty { return }
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
     }
 
