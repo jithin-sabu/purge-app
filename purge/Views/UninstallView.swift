@@ -131,18 +131,34 @@ struct UninstallView: View {
 
     // MARK: Grid
 
+    private var isLoadingApps: Bool {
+        store.isScanningInstalledApps && store.installedApps.isEmpty
+    }
+
     @ViewBuilder
     private var grid: some View {
-        if store.installedApps.isEmpty {
-            if store.isScanningInstalledApps {
+        if store.installedApps.isEmpty && !store.isScanningInstalledApps {
+            emptyState(
+                symbol: "app.badge",
+                title: "No apps found",
+                detail: "Purge looks in Applications and your home Applications folder."
+            )
+        } else {
+            // Crossfade the skeleton into the real grid instead of swapping view
+            // trees, so the load resolves smoothly rather than popping in.
+            ScanContentCrossfade(isLoading: isLoadingApps, contentAlignment: .top) {
                 skeletonGrid
-            } else {
-                emptyState(
-                    symbol: "app.badge",
-                    title: "No apps found",
-                    detail: "Purge looks in Applications and your home Applications folder."
-                )
+            } loaded: {
+                loadedGrid
             }
+        }
+    }
+
+    @ViewBuilder
+    private var loadedGrid: some View {
+        if store.installedApps.isEmpty {
+            // Held behind the skeleton while the first scan runs; nothing to show.
+            Color.clear
         } else if filteredApps.isEmpty {
             emptyState(
                 symbol: "magnifyingglass",
