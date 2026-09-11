@@ -178,7 +178,7 @@ struct UninstallView: View {
     private var skeletonGrid: some View {
         ScrollView {
             LazyVGrid(columns: Self.columns, spacing: 12) {
-                ForEach(0..<9, id: \.self) { _ in
+                ForEach(0..<18, id: \.self) { _ in
                     SkeletonAppTile()
                 }
             }
@@ -211,6 +211,12 @@ struct UninstallView: View {
 }
 
 // MARK: - App tile
+
+/// Shared so the real tile and the loading skeleton are the exact same size.
+private enum AppTileMetrics {
+    /// Height of the content column (icon + name + size), before the card padding.
+    static let contentHeight: CGFloat = 96
+}
 
 private struct AppTile: View {
     let app: InstalledApp
@@ -247,6 +253,7 @@ private struct AppTile: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .frame(height: AppTileMetrics.contentHeight)
         .padding(.horizontal, 12)
         .padding(.vertical, 14)
         .background {
@@ -313,6 +320,7 @@ private struct SkeletonAppTile: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .frame(height: AppTileMetrics.contentHeight)
         .padding(.horizontal, 12)
         .padding(.vertical, 14)
         .background {
