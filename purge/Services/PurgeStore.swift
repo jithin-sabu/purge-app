@@ -107,6 +107,7 @@ final class PurgeStore: ObservableObject {
         case appCaches = "App Caches"
         case devTools = "Dev Tools"
         case largeFiles = "Large Files"
+        case uninstaller = "Uninstall"
         case settings = "Settings"
         case about = "About"
 
@@ -116,6 +117,7 @@ final class PurgeStore: ObservableObject {
             case .appCaches: return "internaldrive"
             case .devTools: return "hammer"
             case .largeFiles: return "tray.full"
+            case .uninstaller: return "trash.square"
             case .settings: return "gearshape"
             case .about: return "info.circle"
             }
@@ -218,6 +220,22 @@ final class PurgeStore: ObservableObject {
     /// The duplicate-cleanup review awaiting confirmation, or nil when closed.
     /// Drives a `.sheet(item:)`.
     @Published var pendingDuplicateCleanup: DuplicateCleanupRequest?
+
+    // MARK: Uninstaller (issue #45)
+
+    /// Apps the picker offers. Sorted largest-first once sizes resolve.
+    @Published var installedApps: [InstalledApp] = []
+    @Published var isScanningInstalledApps = false
+    @Published private(set) var hasCompletedInstalledAppsScan = false
+    /// The app whose leftovers are under review, or nil while the picker shows.
+    @Published var selectedAppForUninstall: InstalledApp?
+    /// The chosen app's bundle plus its matched leftovers. `isSelected` lives on
+    /// the item here rather than a side observable: the list is short (a handful
+    /// of rows), so a toggle re-rendering it is not the scroll-reverting cost it
+    /// would be on the thousands-of-rows Large Files list.
+    @Published var uninstallItems: [UninstallItem] = []
+    @Published var isScanningUninstallLeftovers = false
+    @Published var showUninstallConfirm = false
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:] {
         didSet { invalidateSafeCleanupSummary() }
@@ -272,6 +290,7 @@ final class PurgeStore: ObservableObject {
     private let devScanner = DevScanner()
     private let largeFileScanner = LargeFileScanner()
     private let aiModelScanner = AIModelScanner()
+    private let uninstallScanner = AppUninstallScanner()
     private let duplicateDetector = DuplicateFileDetector()
     private let fileDeleter = FileDeleter()
     private let defaults = UserDefaults.standard
@@ -301,6 +320,8 @@ final class PurgeStore: ObservableObject {
     private var scanGeneration = 0
     private var largeFileScanGeneration = 0
     private var hasCompletedLargeFileScan = false
+    private var installedAppsScanGeneration = 0
+    private var uninstallLeftoverGeneration = 0
     /// The in-flight duplicate pass, so a new scan can abandon gigabytes of
     /// hashing nobody is waiting for any more.
     private var duplicateScanTask: Task<Void, Never>?
@@ -1204,6 +1225,197 @@ final class PurgeStore: ObservableObject {
         } catch {
             manualDeletionSession = nil
             errorMessage = "Unable to delete the selected files. Please try again."
+        }
+    }
+
+    // MARK: - Uninstaller (issue #45)
+
+    func scanInstalledAppsIfNeeded() async {
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
+        guard !isScanningInstalledApps, !hasCompletedInstalledAppsScan else { return }
+        await scanInstalledApps()
+    }
+
+    /// Populates the app picker. Apps stream in and are re-sorted largest-first as
+    /// their sizes land, the same progressive fill the other scans use.
+    func scanInstalledApps() async {
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
+        installedAppsScanGeneration += 1
+        let generation = installedAppsScanGeneration
+        isScanningInstalledApps = true
+        installedApps = []
+        defer {
+            if installedAppsScanGeneration == generation {
+                isScanningInstalledApps = false
+                hasCompletedInstalledAppsScan = true
+            }
+        }
+
+        var collected: [InstalledApp] = []
+        for await app in uninstallScanner.installedAppsStream() {
+            guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
+            collected.append(app)
+            installedApps = collected.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
+        }
+        guard installedAppsScanGeneration == generation else { return }
+        installedApps = collected.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
+    }
+
+    /// Enters the leftover review for `app`, or returns to the picker when nil.
+    func selectAppForUninstall(_ app: InstalledApp?) {
+        selectedAppForUninstall = app
+        uninstallItems = []
+        guard let app else {
+            uninstallLeftoverGeneration += 1 // abandon any in-flight leftover scan
+            return
+        }
+        Task { await scanUninstallLeftovers(for: app) }
+    }
+
+    func backToAppPicker() {
+        selectAppForUninstall(nil)
+    }
+
+    func scanUninstallLeftovers(for app: InstalledApp) async {
+        uninstallLeftoverGeneration += 1
+        let generation = uninstallLeftoverGeneration
+        isScanningUninstallLeftovers = true
+        uninstallItems = []
+        defer {
+            if uninstallLeftoverGeneration == generation {
+                isScanningUninstallLeftovers = false
+            }
+        }
+
+        var collected: [UninstallItem] = []
+        for await item in uninstallScanner.leftoverStream(for: app) {
+            guard uninstallLeftoverGeneration == generation, !Task.isCancelled else { return }
+            collected.append(item)
+            uninstallItems = collected.sorted(by: uninstallItemOrder)
+        }
+        guard uninstallLeftoverGeneration == generation else { return }
+        uninstallItems = collected.sorted(by: uninstallItemOrder)
+    }
+
+    /// Bundle first, then by category, then largest within a category.
+    private func uninstallItemOrder(_ lhs: UninstallItem, _ rhs: UninstallItem) -> Bool {
+        if lhs.category.sortOrder != rhs.category.sortOrder {
+            return lhs.category.sortOrder < rhs.category.sortOrder
+        }
+        return lhs.sizeBytes > rhs.sizeBytes
+    }
+
+    func setUninstallItemSelected(id: String, isSelected: Bool) {
+        guard let index = uninstallItems.firstIndex(where: { $0.id == id }) else { return }
+        uninstallItems[index].isSelected = isSelected
+    }
+
+    func setAllUninstallItemsSelected(_ selected: Bool) {
+        for index in uninstallItems.indices {
+            uninstallItems[index].isSelected = selected
+        }
+    }
+
+    var selectedUninstallItems: [UninstallItem] {
+        uninstallItems.filter(\.isSelected)
+    }
+
+    var selectedUninstallBytes: Int64 {
+        selectedUninstallItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+
+    func requestUninstall() {
+        guard !selectedUninstallItems.isEmpty else { return }
+        showUninstallConfirm = true
+    }
+
+    func dismissUninstallConfirm() {
+        showUninstallConfirm = false
+    }
+
+    func confirmUninstall() async {
+        showUninstallConfirm = false
+        guard let app = selectedAppForUninstall else { return }
+        await performUninstall(app: app, targets: selectedUninstallItems)
+    }
+
+    /// Trashes the selected bundle and leftovers, reusing the same live-session
+    /// overlay, progress poller, and history entry as the Clean Selected and
+    /// Large Files flows. Kept as its own method rather than folded into
+    /// `performLargeFileDeletion`: the two share structure but differ in what a
+    /// row is and what happens after (an app leaving the picker), and the
+    /// large-files path is on the shipping critical path.
+    private func performUninstall(app: InstalledApp, targets: [UninstallItem]) async {
+        guard !targets.isEmpty, !isDeleting else { return }
+
+        var urls: [URL] = []
+        var pathToDisplayName: [String: String] = [:]
+        var pathToExpectedSizeBytes: [String: Int64] = [:]
+        for item in targets {
+            urls.append(item.path)
+            pathToDisplayName[item.path.standardizedFileURL.path] = app.name
+            pathToExpectedSizeBytes[item.path.standardizedFileURL.path] = item.sizeBytes
+        }
+
+        let progressBuffer = DeletionProgressBuffer()
+        let totalBytes = targets.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
+        manualDeletionSession = liveSession
+        let progressPoller = Task { @MainActor [weak liveSession] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                guard let liveSession, liveSession.phase == .cleaning else { return }
+                liveSession.applyProgress(progressBuffer.snapshot())
+            }
+        }
+
+        isDeleting = true
+        errorMessage = nil
+        defer {
+            isDeleting = false
+            progressPoller.cancel()
+        }
+
+        let engineStart = Date()
+        do {
+            let report = try await fileDeleter.deleteUserSelectedFiles(
+                at: urls,
+                pathToDisplayName: pathToDisplayName,
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                onProgress: { @Sendable event in progressBuffer.ingest(event) }
+            )
+            let elapsedSeconds = Date().timeIntervalSince(engineStart)
+            incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
+            lastDeletionReport = report
+
+            let deletedPaths = Set(report.deletedItems.map {
+                URL(fileURLWithPath: $0.path).standardizedFileURL.path
+            })
+            uninstallItems.removeAll { deletedPaths.contains($0.path.standardizedFileURL.path) }
+
+            // The bundle went to the Trash, so the app is no longer installed:
+            // drop it from the picker and, if nothing is left to review, go back.
+            let bundleTrashed = deletedPaths.contains(app.bundleURL.standardizedFileURL.path)
+            if bundleTrashed {
+                installedApps.removeAll { $0.id == app.id }
+            }
+            if uninstallItems.isEmpty {
+                selectedAppForUninstall = nil
+            }
+
+            progressPoller.cancel()
+            liveSession.completeRun(
+                bytesMovedToTrash: report.bytesMovedToTrash,
+                elapsedSeconds: elapsedSeconds,
+                failedItems: report.userVisibleFailures,
+                movedToTrashCount: report.movedToTrashCount
+            )
+            CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+        } catch {
+            manualDeletionSession = nil
+            errorMessage = "Unable to remove \(app.name). Please try again."
         }
     }
 

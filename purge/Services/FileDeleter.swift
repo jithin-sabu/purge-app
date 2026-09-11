@@ -243,9 +243,11 @@ nonisolated final class FileDeleter: Sendable {
 
             // AI model components live in hidden runtime directories that the
             // large-file policy deliberately refuses, so they carry their own
-            // equally narrow gate.
+            // equally narrow gate. The uninstaller adds a third: an app bundle in
+            // an app root, or a leftover inside a known Library location.
             let isEligible = LargeFileScanPolicy.isEligibleForDeletion(url)
                 || AIModelScanPolicy.isEligibleForDeletion(url)
+                || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url)
             guard isEligible else {
                 skippedItems.append(SkippedDeletionItem(
                     path: url.path,

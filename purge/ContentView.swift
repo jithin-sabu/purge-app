@@ -338,9 +338,20 @@ struct ContentView: View {
             devToolsTabBody
         case .largeFiles:
             largeFilesTabBody
+        case .uninstaller:
+            uninstallerTabBody
         case .settings:
             settingsTabBody
         }
+    }
+
+    // Placeholder wired in Phase 3 so the tab compiles; the real review UI lands
+    // in Phase 4.
+    @ViewBuilder
+    private var uninstallerTabBody: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .underDetailPageHeader(includesSubtitle: true)
     }
 
     @ViewBuilder
@@ -482,6 +493,8 @@ struct ContentView: View {
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
         case .largeFiles:
             return largeFilesPageSubtitle
+        case .uninstaller:
+            return nil
         case .settings:
             return nil
         case .about:
