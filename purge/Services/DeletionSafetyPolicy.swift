@@ -651,6 +651,16 @@ enum DeletionSafetyPolicy {
             return .blockedNeverDelete
         }
 
+        // ~/Library/Application Support/JetBrains holds installed plugins and all
+        // IDE settings, not caches. Refuse it and every descendant up front, before
+        // isWhitelistedApplicationSupportCachePath can allow a subfolder that merely
+        // ends in "Cache" (e.g. a plugin's own cache dir). ~/Library/Caches/JetBrains
+        // is the real, rebuildable cache and is unaffected by this guard.
+        let jetBrainsAppSupport = "\(home)/Library/Application Support/JetBrains"
+        if path == jetBrainsAppSupport || path.hasPrefix(jetBrainsAppSupport + "/") {
+            return .blockedNeverDelete
+        }
+
         for allowed in whitelistedPrefixes(home: home) {
             if path == allowed || path.hasPrefix(allowed + "/") {
                 return .allow
