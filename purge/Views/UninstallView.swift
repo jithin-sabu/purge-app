@@ -599,6 +599,9 @@ private struct UninstallSearchField: View {
     @Binding var query: String
     @FocusState private var isFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Local mouse-down monitor installed only while focused; see
+    /// `installOutsideClickResign`.
+    @State private var outsideClickMonitor: Any?
 
     private var hasText: Bool { !query.isEmpty }
 
@@ -615,6 +618,7 @@ private struct UninstallSearchField: View {
                 .font(.system(size: 13))
                 .foregroundStyle(AppColors.textPrimary)
                 .focused($isFocused)
+                .focusEffectDisabledIfAvailable()
                 .accessibilityLabel("Search apps by name")
                 .onExitCommand {
                     if hasText { query = "" } else { isFocused = false }
@@ -653,5 +657,43 @@ private struct UninstallSearchField: View {
         .onTapGesture { isFocused = true }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
+        .onChange(of: isFocused) { focused in
+            if focused { installOutsideClickResign() } else { removeOutsideClickResign() }
+        }
+        .onDisappear { removeOutsideClickResign() }
+    }
+
+    /// SwiftUI leaves a focused TextField's first responder in place when a click
+    /// lands on anything non-focusable (tiles, empty space), so the capsule border
+    /// and caret used to stick. While focused, a local monitor resigns first
+    /// responder for any mouse-down that didn't land on the field editor itself.
+    private func installOutsideClickResign() {
+        guard outsideClickMonitor == nil else { return }
+        outsideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            guard let window = event.window,
+                  let hitView = window.contentView?.hitTest(event.locationInWindow),
+                  hitView !== window.firstResponder
+            else { return event }
+            window.makeFirstResponder(nil)
+            return event
+        }
+    }
+
+    private func removeOutsideClickResign() {
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func focusEffectDisabledIfAvailable() -> some View {
+        if #available(macOS 14.0, *) {
+            focusEffectDisabled()
+        } else {
+            self
+        }
     }
 }
