@@ -277,7 +277,9 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/Cursor/CachedData",
             "\(home)/Library/Application Support/Cursor/User/workspaceStorage",
             "\(home)/Library/Caches/JetBrains",
-            "\(home)/Library/Application Support/JetBrains",
+            // NOTE: `~/Library/Application Support/JetBrains` is deliberately NOT on
+            // the allowlist. It holds installed plugins and all IDE settings (not a
+            // cache), so it must never be scanned, sized, or deleted.
             // AUDIT: `Zed/db` is Zed's local state database (not a pure cache).
             // Re-created on next launch but may reset local editor state —
             // Check First, not Safe.

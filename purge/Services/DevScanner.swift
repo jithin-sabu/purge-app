@@ -447,9 +447,11 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent("Library/Application Support/Cursor/CachedData", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Cursor/User/workspaceStorage", isDirectory: true)
             ]),
+            // Only ~/Library/Caches/JetBrains is a real cache (indexes, compiler
+            // output), rebuilt on next launch. ~/Library/Application Support/JetBrains
+            // holds installed plugins and all settings, so it must never be cleaned.
             ("JetBrains Cache", [
-                home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/JetBrains", isDirectory: true)
+                home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)
             ]),
             ("Zed Cache", [
                 home.appendingPathComponent("Library/Application Support/Zed/db", isDirectory: true),
