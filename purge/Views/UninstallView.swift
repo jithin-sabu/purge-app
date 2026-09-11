@@ -192,15 +192,10 @@ private struct AppTile: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ZStack(alignment: .topTrailing) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
-                    .resizable()
-                    .frame(width: 56, height: 56)
-                    .frame(maxWidth: .infinity)
-
-                selectionMark
-                    .offset(x: 4, y: -4)
-            }
+            Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
+                .resizable()
+                .frame(width: 56, height: 56)
+                .frame(maxWidth: .infinity)
 
             VStack(spacing: 2) {
                 Text(app.name)
@@ -232,6 +227,12 @@ private struct AppTile: View {
                     }
                 }
         }
+        .overlay(alignment: .topLeading) {
+            // Always shown, so an untouched tile still reads as selectable: a
+            // hollow circle at rest, filled when picked, brighter on hover.
+            selectionIndicator
+                .padding(10)
+        }
         .overlay {
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
                 .stroke(
@@ -250,12 +251,17 @@ private struct AppTile: View {
     }
 
     @ViewBuilder
-    private var selectionMark: some View {
+    private var selectionIndicator: some View {
         if isSelected {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 18))
+                .font(.system(size: 20))
                 .foregroundStyle(AppColors.buttonPrimaryBg)
-                .background(Circle().fill(AppColors.bgElevated).padding(2))
+                .background(Circle().fill(AppColors.bgElevated).padding(1))
+        } else {
+            Image(systemName: "circle")
+                .font(.system(size: 20))
+                .foregroundStyle(isHovering ? AppColors.textSecondary : AppColors.textTertiary)
+                .background(Circle().fill(AppColors.bgElevated).padding(1))
         }
     }
 }
