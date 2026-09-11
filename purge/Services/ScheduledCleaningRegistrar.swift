@@ -53,6 +53,8 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     private static let lastGraceSweepKey = "ScheduledCleaningRegistrar.lastGraceSweep"
     private static let lastOutcomeKey = "ScheduledCleaningRegistrar.lastOutcome"
 
+    /// Convenience shim over the standard domain, kept for any external caller.
+    /// The registrar itself reads the anchor through its injected `ud`.
     static var lastGraceSweepDate: Date? {
         UserDefaults.standard.object(forKey: lastGraceSweepKey) as? Date
     }
@@ -67,9 +69,50 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// at a time.
     private var isSweepRunning = false
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: Self.lastOutcomeKey) {
+    // Injected dependencies. Production uses the defaults (the shared prefs store,
+    // the standard defaults domain, the attached PurgeStore, the real re-arm);
+    // tests substitute an isolated defaults suite plus fakes so the timing logic
+    // can be exercised without touching the filesystem, FDA, or notifications.
+    private let ud: UserDefaults
+    private let prefs: ScheduledCleaningPreferenceStore
+    private let performCleanOverride: (() async -> PurgeStore.ScheduledCleaningSummary)?
+    private let rearmOverride: (() async -> Void)?
+
+    /// The anchor timestamp of the last clean, read through the injected domain.
+    private var currentLastGraceSweepDate: Date? {
+        ud.object(forKey: Self.lastGraceSweepKey) as? Date
+    }
+
+    init(
+        prefs: ScheduledCleaningPreferenceStore = .shared,
+        userDefaults: UserDefaults = .standard,
+        performClean: (() async -> PurgeStore.ScheduledCleaningSummary)? = nil,
+        rearm: (() async -> Void)? = nil
+    ) {
+        self.prefs = prefs
+        self.ud = userDefaults
+        self.performCleanOverride = performClean
+        self.rearmOverride = rearm
+        if let data = ud.data(forKey: Self.lastOutcomeKey) {
             lastOutcome = try? JSONDecoder().decode(LastScheduledCleanOutcome.self, from: data)
+        }
+    }
+
+    /// Runs the actual clean, through the injected override when present.
+    private func performClean() async -> PurgeStore.ScheduledCleaningSummary {
+        if let performCleanOverride {
+            return await performCleanOverride()
+        }
+        return await store?.performScheduledClean()
+            ?? PurgeStore.ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+    }
+
+    /// Re-arms the pending reminder, through the injected override when present.
+    private func performRearm() async {
+        if let rearmOverride {
+            await rearmOverride()
+        } else {
+            await applyScheduleFromPrefs()
         }
     }
 
@@ -81,7 +124,7 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         )
         lastOutcome = outcome
         if let data = try? JSONEncoder().encode(outcome) {
-            UserDefaults.standard.set(data, forKey: Self.lastOutcomeKey)
+            ud.set(data, forKey: Self.lastOutcomeKey)
         }
     }
 
@@ -110,16 +153,16 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// clean, fall back to when auto-clean was enabled; live `now` is the last
     /// resort. Shared by `nextCleanDate` and the due check so the displayed date
     /// and the activation sweep can never disagree.
-    private func scheduleAnchor(referenceDate now: Date) -> Date {
-        ScheduledCleaningRegistrar.lastGraceSweepDate
-            ?? ScheduledCleaningPreferenceStore.shared.enabledAt
+    func scheduleAnchor(referenceDate now: Date) -> Date {
+        currentLastGraceSweepDate
+            ?? prefs.enabledAt
             ?? now
     }
 
     /// The moment the next clean becomes due (anchor + one interval), without the
     /// clamp `nextCleanDate` applies for display.
-    private func dueDate(referenceDate now: Date) -> Date {
-        let interval = ScheduledCleaningPreferenceStore.shared.frequency.repeatIntervalSeconds
+    func dueDate(referenceDate now: Date) -> Date {
+        let interval = prefs.effectiveRepeatIntervalSeconds
         return scheduleAnchor(referenceDate: now).addingTimeInterval(interval)
     }
 
@@ -134,7 +177,7 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [Self.repeatingReminderIdentifier])
 
-        guard ScheduledCleaningPreferenceStore.shared.isEnabled else { return }
+        guard prefs.isEnabled else { return }
 
         _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
 
@@ -165,16 +208,16 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// activation sweep, so the next scheduled clean moves forward one interval.
     @discardableResult
     func runScheduledCleanNow(referenceDate now: Date = Date()) async -> PurgeStore.ScheduledCleaningSummary? {
-        guard ScheduledCleaningPreferenceStore.shared.isEnabled else { return nil }
-        guard let store, !isSweepRunning else { return nil }
+        guard prefs.isEnabled else { return nil }
+        guard performCleanOverride != nil || store != nil, !isSweepRunning else { return nil }
 
         isSweepRunning = true
         defer { isSweepRunning = false }
 
-        let summary = await store.performScheduledClean()
-        UserDefaults.standard.set(now, forKey: Self.lastGraceSweepKey)
+        let summary = await performClean()
+        ud.set(now, forKey: Self.lastGraceSweepKey)
         recordOutcome(summary, at: now)
-        await applyScheduleFromPrefs()
+        await performRearm()
         return summary
     }
 
@@ -183,17 +226,17 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// on every activation — is what actually executes the schedule. Anchored to the
     /// same due date the UI shows, so an overdue clean runs the next time Purge opens.
     func runGracefulActivationSweepIfPastDue(referenceDate now: Date = Date()) async {
-        guard ScheduledCleaningPreferenceStore.shared.isEnabled else { return }
-        guard let store, !isSweepRunning else { return }
+        guard prefs.isEnabled else { return }
+        guard performCleanOverride != nil || store != nil, !isSweepRunning else { return }
         guard now >= dueDate(referenceDate: now) else { return }
 
         isSweepRunning = true
         defer { isSweepRunning = false }
 
-        let summary = await store.performScheduledClean()
-        UserDefaults.standard.set(now, forKey: Self.lastGraceSweepKey)
+        let summary = await performClean()
+        ud.set(now, forKey: Self.lastGraceSweepKey)
         recordOutcome(summary, at: now)
 
-        Task { await applyScheduleFromPrefs() }
+        Task { await performRearm() }
     }
 }

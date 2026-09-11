@@ -1553,23 +1553,15 @@ struct AppSortMenu: View {
     @Binding var selection: SortOption
 
     var body: some View {
-        Menu {
-            ForEach(SortOption.allCases) { option in
-                Button {
-                    selection = option
-                } label: {
-                    if option == selection {
-                        Label(option.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(option.displayName)
-                    }
-                }
-            }
-        } label: {
+        AppDropdown(
+            options: SortOption.allCases,
+            selection: selection,
+            optionLabel: { $0.displayName },
+            onSelect: { selection = $0 }
+        ) {
             Label(selection.shortDisplayName, systemImage: "arrow.up.arrow.down")
                 .labelStyle(.titleAndIcon)
         }
-        .menuStyle(.button)
         .buttonStyle(AppButtonStyle(variant: .bordered))
         .fixedSize()
         .accessibilityLabel("Sort by \(selection.displayName)")
