@@ -92,11 +92,17 @@ enum AppUninstallScanPolicy {
         // Never through this gate: system locations.
         if path.hasPrefix("/System/") { return false }
 
-        // An app bundle sitting directly inside an app root.
+        // An app bundle sitting inside an app root, or one folder deeper (vendors
+        // that group their apps, e.g. `/Applications/Utilities/…`). This mirrors
+        // the one-level nesting `AppUninstallScanner.discoverAppBundleURLs` walks,
+        // so every bundle the picker offers can actually be trashed. Deeper paths
+        // stay out, so the gate never descends into bundle internals.
         if std.pathExtension == "app" {
-            let parent = std.deletingLastPathComponent().path
             let appRoots = installedAppRoots().map { $0.standardizedFileURL.path }
-            if appRoots.contains(parent) { return true }
+            let parent = std.deletingLastPathComponent()
+            if appRoots.contains(parent.path) { return true }
+            let grandparent = parent.deletingLastPathComponent().path
+            if appRoots.contains(grandparent) { return true }
             return false
         }
 
@@ -142,8 +148,13 @@ enum AppUninstallScanPolicy {
                 }
             }
             // Group containers are `<teamID>.<something with the bundle-id stem>`.
+            // Require the stem to be a whole dot-separated component, so a bundle
+            // id ending in `.note` cannot claim a `…​.notes` container by partial
+            // overlap. The full bundle id appearing as a suffix also qualifies.
             if category == .groupContainers {
-                if let stem = bundleIDStem(bundleID), lowerName.contains(stem) {
+                if lowerName.hasSuffix("." + bundleID) { return .groupID }
+                if let stem = bundleIDStem(bundleID),
+                   lowerName.split(separator: ".").contains(where: { String($0) == stem }) {
                     return .groupID
                 }
             }

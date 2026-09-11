@@ -1247,12 +1247,12 @@ final class PurgeStore: ObservableObject {
         installedAppsScanGeneration += 1
         let generation = installedAppsScanGeneration
         isScanningInstalledApps = true
+        hasCompletedInstalledAppsScan = false
         installedApps = []
         removableBytesByAppID = [:]
         defer {
             if installedAppsScanGeneration == generation {
                 isScanningInstalledApps = false
-                hasCompletedInstalledAppsScan = true
             }
         }
 
@@ -1262,8 +1262,13 @@ final class PurgeStore: ObservableObject {
             collected.append(app)
             installedApps = collected.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
         }
-        guard installedAppsScanGeneration == generation else { return }
+        // Only a stream that ran to completion counts as a finished scan. A
+        // cancelled or superseded run leaves `hasCompletedInstalledAppsScan`
+        // false so `scanInstalledAppsIfNeeded` will scan again rather than trust a
+        // partial list.
+        guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         installedApps = collected.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
+        hasCompletedInstalledAppsScan = true
 
         // Fill in each tile's "total freed" (bundle + safe leftovers) in the
         // background, so the list appears immediately and the numbers settle in.
@@ -1275,11 +1280,18 @@ final class PurgeStore: ObservableObject {
     /// ticks. Runs one app at a time so it never competes hard with a leftover
     /// scan the user triggers by selecting apps.
     private func measureRemovableTotals(generation: Int) async {
+        // A path is sized once across the whole pass. Two installs that share a
+        // bundle id resolve to the same bundle-id-keyed leftovers; without this the
+        // shared bytes would land in both tiles and double the summed figure on the
+        // Uninstall button (`selectedAppsRemovableBytes`).
+        var sizedPaths = Set<String>()
         for app in installedApps {
             if installedAppsScanGeneration != generation || Task.isCancelled { return }
             var total: Int64 = 0
             for await item in uninstallScanner.leftoverStream(for: app) {
-                if item.matchReason.isHighConfidence { total += item.sizeBytes }
+                guard item.matchReason.isHighConfidence else { continue }
+                guard sizedPaths.insert(item.path.standardizedFileURL.path).inserted else { continue }
+                total += item.sizeBytes
             }
             guard installedAppsScanGeneration == generation else { return }
             removableBytesByAppID[app.id] = total
@@ -1381,6 +1393,14 @@ final class PurgeStore: ObservableObject {
         let selectedByApp = plan.apps.map { ($0.app, $0.selectedItems) }.filter { !$0.1.isEmpty }
         guard !selectedByApp.isEmpty, !isDeleting else { return }
 
+        // Claim the deleting flag before the first suspension point below (the
+        // quit wait). On the main actor an `await` is a chance for a second tap to
+        // re-enter, and setting the flag only just before the engine call would
+        // let two runs slip past the guard. The outer defer clears it on every
+        // exit, including the early "nothing quit" return.
+        isDeleting = true
+        defer { isDeleting = false }
+
         // Quit any running app whose bundle is about to move. If one refuses to
         // quit — the user cancelled its save prompt, say — it is left installed
         // rather than trashed out from under a live process. Leftovers-only
@@ -1407,11 +1427,18 @@ final class PurgeStore: ObservableObject {
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
         var totalBytes: Int64 = 0
+        var seenPaths = Set<String>()
         for (app, items) in toDelete {
             for item in items {
+                // Two apps sharing a bundle id resolve to the same bundle-id-keyed
+                // leftovers, so the same path can appear under both. Trash and size
+                // it once: a duplicate url is a no-op to the engine but would
+                // inflate the total and the progress denominator.
+                let key = item.path.standardizedFileURL.path
+                guard seenPaths.insert(key).inserted else { continue }
                 urls.append(item.path)
-                pathToDisplayName[item.path.standardizedFileURL.path] = app.name
-                pathToExpectedSizeBytes[item.path.standardizedFileURL.path] = item.sizeBytes
+                pathToDisplayName[key] = app.name
+                pathToExpectedSizeBytes[key] = item.sizeBytes
                 totalBytes += item.sizeBytes
             }
         }
@@ -1427,12 +1454,10 @@ final class PurgeStore: ObservableObject {
             }
         }
 
-        isDeleting = true
         errorMessage = nil
-        defer {
-            isDeleting = false
-            progressPoller.cancel()
-        }
+        // `isDeleting` is already set and cleared by the outer defer above; here we
+        // only need the poller torn down on exit.
+        defer { progressPoller.cancel() }
 
         let engineStart = Date()
         do {
@@ -1488,11 +1513,17 @@ final class PurgeStore: ObservableObject {
     /// treated as clear to remove.
     private func quitRunningApp(_ app: InstalledApp) async -> Bool {
         guard let bundleID = app.bundleID else { return true }
-        func isRunning() -> Bool {
-            !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+        // Two installs can share one bundle id (Xcode and Xcode-beta), so match on
+        // the bundle URL as well: quitting the copy being removed must not also
+        // terminate the other copy the user is keeping.
+        let targetURL = app.bundleURL.standardizedFileURL
+        func instances() -> [NSRunningApplication] {
+            NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+                .filter { $0.bundleURL?.standardizedFileURL == targetURL }
         }
+        func isRunning() -> Bool { !instances().isEmpty }
         guard isRunning() else { return true }
-        for instance in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
+        for instance in instances() {
             instance.terminate()
         }
         for _ in 0..<20 {

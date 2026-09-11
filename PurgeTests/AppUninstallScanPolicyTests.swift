@@ -179,6 +179,30 @@ struct AppUninstallScanPolicyTests {
         #expect(reason == nil)
     }
 
+    /// The stem must be a whole component: an app whose id ends in `.note` must
+    /// not claim a `…​.notes` group container by partial overlap.
+    @Test
+    func partialStemDoesNotMatchGroupContainer() {
+        let app = makeApp(bundleID: "com.vendor.note")
+        let reason = AppUninstallScanPolicy.matchReason(
+            forLeftoverName: "TEAMID.com.vendor.notes",
+            category: .groupContainers,
+            app: app
+        )
+        #expect(reason == nil)
+    }
+
+    /// The full bundle id appearing as a dot-suffix still counts.
+    @Test
+    func groupContainerMatchesByFullBundleIDSuffix() {
+        let reason = AppUninstallScanPolicy.matchReason(
+            forLeftoverName: "9XXXXXXXXX.com.knollsoft.Rectangle",
+            category: .groupContainers,
+            app: makeApp()
+        )
+        #expect(reason == .groupID)
+    }
+
     // MARK: Delete-boundary gate
 
     @Test
@@ -214,6 +238,24 @@ struct AppUninstallScanPolicyTests {
     @Test
     func bareAppBundleOutsideAppRootsIsNotEligible() {
         let url = home.appendingPathComponent("Downloads/Something.app")
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
+    }
+
+    /// The scanner walks one folder into an app root (vendors that group their
+    /// apps, e.g. `/Applications/Utilities/…`), so the delete gate must accept the
+    /// same one level. Otherwise a nested app is offered but skipped for safety
+    /// when the user confirms.
+    @Test
+    func appBundleOneLevelInsideAppRootIsEligible() {
+        let url = URL(fileURLWithPath: "/Applications/Utilities/Foo.app", isDirectory: true)
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
+    }
+
+    /// One level only: two folders deep is beyond what the scanner offers and must
+    /// stay out of the gate.
+    @Test
+    func appBundleTwoLevelsInsideAppRootIsNotEligible() {
+        let url = URL(fileURLWithPath: "/Applications/A/B/Foo.app", isDirectory: true)
         #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
     }
 }

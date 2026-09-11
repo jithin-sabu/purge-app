@@ -138,6 +138,21 @@ nonisolated struct UninstallPlan: Identifiable, Hashable {
     let id: String
     var apps: [UninstallAppPlan]
 
-    var totalSelectedItems: Int { apps.reduce(0) { $0 + $1.selectedItems.count } }
-    var totalSelectedBytes: Int64 { apps.reduce(Int64(0)) { $0 + $1.selectedBytes } }
+    var totalSelectedItems: Int { uniqueSelectedItems.count }
+    var totalSelectedBytes: Int64 { uniqueSelectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+
+    /// The checked items across every app, with any path selected under more than
+    /// one app counted once. Two installs that share a bundle id (Xcode and
+    /// Xcode-beta) resolve to the same bundle-id-keyed leftovers, so a naive
+    /// per-app sum would double the figure the sheet shows and the bytes trashed.
+    private var uniqueSelectedItems: [UninstallItem] {
+        var seen = Set<String>()
+        var result: [UninstallItem] = []
+        for app in apps {
+            for item in app.selectedItems where seen.insert(item.id).inserted {
+                result.append(item)
+            }
+        }
+        return result
+    }
 }

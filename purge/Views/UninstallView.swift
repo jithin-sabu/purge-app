@@ -299,7 +299,7 @@ private struct AppTile: View {
         // Full name on hover, since the tile truncates longer ones.
         .help(app.name)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(app.name), \(app.formattedSize)\(app.isRunning ? ", open" : "")")
+        .accessibilityLabel("\(app.name), \(formatBytes(totalBytes))\(app.isRunning ? ", open" : "")")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)
