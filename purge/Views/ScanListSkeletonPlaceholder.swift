@@ -173,6 +173,14 @@ struct ShimmerModifier: ViewModifier {
             .overlay {
                 if !reduceMotion {
                     GeometryReader { geo in
+                        // The highlight band is one container-width wide and
+                        // travels from fully off the left edge to fully off the
+                        // right (offset -w … +w). Both ends of the loop are
+                        // therefore blank, so the linear repeat resets with
+                        // nothing on screen and the loop reads as seamless. A
+                        // 2×-width band (the earlier value) sat at the left edge
+                        // at phase 0, so the reset snapped a visible band back
+                        // into place — the jitter.
                         LinearGradient(
                             gradient: Gradient(colors: [
                                 .clear,
@@ -182,7 +190,7 @@ struct ShimmerModifier: ViewModifier {
                             startPoint: .leading,
                             endPoint: .trailing
                         )
-                        .frame(width: geo.size.width * 2)
+                        .frame(width: geo.size.width)
                         .offset(x: phase * geo.size.width * 2 - geo.size.width)
                     }
                     .allowsHitTesting(false)
