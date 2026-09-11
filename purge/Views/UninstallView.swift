@@ -301,6 +301,8 @@ private struct AppTile: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
         .onHover { isHovering = $0 }
+        // Full name on hover, since the tile truncates longer ones.
+        .help(app.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(app.name), \(app.formattedSize)\(app.isRunning ? ", open" : "")")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
