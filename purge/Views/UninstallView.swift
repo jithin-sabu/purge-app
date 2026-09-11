@@ -135,7 +135,7 @@ struct UninstallView: View {
     private var grid: some View {
         if store.installedApps.isEmpty {
             if store.isScanningInstalledApps {
-                placeholder(label: "Finding installed apps")
+                skeletonGrid
             } else {
                 emptyState(
                     symbol: "app.badge",
@@ -171,14 +171,28 @@ struct UninstallView: View {
         }
     }
 
-    // MARK: Shared bits
+    // MARK: Loading
 
-    private func placeholder(label: String) -> some View {
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(label)
+    /// Shown while the first scan sizes every bundle: a grid of placeholder tiles
+    /// in the real tile's shape, so the list crossfades in without a layout jump.
+    private var skeletonGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: Self.columns, spacing: 12) {
+                ForEach(0..<9, id: \.self) { _ in
+                    SkeletonAppTile()
+                }
+            }
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+            .padding(.top, 2)
+            .padding(.bottom, AppStyle.Spacing.large)
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.bgBase)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Finding installed apps")
     }
+
+    // MARK: Shared bits
 
     private func emptyState(symbol: String, title: String, detail: String) -> some View {
         VStack(spacing: 10) {
@@ -281,6 +295,36 @@ private struct AppTile: View {
                 .foregroundStyle(isHovering ? AppColors.textSecondary : AppColors.textTertiary)
                 .background(Circle().fill(AppColors.bgElevated).padding(1))
         }
+    }
+}
+
+// MARK: - Skeleton tile
+
+private struct SkeletonAppTile: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.secondary.opacity(SkeletonOpacity.medium))
+                .frame(width: 56, height: 56)
+
+            VStack(spacing: 6) {
+                SkeletonBar(width: 96, height: 12, cornerRadius: 4)
+                SkeletonBar(width: 52, height: 10, cornerRadius: 4)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
+        .background {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgElevated)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .stroke(AppColors.borderSubtle, lineWidth: 1)
+        }
+        .shimmering()
+        .accessibilityHidden(true)
     }
 }
 

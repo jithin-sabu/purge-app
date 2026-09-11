@@ -536,13 +536,20 @@ struct ContentView: View {
         return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
     }
 
-    /// Counts the installed apps, and how many are ticked for removal.
+    /// Counts the installed apps, and how many are ticked for removal. While the
+    /// background pass is still measuring each app's freeable space, it says so.
     private var uninstallerPageSubtitle: String? {
         guard !store.installedApps.isEmpty else { return nil }
         let total = store.installedApps.count
         let selected = store.selectedAppIDs.count
         let base = "\(total) \(total == 1 ? "app" : "apps")"
-        return selected > 0 ? "\(base) · \(selected) selected" : base
+        if selected > 0 {
+            return "\(base) · \(selected) selected"
+        }
+        if !store.hasMeasuredAllRemovableTotals {
+            return "\(base) · measuring space…"
+        }
+        return base
     }
 
     private var appCachesSafetyFilter: SafetyFilter {
