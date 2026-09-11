@@ -1,21 +1,21 @@
 import AppKit
 import SwiftUI
 
-/// The Uninstall tab. Two modes in one view: a picker of installed apps, and,
-/// once an app is chosen, the review of its bundle plus the files it left behind.
+/// The Uninstall tab: a grid of installed apps, multi-selectable. Ticking apps
+/// and pressing Uninstall Selected gathers each app's leftovers and opens a
+/// review sheet before anything moves to the Trash.
 struct UninstallView: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var appSearchQuery = ""
 
+    private static let columns = [GridItem(.adaptive(minimum: 168, maximum: 240), spacing: 12)]
+
     var body: some View {
-        Group {
-            if let app = store.selectedAppForUninstall {
-                reviewBody(for: app)
-            } else {
-                pickerBody
-            }
+        VStack(spacing: 8) {
+            controls
+            grid
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.bgBase)
@@ -23,8 +23,6 @@ struct UninstallView: View {
             await store.scanInstalledAppsIfNeeded()
         }
     }
-
-    // MARK: Picker
 
     private var filteredApps: [InstalledApp] {
         let query = appSearchQuery.trimmingCharacters(in: .whitespaces).lowercased()
@@ -35,20 +33,38 @@ struct UninstallView: View {
         }
     }
 
-    private var pickerBody: some View {
-        VStack(spacing: 8) {
-            HStack {
-                UninstallSearchField(query: $appSearchQuery)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+    private var visibleIDs: [String] { filteredApps.map(\.id) }
 
-            pickerList
+    // MARK: Controls
+
+    private var controls: some View {
+        HStack(spacing: 12) {
+            UninstallSelectAllBar(
+                selectedCount: selectedVisibleCount,
+                visibleCount: filteredApps.count,
+                onToggleAll: toggleSelectAll
+            )
+            Spacer(minLength: 8)
+            UninstallSearchField(query: $appSearchQuery)
         }
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
+    private var selectedVisibleCount: Int {
+        visibleIDs.filter { store.selectedAppIDs.contains($0) }.count
+    }
+
+    private func toggleSelectAll() {
+        let ids = visibleIDs
+        guard !ids.isEmpty else { return }
+        let allOn = ids.allSatisfy { store.selectedAppIDs.contains($0) }
+        store.setAllAppsSelected(!allOn, ids: ids)
+    }
+
+    // MARK: Grid
+
     @ViewBuilder
-    private var pickerList: some View {
+    private var grid: some View {
         if store.installedApps.isEmpty {
             if store.isScanningInstalledApps {
                 placeholder(label: "Finding installed apps")
@@ -66,137 +82,27 @@ struct UninstallView: View {
                 detail: "No installed app matches \"\(appSearchQuery)\"."
             )
         } else {
-            List {
-                ForEach(filteredApps) { app in
-                    AppPickerRow(app: app) { store.selectAppForUninstall(app) }
-                        .listRowInsets(ScanListRowInsets.standard)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-                ScanListBottomSpacer()
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(AppColors.bgBase)
-        }
-    }
-
-    // MARK: Review
-
-    private var visibleItemIDs: [String] {
-        store.uninstallItems.map(\.id)
-    }
-
-    private func reviewBody(for app: InstalledApp) -> some View {
-        VStack(spacing: 8) {
-            reviewHeader(for: app)
-                .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-
-            selectAllBar
-
-            ZStack {
-                reviewList(for: app)
-                if store.isDeleting {
-                    CleaningOverlay()
-                }
-            }
-        }
-    }
-
-    private func reviewHeader(for app: InstalledApp) -> some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Button {
-                store.backToAppPicker()
-            } label: {
-                Label("All apps", systemImage: "chevron.left")
-                    .labelStyle(.titleAndIcon)
-            }
-            .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
-            .fixedSize()
-
-            Image(nsImage: appIcon(for: app))
-                .resizable()
-                .frame(width: 22, height: 22)
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(app.name)
-                    .font(AppStyle.Typography.rowTitle)
-                    .lineLimit(1)
-                if app.isRunning {
-                    Text("Currently open")
-                        .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(AppColors.tagCheckText)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var selectAllBar: some View {
-        HStack(alignment: .center) {
-            TriStateCheckbox(title: "Select All", state: selectAllState) {
-                toggleSelectAll()
-            }
-            .fixedSize()
-            .disabled(store.uninstallItems.isEmpty)
-
-            Spacer()
-        }
-        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-    }
-
-    private var selectAllState: SelectAllTriState {
-        let ids = visibleItemIDs
-        guard !ids.isEmpty else { return .none }
-        let selected = store.selectedUninstallItems.count
-        if selected == 0 { return .none }
-        if selected == ids.count { return .all }
-        return .mixed
-    }
-
-    private func toggleSelectAll() {
-        let allOn = store.selectedUninstallItems.count == store.uninstallItems.count
-        store.setAllUninstallItemsSelected(!allOn)
-    }
-
-    @ViewBuilder
-    private func reviewList(for app: InstalledApp) -> some View {
-        if store.uninstallItems.isEmpty {
-            if store.isScanningUninstallLeftovers {
-                placeholder(label: "Scanning \(app.name) leftovers")
-            } else {
-                emptyState(
-                    symbol: "sparkles",
-                    title: "Nothing left behind",
-                    detail: "Purge found no files for \(app.name) beyond the app itself."
-                )
-            }
-        } else {
-            List {
-                ForEach(store.uninstallItems) { item in
-                    UninstallItemRow(item: item) {
-                        store.setUninstallItemSelected(id: item.id, isSelected: !item.isSelected)
+            ScrollView {
+                LazyVGrid(columns: Self.columns, spacing: 12) {
+                    ForEach(filteredApps) { app in
+                        AppTile(
+                            app: app,
+                            isSelected: store.selectedAppIDs.contains(app.id)
+                        ) {
+                            store.toggleAppSelected(id: app.id)
+                        }
                     }
-                    .listRowInsets(ScanListRowInsets.standard)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
                 }
-                ScanListBottomSpacer()
+                .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+                .padding(.top, 2)
+                .padding(.bottom, AppStyle.Spacing.large)
             }
-            .listStyle(.plain)
-            .disablingListSelection()
             .scrollContentBackground(.hidden)
             .background(AppColors.bgBase)
         }
     }
 
     // MARK: Shared bits
-
-    private func appIcon(for app: InstalledApp) -> NSImage {
-        NSWorkspace.shared.icon(forFile: app.bundleURL.path)
-    }
 
     private func placeholder(label: String) -> some View {
         Color.clear
@@ -221,148 +127,111 @@ struct UninstallView: View {
     }
 }
 
-private extension View {
-    @ViewBuilder
-    func disablingListSelection() -> some View {
-        if #available(macOS 14.0, *) {
-            selectionDisabled()
-        } else {
-            self
-        }
-    }
-}
+// MARK: - App tile
 
-// MARK: - Rows
-
-private struct AppPickerRow: View {
+private struct AppTile: View {
     let app: InstalledApp
-    let onSelect: () -> Void
+    let isSelected: Bool
+    let onToggle: () -> Void
 
     @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
-                .resizable()
-                .frame(width: 28, height: 28)
+        VStack(spacing: 8) {
+            ZStack(alignment: .topTrailing) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
+                    .resizable()
+                    .frame(width: 56, height: 56)
+                    .frame(maxWidth: .infinity)
 
-            VStack(alignment: .leading, spacing: 2) {
+                selectionMark
+                    .offset(x: 4, y: -4)
+            }
+
+            VStack(spacing: 2) {
                 Text(app.name)
                     .font(AppStyle.Typography.rowTitle)
                     .lineLimit(1)
-                if let bundleID = app.bundleID {
-                    Text(bundleID)
+                    .truncationMode(.middle)
+
+                HStack(spacing: 4) {
+                    if app.isRunning {
+                        AppBadge(text: "Open", tone: .warning)
+                    }
+                    Text(app.formattedSize)
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                        .monospacedDigit()
                 }
             }
-
-            Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            if app.isRunning {
-                AppBadge(text: "Open", tone: .warning)
-            }
-
-            Text(app.formattedSize)
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 10)
-        .frame(minHeight: AppStyle.Row.listRowMinHeight, alignment: .leading)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onSelect)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
         .background {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
                 .fill(AppColors.bgElevated)
                 .overlay {
-                    if isHovering {
-                        RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+                    if isSelected || isHovering {
+                        RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
                             .fill(AppColors.bgOverlay)
                     }
                 }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                .stroke(AppColors.borderSubtle)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .stroke(
+                    isSelected ? AppColors.buttonPrimaryBg : AppColors.borderSubtle,
+                    lineWidth: isSelected ? 2 : 1
+                )
         }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
         .onHover { isHovering = $0 }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(app.name), \(app.formattedSize)")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(.default, onSelect)
+        .accessibilityLabel("\(app.name), \(app.formattedSize)\(app.isRunning ? ", open" : "")")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default, onToggle)
+    }
+
+    @ViewBuilder
+    private var selectionMark: some View {
+        if isSelected {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(AppColors.buttonPrimaryBg)
+                .background(Circle().fill(AppColors.bgElevated).padding(2))
+        }
     }
 }
 
-private struct UninstallItemRow: View {
-    let item: UninstallItem
-    let onToggle: () -> Void
+// MARK: - Select all bar
 
-    private var badgeTone: AppBadge.Tone {
-        switch item.safetyInfo.level {
-        case .safe: return .safe
-        case .medium: return .warning
-        case .unknown: return .neutral
-        }
+private struct UninstallSelectAllBar: View {
+    let selectedCount: Int
+    let visibleCount: Int
+    let onToggleAll: () -> Void
+
+    private var state: SelectAllTriState {
+        guard visibleCount > 0 else { return .none }
+        if selectedCount == 0 { return .none }
+        if selectedCount == visibleCount { return .all }
+        return .mixed
     }
 
     var body: some View {
-        // Whole row is one tap target, and the checkbox is a non-interactive
-        // visual, for the same reason as LargeFileRow: an interactive control in
-        // a macOS List row scrolls the clicked row into view on click.
-        HStack(alignment: .center, spacing: 12) {
-            Toggle("", isOn: .constant(item.isSelected))
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .tint(AppColors.buttonPrimaryBg)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+        HStack(spacing: 10) {
+            TriStateCheckbox(title: "Select All", state: state, action: onToggleAll)
+                .fixedSize()
+                .disabled(visibleCount == 0)
 
-            Image(systemName: item.category.symbolName)
-                .font(.system(size: 18))
-                .foregroundStyle(.secondary)
-                .frame(width: 26, height: 26)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.safetyInfo.headline)
-                    .font(AppStyle.Typography.rowTitle)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(displayDirectoryPath(for: item.path))
+            if selectedCount > 0 {
+                Text("\(selectedCount) selected")
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            Spacer(minLength: 12)
-
-            VStack(alignment: .trailing, spacing: 6) {
-                Text(item.formattedSize)
-                    .font(.subheadline.weight(.medium))
-                    .monospacedDigit()
-                AppBadge(text: item.safetyInfo.level.displayName, tone: badgeTone)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(minHeight: AppStyle.Row.listRowMinHeight)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onToggle)
-        .modifier(ScanRowCardChrome())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.safetyInfo.headline), \(item.formattedSize), \(item.safetyInfo.level.displayName)")
-        .accessibilityValue(item.isSelected ? "Selected" : "Not selected")
-        .accessibilityAddTraits(item.isSelected ? .isSelected : [])
-        .accessibilityAction(.default, onToggle)
     }
 }
 
@@ -372,7 +241,7 @@ struct UninstallHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
 
     var body: some View {
-        if store.selectedAppForUninstall == nil {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             Button {
                 Task { await store.scanInstalledApps() }
             } label: {
@@ -386,126 +255,137 @@ struct UninstallHeaderActions: View {
             }
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
             .disabled(store.isScanningInstalledApps)
-            .fixedSize()
-        } else {
+
             Button {
-                store.requestUninstall()
+                Task { await store.requestUninstallSelectedApps() }
             } label: {
-                AnimatedDeleteActionLabel(
-                    inactiveTitle: "Uninstall",
-                    activeTitle: "Uninstall",
-                    selectedCount: store.selectedUninstallItems.count,
-                    selectedBytes: store.selectedUninstallBytes
+                CleaningButtonLabel(
+                    title: uninstallTitle,
+                    systemImage: store.isBuildingUninstallPlan ? nil : "trash",
+                    isCleaning: store.isBuildingUninstallPlan,
+                    spinnerTint: AppColors.buttonPrimaryText
                 )
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
             }
-            .buttonStyle(SolidDestructiveButtonStyle())
-            .disabled(store.selectedUninstallItems.isEmpty || store.isDeleting)
-            .fixedSize()
+            .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
+            .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
         }
+        .fixedSize()
+    }
+
+    private var uninstallTitle: String {
+        if store.isBuildingUninstallPlan { return "Preparing..." }
+        let count = store.selectedApps.count
+        if count == 0 { return "Uninstall" }
+        return "Uninstall \(count) \(count == 1 ? "app" : "apps")"
     }
 }
 
-// MARK: - Confirm sheet
+// MARK: - Review sheet
 
-struct UninstallConfirmSheet: View {
-    let app: InstalledApp
-    let items: [UninstallItem]
+struct UninstallReviewSheet: View {
+    @State private var plan: UninstallPlan
     let onCancel: () -> Void
-    let onConfirm: () -> Void
+    let onConfirm: (UninstallPlan) -> Void
 
-    private var totalBytes: Int64 {
-        items.reduce(Int64(0)) { $0 + $1.sizeBytes }
-    }
-
-    private var sortedItems: [UninstallItem] {
-        items.sorted { lhs, rhs in
-            if lhs.category.sortOrder != rhs.category.sortOrder {
-                return lhs.category.sortOrder < rhs.category.sortOrder
-            }
-            return lhs.sizeBytes > rhs.sizeBytes
-        }
+    init(
+        plan: UninstallPlan,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping (UninstallPlan) -> Void
+    ) {
+        _plan = State(initialValue: plan)
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
-            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
-                Text("Uninstall \(app.name)?")
-                    .font(AppStyle.Typography.pageTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-
-                Text("Purge moves the app and the items you picked to the Trash. Nothing is deleted for good, so you can put them back if you change your mind.")
-                    .font(.callout)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if app.isRunning {
-                runningNote
-            }
+            header
 
             ScrollView {
-                LazyVStack(spacing: AppStyle.Spacing.small) {
-                    ForEach(sortedItems) { item in
-                        itemCard(item)
+                LazyVStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+                    ForEach($plan.apps) { $appPlan in
+                        appSection($appPlan)
                     }
                 }
                 .padding(.vertical, 2)
             }
-            .frame(minHeight: 240)
+            .frame(minHeight: 280)
 
-            HStack(spacing: AppStyle.Spacing.small) {
-                Text("Freeing \(formatBytes(totalBytes))")
-                    .font(AppStyle.Typography.metadataEmphasis)
-                    .foregroundStyle(AppColors.textSecondary)
-
-                Spacer()
-
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(AppButtonStyle(variant: .bordered))
-                    .keyboardShortcut(.cancelAction)
-
-                Button("Move \(items.count) to Trash", action: onConfirm)
-                    .buttonStyle(SolidDestructiveButtonStyle())
-                    .keyboardShortcut(.defaultAction)
-            }
+            footer
         }
         .padding(AppStyle.Spacing.large)
-        .frame(minWidth: 580, minHeight: 480)
+        .frame(minWidth: 600, minHeight: 540)
         .background(AppColors.bgBase)
     }
 
-    private var runningNote: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(AppColors.tagCheckText)
-                .accessibilityHidden(true)
-            Text("\(app.name) is open. Purge will quit it before moving it to the Trash.")
-                .font(.subheadline)
+    private var header: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            Text(titleText)
+                .font(AppStyle.Typography.pageTitle)
+                .foregroundStyle(AppColors.textPrimary)
+
+            Text("Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted for good, so you can put anything back if you change your mind.")
+                .font(.callout)
                 .foregroundStyle(AppColors.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                .fill(AppColors.tagCheckBg)
-        )
-        .accessibilityElement(children: .combine)
     }
 
-    private func itemCard(_ item: UninstallItem) -> some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Image(systemName: item.category.symbolName)
+    private var titleText: String {
+        let count = plan.apps.count
+        if count == 1 { return "Uninstall \(plan.apps[0].app.name)?" }
+        return "Uninstall \(count) apps?"
+    }
+
+    private func appSection(_ appPlan: Binding<UninstallAppPlan>) -> some View {
+        let app = appPlan.wrappedValue.app
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: AppStyle.Spacing.small) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                Text(app.name)
+                    .font(AppStyle.Typography.rowTitle)
+                if app.isRunning {
+                    Text("will be quit first")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.tagCheckText)
+                }
+                Spacer()
+                Text(formatBytes(appPlan.wrappedValue.selectedBytes))
+                    .font(AppStyle.Typography.metadataEmphasis)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .monospacedDigit()
+            }
+
+            ForEach(appPlan.items) { $item in
+                itemRow($item)
+            }
+        }
+    }
+
+    private func itemRow(_ item: Binding<UninstallItem>) -> some View {
+        let value = item.wrappedValue
+        return HStack(spacing: AppStyle.Spacing.small) {
+            Toggle("", isOn: item.isSelected)
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .tint(AppColors.buttonPrimaryBg)
+
+            Image(systemName: value.category.symbolName)
                 .foregroundStyle(AppColors.textSecondary)
                 .frame(width: 20)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.safetyInfo.headline)
+                Text(value.safetyInfo.headline)
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(displayDirectoryPath(for: item.path))
+                Text(displayDirectoryPath(for: value.path))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -514,7 +394,12 @@ struct UninstallConfirmSheet: View {
 
             Spacer(minLength: AppStyle.Spacing.xSmall)
 
-            Text(item.formattedSize)
+            AppBadge(
+                text: value.safetyInfo.level.displayName,
+                tone: value.safetyInfo.level == .safe ? .safe : .warning
+            )
+
+            Text(value.formattedSize)
                 .font(AppStyle.Typography.metadataEmphasis)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
@@ -530,6 +415,27 @@ struct UninstallConfirmSheet: View {
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
+    }
+
+    private var footer: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+
+            Spacer()
+
+            Button("Cancel", action: onCancel)
+                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .keyboardShortcut(.cancelAction)
+
+            Button("Move \(plan.totalSelectedItems) to Trash") {
+                onConfirm(plan)
+            }
+            .buttonStyle(SolidDestructiveButtonStyle())
+            .keyboardShortcut(.defaultAction)
+            .disabled(plan.totalSelectedItems == 0)
+        }
     }
 }
 

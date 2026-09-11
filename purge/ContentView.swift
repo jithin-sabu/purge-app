@@ -93,15 +93,12 @@ struct ContentView: View {
                 onConfirm: { keepers in Task { await store.confirmDuplicateCleanup(keeperByGroupID: keepers) } }
             )
         }
-        .sheet(isPresented: $store.showUninstallConfirm) {
-            if let app = store.selectedAppForUninstall {
-                UninstallConfirmSheet(
-                    app: app,
-                    items: store.selectedUninstallItems,
-                    onCancel: { store.dismissUninstallConfirm() },
-                    onConfirm: { Task { await store.confirmUninstall() } }
-                )
-            }
+        .sheet(item: $store.uninstallPlan) { plan in
+            UninstallReviewSheet(
+                plan: plan,
+                onCancel: { store.dismissUninstallPlan() },
+                onConfirm: { edited in Task { await store.confirmUninstallPlan(edited) } }
+            )
         }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
@@ -539,18 +536,13 @@ struct ContentView: View {
         return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
     }
 
-    /// Picker mode counts apps; review mode counts the chosen app's removable items.
+    /// Counts the installed apps, and how many are ticked for removal.
     private var uninstallerPageSubtitle: String? {
-        if store.selectedAppForUninstall == nil {
-            guard !store.installedApps.isEmpty else { return nil }
-            let count = store.installedApps.count
-            return "\(count) \(count == 1 ? "app" : "apps")"
-        }
-        let items = store.uninstallItems
-        guard !items.isEmpty else { return nil }
-        let bytes = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let label = items.count == 1 ? "item" : "items"
-        return "\(items.count) \(label) · \(formatBytes(bytes)) found"
+        guard !store.installedApps.isEmpty else { return nil }
+        let total = store.installedApps.count
+        let selected = store.selectedAppIDs.count
+        let base = "\(total) \(total == 1 ? "app" : "apps")"
+        return selected > 0 ? "\(base) · \(selected) selected" : base
     }
 
     private var appCachesSafetyFilter: SafetyFilter {

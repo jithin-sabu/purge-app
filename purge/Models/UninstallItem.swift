@@ -118,3 +118,26 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
 
     var formattedSize: String { formatBytes(sizeBytes) }
 }
+
+/// One app in a multi-app removal: the app and its bundle-plus-leftover items,
+/// each item carrying its own `isSelected` so the review sheet can tick and
+/// untick within an app.
+nonisolated struct UninstallAppPlan: Identifiable, Hashable {
+    let app: InstalledApp
+    var items: [UninstallItem]
+
+    var id: String { app.id }
+
+    var selectedItems: [UninstallItem] { items.filter(\.isSelected) }
+    var selectedBytes: Int64 { selectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+}
+
+/// The reviewed removal across every selected app. `id` is derived from the app
+/// ids so `.sheet(item:)` presents one sheet per distinct selection.
+nonisolated struct UninstallPlan: Identifiable, Hashable {
+    let id: String
+    var apps: [UninstallAppPlan]
+
+    var totalSelectedItems: Int { apps.reduce(0) { $0 + $1.selectedItems.count } }
+    var totalSelectedBytes: Int64 { apps.reduce(Int64(0)) { $0 + $1.selectedBytes } }
+}
