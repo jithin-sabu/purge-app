@@ -9,7 +9,8 @@ struct AppCachesView<PageHeader: View>: View {
     let scanPhase: PurgeStore.ScanPhase
     let onScan: () -> Void
     var showsPageHeader = true
-    /// When true, the parent supplies the page header and the list uses `safeAreaBar` scroll-edge blur (macOS 26+).
+    /// When true, the parent supplies the page header and this view renders only its
+    /// controls and scrolling list.
     var usesExternalScrollContainer = false
     private let pageHeader: () -> PageHeader
 
@@ -176,32 +177,15 @@ struct AppCachesView<PageHeader: View>: View {
         }
     }
 
-    @ViewBuilder
     private func externalScrollBody(plan: ListPlan) -> some View {
-        if #available(macOS 26.0, *) {
-            VStack(spacing: 0) {
-                filterToolbarChrome(plan: plan)
-
-                if !items.isEmpty && !plan.isEmpty {
-                    ZStack {
-                        cacheResultsList(plan: plan)
-                            .scanTabSoftScrollEdge { selectAllRowChrome(plan: plan) }
-
-                        if store.isDeleting && !store.isInteractiveSafeCleanupInProgress && store.manualDeletionSession == nil {
-                            CleaningOverlay()
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    VStack(spacing: 0) {
-                        selectAllRowChrome(plan: plan)
-                        scanListStack(plan: plan)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-            }
-        } else {
-            standardBody(plan: plan)
+        // Controls and the Select All row sit above the list as opaque chrome; the
+        // list cuts off cleanly at its own edge with no scroll-edge blur, matching
+        // the App Uninstaller tab.
+        VStack(spacing: 0) {
+            filterToolbarChrome(plan: plan)
+            selectAllRowChrome(plan: plan)
+            scanListStack(plan: plan)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

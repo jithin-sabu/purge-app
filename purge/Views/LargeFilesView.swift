@@ -189,30 +189,14 @@ struct LargeFilesView: View {
         }
     }
 
-    @ViewBuilder
     private var externalScrollBody: some View {
-        if #available(macOS 26.0, *) {
-            VStack(spacing: 0) {
-                controlsChrome
-
-                if !visibleFiles.isEmpty {
-                    ZStack {
-                        resultsList
-                            .scanTabSoftScrollEdge { selectAllRowChrome }
-
-                        if store.isDeleting {
-                            CleaningOverlay()
-                        }
-                    }
-                } else {
-                    VStack(spacing: 0) {
-                        selectAllRowChrome
-                        listStack
-                    }
-                }
-            }
-        } else {
-            standardBody
+        // Controls and the Select All row sit above the list as opaque chrome; the
+        // list cuts off cleanly at its own edge with no scroll-edge blur, matching
+        // the App Uninstaller tab.
+        VStack(spacing: 0) {
+            controlsChrome
+            selectAllRowChrome
+            listStack
         }
     }
 
@@ -710,11 +694,7 @@ private struct LargeFileSelectAllBar: View {
             }
 
             // Always present, even under Duplicates where it reorders whole groups
-            // rather than rows. Its absence would shrink this bar, and the scan-tab
-            // scroll-edge constants (`scanTabBarSpacing`, the content-margin
-            // compensation) are absolute offsets tuned against a fixed bar height —
-            // a shorter bar pulls the first card up underneath it and smears the
-            // soft edge into a gradient.
+            // rather than rows, so the bar keeps a stable height across filters.
             AppSortMenu(selection: $sort)
         }
         .scanTabSelectAllRowLayout()

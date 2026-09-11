@@ -8,7 +8,8 @@ struct DevToolsView<PageHeader: View>: View {
     let scanPhase: PurgeStore.ScanPhase
     let onScan: () -> Void
     var showsPageHeader = true
-    /// When true, the parent supplies the page header and the list uses `safeAreaBar` scroll-edge blur (macOS 26+).
+    /// When true, the parent supplies the page header and this view renders only its
+    /// controls and scrolling list.
     var usesExternalScrollContainer = false
     private let pageHeader: () -> PageHeader
 
@@ -559,32 +560,15 @@ struct DevToolsView<PageHeader: View>: View {
         }
     }
 
-    @ViewBuilder
     private var externalScrollBody: some View {
-        if #available(macOS 26.0, *) {
-            VStack(spacing: 0) {
-                fixedScanTabHeader
-
-                if showsDeveloperListContent {
-                    ZStack {
-                        developerListOnly
-                            .scanTabSoftScrollEdge { selectAllRowChrome }
-
-                        if store.isDeleting && !store.isInteractiveSafeCleanupInProgress && store.manualDeletionSession == nil {
-                            CleaningOverlay()
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    VStack(spacing: 0) {
-                        selectAllRowChrome
-                        scanListStack
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-            }
-        } else {
-            standardBody
+        // Controls and the Select All row sit above the list as opaque chrome; the
+        // list cuts off cleanly at its own edge with no scroll-edge blur, matching
+        // the App Uninstaller tab.
+        VStack(spacing: 0) {
+            fixedScanTabHeader
+            selectAllRowChrome
+            scanListStack
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

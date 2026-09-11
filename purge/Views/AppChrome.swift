@@ -43,14 +43,7 @@ enum AppDetailPageLayout {
     /// (see `detailPageScrollEdge`) so the scroll edge effect spans it; older systems pad
     /// it onto the scroll content instead.
     static let clearanceBelowHeader: CGFloat = topContentInset - AppStyle.Spacing.small
-    /// Cancels the default soft scroll-edge inset so list cards sit tight under Select All.
-    static let scanTabScrollContentTopCompensation: CGFloat = -20
-    /// Pulls `List` content up under the Select All bar's safe-area reservation so the
-    /// first card sits a small gap below it; `contentMargins` alone can't reduce that
-    /// part of the inset (negative values clamp).
-    static let scanTabBarSpacing: CGFloat = -22
-    /// Clear band under the Select All row so the first card doesn't crowd it as it
-    /// scrolls underneath (macOS 26 draws a hard scroll edge instead of the old fade).
+    /// Clear band under the Select All row so the first card sits a small gap below it.
     static let scanTabSelectAllBottomPadding: CGFloat = 14
     /// Approximate height of `AppSectionPageHeader` (top inset + title + bottom padding).
     static let pageTitleChromeHeight: CGFloat = topContentInset + 24 + AppStyle.Spacing.small
@@ -64,17 +57,6 @@ enum AppDetailPageLayout {
 
 @available(macOS 26.0, *)
 extension View {
-    /// Sticky scan-tab chrome with a soft scroll edge blur as list rows pass underneath.
-    func scanTabSoftScrollEdge<Chrome: View>(@ViewBuilder chrome: @escaping () -> Chrome) -> some View {
-        safeAreaBar(edge: .top, spacing: AppDetailPageLayout.scanTabBarSpacing, content: chrome)
-            .scrollEdgeEffectStyle(.soft, for: .top)
-            .contentMargins(
-                .top,
-                AppDetailPageLayout.scanTabScrollContentTopCompensation,
-                for: .scrollContent
-            )
-    }
-
     /// A page-header sized bar reserves the band the title occupies (the visible animated
     /// title is owned by the persistent parent overlay, so this copy is invisible) and
     /// carries the clearance below it. Its translucent surface is tied to scroll position:
