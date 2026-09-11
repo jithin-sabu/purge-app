@@ -1381,17 +1381,33 @@ final class PurgeStore: ObservableObject {
         let selectedByApp = plan.apps.map { ($0.app, $0.selectedItems) }.filter { !$0.1.isEmpty }
         guard !selectedByApp.isEmpty, !isDeleting else { return }
 
-        // Quit any running app whose bundle is about to move, so it is not held
-        // open mid-delete. Best-effort and graceful.
-        for (app, items) in selectedByApp where items.contains(where: { $0.category == .bundle }) {
-            await quitRunningApp(app)
+        // Quit any running app whose bundle is about to move. If one refuses to
+        // quit — the user cancelled its save prompt, say — it is left installed
+        // rather than trashed out from under a live process. Leftovers-only
+        // selections don't need a quit: they are not the running binary.
+        var toDelete: [(InstalledApp, [UninstallItem])] = []
+        var stillOpen: [InstalledApp] = []
+        for (app, items) in selectedByApp {
+            let removesBundle = items.contains { $0.category == .bundle }
+            if removesBundle {
+                let quit = await quitRunningApp(app)
+                if !quit { stillOpen.append(app); continue }
+            }
+            toDelete.append((app, items))
+        }
+
+        // Everything the user picked belongs to an app that would not quit.
+        guard !toDelete.isEmpty else {
+            manualDeletionSession = nil
+            errorMessage = stillOpenMessage(stillOpen)
+            return
         }
 
         var urls: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
         var totalBytes: Int64 = 0
-        for (app, items) in selectedByApp {
+        for (app, items) in toDelete {
             for item in items {
                 urls.append(item.path)
                 pathToDisplayName[item.path.standardizedFileURL.path] = app.name
@@ -1435,7 +1451,7 @@ final class PurgeStore: ObservableObject {
             })
             // An app leaves the picker once its bundle is trashed. Its selection
             // clears either way, so a partial failure doesn't leave a ghost tick.
-            for (app, _) in selectedByApp {
+            for (app, _) in toDelete {
                 selectedAppIDs.remove(app.id)
                 if deletedPaths.contains(app.bundleURL.standardizedFileURL.path) {
                     installedApps.removeAll { $0.id == app.id }
@@ -1450,27 +1466,49 @@ final class PurgeStore: ObservableObject {
                 movedToTrashCount: report.movedToTrashCount
             )
             CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+
+            // Apps that declined to quit stay installed and selected, so the user
+            // can quit them and retry. Surfaced after the success summary.
+            if !stillOpen.isEmpty {
+                errorMessage = stillOpenMessage(stillOpen)
+            }
         } catch {
             manualDeletionSession = nil
-            let names = selectedByApp.map(\.0.name)
+            let names = toDelete.map(\.0.name)
             let label = names.count == 1 ? names[0] : "the selected apps"
             errorMessage = "Unable to remove \(label). Please try again."
         }
     }
 
-    /// Asks a running app to quit and waits up to ~2s for it to close its files.
-    /// Graceful `terminate()`, never force: an app with unsaved work gets its own
-    /// chance to prompt. If it will not quit we proceed anyway, since trashing a
-    /// running bundle still succeeds.
-    private func quitRunningApp(_ app: InstalledApp) async {
-        guard let bundleID = app.bundleID else { return }
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-        guard !running.isEmpty else { return }
-        for instance in running { instance.terminate() }
+    /// Asks a running app to quit and waits up to ~2s for it to close, returning
+    /// whether it is no longer running. Graceful `terminate()`, never force: an app
+    /// with unsaved work gets its own chance to prompt, and if the user cancels
+    /// that prompt the app stays open and this returns false so the caller leaves
+    /// it installed. An app with no bundle id was never reported running, so it is
+    /// treated as clear to remove.
+    private func quitRunningApp(_ app: InstalledApp) async -> Bool {
+        guard let bundleID = app.bundleID else { return true }
+        func isRunning() -> Bool {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+        }
+        guard isRunning() else { return true }
+        for instance in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
+            instance.terminate()
+        }
         for _ in 0..<20 {
-            if NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty { return }
+            if !isRunning() { return true }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
+        return !isRunning()
+    }
+
+    private func stillOpenMessage(_ apps: [InstalledApp]) -> String {
+        let names = apps.map(\.name)
+        if names.count == 1 {
+            return "\(names[0]) is still open, so it was left installed. Quit it and try again."
+        }
+        let list = names.joined(separator: ", ")
+        return "These apps are still open, so they were left installed: \(list). Quit them and try again."
     }
 
     /// Runs the access probe off the main actor.

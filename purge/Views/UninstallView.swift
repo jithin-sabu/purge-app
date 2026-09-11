@@ -259,16 +259,11 @@ private struct AppTile: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                HStack(spacing: 4) {
-                    if app.isRunning {
-                        AppBadge(text: "Open", tone: .warning)
-                    }
-                    Text(formatBytes(totalBytes))
-                        .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                }
+                Text(formatBytes(totalBytes))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
             }
         }
         .frame(maxWidth: .infinity)
