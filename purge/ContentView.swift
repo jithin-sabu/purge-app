@@ -93,6 +93,13 @@ struct ContentView: View {
                 onConfirm: { keepers in Task { await store.confirmDuplicateCleanup(keeperByGroupID: keepers) } }
             )
         }
+        .sheet(item: $store.uninstallPlan) { plan in
+            UninstallReviewSheet(
+                plan: plan,
+                onCancel: { store.dismissUninstallPlan() },
+                onConfirm: { edited in Task { await store.confirmUninstallPlan(edited) } }
+            )
+        }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
             if isLifecycleActive, let session = store.interactiveSafeCleanupSession {
@@ -338,9 +345,18 @@ struct ContentView: View {
             devToolsTabBody
         case .largeFiles:
             largeFilesTabBody
+        case .uninstaller:
+            uninstallerTabBody
         case .settings:
             settingsTabBody
         }
+    }
+
+    @ViewBuilder
+    private var uninstallerTabBody: some View {
+        UninstallView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .underDetailPageHeader(includesSubtitle: true)
     }
 
     @ViewBuilder
@@ -470,6 +486,8 @@ struct ContentView: View {
                 AppScanCleanActions(onScan: { Task { await store.scanAll() } }, scanPhase: store.scanPhase)
             } else if store.selectedTab == .largeFiles {
                 LargeFilesHeaderActions()
+            } else if store.selectedTab == .uninstaller {
+                UninstallHeaderActions()
             }
         }
     }
@@ -482,6 +500,8 @@ struct ContentView: View {
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
         case .largeFiles:
             return largeFilesPageSubtitle
+        case .uninstaller:
+            return uninstallerPageSubtitle
         case .settings:
             return nil
         case .about:
@@ -514,6 +534,22 @@ struct ContentView: View {
         let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let fileLabel = files.count == 1 ? "file" : "files"
         return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
+    }
+
+    /// Counts the installed apps, and how many are ticked for removal. While the
+    /// background pass is still measuring each app's freeable space, it says so.
+    private var uninstallerPageSubtitle: String? {
+        guard !store.installedApps.isEmpty else { return nil }
+        let total = store.installedApps.count
+        let selected = store.selectedAppIDs.count
+        let base = "\(total) \(total == 1 ? "app" : "apps")"
+        if selected > 0 {
+            return "\(base) · \(selected) selected"
+        }
+        if !store.hasMeasuredAllRemovableTotals {
+            return "\(base) · measuring space…"
+        }
+        return base
     }
 
     private var appCachesSafetyFilter: SafetyFilter {
