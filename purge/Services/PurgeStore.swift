@@ -228,6 +228,9 @@ final class PurgeStore: ObservableObject {
     @Published var installedApps: [InstalledApp] = []
     @Published var isScanningInstalledApps = false
     @Published private(set) var hasCompletedInstalledAppsScan = false
+    /// Bundle-plus-safe-leftover total per app id, filled in the background after
+    /// the list loads. Absent until measured; callers fall back to bundle size.
+    @Published private(set) var removableBytesByAppID: [String: Int64] = [:]
     /// Apps the user has ticked in the picker, keyed by `InstalledApp.id`.
     @Published var selectedAppIDs: Set<String> = []
     /// True while leftovers for the selected apps are being gathered ahead of the
@@ -1245,6 +1248,7 @@ final class PurgeStore: ObservableObject {
         let generation = installedAppsScanGeneration
         isScanningInstalledApps = true
         installedApps = []
+        removableBytesByAppID = [:]
         defer {
             if installedAppsScanGeneration == generation {
                 isScanningInstalledApps = false
@@ -1260,6 +1264,38 @@ final class PurgeStore: ObservableObject {
         }
         guard installedAppsScanGeneration == generation else { return }
         installedApps = collected.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
+
+        // Fill in each tile's "total freed" (bundle + safe leftovers) in the
+        // background, so the list appears immediately and the numbers settle in.
+        Task { await measureRemovableTotals(generation: generation) }
+    }
+
+    /// For each app, sums the bundle plus its high-confidence (default-checked)
+    /// leftovers, which is what an uninstall frees without the user changing any
+    /// ticks. Runs one app at a time so it never competes hard with a leftover
+    /// scan the user triggers by selecting apps.
+    private func measureRemovableTotals(generation: Int) async {
+        for app in installedApps {
+            if installedAppsScanGeneration != generation || Task.isCancelled { return }
+            var total: Int64 = 0
+            for await item in uninstallScanner.leftoverStream(for: app) {
+                if item.matchReason.isHighConfidence { total += item.sizeBytes }
+            }
+            guard installedAppsScanGeneration == generation else { return }
+            removableBytesByAppID[app.id] = total
+        }
+    }
+
+    /// Bundle-plus-safe-leftover total for an app once measured, else its bundle
+    /// size. This is the figure the tiles and size sort use.
+    func removableBytes(for app: InstalledApp) -> Int64 {
+        removableBytesByAppID[app.id] ?? app.bundleSizeBytes
+    }
+
+    /// True once every listed app has a measured total, so the size sort can use
+    /// the totals without reshuffling tiles while measurement is still in flight.
+    var hasMeasuredAllRemovableTotals: Bool {
+        !installedApps.isEmpty && removableBytesByAppID.count >= installedApps.count
     }
 
     // MARK: App selection
@@ -1284,11 +1320,11 @@ final class PurgeStore: ObservableObject {
         installedApps.filter { selectedAppIDs.contains($0.id) }
     }
 
-    /// Rough total shown on the Uninstall button before leftovers are measured:
-    /// the bundle sizes alone. The review sheet shows the exact figure once the
-    /// leftover scan lands.
-    var selectedAppsBundleBytes: Int64 {
-        selectedApps.reduce(Int64(0)) { $0 + $1.bundleSizeBytes }
+    /// Total shown on the Uninstall button: bundle plus safe leftovers per app
+    /// where measured, bundle size otherwise. The review sheet then shows the
+    /// exact, item-by-item figure.
+    var selectedAppsRemovableBytes: Int64 {
+        selectedApps.reduce(Int64(0)) { $0 + removableBytes(for: $1) }
     }
 
     // MARK: Building the removal plan

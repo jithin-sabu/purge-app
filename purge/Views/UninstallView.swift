@@ -82,7 +82,21 @@ struct UninstallView: View {
                     || ($0.bundleID?.lowercased().contains(query) ?? false)
             }
         }
-        return currentSort.sorted(matched)
+        return sortedApps(matched)
+    }
+
+    /// Size sorts key on the total shown on each tile (bundle + safe leftovers),
+    /// but only once every app is measured — otherwise the grid would reshuffle
+    /// tile by tile as the background pass lands. Name and date never wait.
+    private func sortedApps(_ apps: [InstalledApp]) -> [InstalledApp] {
+        switch currentSort {
+        case .largest where store.hasMeasuredAllRemovableTotals:
+            return apps.sorted { store.removableBytes(for: $0) > store.removableBytes(for: $1) }
+        case .smallest where store.hasMeasuredAllRemovableTotals:
+            return apps.sorted { store.removableBytes(for: $0) < store.removableBytes(for: $1) }
+        default:
+            return currentSort.sorted(apps)
+        }
     }
 
     // MARK: Controls
@@ -141,6 +155,7 @@ struct UninstallView: View {
                     ForEach(filteredApps) { app in
                         AppTile(
                             app: app,
+                            totalBytes: store.removableBytes(for: app),
                             isSelected: store.selectedAppIDs.contains(app.id)
                         ) {
                             store.toggleAppSelected(id: app.id)
@@ -185,6 +200,8 @@ struct UninstallView: View {
 
 private struct AppTile: View {
     let app: InstalledApp
+    /// Bundle plus safe leftovers once measured, bundle size until then.
+    let totalBytes: Int64
     let isSelected: Bool
     let onToggle: () -> Void
 
@@ -207,10 +224,11 @@ private struct AppTile: View {
                     if app.isRunning {
                         AppBadge(text: "Open", tone: .warning)
                     }
-                    Text(app.formattedSize)
+                    Text(formatBytes(totalBytes))
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .contentTransition(.numericText())
                 }
             }
         }
@@ -307,7 +325,7 @@ struct UninstallHeaderActions: View {
                             inactiveTitle: "Uninstall",
                             activeTitle: "Uninstall",
                             selectedCount: store.selectedApps.count,
-                            selectedBytes: store.selectedAppsBundleBytes
+                            selectedBytes: store.selectedAppsRemovableBytes
                         )
                     }
                 }
