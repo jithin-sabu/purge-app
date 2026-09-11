@@ -3,6 +3,26 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.5.0</title>
+      <pubDate>Fri, 11 Sep 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>20</sparkle:version>
+      <sparkle:shortVersionString>1.5.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>A new Uninstaller tab removes an installed app along with the files it leaves behind: caches, preferences, containers, saved state, logs, and login helpers. Review exactly what will be removed, then it all moves to the Trash in one pass. Matching is strict, so removing one app cannot sweep in files shared across a vendor's other apps.</li>
+          <li>Duplicates has a new Keep one of each button that clears a whole tab in one action. It suggests a copy to keep in each set and marks the rest for the Trash, and you can move the keeper before you confirm.</li>
+          <li>Scheduled cleaning adds a Custom interval, so you can set your own repeat in days, weeks, or months instead of only weekly, monthly, or every three months.</li>
+          <li>The Clean Selected confirmation sheet has been redesigned, so what you picked is clearer to read before you confirm the delete.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.5.0/Purgev1.5.0.dmg"
+        sparkle:edSignature="obvs7qbJVEEzzI+V2ydkcsYlZI21HDhiJxlCwyYmBkFEoa8SiFe3FaxobvxalEFa2yBezkG/QZQVgkhrfM2WBQ=="
+        length="7465599"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.4.0</title>
       <pubDate>Fri, 28 Aug 2026 12:00:00 +0000</pubDate>
       <sparkle:version>19</sparkle:version>
