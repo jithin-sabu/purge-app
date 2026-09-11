@@ -147,16 +147,13 @@ enum AppUninstallScanPolicy {
                     return .bundleID
                 }
             }
-            // Group containers are `<teamID>.<something with the bundle-id stem>`.
-            // Require the stem to be a whole dot-separated component, so a bundle
-            // id ending in `.note` cannot claim a `…​.notes` container by partial
-            // overlap. The full bundle id appearing as a suffix also qualifies.
+            // Group containers are `<teamID>.<bundle id>` or `group.<bundle id>`.
+            // Require the app's complete bundle identifier as a dot-suffix. A
+            // stem-only match risked two unrelated vendors sharing a final
+            // component (both `…​.rectangle`) claiming each other's container,
+            // which would be preselected because group matches are high-confidence.
             if category == .groupContainers {
                 if lowerName.hasSuffix("." + bundleID) { return .groupID }
-                if let stem = bundleIDStem(bundleID),
-                   lowerName.split(separator: ".").contains(where: { String($0) == stem }) {
-                    return .groupID
-                }
             }
         }
 
@@ -168,16 +165,6 @@ enum AppUninstallScanPolicy {
         }
 
         return nil
-    }
-
-    /// The distinctive final segment of a bundle id, e.g. `rectangle` from
-    /// `com.knollsoft.Rectangle`. Requires at least three characters so a stubby
-    /// stem cannot match a group container by coincidence.
-    nonisolated static func bundleIDStem(_ bundleID: String) -> String? {
-        let parts = bundleID.split(separator: ".")
-        guard let last = parts.last else { return nil }
-        let stem = String(last).lowercased()
-        return stem.count >= 3 ? stem : nil
     }
 
     // MARK: Safety mapping
