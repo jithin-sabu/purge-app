@@ -85,18 +85,13 @@ struct UninstallView: View {
         return currentSort.sorted(matched)
     }
 
-    private var visibleIDs: [String] { filteredApps.map(\.id) }
-
     // MARK: Controls
+
+    // No Select All here on purpose: selecting every installed app for removal is
+    // not something anyone means to do, and offering it invites an accident.
 
     private var controls: some View {
         HStack(spacing: 12) {
-            UninstallSelectAllBar(
-                selectedCount: selectedVisibleCount,
-                visibleCount: filteredApps.count,
-                onToggleAll: toggleSelectAll
-            )
-
             AppDropdown(
                 options: AppSortOption.allCases,
                 selection: currentSort,
@@ -118,17 +113,6 @@ struct UninstallView: View {
             UninstallSearchField(query: $appSearchQuery)
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-    }
-
-    private var selectedVisibleCount: Int {
-        visibleIDs.filter { store.selectedAppIDs.contains($0) }.count
-    }
-
-    private func toggleSelectAll() {
-        let ids = visibleIDs
-        guard !ids.isEmpty else { return }
-        let allOn = ids.allSatisfy { store.selectedAppIDs.contains($0) }
-        store.setAllAppsSelected(!allOn, ids: ids)
     }
 
     // MARK: Grid
@@ -276,35 +260,6 @@ private struct AppTile: View {
     }
 }
 
-// MARK: - Select all bar
-
-private struct UninstallSelectAllBar: View {
-    let selectedCount: Int
-    let visibleCount: Int
-    let onToggleAll: () -> Void
-
-    private var state: SelectAllTriState {
-        guard visibleCount > 0 else { return .none }
-        if selectedCount == 0 { return .none }
-        if selectedCount == visibleCount { return .all }
-        return .mixed
-    }
-
-    var body: some View {
-        HStack(spacing: 10) {
-            TriStateCheckbox(title: "Select All", state: state, action: onToggleAll)
-                .fixedSize()
-                .disabled(visibleCount == 0)
-
-            if selectedCount > 0 {
-                Text("\(selectedCount) selected")
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
 // MARK: - Header actions (rendered by ContentView's page header)
 
 struct UninstallHeaderActions: View {
@@ -326,15 +281,30 @@ struct UninstallHeaderActions: View {
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
             .disabled(store.isScanningInstalledApps)
 
+            // Same widening delete label as Large Files: compact ("Uninstall")
+            // with nothing ticked, growing to carry the count and size as apps are
+            // selected, so Rescan slides over to make room in one motion. While the
+            // plan is being gathered it shows a spinner in place.
             Button {
                 Task { await store.requestUninstallSelectedApps() }
             } label: {
-                CleaningButtonLabel(
-                    title: uninstallTitle,
-                    systemImage: store.isBuildingUninstallPlan ? nil : "trash",
-                    isCleaning: store.isBuildingUninstallPlan,
-                    spinnerTint: AppColors.buttonPrimaryText
-                )
+                Group {
+                    if store.isBuildingUninstallPlan {
+                        CleaningButtonLabel(
+                            title: "Preparing...",
+                            systemImage: nil,
+                            isCleaning: true,
+                            spinnerTint: AppColors.buttonPrimaryText
+                        )
+                    } else {
+                        AnimatedDeleteActionLabel(
+                            inactiveTitle: "Uninstall",
+                            activeTitle: "Uninstall",
+                            selectedCount: store.selectedApps.count,
+                            selectedBytes: store.selectedAppsBundleBytes
+                        )
+                    }
+                }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
             }
@@ -342,13 +312,6 @@ struct UninstallHeaderActions: View {
             .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
         }
         .fixedSize()
-    }
-
-    private var uninstallTitle: String {
-        if store.isBuildingUninstallPlan { return "Preparing..." }
-        let count = store.selectedApps.count
-        if count == 0 { return "Uninstall" }
-        return "Uninstall \(count) \(count == 1 ? "app" : "apps")"
     }
 }
 

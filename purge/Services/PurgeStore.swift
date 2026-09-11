@@ -117,7 +117,7 @@ final class PurgeStore: ObservableObject {
             case .appCaches: return "internaldrive"
             case .devTools: return "hammer"
             case .largeFiles: return "tray.full"
-            case .uninstaller: return "trash.square"
+            case .uninstaller: return "trash"
             case .settings: return "gearshape"
             case .about: return "info.circle"
             }
