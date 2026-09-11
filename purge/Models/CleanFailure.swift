@@ -37,6 +37,7 @@ nonisolated enum FileProtection {
 
 nonisolated enum CleanFailureReason: Equatable, Error {
     case needsFullDiskAccess
+    case needsAdministrator
     case inUse
     case systemProtected
     case safetySkipped
@@ -46,6 +47,8 @@ nonisolated enum CleanFailureReason: Equatable, Error {
         switch self {
         case .needsFullDiskAccess:
             "Purge needs Full Disk Access to remove this."
+        case .needsAdministrator:
+            "This app is locked to an administrator. Enter your password to move it to the Trash."
         case .inUse:
             "An app is still using this. Quit it and clean again."
         case .systemProtected:
@@ -60,6 +63,8 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     var systemImage: String {
         switch self {
         case .needsFullDiskAccess:
+            "lock.fill"
+        case .needsAdministrator:
             "lock.fill"
         case .inUse:
             "app.badge.fill"
@@ -77,7 +82,14 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     }
 
     var showsRetry: Bool {
-        self == .inUse || self == .unknown
+        self == .inUse || self == .unknown || self == .needsAdministrator
+    }
+
+    /// The retry button's label. The administrator case says what the tap will do —
+    /// summon the password prompt — rather than the bare "Retry" that fits the
+    /// transient failures.
+    var retryTitle: String {
+        self == .needsAdministrator ? "Enter Password" : "Retry"
     }
 
     /// Returns `nil` for file-not-found / already-gone errors that should be dropped silently.

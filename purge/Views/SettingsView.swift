@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var startup = StartupPreferenceStore.shared
+    @ObservedObject private var helper = PrivilegedHelperPreferenceStore.shared
     @ObservedObject private var registrar = ScheduledCleaningRegistrar.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage(DevToolsStalenessOption.userDefaultsKey)
@@ -40,6 +41,7 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 18) {
                     startupSection
+                    protectedAppRemovalSection
                     appearanceSection
                     cleaningScheduleSection
                     devToolsSection
@@ -57,11 +59,16 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(maxHeight: usesExternalScrollContainer ? nil : .infinity, alignment: .topLeading)
         .background(AppColors.bgBase)
-        .onAppear { startup.refreshLoginItemStatus() }
+        .onAppear {
+            startup.refreshLoginItemStatus()
+            helper.refresh()
+        }
         // The user can turn the login item off in System Settings without telling
-        // us; re-read on the way back in so the switch isn't stale.
+        // us; re-read on the way back in so the switch isn't stale. The privileged
+        // helper is enabled in that same pane, so re-read it here too.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             startup.refreshLoginItemStatus()
+            helper.refresh()
         }
         .sheet(item: $selectedHistoryEntry) { entry in
             CleanupHistoryDetailView(entry: entry)
@@ -93,6 +100,35 @@ struct SettingsView: View {
         } message: {
             Text(scheduledCleanNowMessage ?? "")
         }
+    }
+
+    private var protectedAppRemovalSection: some View {
+        settingsSection("Protected App Removal") {
+            settingsToggleRow(
+                title: "Remove admin-locked apps without a password",
+                caption: helperCaption,
+                warning: helper.awaitingApproval
+                    ? "Almost there — turn Purge on under Login Items in System Settings to finish."
+                    : nil,
+                isOn: helperEnabledBinding
+            )
+        }
+    }
+
+    private var helperCaption: String {
+        """
+        Some apps are installed under an administrator and can't be moved to the Trash on their \
+        own — Purge asks for your password each time it hits one. Turn this on to install a small \
+        secure helper that removes them for you without the repeated prompt. It still moves apps \
+        to the Trash, never deletes for good, and you can turn it off anytime.
+        """
+    }
+
+    private var helperEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { helper.isEnabled },
+            set: { helper.setEnabled($0) }
+        )
     }
 
     private var appearanceSection: some View {

@@ -228,6 +228,7 @@ nonisolated final class FileDeleter: Sendable {
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],
         pathToExpectedSizeBytes: [String: Int64] = [:],
+        allowPrivilegedFallback: Bool = false,
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
         var bytesMovedToTrash: Int64 = 0
@@ -276,6 +277,21 @@ nonisolated final class FileDeleter: Sendable {
             }
         }
 
+        // Anything still on disk after an ordinary trash failed is a candidate for
+        // one administrator-authorized move — the root-owned app bundle an installer
+        // planted where the user cannot rename it. Only the uninstaller opts in
+        // (`allowPrivilegedFallback`); the large-files and AI-model routes never
+        // escalate. Batched into a single prompt for the whole run.
+        if allowPrivilegedFallback {
+            await applyPrivilegedFallback(
+                bytesMovedToTrash: &bytesMovedToTrash,
+                deletedItems: &deletedItems,
+                failedItems: &failedItems,
+                pathToDisplayName: pathToDisplayName,
+                onProgress: onProgress
+            )
+        }
+
         let capacityAfter = VolumeCapacityReader.read(for: volumeURL)
         let report = DeletionReport(
             bytesMovedToTrash: bytesMovedToTrash,
@@ -288,6 +304,54 @@ nonisolated final class FileDeleter: Sendable {
             timestamp: Date()
         )
         return report
+    }
+
+    /// Escalates every still-present failure to a root move-to-Trash behind one
+    /// prompt, folding the wins into `deletedItems` and re-labelling the rest as
+    /// `.needsAdministrator` so their retry button summons the prompt again.
+    private func applyPrivilegedFallback(
+        bytesMovedToTrash: inout Int64,
+        deletedItems: inout [DeletedItem],
+        failedItems: inout [FailedDeletionItem],
+        pathToDisplayName: [String: String],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+    ) async {
+        let candidates = failedItems.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !candidates.isEmpty else { return }
+
+        // Prefers the installed helper (silent), falls back to the osascript prompt.
+        let result = await PrivilegedUninstall.moveToTrash(
+            candidates.map { URL(fileURLWithPath: $0.path) }
+        )
+
+        let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
+        guard !movedPaths.isEmpty || result.cancelled || !result.failed.isEmpty else { return }
+
+        var stillFailed: [FailedDeletionItem] = []
+        for item in failedItems {
+            let standardized = URL(fileURLWithPath: item.path).standardizedFileURL.path
+            if movedPaths.contains(standardized) {
+                bytesMovedToTrash += item.sizeBytes
+                deletedItems.append(DeletedItem(
+                    path: item.path,
+                    sizeBytes: item.sizeBytes,
+                    displayName: pathToDisplayName[standardized] ?? item.displayName
+                ))
+                onProgress?(.itemDeleted(sizeBytes: item.sizeBytes))
+            } else if candidates.contains(where: { $0.id == item.id }) {
+                // A candidate we tried but could not move — the user dismissed the
+                // prompt, or the move itself failed. Either way it is retryable.
+                stillFailed.append(FailedDeletionItem(
+                    path: item.path,
+                    displayName: item.displayName,
+                    reason: .needsAdministrator,
+                    sizeBytes: item.sizeBytes
+                ))
+            } else {
+                stillFailed.append(item)
+            }
+        }
+        failedItems = stillFailed
     }
 
     /// Returns the simulator UDID when `url` is exactly `…/CoreSimulator/Devices/{UUID}`.

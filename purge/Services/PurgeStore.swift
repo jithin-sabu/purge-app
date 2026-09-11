@@ -789,6 +789,22 @@ final class PurgeStore: ObservableObject {
     /// Retries deletion for a single failed item from the completion overlay.
     func retryCleanFailure(_ item: CleanFailureItem, session: DeletionSession) async -> Int64? {
         let url = URL(fileURLWithPath: item.path)
+
+        // A `.needsAdministrator` item already failed the unprivileged path, so a
+        // plain retry would only fail again. Go straight to the authorized move.
+        if item.reason == .needsAdministrator {
+            let outcome = await PrivilegedUninstall.moveToTrash([url])
+            guard outcome.moved.contains(where: {
+                $0.standardizedFileURL.path == url.standardizedFileURL.path
+            }) else { return nil }
+            resolveRetriedFailure(item: item, movedBytes: item.sizeBytes, session: session)
+            // If what finally moved was an app's bundle, that app is now gone; drop
+            // it from the picker so it doesn't linger as an installed row.
+            let resolvedPath = url.standardizedFileURL.path
+            installedApps.removeAll { $0.bundleURL.standardizedFileURL.path == resolvedPath }
+            return item.sizeBytes
+        }
+
         let result = await fileDeleter.retryDeleteItem(
             at: url,
             displayName: item.displayName,
@@ -796,29 +812,35 @@ final class PurgeStore: ObservableObject {
         )
         switch result {
         case .success(let movedBytes):
-            session.removeResolvedFailure(id: item.id, additionalMovedBytes: movedBytes)
-            incrementMovedToTrashTotal(by: movedBytes)
-            let deleted = DeletedItem(
-                path: item.path,
-                sizeBytes: movedBytes,
-                displayName: item.displayName
-            )
-            reflectDeletionReportInScanState(
-                DeletionReport(
-                    bytesMovedToTrash: movedBytes,
-                    bytesRemovedDirectly: 0,
-                    deletedItems: [deleted],
-                    failedItems: [],
-                    skippedItems: [],
-                    capacityBefore: nil,
-                    capacityAfter: nil,
-                    timestamp: Date()
-                )
-            )
+            resolveRetriedFailure(item: item, movedBytes: movedBytes, session: session)
             return movedBytes
         case .failure:
             return nil
         }
+    }
+
+    /// Shared bookkeeping once a retried failure finally lands in the Trash: clear it
+    /// from the overlay, credit the moved bytes, and drop it from the scan results.
+    private func resolveRetriedFailure(item: CleanFailureItem, movedBytes: Int64, session: DeletionSession) {
+        session.removeResolvedFailure(id: item.id, additionalMovedBytes: movedBytes)
+        incrementMovedToTrashTotal(by: movedBytes)
+        let deleted = DeletedItem(
+            path: item.path,
+            sizeBytes: movedBytes,
+            displayName: item.displayName
+        )
+        reflectDeletionReportInScanState(
+            DeletionReport(
+                bytesMovedToTrash: movedBytes,
+                bytesRemovedDirectly: 0,
+                deletedItems: [deleted],
+                failedItems: [],
+                skippedItems: [],
+                capacityBefore: nil,
+                capacityAfter: nil,
+                timestamp: Date()
+            )
+        )
     }
 
     /// Updates in-memory scan results so removed folders disappear without requiring a full rescan
@@ -1465,6 +1487,7 @@ final class PurgeStore: ObservableObject {
                 at: urls,
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                allowPrivilegedFallback: true,
                 onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)

@@ -1078,7 +1078,7 @@ private struct CleanFailureRow: View {
                                         .controlSize(.small)
                                         .scaleEffect(0.7)
                                 } else {
-                                    Text("Retry")
+                                    Text(failure.reason.retryTitle)
                                 }
                             }
                             .buttonStyle(CleanFailureActionButtonStyle())
