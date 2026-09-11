@@ -107,7 +107,7 @@ final class PurgeStore: ObservableObject {
         case appCaches = "App Caches"
         case devTools = "Dev Tools"
         case largeFiles = "Large Files"
-        case uninstaller = "Uninstall"
+        case uninstaller = "App Uninstaller"
         case settings = "Settings"
         case about = "About"
 
