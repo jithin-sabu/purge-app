@@ -298,27 +298,21 @@ struct LargeFilesView: View {
     }
 
     private var thresholdMenu: some View {
-        Menu {
-            ForEach(LargeFileSizeThreshold.allCases) { option in
-                Button {
-                    minSizeMB = option.rawValue
-                    onScan()
-                } label: {
-                    if option == sizeThreshold {
-                        Label(option.label, systemImage: "checkmark")
-                    } else {
-                        Text(option.label)
-                    }
-                }
+        AppDropdown(
+            options: LargeFileSizeThreshold.allCases,
+            selection: sizeThreshold,
+            optionLabel: { $0.label },
+            onSelect: { option in
+                minSizeMB = option.rawValue
+                onScan()
             }
-        } label: {
+        ) {
             FilterChip(
                 style: .dropdown,
                 label: sizeThreshold.menuButtonLabel,
                 leadingSystemImage: "arrow.up.forward.circle"
             )
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel("Size filter")
@@ -326,27 +320,21 @@ struct LargeFilesView: View {
     }
 
     private var ageMenu: some View {
-        Menu {
-            ForEach(LargeFileAgeThreshold.allCases) { option in
-                Button {
-                    minAgeDays = option.rawValue
-                    onScan()
-                } label: {
-                    if option == ageThreshold {
-                        Label(option.label, systemImage: "checkmark")
-                    } else {
-                        Text(option.label)
-                    }
-                }
+        AppDropdown(
+            options: LargeFileAgeThreshold.allCases,
+            selection: ageThreshold,
+            optionLabel: { $0.label },
+            onSelect: { option in
+                minAgeDays = option.rawValue
+                onScan()
             }
-        } label: {
+        ) {
             FilterChip(
                 style: .dropdown,
                 label: ageThreshold.menuButtonLabel,
                 leadingSystemImage: "calendar"
             )
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel("Last used filter")

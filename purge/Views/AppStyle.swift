@@ -8,6 +8,12 @@ enum AppStyle {
         static let card: CGFloat = 14
     }
 
+    enum Control {
+        /// Shared height for inline pill controls (menu pickers, small text
+        /// fields) so they line up when placed side by side.
+        static let height: CGFloat = 28
+    }
+
     enum Spacing {
         static let xxSmall: CGFloat = 4
         static let xSmall: CGFloat = 8

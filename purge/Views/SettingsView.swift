@@ -23,6 +23,7 @@ struct SettingsView: View {
     @State private var scheduledCleanNowMessage: String?
     @State private var isCleaningHistoryExpanded = false
     @State private var showClearHistoryConfirmation = false
+    @State private var showCustomIntervalSheet = false
     @State private var selectedHistoryEntry: CleanupHistoryEntry?
     /// Session cache of on-disk sizes for excluded paths, keyed by path. A `nil` value
     /// means the path no longer exists.
@@ -174,11 +175,24 @@ struct SettingsView: View {
 
             settingsPickerRow(
                 title: "How often",
-                selection: $prefs.frequency,
+                selection: frequencySelectionBinding,
                 options: ScheduledCleaningFrequency.allCases,
                 optionLabel: \.displayName
             )
             .disabled(!prefs.isEnabled)
+            .sheet(isPresented: $showCustomIntervalSheet) {
+                CustomCleaningIntervalSheet(
+                    initialAmount: prefs.customIntervalAmount,
+                    initialUnit: prefs.customIntervalUnit,
+                    onCancel: { showCustomIntervalSheet = false },
+                    onConfirm: { amount, unit in
+                        prefs.customIntervalAmount = amount
+                        prefs.customIntervalUnit = unit
+                        prefs.frequency = .custom
+                        showCustomIntervalSheet = false
+                    }
+                )
+            }
 
             settingsSectionDivider
 
@@ -760,7 +774,7 @@ struct SettingsView: View {
 
     private var scheduleSummary: String {
         """
-        Every \(prefs.frequency.summaryPhrase), we will quietly clean the same safe items as the \
+        Every \(prefs.frequency.summaryPhrase(customAmount: prefs.customIntervalAmount, customUnit: prefs.customIntervalUnit)), we will quietly clean the same safe items as the \
         Clean Safe Items button - safe caches and stale developer artifacts. Your actual work is \
         never deleted.
         """
@@ -821,6 +835,22 @@ struct SettingsView: View {
         )
     }
 
+    /// Selecting "Custom" never writes `.custom` directly — it opens the interval
+    /// popup, and `.custom` is only committed when the user saves there. Re-selecting
+    /// Custom re-opens the popup with the saved values, doubling as the edit path.
+    private var frequencySelectionBinding: Binding<ScheduledCleaningFrequency> {
+        Binding(
+            get: { prefs.frequency },
+            set: { newVal in
+                if newVal == .custom {
+                    showCustomIntervalSheet = true
+                } else {
+                    prefs.frequency = newVal
+                }
+            }
+        )
+    }
+
     private func enableAutoClean() {
         Task { await prefs.setEnabled(true, animation: scheduleLayoutAnimation) }
     }
@@ -865,7 +895,7 @@ struct SettingsView: View {
     }()
 }
 
-private struct SettingsMenuPicker<Option: Hashable>: View {
+struct SettingsMenuPicker<Option: Hashable>: View {
     @Binding var selection: Option
     let options: [Option]
     let optionLabel: (Option) -> String
@@ -875,19 +905,12 @@ private struct SettingsMenuPicker<Option: Hashable>: View {
     private var labelMinWidth: CGFloat { fillsWidth ? 0 : 120 }
 
     var body: some View {
-        Menu {
-            ForEach(options, id: \.self) { option in
-                Button {
-                    selection = option
-                } label: {
-                    if option == selection {
-                        Label(optionLabel(option), systemImage: "checkmark")
-                    } else {
-                        Text(optionLabel(option))
-                    }
-                }
-            }
-        } label: {
+        AppDropdown(
+            options: options,
+            selection: selection,
+            optionLabel: optionLabel,
+            onSelect: { selection = $0 }
+        ) {
             HStack(spacing: 8) {
                 Text(optionLabel(selection))
                     .lineLimit(1)
@@ -901,7 +924,6 @@ private struct SettingsMenuPicker<Option: Hashable>: View {
             .frame(minWidth: labelMinWidth)
             .frame(maxWidth: fillsWidth ? .infinity : nil, alignment: .leading)
         }
-        .menuStyle(.button)
         .buttonStyle(SettingsPickerButtonStyle())
         .fixedSize(horizontal: !fillsWidth, vertical: true)
         .accessibilityLabel(accessibilityTitle)
@@ -917,7 +939,7 @@ private struct SettingsPickerButtonStyle: ButtonStyle {
             .font(.system(size: 13))
             .foregroundStyle(.primary)
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .frame(height: AppStyle.Control.height)
             .background(
                 configuration.isPressed ? AppColors.bgElevated : AppColors.bgOverlay,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
@@ -1026,7 +1048,7 @@ private struct ScheduleStatusAnimatedHeight<Content: View>: View {
 }
 
 private extension ScheduledCleaningFrequency {
-    var summaryPhrase: String {
+    func summaryPhrase(customAmount: Int, customUnit: CustomCleaningIntervalUnit) -> String {
         switch self {
         case .weekly:
             return "week"
@@ -1034,6 +1056,8 @@ private extension ScheduledCleaningFrequency {
             return "month"
         case .quarterly:
             return "3 months"
+        case .custom:
+            return customUnit.phrase(amount: customAmount)
         }
     }
 
