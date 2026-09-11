@@ -382,6 +382,14 @@ struct UninstallReviewSheet: View {
         let app = appPlan.wrappedValue.app
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: AppStyle.Spacing.small) {
+                TriStateCheckbox(
+                    title: "",
+                    state: selectAllState(appPlan.wrappedValue),
+                    action: { toggleAll(appPlan) }
+                )
+                .fixedSize()
+                .accessibilityLabel("Select all \(app.name) items")
+
                 Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
                     .resizable()
                     .frame(width: 24, height: 24)
@@ -402,6 +410,22 @@ struct UninstallReviewSheet: View {
             ForEach(appPlan.items) { $item in
                 itemRow($item)
             }
+        }
+    }
+
+    private func selectAllState(_ appPlan: UninstallAppPlan) -> SelectAllTriState {
+        let total = appPlan.items.count
+        guard total > 0 else { return .none }
+        let selected = appPlan.selectedItems.count
+        if selected == 0 { return .none }
+        if selected == total { return .all }
+        return .mixed
+    }
+
+    private func toggleAll(_ appPlan: Binding<UninstallAppPlan>) {
+        let allOn = appPlan.wrappedValue.items.allSatisfy(\.isSelected)
+        for index in appPlan.wrappedValue.items.indices {
+            appPlan.wrappedValue.items[index].isSelected = !allOn
         }
     }
 
