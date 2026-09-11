@@ -22,6 +22,17 @@ struct AppUninstallScanPolicyTests {
         )
     }
 
+    // MARK: Identity
+
+    /// Xcode and Xcode-beta both carry com.apple.dt.Xcode. Identity keys on the
+    /// bundle path so the two never collapse into one ForEach cell (the grid hole).
+    @Test
+    func appsSharingABundleIDHaveDistinctIdentity() {
+        let xcode = makeApp(name: "Xcode", bundlePath: "/Applications/Xcode.app", bundleID: "com.apple.dt.Xcode")
+        let beta = makeApp(name: "Xcode-beta", bundlePath: "/Applications/Xcode-beta.app", bundleID: "com.apple.dt.Xcode")
+        #expect(xcode.id != beta.id)
+    }
+
     // MARK: Protection
 
     @Test

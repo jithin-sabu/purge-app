@@ -4,9 +4,11 @@ import Foundation
 /// from the app roots, never from `/System`, so a row here is always something
 /// the user installed and is allowed to remove.
 nonisolated struct InstalledApp: Identifiable, Hashable {
-    /// Bundle identifier when the app has one, otherwise the bundle path. Used as
-    /// the stable list identity and as the match anchor for finding leftovers.
-    var id: String { bundleID ?? bundleURL.standardizedFileURL.path }
+    /// The bundle path, which is always unique. Deliberately not the bundle id:
+    /// two installs can share one (Xcode and Xcode-beta are both
+    /// `com.apple.dt.Xcode`), and keying identity on that collapses them into a
+    /// single grid cell. The bundle id is still the leftover match anchor below.
+    var id: String { bundleURL.standardizedFileURL.path }
 
     /// Display name, e.g. "Rectangle".
     let name: String
