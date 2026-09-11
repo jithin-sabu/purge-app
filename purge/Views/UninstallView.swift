@@ -1,6 +1,48 @@
 import AppKit
 import SwiftUI
 
+/// Ordering for the app grid. Separate from Large Files' `SortOption` because the
+/// date here is install date, not last-used, and the labels say so.
+enum AppSortOption: String, CaseIterable, Identifiable {
+    case largest
+    case smallest
+    case nameAZ
+    case recentlyInstalled
+    case oldestInstalled
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .largest: return "Size (largest first)"
+        case .smallest: return "Size (smallest first)"
+        case .nameAZ: return "Name (A to Z)"
+        case .recentlyInstalled: return "Recently installed"
+        case .oldestInstalled: return "Oldest installed"
+        }
+    }
+
+    var shortDisplayName: String {
+        switch self {
+        case .largest: return "Largest"
+        case .smallest: return "Smallest"
+        case .nameAZ: return "Name"
+        case .recentlyInstalled: return "Newest"
+        case .oldestInstalled: return "Oldest"
+        }
+    }
+
+    func sorted(_ apps: [InstalledApp]) -> [InstalledApp] {
+        switch self {
+        case .largest: return apps.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
+        case .smallest: return apps.sorted { $0.bundleSizeBytes < $1.bundleSizeBytes }
+        case .nameAZ: return apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .recentlyInstalled: return apps.sorted { $0.dateAdded > $1.dateAdded }
+        case .oldestInstalled: return apps.sorted { $0.dateAdded < $1.dateAdded }
+        }
+    }
+}
+
 /// The Uninstall tab: a grid of installed apps, multi-selectable. Ticking apps
 /// and pressing Uninstall Selected gathers each app's leftovers and opens a
 /// review sheet before anything moves to the Trash.
@@ -9,6 +51,11 @@ struct UninstallView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var appSearchQuery = ""
+    @AppStorage("sort.uninstaller") private var sortRaw = AppSortOption.largest.rawValue
+
+    private var currentSort: AppSortOption {
+        AppSortOption(rawValue: sortRaw) ?? .largest
+    }
 
     private static let columns = [GridItem(.adaptive(minimum: 168, maximum: 240), spacing: 12)]
 
@@ -26,11 +73,16 @@ struct UninstallView: View {
 
     private var filteredApps: [InstalledApp] {
         let query = appSearchQuery.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty else { return store.installedApps }
-        return store.installedApps.filter {
-            $0.name.lowercased().contains(query)
-                || ($0.bundleID?.lowercased().contains(query) ?? false)
+        let matched: [InstalledApp]
+        if query.isEmpty {
+            matched = store.installedApps
+        } else {
+            matched = store.installedApps.filter {
+                $0.name.lowercased().contains(query)
+                    || ($0.bundleID?.lowercased().contains(query) ?? false)
+            }
         }
+        return currentSort.sorted(matched)
     }
 
     private var visibleIDs: [String] { filteredApps.map(\.id) }
@@ -44,6 +96,24 @@ struct UninstallView: View {
                 visibleCount: filteredApps.count,
                 onToggleAll: toggleSelectAll
             )
+
+            AppDropdown(
+                options: AppSortOption.allCases,
+                selection: currentSort,
+                optionLabel: { $0.displayName },
+                onSelect: { sortRaw = $0.rawValue }
+            ) {
+                FilterChip(
+                    style: .dropdown,
+                    label: currentSort.shortDisplayName,
+                    leadingSystemImage: "arrow.up.arrow.down"
+                )
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .accessibilityLabel("Sort apps")
+            .accessibilityValue(currentSort.displayName)
+
             Spacer(minLength: 8)
             UninstallSearchField(query: $appSearchQuery)
         }
@@ -444,36 +514,60 @@ struct UninstallReviewSheet: View {
 private struct UninstallSearchField: View {
     @Binding var query: String
     @FocusState private var isFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var hasText: Bool { !query.isEmpty }
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .imageScale(.small)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 14, height: 14)
+                .accessibilityHidden(true)
+
             TextField("Search apps", text: $query)
                 .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundStyle(AppColors.textPrimary)
                 .focused($isFocused)
-            if !query.isEmpty {
+                .accessibilityLabel("Search apps by name")
+                .onExitCommand {
+                    if hasText { query = "" } else { isFocused = false }
+                }
+
+            if hasText {
                 Button {
                     query = ""
+                    isFocused = true
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
+                        .imageScale(.small)
+                        .foregroundStyle(AppColors.textTertiary)
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .help("Clear search")
                 .accessibilityLabel("Clear search")
+                .transition(.opacity)
             }
         }
-        .font(.system(size: 13))
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(maxWidth: 280, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                .fill(AppColors.bgElevated)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
-        )
+        .padding(.vertical, 5)
+        .frame(width: 240)
+        .background {
+            Capsule(style: .continuous).fill(AppColors.bgElevated)
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(
+                    isFocused ? AppColors.buttonPrimaryBg : AppColors.borderSubtle,
+                    lineWidth: 1
+                )
+        }
+        .contentShape(Capsule(style: .continuous))
+        .onTapGesture { isFocused = true }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
     }
 }

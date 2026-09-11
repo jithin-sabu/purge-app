@@ -49,7 +49,8 @@ nonisolated final class AppUninstallScanner {
                     bundleURL: bundleURL,
                     bundleID: bundleID,
                     bundleSizeBytes: size,
-                    isRunning: isRunning
+                    isRunning: isRunning,
+                    dateAdded: installDate(for: bundleURL)
                 )
             )
         }
@@ -113,6 +114,13 @@ nonisolated final class AppUninstallScanner {
 
     private static func runningBundleIDs() -> Set<String> {
         Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier })
+    }
+
+    /// Closest proxy for when the app was installed: the bundle's creation date on
+    /// this volume, falling back to its content modification date.
+    private static func installDate(for bundleURL: URL) -> Date {
+        let values = try? bundleURL.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+        return values?.creationDate ?? values?.contentModificationDate ?? .distantPast
     }
 
     // MARK: Leftovers for a chosen app
