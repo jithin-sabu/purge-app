@@ -93,6 +93,16 @@ struct ContentView: View {
                 onConfirm: { keepers in Task { await store.confirmDuplicateCleanup(keeperByGroupID: keepers) } }
             )
         }
+        .sheet(isPresented: $store.showUninstallConfirm) {
+            if let app = store.selectedAppForUninstall {
+                UninstallConfirmSheet(
+                    app: app,
+                    items: store.selectedUninstallItems,
+                    onCancel: { store.dismissUninstallConfirm() },
+                    onConfirm: { Task { await store.confirmUninstall() } }
+                )
+            }
+        }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
             if isLifecycleActive, let session = store.interactiveSafeCleanupSession {
@@ -345,12 +355,10 @@ struct ContentView: View {
         }
     }
 
-    // Placeholder wired in Phase 3 so the tab compiles; the real review UI lands
-    // in Phase 4.
     @ViewBuilder
     private var uninstallerTabBody: some View {
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        UninstallView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .underDetailPageHeader(includesSubtitle: true)
     }
 
@@ -481,6 +489,8 @@ struct ContentView: View {
                 AppScanCleanActions(onScan: { Task { await store.scanAll() } }, scanPhase: store.scanPhase)
             } else if store.selectedTab == .largeFiles {
                 LargeFilesHeaderActions()
+            } else if store.selectedTab == .uninstaller {
+                UninstallHeaderActions()
             }
         }
     }
@@ -494,7 +504,7 @@ struct ContentView: View {
         case .largeFiles:
             return largeFilesPageSubtitle
         case .uninstaller:
-            return nil
+            return uninstallerPageSubtitle
         case .settings:
             return nil
         case .about:
@@ -527,6 +537,20 @@ struct ContentView: View {
         let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let fileLabel = files.count == 1 ? "file" : "files"
         return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
+    }
+
+    /// Picker mode counts apps; review mode counts the chosen app's removable items.
+    private var uninstallerPageSubtitle: String? {
+        if store.selectedAppForUninstall == nil {
+            guard !store.installedApps.isEmpty else { return nil }
+            let count = store.installedApps.count
+            return "\(count) \(count == 1 ? "app" : "apps")"
+        }
+        let items = store.uninstallItems
+        guard !items.isEmpty else { return nil }
+        let bytes = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let label = items.count == 1 ? "item" : "items"
+        return "\(items.count) \(label) · \(formatBytes(bytes)) found"
     }
 
     private var appCachesSafetyFilter: SafetyFilter {
