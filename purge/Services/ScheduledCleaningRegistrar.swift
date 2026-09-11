@@ -237,6 +237,6 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         ud.set(now, forKey: Self.lastGraceSweepKey)
         recordOutcome(summary, at: now)
 
-        Task { await performRearm() }
+        await performRearm()
     }
 }

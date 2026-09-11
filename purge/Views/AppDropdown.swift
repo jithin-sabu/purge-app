@@ -122,6 +122,8 @@ private struct AppDropdownRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
@@ -143,6 +145,7 @@ private struct AppDropdownAnchor: NSViewRepresentable {
 @MainActor
 private final class AppDropdownPanelController {
     private var panel: NSPanel?
+    private weak var anchor: NSView?
     private var monitors: [Any] = []
     private var observers: [NSObjectProtocol] = []
 
@@ -165,6 +168,7 @@ private final class AppDropdownPanelController {
             backing: .buffered,
             defer: false
         )
+        self.anchor = anchor
         panel.contentView = hosting
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -189,10 +193,20 @@ private final class AppDropdownPanelController {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
 
+        anchor = nil
         guard let panel else { return }
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)
         self.panel = nil
+    }
+
+    /// True when the event is a mouse-down landing inside the trigger view, so
+    /// the outside-click monitor can leave it alone and let the trigger's own
+    /// `toggle()` dismiss an already-visible panel instead of reopening it.
+    private func isInsideAnchor(_ event: NSEvent) -> Bool {
+        guard let anchor, let window = anchor.window, event.window === window else { return false }
+        let frameInWindow = anchor.convert(anchor.bounds, to: nil)
+        return frameInWindow.contains(event.locationInWindow)
     }
 
     /// Below the button and left-aligned with it, flipped above when the
@@ -215,6 +229,10 @@ private final class AppDropdownPanelController {
     private func startWatching(parent: NSWindow) {
         let outside: (NSEvent) -> Bool = { [weak self] event in
             guard let self, let panel = self.panel else { return false }
+            // A click on the trigger is technically outside the panel, but the
+            // trigger's own action toggles the panel — dismissing here would let
+            // it immediately reopen. Leave those clicks to `toggle()`.
+            if self.isInsideAnchor(event) { return false }
             return event.window !== panel
         }
 
