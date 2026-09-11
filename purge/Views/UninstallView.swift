@@ -57,7 +57,10 @@ struct UninstallView: View {
         AppSortOption(rawValue: sortRaw) ?? .largest
     }
 
-    private static let columns = [GridItem(.adaptive(minimum: 168, maximum: 240), spacing: 12)]
+    private static let columns = Array(
+        repeating: GridItem(.flexible(), spacing: 12),
+        count: 4
+    )
 
     var body: some View {
         VStack(spacing: 8) {
@@ -194,7 +197,7 @@ struct UninstallView: View {
     private var skeletonGrid: some View {
         ScrollView {
             LazyVGrid(columns: Self.columns, spacing: 12) {
-                ForEach(0..<18, id: \.self) { _ in
+                ForEach(0..<20, id: \.self) { _ in
                     SkeletonAppTile()
                 }
             }
