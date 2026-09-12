@@ -1127,7 +1127,7 @@ private struct NeedsAdministratorPanel: View {
     private var isSingle: Bool { items.count == 1 }
 
     private var title: String {
-        isSingle ? "\(items[0].displayName) needs permission" : "\(items.count) apps need permission"
+        "macOS needs your permission"
     }
 
     /// Only when several are held: name them so the count isn't a mystery.
@@ -1143,14 +1143,14 @@ private struct NeedsAdministratorPanel: View {
 
     private var explanation: String {
         isSingle
-            ? "An administrator installed it, so macOS needs your OK before it can move to the Trash."
-            : "An administrator installed them, so macOS needs your OK before they can move to the Trash."
+            ? "An administrator installed \(items[0].displayName), so macOS needs your permission before it can move to the Trash."
+            : "An administrator installed them, so macOS needs your permission before they can move to the Trash."
     }
 
     private var trustLine: String {
         isSingle
-            ? "Moved to the Trash, not deleted — restore it anytime."
-            : "Moved to the Trash, not deleted — restore them anytime."
+            ? "Moved to the Trash, not deleted. Restore it anytime."
+            : "Moved to the Trash, not deleted. Restore them anytime."
     }
 
     private var primaryTitle: String {
@@ -1208,19 +1208,27 @@ private struct NeedsAdministratorPanel: View {
                 .buttonStyle(.plain)
                 .disabled(isWorking)
 
+                if isSingle {
+                    Button(action: onRevealInFinder) {
+                        Text("Remove in Finder instead")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.white.opacity(0.08), in: Capsule(style: .continuous))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 Text(trustLine)
                     .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(0.5))
                     .multilineTextAlignment(.center)
-
-                if isSingle {
-                    Button(action: onRevealInFinder) {
-                        Text("Remove in Finder instead")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.55))
-                    }
-                    .buttonStyle(.plain)
-                }
+                    .padding(.top, 2)
             }
         }
         .padding(24)
