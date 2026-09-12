@@ -67,6 +67,10 @@ nonisolated struct DeletionReport: Identifiable {
     let capacityBefore: VolumeCapacity?
     let capacityAfter: VolumeCapacity?
     let timestamp: Date
+    /// Paths the privileged helper moved to the Trash but could not fully hand back
+    /// to the user. They are gone from their source, but emptying the Trash may ask
+    /// for a password. Empty for every ordinary, non-escalated removal.
+    var ownershipWarningPaths: [String] = []
 
     /// The measured volume delta, the only number that may be called reclaimed.
     /// `nil` when it was never measured. May be negative or near zero: a trash move
@@ -235,6 +239,7 @@ nonisolated final class FileDeleter: Sendable {
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
         var skippedItems: [SkippedDeletionItem] = []
+        var ownershipWarningPaths: [String] = []
         let volumeURL = FileManager.default.homeDirectoryForCurrentUser
         let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
 
@@ -284,6 +289,7 @@ nonisolated final class FileDeleter: Sendable {
                 bytesMovedToTrash: &bytesMovedToTrash,
                 deletedItems: &deletedItems,
                 failedItems: &failedItems,
+                ownershipWarningPaths: &ownershipWarningPaths,
                 privilegedEligiblePaths: privilegedEligiblePaths,
                 pathToDisplayName: pathToDisplayName,
                 onProgress: onProgress
@@ -299,7 +305,8 @@ nonisolated final class FileDeleter: Sendable {
             skippedItems: skippedItems,
             capacityBefore: capacityBefore,
             capacityAfter: capacityAfter,
-            timestamp: Date()
+            timestamp: Date(),
+            ownershipWarningPaths: ownershipWarningPaths
         )
         return report
     }
@@ -312,6 +319,7 @@ nonisolated final class FileDeleter: Sendable {
         bytesMovedToTrash: inout Int64,
         deletedItems: inout [DeletedItem],
         failedItems: inout [FailedDeletionItem],
+        ownershipWarningPaths: inout [String],
         privilegedEligiblePaths: Set<String>,
         pathToDisplayName: [String: String],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
@@ -331,31 +339,53 @@ nonisolated final class FileDeleter: Sendable {
         )
         let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
         let indeterminatePaths = Set(result.indeterminate.map { $0.standardizedFileURL.path })
+        let ownershipIncompletePaths = Set(result.ownershipIncomplete.map { $0.standardizedFileURL.path })
+
+        // Records a moved item: credits its bytes, lists it as deleted, advances
+        // progress, and carries forward any "emptying may ask for a password" note.
+        func recordMoved(_ item: FailedDeletionItem, standardized: String) {
+            bytesMovedToTrash += item.sizeBytes
+            deletedItems.append(DeletedItem(
+                path: item.path,
+                sizeBytes: item.sizeBytes,
+                displayName: pathToDisplayName[standardized] ?? item.displayName
+            ))
+            if ownershipIncompletePaths.contains(standardized) {
+                ownershipWarningPaths.append(item.path)
+            }
+            onProgress?(.itemDeleted(sizeBytes: item.sizeBytes))
+        }
 
         var stillFailed: [FailedDeletionItem] = []
         for item in failedItems {
             let standardized = URL(fileURLWithPath: item.path).standardizedFileURL.path
             if movedPaths.contains(standardized) {
-                bytesMovedToTrash += item.sizeBytes
-                deletedItems.append(DeletedItem(
-                    path: item.path,
-                    sizeBytes: item.sizeBytes,
-                    displayName: pathToDisplayName[standardized] ?? item.displayName
-                ))
-                onProgress?(.itemDeleted(sizeBytes: item.sizeBytes))
+                recordMoved(item, standardized: standardized)
             } else if indeterminatePaths.contains(standardized) {
-                // The helper timed out and may still be finishing. Keep the honest
-                // original error instead of claiming that another permission is needed.
-                stillFailed.append(item)
+                // The helper timed out and may still be finishing. If the source is
+                // already gone, the move did land — credit it rather than leaving a
+                // removal button stuck forever. If it is still on disk, keep the
+                // honest original error and let the uncertainty stand.
+                if FileManager.default.fileExists(atPath: item.path) {
+                    stillFailed.append(item)
+                } else {
+                    recordMoved(item, standardized: standardized)
+                }
             } else if candidates.contains(where: { $0.id == item.id }) {
-                // Still on disk and unmoved: the helper isn't enabled yet. Present it
-                // as "needs one-time setup," not a hard failure.
-                stillFailed.append(FailedDeletionItem(
-                    path: item.path,
-                    displayName: item.displayName,
-                    reason: .needsAdministrator,
-                    sizeBytes: item.sizeBytes
-                ))
+                if result.helperAvailable {
+                    // An enabled helper attempted the move and the item is still here:
+                    // that is a real failure, not a missing permission. Keep the honest
+                    // original reason so the user sees "Retry", not "Set Up" again.
+                    stillFailed.append(item)
+                } else {
+                    // Helper isn't enabled yet: present it as one-time setup.
+                    stillFailed.append(FailedDeletionItem(
+                        path: item.path,
+                        displayName: item.displayName,
+                        reason: .needsAdministrator,
+                        sizeBytes: item.sizeBytes
+                    ))
+                }
             } else {
                 stillFailed.append(item)
             }

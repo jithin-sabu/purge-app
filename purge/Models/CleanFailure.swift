@@ -41,6 +41,7 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     case inUse
     case systemProtected
     case safetySkipped
+    case keptForOtherApp
     case unknown
 
     var explanation: String {
@@ -55,6 +56,8 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             "macOS protects this one and won't let it be removed."
         case .safetySkipped:
             "Purge left this one alone to stay on the safe side."
+        case .keptForOtherApp:
+            "Another app you still have installed uses this too, so Purge kept it."
         case .unknown:
             "This one couldn't be removed. Try again."
         }
@@ -72,6 +75,8 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             "lock.shield.fill"
         case .safetySkipped:
             "hand.raised.fill"
+        case .keptForOtherApp:
+            "square.on.square"
         case .unknown:
             "exclamationmark.circle.fill"
         }

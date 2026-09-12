@@ -633,6 +633,18 @@ struct SafeCleanupCelebrationOverlay: View {
                         .multilineTextAlignment(.center)
                     }
 
+                    // The helper moved a protected app but could not hand every file
+                    // back, so say so plainly rather than implying a spotless Trash.
+                    if session.phase == .complete, session.trashOwnershipWarning {
+                        HStack(spacing: 5) {
+                            Image(systemName: "key")
+                            Text("Emptying the Trash may ask for your password.")
+                        }
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                    }
+
                     Button(action: onDone) {
                         Text("Done")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
