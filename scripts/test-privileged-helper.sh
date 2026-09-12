@@ -13,7 +13,11 @@ IDENTITY="Developer ID Application: Jithin Sabu (BX83ZBV95B)"
 TEAM="BX83ZBV95B"
 HELPER="Contents/MacOS/io.getpurge.helper"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DDIR="$REPO_ROOT/build/HelperTest"
+# Build OUTSIDE the repo. The repo sits under ~/Documents, which iCloud syncs, and
+# iCloud stamps com.apple.FinderInfo / fileprovider xattrs on the build products.
+# codesign then refuses the bundle with "resource fork … not allowed". A per-user
+# temp dir carries none of that.
+DDIR="${TMPDIR:-/tmp}/purge-helpertest-dd"
 
 cd "$REPO_ROOT"
 
