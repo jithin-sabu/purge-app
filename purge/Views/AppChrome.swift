@@ -550,66 +550,67 @@ struct SafeCleanupCelebrationOverlay: View {
             VStack(spacing: AppStyle.Spacing.large) {
                 Spacer(minLength: 0)
 
-                CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
-                    .frame(width: 88, height: 88)
-                    .scaleEffect(checkmarkScale)
-                    .opacity(checkmarkVisible ? 1 : 0)
-                    .accessibilityHidden(true)
+                if hidesSuccessChrome {
+                    // Nothing moved: the panel is the whole story, centered on its own.
+                    administratorPanel
+                        .frame(maxWidth: 460)
+                } else {
+                    CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
+                        .frame(width: 88, height: 88)
+                        .scaleEffect(checkmarkScale)
+                        .opacity(checkmarkVisible ? 1 : 0)
+                        .accessibilityHidden(true)
 
-                VStack(spacing: AppStyle.Spacing.small) {
-                    Text(formatBytes(displayedBytes))
-                        .font(.system(size: 54, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .monospacedDigit()
-                        .contentTransition(reduceMotion ? .identity : .numericText())
-                        .multilineTextAlignment(.center)
-                        .accessibilityAddTraits(.isHeader)
+                    VStack(spacing: AppStyle.Spacing.small) {
+                        Text(formatBytes(displayedBytes))
+                            .font(.system(size: 54, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                            .contentTransition(reduceMotion ? .identity : .numericText())
+                            .multilineTextAlignment(.center)
+                            .accessibilityAddTraits(.isHeader)
 
-                    Text(subtitleText)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.78))
-                        .multilineTextAlignment(.center)
-                        .contentTransition(.opacity)
+                        Text(subtitleText)
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.78))
+                            .multilineTextAlignment(.center)
+                            .contentTransition(.opacity)
 
-                    // The cleaning-phase progress group draws into the slot the
-                    // completion lines occupy (always laid out, opacity-toggled),
-                    // so neither phase ever shifts the other's elements.
-                    ZStack(alignment: .top) {
-                        VStack(spacing: AppStyle.Spacing.small) {
-                            if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
-                                OnboardingSizeComparisonLine(items: comparisonItems)
-                                    .foregroundStyle(.white.opacity(0.78))
+                        // The cleaning-phase progress group draws into the slot the
+                        // completion lines occupy (always laid out, opacity-toggled),
+                        // so neither phase ever shifts the other's elements.
+                        ZStack(alignment: .top) {
+                            VStack(spacing: AppStyle.Spacing.small) {
+                                if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
+                                    OnboardingSizeComparisonLine(items: comparisonItems)
+                                        .foregroundStyle(.white.opacity(0.78))
+                                }
+
+                                if tagline != nil {
+                                    CompletionTimeTagline(
+                                        elapsedSeconds: session.elapsedSeconds,
+                                        boltFlashToken: boltFlashToken
+                                    )
+                                    .padding(.top, AppStyle.Spacing.xSmall)
+                                }
                             }
+                            .opacity(completionLinesVisible ? 1 : 0)
 
-                            if tagline != nil {
-                                CompletionTimeTagline(
-                                    elapsedSeconds: session.elapsedSeconds,
-                                    boltFlashToken: boltFlashToken
-                                )
-                                .padding(.top, AppStyle.Spacing.xSmall)
-                            }
+                            progressGroup
+                                .frame(height: 0, alignment: .top)
+                                .opacity(progressGroupVisible ? 1 : 0)
                         }
-                        .opacity(completionLinesVisible ? 1 : 0)
-
-                        progressGroup
-                            .frame(height: 0, alignment: .top)
-                            .opacity(progressGroupVisible ? 1 : 0)
                     }
+                    .frame(maxWidth: 560)
                 }
-                .frame(maxWidth: 560)
 
                 Spacer(minLength: 0)
 
                 VStack(spacing: AppStyle.Spacing.small) {
-                    if session.phase == .complete, !administratorFailures.isEmpty {
-                        NeedsAdministratorPanel(
-                            items: administratorFailures,
-                            isHelperEnabled: helperPrefs.isEnabled,
-                            awaitingApproval: helperPrefs.awaitingApproval,
-                            isWorking: !retryingFailureIDs.isDisjoint(with: Set(administratorFailures.map(\.id))),
-                            onPrimaryAction: handleAdministratorAction,
-                            onRevealInFinder: revealAdministratorItemInFinder
-                        )
+                    // When the header is hidden the panel already stands above; only
+                    // show it here (beneath the success number) when the header stayed.
+                    if session.phase == .complete, !administratorFailures.isEmpty, !hidesSuccessChrome {
+                        administratorPanel
                     }
 
                     if session.phase == .complete, !otherFailures.isEmpty {
@@ -746,6 +747,28 @@ struct SafeCleanupCelebrationOverlay: View {
     private func revealAdministratorItemInFinder() {
         guard let first = administratorFailures.first else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: first.path)])
+    }
+
+    /// When the only outcome is a locked app and nothing actually moved, the success
+    /// header (checkmark, "0 bytes", timing) is just noise around a "0". Drop it and
+    /// let the permission panel stand on its own. As soon as something did move, the
+    /// header earns its place again and the panel sits beneath it.
+    private var hidesSuccessChrome: Bool {
+        session.phase == .complete
+            && !administratorFailures.isEmpty
+            && session.movedToTrashCount == 0
+            && session.finalBytesMovedToTrash == 0
+    }
+
+    private var administratorPanel: some View {
+        NeedsAdministratorPanel(
+            items: administratorFailures,
+            isHelperEnabled: helperPrefs.isEnabled,
+            awaitingApproval: helperPrefs.awaitingApproval,
+            isWorking: !retryingFailureIDs.isDisjoint(with: Set(administratorFailures.map(\.id))),
+            onPrimaryAction: handleAdministratorAction,
+            onRevealInFinder: revealAdministratorItemInFinder
+        )
     }
 
     /// Shown in the complete phase only when something actually went to Trash.
