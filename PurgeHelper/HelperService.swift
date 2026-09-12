@@ -14,31 +14,60 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         paths: [String],
         withReply reply: @escaping ([String]) -> Void
     ) {
-        // The peer identity determines both ownership and destination. Nothing in a
-        // root operation should trust a uid, gid, or Trash path supplied by the app.
+        reply(performMove(paths: paths).moved)
+    }
+
+    func moveToTrashReportingOwnership(
+        paths: [String],
+        withReply reply: @escaping ([String], [String]) -> Void
+    ) {
+        let outcome = performMove(paths: paths)
+        reply(outcome.moved, outcome.ownershipIncomplete)
+    }
+
+    /// The result of a move request: which paths left their source, and which of those
+    /// moved items the helper could not fully hand back to the user. An item in
+    /// `ownershipIncomplete` is also in `moved` — it is in the Trash, but emptying it
+    /// may prompt for a password.
+    private struct MoveOutcome {
+        var moved: [String] = []
+        var ownershipIncomplete: [String] = []
+    }
+
+    /// The one privileged operation, shared by both reply shapes. The peer identity
+    /// determines both ownership and destination. Nothing in a root operation should
+    /// trust a uid, gid, or Trash path supplied by the app.
+    private func performMove(paths: [String]) -> MoveOutcome {
         guard let connection = NSXPCConnection.current() else {
             NSLog("PurgeHelper: refusing request without a current XPC connection")
-            reply([])
-            return
+            return MoveOutcome()
         }
         let ownerUID = connection.effectiveUserIdentifier
         let ownerGID = connection.effectiveGroupIdentifier
         guard ownerUID != 0, let homeDirectory = homeDirectory(for: ownerUID) else {
             NSLog("PurgeHelper: refusing request with invalid peer uid %u", ownerUID)
-            reply([])
-            return
+            return MoveOutcome()
+        }
+
+        // The caller being the genuine Purge app is not enough: this helper is shared by
+        // every account on the Mac once any administrator approves it. Removing
+        // protected apps is an administrator action, so require the connecting user to
+        // be an administrator too. A standard account is refused even through a real
+        // Purge, and is told to ask an administrator to run the removal.
+        guard isAdministrator(uid: ownerUID) else {
+            NSLog("PurgeHelper: refusing non-administrator peer uid %u", ownerUID)
+            return MoveOutcome()
         }
 
         let trashDirectory = homeDirectory.appendingPathComponent(".Trash", isDirectory: true)
         guard let trashFD = openDirectoryWithoutFollowingSymlinks(trashDirectory),
               validatedTrashDirectory(fileDescriptor: trashFD, ownerUID: ownerUID) else {
             NSLog("PurgeHelper: refusing invalid Trash directory %@", trashDirectory.path)
-            reply([])
-            return
+            return MoveOutcome()
         }
         defer { close(trashFD) }
 
-        var moved: [String] = []
+        var outcome = MoveOutcome()
         for path in paths {
             let source = URL(fileURLWithPath: path)
             guard PurgeHelperConstants.isAllowedUninstallLocation(
@@ -49,18 +78,53 @@ final class HelperService: NSObject, PurgeHelperProtocol {
                 continue
             }
 
-            if secureMoveToTrash(
+            let result = secureMoveToTrash(
                 source,
                 trashFD: trashFD,
                 uid: ownerUID,
                 gid: ownerGID
-            ) {
-                moved.append(path)
+            )
+            if result.moved {
+                outcome.moved.append(path)
+                if !result.ownershipComplete { outcome.ownershipIncomplete.append(path) }
             } else {
                 NSLog("PurgeHelper: move failed for %@ (errno %d)", path, errno)
             }
         }
-        reply(moved)
+        return outcome
+    }
+
+    /// True only when `uid` is a member of the local administrators group (gid 80).
+    /// The lookup uses the directory record, never the daemon's own environment.
+    private func isAdministrator(uid: uid_t) -> Bool {
+        let suggestedSize = sysconf(_SC_GETPW_R_SIZE_MAX)
+        let bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
+        var record = passwd()
+        var result: UnsafeMutablePointer<passwd>?
+        var buffer = [CChar](repeating: 0, count: bufferSize)
+
+        let identity: (name: String, primaryGID: Int32)? = buffer.withUnsafeMutableBufferPointer { storage in
+            guard let baseAddress = storage.baseAddress else { return nil }
+            let status = getpwuid_r(uid, &record, baseAddress, storage.count, &result)
+            guard status == 0, result != nil, let namePointer = record.pw_name else { return nil }
+            return (String(cString: namePointer), Int32(record.pw_gid))
+        }
+        guard let identity else { return false }
+
+        let adminGID: Int32 = 80
+        var count: Int32 = 32
+        var groups = [Int32](repeating: 0, count: Int(count))
+        let queried = identity.name.withCString {
+            getgrouplist($0, identity.primaryGID, &groups, &count)
+        }
+        if queried == -1 {
+            // The buffer was too small; `count` now holds the real group count.
+            groups = [Int32](repeating: 0, count: Int(count))
+            _ = identity.name.withCString {
+                getgrouplist($0, identity.primaryGID, &groups, &count)
+            }
+        }
+        return groups.prefix(Int(count)).contains(adminGID)
     }
 
     /// Looks up the connecting user's home without consulting the daemon's own
@@ -109,11 +173,21 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         return currentFD
     }
 
+    /// Whether a move happened and, if so, whether every moved file's ownership was
+    /// handed back. `moved == false` means nothing left the source; when `moved` is
+    /// true, `ownershipComplete == false` means the item is in the Trash but still
+    /// partly owned by root, so emptying it may prompt for a password.
+    private struct SecureMoveResult {
+        let moved: Bool
+        let ownershipComplete: Bool
+    }
+
     /// Atomically renames the source relative to already-open source and Trash
     /// directories. This means path components cannot be swapped after validation.
-    private func secureMoveToTrash(_ source: URL, trashFD: Int32, uid: uid_t, gid: gid_t) -> Bool {
+    private func secureMoveToTrash(_ source: URL, trashFD: Int32, uid: uid_t, gid: gid_t) -> SecureMoveResult {
+        let notMoved = SecureMoveResult(moved: false, ownershipComplete: false)
         guard let sourceParentFD = openDirectoryWithoutFollowingSymlinks(source.deletingLastPathComponent()) else {
-            return false
+            return notMoved
         }
         defer { close(sourceParentFD) }
 
@@ -121,25 +195,26 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         let sourceFD = sourceName.withCString {
             openat(sourceParentFD, $0, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         }
-        guard sourceFD >= 0 else { return false }
+        guard sourceFD >= 0 else { return notMoved }
         defer { close(sourceFD) }
 
         var sourceInfo = stat()
-        guard fstat(sourceFD, &sourceInfo) == 0 else { return false }
+        guard fstat(sourceFD, &sourceInfo) == 0 else { return notMoved }
         let sourceType = sourceInfo.st_mode & S_IFMT
-        guard sourceType == S_IFDIR || sourceType == S_IFREG else { return false }
+        guard sourceType == S_IFDIR || sourceType == S_IFREG else { return notMoved }
 
         guard renameToUniqueDestination(
             source,
             sourceParentFD: sourceParentFD,
             sourceName: sourceName,
             trashFD: trashFD
-        ) else { return false }
+        ) else { return notMoved }
 
-        if !chownRecursively(fileDescriptor: sourceFD, uid: uid, gid: gid) {
+        let ownershipComplete = chownRecursively(fileDescriptor: sourceFD, uid: uid, gid: gid)
+        if !ownershipComplete {
             NSLog("PurgeHelper: moved %@ but could not update every owner", source.path)
         }
-        return true
+        return SecureMoveResult(moved: true, ownershipComplete: ownershipComplete)
     }
 
     /// Renames to a unique Trash name with `RENAME_EXCL`, which makes the collision

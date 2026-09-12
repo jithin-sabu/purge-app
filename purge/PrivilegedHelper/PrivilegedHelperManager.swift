@@ -53,11 +53,14 @@ final class PrivilegedHelperManager {
         }
     }
 
-    func unregister() async {
+    @discardableResult
+    func unregister() async -> Bool {
         do {
             try await service.unregister()
+            return true
         } catch {
             NSLog("Purge: helper unregister() failed — %@", error.localizedDescription)
+            return false
         }
     }
 
@@ -92,8 +95,11 @@ final class PrivilegedHelperManager {
     func moveToTrash(_ urls: [URL]) async -> PrivilegedMoveResult? {
         // A helper can be approved after app launch. Check again here so an old,
         // newly-approved copy is replaced before it receives the current protocol.
-        await reconcileVersion()
-        guard service.status == .enabled, !urls.isEmpty else { return nil }
+        // A definite, un-fixable version mismatch reports "not ready" rather than
+        // letting a stale helper serve the request, so we never silently run an old
+        // binary: the caller then offers one-time setup instead.
+        let ready = await reconcileVersion()
+        guard ready, !urls.isEmpty else { return nil }
         let connection = vettedConnection()
         defer { connection.invalidate() }
 
@@ -122,13 +128,20 @@ final class PrivilegedHelperManager {
                 return
             }
 
-            proxy.moveToTrash(
+            proxy.moveToTrashReportingOwnership(
                 paths: sentPaths
-            ) { movedPaths in
+            ) { movedPaths, ownershipIncompletePaths in
                 let movedSet = Set(movedPaths)
+                let incompleteSet = Set(ownershipIncompletePaths)
                 let moved = urls.filter { movedSet.contains($0.path) }
                 let failed = urls.filter { !movedSet.contains($0.path) }
-                box.resume(PrivilegedMoveResult(moved: moved, failed: failed, indeterminate: []))
+                let ownershipIncomplete = urls.filter { incompleteSet.contains($0.path) }
+                box.resume(PrivilegedMoveResult(
+                    moved: moved,
+                    failed: failed,
+                    indeterminate: [],
+                    ownershipIncomplete: ownershipIncomplete
+                ))
             }
         }
     }
@@ -157,21 +170,43 @@ final class PrivilegedHelperManager {
     /// older copy survived an app update — re-register to install the current binary.
     /// A definite mismatch replaces the old registration. A missing answer refreshes
     /// the existing approved registration without removing it or asking again.
-    func reconcileVersion() async {
-        guard service.status == .enabled else { return }
+    /// Returns `true` when an enabled helper at the current version is ready to serve
+    /// a request. A definite version mismatch that survives re-registration returns
+    /// `false`, so the caller treats the helper as not set up rather than trusting a
+    /// stale binary to behave like the current one.
+    @discardableResult
+    func reconcileVersion() async -> Bool {
+        guard service.status == .enabled else { return false }
         guard let installed = await installedHelperVersion() else {
             // SMAppService can report `.enabled` even though launchd no longer has the
             // job, most often after replacing Purge.app with a newer build. Registering
             // again reloads the already-approved daemon without removing the user's
-            // permission or sending them back to System Settings.
+            // permission or sending them back to System Settings. A flaky version query
+            // is also possible, so let the request proceed — the move has its own
+            // timeout and error handling for a genuinely dead helper.
             NSLog("Purge: enabled helper is unreachable — reloading registration")
             register()
-            return
+            return true
         }
-        guard installed != PurgeHelperConstants.version else { return }
+        guard installed != PurgeHelperConstants.version else { return true }
+
         NSLog("Purge: stale helper %@ (want %@) — re-registering", installed, PurgeHelperConstants.version)
-        await unregister()
+        if await unregister() == false {
+            // Removing the old registration failed. Re-registering on top of it can
+            // leave the old binary in place, so confirm the version afterwards rather
+            // than assuming the update took.
+            NSLog("Purge: could not remove stale helper %@ before reinstalling", installed)
+        }
         register()
+
+        let afterUpdate = await installedHelperVersion()
+        if afterUpdate == PurgeHelperConstants.version { return true }
+        NSLog(
+            "Purge: helper update did not take (installed %@, want %@) — offering setup instead of using the old helper",
+            afterUpdate ?? "unreachable",
+            PurgeHelperConstants.version
+        )
+        return false
     }
 }
 

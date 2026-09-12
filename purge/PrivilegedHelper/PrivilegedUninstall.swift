@@ -2,10 +2,17 @@ import Foundation
 
 /// Outcome of an escalated move. `indeterminate` means the helper did not reply, so
 /// the caller must not claim either success or failure until it checks the disk.
+/// `ownershipIncomplete` is the subset of `moved` the helper could not fully hand
+/// back: those items are in the Trash, but emptying them may prompt for a password.
 nonisolated struct PrivilegedMoveResult: Sendable {
     let moved: [URL]
     let failed: [URL]
     let indeterminate: [URL]
+    var ownershipIncomplete: [URL] = []
+    /// `true` when an enabled helper actually attempted the move. `false` means the
+    /// helper is not set up yet, so a still-present item is a one-time-setup prompt,
+    /// not a failure of an escalated attempt.
+    var helperAvailable: Bool = true
 }
 
 /// The single entry point the deletion engine uses to escalate a stuck uninstall.
@@ -34,7 +41,12 @@ nonisolated enum PrivilegedUninstall {
 
         guard let result = await PrivilegedHelperManager.shared.moveToTrash(urls) else {
             // Helper not enabled (or unreachable): nothing moved, nothing scary shown.
-            return PrivilegedMoveResult(moved: [], failed: urls, indeterminate: [])
+            return PrivilegedMoveResult(
+                moved: [],
+                failed: urls,
+                indeterminate: [],
+                helperAvailable: false
+            )
         }
         return result
     }

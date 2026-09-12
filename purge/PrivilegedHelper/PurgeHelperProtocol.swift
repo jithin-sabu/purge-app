@@ -12,7 +12,10 @@ enum PurgeHelperConstants {
     /// Bump it whenever the helper's behaviour changes: the app compares this against
     /// the version a running helper reports and re-registers when an older copy
     /// survived an update.
-    static let version = "2"
+    ///
+    /// v3 adds the administrator-only caller gate and the ownership-reporting move, so
+    /// an app that talks the v3 protocol re-registers any surviving v2 helper first.
+    static let version = "3"
 
     /// The daemon property list bundled at `Contents/Library/LaunchDaemons/`, named
     /// to `SMAppService.daemon(plistName:)`.
@@ -98,9 +101,22 @@ enum PurgeHelperConstants {
     /// Moves each path in `paths` into the connecting user's Trash as root, then hands
     /// ownership back to that same user so they can empty the Trash unaided.
     /// Replies with the subset of `paths` that are now gone from their source.
+    ///
+    /// Kept for wire compatibility with a v2 app talking to a v3 helper. New callers
+    /// use `moveToTrashReportingOwnership`, which also names the items whose ownership
+    /// could not be fully handed back.
     func moveToTrash(
         paths: [String],
         withReply reply: @escaping (_ movedPaths: [String]) -> Void
+    )
+
+    /// Same move as `moveToTrash`, but the reply also names the subset of moved items
+    /// whose ownership could not be fully handed back to the user. Those items really
+    /// did move to the Trash, but emptying them may prompt for a password, so the app
+    /// can say so honestly instead of reporting a clean success.
+    func moveToTrashReportingOwnership(
+        paths: [String],
+        withReply reply: @escaping (_ movedPaths: [String], _ ownershipIncompletePaths: [String]) -> Void
     )
 
     /// Round-trips the helper's build version so the app can tell whether an older
