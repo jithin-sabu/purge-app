@@ -11,7 +11,7 @@ enum PurgeHelperConstants {
     /// The helper's build version, shared so the app and the daemon agree on it.
     /// Bump it whenever the helper's behaviour changes: the app compares this against
     /// the version a running helper reports and re-registers when an older copy
-    /// survived an update. A launchd tool has no Info.plist, so it lives here.
+    /// survived an update.
     static let version = "2"
 
     /// The daemon property list bundled at `Contents/Library/LaunchDaemons/`, named

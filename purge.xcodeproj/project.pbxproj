@@ -62,7 +62,7 @@
 
 /* Begin PBXFileReference section */
 		23866D74E1EC150691D3E969 /* io.getpurge.helper */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = file; path = io.getpurge.helper; sourceTree = BUILT_PRODUCTS_DIR; };
-		49C4D8E8868801EE41EAE019 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		49C4D8E8868801EE41EAE019 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		5AB930692FAF6F5400EB0EBD /* purge.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = purge.icon; sourceTree = "<group>"; };
 		5AF380452FAA15E4001693A0 /* Purge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Purge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5AF381002FAA15E4001693A0 /* PurgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PurgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };

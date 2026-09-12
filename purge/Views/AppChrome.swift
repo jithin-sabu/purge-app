@@ -1154,6 +1154,9 @@ private struct NeedsAdministratorPanel: View {
     }
 
     private var primaryTitle: String {
+        // Approval pending: the button's job is to reopen Settings, so say so rather
+        // than "Set up," which reads as if setup hasn't started.
+        if needsApproval { return "Open System Settings" }
         if !isHelperEnabled { return "Set up secure removal" }
         return isSingle ? "Remove \(items[0].displayName)" : "Remove \(items.count) apps"
     }

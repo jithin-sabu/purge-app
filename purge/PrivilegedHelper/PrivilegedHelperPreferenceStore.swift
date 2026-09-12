@@ -37,26 +37,36 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
         if status == .enabled { lastRegistrationFailed = false }
     }
 
+    /// The most recent state the user asked for. A request that is superseded before
+    /// its turn is dropped, so the helper always settles on the last thing asked.
+    private var desiredEnabled: Bool?
+    /// Serializes register/unregister so a slow `unregister()` can never land after a
+    /// newer `register()` and leave the helper in the wrong state.
+    private var applyTask: Task<Void, Never>?
+
     func setEnabled(_ enabled: Bool) {
-        if enabled {
-            lastRegistrationFailed = false
-            switch manager.register() {
-            case .enabled:
-                break
-            case .needsApproval:
-                manager.openLoginItemsSettings()
-            case .failed(let detail):
-                lastRegistrationFailed = true
-                NSLog("Purge: helper registration failed — %@", detail)
-            }
-        } else {
-            lastRegistrationFailed = false
-            Task {
+        desiredEnabled = enabled
+        lastRegistrationFailed = false
+        let previous = applyTask
+        applyTask = Task { @MainActor in
+            _ = await previous?.value
+            // A later request took over while this one waited; let that one decide.
+            guard desiredEnabled == enabled else { return }
+            if enabled {
+                switch manager.register() {
+                case .enabled:
+                    break
+                case .needsApproval:
+                    manager.openLoginItemsSettings()
+                case .failed(let detail):
+                    lastRegistrationFailed = true
+                    NSLog("Purge: helper registration failed — %@", detail)
+                }
+            } else {
                 await manager.unregister()
-                refresh()
             }
+            refresh()
         }
-        refresh()
     }
 
     func openLoginItemsSettings() {

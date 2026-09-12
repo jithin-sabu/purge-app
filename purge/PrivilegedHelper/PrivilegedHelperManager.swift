@@ -109,8 +109,12 @@ final class PrivilegedHelperManager {
             }
 
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+                // An enabled helper that faults mid-call may already have moved one or
+                // more paths. Mark them indeterminate — same as the timeout path — so the
+                // caller keeps the honest original error instead of demoting an enabled
+                // helper to a "needs administrator setup" retry.
                 NSLog("Purge: helper XPC error — %@", error.localizedDescription)
-                box.resume(nil)
+                box.resume(PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
             } as? PurgeHelperProtocol
 
             guard let proxy else {
