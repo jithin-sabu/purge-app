@@ -5,7 +5,7 @@ import ServiceManagement
 /// `SMAppService`, reports whether it is enabled, and dials it over XPC to move
 /// admin-owned bundles to the Trash without a per-uninstall password.
 ///
-/// Registration is a one-time setup. macOS shows the daemon under the app in
+    /// Registration is a one-time setup. macOS shows the daemon under the app in
 /// System Settings and the user enables it there. Once enabled, uninstalls of
 /// locked apps can use the helper without another password prompt.
 @MainActor
@@ -30,21 +30,21 @@ final class PrivilegedHelperManager {
 
     var status: SMAppService.Status { service.status }
 
-    /// The helper is installed, enabled, and ready to take a connection.
-    var isReady: Bool { status == .enabled }
-
     /// Registers the daemon if it isn't already. A fresh registration lands in
     /// `.requiresApproval` until the user flips it on in System Settings, so this
     /// reports which of the two happened rather than pretending it is live.
     @discardableResult
     func register() -> Registration {
-        if service.status == .enabled { return .enabled }
+        let statusBeforeRegistration = service.status
         do {
             try service.register()
         } catch {
-            // `register()` throws if it is already registered; the status read below
-            // is the real answer, so only a genuinely stuck state falls through.
-            NSLog("Purge: helper register() threw — %@", error.localizedDescription)
+            // Calling register for an already-loaded helper throws harmlessly. We also
+            // call it when macOS still says "enabled" but dropped the launch job after
+            // an app update, because that call loads the approved helper again.
+            if statusBeforeRegistration != .enabled {
+                NSLog("Purge: helper register() threw — %@", error.localizedDescription)
+            }
         }
         switch service.status {
         case .enabled: return .enabled
@@ -155,11 +155,19 @@ final class PrivilegedHelperManager {
 
     /// If an enabled helper reports a version other than the one this app ships, an
     /// older copy survived an app update — re-register to install the current binary.
-    /// Only a definite mismatch acts; a missing answer is left alone so a flaky call
-    /// can never trigger a spurious re-approval. Cheap to call once per launch.
+    /// A definite mismatch replaces the old registration. A missing answer refreshes
+    /// the existing approved registration without removing it or asking again.
     func reconcileVersion() async {
         guard service.status == .enabled else { return }
-        guard let installed = await installedHelperVersion() else { return }
+        guard let installed = await installedHelperVersion() else {
+            // SMAppService can report `.enabled` even though launchd no longer has the
+            // job, most often after replacing Purge.app with a newer build. Registering
+            // again reloads the already-approved daemon without removing the user's
+            // permission or sending them back to System Settings.
+            NSLog("Purge: enabled helper is unreachable — reloading registration")
+            register()
+            return
+        }
         guard installed != PurgeHelperConstants.version else { return }
         NSLog("Purge: stale helper %@ (want %@) — re-registering", installed, PurgeHelperConstants.version)
         await unregister()

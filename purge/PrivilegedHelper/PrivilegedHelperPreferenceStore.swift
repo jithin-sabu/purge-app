@@ -43,10 +43,15 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
     /// Serializes register/unregister so a slow `unregister()` can never land after a
     /// newer `register()` and leave the helper in the wrong state.
     private var applyTask: Task<Void, Never>?
+    /// macOS does not send the app a notification when the user approves a background
+    /// helper in System Settings. Poll briefly while approval is pending so the
+    /// uninstall screen can continue as soon as the switch is turned on.
+    private var approvalMonitorTask: Task<Void, Never>?
 
     func setEnabled(_ enabled: Bool) {
         desiredEnabled = enabled
         lastRegistrationFailed = false
+        if !enabled { approvalMonitorTask?.cancel() }
         let previous = applyTask
         applyTask = Task { @MainActor in
             _ = await previous?.value
@@ -55,10 +60,13 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
             if enabled {
                 switch manager.register() {
                 case .enabled:
+                    approvalMonitorTask?.cancel()
                     break
                 case .needsApproval:
+                    monitorPendingApproval()
                     manager.openLoginItemsSettings()
                 case .failed(let detail):
+                    approvalMonitorTask?.cancel()
                     lastRegistrationFailed = true
                     NSLog("Purge: helper registration failed — %@", detail)
                 }
@@ -66,6 +74,26 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
                 await manager.unregister()
             }
             refresh()
+        }
+    }
+
+    private func monitorPendingApproval() {
+        approvalMonitorTask?.cancel()
+        approvalMonitorTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            // Five minutes is long enough to read the explanation and find the switch,
+            // without leaving a permanent timer running in the app.
+            for _ in 0..<600 {
+                do {
+                    try await Task.sleep(for: .milliseconds(500))
+                } catch {
+                    return
+                }
+                guard desiredEnabled == true else { return }
+                refresh()
+                if isEnabled || !needsApproval { return }
+            }
         }
     }
 

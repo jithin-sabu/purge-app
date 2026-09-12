@@ -657,10 +657,17 @@ struct SafeCleanupCelebrationOverlay: View {
             handleAppear()
             helperPrefs.refresh()
         }
-        // The user enables the helper in System Settings and comes back with this
-        // screen still up; re-read so the panel's button flips to "Remove."
+        // Keep a foreground refresh as a fallback if approval took longer than the
+        // short background monitor or the app was reopened later.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             helperPrefs.refresh()
+        }
+        // Approval happens outside Purge. The preference store watches for macOS to
+        // enable the helper; when it does, finish the uninstall the user already
+        // confirmed instead of making them press a second removal button.
+        .onChange(of: helperPrefs.isEnabled) { isEnabled in
+            guard isEnabled else { return }
+            retryAdministratorFailures()
         }
         .onChange(of: session.phase) { phase in
             guard phase == .complete else { return }
@@ -734,17 +741,20 @@ struct SafeCleanupCelebrationOverlay: View {
         session.failedItems.filter { $0.reason != .needsAdministrator }
     }
 
-    /// One button for both jobs: set the helper up the first time (which sends the
-    /// user to approve it), or, once it is enabled, remove every stuck app now.
-    /// Re-reads the live status first so a tap right after the user enabled it in
-    /// Settings removes the app instead of bouncing them back to Settings.
+    /// One button for both jobs: set the helper up the first time, or manually retry
+    /// if automatic continuation did not finish. Re-read the live status first so a
+    /// tap after approval removes the app instead of reopening System Settings.
     private func handleAdministratorAction() {
         helperPrefs.refresh()
         if helperPrefs.isEnabled {
-            for item in administratorFailures { retryFailure(item) }
+            retryAdministratorFailures()
         } else {
             helperPrefs.setEnabled(true)
         }
+    }
+
+    private func retryAdministratorFailures() {
+        for item in administratorFailures { retryFailure(item) }
     }
 
     private func revealAdministratorItemInFinder() {
