@@ -790,25 +790,11 @@ final class PurgeStore: ObservableObject {
     func retryCleanFailure(_ item: CleanFailureItem, session: DeletionSession) async -> Int64? {
         let url = URL(fileURLWithPath: item.path)
 
-        // A `.needsAdministrator` item needs the signed helper. If it isn't enabled
-        // yet, this tap is the setup step: register it and send the user to approve
-        // it — the item stays pending, and once approved a second tap (or a fresh
-        // uninstall) completes silently. If it is already enabled, do the move now.
+        // A `.needsAdministrator` item is a whole app held back because its bundle is
+        // locked. Removing it goes through the helper and takes the bundle *and* the
+        // leftovers we deferred with it, so nothing is stripped until the app can go.
         if item.reason == .needsAdministrator {
-            guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
-                PrivilegedHelperPreferenceStore.shared.setEnabled(true)
-                return nil
-            }
-            let outcome = await PrivilegedUninstall.moveToTrash([url])
-            guard outcome.moved.contains(where: {
-                $0.standardizedFileURL.path == url.standardizedFileURL.path
-            }) else { return nil }
-            resolveRetriedFailure(item: item, movedBytes: item.sizeBytes, session: session)
-            // If what finally moved was an app's bundle, that app is now gone; drop
-            // it from the picker so it doesn't linger as an installed row.
-            let resolvedPath = url.standardizedFileURL.path
-            installedApps.removeAll { $0.bundleURL.standardizedFileURL.path == resolvedPath }
-            return item.sizeBytes
+            return await completeLockedUninstall(for: item, session: session)
         }
 
         let result = await fileDeleter.retryDeleteItem(
@@ -847,6 +833,58 @@ final class PurgeStore: ObservableObject {
                 timestamp: Date()
             )
         )
+    }
+
+    /// Finishes a deferred locked-app uninstall once the helper is set up: removes the
+    /// bundle and every leftover held with it in one privileged move, so an app is
+    /// never left gutted. If the helper isn't enabled yet, this tap is the setup step
+    /// and the app stays pending until the user approves it.
+    private func completeLockedUninstall(for item: CleanFailureItem, session: DeletionSession) async -> Int64? {
+        guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
+            PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+            return nil
+        }
+
+        let bundleKey = URL(fileURLWithPath: item.path).standardizedFileURL.path
+        let pending = pendingLockedUninstalls.first { $0.bundlePath == bundleKey }
+        let urls = pending?.items.map(\.path) ?? [URL(fileURLWithPath: item.path)]
+
+        let result = await PrivilegedUninstall.moveToTrash(urls)
+        guard !result.moved.isEmpty else { return nil }
+        let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
+
+        let movedBytes: Int64
+        if let pending {
+            movedBytes = pending.items
+                .filter { movedPaths.contains($0.path.standardizedFileURL.path) }
+                .reduce(0) { $0 + $1.sizeBytes }
+        } else {
+            movedBytes = item.sizeBytes
+        }
+
+        session.removeResolvedFailure(id: item.id, additionalMovedBytes: movedBytes)
+        incrementMovedToTrashTotal(by: movedBytes)
+        reflectDeletionReportInScanState(
+            DeletionReport(
+                bytesMovedToTrash: movedBytes,
+                bytesRemovedDirectly: 0,
+                deletedItems: result.moved.map {
+                    DeletedItem(path: $0.path, sizeBytes: 0, displayName: item.displayName)
+                },
+                failedItems: [],
+                skippedItems: [],
+                capacityBefore: nil,
+                capacityAfter: nil,
+                timestamp: Date()
+            )
+        )
+
+        // The app has actually left the disk only if its bundle moved.
+        if movedPaths.contains(bundleKey) {
+            installedApps.removeAll { $0.bundleURL.standardizedFileURL.path == bundleKey }
+            pendingLockedUninstalls.removeAll { $0.bundlePath == bundleKey }
+        }
+        return movedBytes
     }
 
     /// Updates in-memory scan results so removed folders disappear without requiring a full rescan
@@ -1412,6 +1450,26 @@ final class PurgeStore: ObservableObject {
         await performUninstallPlan(plan)
     }
 
+    /// An app whose bundle needs the helper, held whole (bundle + leftovers) until
+    /// the helper is enabled. We never strip an app's leftovers while its bundle
+    /// stays put: that would gut an app the user can still open.
+    private struct PendingLockedUninstall {
+        let app: InstalledApp
+        let items: [UninstallItem]
+        var bundlePath: String { app.bundleURL.standardizedFileURL.path }
+    }
+
+    private var pendingLockedUninstalls: [PendingLockedUninstall] = []
+
+    /// Whether moving `url` to the Trash needs elevated rights — true when the
+    /// bundle or its parent isn't writable by this user, which is what defeats the
+    /// cross-directory rename a trash move performs (root-owned apps like Teams).
+    private func bundleNeedsPrivilege(_ url: URL) -> Bool {
+        let fileManager = FileManager.default
+        if !fileManager.isWritableFile(atPath: url.path) { return true }
+        return !fileManager.isWritableFile(atPath: url.deletingLastPathComponent().path)
+    }
+
     /// Trashes the checked items across all apps in `plan`, reusing the same
     /// live-session overlay, progress poller, and history entry as the other
     /// manual flows. Kept separate from `performLargeFileDeletion`: they share
@@ -1451,12 +1509,35 @@ final class PurgeStore: ObservableObject {
             return
         }
 
+        // An app whose bundle is locked and can't be removed yet is held back whole:
+        // removing its caches and containers now, while the app itself stays put,
+        // would leave a half-working app. Defer bundle + leftovers together until the
+        // helper is enabled; the "needs your OK" panel then removes the lot at once.
+        // With the helper already on, nothing defers — the bundle escalates inline.
+        let helperReady = PrivilegedHelperPreferenceStore.shared.isEnabled
+        var ready: [(InstalledApp, [UninstallItem])] = []
+        var deferred: [(InstalledApp, [UninstallItem])] = []
+        for (app, items) in toDelete {
+            let removesBundle = items.contains { $0.category == .bundle }
+            if removesBundle, !helperReady, bundleNeedsPrivilege(app.bundleURL) {
+                deferred.append((app, items))
+            } else {
+                ready.append((app, items))
+            }
+        }
+
+        for (app, items) in deferred {
+            let key = app.bundleURL.standardizedFileURL.path
+            pendingLockedUninstalls.removeAll { $0.bundlePath == key }
+            pendingLockedUninstalls.append(PendingLockedUninstall(app: app, items: items))
+        }
+
         var urls: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
         var totalBytes: Int64 = 0
         var seenPaths = Set<String>()
-        for (app, items) in toDelete {
+        for (app, items) in ready {
             for item in items {
                 // Two apps sharing a bundle id resolve to the same bundle-id-keyed
                 // leftovers, so the same path can appear under both. Trash and size
@@ -1512,11 +1593,22 @@ final class PurgeStore: ObservableObject {
                 }
             }
 
+            // Deferred apps moved nothing; surface each as one "needs your OK" row so
+            // the panel can offer setup and then remove the whole app at once.
+            let deferredFailures = deferred.map { app, items in
+                CleanFailureItem(
+                    path: app.bundleURL.path,
+                    displayName: app.name,
+                    reason: .needsAdministrator,
+                    sizeBytes: items.reduce(0) { $0 + $1.sizeBytes }
+                )
+            }
+
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,
                 elapsedSeconds: elapsedSeconds,
-                failedItems: report.userVisibleFailures,
+                failedItems: report.userVisibleFailures + deferredFailures,
                 movedToTrashCount: report.movedToTrashCount
             )
             CleanupHistoryStore.shared.append(trigger: .manual, report: report)
