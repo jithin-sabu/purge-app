@@ -1113,9 +1113,9 @@ private struct CleanFailureDisclosure: View {
 }
 
 /// The completion-screen treatment for apps that are locked to an administrator.
-/// Not an error and not a silent success: it says plainly what happened, what Purge
-/// will and won't do, and offers one calm next step — set up the secure helper once,
-/// or (if already set up) remove the apps now — with Finder as the manual escape.
+/// Not an error and not a silent success: it names what's held, says in one line why,
+/// reassures in one line that nothing is really deleted, and offers a single action —
+/// set the helper up once, or (once set up) remove everything held.
 private struct NeedsAdministratorPanel: View {
     let items: [CleanFailureItem]
     let isHelperEnabled: Bool
@@ -1124,60 +1124,71 @@ private struct NeedsAdministratorPanel: View {
     let onPrimaryAction: () -> Void
     let onRevealInFinder: () -> Void
 
+    private var isSingle: Bool { items.count == 1 }
+
     private var title: String {
-        items.count == 1 ? "\(items[0].displayName) needs your OK" : "\(items.count) apps need your OK"
+        isSingle ? "\(items[0].displayName) needs permission" : "\(items.count) apps need permission"
+    }
+
+    /// Only when several are held: name them so the count isn't a mystery.
+    private var namesLine: String? {
+        guard !isSingle else { return nil }
+        let names = items.map(\.displayName)
+        switch names.count {
+        case 2: return "\(names[0]) and \(names[1])"
+        case 3: return "\(names[0]), \(names[1]), and \(names[2])"
+        default: return "\(names[0]), \(names[1]), and \(names.count - 2) more"
+        }
     }
 
     private var explanation: String {
-        items.count == 1
-            ? "It was installed by an administrator, so macOS won't let any app move it to the Trash without your permission. That's a macOS protection, not a problem with the app or with Purge."
-            : "They were installed by an administrator, so macOS won't let them be moved to the Trash without your permission. That's a macOS protection, not a problem with the apps or with Purge."
+        isSingle
+            ? "An administrator installed it, so macOS needs your OK before it can move to the Trash."
+            : "An administrator installed them, so macOS needs your OK before they can move to the Trash."
+    }
+
+    private var trustLine: String {
+        isSingle
+            ? "Moved to the Trash, not deleted — restore it anytime."
+            : "Moved to the Trash, not deleted — restore them anytime."
     }
 
     private var primaryTitle: String {
-        if !isHelperEnabled { return "Set Up Secure Removal" }
-        return items.count == 1 ? "Remove \(items[0].displayName)" : "Remove \(items.count) Apps"
+        if !isHelperEnabled { return "Set up secure removal" }
+        return isSingle ? "Remove \(items[0].displayName)" : "Remove \(items.count) apps"
     }
 
     var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "lock.shield")
-                .font(.system(size: 26, weight: .regular))
-                .foregroundStyle(.white.opacity(0.85))
-                .accessibilityHidden(true)
+        VStack(spacing: 18) {
+            VStack(spacing: 8) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 30, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .accessibilityHidden(true)
 
-            VStack(spacing: 6) {
                 Text(title)
-                    .font(.headline)
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
 
-                Text(explanation)
-                    .font(.callout)
-                    .foregroundStyle(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            reassuranceList
-
-            if isHelperEnabled {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
-                    Text("Secure removal is on")
-                        .foregroundStyle(.white.opacity(0.85))
+                if let namesLine {
+                    Text(namesLine)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
                 }
-                .font(.caption.weight(.medium))
-            } else if awaitingApproval {
-                Text("Almost there — in System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back.")
-                    .font(.caption)
+
+                Text(explanation)
+                    .font(.system(size: 15))
                     .foregroundStyle(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 1)
             }
 
-            VStack(spacing: 10) {
+            statusLine
+
+            VStack(spacing: 12) {
                 Button(action: onPrimaryAction) {
                     Group {
                         if isWorking {
@@ -1186,60 +1197,56 @@ private struct NeedsAdministratorPanel: View {
                                 .tint(AppColors.buttonPrimaryText)
                         } else {
                             Text(primaryTitle)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .font(.system(size: 15, weight: .semibold))
                         }
                     }
                     .foregroundStyle(AppColors.buttonPrimaryText)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 11)
                     .background(AppColors.textPrimary, in: Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(isWorking)
 
-                Button(action: onRevealInFinder) {
-                    Text("Remove it in Finder instead")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.6))
+                Text(trustLine)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+
+                if isSingle {
+                    Button(action: onRevealInFinder) {
+                        Text("Remove in Finder instead")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
-        .padding(20)
-        .frame(maxWidth: 420)
+        .padding(24)
+        .frame(maxWidth: 400)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.white.opacity(0.06))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5)
         }
     }
 
-    private var reassuranceList: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            reassuranceRow("trash", "Only moves to the Trash, never deletes for good")
-            reassuranceRow("arrow.uturn.backward", "You can put it back anytime")
-            reassuranceRow("hand.raised", "Never touches your documents or personal files")
-            reassuranceRow("switch.2", "Turn secure removal off whenever you like")
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
-    }
-
-    private func reassuranceRow(_ icon: String, _ text: String) -> some View {
-        HStack(alignment: .center, spacing: 9) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.5))
-                .frame(width: 16, alignment: .center)
-                .accessibilityHidden(true)
-
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.72))
-                .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    private var statusLine: some View {
+        if isHelperEnabled {
+            Label("Secure removal is on", systemImage: "checkmark.seal.fill")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.green)
+        } else if awaitingApproval {
+            Text("In System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.68))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
