@@ -73,6 +73,14 @@ final class DeletionSession: ObservableObject, Identifiable {
     private(set) var failedCount: Int = 0
     private(set) var movedToTrashCount: Int = 0
     @Published private(set) var failedItems: [CleanFailureItem] = []
+    /// `true` when at least one item was moved to the Trash by the privileged helper
+    /// but could not be fully handed back to the user, so emptying the Trash may ask
+    /// for a password. Drives one honest line on the completion screen; `false` for
+    /// every ordinary removal.
+    @Published private(set) var trashOwnershipWarning = false
+
+    /// Raises the Trash-ownership note. Safe to call more than once.
+    func noteTrashOwnershipWarning() { trashOwnershipWarning = true }
 
     init(totalBytes: Int64, totalItems: Int, startedAt: Date = Date()) {
         self.totalBytes = totalBytes
@@ -136,5 +144,20 @@ final class DeletionSession: ObservableObject, Identifiable {
         failedItems.removeAll { $0.id == id }
         failedCount = failedItems.count
         finalBytesMovedToTrash += additionalMovedBytes
+    }
+
+    /// Credits bytes from a partial retry while leaving its unresolved failure visible.
+    func addRetriedMovedBytes(_ bytes: Int64) {
+        guard bytes > 0 else { return }
+        finalBytesMovedToTrash += bytes
+    }
+
+    /// Replaces one grouped failure with the exact items that remain after a partial
+    /// uninstall. This keeps leftover failures visible after the app bundle moved.
+    func replaceFailure(id: UUID, with replacements: [CleanFailureItem]) {
+        guard let index = failedItems.firstIndex(where: { $0.id == id }) else { return }
+        failedItems.remove(at: index)
+        failedItems.insert(contentsOf: replacements, at: index)
+        failedCount = failedItems.count
     }
 }

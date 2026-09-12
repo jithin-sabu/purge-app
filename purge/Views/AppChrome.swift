@@ -485,6 +485,7 @@ struct SafeCleanupCelebrationOverlay: View {
     let onDone: () -> Void
 
     @EnvironmentObject private var store: PurgeStore
+    @ObservedObject private var helperPrefs = PrivilegedHelperPreferenceStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var checkmarkProgress: CGFloat = 0
     @State private var checkmarkScale: CGFloat
@@ -549,60 +550,72 @@ struct SafeCleanupCelebrationOverlay: View {
             VStack(spacing: AppStyle.Spacing.large) {
                 Spacer(minLength: 0)
 
-                CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
-                    .frame(width: 88, height: 88)
-                    .scaleEffect(checkmarkScale)
-                    .opacity(checkmarkVisible ? 1 : 0)
-                    .accessibilityHidden(true)
+                if hidesSuccessChrome {
+                    // Nothing moved: the panel is the whole story, centered on its own.
+                    administratorPanel
+                        .frame(maxWidth: 460)
+                } else {
+                    CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
+                        .frame(width: 88, height: 88)
+                        .scaleEffect(checkmarkScale)
+                        .opacity(checkmarkVisible ? 1 : 0)
+                        .accessibilityHidden(true)
 
-                VStack(spacing: AppStyle.Spacing.small) {
-                    Text(formatBytes(displayedBytes))
-                        .font(.system(size: 54, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .monospacedDigit()
-                        .contentTransition(reduceMotion ? .identity : .numericText())
-                        .multilineTextAlignment(.center)
-                        .accessibilityAddTraits(.isHeader)
+                    VStack(spacing: AppStyle.Spacing.small) {
+                        Text(formatBytes(displayedBytes))
+                            .font(.system(size: 54, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                            .contentTransition(reduceMotion ? .identity : .numericText())
+                            .multilineTextAlignment(.center)
+                            .accessibilityAddTraits(.isHeader)
 
-                    Text(subtitleText)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.78))
-                        .multilineTextAlignment(.center)
-                        .contentTransition(.opacity)
+                        Text(subtitleText)
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.78))
+                            .multilineTextAlignment(.center)
+                            .contentTransition(.opacity)
 
-                    // The cleaning-phase progress group draws into the slot the
-                    // completion lines occupy (always laid out, opacity-toggled),
-                    // so neither phase ever shifts the other's elements.
-                    ZStack(alignment: .top) {
-                        VStack(spacing: AppStyle.Spacing.small) {
-                            if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
-                                OnboardingSizeComparisonLine(items: comparisonItems)
-                                    .foregroundStyle(.white.opacity(0.78))
+                        // The cleaning-phase progress group draws into the slot the
+                        // completion lines occupy (always laid out, opacity-toggled),
+                        // so neither phase ever shifts the other's elements.
+                        ZStack(alignment: .top) {
+                            VStack(spacing: AppStyle.Spacing.small) {
+                                if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
+                                    OnboardingSizeComparisonLine(items: comparisonItems)
+                                        .foregroundStyle(.white.opacity(0.78))
+                                }
+
+                                if tagline != nil {
+                                    CompletionTimeTagline(
+                                        elapsedSeconds: session.elapsedSeconds,
+                                        boltFlashToken: boltFlashToken
+                                    )
+                                    .padding(.top, AppStyle.Spacing.xSmall)
+                                }
                             }
+                            .opacity(completionLinesVisible ? 1 : 0)
 
-                            if tagline != nil {
-                                CompletionTimeTagline(
-                                    elapsedSeconds: session.elapsedSeconds,
-                                    boltFlashToken: boltFlashToken
-                                )
-                                .padding(.top, AppStyle.Spacing.xSmall)
-                            }
+                            progressGroup
+                                .frame(height: 0, alignment: .top)
+                                .opacity(progressGroupVisible ? 1 : 0)
                         }
-                        .opacity(completionLinesVisible ? 1 : 0)
-
-                        progressGroup
-                            .frame(height: 0, alignment: .top)
-                            .opacity(progressGroupVisible ? 1 : 0)
                     }
+                    .frame(maxWidth: 560)
                 }
-                .frame(maxWidth: 560)
 
                 Spacer(minLength: 0)
 
                 VStack(spacing: AppStyle.Spacing.small) {
-                    if session.phase == .complete, session.failedCount > 0 {
+                    // When the header is hidden the panel already stands above; only
+                    // show it here (beneath the success number) when the header stayed.
+                    if session.phase == .complete, !administratorFailures.isEmpty, !hidesSuccessChrome {
+                        administratorPanel
+                    }
+
+                    if session.phase == .complete, !otherFailures.isEmpty {
                         CleanFailureDisclosure(
-                            failures: session.failedItems,
+                            failures: otherFailures,
                             isExpanded: $failuresExpanded,
                             retryingIDs: retryingFailureIDs,
                             onOpenSettings: openFullDiskAccessSettings,
@@ -614,6 +627,18 @@ struct SafeCleanupCelebrationOverlay: View {
                         HStack(spacing: 5) {
                             Image(systemName: "trash")
                             Text("Empty your Trash to reclaim this space.")
+                        }
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                    }
+
+                    // The helper moved a protected app but could not hand every file
+                    // back, so say so plainly rather than implying a spotless Trash.
+                    if session.phase == .complete, session.trashOwnershipWarning {
+                        HStack(spacing: 5) {
+                            Image(systemName: "key")
+                            Text("Emptying the Trash may ask for your password.")
                         }
                         .font(.system(.body, design: .rounded, weight: .medium))
                         .foregroundStyle(.tertiary)
@@ -640,7 +665,22 @@ struct SafeCleanupCelebrationOverlay: View {
             .background(sheetBackground)
             .accessibilityElement(children: .contain)
         }
-        .onAppear(perform: handleAppear)
+        .onAppear {
+            handleAppear()
+            helperPrefs.refresh()
+        }
+        // Keep a foreground refresh as a fallback if approval took longer than the
+        // short background monitor or the app was reopened later.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            helperPrefs.refresh()
+        }
+        // Approval happens outside Purge. The preference store watches for macOS to
+        // enable the helper; when it does, finish the uninstall the user already
+        // confirmed instead of making them press a second removal button.
+        .onChange(of: helperPrefs.isEnabled) { isEnabled in
+            guard isEnabled else { return }
+            retryAdministratorFailures()
+        }
         .onChange(of: session.phase) { phase in
             guard phase == .complete else { return }
             beginCompletionSequence()
@@ -703,6 +743,59 @@ struct SafeCleanupCelebrationOverlay: View {
         }
     }
 
+    /// Locked-app failures get the reassuring setup panel; everything else keeps the
+    /// terse disclosure. Split so a run that hits both still shows each correctly.
+    private var administratorFailures: [CleanFailureItem] {
+        session.failedItems.filter { $0.reason == .needsAdministrator }
+    }
+
+    private var otherFailures: [CleanFailureItem] {
+        session.failedItems.filter { $0.reason != .needsAdministrator }
+    }
+
+    /// One button for both jobs: set the helper up the first time, or manually retry
+    /// if automatic continuation did not finish. Re-read the live status first so a
+    /// tap after approval removes the app instead of reopening System Settings.
+    private func handleAdministratorAction() {
+        helperPrefs.refresh()
+        if helperPrefs.isEnabled {
+            retryAdministratorFailures()
+        } else {
+            helperPrefs.setEnabled(true)
+        }
+    }
+
+    private func retryAdministratorFailures() {
+        for item in administratorFailures { retryFailure(item) }
+    }
+
+    private func revealAdministratorItemInFinder() {
+        guard let first = administratorFailures.first else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: first.path)])
+    }
+
+    /// When the only outcome is a locked app and nothing actually moved, the success
+    /// header (checkmark, "0 bytes", timing) is just noise around a "0". Drop it and
+    /// let the permission panel stand on its own. As soon as something did move, the
+    /// header earns its place again and the panel sits beneath it.
+    private var hidesSuccessChrome: Bool {
+        session.phase == .complete
+            && !administratorFailures.isEmpty
+            && session.movedToTrashCount == 0
+            && session.finalBytesMovedToTrash == 0
+    }
+
+    private var administratorPanel: some View {
+        NeedsAdministratorPanel(
+            items: administratorFailures,
+            isHelperEnabled: helperPrefs.isEnabled,
+            needsApproval: helperPrefs.needsApproval,
+            isWorking: !retryingFailureIDs.isDisjoint(with: Set(administratorFailures.map(\.id))),
+            onPrimaryAction: handleAdministratorAction,
+            onRevealInFinder: revealAdministratorItemInFinder
+        )
+    }
+
     /// Shown in the complete phase only when something actually went to Trash.
     /// During cleaning the (invisible) footer reserves its space so nothing shifts.
     private var reservesTrashDisclaimerSpace: Bool {
@@ -716,7 +809,11 @@ struct SafeCleanupCelebrationOverlay: View {
     }
 
     private var showsConfetti: Bool {
-        confettiArmed && session.finalBytesMovedToTrash >= Self.confettiThresholdBytes && !reduceMotion
+        // Don't celebrate when something still needs the user's attention.
+        confettiArmed
+            && administratorFailures.isEmpty
+            && session.finalBytesMovedToTrash >= Self.confettiThresholdBytes
+            && !reduceMotion
     }
 
     private func handleAppear() {
@@ -1037,6 +1134,156 @@ private struct CleanFailureDisclosure: View {
     }
 }
 
+/// The completion-screen treatment for apps that are locked to an administrator.
+/// Not an error and not a silent success: it names what's held, says in one line why,
+/// reassures in one line that nothing is really deleted, and offers a single action —
+/// set the helper up once, or (once set up) remove everything held.
+private struct NeedsAdministratorPanel: View {
+    let items: [CleanFailureItem]
+    let isHelperEnabled: Bool
+    let needsApproval: Bool
+    let isWorking: Bool
+    let onPrimaryAction: () -> Void
+    let onRevealInFinder: () -> Void
+
+    private var isSingle: Bool { items.count == 1 }
+
+    private var title: String {
+        "macOS needs your permission"
+    }
+
+    /// Only when several are held: name them so the count isn't a mystery.
+    private var namesLine: String? {
+        guard !isSingle else { return nil }
+        let names = items.map(\.displayName)
+        switch names.count {
+        case 2: return "\(names[0]) and \(names[1])"
+        case 3: return "\(names[0]), \(names[1]), and \(names[2])"
+        default: return "\(names[0]), \(names[1]), and \(names.count - 2) more"
+        }
+    }
+
+    private var explanation: String {
+        isSingle
+            ? "An administrator installed \(items[0].displayName), so macOS needs your permission before it can move to the Trash."
+            : "An administrator installed them, so macOS needs your permission before they can move to the Trash."
+    }
+
+    private var trustLine: String {
+        isSingle
+            ? "Moved to the Trash, not deleted. Restore it anytime."
+            : "Moved to the Trash, not deleted. Restore them anytime."
+    }
+
+    private var primaryTitle: String {
+        // Approval pending: the button's job is to reopen Settings, so say so rather
+        // than "Set up," which reads as if setup hasn't started.
+        if needsApproval { return "Open System Settings" }
+        if !isHelperEnabled { return "Set up secure removal" }
+        return isSingle ? "Remove \(items[0].displayName)" : "Remove \(items.count) apps"
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            VStack(spacing: 8) {
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 30, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .accessibilityHidden(true)
+
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+
+                if let namesLine {
+                    Text(namesLine)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                }
+
+                Text(explanation)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 1)
+            }
+
+            statusLine
+
+            VStack(spacing: 12) {
+                Button(action: onPrimaryAction) {
+                    Group {
+                        if isWorking {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(AppColors.buttonPrimaryText)
+                        } else {
+                            Text(primaryTitle)
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                    }
+                    .foregroundStyle(AppColors.buttonPrimaryText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(AppColors.textPrimary, in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(isWorking)
+
+                if isSingle {
+                    Button(action: onRevealInFinder) {
+                        Text("Remove in Finder instead")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Color.white.opacity(0.08), in: Capsule(style: .continuous))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Text(trustLine)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: 400)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5)
+        }
+    }
+
+    @ViewBuilder
+    private var statusLine: some View {
+        if isHelperEnabled {
+            Label("Secure removal is on", systemImage: "checkmark.seal.fill")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.green)
+        } else if needsApproval {
+            Text("In System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.68))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 private struct CleanFailureRow: View {
     let failure: CleanFailureItem
     let isRetrying: Bool
@@ -1078,7 +1325,7 @@ private struct CleanFailureRow: View {
                                         .controlSize(.small)
                                         .scaleEffect(0.7)
                                 } else {
-                                    Text("Retry")
+                                    Text(failure.reason.retryTitle)
                                 }
                             }
                             .buttonStyle(CleanFailureActionButtonStyle())
@@ -1720,4 +1967,3 @@ extension View {
         modifier(SidebarCompactTopModifier())
     }
 }
-

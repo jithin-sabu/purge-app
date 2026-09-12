@@ -35,5 +35,14 @@ enum AppBootstrapper {
         CleaningQuitGuard.isCleaningActive = { [weak store = env.store] in
             store?.isManualCleaningInProgress ?? false
         }
+
+        // Check the installed helper once per app launch. Keeping this here avoids
+        // starting registration work just because a view happened to read the
+        // preference store during previews or tests.
+        let helperPreferences = PrivilegedHelperPreferenceStore.shared
+        Task {
+            await PrivilegedHelperManager.shared.reconcileVersion()
+            helperPreferences.refresh()
+        }
     }
 }

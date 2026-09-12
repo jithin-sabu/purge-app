@@ -789,6 +789,14 @@ final class PurgeStore: ObservableObject {
     /// Retries deletion for a single failed item from the completion overlay.
     func retryCleanFailure(_ item: CleanFailureItem, session: DeletionSession) async -> Int64? {
         let url = URL(fileURLWithPath: item.path)
+
+        // A `.needsAdministrator` item is a whole app held back because its bundle is
+        // locked. Removing it goes through the helper and takes the bundle *and* the
+        // leftovers we deferred with it, so nothing is stripped until the app can go.
+        if item.reason == .needsAdministrator {
+            return await completeLockedUninstall(for: item, session: session)
+        }
+
         let result = await fileDeleter.retryDeleteItem(
             at: url,
             displayName: item.displayName,
@@ -796,29 +804,171 @@ final class PurgeStore: ObservableObject {
         )
         switch result {
         case .success(let movedBytes):
-            session.removeResolvedFailure(id: item.id, additionalMovedBytes: movedBytes)
-            incrementMovedToTrashTotal(by: movedBytes)
-            let deleted = DeletedItem(
-                path: item.path,
-                sizeBytes: movedBytes,
-                displayName: item.displayName
-            )
-            reflectDeletionReportInScanState(
-                DeletionReport(
-                    bytesMovedToTrash: movedBytes,
-                    bytesRemovedDirectly: 0,
-                    deletedItems: [deleted],
-                    failedItems: [],
-                    skippedItems: [],
-                    capacityBefore: nil,
-                    capacityAfter: nil,
-                    timestamp: Date()
-                )
-            )
+            resolveRetriedFailure(item: item, movedBytes: movedBytes, session: session)
             return movedBytes
         case .failure:
             return nil
         }
+    }
+
+    /// Shared bookkeeping once a retried failure finally lands in the Trash: clear it
+    /// from the overlay, credit the moved bytes, and drop it from the scan results.
+    private func resolveRetriedFailure(item: CleanFailureItem, movedBytes: Int64, session: DeletionSession) {
+        session.removeResolvedFailure(id: item.id, additionalMovedBytes: movedBytes)
+        incrementMovedToTrashTotal(by: movedBytes)
+        let deleted = DeletedItem(
+            path: item.path,
+            sizeBytes: movedBytes,
+            displayName: item.displayName
+        )
+        reflectDeletionReportInScanState(
+            DeletionReport(
+                bytesMovedToTrash: movedBytes,
+                bytesRemovedDirectly: 0,
+                deletedItems: [deleted],
+                failedItems: [],
+                skippedItems: [],
+                capacityBefore: nil,
+                capacityAfter: nil,
+                timestamp: Date()
+            )
+        )
+    }
+
+    /// Finishes a deferred locked-app uninstall once the helper is set up. Removes the
+    /// bundle first; only if it actually moves are the leftovers held with it trashed,
+    /// so an app is never gutted while it stays put. If the helper isn't enabled yet,
+    /// this tap is the setup step and the app stays pending until the user approves it;
+    /// if the bundle still won't move, the whole pending unit is left untouched.
+    private func completeLockedUninstall(for item: CleanFailureItem, session: DeletionSession) async -> Int64? {
+        guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
+            PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+            return nil
+        }
+
+        let bundleKey = URL(fileURLWithPath: item.path).standardizedFileURL.path
+        let pending = pendingLockedUninstalls.first { $0.bundlePath == bundleKey }
+        let leftovers = pending?.items.filter { $0.category != .bundle } ?? []
+
+        // Pass 1 — the bundle, on its own. It is always helper-eligible: the validated
+        // .app the user chose to remove, which a managed installer can protect even in
+        // a writable /Applications. Not one leftover is touched until the bundle moves.
+        let bundleURL = pending?.app.bundleURL ?? URL(fileURLWithPath: item.path)
+        let bundleName = pending?.app.name ?? item.displayName
+        let bundleSize = pending?.items.first(where: { $0.category == .bundle })?.sizeBytes ?? item.sizeBytes
+        guard let bundleReport = try? await fileDeleter.deleteUserSelectedFiles(
+            at: [bundleURL],
+            pathToDisplayName: [bundleKey: bundleName],
+            pathToExpectedSizeBytes: [bundleKey: bundleSize],
+            privilegedEligiblePaths: [bundleKey]
+        ) else { return nil }
+
+        let bundleMoved = bundleReport.deletedItems.contains {
+            URL(fileURLWithPath: $0.path).standardizedFileURL.path == bundleKey
+        }
+        guard bundleMoved else {
+            // Still can't move the bundle — helper not enabled yet, or a move that
+            // failed. Leave the whole pending unit intact so no leftover is trashed
+            // while the app stays put, and keep the "needs your OK" row as it is.
+            return nil
+        }
+
+        installedApps.removeAll { $0.bundleURL.standardizedFileURL.path == bundleKey }
+        pendingLockedUninstalls.removeAll { $0.bundlePath == bundleKey }
+
+        // A leftover that another still-installed app also claims is held back, so
+        // finishing this app's removal never strips files a surviving copy needs.
+        // The removed app is already out of `installedApps` above.
+        var keptSharedFailures: [CleanFailureItem] = []
+        let deletableLeftovers: [UninstallItem]
+        if let owner = pending?.app {
+            deletableLeftovers = leftovers.filter { leftover in
+                if let otherApp = appStillUsing(leftover: leftover, excludingOwner: owner, among: installedApps) {
+                    keptSharedFailures.append(keptSharedFailure(item: leftover, otherApp: otherApp))
+                    return false
+                }
+                return true
+            }
+        } else {
+            deletableLeftovers = leftovers
+        }
+
+        // Pass 2 — the leftovers, now that the app is actually gone. Each escalates
+        // only when its own parent directory is not writable.
+        var leftoverReport: DeletionReport?
+        if !deletableLeftovers.isEmpty {
+            var names: [String: String] = [:]
+            var sizes: [String: Int64] = [:]
+            var eligible = Set<String>()
+            for leftover in deletableLeftovers {
+                let key = leftover.path.standardizedFileURL.path
+                names[key] = "\(bundleName) \(leftover.category.displayName)"
+                sizes[key] = leftover.sizeBytes
+                if pathNeedsPrivilege(leftover.path) { eligible.insert(key) }
+            }
+            leftoverReport = try? await fileDeleter.deleteUserSelectedFiles(
+                at: deletableLeftovers.map(\.path),
+                pathToDisplayName: names,
+                pathToExpectedSizeBytes: sizes,
+                privilegedEligiblePaths: eligible
+            )
+        }
+
+        let movedBytes = bundleReport.bytesMovedToTrash + (leftoverReport?.bytesMovedToTrash ?? 0)
+        if movedBytes > 0 {
+            session.addRetriedMovedBytes(movedBytes)
+            incrementMovedToTrashTotal(by: movedBytes)
+        }
+        if !bundleReport.ownershipWarningPaths.isEmpty
+            || !(leftoverReport?.ownershipWarningPaths.isEmpty ?? true) {
+            session.noteTrashOwnershipWarning()
+        }
+        reflectDeletionReportInScanState(
+            DeletionReport(
+                bytesMovedToTrash: movedBytes,
+                bytesRemovedDirectly: 0,
+                deletedItems: bundleReport.deletedItems + (leftoverReport?.deletedItems ?? []),
+                failedItems: leftoverReport?.failedItems ?? [],
+                skippedItems: [],
+                capacityBefore: nil,
+                capacityAfter: nil,
+                timestamp: Date()
+            )
+        )
+
+        // The app is gone. Any leftover that still failed becomes its own plain row,
+        // no longer described as a locked application.
+        let movedLeftoverPaths = Set((leftoverReport?.deletedItems ?? []).map {
+            URL(fileURLWithPath: $0.path).standardizedFileURL.path
+        })
+        let failedLeftovers = deletableLeftovers.filter {
+            !movedLeftoverPaths.contains($0.path.standardizedFileURL.path)
+        }
+        let reportReasons = (leftoverReport?.failedItems ?? []).reduce(into: [String: CleanFailureReason]()) {
+            reasons, failure in
+            reasons[URL(fileURLWithPath: failure.path).standardizedFileURL.path] = failure.reason
+        }
+        let failedReplacements = failedLeftovers.map { leftover -> CleanFailureItem in
+            let key = leftover.path.standardizedFileURL.path
+            let reported = reportReasons[key] ?? .unknown
+            let reason: CleanFailureReason = reported == .needsAdministrator ? .unknown : reported
+            return CleanFailureItem(
+                path: leftover.path.path,
+                displayName: "\(bundleName) \(leftover.category.displayName)",
+                reason: reason,
+                sizeBytes: leftover.sizeBytes
+            )
+        }
+        // Both the leftovers that failed and the ones kept for another app remain as
+        // rows; when neither exists, the whole "needs your OK" row is resolved.
+        let replacements = failedReplacements + keptSharedFailures
+        if replacements.isEmpty {
+            session.removeResolvedFailure(id: item.id, additionalMovedBytes: 0)
+        } else {
+            session.replaceFailure(id: item.id, with: replacements)
+        }
+
+        return movedBytes > 0 ? movedBytes : nil
     }
 
     /// Updates in-memory scan results so removed folders disappear without requiring a full rescan
@@ -1223,6 +1373,7 @@ final class PurgeStore: ObservableObject {
                 failedItems: report.userVisibleFailures,
                 movedToTrashCount: report.movedToTrashCount
             )
+            if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
             CleanupHistoryStore.shared.append(trigger: .manual, report: report)
         } catch {
             manualDeletionSession = nil
@@ -1384,6 +1535,56 @@ final class PurgeStore: ObservableObject {
         await performUninstallPlan(plan)
     }
 
+    /// An app whose bundle needs the helper, held whole (bundle + leftovers) until
+    /// the helper is enabled. We never strip an app's leftovers while its bundle
+    /// stays put: that would gut an app the user can still open.
+    private struct PendingLockedUninstall {
+        let app: InstalledApp
+        let items: [UninstallItem]
+        var bundlePath: String { app.bundleURL.standardizedFileURL.path }
+    }
+
+    private var pendingLockedUninstalls: [PendingLockedUninstall] = []
+
+    /// Moving an item requires write access to the directory containing it. The
+    /// item's own owner and mode do not matter for a rename, so checking the item
+    /// itself would unnecessarily elevate files in a user-writable folder.
+    private func pathNeedsPrivilege(_ url: URL) -> Bool {
+        !FileManager.default.isWritableFile(atPath: url.deletingLastPathComponent().path)
+    }
+
+    /// The other still-installed app, if any, that a leftover also belongs to.
+    /// Removing the chosen app must not take a file a second installed app still
+    /// needs, which is what happens when two copies share bundle-id-keyed support.
+    /// Matching reuses the scanner's strict identifier/name rules, so only a
+    /// genuinely shared leftover is ever held back.
+    private func appStillUsing(
+        leftover item: UninstallItem,
+        excludingOwner owner: InstalledApp,
+        among remaining: [InstalledApp]
+    ) -> InstalledApp? {
+        let name = item.path.lastPathComponent
+        return remaining.first { candidate in
+            candidate.id != owner.id
+                && AppUninstallScanPolicy.matchReason(
+                    forLeftoverName: name,
+                    category: item.category,
+                    app: candidate
+                ) != nil
+        }
+    }
+
+    /// Builds the "kept, still used by another app" notice shown for a shared leftover
+    /// that Purge deliberately left in place.
+    private func keptSharedFailure(item: UninstallItem, otherApp: InstalledApp) -> CleanFailureItem {
+        CleanFailureItem(
+            path: item.path.path,
+            displayName: "\(otherApp.name) \(item.category.displayName)",
+            reason: .keptForOtherApp,
+            sizeBytes: item.sizeBytes
+        )
+    }
+
     /// Trashes the checked items across all apps in `plan`, reusing the same
     /// live-session overlay, progress poller, and history entry as the other
     /// manual flows. Kept separate from `performLargeFileDeletion`: they share
@@ -1423,28 +1624,41 @@ final class PurgeStore: ObservableObject {
             return
         }
 
-        var urls: [URL] = []
-        var pathToDisplayName: [String: String] = [:]
-        var pathToExpectedSizeBytes: [String: Int64] = [:]
-        var totalBytes: Int64 = 0
-        var seenPaths = Set<String>()
+        // The invariant: an app's leftovers are never trashed while its bundle stays
+        // put. Removing caches and containers now, while the .app itself can't move,
+        // would gut an app the user can still open. So bundles go first, and only the
+        // leftovers of apps whose bundle actually moved are trashed. An app whose
+        // bundle can't be removed (helper not enabled, or a managed bundle the helper
+        // still can't move) is held whole — bundle plus leftovers — as one pending
+        // "needs your OK" unit, and nothing of it is touched.
+        //
+        // A selection where the user unticked the bundle and kept only leftovers is a
+        // deliberate leftovers-only cleanup and removes right away.
+        var bundleRemovingApps: [(app: InstalledApp, bundle: UninstallItem, leftovers: [UninstallItem])] = []
+        var leftoverOnlyApps: [(InstalledApp, [UninstallItem])] = []
         for (app, items) in toDelete {
-            for item in items {
-                // Two apps sharing a bundle id resolve to the same bundle-id-keyed
-                // leftovers, so the same path can appear under both. Trash and size
-                // it once: a duplicate url is a no-op to the engine but would
-                // inflate the total and the progress denominator.
-                let key = item.path.standardizedFileURL.path
-                guard seenPaths.insert(key).inserted else { continue }
-                urls.append(item.path)
-                pathToDisplayName[key] = app.name
-                pathToExpectedSizeBytes[key] = item.sizeBytes
-                totalBytes += item.sizeBytes
+            if let bundle = items.first(where: { $0.category == .bundle }) {
+                bundleRemovingApps.append((app, bundle, items.filter { $0.category != .bundle }))
+            } else {
+                leftoverOnlyApps.append((app, items))
             }
         }
 
         let progressBuffer = DeletionProgressBuffer()
-        let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
+        // Size and count each distinct path once. Two apps can resolve to the same
+        // bundle-id-keyed leftover, and the delete pass trashes such a path a single
+        // time (see the dedup in pass 2), so counting it twice here would leave the
+        // progress total short of what is actually moved.
+        var countedPaths = Set<String>()
+        var totalBytes: Int64 = 0
+        var totalItems = 0
+        for (_, items) in toDelete {
+            for item in items where countedPaths.insert(item.path.standardizedFileURL.path).inserted {
+                totalBytes += item.sizeBytes
+                totalItems += 1
+            }
+        }
+        let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: totalItems)
         manualDeletionSession = liveSession
         let progressPoller = Task { @MainActor [weak liveSession] in
             while !Task.isCancelled {
@@ -1460,48 +1674,167 @@ final class PurgeStore: ObservableObject {
         defer { progressPoller.cancel() }
 
         let engineStart = Date()
-        do {
-            let report = try await fileDeleter.deleteUserSelectedFiles(
-                at: urls,
-                pathToDisplayName: pathToDisplayName,
-                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
-                onProgress: { @Sendable event in progressBuffer.ingest(event) }
-            )
-            let elapsedSeconds = Date().timeIntervalSince(engineStart)
-            incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
-            lastDeletionReport = report
 
-            let deletedPaths = Set(report.deletedItems.map {
-                URL(fileURLWithPath: $0.path).standardizedFileURL.path
-            })
-            // An app leaves the picker once its bundle is trashed. Its selection
-            // clears either way, so a partial failure doesn't leave a ghost tick.
-            for (app, _) in toDelete {
-                selectedAppIDs.remove(app.id)
-                if deletedPaths.contains(app.bundleURL.standardizedFileURL.path) {
-                    installedApps.removeAll { $0.id == app.id }
+        // Pass 1 — bundles first. A validated .app the user picked is always eligible
+        // for the administrator helper: a managed bundle needs authorization to move
+        // even when its parent directory (/Applications) is writable, so parent-dir
+        // writability is the wrong test for the bundle itself.
+        var bundleReport: DeletionReport?
+        var movedBundlePaths = Set<String>()
+        if !bundleRemovingApps.isEmpty {
+            var urls: [URL] = []
+            var names: [String: String] = [:]
+            var sizes: [String: Int64] = [:]
+            var eligible = Set<String>()
+            for entry in bundleRemovingApps {
+                let key = entry.bundle.path.standardizedFileURL.path
+                urls.append(entry.bundle.path)
+                names[key] = entry.app.name
+                sizes[key] = entry.bundle.sizeBytes
+                eligible.insert(key)
+            }
+            do {
+                let report = try await fileDeleter.deleteUserSelectedFiles(
+                    at: urls,
+                    pathToDisplayName: names,
+                    pathToExpectedSizeBytes: sizes,
+                    privilegedEligiblePaths: eligible,
+                    onProgress: { @Sendable event in progressBuffer.ingest(event) }
+                )
+                bundleReport = report
+                movedBundlePaths = Set(report.deletedItems.map {
+                    URL(fileURLWithPath: $0.path).standardizedFileURL.path
+                })
+            } catch {
+                manualDeletionSession = nil
+                let names = bundleRemovingApps.map(\.app.name)
+                let label = names.count == 1 ? names[0] : "the selected apps"
+                errorMessage = "Unable to remove \(label). Please try again."
+                return
+            }
+        }
+
+        // Partition by whether the bundle actually left. A held app keeps every one
+        // of its leftovers, deferred with the bundle. Leftovers of apps whose bundle
+        // moved (and leftovers-only selections) go on to pass 2.
+        var heldApps: [(InstalledApp, [UninstallItem])] = []
+        var leftoverBatch: [(InstalledApp, [UninstallItem])] = leftoverOnlyApps
+        for entry in bundleRemovingApps {
+            if movedBundlePaths.contains(entry.bundle.path.standardizedFileURL.path) {
+                if !entry.leftovers.isEmpty { leftoverBatch.append((entry.app, entry.leftovers)) }
+            } else {
+                heldApps.append((entry.app, [entry.bundle] + entry.leftovers))
+            }
+        }
+
+        for (app, items) in heldApps {
+            let key = app.bundleURL.standardizedFileURL.path
+            pendingLockedUninstalls.removeAll { $0.bundlePath == key }
+            pendingLockedUninstalls.append(PendingLockedUninstall(app: app, items: items))
+        }
+
+        // Pass 2 — leftovers, now that their apps are gone. A leftover escalates to
+        // the helper only when its own parent directory is not writable, so ordinary
+        // user-owned files never run as root.
+        // Apps whose bundle did not move are still on this Mac, so a leftover one of
+        // them also claims must be held back rather than swept away with the app being
+        // removed. This is the two-copies case: removing one copy must not strip the
+        // support files the surviving copy still reads.
+        let remainingApps = installedApps.filter {
+            !movedBundlePaths.contains($0.bundleURL.standardizedFileURL.path)
+        }
+        var keptSharedFailures: [CleanFailureItem] = []
+
+        var leftoverReport: DeletionReport?
+        if !leftoverBatch.isEmpty {
+            var urls: [URL] = []
+            var names: [String: String] = [:]
+            var sizes: [String: Int64] = [:]
+            var eligible = Set<String>()
+            var seen = Set<String>()
+            for (app, items) in leftoverBatch {
+                for item in items {
+                    // Two apps sharing a bundle id resolve to the same bundle-id-keyed
+                    // leftover, so a path can appear under both. Trash and size it once.
+                    let key = item.path.standardizedFileURL.path
+                    guard seen.insert(key).inserted else { continue }
+                    if let otherApp = appStillUsing(leftover: item, excludingOwner: app, among: remainingApps) {
+                        keptSharedFailures.append(keptSharedFailure(item: item, otherApp: otherApp))
+                        continue
+                    }
+                    urls.append(item.path)
+                    names[key] = app.name
+                    sizes[key] = item.sizeBytes
+                    if pathNeedsPrivilege(item.path) { eligible.insert(key) }
                 }
             }
-
-            progressPoller.cancel()
-            liveSession.completeRun(
-                bytesMovedToTrash: report.bytesMovedToTrash,
-                elapsedSeconds: elapsedSeconds,
-                failedItems: report.userVisibleFailures,
-                movedToTrashCount: report.movedToTrashCount
+            // Bundles already moved; a leftover failure here must not discard that.
+            leftoverReport = try? await fileDeleter.deleteUserSelectedFiles(
+                at: urls,
+                pathToDisplayName: names,
+                pathToExpectedSizeBytes: sizes,
+                privilegedEligiblePaths: eligible,
+                onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
-            CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+        }
 
-            // Apps that declined to quit stay installed and selected, so the user
-            // can quit them and retry. Surfaced after the success summary.
-            if !stillOpen.isEmpty {
-                errorMessage = stillOpenMessage(stillOpen)
+        let elapsedSeconds = Date().timeIntervalSince(engineStart)
+
+        // A stuck bundle is always a held app, so its failure is represented by the
+        // synthesized "needs your OK" row below — never also as a bundle failure here.
+        let movedBytes = (bundleReport?.bytesMovedToTrash ?? 0) + (leftoverReport?.bytesMovedToTrash ?? 0)
+        let report = DeletionReport(
+            bytesMovedToTrash: movedBytes,
+            bytesRemovedDirectly: 0,
+            deletedItems: (bundleReport?.deletedItems ?? []) + (leftoverReport?.deletedItems ?? []),
+            failedItems: leftoverReport?.failedItems ?? [],
+            skippedItems: leftoverReport?.skippedItems ?? [],
+            capacityBefore: bundleReport?.capacityBefore ?? leftoverReport?.capacityBefore,
+            capacityAfter: leftoverReport?.capacityAfter ?? bundleReport?.capacityAfter,
+            timestamp: Date(),
+            ownershipWarningPaths: (bundleReport?.ownershipWarningPaths ?? [])
+                + (leftoverReport?.ownershipWarningPaths ?? [])
+        )
+        incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
+        lastDeletionReport = report
+
+        let deletedPaths = Set(report.deletedItems.map {
+            URL(fileURLWithPath: $0.path).standardizedFileURL.path
+        })
+        // An app leaves the picker once its bundle is trashed. Its selection clears
+        // either way, so a partial failure doesn't leave a ghost tick.
+        for (app, _) in toDelete {
+            selectedAppIDs.remove(app.id)
+            if deletedPaths.contains(app.bundleURL.standardizedFileURL.path) {
+                installedApps.removeAll { $0.id == app.id }
             }
-        } catch {
-            manualDeletionSession = nil
-            let names = toDelete.map(\.0.name)
-            let label = names.count == 1 ? names[0] : "the selected apps"
-            errorMessage = "Unable to remove \(label). Please try again."
+        }
+
+        // Held apps moved nothing; surface each as one "needs your OK" row so the
+        // panel can offer setup and then remove the whole app at once.
+        let heldFailures = heldApps.map { app, items in
+            CleanFailureItem(
+                path: app.bundleURL.path,
+                displayName: app.name,
+                reason: .needsAdministrator,
+                sizeBytes: items.reduce(0) { $0 + $1.sizeBytes }
+            )
+        }
+
+        progressPoller.cancel()
+        liveSession.completeRun(
+            bytesMovedToTrash: report.bytesMovedToTrash,
+            elapsedSeconds: elapsedSeconds,
+            failedItems: report.userVisibleFailures + heldFailures + keptSharedFailures,
+            movedToTrashCount: report.movedToTrashCount
+        )
+        if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
+        CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+
+        // Apps that declined to quit stay installed and selected, so the user can
+        // quit them and retry. Surfaced after the success summary.
+        if !stillOpen.isEmpty {
+            errorMessage = stillOpenMessage(stillOpen)
         }
     }
 

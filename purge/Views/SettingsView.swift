@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var prefs = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var startup = StartupPreferenceStore.shared
+    @ObservedObject private var helper = PrivilegedHelperPreferenceStore.shared
     @ObservedObject private var registrar = ScheduledCleaningRegistrar.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
     @AppStorage(DevToolsStalenessOption.userDefaultsKey)
@@ -40,6 +41,7 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 18) {
                     startupSection
+                    protectedAppRemovalSection
                     appearanceSection
                     cleaningScheduleSection
                     devToolsSection
@@ -57,11 +59,16 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(maxHeight: usesExternalScrollContainer ? nil : .infinity, alignment: .topLeading)
         .background(AppColors.bgBase)
-        .onAppear { startup.refreshLoginItemStatus() }
+        .onAppear {
+            startup.refreshLoginItemStatus()
+            helper.refresh()
+        }
         // The user can turn the login item off in System Settings without telling
-        // us; re-read on the way back in so the switch isn't stale.
+        // us; re-read on the way back in so the switch isn't stale. The privileged
+        // helper is enabled in that same pane, so re-read it here too.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             startup.refreshLoginItemStatus()
+            helper.refresh()
         }
         .sheet(item: $selectedHistoryEntry) { entry in
             CleanupHistoryDetailView(entry: entry)
@@ -92,6 +99,127 @@ struct SettingsView: View {
             Button("OK") { scheduledCleanNowMessage = nil }
         } message: {
             Text(scheduledCleanNowMessage ?? "")
+        }
+    }
+
+    /// The four states the secure-removal helper can be in. Held as one value so the
+    /// status line's icon, tint, message and action stay in lockstep, and so the
+    /// layout can animate on a single `Equatable` key as the state changes.
+    private enum HelperPhase: Equatable {
+        case on
+        case awaitingApproval
+        case failed
+        case off
+    }
+
+    private var helperPhase: HelperPhase {
+        if helper.isEnabled { return .on }
+        if helper.needsApproval { return .awaitingApproval }
+        if helper.lastRegistrationFailed { return .failed }
+        return .off
+    }
+
+    private var protectedAppRemovalSection: some View {
+        settingsSection("Protected App Removal") {
+            // A switch, like every other setting, so the control never changes shape
+            // between states. Turning it on registers the helper (which then waits on
+            // approval in System Settings); turning it off unregisters it.
+            settingsToggleRow(
+                title: "Remove admin-locked apps without a password",
+                caption: helperCaption,
+                isOn: helperEnabledBinding
+            )
+
+            settingsSectionDivider
+
+            // One status line that always sits here, so the message and its one action
+            // (Open System Settings, when approval is pending) stay in a fixed place
+            // rather than moving around beside the control.
+            helperStatusCard
+                .padding(16)
+        }
+    }
+
+    private var helperCaption: String {
+        """
+        Some apps are installed under an administrator and can't be moved to the Trash on their \
+        own. Purge asks you to enable its secure removal helper only when an app needs it. Items \
+        still go to the Trash, and you can turn it off here at any time.
+        """
+    }
+
+    /// The switch reads on for both `.on` and `.awaitingApproval`: once the user asks
+    /// for the helper, its intent stays on while System Settings approval is pending,
+    /// and turning the switch back off during that wait cancels the request.
+    private var helperEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { helper.isEnabled || helper.needsApproval },
+            set: { helper.setEnabled($0) }
+        )
+    }
+
+    private var helperStatusCard: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: helperStatusIcon)
+                .font(.system(size: 13, weight: .medium))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(helperStatusTint)
+                .frame(width: 16, alignment: .center)
+                .padding(.top, 1)
+                .accessibilityHidden(true)
+
+            Text(helperStatusMessage)
+                .font(scheduleStatusSecondaryFont)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let action = helperStatusAction {
+                statusTextButton(action.title, isDisabled: false, action: action.perform)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.2), value: helperPhase)
+    }
+
+    private var helperStatusIcon: String {
+        switch helperPhase {
+        case .on: return "checkmark.seal.fill"
+        case .awaitingApproval, .failed: return "exclamationmark.triangle.fill"
+        case .off: return "lock"
+        }
+    }
+
+    private var helperStatusTint: Color {
+        switch helperPhase {
+        case .on: return AppColors.tagSafeText
+        case .awaitingApproval, .failed: return AppColors.tagCheckText
+        case .off: return AppColors.textSecondary
+        }
+    }
+
+    private var helperStatusMessage: String {
+        switch helperPhase {
+        case .on:
+            return "On. Admin-locked apps can be moved to the Trash without a password."
+        case .awaitingApproval:
+            return "Approval is still needed in System Settings."
+        case .failed:
+            return "Setup didn't complete. Turn it on again to retry."
+        case .off:
+            return "Off. Purge will ask for approval the first time an app needs it."
+        }
+    }
+
+    /// The one inline action the status line ever shows. Only pending approval needs a
+    /// button the switch can't stand in for; every other state leaves this nil so the
+    /// row keeps the same shape.
+    private var helperStatusAction: (title: String, perform: () -> Void)? {
+        switch helperPhase {
+        case .awaitingApproval:
+            return ("Open System Settings", { helper.openLoginItemsSettings() })
+        case .on, .failed, .off:
+            return nil
         }
     }
 

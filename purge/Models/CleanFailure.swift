@@ -37,21 +37,27 @@ nonisolated enum FileProtection {
 
 nonisolated enum CleanFailureReason: Equatable, Error {
     case needsFullDiskAccess
+    case needsAdministrator
     case inUse
     case systemProtected
     case safetySkipped
+    case keptForOtherApp
     case unknown
 
     var explanation: String {
         switch self {
         case .needsFullDiskAccess:
             "Purge needs Full Disk Access to remove this."
+        case .needsAdministrator:
+            "This app was installed by an administrator, so macOS won't let it be moved on its own. Set up secure removal once and Purge can finish it."
         case .inUse:
             "An app is still using this. Quit it and clean again."
         case .systemProtected:
             "macOS protects this one and won't let it be removed."
         case .safetySkipped:
             "Purge left this one alone to stay on the safe side."
+        case .keptForOtherApp:
+            "Another app you still have installed uses this too, so Purge kept it."
         case .unknown:
             "This one couldn't be removed. Try again."
         }
@@ -61,12 +67,16 @@ nonisolated enum CleanFailureReason: Equatable, Error {
         switch self {
         case .needsFullDiskAccess:
             "lock.fill"
+        case .needsAdministrator:
+            "lock.fill"
         case .inUse:
             "app.badge.fill"
         case .systemProtected:
             "lock.shield.fill"
         case .safetySkipped:
             "hand.raised.fill"
+        case .keptForOtherApp:
+            "square.on.square"
         case .unknown:
             "exclamationmark.circle.fill"
         }
@@ -77,7 +87,14 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     }
 
     var showsRetry: Bool {
-        self == .inUse || self == .unknown
+        self == .inUse || self == .unknown || self == .needsAdministrator
+    }
+
+    /// The retry button's label. The administrator case says what the tap will do —
+    /// summon the password prompt — rather than the bare "Retry" that fits the
+    /// transient failures.
+    var retryTitle: String {
+        self == .needsAdministrator ? "Set Up Secure Removal" : "Retry"
     }
 
     /// Returns `nil` for file-not-found / already-gone errors that should be dropped silently.
