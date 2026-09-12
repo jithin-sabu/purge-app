@@ -13,7 +13,13 @@ import ServiceManagement
 final class PrivilegedHelperManager {
     static let shared = PrivilegedHelperManager()
 
-    private let service = SMAppService.daemon(plistName: PurgeHelperConstants.daemonPlistName)
+    // A fresh handle every read. A cached `SMAppService.daemon` reports the status it
+    // saw at creation, so after the user flips the switch in System Settings a stored
+    // instance keeps saying `.requiresApproval` — which left the UI stuck and made
+    // "Set Up" reopen Settings forever. Re-derive it so `status` is always current.
+    private var service: SMAppService {
+        SMAppService.daemon(plistName: PurgeHelperConstants.daemonPlistName)
+    }
 
     private init() {}
 
@@ -26,7 +32,7 @@ final class PrivilegedHelperManager {
     var status: SMAppService.Status { service.status }
 
     /// The helper is installed, enabled, and ready to take a connection.
-    var isReady: Bool { service.status == .enabled }
+    var isReady: Bool { status == .enabled }
 
     /// Registers the daemon if it isn't already. A fresh registration lands in
     /// `.requiresApproval` until the user flips it on in System Settings, so this

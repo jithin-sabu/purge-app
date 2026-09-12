@@ -736,7 +736,10 @@ struct SafeCleanupCelebrationOverlay: View {
 
     /// One button for both jobs: set the helper up the first time (which sends the
     /// user to approve it), or, once it is enabled, remove every stuck app now.
+    /// Re-reads the live status first so a tap right after the user enabled it in
+    /// Settings removes the app instead of bouncing them back to Settings.
     private func handleAdministratorAction() {
+        helperPrefs.refresh()
         if helperPrefs.isEnabled {
             for item in administratorFailures { retryFailure(item) }
         } else {
@@ -1158,8 +1161,16 @@ private struct NeedsAdministratorPanel: View {
 
             reassuranceList
 
-            if awaitingApproval {
-                Text("Almost there — turn Purge on under Login Items in System Settings, then come back and try again.")
+            if isHelperEnabled {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                    Text("Secure removal is on")
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                .font(.caption.weight(.medium))
+            } else if awaitingApproval {
+                Text("Almost there — in System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back.")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.7))
                     .multilineTextAlignment(.center)

@@ -26,7 +26,12 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
     /// Re-reads the daemon status. Cheap; call it when the window returns to the
     /// foreground so a change made in System Settings is picked up.
     func refresh() {
-        status = manager.status
+        let latest = manager.status
+        // Low-volume and only on refresh: lets us confirm from Console what the app
+        // actually reads after the user flips the switch, when a non-notarized dev
+        // build makes SMAppService status hard to trust.
+        NSLog("Purge: helper status = %ld", latest.rawValue)
+        status = latest
         if status == .enabled { awaitingApproval = false }
     }
 
