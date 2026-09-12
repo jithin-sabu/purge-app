@@ -652,7 +652,15 @@ struct SafeCleanupCelebrationOverlay: View {
             .background(sheetBackground)
             .accessibilityElement(children: .contain)
         }
-        .onAppear(perform: handleAppear)
+        .onAppear {
+            handleAppear()
+            helperPrefs.refresh()
+        }
+        // The user enables the helper in System Settings and comes back with this
+        // screen still up; re-read so the panel's button flips to "Remove."
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            helperPrefs.refresh()
+        }
         .onChange(of: session.phase) { phase in
             guard phase == .complete else { return }
             beginCompletionSequence()
