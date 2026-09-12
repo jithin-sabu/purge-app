@@ -306,9 +306,11 @@ nonisolated final class FileDeleter: Sendable {
         return report
     }
 
-    /// Escalates every still-present failure to a root move-to-Trash behind one
-    /// prompt, folding the wins into `deletedItems` and re-labelling the rest as
-    /// `.needsAdministrator` so their retry button summons the prompt again.
+    /// Escalates every still-present failure through the signed helper. When the
+    /// helper is enabled the moves happen silently and fold into `deletedItems`;
+    /// anything left (helper not set up yet, chiefly) is re-labelled
+    /// `.needsAdministrator` so the result screen can offer one-time setup. Nothing
+    /// here shows a system prompt on its own.
     private func applyPrivilegedFallback(
         bytesMovedToTrash: inout Int64,
         deletedItems: inout [DeletedItem],
@@ -319,13 +321,10 @@ nonisolated final class FileDeleter: Sendable {
         let candidates = failedItems.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !candidates.isEmpty else { return }
 
-        // Prefers the installed helper (silent), falls back to the osascript prompt.
         let result = await PrivilegedUninstall.moveToTrash(
             candidates.map { URL(fileURLWithPath: $0.path) }
         )
-
         let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
-        guard !movedPaths.isEmpty || result.cancelled || !result.failed.isEmpty else { return }
 
         var stillFailed: [FailedDeletionItem] = []
         for item in failedItems {
@@ -339,8 +338,8 @@ nonisolated final class FileDeleter: Sendable {
                 ))
                 onProgress?(.itemDeleted(sizeBytes: item.sizeBytes))
             } else if candidates.contains(where: { $0.id == item.id }) {
-                // A candidate we tried but could not move — the user dismissed the
-                // prompt, or the move itself failed. Either way it is retryable.
+                // Still on disk and unmoved: the helper isn't enabled yet. Present it
+                // as "needs one-time setup," not a hard failure.
                 stillFailed.append(FailedDeletionItem(
                     path: item.path,
                     displayName: item.displayName,

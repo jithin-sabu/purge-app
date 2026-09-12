@@ -48,7 +48,7 @@ nonisolated enum CleanFailureReason: Equatable, Error {
         case .needsFullDiskAccess:
             "Purge needs Full Disk Access to remove this."
         case .needsAdministrator:
-            "This app is locked to an administrator. Enter your password to move it to the Trash."
+            "This app was installed by an administrator, so macOS won't let it be moved on its own. Set up secure removal once and Purge can finish it."
         case .inUse:
             "An app is still using this. Quit it and clean again."
         case .systemProtected:
@@ -89,7 +89,7 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     /// summon the password prompt — rather than the bare "Retry" that fits the
     /// transient failures.
     var retryTitle: String {
-        self == .needsAdministrator ? "Enter Password" : "Retry"
+        self == .needsAdministrator ? "Set Up Secure Removal" : "Retry"
     }
 
     /// Returns `nil` for file-not-found / already-gone errors that should be dropped silently.

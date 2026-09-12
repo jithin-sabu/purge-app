@@ -790,9 +790,15 @@ final class PurgeStore: ObservableObject {
     func retryCleanFailure(_ item: CleanFailureItem, session: DeletionSession) async -> Int64? {
         let url = URL(fileURLWithPath: item.path)
 
-        // A `.needsAdministrator` item already failed the unprivileged path, so a
-        // plain retry would only fail again. Go straight to the authorized move.
+        // A `.needsAdministrator` item needs the signed helper. If it isn't enabled
+        // yet, this tap is the setup step: register it and send the user to approve
+        // it — the item stays pending, and once approved a second tap (or a fresh
+        // uninstall) completes silently. If it is already enabled, do the move now.
         if item.reason == .needsAdministrator {
+            guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
+                PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+                return nil
+            }
             let outcome = await PrivilegedUninstall.moveToTrash([url])
             guard outcome.moved.contains(where: {
                 $0.standardizedFileURL.path == url.standardizedFileURL.path

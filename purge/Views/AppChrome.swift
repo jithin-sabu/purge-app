@@ -485,6 +485,7 @@ struct SafeCleanupCelebrationOverlay: View {
     let onDone: () -> Void
 
     @EnvironmentObject private var store: PurgeStore
+    @ObservedObject private var helperPrefs = PrivilegedHelperPreferenceStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var checkmarkProgress: CGFloat = 0
     @State private var checkmarkScale: CGFloat
@@ -600,9 +601,20 @@ struct SafeCleanupCelebrationOverlay: View {
                 Spacer(minLength: 0)
 
                 VStack(spacing: AppStyle.Spacing.small) {
-                    if session.phase == .complete, session.failedCount > 0 {
+                    if session.phase == .complete, !administratorFailures.isEmpty {
+                        NeedsAdministratorPanel(
+                            items: administratorFailures,
+                            isHelperEnabled: helperPrefs.isEnabled,
+                            awaitingApproval: helperPrefs.awaitingApproval,
+                            isWorking: !retryingFailureIDs.isDisjoint(with: Set(administratorFailures.map(\.id))),
+                            onPrimaryAction: handleAdministratorAction,
+                            onRevealInFinder: revealAdministratorItemInFinder
+                        )
+                    }
+
+                    if session.phase == .complete, !otherFailures.isEmpty {
                         CleanFailureDisclosure(
-                            failures: session.failedItems,
+                            failures: otherFailures,
                             isExpanded: $failuresExpanded,
                             retryingIDs: retryingFailureIDs,
                             onOpenSettings: openFullDiskAccessSettings,
@@ -703,6 +715,31 @@ struct SafeCleanupCelebrationOverlay: View {
         }
     }
 
+    /// Locked-app failures get the reassuring setup panel; everything else keeps the
+    /// terse disclosure. Split so a run that hits both still shows each correctly.
+    private var administratorFailures: [CleanFailureItem] {
+        session.failedItems.filter { $0.reason == .needsAdministrator }
+    }
+
+    private var otherFailures: [CleanFailureItem] {
+        session.failedItems.filter { $0.reason != .needsAdministrator }
+    }
+
+    /// One button for both jobs: set the helper up the first time (which sends the
+    /// user to approve it), or, once it is enabled, remove every stuck app now.
+    private func handleAdministratorAction() {
+        if helperPrefs.isEnabled {
+            for item in administratorFailures { retryFailure(item) }
+        } else {
+            helperPrefs.setEnabled(true)
+        }
+    }
+
+    private func revealAdministratorItemInFinder() {
+        guard let first = administratorFailures.first else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: first.path)])
+    }
+
     /// Shown in the complete phase only when something actually went to Trash.
     /// During cleaning the (invisible) footer reserves its space so nothing shifts.
     private var reservesTrashDisclaimerSpace: Bool {
@@ -716,7 +753,11 @@ struct SafeCleanupCelebrationOverlay: View {
     }
 
     private var showsConfetti: Bool {
-        confettiArmed && session.finalBytesMovedToTrash >= Self.confettiThresholdBytes && !reduceMotion
+        // Don't celebrate when something still needs the user's attention.
+        confettiArmed
+            && administratorFailures.isEmpty
+            && session.finalBytesMovedToTrash >= Self.confettiThresholdBytes
+            && !reduceMotion
     }
 
     private func handleAppear() {
@@ -1034,6 +1075,130 @@ private struct CleanFailureDisclosure: View {
             }
         }
         .multilineTextAlignment(.center)
+    }
+}
+
+/// The completion-screen treatment for apps that are locked to an administrator.
+/// Not an error and not a silent success: it says plainly what happened, what Purge
+/// will and won't do, and offers one calm next step — set up the secure helper once,
+/// or (if already set up) remove the apps now — with Finder as the manual escape.
+private struct NeedsAdministratorPanel: View {
+    let items: [CleanFailureItem]
+    let isHelperEnabled: Bool
+    let awaitingApproval: Bool
+    let isWorking: Bool
+    let onPrimaryAction: () -> Void
+    let onRevealInFinder: () -> Void
+
+    private var title: String {
+        items.count == 1 ? "\(items[0].displayName) needs your OK" : "\(items.count) apps need your OK"
+    }
+
+    private var explanation: String {
+        items.count == 1
+            ? "It was installed by an administrator, so macOS won't let any app move it to the Trash without your permission. That's a macOS protection, not a problem with the app or with Purge."
+            : "They were installed by an administrator, so macOS won't let them be moved to the Trash without your permission. That's a macOS protection, not a problem with the apps or with Purge."
+    }
+
+    private var primaryTitle: String {
+        if !isHelperEnabled { return "Set Up Secure Removal" }
+        return items.count == 1 ? "Remove \(items[0].displayName)" : "Remove \(items.count) Apps"
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 26, weight: .regular))
+                .foregroundStyle(.white.opacity(0.85))
+                .accessibilityHidden(true)
+
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+
+                Text(explanation)
+                    .font(.callout)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            reassuranceList
+
+            if awaitingApproval {
+                Text("Almost there — turn Purge on under Login Items in System Settings, then come back and try again.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(spacing: 10) {
+                Button(action: onPrimaryAction) {
+                    Group {
+                        if isWorking {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(AppColors.buttonPrimaryText)
+                        } else {
+                            Text(primaryTitle)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        }
+                    }
+                    .foregroundStyle(AppColors.buttonPrimaryText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(AppColors.textPrimary, in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(isWorking)
+
+                Button(action: onRevealInFinder) {
+                    Text("Remove it in Finder instead")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: 420)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5)
+        }
+    }
+
+    private var reassuranceList: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            reassuranceRow("trash", "Only moves to the Trash, never deletes for good")
+            reassuranceRow("arrow.uturn.backward", "You can put it back anytime")
+            reassuranceRow("hand.raised", "Never touches your documents or personal files")
+            reassuranceRow("switch.2", "Turn secure removal off whenever you like")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+    }
+
+    private func reassuranceRow(_ icon: String, _ text: String) -> some View {
+        HStack(alignment: .center, spacing: 9) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.5))
+                .frame(width: 16, alignment: .center)
+                .accessibilityHidden(true)
+
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.72))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

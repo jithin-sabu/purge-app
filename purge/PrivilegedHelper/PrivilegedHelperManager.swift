@@ -62,9 +62,9 @@ final class PrivilegedHelperManager {
     }
 
     /// Moves `urls` to `trashDirectory` through the helper. Returns `nil` when the
-    /// helper is not enabled or the connection cannot be vetted, so the caller can
-    /// fall back to the osascript path. Never throws: escalation is best-effort.
-    func moveToTrash(_ urls: [URL], trashDirectory: URL) async -> PrivilegedRemover.Result? {
+    /// helper is not enabled or the connection cannot be vetted, so the caller knows
+    /// escalation did not happen. Never throws: escalation is best-effort.
+    func moveToTrash(_ urls: [URL], trashDirectory: URL) async -> PrivilegedMoveResult? {
         guard service.status == .enabled, !urls.isEmpty else { return nil }
 
         let connection = NSXPCConnection(
@@ -85,7 +85,7 @@ final class PrivilegedHelperManager {
         defer { connection.invalidate() }
 
         let sentPaths = urls.map(\.path)
-        return await withCheckedContinuation { (continuation: CheckedContinuation<PrivilegedRemover.Result?, Never>) in
+        return await withCheckedContinuation { (continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) in
             let box = ContinuationBox(continuation)
 
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
@@ -107,7 +107,7 @@ final class PrivilegedHelperManager {
                 let movedSet = Set(movedPaths)
                 let moved = urls.filter { movedSet.contains($0.path) }
                 let failed = urls.filter { !movedSet.contains($0.path) }
-                box.resume(PrivilegedRemover.Result(moved: moved, failed: failed, cancelled: false))
+                box.resume(PrivilegedMoveResult(moved: moved, failed: failed))
             }
         }
     }
@@ -117,13 +117,13 @@ final class PrivilegedHelperManager {
 /// can race on different queues — resume it exactly once.
 private final class ContinuationBox: @unchecked Sendable {
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<PrivilegedRemover.Result?, Never>?
+    private var continuation: CheckedContinuation<PrivilegedMoveResult?, Never>?
 
-    init(_ continuation: CheckedContinuation<PrivilegedRemover.Result?, Never>) {
+    init(_ continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) {
         self.continuation = continuation
     }
 
-    func resume(_ value: PrivilegedRemover.Result?) {
+    func resume(_ value: PrivilegedMoveResult?) {
         lock.lock()
         defer { lock.unlock() }
         guard let continuation else { return }
