@@ -13,14 +13,9 @@ final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
         _ listener: NSXPCListener,
         shouldAcceptNewConnection newConnection: NSXPCConnection
     ) -> Bool {
-        // Refuse anything that is not the real Purge app. If the requirement string
-        // cannot even be applied, fail closed rather than serve an unvetted client.
-        do {
-            try newConnection.setCodeSigningRequirement(PurgeHelperConstants.clientRequirement)
-        } catch {
-            NSLog("PurgeHelper: rejecting connection, requirement not applied — %@", error.localizedDescription)
-            return false
-        }
+        // Refuse anything that is not the real Purge app. The requirement is a fixed,
+        // tested constant and must be installed before the connection is resumed.
+        newConnection.setCodeSigningRequirement(PurgeHelperConstants.clientRequirement)
 
         newConnection.exportedInterface = NSXPCInterface(with: PurgeHelperProtocol.self)
         newConnection.exportedObject = HelperService()

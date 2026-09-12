@@ -228,7 +228,7 @@ nonisolated final class FileDeleter: Sendable {
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],
         pathToExpectedSizeBytes: [String: Int64] = [:],
-        allowPrivilegedFallback: Bool = false,
+        privilegedEligiblePaths: Set<String> = [],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
         var bytesMovedToTrash: Int64 = 0
@@ -277,16 +277,14 @@ nonisolated final class FileDeleter: Sendable {
             }
         }
 
-        // Anything still on disk after an ordinary trash failed is a candidate for
-        // one administrator-authorized move — the root-owned app bundle an installer
-        // planted where the user cannot rename it. Only the uninstaller opts in
-        // (`allowPrivilegedFallback`); the large-files and AI-model routes never
-        // escalate. Batched into a single prompt for the whole run.
-        if allowPrivilegedFallback {
+        // Only paths the uninstall planner proved have a non-writable parent may use
+        // the administrator helper. Other deletion routes pass an empty set.
+        if !privilegedEligiblePaths.isEmpty {
             await applyPrivilegedFallback(
                 bytesMovedToTrash: &bytesMovedToTrash,
                 deletedItems: &deletedItems,
                 failedItems: &failedItems,
+                privilegedEligiblePaths: privilegedEligiblePaths,
                 pathToDisplayName: pathToDisplayName,
                 onProgress: onProgress
             )
@@ -306,25 +304,33 @@ nonisolated final class FileDeleter: Sendable {
         return report
     }
 
-    /// Escalates every still-present failure through the signed helper. When the
-    /// helper is enabled the moves happen silently and fold into `deletedItems`;
-    /// anything left (helper not set up yet, chiefly) is re-labelled
-    /// `.needsAdministrator` so the result screen can offer one-time setup. Nothing
-    /// here shows a system prompt on its own.
+    /// Escalates only explicit uninstall paths whose ordinary move failed and whose
+    /// parent folder is not writable. When the helper is enabled, successful moves
+    /// fold into `deletedItems`; otherwise the result screen can offer one-time setup.
+    /// Nothing here shows a system prompt on its own.
     private func applyPrivilegedFallback(
         bytesMovedToTrash: inout Int64,
         deletedItems: inout [DeletedItem],
         failedItems: inout [FailedDeletionItem],
+        privilegedEligiblePaths: Set<String>,
         pathToDisplayName: [String: String],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
     ) async {
-        let candidates = failedItems.filter { FileManager.default.fileExists(atPath: $0.path) }
+        // With Full Disk Access granted, an ownership denial resolves to `.unknown`.
+        // Busy, system-protected, and privacy-protected failures keep their original
+        // handling and are never silently retried as root.
+        let candidates = failedItems.filter {
+            $0.reason == .unknown
+                && privilegedEligiblePaths.contains(URL(fileURLWithPath: $0.path).standardizedFileURL.path)
+                && FileManager.default.fileExists(atPath: $0.path)
+        }
         guard !candidates.isEmpty else { return }
 
         let result = await PrivilegedUninstall.moveToTrash(
             candidates.map { URL(fileURLWithPath: $0.path) }
         )
         let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
+        let indeterminatePaths = Set(result.indeterminate.map { $0.standardizedFileURL.path })
 
         var stillFailed: [FailedDeletionItem] = []
         for item in failedItems {
@@ -337,6 +343,10 @@ nonisolated final class FileDeleter: Sendable {
                     displayName: pathToDisplayName[standardized] ?? item.displayName
                 ))
                 onProgress?(.itemDeleted(sizeBytes: item.sizeBytes))
+            } else if indeterminatePaths.contains(standardized) {
+                // The helper timed out and may still be finishing. Keep the honest
+                // original error instead of claiming that another permission is needed.
+                stillFailed.append(item)
             } else if candidates.contains(where: { $0.id == item.id }) {
                 // Still on disk and unmoved: the helper isn't enabled yet. Present it
                 // as "needs one-time setup," not a hard failure.

@@ -767,7 +767,7 @@ struct SafeCleanupCelebrationOverlay: View {
         NeedsAdministratorPanel(
             items: administratorFailures,
             isHelperEnabled: helperPrefs.isEnabled,
-            awaitingApproval: helperPrefs.awaitingApproval,
+            needsApproval: helperPrefs.needsApproval,
             isWorking: !retryingFailureIDs.isDisjoint(with: Set(administratorFailures.map(\.id))),
             onPrimaryAction: handleAdministratorAction,
             onRevealInFinder: revealAdministratorItemInFinder
@@ -1119,7 +1119,7 @@ private struct CleanFailureDisclosure: View {
 private struct NeedsAdministratorPanel: View {
     let items: [CleanFailureItem]
     let isHelperEnabled: Bool
-    let awaitingApproval: Bool
+    let needsApproval: Bool
     let isWorking: Bool
     let onPrimaryAction: () -> Void
     let onRevealInFinder: () -> Void
@@ -1241,7 +1241,7 @@ private struct NeedsAdministratorPanel: View {
             Label("Secure removal is on", systemImage: "checkmark.seal.fill")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.green)
-        } else if awaitingApproval {
+        } else if needsApproval {
             Text("In System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back.")
                 .font(.system(size: 13))
                 .foregroundStyle(.white.opacity(0.68))
@@ -1934,4 +1934,3 @@ extension View {
         modifier(SidebarCompactTopModifier())
     }
 }
-

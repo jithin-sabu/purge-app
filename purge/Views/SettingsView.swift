@@ -104,31 +104,73 @@ struct SettingsView: View {
 
     private var protectedAppRemovalSection: some View {
         settingsSection("Protected App Removal") {
-            settingsToggleRow(
-                title: "Remove admin-locked apps without a password",
-                caption: helperCaption,
-                warning: helper.awaitingApproval
-                    ? "Almost there — turn Purge on under Login Items in System Settings to finish."
-                    : nil,
-                isOn: helperEnabledBinding
-            )
+            HStack(alignment: .center, spacing: 16) {
+                settingsRowLabel(
+                    title: "Remove admin-locked apps without a password",
+                    caption: helperCaption,
+                    warning: helperWarning
+                )
+
+                helperStatusAndActions
+            }
+            .padding(16)
         }
     }
 
     private var helperCaption: String {
         """
         Some apps are installed under an administrator and can't be moved to the Trash on their \
-        own — Purge asks for your password each time it hits one. Turn this on to install a small \
-        secure helper that removes them for you without the repeated prompt. It still moves apps \
-        to the Trash, never deletes for good, and you can turn it off anytime.
+        own. Purge asks you to enable its secure removal helper only when an app needs it. Items \
+        still go to the Trash, and you can turn the helper off here at any time.
         """
     }
 
-    private var helperEnabledBinding: Binding<Bool> {
-        Binding(
-            get: { helper.isEnabled },
-            set: { helper.setEnabled($0) }
-        )
+    private var helperWarning: String? {
+        if helper.lastRegistrationFailed {
+            return "Setup didn't complete. Try again."
+        }
+        if helper.needsApproval {
+            return "Approval is still needed in System Settings."
+        }
+        return nil
+    }
+
+    private var helperStatusTitle: String {
+        if helper.isEnabled { return "Enabled" }
+        if helper.needsApproval { return "Needs approval" }
+        if helper.lastRegistrationFailed { return "Setup failed" }
+        return "Off"
+    }
+
+    private var helperStatusAndActions: some View {
+        VStack(alignment: .trailing, spacing: 7) {
+            Text(helperStatusTitle)
+                .font(.caption)
+                .foregroundStyle(helper.isEnabled ? AppColors.tagSafeText : .secondary)
+
+            HStack(spacing: 12) {
+                if helper.needsApproval {
+                    statusTextButton("Open System Settings", isDisabled: false) {
+                        helper.openLoginItemsSettings()
+                    }
+                    statusTextButton("Cancel", isDisabled: false) {
+                        helper.setEnabled(false)
+                    }
+                } else if helper.isEnabled {
+                    statusTextButton("Turn off", isDisabled: false) {
+                        helper.setEnabled(false)
+                    }
+                } else {
+                    statusTextButton(
+                        helper.lastRegistrationFailed ? "Try again" : "Enable",
+                        isDisabled: false
+                    ) {
+                        helper.setEnabled(true)
+                    }
+                }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var appearanceSection: some View {

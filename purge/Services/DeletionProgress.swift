@@ -137,4 +137,19 @@ final class DeletionSession: ObservableObject, Identifiable {
         failedCount = failedItems.count
         finalBytesMovedToTrash += additionalMovedBytes
     }
+
+    /// Credits bytes from a partial retry while leaving its unresolved failure visible.
+    func addRetriedMovedBytes(_ bytes: Int64) {
+        guard bytes > 0 else { return }
+        finalBytesMovedToTrash += bytes
+    }
+
+    /// Replaces one grouped failure with the exact items that remain after a partial
+    /// uninstall. This keeps leftover failures visible after the app bundle moved.
+    func replaceFailure(id: UUID, with replacements: [CleanFailureItem]) {
+        guard let index = failedItems.firstIndex(where: { $0.id == id }) else { return }
+        failedItems.remove(at: index)
+        failedItems.insert(contentsOf: replacements, at: index)
+        failedCount = failedItems.count
+    }
 }

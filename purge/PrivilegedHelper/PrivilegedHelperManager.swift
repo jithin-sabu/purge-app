@@ -5,10 +5,9 @@ import ServiceManagement
 /// `SMAppService`, reports whether it is enabled, and dials it over XPC to move
 /// admin-owned bundles to the Trash without a per-uninstall password.
 ///
-/// Registration is a one-time setup — macOS shows the daemon under the app in
+/// Registration is a one-time setup. macOS shows the daemon under the app in
 /// System Settings and the user enables it there. Once enabled, uninstalls of
-/// locked apps are silent; until then the caller falls back to the osascript prompt,
-/// so the feature always works, just less smoothly before setup.
+/// locked apps can use the helper without another password prompt.
 @MainActor
 final class PrivilegedHelperManager {
     static let shared = PrivilegedHelperManager()
@@ -67,32 +66,47 @@ final class PrivilegedHelperManager {
         SMAppService.openSystemSettingsLoginItems()
     }
 
-    /// Moves `urls` to `trashDirectory` through the helper. Returns `nil` when the
-    /// helper is not enabled or the connection cannot be vetted, so the caller knows
-    /// escalation did not happen. Never throws: escalation is best-effort.
-    func moveToTrash(_ urls: [URL], trashDirectory: URL) async -> PrivilegedMoveResult? {
-        guard service.status == .enabled, !urls.isEmpty else { return nil }
+    /// Moving is quick, but handing ownership of every file in a large app back to the
+    /// user can take minutes. A timeout is therefore an unknown result, never proof
+    /// that nothing moved.
+    private static let moveTimeout: TimeInterval = 300
+    private static let versionTimeout: TimeInterval = 10
 
+    /// Builds a connection to the helper and applies the code-signing requirement so
+    /// we only ever talk to the genuine, same-team daemon — the mirror of the check the
+    /// helper runs on us.
+    private func vettedConnection() -> NSXPCConnection {
         let connection = NSXPCConnection(
             machServiceName: PurgeHelperConstants.machServiceName,
             options: .privileged
         )
         connection.remoteObjectInterface = NSXPCInterface(with: PurgeHelperProtocol.self)
-        // Refuse to talk to anything but the genuine, same-team helper — the mirror of
-        // the check the helper runs on us. If it can't be applied, don't risk it.
-        do {
-            try connection.setCodeSigningRequirement(PurgeHelperConstants.helperRequirement)
-        } catch {
-            NSLog("Purge: helper requirement not applied — %@", error.localizedDescription)
-            connection.invalidate()
-            return nil
-        }
+        connection.setCodeSigningRequirement(PurgeHelperConstants.helperRequirement)
         connection.resume()
+        return connection
+    }
+
+    /// Moves `urls` to the connecting user's Trash through the helper. Returns `nil`
+    /// when the helper is not enabled or the connection fails, so the caller knows
+    /// escalation did not happen. Never throws: escalation is best-effort.
+    func moveToTrash(_ urls: [URL]) async -> PrivilegedMoveResult? {
+        // A helper can be approved after app launch. Check again here so an old,
+        // newly-approved copy is replaced before it receives the current protocol.
+        await reconcileVersion()
+        guard service.status == .enabled, !urls.isEmpty else { return nil }
+        let connection = vettedConnection()
         defer { connection.invalidate() }
 
         let sentPaths = urls.map(\.path)
         return await withCheckedContinuation { (continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) in
             let box = ContinuationBox(continuation)
+
+            // The helper may already have moved one or more paths before a timeout.
+            // Preserve that uncertainty so callers do not report a false failure or
+            // immediately retry an operation that may still be finishing.
+            DispatchQueue.global().asyncAfter(deadline: .now() + Self.moveTimeout) {
+                box.resume(PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
+            }
 
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
                 NSLog("Purge: helper XPC error — %@", error.localizedDescription)
@@ -105,17 +119,47 @@ final class PrivilegedHelperManager {
             }
 
             proxy.moveToTrash(
-                paths: sentPaths,
-                trashDirectoryPath: trashDirectory.path,
-                uid: Int(getuid()),
-                gid: Int(getgid())
+                paths: sentPaths
             ) { movedPaths in
                 let movedSet = Set(movedPaths)
                 let moved = urls.filter { movedSet.contains($0.path) }
                 let failed = urls.filter { !movedSet.contains($0.path) }
-                box.resume(PrivilegedMoveResult(moved: moved, failed: failed))
+                box.resume(PrivilegedMoveResult(moved: moved, failed: failed, indeterminate: []))
             }
         }
+    }
+
+    /// The version an enabled helper reports, or `nil` if it can't be reached in time.
+    /// Deliberately distinguishes "no answer" (nil) from a real version string so the
+    /// caller never re-registers on a flaky call.
+    private func installedHelperVersion() async -> String? {
+        let connection = vettedConnection()
+        defer { connection.invalidate() }
+
+        return await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+            let box = VersionBox(continuation)
+            DispatchQueue.global().asyncAfter(deadline: .now() + Self.versionTimeout) {
+                box.resume(nil)
+            }
+            let proxy = connection.remoteObjectProxyWithErrorHandler { _ in
+                box.resume(nil)
+            } as? PurgeHelperProtocol
+            guard let proxy else { box.resume(nil); return }
+            proxy.helperVersion { version in box.resume(version) }
+        }
+    }
+
+    /// If an enabled helper reports a version other than the one this app ships, an
+    /// older copy survived an app update — re-register to install the current binary.
+    /// Only a definite mismatch acts; a missing answer is left alone so a flaky call
+    /// can never trigger a spurious re-approval. Cheap to call once per launch.
+    func reconcileVersion() async {
+        guard service.status == .enabled else { return }
+        guard let installed = await installedHelperVersion() else { return }
+        guard installed != PurgeHelperConstants.version else { return }
+        NSLog("Purge: stale helper %@ (want %@) — re-registering", installed, PurgeHelperConstants.version)
+        await unregister()
+        register()
     }
 }
 
@@ -130,6 +174,25 @@ private final class ContinuationBox: @unchecked Sendable {
     }
 
     func resume(_ value: PrivilegedMoveResult?) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let continuation else { return }
+        self.continuation = nil
+        continuation.resume(returning: value)
+    }
+}
+
+/// The version-query counterpart of `ContinuationBox`: the reply and the timeout race
+/// on different queues, so this resumes the continuation exactly once.
+private final class VersionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<String?, Never>?
+
+    init(_ continuation: CheckedContinuation<String?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: String?) {
         lock.lock()
         defer { lock.unlock() }
         guard let continuation else { return }

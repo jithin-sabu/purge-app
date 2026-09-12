@@ -2,10 +2,9 @@ import Combine
 import Foundation
 import ServiceManagement
 
-/// Backs the Settings toggle for the privileged helper. Holds the daemon's live
-/// `SMAppService` status so the switch reflects reality — including changes the user
-/// makes directly in System Settings — and turns a toggle into a register /
-/// unregister, nudging the user to the Login Items pane when approval is pending.
+/// Holds the privileged helper's live status for Settings and the uninstall flow.
+/// The status always comes from macOS, including changes the user makes directly in
+/// System Settings.
 @MainActor
 final class PrivilegedHelperPreferenceStore: ObservableObject {
     static let shared = PrivilegedHelperPreferenceStore()
@@ -13,15 +12,18 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
     private let manager = PrivilegedHelperManager.shared
 
     @Published private(set) var status: SMAppService.Status
-    /// True right after a toggle-on that landed in `.requiresApproval`, so the UI can
-    /// explain the one remaining step without nagging on every status refresh.
-    @Published private(set) var awaitingApproval = false
+    /// Set when a registration attempt could neither enable nor reach approval, so the
+    /// UI can offer a clear retry action.
+    @Published private(set) var lastRegistrationFailed = false
 
     private init() {
         status = PrivilegedHelperManager.shared.status
     }
 
     var isEnabled: Bool { status == .enabled }
+
+    /// The helper is registered but still needs the user to approve it in System Settings.
+    var needsApproval: Bool { status == .requiresApproval }
 
     /// Re-reads the daemon status. Cheap; call it when the window returns to the
     /// foreground so a change made in System Settings is picked up.
@@ -32,22 +34,23 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
         // build makes SMAppService status hard to trust.
         NSLog("Purge: helper status = %ld", latest.rawValue)
         status = latest
-        if status == .enabled { awaitingApproval = false }
+        if status == .enabled { lastRegistrationFailed = false }
     }
 
     func setEnabled(_ enabled: Bool) {
         if enabled {
+            lastRegistrationFailed = false
             switch manager.register() {
             case .enabled:
-                awaitingApproval = false
+                break
             case .needsApproval:
-                awaitingApproval = true
                 manager.openLoginItemsSettings()
-            case .failed:
-                awaitingApproval = false
+            case .failed(let detail):
+                lastRegistrationFailed = true
+                NSLog("Purge: helper registration failed — %@", detail)
             }
         } else {
-            awaitingApproval = false
+            lastRegistrationFailed = false
             Task {
                 await manager.unregister()
                 refresh()
