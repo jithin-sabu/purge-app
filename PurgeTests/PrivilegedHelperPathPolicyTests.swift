@@ -64,6 +64,57 @@ struct PrivilegedHelperPathPolicyTests {
 
     @Test("Helper behavior version is current")
     func helperVersionIsCurrent() {
-        #expect(PurgeHelperConstants.version == "2")
+        #expect(PurgeHelperConstants.version == "3")
+    }
+}
+
+/// A leftover keyed by bundle id belongs to every installed app that carries that
+/// id. When two copies share one (Xcode and Xcode-beta are both
+/// `com.apple.dt.Xcode`), removing one copy must not strip files the other reads.
+/// These pin the matching primitive the shared-leftover guard relies on.
+@Suite("Shared leftover detection")
+struct SharedLeftoverDetectionTests {
+    private func app(_ name: String, bundleID: String?, path: String) -> InstalledApp {
+        InstalledApp(
+            name: name,
+            bundleURL: URL(fileURLWithPath: path),
+            bundleID: bundleID,
+            bundleSizeBytes: 0,
+            isRunning: false
+        )
+    }
+
+    @Test("A second copy with the same bundle id claims the same leftover")
+    func secondCopyClaimsLeftover() {
+        let beta = app("Xcode-beta", bundleID: "com.apple.dt.Xcode", path: "/Applications/Xcode-beta.app")
+        // A preferences file keyed by the shared bundle id matches the other copy too.
+        #expect(
+            AppUninstallScanPolicy.matchReason(
+                forLeftoverName: "com.apple.dt.Xcode.plist",
+                category: .preferences,
+                app: beta
+            ) != nil
+        )
+    }
+
+    @Test("An unrelated app does not claim the leftover")
+    func unrelatedAppDoesNotClaim() {
+        let other = app("Rectangle", bundleID: "com.knollsoft.Rectangle", path: "/Applications/Rectangle.app")
+        #expect(
+            AppUninstallScanPolicy.matchReason(
+                forLeftoverName: "com.apple.dt.Xcode.plist",
+                category: .preferences,
+                app: other
+            ) == nil
+        )
+    }
+}
+
+@Suite("Kept-for-other-app is informational")
+struct KeptForOtherAppReasonTests {
+    @Test("Offers neither retry nor settings")
+    func nonActionable() {
+        #expect(CleanFailureReason.keptForOtherApp.showsRetry == false)
+        #expect(CleanFailureReason.keptForOtherApp.showsOpenSettings == false)
     }
 }
