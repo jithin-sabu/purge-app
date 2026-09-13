@@ -88,7 +88,7 @@ struct UninstallView: View {
         return sortedApps(matched)
     }
 
-    /// Size sorts key on the total shown on each tile (bundle + safe leftovers),
+    /// Size sorts key on the total shown on each tile (bundle + all leftovers),
     /// but only once every app is measured — otherwise the grid would reshuffle
     /// tile by tile as the background pass lands. Name and date never wait.
     private func sortedApps(_ apps: [InstalledApp]) -> [InstalledApp] {
@@ -239,7 +239,7 @@ private enum AppTileMetrics {
 
 private struct AppTile: View {
     let app: InstalledApp
-    /// Bundle plus safe leftovers once measured, bundle size until then.
+    /// Bundle plus all matched leftovers once measured, bundle size until then.
     let totalBytes: Int64
     let isSelected: Bool
     let onToggle: () -> Void
@@ -542,11 +542,6 @@ struct UninstallReviewSheet: View {
             }
 
             Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            AppBadge(
-                text: value.safetyInfo.level.displayName,
-                tone: value.safetyInfo.level == .safe ? .safe : .warning
-            )
 
             Text(value.formattedSize)
                 .font(AppStyle.Typography.metadataEmphasis)

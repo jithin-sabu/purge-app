@@ -202,9 +202,10 @@ nonisolated final class AppUninstallScanner {
                     category: match.category,
                     safetyInfo: safety,
                     matchReason: match.reason,
-                    // High-confidence matches start checked; name matches wait for
-                    // the user to confirm they belong to the app.
-                    isSelected: match.reason.isHighConfidence
+                    // Uninstalling an app means taking its files with it, so every
+                    // matched item starts checked. The user unticks anything they
+                    // want to keep.
+                    isSelected: true
                 )
             )
         }
