@@ -1492,8 +1492,9 @@ final class PurgeStore: ObservableObject {
     // MARK: Building the removal plan
 
     /// Gathers the bundle plus leftovers for every selected app and opens the
-    /// review sheet. The scan runs per app; high-confidence matches arrive
-    /// checked, name matches unchecked, as in the scanner.
+    /// review sheet. Every match arrives checked; the sharing pass below then
+    /// unticks any leftover a kept app still claims, so the sheet shows upfront
+    /// what the deletion pass would otherwise silently hold back.
     func requestUninstallSelectedApps() async {
         let apps = selectedApps
         guard !apps.isEmpty, !isBuildingUninstallPlan, !isDeleting else { return }
@@ -1511,8 +1512,37 @@ final class PurgeStore: ObservableObject {
             appPlans.append(UninstallAppPlan(app: app, items: items))
         }
 
+        markSharedWithSurvivors(in: &appPlans)
+
         let id = appPlans.map(\.app.id).sorted().joined(separator: "|")
         uninstallPlan = UninstallPlan(id: id, apps: appPlans)
+    }
+
+    /// Unticks and labels any leftover that an app the user is keeping also claims,
+    /// so removing one app never proposes trashing a file a surviving app reads
+    /// (the two-copies case, or one app of a suite that shares support). The bundle
+    /// is never shared, and this reuses the deletion pass's `appStillUsing` matcher
+    /// so the sheet and the actual removal agree on what is held back.
+    private func markSharedWithSurvivors(in appPlans: inout [UninstallAppPlan]) {
+        let removingIDs = Set(appPlans.map(\.app.id))
+        let survivors = installedApps.filter { !removingIDs.contains($0.id) }
+        guard !survivors.isEmpty else { return }
+
+        for planIndex in appPlans.indices {
+            let owner = appPlans[planIndex].app
+            for itemIndex in appPlans[planIndex].items.indices {
+                let item = appPlans[planIndex].items[itemIndex]
+                guard item.category != .bundle else { continue }
+                if let survivor = appStillUsing(
+                    leftover: item,
+                    excludingOwner: owner,
+                    among: survivors
+                ) {
+                    appPlans[planIndex].items[itemIndex].isSelected = false
+                    appPlans[planIndex].items[itemIndex].keptForApp = survivor.name
+                }
+            }
+        }
     }
 
     func dismissUninstallPlan() {
@@ -1562,15 +1592,12 @@ final class PurgeStore: ObservableObject {
         excludingOwner owner: InstalledApp,
         among remaining: [InstalledApp]
     ) -> InstalledApp? {
-        let name = item.path.lastPathComponent
-        return remaining.first { candidate in
-            candidate.id != owner.id
-                && AppUninstallScanPolicy.matchReason(
-                    forLeftoverName: name,
-                    category: item.category,
-                    app: candidate
-                ) != nil
-        }
+        AppUninstallScanPolicy.claimant(
+            forLeftoverName: item.path.lastPathComponent,
+            category: item.category,
+            ownerID: owner.id,
+            among: remaining
+        )
     }
 
     /// Builds the "kept, still used by another app" notice shown for a shared leftover

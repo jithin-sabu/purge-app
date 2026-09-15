@@ -115,6 +115,15 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     let safetyInfo: SafetyInfo
     let matchReason: MatchReason
     var isSelected: Bool
+    /// The name of another still-installed app that also claims this path, set
+    /// when the plan is built. Non-nil means the item is shared with an app the
+    /// user is keeping, so it starts unticked and the deletion pass holds it back
+    /// rather than stripping a file the surviving app still reads. `nil` for the
+    /// common case of a path only this app owns.
+    var keptForApp: String? = nil
+
+    /// Shared with an app that is staying installed, so it must not be trashed.
+    var isKeptForOtherApp: Bool { keptForApp != nil }
 
     var formattedSize: String { formatBytes(sizeBytes) }
 }
