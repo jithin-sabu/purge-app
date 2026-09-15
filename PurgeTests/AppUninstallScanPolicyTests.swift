@@ -258,4 +258,55 @@ struct AppUninstallScanPolicyTests {
         let url = URL(fileURLWithPath: "/Applications/A/B/Foo.app", isDirectory: true)
         #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
     }
+
+    // MARK: Shared-leftover detection
+
+    /// Two copies of the same app share bundle-id-keyed support. Removing one must
+    /// see that the other copy still claims the shared preference.
+    @Test
+    func twoCopiesShareBundleIDLeftover() {
+        let owner = makeApp(bundlePath: "/Applications/Rectangle.app")
+        let secondCopy = makeApp(
+            bundlePath: FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Applications/Rectangle.app").path
+        )
+        let claimant = AppUninstallScanPolicy.claimant(
+            forLeftoverName: "com.knollsoft.Rectangle.plist",
+            category: .preferences,
+            ownerID: owner.id,
+            among: [secondCopy]
+        )
+        #expect(claimant?.id == secondCopy.id)
+    }
+
+    /// The owner never counts as a claimant of its own leftover.
+    @Test
+    func ownerIsNotItsOwnClaimant() {
+        let owner = makeApp()
+        let claimant = AppUninstallScanPolicy.claimant(
+            forLeftoverName: "com.knollsoft.Rectangle.plist",
+            category: .preferences,
+            ownerID: owner.id,
+            among: [owner]
+        )
+        #expect(claimant == nil)
+    }
+
+    /// An unrelated surviving app does not claim the leftover, so it is not shared.
+    @Test
+    func unrelatedSurvivorDoesNotClaimLeftover() {
+        let owner = makeApp()
+        let safari = makeApp(
+            name: "Safari",
+            bundlePath: "/Applications/Safari.app",
+            bundleID: "com.apple.Safari"
+        )
+        let claimant = AppUninstallScanPolicy.claimant(
+            forLeftoverName: "com.knollsoft.Rectangle.plist",
+            category: .preferences,
+            ownerID: owner.id,
+            among: [safari]
+        )
+        #expect(claimant == nil)
+    }
 }
