@@ -88,7 +88,7 @@ struct UninstallView: View {
         return sortedApps(matched)
     }
 
-    /// Size sorts key on the total shown on each tile (bundle + safe leftovers),
+    /// Size sorts key on the total shown on each tile (bundle + all leftovers),
     /// but only once every app is measured — otherwise the grid would reshuffle
     /// tile by tile as the background pass lands. Name and date never wait.
     private func sortedApps(_ apps: [InstalledApp]) -> [InstalledApp] {
@@ -239,7 +239,7 @@ private enum AppTileMetrics {
 
 private struct AppTile: View {
     let app: InstalledApp
-    /// Bundle plus safe leftovers once measured, bundle size until then.
+    /// Bundle plus all matched leftovers once measured, bundle size until then.
     let totalBytes: Int64
     let isSelected: Bool
     let onToggle: () -> Void
@@ -499,18 +499,23 @@ struct UninstallReviewSheet: View {
         }
     }
 
+    /// Tri-state over the items the user can actually tick. Items kept for a
+    /// surviving app are locked off, so they never count toward "all".
     private func selectAllState(_ appPlan: UninstallAppPlan) -> SelectAllTriState {
-        let total = appPlan.items.count
-        guard total > 0 else { return .none }
-        let selected = appPlan.selectedItems.count
+        let toggleable = appPlan.items.filter { !$0.isKeptForOtherApp }
+        guard !toggleable.isEmpty else { return .none }
+        let selected = toggleable.filter(\.isSelected).count
         if selected == 0 { return .none }
-        if selected == total { return .all }
+        if selected == toggleable.count { return .all }
         return .mixed
     }
 
     private func toggleAll(_ appPlan: Binding<UninstallAppPlan>) {
-        let allOn = appPlan.wrappedValue.items.allSatisfy(\.isSelected)
-        for index in appPlan.wrappedValue.items.indices {
+        let indices = appPlan.wrappedValue.items.indices.filter {
+            !appPlan.wrappedValue.items[$0].isKeptForOtherApp
+        }
+        let allOn = indices.allSatisfy { appPlan.wrappedValue.items[$0].isSelected }
+        for index in indices {
             appPlan.wrappedValue.items[index].isSelected = !allOn
         }
     }
@@ -522,6 +527,10 @@ struct UninstallReviewSheet: View {
                 .labelsHidden()
                 .toggleStyle(.checkbox)
                 .tint(AppColors.buttonPrimaryBg)
+                // Locked off: while the other app is installed, the deletion pass
+                // holds this file back regardless, so the tick must not imply
+                // otherwise.
+                .disabled(value.isKeptForOtherApp)
 
             Image(systemName: value.category.symbolName)
                 .foregroundStyle(AppColors.textSecondary)
@@ -539,14 +548,16 @@ struct UninstallReviewSheet: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if let keptForApp = value.keptForApp {
+                    Text("Kept, still used by \(keptForApp)")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.tagCheckText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
 
             Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            AppBadge(
-                text: value.safetyInfo.level.displayName,
-                tone: value.safetyInfo.level == .safe ? .safe : .warning
-            )
 
             Text(value.formattedSize)
                 .font(AppStyle.Typography.metadataEmphasis)

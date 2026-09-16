@@ -76,11 +76,12 @@ struct AppUninstallScannerTests {
         let supportIDItem = byPath[supportByID.standardizedFileURL.path]
         #expect(supportIDItem?.matchReason == .bundleID)
 
-        // Name anchored: matched, medium, not preselected.
+        // Name anchored: still matched and still flagged medium in the data, but
+        // uninstall takes the app's files with it, so every match starts ticked.
         let nameItem = byPath[supportByName.standardizedFileURL.path]
         #expect(nameItem?.matchReason == .appName)
         #expect(nameItem?.safetyInfo.level == .medium)
-        #expect(nameItem?.isSelected == false)
+        #expect(nameItem?.isSelected == true)
 
         // The false-positive guard: the unrelated vendor folder is left alone.
         #expect(byPath[unrelated.standardizedFileURL.path] == nil)

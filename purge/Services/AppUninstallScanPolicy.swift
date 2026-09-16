@@ -167,6 +167,25 @@ enum AppUninstallScanPolicy {
         return nil
     }
 
+    // MARK: Shared-leftover detection
+
+    /// The first app in `others` (never the one whose id is `ownerID`) that also
+    /// claims this leftover, using the same strict identifier/name rules as
+    /// `matchReason`. A non-nil result means the leftover is shared with an app the
+    /// user is keeping, so removing its owner must not trash it: the two-copies
+    /// case, or one app of a suite that shares support with its siblings.
+    nonisolated static func claimant(
+        forLeftoverName name: String,
+        category: UninstallCategory,
+        ownerID: String,
+        among others: [InstalledApp]
+    ) -> InstalledApp? {
+        others.first { candidate in
+            candidate.id != ownerID
+                && matchReason(forLeftoverName: name, category: category, app: candidate) != nil
+        }
+    }
+
     // MARK: Safety mapping
 
     /// Bundle-id and group anchored matches are safe to remove and preselected;
