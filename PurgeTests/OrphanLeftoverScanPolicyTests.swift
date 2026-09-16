@@ -90,6 +90,17 @@ struct OrphanLeftoverScanPolicyTests {
         #expect(index(["a.b", "c.d", "e.f", "g.h", "i.j"]).looksComplete)
     }
 
+    /// A root that existed but failed to enumerate leaves the view degraded, so
+    /// the scan must not run even with enough apps counted elsewhere.
+    @Test
+    func unreadableRootLooksIncomplete() {
+        let degraded = OrphanLeftoverScanPolicy.InstalledAppIndex(
+            diskBundleIDs: Set(["a.b", "c.d", "e.f", "g.h", "i.j"]),
+            rootsReadable: false
+        )
+        #expect(!degraded.looksComplete)
+    }
+
     // MARK: Bundle-id extraction
 
     @Test
@@ -119,11 +130,12 @@ struct OrphanLeftoverScanPolicyTests {
         ) == "com.vendor.App")
     }
 
+    /// The `group.<name>` form is an app-group identifier shared with installed
+    /// apps and their extensions, not an app bundle id, so it is not attributed
+    /// by name (it would flag a group an installed app still uses).
     @Test
-    func groupContainerStripsGroupPrefix() {
-        #expect(OrphanLeftoverScanPolicy.groupContainerBundleID(
-            from: "group.com.vendor.App"
-        ) == "com.vendor.App")
+    func groupContainerRejectsAppGroupPrefix() {
+        #expect(OrphanLeftoverScanPolicy.groupContainerBundleID(from: "group.com.vendor.App") == nil)
     }
 
     @Test

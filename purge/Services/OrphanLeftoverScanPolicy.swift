@@ -64,14 +64,21 @@ enum OrphanLeftoverScanPolicy {
         /// roots. Used both for ownership and for the completeness check.
         let diskBundleIDs: Set<String>
 
+        /// False when an app root existed on disk but could not be enumerated
+        /// (a permissions failure, a volume going away mid-read). A degraded read
+        /// undercounts installed apps, which would flag their leftovers as
+        /// orphaned, so it suppresses the scan. Defaults to `true` so callers that
+        /// build an index directly (tests) are unaffected.
+        var rootsReadable: Bool = true
+
         var appCount: Int { diskBundleIDs.count }
 
         /// Guards against acting on a broken view of the world: an unmounted
         /// volume, an unreadable `/Applications`, or a sandbox with no Launch
         /// Services access all read as "almost nothing installed", which would
-        /// flag every leftover as orphaned. Below the floor, the scan suppresses
-        /// itself rather than produce a false list.
-        var looksComplete: Bool { appCount >= minimumPlausibleAppCount }
+        /// flag every leftover as orphaned. The scan suppresses itself unless the
+        /// roots read cleanly and there are at least a plausible number of apps.
+        var looksComplete: Bool { rootsReadable && appCount >= minimumPlausibleAppCount }
 
         /// Whether an installed app owns this bundle id, by exact match or by
         /// being a parent of it. Biased toward owned: it tests the id and each
@@ -107,6 +114,10 @@ enum OrphanLeftoverScanPolicy {
     nonisolated static func makeInstalledAppIndex() -> InstalledAppIndex {
         let fm = FileManager.default
         var ids = Set<String>()
+        // A root that is absent (e.g. no `~/Applications`) is fine and reads as
+        // empty. A root that exists but fails to enumerate means our view of what
+        // is installed is degraded, not just sparse, so the scan must not run.
+        var rootsReadable = true
 
         func collect(_ url: URL) {
             guard url.pathExtension == "app" else { return }
@@ -116,15 +127,22 @@ enum OrphanLeftoverScanPolicy {
         }
 
         for root in AppUninstallScanPolicy.installedAppRoots() {
+            guard fm.fileExists(atPath: root.path) else { continue }
             guard let entries = try? fm.contentsOfDirectory(
                 at: root,
                 includingPropertiesForKeys: [.isDirectoryKey],
                 options: [.skipsHiddenFiles]
-            ) else { continue }
+            ) else {
+                rootsReadable = false
+                continue
+            }
             for entry in entries {
                 if entry.pathExtension == "app" {
                     collect(entry)
                 } else if (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                    // A single unreadable subfolder is not treated as a degraded
+                    // view: it only hides vendor-grouped apps one level down, and
+                    // suppressing the whole scan for one odd folder would be worse.
                     let nested = (try? fm.contentsOfDirectory(
                         at: entry,
                         includingPropertiesForKeys: nil,
@@ -134,7 +152,7 @@ enum OrphanLeftoverScanPolicy {
                 }
             }
         }
-        return InstalledAppIndex(diskBundleIDs: ids)
+        return InstalledAppIndex(diskBundleIDs: ids, rootsReadable: rootsReadable)
     }
 
     // MARK: Orphan test
@@ -217,18 +235,21 @@ enum OrphanLeftoverScanPolicy {
         return nil
     }
 
-    /// Group containers are `<teamID>.<bundle id>` or `group.<bundle id>`. The
-    /// bundle id is what remains after the prefix; anything that does not then
-    /// look like a bundle id is rejected.
+    /// The owning bundle id for a `<teamID>.<bundle id>` group container, whose
+    /// remainder after the team id is a real application bundle identifier we can
+    /// check against installed apps.
+    ///
+    /// The `group.<name>` form is deliberately not handled: that name is a
+    /// developer-chosen app-group identifier, not an app bundle id, and is
+    /// routinely shared by an installed app and its extensions (for example a
+    /// password manager and its Safari extension). Matching it against installed
+    /// bundle ids would flag a group an installed app still uses. Attributing it
+    /// correctly needs the installed apps' app-group entitlements, which is out of
+    /// scope here, so those containers are left alone rather than guessed at.
     nonisolated static func groupContainerBundleID(from name: String) -> String? {
-        let candidate: String
-        if name.lowercased().hasPrefix("group.") {
-            candidate = String(name.dropFirst("group.".count))
-        } else if let dot = name.firstIndex(of: "."), isTeamIdentifier(String(name[..<dot])) {
-            candidate = String(name[name.index(after: dot)...])
-        } else {
-            return nil
-        }
+        guard let dot = name.firstIndex(of: "."),
+              isTeamIdentifier(String(name[..<dot])) else { return nil }
+        let candidate = String(name[name.index(after: dot)...])
         return looksLikeBundleID(candidate) ? candidate : nil
     }
 
