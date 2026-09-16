@@ -46,36 +46,16 @@ enum AppSortOption: String, CaseIterable, Identifiable {
 /// The Uninstall tab: a grid of installed apps, multi-selectable. Ticking apps
 /// and pressing Uninstall Selected gathers each app's leftovers and opens a
 /// review sheet before anything moves to the Trash.
-/// The two views inside the App Uninstaller tab. `leftovers` only exists as a
-/// switchable segment once a scan finds any (issue #26).
-enum UninstallSection: String, CaseIterable, Identifiable {
-    case installedApps
-    case leftovers
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .installedApps: return "Installed Apps"
-        case .leftovers: return "Leftovers"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .installedApps: return "square.grid.2x2"
-        case .leftovers: return "clock.badge.xmark"
-        }
-    }
-}
-
 struct UninstallView: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var appSearchQuery = ""
-    @State private var section: UninstallSection = .installedApps
     @AppStorage("sort.uninstaller") private var sortRaw = AppSortOption.largest.rawValue
+
+    /// The active view lives on the store so the tab header can swap its action
+    /// button to match; this view reads and writes it through `store`.
+    private var section: UninstallSection { store.uninstallSection }
 
     /// The Leftovers segment appears only once a scan has found something, so the
     /// tab looks exactly as before for the common case of no orphans.
@@ -107,7 +87,7 @@ struct UninstallView: View {
         // while it is the active view; fall back to the apps so the tab never
         // shows a segment that is no longer there.
         .onChange(of: showsLeftoversSegment) { shows in
-            if !shows { section = .installedApps }
+            if !shows { store.uninstallSection = .installedApps }
         }
     }
 
@@ -215,9 +195,9 @@ struct UninstallView: View {
         let isOn = section == target
         return Button {
             if reduceMotion {
-                section = target
+                store.uninstallSection = target
             } else {
-                withAnimation(.easeInOut(duration: 0.2)) { section = target }
+                withAnimation(.easeInOut(duration: 0.2)) { store.uninstallSection = target }
             }
         } label: {
             FilterChip(
@@ -458,6 +438,9 @@ private struct SkeletonAppTile: View {
 
 struct UninstallHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var onLeftovers: Bool { store.uninstallSection == .leftovers }
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
@@ -475,37 +458,69 @@ struct UninstallHeaderActions: View {
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
             .disabled(store.isScanningInstalledApps)
 
-            // Same widening delete label as Large Files: compact ("Uninstall")
-            // with nothing ticked, growing to carry the count and size as apps are
-            // selected, so Rescan slides over to make room in one motion. While the
-            // plan is being gathered it shows a spinner in place.
-            Button {
-                Task { await store.requestUninstallSelectedApps() }
-            } label: {
-                Group {
-                    if store.isBuildingUninstallPlan {
-                        CleaningButtonLabel(
-                            title: "Preparing...",
-                            systemImage: nil,
-                            isCleaning: true,
-                            spinnerTint: AppColors.buttonPrimaryText
-                        )
-                    } else {
-                        AnimatedDeleteActionLabel(
-                            inactiveTitle: "Uninstall",
-                            activeTitle: "Uninstall",
-                            selectedCount: store.selectedApps.count,
-                            selectedBytes: store.selectedAppsRemovableBytes
-                        )
-                    }
+            // One destructive button whose job follows the active segment: Uninstall
+            // for the app grid, Remove for leftovers. Crossfading between them keeps
+            // the header from jumping as the user switches views.
+            ZStack {
+                if onLeftovers {
+                    removeLeftoversButton
+                } else {
+                    uninstallAppsButton
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
             }
-            .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
-            .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: onLeftovers)
         }
         .fixedSize()
+    }
+
+    // Same widening delete label as Large Files: compact ("Uninstall") with
+    // nothing ticked, growing to carry the count and size as apps are selected.
+    // While the plan is being gathered it shows a spinner in place.
+    private var uninstallAppsButton: some View {
+        Button {
+            Task { await store.requestUninstallSelectedApps() }
+        } label: {
+            Group {
+                if store.isBuildingUninstallPlan {
+                    CleaningButtonLabel(
+                        title: "Preparing...",
+                        systemImage: nil,
+                        isCleaning: true,
+                        spinnerTint: AppColors.buttonPrimaryText
+                    )
+                } else {
+                    AnimatedDeleteActionLabel(
+                        inactiveTitle: "Uninstall",
+                        activeTitle: "Uninstall",
+                        selectedCount: store.selectedApps.count,
+                        selectedBytes: store.selectedAppsRemovableBytes
+                    )
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
+        .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
+        .transition(.opacity)
+    }
+
+    private var removeLeftoversButton: some View {
+        Button {
+            store.requestOrphanCleanup()
+        } label: {
+            AnimatedDeleteActionLabel(
+                inactiveTitle: "Remove",
+                activeTitle: "Remove",
+                selectedCount: store.selectedOrphanCount,
+                selectedBytes: store.selectedOrphanBytes
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
+        .disabled(store.selectedOrphanCount == 0 || store.isDeleting)
+        .transition(.opacity)
     }
 }
 
@@ -736,40 +751,17 @@ struct OrphanLeftoversSection: View {
     }
 
     private var header: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Image(systemName: "clock.badge.xmark")
+        // The Remove action lives in the tab's top-right header (it swaps in for
+        // Uninstall on this segment), so this header is just the title and tally.
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Leftovers from removed apps")
+                .font(AppStyle.Typography.rowTitle)
+                .foregroundStyle(AppColors.textPrimary)
+            Text(subtitle)
+                .font(AppStyle.Typography.metadata)
                 .foregroundStyle(AppColors.textSecondary)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Leftovers from removed apps")
-                    .font(AppStyle.Typography.rowTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                Text(subtitle)
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-            }
-
-            Spacer(minLength: AppStyle.Spacing.small)
-
-            if !orphans.isEmpty {
-                Button {
-                    store.requestOrphanCleanup()
-                } label: {
-                    AnimatedDeleteActionLabel(
-                        inactiveTitle: "Remove",
-                        activeTitle: "Remove",
-                        selectedCount: store.selectedOrphanCount,
-                        selectedBytes: store.selectedOrphanBytes
-                    )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                }
-                .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
-                .disabled(store.selectedOrphanCount == 0 || store.isDeleting)
-                .fixedSize()
-            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var subtitle: String {

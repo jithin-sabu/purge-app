@@ -128,6 +128,31 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     var formattedSize: String { formatBytes(sizeBytes) }
 }
 
+/// The two views inside the App Uninstaller tab. `leftovers` only exists as a
+/// switchable segment once a scan finds any (issue #26). Lives here rather than
+/// in the view so `PurgeStore` can own the current selection and the tab's
+/// header can swap its action button to match.
+nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
+    case installedApps
+    case leftovers
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .installedApps: return "Installed Apps"
+        case .leftovers: return "Leftovers"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .installedApps: return "square.grid.2x2"
+        case .leftovers: return "clock.badge.xmark"
+        }
+    }
+}
+
 /// The reviewed orphan-leftover removal awaiting confirmation (issue #26). Unlike
 /// `UninstallPlan`, there is no app: every item is a leftover whose owner is gone,
 /// so it is a flat list. Each item keeps its own `isSelected` so the review sheet

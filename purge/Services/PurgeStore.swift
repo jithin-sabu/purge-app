@@ -242,6 +242,11 @@ final class PurgeStore: ObservableObject {
 
     // MARK: Orphan leftovers (issue #26)
 
+    /// Which view the App Uninstaller tab is showing. Lifted into the store so the
+    /// tab's header can swap its action button (Uninstall vs Remove leftovers) to
+    /// match the segment the user is on.
+    @Published var uninstallSection: UninstallSection = .installedApps
+
     /// Leftovers whose owning app is no longer installed, shown as a section under
     /// the App Uninstaller tab. Always "Check First", never preselected.
     @Published var orphanLeftovers: [UninstallItem] = []

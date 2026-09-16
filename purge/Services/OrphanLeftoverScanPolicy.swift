@@ -325,7 +325,9 @@ enum OrphanLeftoverScanPolicy {
     ) -> SafetyInfo {
         SafetyInfo(
             level: .medium,
-            headline: "\(appName) — leftover from a removed app",
+            // No "leftover from a removed app" suffix here: the section and the
+            // review sheet already say so, so on the row it is only noise.
+            headline: appName,
             explanation: "This \(category.displayName.lowercased()) folder belongs to an app that is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app.",
             recoverySteps: "Removed items go to the Trash, so you can put them back until you empty it. If you reinstall the app, let it recreate its data.",
             reinstallCommand: nil
