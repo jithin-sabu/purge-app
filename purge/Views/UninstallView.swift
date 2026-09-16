@@ -62,6 +62,11 @@ struct UninstallView: View {
         count: 4
     )
 
+    /// Gentle spring so tiles glide to their new slot when the size sort settles,
+    /// rather than snapping. Slightly under-damped for a touch of settle without
+    /// a bounce that would read as jitter across a full grid.
+    private let tileReorderAnimation: Animation = .spring(response: 0.45, dampingFraction: 0.85)
+
     var body: some View {
         VStack(spacing: 8) {
             controls
@@ -184,6 +189,12 @@ struct UninstallView: View {
                 .padding(.horizontal, AppDetailPageLayout.horizontalInset)
                 .padding(.top, 2)
                 .padding(.bottom, AppStyle.Spacing.large)
+                // When the background pass finishes measuring every app's full
+                // footprint, the size sort flips from bundle-size order to
+                // total-removable order all at once. Keying the animation on the
+                // current tile order lets LazyVGrid slide each tile to its new
+                // slot (identity is the stable app id) instead of popping.
+                .animation(reduceMotion ? nil : tileReorderAnimation, value: filteredApps.map(\.id))
             }
             .scrollContentBackground(.hidden)
             .background(AppColors.bgBase)
