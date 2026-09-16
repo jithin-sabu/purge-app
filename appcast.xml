@@ -3,6 +3,24 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.5.2</title>
+      <pubDate>Tue, 16 Sep 2026 15:00:00 +0000</pubDate>
+      <sparkle:version>22</sparkle:version>
+      <sparkle:shortVersionString>1.5.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>Purge now finds leftovers from apps you no longer have installed. Caches, containers, and app data left behind in your Library appear under a new Leftovers view in the App Uninstaller tab, marked Check First, with a review step before anything moves to the Trash.</li>
+          <li>App tiles now glide into their new order when the list finishes measuring each app's size, instead of jumping.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.5.2/Purgev1.5.2.dmg"
+        sparkle:edSignature="3+yubCoup6vio66foTwTuE0h1AvGPXF1gz7HNA7hWDyTRig9XgeG2MO793olLZd3loPg0yDqLjEgiG0W2smQCg=="
+        length="7740606"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.1</title>
       <pubDate>Tue, 16 Sep 2026 12:00:00 +0000</pubDate>
       <sparkle:version>21</sparkle:version>
