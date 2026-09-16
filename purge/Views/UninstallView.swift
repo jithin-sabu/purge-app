@@ -66,7 +66,6 @@ struct UninstallView: View {
         VStack(spacing: 8) {
             controls
             grid
-            OrphanLeftoversPanel()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.bgBase)
@@ -164,24 +163,29 @@ struct UninstallView: View {
         if store.installedApps.isEmpty {
             // Held behind the skeleton while the first scan runs; nothing to show.
             Color.clear
-        } else if filteredApps.isEmpty {
-            emptyState(
-                symbol: "magnifyingglass",
-                title: "Nothing matches",
-                detail: "No installed app matches \"\(appSearchQuery)\"."
-            )
         } else {
+            // Tiles and the "leftovers from removed apps" section share one scroll,
+            // so the leftovers flow directly under the grid and scroll with it,
+            // rather than sitting in a pinned, separately-scrolling box.
             ScrollView {
-                LazyVGrid(columns: Self.columns, spacing: 12) {
-                    ForEach(filteredApps) { app in
-                        AppTile(
-                            app: app,
-                            totalBytes: store.removableBytes(for: app),
-                            isSelected: store.selectedAppIDs.contains(app.id)
-                        ) {
-                            store.toggleAppSelected(id: app.id)
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.large) {
+                    if filteredApps.isEmpty {
+                        searchMissRow
+                    } else {
+                        LazyVGrid(columns: Self.columns, spacing: 12) {
+                            ForEach(filteredApps) { app in
+                                AppTile(
+                                    app: app,
+                                    totalBytes: store.removableBytes(for: app),
+                                    isSelected: store.selectedAppIDs.contains(app.id)
+                                ) {
+                                    store.toggleAppSelected(id: app.id)
+                                }
+                            }
                         }
                     }
+
+                    OrphanLeftoversSection()
                 }
                 .padding(.horizontal, AppDetailPageLayout.horizontalInset)
                 .padding(.top, 2)
@@ -214,6 +218,20 @@ struct UninstallView: View {
     }
 
     // MARK: Shared bits
+
+    /// Compact search-miss line, used inside the shared scroll where the
+    /// full-height `emptyState` would collapse. The leftovers section still shows
+    /// below it, so a search that hides every app never hides the leftovers.
+    private var searchMissRow: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            Text("No installed app matches \"\(appSearchQuery)\".")
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.vertical, AppStyle.Spacing.medium)
+    }
 
     private func emptyState(symbol: String, title: String, detail: String) -> some View {
         VStack(spacing: 10) {
@@ -601,12 +619,14 @@ struct UninstallReviewSheet: View {
     }
 }
 
-// MARK: - Orphan leftovers panel (issue #26)
+// MARK: - Orphan leftovers section (issue #26)
 
-/// A panel below the app grid listing leftovers whose owning app is gone. Hidden
+/// The "Leftovers from removed apps" section. It flows directly under the app
+/// tiles inside the tab's shared scroll — the rows are ordinary cards, like the
+/// App Caches list, rather than a pinned, separately-scrolling box. Hidden
 /// entirely for the common case of no orphans, so the tab looks unchanged for
 /// most users. Every row is "Check First" and starts unticked.
-struct OrphanLeftoversPanel: View {
+struct OrphanLeftoversSection: View {
     @EnvironmentObject private var store: PurgeStore
 
     private var orphans: [UninstallItem] { store.orphanLeftovers }
@@ -620,25 +640,18 @@ struct OrphanLeftoversPanel: View {
     var body: some View {
         if shouldShow {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+                Divider()
+                    .padding(.bottom, AppStyle.Spacing.xSmall)
                 header
                 if orphans.isEmpty {
                     scanningRow
                 } else {
-                    list
+                    selectAllRow
+                    ForEach(orphans) { item in
+                        row(item)
+                    }
                 }
             }
-            .padding(AppStyle.Spacing.medium)
-            .background(
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                    .fill(AppColors.bgElevated)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                    .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
-            )
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .padding(.bottom, AppStyle.Spacing.medium)
-            .frame(maxHeight: 280)
         }
     }
 
@@ -705,35 +718,24 @@ struct OrphanLeftoversPanel: View {
         return .mixed
     }
 
-    private var list: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: AppStyle.Spacing.small) {
-                TriStateCheckbox(
-                    title: "",
-                    state: selectAllState,
-                    action: {
-                        let ids = orphans.map(\.id)
-                        store.setAllOrphansSelected(selectAllState != .all, ids: ids)
-                    }
-                )
-                .fixedSize()
-                .accessibilityLabel("Select all leftovers")
-                Text("Select all")
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-                Spacer()
-            }
-            .padding(.leading, 2)
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
-                    ForEach(orphans) { item in
-                        row(item)
-                    }
+    private var selectAllRow: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            TriStateCheckbox(
+                title: "",
+                state: selectAllState,
+                action: {
+                    let ids = orphans.map(\.id)
+                    store.setAllOrphansSelected(selectAllState != .all, ids: ids)
                 }
-                .padding(.vertical, 1)
-            }
+            )
+            .fixedSize()
+            .accessibilityLabel("Select all leftovers")
+            Text("Select all")
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+            Spacer()
         }
+        .padding(.leading, 2)
     }
 
     private func row(_ item: UninstallItem) -> some View {
