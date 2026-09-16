@@ -26,6 +26,7 @@ nonisolated final class OrphanLeftoverScanner {
         let url: URL
         let category: UninstallCategory
         let appName: String
+        let modified: Date
     }
 
     private static func run(continuation: AsyncStream<UninstallItem>.Continuation) {
@@ -87,7 +88,8 @@ nonisolated final class OrphanLeftoverScanner {
                     Candidate(
                         url: entry,
                         category: root.category,
-                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: bundleID, url: entry)
+                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: bundleID, url: entry),
+                        modified: modified
                     )
                 )
             }
@@ -110,7 +112,8 @@ nonisolated final class OrphanLeftoverScanner {
                     safetyInfo: safety,
                     matchReason: .bundleID,
                     // App data that does not regenerate: the user opts in per item.
-                    isSelected: false
+                    isSelected: false,
+                    lastModified: candidate.modified
                 )
             )
         }

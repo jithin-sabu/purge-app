@@ -121,6 +121,10 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// rather than stripping a file the surviving app still reads. `nil` for the
     /// common case of a path only this app owns.
     var keptForApp: String? = nil
+    /// Last-modified date of the path, used to sort the leftovers list by age.
+    /// The app-uninstaller flow does not sort by date, so it leaves this at the
+    /// default.
+    var lastModified: Date = .distantPast
 
     /// Shared with an app that is staying installed, so it must not be trashed.
     var isKeptForOtherApp: Bool { keptForApp != nil }

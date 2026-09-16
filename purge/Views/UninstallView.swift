@@ -52,6 +52,7 @@ struct UninstallView: View {
 
     @State private var appSearchQuery = ""
     @AppStorage("sort.uninstaller") private var sortRaw = AppSortOption.largest.rawValue
+    @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
 
     /// The active view lives on the store so the tab header can swap its action
     /// button to match; this view reads and writes it through `store`.
@@ -101,17 +102,125 @@ struct UninstallView: View {
         }
     }
 
-    /// The leftovers segment as its own scroll, so it owns its scroll position
-    /// and its own Remove action rather than sharing the grid's.
-    private var leftoversScroll: some View {
-        ScrollView {
-            OrphanLeftoversSection()
-                .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-                .padding(.top, 2)
-                .padding(.bottom, AppStyle.Spacing.large)
+    private var leftoversSort: SortOption {
+        SortOption(rawValue: leftoversSortRaw) ?? .sizeDesc
+    }
+
+    private var sortedOrphans: [UninstallItem] {
+        let items = store.orphanLeftovers
+        switch leftoversSort {
+        case .sizeDesc: return items.sorted { $0.sizeBytes > $1.sizeBytes }
+        case .sizeAsc: return items.sorted { $0.sizeBytes < $1.sizeBytes }
+        case .dateNewest: return items.sorted { $0.lastModified > $1.lastModified }
+        case .dateOldest: return items.sorted { $0.lastModified < $1.lastModified }
+        case .nameAZ:
+            return items.sorted {
+                $0.safetyInfo.headline.localizedCaseInsensitiveCompare($1.safetyInfo.headline) == .orderedAscending
+            }
         }
-        .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+    }
+
+    /// The leftovers segment: a pinned Select All + sort row (matching the App
+    /// Caches / Dev Tools chrome), then the rows in their own scroll below.
+    @ViewBuilder
+    private var leftoversScroll: some View {
+        if store.orphanLeftovers.isEmpty {
+            // Only reachable in the brief window between the last item being
+            // removed and the segment falling back to Installed Apps.
+            Color.clear
+        } else {
+            VStack(spacing: 0) {
+                leftoversToolbar
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        ForEach(sortedOrphans) { item in
+                            orphanRow(item)
+                        }
+                    }
+                    .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+                    .padding(.top, 2)
+                    .padding(.bottom, AppStyle.Spacing.large)
+                }
+                .scrollContentBackground(.hidden)
+                .background(AppColors.bgBase)
+            }
+        }
+    }
+
+    private var leftoversSelectAllState: SelectAllTriState {
+        let items = store.orphanLeftovers
+        guard !items.isEmpty else { return .none }
+        let selected = items.filter { store.orphanSelectedIDs.contains($0.id) }.count
+        if selected == 0 { return .none }
+        if selected == items.count { return .all }
+        return .mixed
+    }
+
+    private var leftoversToolbar: some View {
+        HStack(alignment: .bottom) {
+            TriStateCheckbox(title: "Select All", state: leftoversSelectAllState) {
+                let ids = store.orphanLeftovers.map(\.id)
+                store.setAllOrphansSelected(leftoversSelectAllState != .all, ids: ids)
+            }
+            .fixedSize()
+            Spacer()
+            AppSortMenu(selection: Binding(
+                get: { leftoversSort },
+                set: { leftoversSortRaw = $0.rawValue }
+            ))
+        }
+        .scanTabSelectAllRowLayout()
+    }
+
+    private func orphanRow(_ item: UninstallItem) -> some View {
+        let isSelected = store.orphanSelectedIDs.contains(item.id)
+        return HStack(spacing: AppStyle.Spacing.small) {
+            Toggle("", isOn: Binding(
+                get: { isSelected },
+                set: { _ in store.toggleOrphanSelected(id: item.id) }
+            ))
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+            .tint(AppColors.buttonPrimaryBg)
+
+            Image(systemName: item.category.symbolName)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.safetyInfo.headline)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(displayDirectoryPath(for: item.path))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.xSmall)
+
+            Text(item.formattedSize)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { store.toggleOrphanSelected(id: item.id) }
     }
 
     private var filteredApps: [InstalledApp] {
@@ -713,134 +822,6 @@ struct UninstallReviewSheet: View {
             .keyboardShortcut(.defaultAction)
             .disabled(plan.totalSelectedItems == 0)
         }
-    }
-}
-
-// MARK: - Orphan leftovers section (issue #26)
-
-/// The "Leftovers from removed apps" section. It flows directly under the app
-/// tiles inside the tab's shared scroll — the rows are ordinary cards, like the
-/// App Caches list, rather than a pinned, separately-scrolling box. Hidden
-/// entirely for the common case of no orphans, so the tab looks unchanged for
-/// most users. Every row is "Check First" and starts unticked.
-struct OrphanLeftoversSection: View {
-    @EnvironmentObject private var store: PurgeStore
-
-    private var orphans: [UninstallItem] { store.orphanLeftovers }
-
-    /// Show once a scan is in flight with something found, or once one finished
-    /// and found leftovers. A finished, empty scan shows nothing.
-    private var shouldShow: Bool {
-        !orphans.isEmpty || (store.isScanningOrphans && store.hasFullDiskAccess)
-    }
-
-    var body: some View {
-        if shouldShow {
-            // No section title or tally here: the tab's page header already carries
-            // "N items · size" for this segment, and Remove lives in the top-right
-            // header. This view is just the picker, matching the Installed Apps
-            // grid, which likewise has no in-view title.
-            VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-                if orphans.isEmpty {
-                    scanningRow
-                } else {
-                    selectAllRow
-                    ForEach(orphans) { item in
-                        row(item)
-                    }
-                }
-            }
-        }
-    }
-
-    private var scanningRow: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            ProgressView().controlSize(.small)
-            Text("Checking Containers and app data for owners that are no longer installed")
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(AppColors.textSecondary)
-            Spacer()
-        }
-        .padding(.vertical, AppStyle.Spacing.xSmall)
-    }
-
-    private var selectAllState: SelectAllTriState {
-        guard !orphans.isEmpty else { return .none }
-        let selected = orphans.filter { store.orphanSelectedIDs.contains($0.id) }.count
-        if selected == 0 { return .none }
-        if selected == orphans.count { return .all }
-        return .mixed
-    }
-
-    private var selectAllRow: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            TriStateCheckbox(
-                title: "",
-                state: selectAllState,
-                action: {
-                    let ids = orphans.map(\.id)
-                    store.setAllOrphansSelected(selectAllState != .all, ids: ids)
-                }
-            )
-            .fixedSize()
-            .accessibilityLabel("Select all leftovers")
-            Text("Select all")
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(AppColors.textSecondary)
-            Spacer()
-        }
-        .padding(.leading, 2)
-    }
-
-    private func row(_ item: UninstallItem) -> some View {
-        let isSelected = store.orphanSelectedIDs.contains(item.id)
-        return HStack(spacing: AppStyle.Spacing.small) {
-            Toggle("", isOn: Binding(
-                get: { isSelected },
-                set: { _ in store.toggleOrphanSelected(id: item.id) }
-            ))
-            .labelsHidden()
-            .toggleStyle(.checkbox)
-            .tint(AppColors.buttonPrimaryBg)
-
-            Image(systemName: item.category.symbolName)
-                .foregroundStyle(AppColors.textSecondary)
-                .frame(width: 20)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.safetyInfo.headline)
-                    .font(AppStyle.Typography.rowTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(displayDirectoryPath(for: item.path))
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            Text(item.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.textSecondary)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.small)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { store.toggleOrphanSelected(id: item.id) }
     }
 }
 
