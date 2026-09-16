@@ -562,7 +562,7 @@ struct ContentView: View {
         let selected = store.selectedAppIDs.count
         let base = "\(total) \(total == 1 ? "app" : "apps")"
         if selected > 0 {
-            return "\(base) · \(selected) selected"
+            return "\(base) · \(selected) selected · \(formatBytes(store.selectedAppsRemovableBytes))"
         }
         if !store.hasMeasuredAllRemovableTotals {
             return "\(base) · measuring space…"
