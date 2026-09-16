@@ -52,6 +52,17 @@ struct UninstallView: View {
 
     @State private var appSearchQuery = ""
     @AppStorage("sort.uninstaller") private var sortRaw = AppSortOption.largest.rawValue
+    @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
+
+    /// The active view lives on the store so the tab header can swap its action
+    /// button to match; this view reads and writes it through `store`.
+    private var section: UninstallSection { store.uninstallSection }
+
+    /// The Leftovers segment appears only once a scan has found something, so the
+    /// tab looks exactly as before for the common case of no orphans.
+    private var showsLeftoversSegment: Bool {
+        !store.orphanLeftovers.isEmpty
+    }
 
     private var currentSort: AppSortOption {
         AppSortOption(rawValue: sortRaw) ?? .largest
@@ -70,13 +81,151 @@ struct UninstallView: View {
     var body: some View {
         VStack(spacing: 8) {
             controls
-            grid
+            content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.bgBase)
         .task {
             await store.scanInstalledAppsIfNeeded()
+            await store.scanOrphanLeftoversIfNeeded()
         }
+        // The Leftovers segment can vanish (all removed, or a rescan finds none)
+        // while it is the active view; fall back to the apps so the tab never
+        // shows a segment that is no longer there.
+        .onChange(of: showsLeftoversSegment) { shows in
+            if !shows { store.uninstallSection = .installedApps }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch section {
+        case .installedApps:
+            grid
+        case .leftovers:
+            leftoversScroll
+        }
+    }
+
+    private var leftoversSort: SortOption {
+        SortOption(rawValue: leftoversSortRaw) ?? .sizeDesc
+    }
+
+    private var sortedOrphans: [UninstallItem] {
+        let items = store.orphanLeftovers
+        switch leftoversSort {
+        case .sizeDesc: return items.sorted { $0.sizeBytes > $1.sizeBytes }
+        case .sizeAsc: return items.sorted { $0.sizeBytes < $1.sizeBytes }
+        case .dateNewest: return items.sorted { $0.lastModified > $1.lastModified }
+        case .dateOldest: return items.sorted { $0.lastModified < $1.lastModified }
+        case .nameAZ:
+            return items.sorted {
+                $0.safetyInfo.headline.localizedCaseInsensitiveCompare($1.safetyInfo.headline) == .orderedAscending
+            }
+        }
+    }
+
+    /// The leftovers segment: a pinned Select All + sort row (matching the App
+    /// Caches / Dev Tools chrome), then the rows in their own scroll below.
+    @ViewBuilder
+    private var leftoversScroll: some View {
+        if store.orphanLeftovers.isEmpty {
+            // Only reachable in the brief window between the last item being
+            // removed and the segment falling back to Installed Apps.
+            Color.clear
+        } else {
+            VStack(spacing: 0) {
+                leftoversToolbar
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        ForEach(sortedOrphans) { item in
+                            orphanRow(item)
+                        }
+                    }
+                    .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+                    .padding(.top, 2)
+                    .padding(.bottom, AppStyle.Spacing.large)
+                }
+                .scrollContentBackground(.hidden)
+                .background(AppColors.bgBase)
+            }
+        }
+    }
+
+    private var leftoversSelectAllState: SelectAllTriState {
+        let items = store.orphanLeftovers
+        guard !items.isEmpty else { return .none }
+        let selected = items.filter { store.orphanSelectedIDs.contains($0.id) }.count
+        if selected == 0 { return .none }
+        if selected == items.count { return .all }
+        return .mixed
+    }
+
+    private var leftoversToolbar: some View {
+        HStack(alignment: .bottom) {
+            TriStateCheckbox(title: "Select All", state: leftoversSelectAllState) {
+                let ids = store.orphanLeftovers.map(\.id)
+                store.setAllOrphansSelected(leftoversSelectAllState != .all, ids: ids)
+            }
+            .fixedSize()
+            Spacer()
+            AppSortMenu(selection: Binding(
+                get: { leftoversSort },
+                set: { leftoversSortRaw = $0.rawValue }
+            ))
+        }
+        .scanTabSelectAllRowLayout()
+    }
+
+    private func orphanRow(_ item: UninstallItem) -> some View {
+        let isSelected = store.orphanSelectedIDs.contains(item.id)
+        return HStack(spacing: AppStyle.Spacing.small) {
+            Toggle("", isOn: Binding(
+                get: { isSelected },
+                set: { _ in store.toggleOrphanSelected(id: item.id) }
+            ))
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+            .tint(AppColors.buttonPrimaryBg)
+
+            Image(systemName: item.category.symbolName)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.safetyInfo.headline)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(displayDirectoryPath(for: item.path))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.xSmall)
+
+            Text(item.formattedSize)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { store.toggleOrphanSelected(id: item.id) }
     }
 
     private var filteredApps: [InstalledApp] {
@@ -114,27 +263,69 @@ struct UninstallView: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
-            AppDropdown(
-                options: AppSortOption.allCases,
-                selection: currentSort,
-                optionLabel: { $0.displayName },
-                onSelect: { sortRaw = $0.rawValue }
-            ) {
-                FilterChip(
-                    style: .dropdown,
-                    label: currentSort.shortDisplayName,
-                    leadingSystemImage: "arrow.up.arrow.down"
-                )
+            if showsLeftoversSegment {
+                sectionSegments
             }
-            .buttonStyle(.plain)
-            .fixedSize()
-            .accessibilityLabel("Sort apps")
-            .accessibilityValue(currentSort.displayName)
 
-            Spacer(minLength: 8)
-            UninstallSearchField(query: $appSearchQuery)
+            // Sort and search apply to the app grid only; hide them on the
+            // leftovers view so its controls (Select all, Remove) stand alone.
+            if section == .installedApps {
+                AppDropdown(
+                    options: AppSortOption.allCases,
+                    selection: currentSort,
+                    optionLabel: { $0.displayName },
+                    onSelect: { sortRaw = $0.rawValue }
+                ) {
+                    FilterChip(
+                        style: .dropdown,
+                        label: currentSort.shortDisplayName,
+                        leadingSystemImage: "arrow.up.arrow.down"
+                    )
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .accessibilityLabel("Sort apps")
+                .accessibilityValue(currentSort.displayName)
+
+                Spacer(minLength: 8)
+                UninstallSearchField(query: $appSearchQuery)
+            } else {
+                Spacer(minLength: 8)
+            }
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+    }
+
+    /// The Installed Apps / Leftovers switcher, reusing the tab-style chip the
+    /// App Caches safety filter uses so it reads as a first-class view switch.
+    private var sectionSegments: some View {
+        HStack(spacing: 4) {
+            segmentChip(.installedApps, count: nil)
+            segmentChip(.leftovers, count: store.orphanLeftovers.count)
+        }
+    }
+
+    private func segmentChip(_ target: UninstallSection, count: Int?) -> some View {
+        let isOn = section == target
+        return Button {
+            if reduceMotion {
+                store.uninstallSection = target
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) { store.uninstallSection = target }
+            }
+        } label: {
+            FilterChip(
+                style: .tab,
+                label: target.label,
+                isSelected: isOn,
+                tier: target == .leftovers ? .checkFirst : .neutral,
+                leadingSystemImage: target.symbolName,
+                count: count
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(count.map { "\(target.label), \($0) items" } ?? target.label)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     // MARK: Grid
@@ -367,54 +558,97 @@ private struct SkeletonAppTile: View {
 
 struct UninstallHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var onLeftovers: Bool { store.uninstallSection == .leftovers }
+
+    /// Rescan refreshes both lists on this tab, so the button reflects either scan.
+    private var isScanning: Bool {
+        store.isScanningInstalledApps || store.isScanningOrphans
+    }
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
             Button {
-                Task { await store.scanInstalledApps() }
+                Task {
+                    await store.scanInstalledApps()
+                    await store.scanOrphanLeftovers()
+                }
             } label: {
                 CleaningButtonLabel(
-                    title: store.isScanningInstalledApps ? "Scanning..." : "Rescan",
-                    systemImage: store.isScanningInstalledApps ? nil : "arrow.clockwise",
-                    isCleaning: store.isScanningInstalledApps
+                    title: isScanning ? "Scanning..." : "Rescan",
+                    systemImage: isScanning ? nil : "arrow.clockwise",
+                    isCleaning: isScanning
                 )
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
             }
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
-            .disabled(store.isScanningInstalledApps)
+            .disabled(isScanning)
 
-            // Same widening delete label as Large Files: compact ("Uninstall")
-            // with nothing ticked, growing to carry the count and size as apps are
-            // selected, so Rescan slides over to make room in one motion. While the
-            // plan is being gathered it shows a spinner in place.
-            Button {
-                Task { await store.requestUninstallSelectedApps() }
-            } label: {
-                Group {
-                    if store.isBuildingUninstallPlan {
-                        CleaningButtonLabel(
-                            title: "Preparing...",
-                            systemImage: nil,
-                            isCleaning: true,
-                            spinnerTint: AppColors.buttonPrimaryText
-                        )
-                    } else {
-                        AnimatedDeleteActionLabel(
-                            inactiveTitle: "Uninstall",
-                            activeTitle: "Uninstall",
-                            selectedCount: store.selectedApps.count,
-                            selectedBytes: store.selectedAppsRemovableBytes
-                        )
-                    }
+            // One destructive button whose job follows the active segment: Uninstall
+            // for the app grid, Remove for leftovers. Crossfading between them keeps
+            // the header from jumping as the user switches views.
+            ZStack {
+                if onLeftovers {
+                    removeLeftoversButton
+                } else {
+                    uninstallAppsButton
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
             }
-            .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
-            .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: onLeftovers)
         }
         .fixedSize()
+    }
+
+    // Same widening delete label as Large Files: compact ("Uninstall") with
+    // nothing ticked, growing to carry the count and size as apps are selected.
+    // While the plan is being gathered it shows a spinner in place.
+    private var uninstallAppsButton: some View {
+        Button {
+            Task { await store.requestUninstallSelectedApps() }
+        } label: {
+            Group {
+                if store.isBuildingUninstallPlan {
+                    CleaningButtonLabel(
+                        title: "Preparing...",
+                        systemImage: nil,
+                        isCleaning: true,
+                        spinnerTint: AppColors.buttonPrimaryText
+                    )
+                } else {
+                    AnimatedDeleteActionLabel(
+                        inactiveTitle: "Uninstall",
+                        activeTitle: "Uninstall",
+                        selectedCount: store.selectedApps.count,
+                        selectedBytes: store.selectedAppsRemovableBytes
+                    )
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
+        .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
+        .transition(.opacity)
+    }
+
+    private var removeLeftoversButton: some View {
+        Button {
+            store.requestOrphanCleanup()
+        } label: {
+            AnimatedDeleteActionLabel(
+                inactiveTitle: "Remove",
+                activeTitle: "Remove",
+                selectedCount: store.selectedOrphanCount,
+                selectedBytes: store.selectedOrphanBytes
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
+        .disabled(store.selectedOrphanCount == 0 || store.isDeleting)
+        .transition(.opacity)
     }
 }
 
@@ -566,6 +800,124 @@ struct UninstallReviewSheet: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+            }
+
+            Spacer(minLength: AppStyle.Spacing.xSmall)
+
+            Text(value.formattedSize)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private var footer: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+
+            Spacer()
+
+            Button("Cancel", action: onCancel)
+                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .keyboardShortcut(.cancelAction)
+
+            Button("Move \(plan.totalSelectedItems) to Trash") {
+                onConfirm(plan)
+            }
+            .buttonStyle(SolidDestructiveButtonStyle())
+            .keyboardShortcut(.defaultAction)
+            .disabled(plan.totalSelectedItems == 0)
+        }
+    }
+}
+
+// MARK: - Orphan review sheet
+
+struct OrphanReviewSheet: View {
+    @State private var plan: OrphanCleanupPlan
+    let onCancel: () -> Void
+    let onConfirm: (OrphanCleanupPlan) -> Void
+
+    init(
+        plan: OrphanCleanupPlan,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping (OrphanCleanupPlan) -> Void
+    ) {
+        _plan = State(initialValue: plan)
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            header
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach($plan.items) { $item in
+                        itemRow($item)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(minHeight: 260)
+
+            footer
+        }
+        .padding(AppStyle.Spacing.large)
+        .frame(minWidth: 600, minHeight: 520)
+        .background(AppColors.bgBase)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            Text("Remove leftovers from removed apps?")
+                .font(AppStyle.Typography.pageTitle)
+                .foregroundStyle(AppColors.textPrimary)
+            Text("These folders belong to apps you no longer have installed. This is app data, not a rebuildable cache, so it will not come back on its own. Everything moves to the Trash, so you can put it back until you empty it.")
+                .font(.callout)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func itemRow(_ item: Binding<UninstallItem>) -> some View {
+        let value = item.wrappedValue
+        return HStack(spacing: AppStyle.Spacing.small) {
+            Toggle("", isOn: item.isSelected)
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .tint(AppColors.buttonPrimaryBg)
+
+            Image(systemName: value.category.symbolName)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value.safetyInfo.headline)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(displayDirectoryPath(for: value.path))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
             Spacer(minLength: AppStyle.Spacing.xSmall)

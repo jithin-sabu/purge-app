@@ -100,6 +100,13 @@ struct ContentView: View {
                 onConfirm: { edited in Task { await store.confirmUninstallPlan(edited) } }
             )
         }
+        .sheet(item: $store.orphanCleanupPlan) { plan in
+            OrphanReviewSheet(
+                plan: plan,
+                onCancel: { store.cancelOrphanCleanup() },
+                onConfirm: { edited in Task { await store.confirmOrphanCleanup(edited) } }
+            )
+        }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
             if isLifecycleActive, let session = store.interactiveSafeCleanupSession {
@@ -536,20 +543,52 @@ struct ContentView: View {
         return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
     }
 
-    /// Counts the installed apps, and how many are ticked for removal. While the
-    /// background pass is still measuring each app's freeable space, it says so.
+    /// Follows the active segment, with one shared shape so the two read the same:
+    /// "N units · total size" at rest, and "N units · M selected · selected size"
+    /// once anything is ticked.
     private var uninstallerPageSubtitle: String? {
-        guard !store.installedApps.isEmpty else { return nil }
-        let total = store.installedApps.count
-        let selected = store.selectedAppIDs.count
-        let base = "\(total) \(total == 1 ? "app" : "apps")"
-        if selected > 0 {
-            return "\(base) · \(selected) selected"
+        if store.uninstallSection == .leftovers {
+            let items = store.orphanLeftovers
+            guard !items.isEmpty else { return nil }
+            return uninstallSubtitle(
+                count: items.count,
+                unit: ("item", "items"),
+                totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
+                selectedCount: store.selectedOrphanCount,
+                selectedBytes: store.selectedOrphanBytes,
+                measuring: false
+            )
         }
-        if !store.hasMeasuredAllRemovableTotals {
+
+        guard !store.installedApps.isEmpty else { return nil }
+        return uninstallSubtitle(
+            count: store.installedApps.count,
+            unit: ("app", "apps"),
+            totalBytes: store.installedApps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) },
+            selectedCount: store.selectedAppIDs.count,
+            selectedBytes: store.selectedAppsRemovableBytes,
+            // App totals fill in on a background pass; say so rather than show a
+            // size that is still climbing.
+            measuring: !store.hasMeasuredAllRemovableTotals
+        )
+    }
+
+    private func uninstallSubtitle(
+        count: Int,
+        unit: (singular: String, plural: String),
+        totalBytes: Int64,
+        selectedCount: Int,
+        selectedBytes: Int64,
+        measuring: Bool
+    ) -> String {
+        let base = "\(count) \(count == 1 ? unit.singular : unit.plural)"
+        if selectedCount > 0 {
+            return "\(base) · \(selectedCount) selected · \(formatBytes(selectedBytes))"
+        }
+        if measuring {
             return "\(base) · measuring space…"
         }
-        return base
+        return "\(base) · \(formatBytes(totalBytes))"
     }
 
     private var appCachesSafetyFilter: SafetyFilter {

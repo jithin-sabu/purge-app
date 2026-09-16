@@ -121,11 +121,56 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// rather than stripping a file the surviving app still reads. `nil` for the
     /// common case of a path only this app owns.
     var keptForApp: String? = nil
+    /// Last-modified date of the path, used to sort the leftovers list by age.
+    /// The app-uninstaller flow does not sort by date, so it leaves this at the
+    /// default.
+    var lastModified: Date = .distantPast
 
     /// Shared with an app that is staying installed, so it must not be trashed.
     var isKeptForOtherApp: Bool { keptForApp != nil }
 
     var formattedSize: String { formatBytes(sizeBytes) }
+}
+
+/// The two views inside the App Uninstaller tab. `leftovers` only exists as a
+/// switchable segment once a scan finds any (issue #26). Lives here rather than
+/// in the view so `PurgeStore` can own the current selection and the tab's
+/// header can swap its action button to match.
+nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
+    case installedApps
+    case leftovers
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .installedApps: return "Installed Apps"
+        case .leftovers: return "Leftovers"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .installedApps: return "square.grid.2x2"
+        case .leftovers: return "clock.badge.xmark"
+        }
+    }
+}
+
+/// The reviewed orphan-leftover removal awaiting confirmation (issue #26). Unlike
+/// `UninstallPlan`, there is no app: every item is a leftover whose owner is gone,
+/// so it is a flat list. Each item keeps its own `isSelected` so the review sheet
+/// can tick and untick within it.
+nonisolated struct OrphanCleanupPlan: Identifiable, Hashable {
+    var items: [UninstallItem]
+
+    /// Stable across reopenings of the same set, so `.sheet(item:)` presents one
+    /// sheet per distinct selection.
+    var id: String { items.map(\.id).sorted().joined(separator: "|") }
+
+    var selectedItems: [UninstallItem] { items.filter(\.isSelected) }
+    var totalSelectedItems: Int { selectedItems.count }
+    var totalSelectedBytes: Int64 { selectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
 }
 
 /// One app in a multi-app removal: the app and its bundle-plus-leftover items,
