@@ -3,6 +3,25 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.5.1</title>
+      <pubDate>Tue, 16 Sep 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>21</sparkle:version>
+      <sparkle:shortVersionString>1.5.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li>The Uninstaller can now remove apps that macOS installs as root-owned, like Microsoft Teams, which previously failed to delete. An opt-in secure-removal helper, set up once in Settings, moves the locked app and its leftovers to the Trash with no per-uninstall password prompt.</li>
+          <li>Removing an app now selects everything it leaves behind by default, so caches, preferences, containers, saved state, and logs all start ticked and you untick what you want to keep. App tiles and the Uninstall button now show the app's real total footprint.</li>
+          <li>A leftover that another installed app still uses is held back instead of removed. Shared support files arrive unticked and disabled, so uninstalling one app cannot break another.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.5.1/Purgev1.5.1.dmg"
+        sparkle:edSignature="9n+8xOcmCyvEGuq6RaHTgvqL8GqWT91Tms7jLUgwrPWrTsVV5YPv4lqdXoYZhXUm/lvuemiNlrFzwTysHr8nDA=="
+        length="7649475"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.0</title>
       <pubDate>Fri, 11 Sep 2026 12:00:00 +0000</pubDate>
       <sparkle:version>20</sparkle:version>
