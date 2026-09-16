@@ -128,6 +128,22 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     var formattedSize: String { formatBytes(sizeBytes) }
 }
 
+/// The reviewed orphan-leftover removal awaiting confirmation (issue #26). Unlike
+/// `UninstallPlan`, there is no app: every item is a leftover whose owner is gone,
+/// so it is a flat list. Each item keeps its own `isSelected` so the review sheet
+/// can tick and untick within it.
+nonisolated struct OrphanCleanupPlan: Identifiable, Hashable {
+    var items: [UninstallItem]
+
+    /// Stable across reopenings of the same set, so `.sheet(item:)` presents one
+    /// sheet per distinct selection.
+    var id: String { items.map(\.id).sorted().joined(separator: "|") }
+
+    var selectedItems: [UninstallItem] { items.filter(\.isSelected) }
+    var totalSelectedItems: Int { selectedItems.count }
+    var totalSelectedBytes: Int64 { selectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+}
+
 /// One app in a multi-app removal: the app and its bundle-plus-leftover items,
 /// each item carrying its own `isSelected` so the review sheet can tick and
 /// untick within an app.

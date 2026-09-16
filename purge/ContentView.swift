@@ -100,6 +100,13 @@ struct ContentView: View {
                 onConfirm: { edited in Task { await store.confirmUninstallPlan(edited) } }
             )
         }
+        .sheet(item: $store.orphanCleanupPlan) { plan in
+            OrphanReviewSheet(
+                plan: plan,
+                onCancel: { store.cancelOrphanCleanup() },
+                onConfirm: { edited in Task { await store.confirmOrphanCleanup(edited) } }
+            )
+        }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
             if isLifecycleActive, let session = store.interactiveSafeCleanupSession {

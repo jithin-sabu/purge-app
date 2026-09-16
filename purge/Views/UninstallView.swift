@@ -66,11 +66,13 @@ struct UninstallView: View {
         VStack(spacing: 8) {
             controls
             grid
+            OrphanLeftoversPanel()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.bgBase)
         .task {
             await store.scanInstalledAppsIfNeeded()
+            await store.scanOrphanLeftoversIfNeeded()
         }
     }
 
@@ -555,6 +557,311 @@ struct UninstallReviewSheet: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+            }
+
+            Spacer(minLength: AppStyle.Spacing.xSmall)
+
+            Text(value.formattedSize)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+    }
+
+    private var footer: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+
+            Spacer()
+
+            Button("Cancel", action: onCancel)
+                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .keyboardShortcut(.cancelAction)
+
+            Button("Move \(plan.totalSelectedItems) to Trash") {
+                onConfirm(plan)
+            }
+            .buttonStyle(SolidDestructiveButtonStyle())
+            .keyboardShortcut(.defaultAction)
+            .disabled(plan.totalSelectedItems == 0)
+        }
+    }
+}
+
+// MARK: - Orphan leftovers panel (issue #26)
+
+/// A panel below the app grid listing leftovers whose owning app is gone. Hidden
+/// entirely for the common case of no orphans, so the tab looks unchanged for
+/// most users. Every row is "Check First" and starts unticked.
+struct OrphanLeftoversPanel: View {
+    @EnvironmentObject private var store: PurgeStore
+
+    private var orphans: [UninstallItem] { store.orphanLeftovers }
+
+    /// Show once a scan is in flight with something found, or once one finished
+    /// and found leftovers. A finished, empty scan shows nothing.
+    private var shouldShow: Bool {
+        !orphans.isEmpty || (store.isScanningOrphans && store.hasFullDiskAccess)
+    }
+
+    var body: some View {
+        if shouldShow {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+                header
+                if orphans.isEmpty {
+                    scanningRow
+                } else {
+                    list
+                }
+            }
+            .padding(AppStyle.Spacing.medium)
+            .background(
+                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                    .fill(AppColors.bgElevated)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                    .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+            )
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+            .padding(.bottom, AppStyle.Spacing.medium)
+            .frame(maxHeight: 280)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Image(systemName: "clock.badge.xmark")
+                .foregroundStyle(AppColors.textSecondary)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Leftovers from removed apps")
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                Text(subtitle)
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.small)
+
+            if !orphans.isEmpty {
+                Button {
+                    store.requestOrphanCleanup()
+                } label: {
+                    AnimatedDeleteActionLabel(
+                        inactiveTitle: "Remove",
+                        activeTitle: "Remove",
+                        selectedCount: store.selectedOrphanCount,
+                        selectedBytes: store.selectedOrphanBytes
+                    )
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                }
+                .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
+                .disabled(store.selectedOrphanCount == 0 || store.isDeleting)
+                .fixedSize()
+            }
+        }
+    }
+
+    private var subtitle: String {
+        if orphans.isEmpty { return "Looking through your Library…" }
+        let total = orphans.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let noun = orphans.count == 1 ? "item" : "items"
+        return "\(orphans.count) \(noun), \(formatBytes(total)) — app data, so check before removing"
+    }
+
+    private var scanningRow: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            ProgressView().controlSize(.small)
+            Text("Checking Containers and app data for owners that are no longer installed")
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+            Spacer()
+        }
+        .padding(.vertical, AppStyle.Spacing.xSmall)
+    }
+
+    private var selectAllState: SelectAllTriState {
+        guard !orphans.isEmpty else { return .none }
+        let selected = orphans.filter { store.orphanSelectedIDs.contains($0.id) }.count
+        if selected == 0 { return .none }
+        if selected == orphans.count { return .all }
+        return .mixed
+    }
+
+    private var list: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: AppStyle.Spacing.small) {
+                TriStateCheckbox(
+                    title: "",
+                    state: selectAllState,
+                    action: {
+                        let ids = orphans.map(\.id)
+                        store.setAllOrphansSelected(selectAllState != .all, ids: ids)
+                    }
+                )
+                .fixedSize()
+                .accessibilityLabel("Select all leftovers")
+                Text("Select all")
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                Spacer()
+            }
+            .padding(.leading, 2)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach(orphans) { item in
+                        row(item)
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+        }
+    }
+
+    private func row(_ item: UninstallItem) -> some View {
+        let isSelected = store.orphanSelectedIDs.contains(item.id)
+        return HStack(spacing: AppStyle.Spacing.small) {
+            Toggle("", isOn: Binding(
+                get: { isSelected },
+                set: { _ in store.toggleOrphanSelected(id: item.id) }
+            ))
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+            .tint(AppColors.buttonPrimaryBg)
+
+            Image(systemName: item.category.symbolName)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.safetyInfo.headline)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(displayDirectoryPath(for: item.path))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.xSmall)
+
+            Text(item.formattedSize)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { store.toggleOrphanSelected(id: item.id) }
+    }
+}
+
+// MARK: - Orphan review sheet
+
+struct OrphanReviewSheet: View {
+    @State private var plan: OrphanCleanupPlan
+    let onCancel: () -> Void
+    let onConfirm: (OrphanCleanupPlan) -> Void
+
+    init(
+        plan: OrphanCleanupPlan,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping (OrphanCleanupPlan) -> Void
+    ) {
+        _plan = State(initialValue: plan)
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            header
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach($plan.items) { $item in
+                        itemRow($item)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(minHeight: 260)
+
+            footer
+        }
+        .padding(AppStyle.Spacing.large)
+        .frame(minWidth: 600, minHeight: 520)
+        .background(AppColors.bgBase)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            Text("Remove leftovers from removed apps?")
+                .font(AppStyle.Typography.pageTitle)
+                .foregroundStyle(AppColors.textPrimary)
+            Text("These folders belong to apps you no longer have installed. This is app data, not a rebuildable cache, so it will not come back on its own. Everything moves to the Trash, so you can put it back until you empty it.")
+                .font(.callout)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func itemRow(_ item: Binding<UninstallItem>) -> some View {
+        let value = item.wrappedValue
+        return HStack(spacing: AppStyle.Spacing.small) {
+            Toggle("", isOn: item.isSelected)
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .tint(AppColors.buttonPrimaryBg)
+
+            Image(systemName: value.category.symbolName)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value.safetyInfo.headline)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(displayDirectoryPath(for: value.path))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
             Spacer(minLength: AppStyle.Spacing.xSmall)

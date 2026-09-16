@@ -239,6 +239,19 @@ final class PurgeStore: ObservableObject {
     /// The reviewed removal, one entry per selected app, awaiting confirmation.
     /// Drives the review sheet via `.sheet(item:)`; nil when closed.
     @Published var uninstallPlan: UninstallPlan?
+
+    // MARK: Orphan leftovers (issue #26)
+
+    /// Leftovers whose owning app is no longer installed, shown as a section under
+    /// the App Uninstaller tab. Always "Check First", never preselected.
+    @Published var orphanLeftovers: [UninstallItem] = []
+    @Published var isScanningOrphans = false
+    @Published private(set) var hasCompletedOrphanScan = false
+    /// Orphan rows the user has ticked, keyed by `UninstallItem.id` (its path).
+    @Published var orphanSelectedIDs: Set<String> = []
+    /// The reviewed orphan removal awaiting confirmation. Drives the review sheet
+    /// via `.sheet(item:)`; nil when closed.
+    @Published var orphanCleanupPlan: OrphanCleanupPlan?
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:] {
         didSet { invalidateSafeCleanupSummary() }
@@ -294,6 +307,7 @@ final class PurgeStore: ObservableObject {
     private let largeFileScanner = LargeFileScanner()
     private let aiModelScanner = AIModelScanner()
     private let uninstallScanner = AppUninstallScanner()
+    private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
     private let fileDeleter = FileDeleter()
     private let defaults = UserDefaults.standard
@@ -324,6 +338,7 @@ final class PurgeStore: ObservableObject {
     private var largeFileScanGeneration = 0
     private var hasCompletedLargeFileScan = false
     private var installedAppsScanGeneration = 0
+    private var orphanScanGeneration = 0
     /// The in-flight duplicate pass, so a new scan can abandon gigabytes of
     /// hashing nobody is waiting for any more.
     private var duplicateScanTask: Task<Void, Never>?
@@ -1458,6 +1473,173 @@ final class PurgeStore: ObservableObject {
     /// the totals without reshuffling tiles while measurement is still in flight.
     var hasMeasuredAllRemovableTotals: Bool {
         !installedApps.isEmpty && removableBytesByAppID.count >= installedApps.count
+    }
+
+    // MARK: - Orphan leftovers (issue #26)
+
+    func scanOrphanLeftoversIfNeeded() async {
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
+        guard !isScanningOrphans, !hasCompletedOrphanScan else { return }
+        await scanOrphanLeftovers()
+    }
+
+    /// Populates the "Leftovers from removed apps" section. Rows stream in and are
+    /// re-sorted largest-first as their sizes land, the same progressive fill the
+    /// other scans use. Requires Full Disk Access: without it the Library roots
+    /// are unreadable and the scan would wrongly read as empty.
+    func scanOrphanLeftovers() async {
+        refreshPermission()
+        guard hasFullDiskAccess else { return }
+        orphanScanGeneration += 1
+        let generation = orphanScanGeneration
+        isScanningOrphans = true
+        hasCompletedOrphanScan = false
+        orphanLeftovers = []
+        orphanSelectedIDs = []
+        defer {
+            if orphanScanGeneration == generation {
+                isScanningOrphans = false
+            }
+        }
+
+        var collected: [UninstallItem] = []
+        for await item in orphanScanner.orphanStream() {
+            guard orphanScanGeneration == generation, !Task.isCancelled else { return }
+            collected.append(item)
+            orphanLeftovers = collected.sorted { $0.sizeBytes > $1.sizeBytes }
+        }
+        // Only a stream that ran to completion counts as a finished scan, so a
+        // cancelled or superseded run scans again rather than trusting a partial
+        // list.
+        guard orphanScanGeneration == generation, !Task.isCancelled else { return }
+        orphanLeftovers = collected.sorted { $0.sizeBytes > $1.sizeBytes }
+        hasCompletedOrphanScan = true
+    }
+
+    func toggleOrphanSelected(id: String) {
+        if orphanSelectedIDs.contains(id) {
+            orphanSelectedIDs.remove(id)
+        } else {
+            orphanSelectedIDs.insert(id)
+        }
+    }
+
+    func setAllOrphansSelected(_ selected: Bool, ids: [String]) {
+        if selected {
+            orphanSelectedIDs.formUnion(ids)
+        } else {
+            orphanSelectedIDs.subtract(ids)
+        }
+    }
+
+    var selectedOrphanBytes: Int64 {
+        orphanLeftovers
+            .filter { orphanSelectedIDs.contains($0.id) }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+
+    var selectedOrphanCount: Int {
+        orphanLeftovers.filter { orphanSelectedIDs.contains($0.id) }.count
+    }
+
+    /// Opens the orphan review sheet with the ticked leftovers, each carried in
+    /// pre-selected so the sheet's own checkboxes start where the list left off.
+    func requestOrphanCleanup() {
+        let items = orphanLeftovers
+            .filter { orphanSelectedIDs.contains($0.id) }
+            .map { item -> UninstallItem in
+                var copy = item
+                copy.isSelected = true
+                return copy
+            }
+        guard !items.isEmpty, !isDeleting else { return }
+        orphanCleanupPlan = OrphanCleanupPlan(items: items)
+    }
+
+    func cancelOrphanCleanup() {
+        orphanCleanupPlan = nil
+    }
+
+    func confirmOrphanCleanup(_ plan: OrphanCleanupPlan) async {
+        orphanCleanupPlan = nil
+        await performOrphanCleanup(items: plan.selectedItems)
+    }
+
+    /// Trashes the chosen orphan leftovers, reusing the uninstaller's deletion
+    /// primitive: those paths sit outside the cache allowlist, and
+    /// `deleteUserSelectedFiles` accepts them through
+    /// `AppUninstallScanPolicy.isEligibleForUninstallDeletion`, the same gate the
+    /// scanner used to offer them. Shares the live-session overlay, progress
+    /// poller, and history entry with the other manual flows.
+    private func performOrphanCleanup(items: [UninstallItem]) async {
+        guard !items.isEmpty, !isDeleting else { return }
+
+        var urls: [URL] = []
+        var pathToDisplayName: [String: String] = [:]
+        var pathToExpectedSizeBytes: [String: Int64] = [:]
+        for item in items {
+            let key = item.path.standardizedFileURL.path
+            urls.append(item.path)
+            pathToDisplayName[key] = item.safetyInfo.headline
+            pathToExpectedSizeBytes[key] = item.sizeBytes
+        }
+
+        let progressBuffer = DeletionProgressBuffer()
+        let totalBytes = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
+        manualDeletionSession = liveSession
+        let progressPoller = Task { @MainActor [weak liveSession] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                guard let liveSession, liveSession.phase == .cleaning else { return }
+                liveSession.applyProgress(progressBuffer.snapshot())
+            }
+        }
+
+        isDeleting = true
+        errorMessage = nil
+        defer {
+            isDeleting = false
+            progressPoller.cancel()
+        }
+
+        let engineStart = Date()
+        do {
+            let report = try await fileDeleter.deleteUserSelectedFiles(
+                at: urls,
+                pathToDisplayName: pathToDisplayName,
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                onProgress: { @Sendable event in progressBuffer.ingest(event) }
+            )
+            let elapsedSeconds = Date().timeIntervalSince(engineStart)
+            incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
+            lastDeletionReport = report
+            let deletedPaths = Set(report.deletedItems.map {
+                URL(fileURLWithPath: $0.path).standardizedFileURL.path
+            })
+            let clearedIDs = Set(
+                orphanLeftovers
+                    .filter { deletedPaths.contains($0.path.standardizedFileURL.path) }
+                    .map(\.id)
+            )
+            withAnimation(.easeInOut(duration: 0.2)) {
+                orphanLeftovers.removeAll { clearedIDs.contains($0.id) }
+            }
+            orphanSelectedIDs.subtract(clearedIDs)
+            progressPoller.cancel()
+            liveSession.completeRun(
+                bytesMovedToTrash: report.bytesMovedToTrash,
+                elapsedSeconds: elapsedSeconds,
+                failedItems: report.userVisibleFailures,
+                movedToTrashCount: report.movedToTrashCount
+            )
+            if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
+            CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+        } catch {
+            manualDeletionSession = nil
+            errorMessage = "Unable to remove the selected leftovers. Please try again."
+        }
     }
 
     // MARK: App selection
