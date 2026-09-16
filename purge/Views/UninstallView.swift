@@ -46,12 +46,42 @@ enum AppSortOption: String, CaseIterable, Identifiable {
 /// The Uninstall tab: a grid of installed apps, multi-selectable. Ticking apps
 /// and pressing Uninstall Selected gathers each app's leftovers and opens a
 /// review sheet before anything moves to the Trash.
+/// The two views inside the App Uninstaller tab. `leftovers` only exists as a
+/// switchable segment once a scan finds any (issue #26).
+enum UninstallSection: String, CaseIterable, Identifiable {
+    case installedApps
+    case leftovers
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .installedApps: return "Installed Apps"
+        case .leftovers: return "Leftovers"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .installedApps: return "square.grid.2x2"
+        case .leftovers: return "clock.badge.xmark"
+        }
+    }
+}
+
 struct UninstallView: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var appSearchQuery = ""
+    @State private var section: UninstallSection = .installedApps
     @AppStorage("sort.uninstaller") private var sortRaw = AppSortOption.largest.rawValue
+
+    /// The Leftovers segment appears only once a scan has found something, so the
+    /// tab looks exactly as before for the common case of no orphans.
+    private var showsLeftoversSegment: Bool {
+        !store.orphanLeftovers.isEmpty
+    }
 
     private var currentSort: AppSortOption {
         AppSortOption(rawValue: sortRaw) ?? .largest
@@ -65,7 +95,7 @@ struct UninstallView: View {
     var body: some View {
         VStack(spacing: 8) {
             controls
-            grid
+            content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.bgBase)
@@ -73,6 +103,35 @@ struct UninstallView: View {
             await store.scanInstalledAppsIfNeeded()
             await store.scanOrphanLeftoversIfNeeded()
         }
+        // The Leftovers segment can vanish (all removed, or a rescan finds none)
+        // while it is the active view; fall back to the apps so the tab never
+        // shows a segment that is no longer there.
+        .onChange(of: showsLeftoversSegment) { shows in
+            if !shows { section = .installedApps }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch section {
+        case .installedApps:
+            grid
+        case .leftovers:
+            leftoversScroll
+        }
+    }
+
+    /// The leftovers segment as its own scroll, so it owns its scroll position
+    /// and its own Remove action rather than sharing the grid's.
+    private var leftoversScroll: some View {
+        ScrollView {
+            OrphanLeftoversSection()
+                .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+                .padding(.top, 2)
+                .padding(.bottom, AppStyle.Spacing.large)
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.bgBase)
     }
 
     private var filteredApps: [InstalledApp] {
@@ -110,27 +169,69 @@ struct UninstallView: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
-            AppDropdown(
-                options: AppSortOption.allCases,
-                selection: currentSort,
-                optionLabel: { $0.displayName },
-                onSelect: { sortRaw = $0.rawValue }
-            ) {
-                FilterChip(
-                    style: .dropdown,
-                    label: currentSort.shortDisplayName,
-                    leadingSystemImage: "arrow.up.arrow.down"
-                )
+            if showsLeftoversSegment {
+                sectionSegments
             }
-            .buttonStyle(.plain)
-            .fixedSize()
-            .accessibilityLabel("Sort apps")
-            .accessibilityValue(currentSort.displayName)
 
-            Spacer(minLength: 8)
-            UninstallSearchField(query: $appSearchQuery)
+            // Sort and search apply to the app grid only; hide them on the
+            // leftovers view so its controls (Select all, Remove) stand alone.
+            if section == .installedApps {
+                AppDropdown(
+                    options: AppSortOption.allCases,
+                    selection: currentSort,
+                    optionLabel: { $0.displayName },
+                    onSelect: { sortRaw = $0.rawValue }
+                ) {
+                    FilterChip(
+                        style: .dropdown,
+                        label: currentSort.shortDisplayName,
+                        leadingSystemImage: "arrow.up.arrow.down"
+                    )
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .accessibilityLabel("Sort apps")
+                .accessibilityValue(currentSort.displayName)
+
+                Spacer(minLength: 8)
+                UninstallSearchField(query: $appSearchQuery)
+            } else {
+                Spacer(minLength: 8)
+            }
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+    }
+
+    /// The Installed Apps / Leftovers switcher, reusing the tab-style chip the
+    /// App Caches safety filter uses so it reads as a first-class view switch.
+    private var sectionSegments: some View {
+        HStack(spacing: 4) {
+            segmentChip(.installedApps, count: nil)
+            segmentChip(.leftovers, count: store.orphanLeftovers.count)
+        }
+    }
+
+    private func segmentChip(_ target: UninstallSection, count: Int?) -> some View {
+        let isOn = section == target
+        return Button {
+            if reduceMotion {
+                section = target
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) { section = target }
+            }
+        } label: {
+            FilterChip(
+                style: .tab,
+                label: target.label,
+                isSelected: isOn,
+                tier: target == .leftovers ? .checkFirst : .neutral,
+                leadingSystemImage: target.symbolName,
+                count: count
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(count.map { "\(target.label), \($0) items" } ?? target.label)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     // MARK: Grid
@@ -163,29 +264,24 @@ struct UninstallView: View {
         if store.installedApps.isEmpty {
             // Held behind the skeleton while the first scan runs; nothing to show.
             Color.clear
+        } else if filteredApps.isEmpty {
+            emptyState(
+                symbol: "magnifyingglass",
+                title: "Nothing matches",
+                detail: "No installed app matches \"\(appSearchQuery)\"."
+            )
         } else {
-            // Tiles and the "leftovers from removed apps" section share one scroll,
-            // so the leftovers flow directly under the grid and scroll with it,
-            // rather than sitting in a pinned, separately-scrolling box.
             ScrollView {
-                VStack(alignment: .leading, spacing: AppStyle.Spacing.large) {
-                    if filteredApps.isEmpty {
-                        searchMissRow
-                    } else {
-                        LazyVGrid(columns: Self.columns, spacing: 12) {
-                            ForEach(filteredApps) { app in
-                                AppTile(
-                                    app: app,
-                                    totalBytes: store.removableBytes(for: app),
-                                    isSelected: store.selectedAppIDs.contains(app.id)
-                                ) {
-                                    store.toggleAppSelected(id: app.id)
-                                }
-                            }
+                LazyVGrid(columns: Self.columns, spacing: 12) {
+                    ForEach(filteredApps) { app in
+                        AppTile(
+                            app: app,
+                            totalBytes: store.removableBytes(for: app),
+                            isSelected: store.selectedAppIDs.contains(app.id)
+                        ) {
+                            store.toggleAppSelected(id: app.id)
                         }
                     }
-
-                    OrphanLeftoversSection()
                 }
                 .padding(.horizontal, AppDetailPageLayout.horizontalInset)
                 .padding(.top, 2)
@@ -218,20 +314,6 @@ struct UninstallView: View {
     }
 
     // MARK: Shared bits
-
-    /// Compact search-miss line, used inside the shared scroll where the
-    /// full-height `emptyState` would collapse. The leftovers section still shows
-    /// below it, so a search that hides every app never hides the leftovers.
-    private var searchMissRow: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            Text("No installed app matches \"\(appSearchQuery)\".")
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(.vertical, AppStyle.Spacing.medium)
-    }
 
     private func emptyState(symbol: String, title: String, detail: String) -> some View {
         VStack(spacing: 10) {
@@ -640,8 +722,6 @@ struct OrphanLeftoversSection: View {
     var body: some View {
         if shouldShow {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-                Divider()
-                    .padding(.bottom, AppStyle.Spacing.xSmall)
                 header
                 if orphans.isEmpty {
                     scanningRow
