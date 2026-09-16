@@ -765,10 +765,10 @@ struct OrphanLeftoversSection: View {
     }
 
     private var subtitle: String {
-        if orphans.isEmpty { return "Looking through your Library…" }
+        if orphans.isEmpty { return "Looking through your Library" }
         let total = orphans.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let noun = orphans.count == 1 ? "item" : "items"
-        return "\(orphans.count) \(noun), \(formatBytes(total)) — app data, so check before removing"
+        return "\(orphans.count) \(noun), \(formatBytes(total))"
     }
 
     private var scanningRow: some View {
