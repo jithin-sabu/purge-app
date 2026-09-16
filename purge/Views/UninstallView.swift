@@ -736,8 +736,11 @@ struct OrphanLeftoversSection: View {
 
     var body: some View {
         if shouldShow {
+            // No section title or tally here: the tab's page header already carries
+            // "N items · size" for this segment, and Remove lives in the top-right
+            // header. This view is just the picker, matching the Installed Apps
+            // grid, which likewise has no in-view title.
             VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-                header
                 if orphans.isEmpty {
                     scanningRow
                 } else {
@@ -748,27 +751,6 @@ struct OrphanLeftoversSection: View {
                 }
             }
         }
-    }
-
-    private var header: some View {
-        // The Remove action lives in the tab's top-right header (it swaps in for
-        // Uninstall on this segment), so this header is just the title and tally.
-        VStack(alignment: .leading, spacing: 1) {
-            Text("Leftovers from removed apps")
-                .font(AppStyle.Typography.rowTitle)
-                .foregroundStyle(AppColors.textPrimary)
-            Text(subtitle)
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(AppColors.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var subtitle: String {
-        if orphans.isEmpty { return "Looking through your Library" }
-        let total = orphans.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let noun = orphans.count == 1 ? "item" : "items"
-        return "\(orphans.count) \(noun), \(formatBytes(total))"
     }
 
     private var scanningRow: some View {

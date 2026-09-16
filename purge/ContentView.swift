@@ -543,9 +543,20 @@ struct ContentView: View {
         return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
     }
 
-    /// Counts the installed apps, and how many are ticked for removal. While the
-    /// background pass is still measuring each app's freeable space, it says so.
+    /// Follows the active segment. On Installed Apps it counts the apps and how
+    /// many are ticked; on Leftovers it carries the item count and total size that
+    /// the in-view section used to show, so the section itself needs no header.
     private var uninstallerPageSubtitle: String? {
+        if store.uninstallSection == .leftovers {
+            let items = store.orphanLeftovers
+            guard !items.isEmpty else { return nil }
+            let bytes = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            let itemLabel = items.count == 1 ? "item" : "items"
+            let selected = store.selectedOrphanCount
+            let base = "\(items.count) \(itemLabel) · \(formatBytes(bytes))"
+            return selected > 0 ? "\(base) · \(selected) selected" : base
+        }
+
         guard !store.installedApps.isEmpty else { return nil }
         let total = store.installedApps.count
         let selected = store.selectedAppIDs.count
