@@ -543,31 +543,52 @@ struct ContentView: View {
         return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
     }
 
-    /// Follows the active segment. On Installed Apps it counts the apps and how
-    /// many are ticked; on Leftovers it carries the item count and total size that
-    /// the in-view section used to show, so the section itself needs no header.
+    /// Follows the active segment, with one shared shape so the two read the same:
+    /// "N units · total size" at rest, and "N units · M selected · selected size"
+    /// once anything is ticked.
     private var uninstallerPageSubtitle: String? {
         if store.uninstallSection == .leftovers {
             let items = store.orphanLeftovers
             guard !items.isEmpty else { return nil }
-            let bytes = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
-            let itemLabel = items.count == 1 ? "item" : "items"
-            let selected = store.selectedOrphanCount
-            let base = "\(items.count) \(itemLabel) · \(formatBytes(bytes))"
-            return selected > 0 ? "\(base) · \(selected) selected" : base
+            return uninstallSubtitle(
+                count: items.count,
+                unit: ("item", "items"),
+                totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
+                selectedCount: store.selectedOrphanCount,
+                selectedBytes: store.selectedOrphanBytes,
+                measuring: false
+            )
         }
 
         guard !store.installedApps.isEmpty else { return nil }
-        let total = store.installedApps.count
-        let selected = store.selectedAppIDs.count
-        let base = "\(total) \(total == 1 ? "app" : "apps")"
-        if selected > 0 {
-            return "\(base) · \(selected) selected · \(formatBytes(store.selectedAppsRemovableBytes))"
+        return uninstallSubtitle(
+            count: store.installedApps.count,
+            unit: ("app", "apps"),
+            totalBytes: store.installedApps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) },
+            selectedCount: store.selectedAppIDs.count,
+            selectedBytes: store.selectedAppsRemovableBytes,
+            // App totals fill in on a background pass; say so rather than show a
+            // size that is still climbing.
+            measuring: !store.hasMeasuredAllRemovableTotals
+        )
+    }
+
+    private func uninstallSubtitle(
+        count: Int,
+        unit: (singular: String, plural: String),
+        totalBytes: Int64,
+        selectedCount: Int,
+        selectedBytes: Int64,
+        measuring: Bool
+    ) -> String {
+        let base = "\(count) \(count == 1 ? unit.singular : unit.plural)"
+        if selectedCount > 0 {
+            return "\(base) · \(selectedCount) selected · \(formatBytes(selectedBytes))"
         }
-        if !store.hasMeasuredAllRemovableTotals {
+        if measuring {
             return "\(base) · measuring space…"
         }
-        return base
+        return "\(base) · \(formatBytes(totalBytes))"
     }
 
     private var appCachesSafetyFilter: SafetyFilter {
