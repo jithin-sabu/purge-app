@@ -23,8 +23,8 @@ enum OrphanLeftoverScanPolicy {
     /// `~/Library/Caches/<id>` is deliberately absent: the general cache scan
     /// already surfaces those folders (installed or not) as rebuildable caches,
     /// so listing them again here would double them up. Preferences and the two
-    /// launch-item roots are also left out of v1 — they are tiny, noisy, and full
-    /// of daemon/helper identifiers that never appear as apps, which is exactly
+    /// launch-item roots are also left out — they are tiny, noisy, and full of
+    /// daemon/helper identifiers that never appear as apps, which is exactly
     /// where a wrong "orphaned" call is most likely.
     nonisolated struct OrphanRoot {
         let url: URL
@@ -34,6 +34,10 @@ enum OrphanLeftoverScanPolicy {
     nonisolated static func orphanRoots(home: URL) -> [OrphanRoot] {
         let lib = home.appendingPathComponent("Library", isDirectory: true)
         return [
+            OrphanRoot(
+                url: lib.appendingPathComponent("Application Support", isDirectory: true),
+                category: .applicationSupport
+            ),
             OrphanRoot(
                 url: lib.appendingPathComponent("Containers", isDirectory: true),
                 category: .containers
@@ -184,6 +188,8 @@ enum OrphanLeftoverScanPolicy {
         url: URL
     ) -> String? {
         switch category {
+        case .applicationSupport:
+            return applicationSupportBundleID(from: name, url: url)
         case .containers:
             return owningBundleIDForContainer(at: url, directoryName: name)
         case .groupContainers:
@@ -195,6 +201,21 @@ enum OrphanLeftoverScanPolicy {
         default:
             return nil
         }
+    }
+
+    /// Application Support is real app data, not a rebuildable cache, so this
+    /// path stays conservative: only a direct child folder whose complete name is
+    /// already a bundle identifier can be attributed to a removed app. Human
+    /// names (`Docker`, `Google`, `Adobe`) are left alone because they are often
+    /// shared across products.
+    nonisolated static func applicationSupportBundleID(from name: String, url: URL) -> String? {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue,
+              looksLikeBundleID(name) else {
+            return nil
+        }
+        return name
     }
 
     /// A container directory is usually named by its bundle id. When it is named
@@ -295,12 +316,11 @@ enum OrphanLeftoverScanPolicy {
     /// The untouched window an orphan must exceed before it is offered, reusing
     /// the Developer Projects "Consider stale after" control. Removed apps go to
     /// a data tier that does not come back, so a mid-reinstall or just-quit app
-    /// must never be swept: when the control is set to "Show all" (no gate), this
-    /// falls back to the default window rather than zero, and a 30-day floor
-    /// applies in every case.
+    /// must never be swept. When the control is set to "Show all", the orphan
+    /// scan still keeps a 30-day safety buffer instead of offering fresh data.
     nonisolated static func effectiveStaleDays(userDefaults: UserDefaults = .standard) -> Int {
         let configured = DevToolsStalenessOption.currentThresholdDays(userDefaults: userDefaults)
-        let base = configured == 0 ? DevToolsStalenessOption.defaultOption.rawValue : configured
+        let base = configured == 0 ? minimumStaleDaysFloor : configured
         return max(base, minimumStaleDaysFloor)
     }
 
