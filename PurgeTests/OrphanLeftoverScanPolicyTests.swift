@@ -111,6 +111,42 @@ struct OrphanLeftoverScanPolicyTests {
         ) == "com.vendor.App")
     }
 
+    @Test
+    func bundleIDNamedApplicationSupportFolderResolvesToItself() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("com.docker.install", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        #expect(OrphanLeftoverScanPolicy.applicationSupportBundleID(
+            from: "com.docker.install",
+            url: url
+        ) == "com.docker.install")
+    }
+
+    @Test
+    func applicationSupportRejectsHumanNamedFolders() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Docker", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        #expect(OrphanLeftoverScanPolicy.applicationSupportBundleID(
+            from: "Docker",
+            url: url
+        ) == nil)
+    }
+
+    @Test
+    func applicationSupportRejectsBundleIDNamedFiles() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("com.vendor.App")
+        try Data().write(to: url)
+        #expect(OrphanLeftoverScanPolicy.applicationSupportBundleID(
+            from: "com.vendor.App",
+            url: url
+        ) == nil)
+    }
+
     /// A UUID-named container is not attributed by name; ownership must come from
     /// metadata (unavailable in a unit test), so this returns nil rather than
     /// treating the UUID as a bundle id.
@@ -180,13 +216,12 @@ struct OrphanLeftoverScanPolicyTests {
     // MARK: Staleness
 
     @Test
-    func showAllFallsBackToDefaultWindowNotZero() {
+    func showAllKeepsMinimumSafetyWindow() {
         let defaults = UserDefaults(suiteName: "orphan.tests.showall")!
         defaults.removePersistentDomain(forName: "orphan.tests.showall")
         defaults.set(DevToolsStalenessOption.showAll.rawValue, forKey: DevToolsStalenessOption.userDefaultsKey)
         let days = OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults)
-        #expect(days >= OrphanLeftoverScanPolicy.minimumStaleDaysFloor)
-        #expect(days == DevToolsStalenessOption.defaultOption.rawValue)
+        #expect(days == OrphanLeftoverScanPolicy.minimumStaleDaysFloor)
     }
 
     @Test
@@ -226,5 +261,12 @@ struct OrphanLeftoverScanPolicyTests {
             let info = OrphanLeftoverScanPolicy.safetyInfo(appName: "Docker", category: category)
             #expect(info.level == .medium)
         }
+    }
+
+    private func makeTemporaryDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OrphanLeftoverScanPolicyTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 }
