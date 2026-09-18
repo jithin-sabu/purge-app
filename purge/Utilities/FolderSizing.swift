@@ -41,6 +41,11 @@ enum FolderSizing {
         guard !chunk.isEmpty else { return [:] }
         guard acquireDuPermit() else { return [:] }
         defer { duChunkLimiter.signal() }
+        // Same window `directorySizes` already covers: cancelled between
+        // taking a permit and starting work. Skip `du` and let `defer` give
+        // the slot back — otherwise a superseded scan still walks for up to
+        // `duChunkTimeout`.
+        guard !Task.isCancelled else { return [:] }
         return runDuChunk(chunk)
     }
 
