@@ -10,8 +10,8 @@ import Testing
 /// under that fan-out.
 @Suite("Folder sizing under scan fan-out")
 struct FolderSizingConcurrencyTests {
-    /// Matches `CacheScanner.runSizeJobs`.
-    private static let scanConcurrency = 10
+    /// Matches `CacheScanner.runSizeJobs` / `FolderSizing.maxConcurrentDuChunks`.
+    private static let scanConcurrency = FolderSizing.maxConcurrentDuChunks
 
     private func makeTree(directories: Int, bytesEach: Int) throws -> (root: URL, paths: [URL]) {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -110,7 +110,7 @@ struct FolderSizingConcurrencyTests {
         let (root, paths) = try makeTree(directories: FolderSizing.duChunkSize * 3, bytesEach: 4 * 1024)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        // More iterations than `maxConcurrentDuChunks` (10).
+        // More iterations than `maxConcurrentDuChunks`.
         for _ in 0..<14 {
             let task = Task.detached { _ = FolderSizing.directorySizes(at: paths) }
             task.cancel()
@@ -145,5 +145,64 @@ struct FolderSizingConcurrencyTests {
         for path in readable {
             #expect(sizes[path.standardizedFileURL.path] ?? 0 > 0, "lost \(path.lastPathComponent)")
         }
+    }
+
+    /// Cache sizing uses `directorySizesForChunk` while project / leftover sizing uses
+    /// `directorySizes`. They now share one permit pool, so either path waiting on the
+    /// other must still return a complete result rather than dropping chunks.
+    @Test("Chunk sizing and directorySizes share the limiter without dropping results")
+    func chunkAndDirectorySizesShareLimiter() async throws {
+        let chunkTree = try makeTree(directories: FolderSizing.duChunkSize * 4, bytesEach: 4 * 1024)
+        let dirTree = try makeTree(directories: FolderSizing.duChunkSize + 8, bytesEach: 4 * 1024)
+        defer {
+            try? FileManager.default.removeItem(at: chunkTree.root)
+            try? FileManager.default.removeItem(at: dirTree.root)
+        }
+
+        async let chunkSizes: [String: Int64] = {
+            var parts: [[URL]] = []
+            var index = 0
+            while index < chunkTree.paths.count {
+                parts.append(
+                    Array(chunkTree.paths[index..<min(index + FolderSizing.duChunkSize, chunkTree.paths.count)])
+                )
+                index += FolderSizing.duChunkSize
+            }
+            return await withTaskGroup(
+                of: [String: Int64].self,
+                returning: [String: Int64].self
+            ) { group in
+                for part in parts {
+                    group.addTask { FolderSizing.directorySizesForChunk(part) }
+                }
+                return await group.reduce(into: [:]) { $0.merge($1) { current, _ in current } }
+            }
+        }()
+        async let dirSizes = FolderSizing.directorySizes(at: dirTree.paths)
+        let (chunks, dirs) = await (chunkSizes, dirSizes)
+
+        #expect(chunks.count == chunkTree.paths.count, "chunks measured \(chunks.count) of \(chunkTree.paths.count)")
+        #expect(dirs.count == dirTree.paths.count, "directorySizes measured \(dirs.count) of \(dirTree.paths.count)")
+        for path in chunkTree.paths {
+            #expect(chunks[path.standardizedFileURL.path] ?? 0 > 0)
+        }
+        for path in dirTree.paths {
+            #expect(dirs[path.standardizedFileURL.path] ?? 0 > 0)
+        }
+    }
+
+    @Test("Cancelled chunk sizing calls do not leak limiter permits")
+    func chunkCancellationDoesNotLeakLimiterPermits() async throws {
+        let (root, paths) = try makeTree(directories: FolderSizing.duChunkSize, bytesEach: 4 * 1024)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for _ in 0..<(FolderSizing.maxConcurrentDuChunks + 4) {
+            let task = Task.detached { _ = FolderSizing.directorySizesForChunk(paths) }
+            task.cancel()
+            _ = await task.value
+        }
+
+        let sizes = FolderSizing.directorySizes(at: paths)
+        #expect(sizes.count == paths.count, "measured \(sizes.count) of \(paths.count) after chunk cancellations")
     }
 }

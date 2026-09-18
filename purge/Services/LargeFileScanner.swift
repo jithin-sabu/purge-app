@@ -17,6 +17,12 @@ nonisolated final class LargeFileScanner {
         }
     }
 
+    /// How many enumerator steps share one autorelease pool. `nextObject()` and
+    /// `resourceValues` allocate Foundation objects per file; draining every step
+    /// is slower, and never draining lets a Downloads walk hold megabytes of
+    /// transients until the root finishes.
+    private static let enumeratorAutoreleaseBatch = 256
+
     private static func run(
         minBytes: Int64,
         staleDays: Int,
@@ -41,47 +47,54 @@ nonisolated final class LargeFileScanner {
                 options: [.skipsHiddenFiles, .skipsPackageDescendants]
             ) else { continue }
 
-            while let next = enumerator.nextObject() {
-                if Task.isCancelled { break }
-                guard let fileURL = next as? URL else { continue }
+            enumerateRoot: while true {
+                let keepGoing: Bool = autoreleasepool {
+                    for _ in 0..<enumeratorAutoreleaseBatch {
+                        guard let next = enumerator.nextObject() else { return false }
+                        if Task.isCancelled { return false }
+                        guard let fileURL = next as? URL else { continue }
 
-                let values = try? fileURL.resourceValues(forKeys: resourceKeys)
+                        let values = try? fileURL.resourceValues(forKeys: resourceKeys)
 
-                if values?.isDirectory == true || values?.isPackage == true {
-                    if LargeFileScanPolicy.isExcludedDirectory(fileURL) {
-                        enumerator.skipDescendants()
+                        if values?.isDirectory == true || values?.isPackage == true {
+                            if LargeFileScanPolicy.isExcludedDirectory(fileURL) {
+                                enumerator.skipDescendants()
+                            }
+                            continue
+                        }
+
+                        guard values?.isRegularFile == true else { continue }
+
+                        let size = Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
+                        guard size >= minBytes else { continue }
+
+                        let accessed = values?.contentAccessDate ?? .distantPast
+                        let modified = values?.contentModificationDate ?? .distantPast
+                        let lastUsed = max(accessed, modified)
+                        if staleDays > 0 {
+                            let days = Calendar.current.dateComponents([.day], from: lastUsed, to: now).day ?? 0
+                            guard days >= staleDays else { continue }
+                        }
+
+                        // Never list a file the filesystem will refuse to give up — its own
+                        // flags or its directory's. Offering it can only end in "couldn't be
+                        // cleaned", so it does not belong in the list at all. The check runs
+                        // last because it costs syscalls and only a handful of files, already
+                        // past the size and staleness filters, get this far.
+                        if FileProtection.blocksRemoval(fileURL) { continue }
+
+                        continuation.yield(
+                            LargeFile(
+                                path: fileURL.standardizedFileURL,
+                                sizeBytes: size,
+                                lastUsed: lastUsed,
+                                category: LargeFileCategory.category(forExtension: fileURL.pathExtension)
+                            )
+                        )
                     }
-                    continue
+                    return true
                 }
-
-                guard values?.isRegularFile == true else { continue }
-
-                let size = Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
-                guard size >= minBytes else { continue }
-
-                let accessed = values?.contentAccessDate ?? .distantPast
-                let modified = values?.contentModificationDate ?? .distantPast
-                let lastUsed = max(accessed, modified)
-                if staleDays > 0 {
-                    let days = Calendar.current.dateComponents([.day], from: lastUsed, to: now).day ?? 0
-                    guard days >= staleDays else { continue }
-                }
-
-                // Never list a file the filesystem will refuse to give up — its own
-                // flags or its directory's. Offering it can only end in "couldn't be
-                // cleaned", so it does not belong in the list at all. The check runs
-                // last because it costs syscalls and only a handful of files, already
-                // past the size and staleness filters, get this far.
-                if FileProtection.blocksRemoval(fileURL) { continue }
-
-                continuation.yield(
-                    LargeFile(
-                        path: fileURL.standardizedFileURL,
-                        sizeBytes: size,
-                        lastUsed: lastUsed,
-                        category: LargeFileCategory.category(forExtension: fileURL.pathExtension)
-                    )
-                )
+                if !keepGoing { break enumerateRoot }
             }
         }
 

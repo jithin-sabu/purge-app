@@ -90,11 +90,7 @@ actor GitStatusChecker {
             repoRootsToResolve.insert(repoRoot.path)
         }
 
-        for repoPath in repoRootsToResolve {
-            if cache[repoPath] != nil { continue }
-            let repoURL = URL(fileURLWithPath: repoPath)
-            cache[repoPath] = await GitStatusChecker.runGitStatus(repository: repoURL)
-        }
+        await fetchMissingRepoStatuses(repoRootsToResolve)
 
         for (pathKey, repoPath) in pathToRepoRoot {
             result[pathKey] = cache[repoPath] ?? .clean
@@ -105,6 +101,37 @@ actor GitStatusChecker {
 
     func clearSessionCache() {
         cache.removeAll()
+    }
+
+    /// Unique-repo fetches only. Several cache rows often share one git root, so the
+    /// previous sequential loop paid once per distinct repo; this keeps that, and
+    /// overlaps a handful of unrelated repos instead of waiting for each `git status`
+    /// in turn. Porcelain results are identical.
+    private static let maxConcurrentGitStatus = 4
+
+    private func fetchMissingRepoStatuses(_ repoRoots: Set<String>) async {
+        let missing = repoRoots.filter { cache[$0] == nil }
+        guard !missing.isEmpty else { return }
+
+        await withTaskGroup(of: (String, GitWorktreeStatus).self) { group in
+            var remaining = Array(missing)
+            func spawn() {
+                guard let repoPath = remaining.popLast() else { return }
+                group.addTask {
+                    let status = await GitStatusChecker.runGitStatus(
+                        repository: URL(fileURLWithPath: repoPath)
+                    )
+                    return (repoPath, status)
+                }
+            }
+            for _ in 0..<min(Self.maxConcurrentGitStatus, remaining.count) {
+                spawn()
+            }
+            for await (repoPath, status) in group {
+                cache[repoPath] = status
+                spawn()
+            }
+        }
     }
 
     private static func runGitStatus(repository: URL) async -> GitWorktreeStatus {

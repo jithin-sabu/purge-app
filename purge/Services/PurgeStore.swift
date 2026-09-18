@@ -3210,25 +3210,21 @@ final class PurgeStore: ObservableObject {
         isEnrichingGeneral = true
         defer { isEnrichingGeneral = false }
         var copy = cacheItems
-        await withTaskGroup(of: (Int, ReinstallSafetyStatus, GitWorktreeStatus).self) { group in
-            for index in copy.indices {
-                group.addTask {
-                    var reinstall = ReinstallSafetyStatus.notApplicable
-                    var git = GitWorktreeStatus.clean
-                    for location in copy[index].locations {
-                        let url = location.path.standardizedFileURL
-                        let locReinstall = Self.cacheReinstallStatus(forPath: url)
-                        reinstall = Self.worstReinstall(reinstall, locReinstall)
-                        let locGit = await self.gitChecker.cleanupStatus(for: url)
-                        git = Self.worstGit(git, locGit)
-                    }
-                    return (index, reinstall, git)
-                }
+        // One `git status` per unique repository, same helper Dev Tools already uses.
+        // The previous one-task-per-row fan-out still serialized on the git actor and
+        // paid for a MainActor hop per location.
+        let urls = copy.flatMap(\.paths)
+        let statusesByPath = await gitChecker.cleanupStatuses(for: urls)
+        for index in copy.indices {
+            var reinstall = ReinstallSafetyStatus.notApplicable
+            var git = GitWorktreeStatus.clean
+            for location in copy[index].locations {
+                let url = location.path.standardizedFileURL
+                reinstall = Self.worstReinstall(reinstall, Self.cacheReinstallStatus(forPath: url))
+                git = Self.worstGit(git, statusesByPath[url.path] ?? .clean)
             }
-            for await (index, reinstall, git) in group {
-                copy[index].reinstallSafety = reinstall
-                copy[index].gitStatus = git
-            }
+            copy[index].reinstallSafety = reinstall
+            copy[index].gitStatus = git
         }
         withAnimation(.easeInOut(duration: 0.2)) {
             cacheItems = copy

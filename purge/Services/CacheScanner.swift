@@ -423,7 +423,10 @@ nonisolated final class CacheScanner {
         guard !jobs.isEmpty else { return }
 
         let chunkSize = FolderSizing.duChunkSize
-        let maxConcurrent = 10
+        // Matches the process-wide `du` cap. Each task takes one limiter permit
+        // inside `directorySizesForChunk`, so this is the fan-out, not a second
+        // multiplier on top of `directorySizes` callers.
+        let maxConcurrent = FolderSizing.maxConcurrentDuChunks
         var chunks: [[SizeJob]] = []
         var index = 0
         while index < jobs.count {
