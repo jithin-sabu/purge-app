@@ -3,14 +3,17 @@ import Foundation
 /// Shared folder sizing so scans can call this from background tasks without hopping through `MainActor`.
 enum FolderSizing {
     nonisolated static let duChunkSize = 64
-    private static let maxConcurrentDuChunks = 10
+    /// Process-wide cap on concurrent `du` processes. `CacheScanner.runSizeJobs`
+    /// fans out this many Swift tasks, each calling ``directorySizesForChunk``.
+    nonisolated static let maxConcurrentDuChunks = 10
 
     /// Process-wide, deliberately **not** per call.
     ///
     /// A per-call semaphore caps one `directorySizes` invocation at ten `du` processes but
     /// says nothing about how many invocations run at once — N concurrent callers meant up
     /// to 10N subprocesses. `du` is I/O-bound on a single disk, so the useful limit is a
-    /// total, and the scanners legitimately call this concurrently.
+    /// total, and the scanners legitimately call this concurrently — including
+    /// `directorySizesForChunk`, which used to skip the limiter and stack on top of it.
     private nonisolated static let duChunkLimiter = DispatchSemaphore(value: maxConcurrentDuChunks)
 
     /// How often a caller queued on `duChunkLimiter` re-checks for cancellation.
@@ -20,9 +23,31 @@ enum FolderSizing {
     /// only so a `du` that never returns cannot wedge the scan permanently.
     private static let duChunkTimeout: TimeInterval = 300
 
+    /// Timed acquisition, not `wait()`. The limiter is process-wide, so this can be
+    /// queued behind a permit held by an *unrelated* scan whose chunk runs all the
+    /// way to `duChunkTimeout`. An indefinite wait would keep a cancelled scan
+    /// parked here for that long — on a cooperative-pool thread, which is the
+    /// resource the bounded fan-out in `DevScanner.buildProjectGroups` exists to
+    /// protect.
+    private nonisolated static func acquireDuPermit() -> Bool {
+        var acquired = false
+        while !acquired && !Task.isCancelled {
+            acquired = duChunkLimiter.wait(timeout: .now() + limiterPollInterval) == .success
+        }
+        return acquired
+    }
+
     nonisolated static func directorySizesForChunk(_ chunk: [URL]) -> [String: Int64] {
         guard !chunk.isEmpty else { return [:] }
+        guard acquireDuPermit() else { return [:] }
+        defer { duChunkLimiter.signal() }
+        return runDuChunk(chunk)
+    }
 
+    /// Raw `du` for a chunk. Callers that already hold ``duChunkLimiter`` must use this
+    /// rather than ``directorySizesForChunk``, which would try to take a second permit
+    /// and deadlock once the cap is full.
+    private nonisolated static func runDuChunk(_ chunk: [URL]) -> [String: Int64] {
         // `du` writes one "Permission denied" line per unreadable directory, so stderr can run
         // to megabytes on a broad scan. ProcessRunner drains it concurrently; leaving it
         // undrained would block `du` on a full pipe and hang the read below.
@@ -67,17 +92,7 @@ enum FolderSizing {
         for chunk in chunks {
             if Task.isCancelled { break }
 
-            // Timed acquisition, not `wait()`. The limiter is process-wide, so this can be
-            // queued behind a permit held by an *unrelated* scan whose chunk runs all the
-            // way to `duChunkTimeout`. An indefinite wait would keep a cancelled scan
-            // parked here for that long — on a cooperative-pool thread, which is the
-            // resource the bounded fan-out in `DevScanner.buildProjectGroups` exists to
-            // protect.
-            var acquired = false
-            while !acquired && !Task.isCancelled {
-                acquired = duChunkLimiter.wait(timeout: .now() + limiterPollInterval) == .success
-            }
-            guard acquired else { break }
+            guard acquireDuPermit() else { break }
             // Cancelled between acquiring and dispatching: the permit must go back, or a
             // process-wide slot is lost for the lifetime of the app.
             guard !Task.isCancelled else {
@@ -91,7 +106,7 @@ enum FolderSizing {
                     duChunkLimiter.signal()
                     group.leave()
                 }
-                let partial = directorySizesForChunk(chunk)
+                let partial = runDuChunk(chunk)
                 lock.lock()
                 for (path, size) in partial {
                     result[path] = size

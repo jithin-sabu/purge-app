@@ -44,7 +44,11 @@ final class BrandIconService {
 
     static let fallbackFolderSymbolName = "folder.fill"
 
-    private let imageCache = NSCache<NSString, NSImage>()
+    private let imageCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 256
+        return cache
+    }()
 
     /// Fully-resolved row icons, keyed by the row's icon identity plus appearance.
     ///
