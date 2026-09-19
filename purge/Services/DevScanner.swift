@@ -56,7 +56,8 @@ nonisolated final class DevScanner {
         "Xcode Documentation Cache": "xcode-docs-cache",
         "Corepack Cache": "corepack-cache",
         "Obsolete Cursor Extension": "obsolete-cursor-extension",
-        "Obsolete VS Code Extension": "obsolete-vscode-extension"
+        "Obsolete VS Code Extension": "obsolete-vscode-extension",
+        "Cursor Agent Leftovers": "cursor-agent-leftover"
     ]
 
     private func safetyInfo(forToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
@@ -523,7 +524,9 @@ nonisolated final class DevScanner {
 
     private func scanGlobalCachePlaceholders() -> ([DevTool], [DevToolSizeJob]) {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let staticDefinitions = Self.globalCacheDefinitions() + discoverObsoleteEditorExtensionDefinitions(home: home)
+        let staticDefinitions = Self.globalCacheDefinitions()
+            + discoverObsoleteEditorExtensionDefinitions(home: home)
+            + discoverCursorAgentLeftoverDefinitions(home: home)
 
         let built = staticDefinitions.compactMap { entry -> DevTool? in
             let label = entry.label
@@ -559,6 +562,13 @@ nonisolated final class DevScanner {
             DevToolSizeJob(toolID: $0.id, toolLabel: $0.toolName, paths: $0.paths)
         }
         return (tools, jobs)
+    }
+
+    private func discoverCursorAgentLeftoverDefinitions(home: URL) -> [(label: String, paths: [URL])] {
+        let live = CursorAgentLeftoverScanPolicy.LiveContext.current(home: home)
+        let unused = CursorAgentLeftoverScanPolicy.unusedDirectories(home: home, live: live)
+        guard !unused.isEmpty else { return [] }
+        return [(CursorAgentLeftoverScanPolicy.toolLabel, unused)]
     }
 
     private func discoverObsoleteEditorExtensionDefinitions(home: URL) -> [(label: String, paths: [URL])] {

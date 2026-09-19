@@ -185,6 +185,7 @@ enum BrandIconMapping {
         "npm-logs": "nodedotjs",
         "corepack-cache": "nodedotjs",
         "obsolete-cursor-extension": "cursor",
+        "cursor-agent-leftover": "cursor",
         "obsolete-vscode-extension": "visualstudiocode",
         "zsh": "iterm2",
     ]

@@ -593,6 +593,13 @@ enum DeletionSafetyPolicy {
         return true
     }
 
+    /// Cursor agent leftovers only: a leaf worktree under `~/.cursor/worktrees`,
+    /// or a junk temp/empty-window namespace under `~/.cursor/projects`. Never
+    /// the `.cursor` root, settings, login, or a real project folder.
+    nonisolated static func isWhitelistedCursorAgentLeftoverPath(_ path: String, home: String) -> Bool {
+        CursorAgentLeftoverScanPolicy.isWhitelistedPath(path, home: home)
+    }
+
     /// Whether this path is a build artifact of a real project sitting right above it.
     ///
     /// This is the mechanism that lets Purge offer folders whose *names* are far too
@@ -680,6 +687,9 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedEditorExtensionPath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedCursorAgentLeftoverPath(path, home: home) {
             return .allow
         }
 
