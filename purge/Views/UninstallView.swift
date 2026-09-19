@@ -87,9 +87,9 @@ struct UninstallView: View {
     /// Session-only: leaving this tab rebuilds the view, and a launch starts
     /// fresh, so size sort never survives a trip away from Uninstall.
     @State private var selectedSort = AppSortOption.nameAZ
-    /// List is the first-run default; after that, honor the user's preferred
+    /// Grid is the first-run default; after that, honor the user's preferred
     /// density across tab changes and launches.
-    @AppStorage("view.uninstaller") private var viewModeRaw = UninstallAppViewMode.list.rawValue
+    @AppStorage("view.uninstaller.mode") private var viewMode = UninstallAppViewMode.grid
     @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
 
     /// The active view lives on the store so the tab header can swap its action
@@ -109,26 +109,19 @@ struct UninstallView: View {
         return selectedSort
     }
 
-    private var viewMode: UninstallAppViewMode {
-        UninstallAppViewMode(rawValue: viewModeRaw) ?? .list
-    }
-
-    private var viewModeBinding: Binding<UninstallAppViewMode> {
-        Binding(
-            get: { viewMode },
-            set: { viewModeRaw = $0.rawValue }
-        )
-    }
-
     private static let columns = Array(
         repeating: GridItem(.flexible(), spacing: 12),
         count: 4
     )
 
-    /// Gentle spring so tiles glide to their new slot when the size sort settles,
-    /// rather than snapping. Slightly under-damped for a touch of settle without
-    /// a bounce that would read as jitter across a full grid.
-    private let tileReorderAnimation: Animation = .spring(response: 0.45, dampingFraction: 0.85)
+    /// Soft, near-critically damped spring so tiles glide to their new slots
+    /// without a hard snap or an under-damped overshoot.
+    private let tileReorderAnimation: Animation = .spring(response: 0.38, dampingFraction: 0.92)
+
+    /// Shared geometry for sort reorders so the same app slides to its new slot
+    /// instead of fading out in one place and in from another.
+    @Namespace private var listReorderNamespace
+    @Namespace private var gridReorderNamespace
 
     var body: some View {
         VStack(spacing: 8) {
@@ -335,7 +328,14 @@ struct UninstallView: View {
                     isOptionEnabled: { option in
                         !option.needsFullMeasurement || store.hasMeasuredAllRemovableTotals
                     },
-                    onSelect: { selectedSort = $0 }
+                    onSelect: { option in
+                        guard option != selectedSort else { return }
+                        if reduceMotion {
+                            selectedSort = option
+                        } else {
+                            withAnimation(tileReorderAnimation) { selectedSort = option }
+                        }
+                    }
                 ) {
                     FilterChip(
                         style: .dropdown,
@@ -391,18 +391,7 @@ struct UninstallView: View {
     }
 
     private var viewModePicker: some View {
-        Picker("App view", selection: viewModeBinding) {
-            ForEach(UninstallAppViewMode.allCases) { mode in
-                Label(mode.label, systemImage: mode.symbolName)
-                    .labelStyle(.iconOnly)
-                    .tag(mode)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
-        .accessibilityLabel("App view")
-        .accessibilityValue(viewMode.label)
+        UninstallViewModeSwitcher(selection: $viewMode)
     }
 
     // MARK: App collection
@@ -453,7 +442,9 @@ struct UninstallView: View {
 
     private var loadedList: some View {
         ScrollView {
-            LazyVStack(spacing: 6) {
+            // Non-lazy so every row stays in the hierarchy and can slide to its
+            // new index on sort. LazyVStack treats reorders as remove + insert.
+            VStack(spacing: 6) {
                 ForEach(filteredApps) { app in
                     AppListRow(
                         app: app,
@@ -464,41 +455,77 @@ struct UninstallView: View {
                     ) {
                         store.toggleAppSelected(id: app.id)
                     }
+                    .matchedGeometryEffect(id: app.id, in: listReorderNamespace)
                 }
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, 2)
             .padding(.bottom, AppStyle.Spacing.large)
-            .animation(reduceMotion ? nil : tileReorderAnimation, value: filteredApps.map(\.id))
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.bgBase)
+        // Layout animations may draw a moving row beyond its final slot.
+        // Keep that intermediate drawing inside the visible collection viewport.
+        .clipped()
     }
 
     private var loadedGrid: some View {
         ScrollView {
-            LazyVGrid(columns: Self.columns, spacing: 12) {
-                ForEach(filteredApps) { app in
-                    AppTile(
-                        app: app,
-                        totalBytes: store.removableBytes(for: app),
-                        isSizePending: store.removableBytes(for: app) == 0
-                            && !store.hasMeasuredAllRemovableTotals,
-                        isSelected: store.selectedAppIDs.contains(app.id)
-                    ) {
-                        store.toggleAppSelected(id: app.id)
+            // Non-lazy so tiles keep identity across sort and slide in place.
+            // LazyVGrid recycles cells and makes reorders look like fly-ins.
+            VStack(spacing: 12) {
+                ForEach(gridRows, id: \.startIndex) { row in
+                    HStack(spacing: 12) {
+                        ForEach(row.apps) { app in
+                            AppTile(
+                                app: app,
+                                totalBytes: store.removableBytes(for: app),
+                                isSizePending: store.removableBytes(for: app) == 0
+                                    && !store.hasMeasuredAllRemovableTotals,
+                                isSelected: store.selectedAppIDs.contains(app.id)
+                            ) {
+                                store.toggleAppSelected(id: app.id)
+                            }
+                            .matchedGeometryEffect(id: app.id, in: gridReorderNamespace)
+                            .frame(maxWidth: .infinity)
+                        }
+
+                        // Keep the last row's columns aligned with the ones above.
+                        ForEach(0..<row.leadingPad, id: \.self) { _ in
+                            Color.clear
+                                .frame(maxWidth: .infinity)
+                                .accessibilityHidden(true)
+                        }
                     }
                 }
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, 2)
             .padding(.bottom, AppStyle.Spacing.large)
-            // Once measurement finishes, choosing a size sort moves every app
-            // in one stable transition instead of reshuffling during the scan.
-            .animation(reduceMotion ? nil : tileReorderAnimation, value: filteredApps.map(\.id))
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.bgBase)
+        // Reordering edge tiles must not paint over the surrounding window.
+        .clipped()
+    }
+
+    private struct AppGridRow: Identifiable {
+        let startIndex: Int
+        let apps: ArraySlice<InstalledApp>
+        var id: Int { startIndex }
+        var leadingPad: Int { max(0, 4 - apps.count) }
+    }
+
+    private var gridRows: [AppGridRow] {
+        let apps = filteredApps
+        var rows: [AppGridRow] = []
+        var index = 0
+        while index < apps.count {
+            let end = min(index + 4, apps.count)
+            rows.append(AppGridRow(startIndex: index, apps: apps[index..<end]))
+            index = end
+        }
+        return rows
     }
 
     // MARK: Loading
@@ -567,6 +594,66 @@ struct UninstallView: View {
     }
 }
 
+// MARK: - View mode switcher
+
+/// One pill, two segments — same idea as a segmented control, but the active
+/// thumb uses a quiet overlay instead of the native white highlight.
+private struct UninstallViewModeSwitcher: View {
+    @Binding var selection: UninstallAppViewMode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let segmentWidth: CGFloat = 30
+    private static let inset: CGFloat = 2
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(UninstallAppViewMode.allCases) { mode in
+                segment(mode)
+            }
+        }
+        .padding(Self.inset)
+        .background {
+            Capsule(style: .continuous)
+                .fill(AppColors.bgElevated)
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("App view")
+    }
+
+    private func segment(_ mode: UninstallAppViewMode) -> some View {
+        let isOn = selection == mode
+        return Button {
+            guard selection != mode else { return }
+            if reduceMotion {
+                selection = mode
+            } else {
+                withAnimation(.easeInOut(duration: 0.15)) { selection = mode }
+            }
+        } label: {
+            Image(systemName: mode.symbolName)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isOn ? AppColors.textPrimary : AppColors.textSecondary)
+                .frame(width: Self.segmentWidth, height: AppStyle.Control.height - (Self.inset * 2))
+                .background {
+                    if isOn {
+                        Capsule(style: .continuous)
+                            // Quiet lift over the track — avoids the native white thumb.
+                            .fill(Color.primary.opacity(0.08))
+                    }
+                }
+                .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(mode.label)
+        .accessibilityLabel(mode.label)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
 // MARK: - App list row
 
 private struct AppListRow: View {
@@ -580,7 +667,14 @@ private struct AppListRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            selectionIndicator
+            // Same pattern as App Caches: a native checkbox for appearance, with
+            // selection driven by the whole-row tap so AppKit doesn't steal focus.
+            Toggle("", isOn: .constant(isSelected))
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .tint(AppColors.buttonPrimaryBg)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
 
             Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
                 .resizable()
@@ -603,12 +697,6 @@ private struct AppListRow: View {
 
             Spacer(minLength: AppStyle.Spacing.small)
 
-            if app.isRunning {
-                Text("Open")
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-            }
-
             Text(isSizePending ? "…" : formatBytes(totalBytes))
                 .font(AppStyle.Typography.metadataEmphasis)
                 .foregroundStyle(AppColors.textSecondary)
@@ -617,7 +705,7 @@ private struct AppListRow: View {
                 .frame(minWidth: 72, alignment: .trailing)
         }
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 8)
+        .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -625,10 +713,7 @@ private struct AppListRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .stroke(
-                    isSelected ? AppColors.buttonPrimaryBg : AppColors.borderSubtle,
-                    lineWidth: isSelected ? 2 : 1
-                )
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
@@ -637,34 +722,19 @@ private struct AppListRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))"
-                + "\(app.isRunning ? ", open" : "")"
         )
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)
-    }
-
-    @ViewBuilder
-    private var selectionIndicator: some View {
-        if isSelected {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(AppColors.buttonPrimaryBg)
-                .background(Circle().fill(AppColors.bgCard).padding(1))
-        } else {
-            Image(systemName: "circle")
-                .font(.system(size: 20))
-                .foregroundStyle(isHovering ? AppColors.textSecondary : AppColors.textTertiary)
-        }
     }
 }
 
 private struct SkeletonAppListRow: View {
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            Circle()
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .stroke(Color.secondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
-                .frame(width: 20, height: 20)
+                .frame(width: 14, height: 14)
 
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.secondary.opacity(SkeletonOpacity.medium))
@@ -679,14 +749,14 @@ private struct SkeletonAppListRow: View {
             SkeletonBar(width: 54, height: 10, cornerRadius: 4)
         }
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 8)
+        .padding(.vertical, AppStyle.Spacing.small)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
                 .fill(AppColors.bgCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .stroke(AppColors.borderSubtle, lineWidth: 1)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
         .shimmering()
         .accessibilityHidden(true)
@@ -765,7 +835,7 @@ private struct AppTile: View {
         // Full name on hover, since the tile truncates longer ones.
         .help(app.name)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))\(app.isRunning ? ", open" : "")")
+        .accessibilityLabel("\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)
@@ -1275,7 +1345,7 @@ private struct UninstallSearchField: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .frame(width: 240)
+        .frame(width: 180)
         .background {
             Capsule(style: .continuous).fill(AppColors.bgElevated)
         }
