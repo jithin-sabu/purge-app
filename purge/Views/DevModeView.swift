@@ -965,13 +965,7 @@ struct DevToolsView<PageHeader: View>: View {
                             store.excludeProjectGroupFromScans(groupID: group.id)
                         },
                         .separator,
-                        .action(title: "Show in Finder") {
-                            FinderReveal.show(group.rootPath)
-                        },
-                        .action(title: "Copy Path") {
-                            FinderReveal.copyPaths([group.rootPath])
-                        }
-                    ]
+                    ] + FinderReveal.menuEntries(for: [ScanRowLocation(url: group.rootPath)])
                 }
             }
             // The overlay only answers a secondary click, which VoiceOver and the

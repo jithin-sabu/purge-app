@@ -189,7 +189,14 @@ struct UninstallView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(sortedOrphans) { item in
-                            orphanRow(item)
+                            UninstallItemRow(
+                                item: item,
+                                isSelected: Binding(
+                                    get: { store.orphanSelectedIDs.contains(item.id) },
+                                    set: { _ in store.toggleOrphanSelected(id: item.id) }
+                                ),
+                                togglesOnRowTap: true
+                            )
                         }
                     }
                     .padding(.horizontal, AppDetailPageLayout.horizontalInset)
@@ -225,57 +232,6 @@ struct UninstallView: View {
             ))
         }
         .scanTabSelectAllRowLayout()
-    }
-
-    private func orphanRow(_ item: UninstallItem) -> some View {
-        let isSelected = store.orphanSelectedIDs.contains(item.id)
-        return HStack(spacing: AppStyle.Spacing.small) {
-            Toggle("", isOn: Binding(
-                get: { isSelected },
-                set: { _ in store.toggleOrphanSelected(id: item.id) }
-            ))
-            .labelsHidden()
-            .toggleStyle(.checkbox)
-            .tint(AppColors.buttonPrimaryBg)
-
-            Image(systemName: item.category.symbolName)
-                .foregroundStyle(AppColors.textSecondary)
-                .frame(width: 20)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.safetyInfo.headline)
-                    .font(AppStyle.Typography.rowTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(displayDirectoryPath(for: item.path))
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            Text(item.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.textSecondary)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.small)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture { store.toggleOrphanSelected(id: item.id) }
     }
 
     private var filteredApps: [InstalledApp] {
@@ -654,6 +610,97 @@ private struct UninstallViewModeSwitcher: View {
     }
 }
 
+// MARK: - Uninstall path row
+
+/// Leftover list and review-sheet rows share this chrome so Show in Finder is
+/// available everywhere a path can go to Trash.
+private struct UninstallItemRow: View {
+    let item: UninstallItem
+    @Binding var isSelected: Bool
+    var isToggleDisabled: Bool = false
+    var togglesOnRowTap: Bool = false
+
+    @State private var isContextMenuActive = false
+
+    var body: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Toggle("", isOn: $isSelected)
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .tint(AppColors.buttonPrimaryBg)
+                .disabled(isToggleDisabled)
+                // Leftover list rows select from the whole-row tap, like App Caches.
+                // Review-sheet rows keep a live checkbox because they have no row tap.
+                .allowsHitTesting(!togglesOnRowTap)
+
+            Image(systemName: item.category.symbolName)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.safetyInfo.headline)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(displayDirectoryPath(for: item.path))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let keptForApp = item.keptForApp {
+                    Text("Kept, still used by \(keptForApp)")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.tagCheckText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            Spacer(minLength: AppStyle.Spacing.xSmall)
+
+            Text(item.formattedSize)
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(isContextMenuActive ? AppColors.bgOverlay : AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+        .modifier(OptionalRowTap(enabled: togglesOnRowTap && !isToggleDisabled) {
+            isSelected.toggle()
+        })
+        .finderRevealMenu(isMenuActive: $isContextMenuActive) {
+            [ScanRowLocation(url: item.path, sizeBytes: item.sizeBytes)]
+        }
+        .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
+    }
+}
+
+private struct OptionalRowTap: ViewModifier {
+    let enabled: Bool
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(perform: action)
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - App list row
 
 private struct AppListRow: View {
@@ -664,6 +711,7 @@ private struct AppListRow: View {
     let onToggle: () -> Void
 
     @State private var isHovering = false
+    @State private var isContextMenuActive = false
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
@@ -709,7 +757,7 @@ private struct AppListRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(isSelected || isHovering ? AppColors.bgOverlay : AppColors.bgCard)
+                .fill(isSelected || isHovering || isContextMenuActive ? AppColors.bgOverlay : AppColors.bgCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -726,6 +774,10 @@ private struct AppListRow: View {
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)
+        .finderRevealMenu(isMenuActive: $isContextMenuActive) {
+            [ScanRowLocation(url: app.bundleURL, sizeBytes: app.bundleSizeBytes)]
+        }
+        .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
     }
 }
 
@@ -781,6 +833,7 @@ private struct AppTile: View {
     let onToggle: () -> Void
 
     @State private var isHovering = false
+    @State private var isContextMenuActive = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -810,7 +863,7 @@ private struct AppTile: View {
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
                 .fill(AppColors.bgElevated)
                 .overlay {
-                    if isSelected || isHovering {
+                    if isSelected || isHovering || isContextMenuActive {
                         RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
                             .fill(AppColors.bgOverlay)
                     }
@@ -839,6 +892,10 @@ private struct AppTile: View {
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)
+        .finderRevealMenu(isMenuActive: $isContextMenuActive) {
+            [ScanRowLocation(url: app.bundleURL, sizeBytes: app.bundleSizeBytes)]
+        }
+        .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
     }
 
     @ViewBuilder
@@ -1073,7 +1130,14 @@ struct UninstallReviewSheet: View {
             }
 
             ForEach(appPlan.items) { $item in
-                itemRow($item)
+                UninstallItemRow(
+                    item: item,
+                    isSelected: $item.isSelected,
+                    // Locked off: while the other app is installed, the deletion
+                    // pass holds this file back regardless, so the tick must not
+                    // imply otherwise.
+                    isToggleDisabled: item.isKeptForOtherApp
+                )
             }
         }
     }
@@ -1097,63 +1161,6 @@ struct UninstallReviewSheet: View {
         for index in indices {
             appPlan.wrappedValue.items[index].isSelected = !allOn
         }
-    }
-
-    private func itemRow(_ item: Binding<UninstallItem>) -> some View {
-        let value = item.wrappedValue
-        return HStack(spacing: AppStyle.Spacing.small) {
-            Toggle("", isOn: item.isSelected)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .tint(AppColors.buttonPrimaryBg)
-                // Locked off: while the other app is installed, the deletion pass
-                // holds this file back regardless, so the tick must not imply
-                // otherwise.
-                .disabled(value.isKeptForOtherApp)
-
-            Image(systemName: value.category.symbolName)
-                .foregroundStyle(AppColors.textSecondary)
-                .frame(width: 20)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value.safetyInfo.headline)
-                    .font(AppStyle.Typography.rowTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(displayDirectoryPath(for: value.path))
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if let keptForApp = value.keptForApp {
-                    Text("Kept, still used by \(keptForApp)")
-                        .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(AppColors.tagCheckText)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-
-            Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            Text(value.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.textSecondary)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.small)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
-        )
     }
 
     private var footer: some View {
@@ -1202,7 +1209,10 @@ struct OrphanReviewSheet: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach($plan.items) { $item in
-                        itemRow($item)
+                        UninstallItemRow(
+                            item: item,
+                            isSelected: $item.isSelected
+                        )
                     }
                 }
                 .padding(.vertical, 2)
@@ -1226,52 +1236,6 @@ struct OrphanReviewSheet: View {
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private func itemRow(_ item: Binding<UninstallItem>) -> some View {
-        let value = item.wrappedValue
-        return HStack(spacing: AppStyle.Spacing.small) {
-            Toggle("", isOn: item.isSelected)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .tint(AppColors.buttonPrimaryBg)
-
-            Image(systemName: value.category.symbolName)
-                .foregroundStyle(AppColors.textSecondary)
-                .frame(width: 20)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value.safetyInfo.headline)
-                    .font(AppStyle.Typography.rowTitle)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(displayDirectoryPath(for: value.path))
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            Text(value.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.textSecondary)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.small)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
-        )
     }
 
     private var footer: some View {

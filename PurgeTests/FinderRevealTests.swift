@@ -72,4 +72,63 @@ struct FinderRevealTests {
 
         #expect(title == "~/Library/Caches/com.example.app")
     }
+
+    @Test func emptyLocationsProduceNoMenu() {
+        #expect(FinderReveal.menuEntries(for: []).isEmpty)
+    }
+
+    @Test func singleLocationUsesFlatShowAndCopy() {
+        let url = home.appendingPathComponent("Library/Caches/com.example.app")
+        let entries = FinderReveal.menuEntries(for: [ScanRowLocation(url: url, sizeBytes: 1_000)])
+
+        #expect(entries.count == 2)
+        guard entries.count >= 2 else { return }
+        guard case .action(let showTitle, _) = entries[0] else {
+            Issue.record("expected a flat Show in Finder action")
+            return
+        }
+        guard case .action(let copyTitle, _) = entries[1] else {
+            Issue.record("expected Copy Path")
+            return
+        }
+        #expect(showTitle == "Show in Finder")
+        #expect(copyTitle == "Copy Path")
+    }
+
+    /// Several folders become a submenu so Finder does not open one window per parent.
+    /// Largest first matches the visual order on scan rows.
+    @Test func multipleLocationsUseASubmenuLargestFirst() {
+        let smaller = ScanRowLocation(
+            url: home.appendingPathComponent("Library/Caches/small"),
+            sizeBytes: 100
+        )
+        let larger = ScanRowLocation(
+            url: home.appendingPathComponent("Library/Caches/large"),
+            sizeBytes: 200
+        )
+        let entries = FinderReveal.menuEntries(for: [smaller, larger])
+
+        #expect(entries.count == 2)
+        guard entries.count >= 2 else { return }
+        guard case .submenu(let title, let sub) = entries[0] else {
+            Issue.record("expected a Show in Finder submenu")
+            return
+        }
+        guard case .action(let copyTitle, _) = entries[1] else {
+            Issue.record("expected Copy Paths")
+            return
+        }
+        #expect(title == "Show in Finder")
+        #expect(copyTitle == "Copy Paths")
+        #expect(sub.count == 2)
+        guard sub.count >= 2 else { return }
+        guard case .action(let firstTitle, _) = sub[0],
+              case .action(let secondTitle, _) = sub[1]
+        else {
+            Issue.record("expected two submenu actions")
+            return
+        }
+        #expect(firstTitle == FinderReveal.menuTitle(for: larger))
+        #expect(secondTitle == FinderReveal.menuTitle(for: smaller))
+    }
 }
