@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import Foundation
 
 /// Discovers installed apps and, for a chosen app, every file it left behind.
@@ -27,11 +28,9 @@ nonisolated final class AppUninstallScanner {
         let bundleURLs = discoverAppBundleURLs()
         let runningIDs = runningBundleIDs()
 
-        // Size every bundle in one chunked `du` pass, then emit. Apps are a
-        // bounded set, so waiting for the sizes keeps the list sortable by size
-        // from the first render rather than reflowing as figures trickle in.
-        let sizes = FolderSizing.directorySizes(at: bundleURLs)
-
+        // Yield as soon as the bundle is identified. Spotlight's indexed size is
+        // a cheap first figure so the list can paint without waiting on `du`;
+        // `PurgeStore` walks each bundle afterwards and replaces the number.
         for bundleURL in bundleURLs {
             if Task.isCancelled { break }
             let bundle = Bundle(url: bundleURL)
@@ -40,7 +39,7 @@ nonisolated final class AppUninstallScanner {
                 continue
             }
             let name = displayName(for: bundleURL, bundle: bundle)
-            let size = sizes[bundleURL.standardizedFileURL.path] ?? 0
+            let size = InstalledAppBundleSizing.spotlightLogicalSize(at: bundleURL) ?? 0
             let isRunning = bundleID.map { runningIDs.contains($0) } ?? false
 
             continuation.yield(
@@ -210,5 +209,27 @@ nonisolated final class AppUninstallScanner {
             )
         }
         continuation.finish()
+    }
+}
+
+/// Fast first-pass bundle size from Spotlight's index (`kMDItemLogicalSize`).
+/// Missing, unindexed, or zero values are treated as unknown so the store can
+/// follow up with `du`.
+enum InstalledAppBundleSizing {
+    nonisolated static func spotlightLogicalSize(at url: URL) -> Int64? {
+        let path = url.standardizedFileURL.path as CFString
+        guard let item = MDItemCreate(nil, path) else { return nil }
+        guard let raw = MDItemCopyAttribute(item, "kMDItemLogicalSize" as CFString) else {
+            return nil
+        }
+        let bytes: Int64
+        if let value = raw as? Int64 {
+            bytes = value
+        } else if let number = raw as? NSNumber {
+            bytes = number.int64Value
+        } else {
+            return nil
+        }
+        return bytes > 0 ? bytes : nil
     }
 }

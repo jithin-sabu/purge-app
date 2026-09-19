@@ -98,4 +98,42 @@ struct AppUninstallScannerTests {
         #expect(apps.allSatisfy { !$0.bundleURL.path.hasPrefix("/System/") })
         #expect(apps.allSatisfy { $0.bundleID != "io.getpurge.app" })
     }
+
+    @Test
+    func spotlightLogicalSizeIgnoresMissingPaths() {
+        let missing = URL(fileURLWithPath: "/tmp/purge-missing-\(UUID().uuidString).app")
+        #expect(InstalledAppBundleSizing.spotlightLogicalSize(at: missing) == nil)
+    }
+}
+
+@Suite("Uninstaller sort options")
+struct AppSortOptionTests {
+    @Test
+    func sizeSortsWaitForFullMeasurement() {
+        #expect(AppSortOption.largest.needsFullMeasurement)
+        #expect(AppSortOption.smallest.needsFullMeasurement)
+        #expect(!AppSortOption.nameAZ.needsFullMeasurement)
+        #expect(!AppSortOption.recentlyInstalled.needsFullMeasurement)
+        #expect(!AppSortOption.oldestInstalled.needsFullMeasurement)
+    }
+
+    @Test
+    func nameSortIsAlphabeticalIgnoringCase() {
+        let older = InstalledApp(
+            name: "zoom",
+            bundleURL: URL(fileURLWithPath: "/Applications/zoom.app"),
+            bundleID: "us.zoom.xos",
+            bundleSizeBytes: 9,
+            isRunning: false
+        )
+        let newer = InstalledApp(
+            name: "Arc",
+            bundleURL: URL(fileURLWithPath: "/Applications/Arc.app"),
+            bundleID: "company.thebrowser.Browser",
+            bundleSizeBytes: 1,
+            isRunning: false
+        )
+        let sorted = AppSortOption.nameAZ.sorted([older, newer])
+        #expect(sorted.map(\.name) == ["Arc", "zoom"])
+    }
 }

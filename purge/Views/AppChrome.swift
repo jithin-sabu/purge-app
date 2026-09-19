@@ -367,7 +367,9 @@ struct AnimatedDeleteActionLabel: View {
     let inactiveTitle: String
     let activeTitle: String
     let selectedCount: Int
-    let selectedBytes: Int64
+    /// When nil, the active label shows no byte suffix (e.g. Uninstall, where the
+    /// review sheet owns the exact total).
+    var selectedBytes: Int64? = nil
     var systemImage = "trash.fill"
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -387,7 +389,10 @@ struct AnimatedDeleteActionLabel: View {
 
     private var accessibilityTitle: String {
         guard hasSelection else { return inactiveTitle }
-        return "\(activeTitle), \(formatBytes(selectedBytes)) selected"
+        if let selectedBytes {
+            return "\(activeTitle), \(formatBytes(selectedBytes)) selected"
+        }
+        return "\(activeTitle), \(selectedCount) selected"
     }
 
     var body: some View {
@@ -428,7 +433,7 @@ struct AnimatedDeleteActionLabel: View {
             Text(hasSelection ? activeTitle : inactiveTitle)
                 .contentTransition(reduceMotion ? .identity : .opacity)
 
-            if hasSelection {
+            if hasSelection, selectedBytes != nil {
                 selectionSuffix
                     .transition(suffixTransition)
             }
@@ -437,13 +442,16 @@ struct AnimatedDeleteActionLabel: View {
         .animation(textAnimation, value: selectedBytes)
     }
 
+    @ViewBuilder
     private var selectionSuffix: some View {
-        HStack(spacing: 0) {
-            Text(" (")
-            Text(formatBytes(selectedBytes))
-                .monospacedDigit()
-                .contentTransition(reduceMotion ? .identity : .numericText())
-            Text(")")
+        if let selectedBytes {
+            HStack(spacing: 0) {
+                Text(" (")
+                Text(formatBytes(selectedBytes))
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                Text(")")
+            }
         }
     }
 

@@ -52,13 +52,19 @@ struct FilterChip: View {
         HStack(spacing: Self.contentSpacing) {
             if let leadingSystemImage {
                 Image(systemName: leadingSystemImage)
-                    .imageScale(.small)
+                    // Badged symbols (e.g. clock.badge.xmark) report a taller
+                    // ideal size than a plain glyph. Size and clip so every
+                    // chip shares one height.
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(foregroundColor)
                     .frame(width: 14, height: 14)
+                    .clipped()
                     .accessibilityHidden(true)
             }
 
-            labelView
+            if !label.isEmpty {
+                labelView
+            }
 
             if style == .dropdown {
                 Image(systemName: "chevron.down")
@@ -67,7 +73,7 @@ struct FilterChip: View {
                     .accessibilityHidden(true)
             } else if let count {
                 Text("\(count)")
-                    .font(.callout.weight(.medium))
+                    .font(.system(size: Self.labelSize, weight: .medium))
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .foregroundStyle(countColor)
