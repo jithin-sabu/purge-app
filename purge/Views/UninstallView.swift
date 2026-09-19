@@ -55,7 +55,28 @@ enum AppSortOption: String, CaseIterable, Identifiable {
     }
 }
 
-/// The Uninstall tab: a grid of installed apps, multi-selectable. Ticking apps
+private enum UninstallAppViewMode: String, CaseIterable, Identifiable {
+    case list
+    case grid
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .list: return "List"
+        case .grid: return "Grid"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .list: return "list.bullet"
+        case .grid: return "square.grid.2x2"
+        }
+    }
+}
+
+/// The Uninstall tab: a list or grid of installed apps, multi-selectable. Ticking apps
 /// and pressing Uninstall Selected gathers each app's leftovers and opens a
 /// review sheet before anything moves to the Trash.
 struct UninstallView: View {
@@ -66,6 +87,9 @@ struct UninstallView: View {
     /// Session-only: leaving this tab rebuilds the view, and a launch starts
     /// fresh, so size sort never survives a trip away from Uninstall.
     @State private var selectedSort = AppSortOption.nameAZ
+    /// List is the first-run default; after that, honor the user's preferred
+    /// density across tab changes and launches.
+    @AppStorage("view.uninstaller") private var viewModeRaw = UninstallAppViewMode.list.rawValue
     @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
 
     /// The active view lives on the store so the tab header can swap its action
@@ -83,6 +107,17 @@ struct UninstallView: View {
             return .nameAZ
         }
         return selectedSort
+    }
+
+    private var viewMode: UninstallAppViewMode {
+        UninstallAppViewMode(rawValue: viewModeRaw) ?? .list
+    }
+
+    private var viewModeBinding: Binding<UninstallAppViewMode> {
+        Binding(
+            get: { viewMode },
+            set: { viewModeRaw = $0.rawValue }
+        )
     }
 
     private static let columns = Array(
@@ -123,7 +158,7 @@ struct UninstallView: View {
     private var content: some View {
         switch section {
         case .installedApps:
-            grid
+            appsContent
         case .leftovers:
             leftoversScroll
         }
@@ -289,7 +324,8 @@ struct UninstallView: View {
                 sectionSegments
             }
 
-            // Sort and search apply to the app grid only; hide them on the
+            // Sort, search and view mode apply to installed apps only; hide
+            // them on the
             // leftovers view so its controls (Select all, Remove) stand alone.
             if section == .installedApps {
                 AppDropdown(
@@ -314,6 +350,7 @@ struct UninstallView: View {
 
                 Spacer(minLength: 8)
                 UninstallSearchField(query: $appSearchQuery)
+                viewModePicker
             } else {
                 Spacer(minLength: 8)
             }
@@ -353,14 +390,29 @@ struct UninstallView: View {
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    // MARK: Grid
+    private var viewModePicker: some View {
+        Picker("App view", selection: viewModeBinding) {
+            ForEach(UninstallAppViewMode.allCases) { mode in
+                Label(mode.label, systemImage: mode.symbolName)
+                    .labelStyle(.iconOnly)
+                    .tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .accessibilityLabel("App view")
+        .accessibilityValue(viewMode.label)
+    }
+
+    // MARK: App collection
 
     private var isLoadingApps: Bool {
         store.isScanningInstalledApps && store.installedApps.isEmpty
     }
 
     @ViewBuilder
-    private var grid: some View {
+    private var appsContent: some View {
         if store.installedApps.isEmpty && !store.isScanningInstalledApps {
             emptyState(
                 symbol: "app.badge",
@@ -368,18 +420,18 @@ struct UninstallView: View {
                 detail: "Purge looks in Applications and your home Applications folder."
             )
         } else {
-            // Crossfade the skeleton into the real grid instead of swapping view
+            // Crossfade the skeleton into the real collection instead of swapping view
             // trees, so the load resolves smoothly rather than popping in.
             ScanContentCrossfade(isLoading: isLoadingApps, contentAlignment: .top) {
-                skeletonGrid
+                loadingApps
             } loaded: {
-                loadedGrid
+                loadedApps
             }
         }
     }
 
     @ViewBuilder
-    private var loadedGrid: some View {
+    private var loadedApps: some View {
         if store.installedApps.isEmpty {
             // Held behind the skeleton while the first scan runs; nothing to show.
             Color.clear
@@ -390,39 +442,96 @@ struct UninstallView: View {
                 detail: "No installed app matches \"\(appSearchQuery)\"."
             )
         } else {
-            ScrollView {
-                LazyVGrid(columns: Self.columns, spacing: 12) {
-                    ForEach(filteredApps) { app in
-                        AppTile(
-                            app: app,
-                            totalBytes: store.removableBytes(for: app),
-                            isSizePending: store.removableBytes(for: app) == 0
-                                && !store.hasMeasuredAllRemovableTotals,
-                            isSelected: store.selectedAppIDs.contains(app.id)
-                        ) {
-                            store.toggleAppSelected(id: app.id)
-                        }
+            switch viewMode {
+            case .list:
+                loadedList
+            case .grid:
+                loadedGrid
+            }
+        }
+    }
+
+    private var loadedList: some View {
+        ScrollView {
+            LazyVStack(spacing: 6) {
+                ForEach(filteredApps) { app in
+                    AppListRow(
+                        app: app,
+                        totalBytes: store.removableBytes(for: app),
+                        isSizePending: store.removableBytes(for: app) == 0
+                            && !store.hasMeasuredAllRemovableTotals,
+                        isSelected: store.selectedAppIDs.contains(app.id)
+                    ) {
+                        store.toggleAppSelected(id: app.id)
                     }
                 }
-                .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-                .padding(.top, 2)
-                .padding(.bottom, AppStyle.Spacing.large)
-                // When the background pass finishes measuring every app's full
-                // footprint, the size sort flips from bundle-size order to
-                // total-removable order all at once. Keying the animation on the
-                // current tile order lets LazyVGrid slide each tile to its new
-                // slot (identity is the stable app id) instead of popping.
-                .animation(reduceMotion ? nil : tileReorderAnimation, value: filteredApps.map(\.id))
             }
-            .scrollContentBackground(.hidden)
-            .background(AppColors.bgBase)
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+            .padding(.top, 2)
+            .padding(.bottom, AppStyle.Spacing.large)
+            .animation(reduceMotion ? nil : tileReorderAnimation, value: filteredApps.map(\.id))
         }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.bgBase)
+    }
+
+    private var loadedGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: Self.columns, spacing: 12) {
+                ForEach(filteredApps) { app in
+                    AppTile(
+                        app: app,
+                        totalBytes: store.removableBytes(for: app),
+                        isSizePending: store.removableBytes(for: app) == 0
+                            && !store.hasMeasuredAllRemovableTotals,
+                        isSelected: store.selectedAppIDs.contains(app.id)
+                    ) {
+                        store.toggleAppSelected(id: app.id)
+                    }
+                }
+            }
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+            .padding(.top, 2)
+            .padding(.bottom, AppStyle.Spacing.large)
+            // Once measurement finishes, choosing a size sort moves every app
+            // in one stable transition instead of reshuffling during the scan.
+            .animation(reduceMotion ? nil : tileReorderAnimation, value: filteredApps.map(\.id))
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.bgBase)
     }
 
     // MARK: Loading
 
-    /// Shown while the first scan sizes every bundle: a grid of placeholder tiles
-    /// in the real tile's shape, so the list crossfades in without a layout jump.
+    @ViewBuilder
+    private var loadingApps: some View {
+        switch viewMode {
+        case .list:
+            skeletonList
+        case .grid:
+            skeletonGrid
+        }
+    }
+
+    private var skeletonList: some View {
+        ScrollView {
+            LazyVStack(spacing: 6) {
+                ForEach(0..<12, id: \.self) { _ in
+                    SkeletonAppListRow()
+                }
+            }
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+            .padding(.top, 2)
+            .padding(.bottom, AppStyle.Spacing.large)
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.bgBase)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Finding installed apps")
+    }
+
+    /// Shown while the first scan discovers app bundles. It normally lasts only
+    /// until the first app is emitted; sizes continue to settle in the real view.
     private var skeletonGrid: some View {
         ScrollView {
             LazyVGrid(columns: Self.columns, spacing: 12) {
@@ -455,6 +564,132 @@ struct UninstallView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 24)
+    }
+}
+
+// MARK: - App list row
+
+private struct AppListRow: View {
+    let app: InstalledApp
+    let totalBytes: Int64
+    let isSizePending: Bool
+    let isSelected: Bool
+    let onToggle: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            selectionIndicator
+
+            Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
+                .resizable()
+                .frame(width: 36, height: 36)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(app.name)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Text(app.bundleURL.deletingLastPathComponent().path)
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.small)
+
+            if app.isRunning {
+                Text("Open")
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+
+            Text(isSizePending ? "…" : formatBytes(totalBytes))
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .frame(minWidth: 72, alignment: .trailing)
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(isSelected || isHovering ? AppColors.bgOverlay : AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .stroke(
+                    isSelected ? AppColors.buttonPrimaryBg : AppColors.borderSubtle,
+                    lineWidth: isSelected ? 2 : 1
+                )
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+        .onHover { isHovering = $0 }
+        .help(app.name)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))"
+                + "\(app.isRunning ? ", open" : "")"
+        )
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(.default, onToggle)
+    }
+
+    @ViewBuilder
+    private var selectionIndicator: some View {
+        if isSelected {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(AppColors.buttonPrimaryBg)
+                .background(Circle().fill(AppColors.bgCard).padding(1))
+        } else {
+            Image(systemName: "circle")
+                .font(.system(size: 20))
+                .foregroundStyle(isHovering ? AppColors.textSecondary : AppColors.textTertiary)
+        }
+    }
+}
+
+private struct SkeletonAppListRow: View {
+    var body: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Circle()
+                .stroke(Color.secondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
+                .frame(width: 20, height: 20)
+
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.secondary.opacity(SkeletonOpacity.medium))
+                .frame(width: 36, height: 36)
+
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonBar(width: 120, height: 12, cornerRadius: 4)
+                SkeletonBar(width: 180, height: 9, cornerRadius: 4)
+            }
+
+            Spacer()
+            SkeletonBar(width: 54, height: 10, cornerRadius: 4)
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .stroke(AppColors.borderSubtle, lineWidth: 1)
+        )
+        .shimmering()
+        .accessibilityHidden(true)
     }
 }
 
