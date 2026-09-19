@@ -42,4 +42,37 @@ enum FinderReveal {
         guard let sizeBytes = location.sizeBytes, sizeBytes > 0 else { return path }
         return "\(path) — \(formatBytes(sizeBytes))"
     }
+
+    /// Right-click actions used by scan rows and the uninstaller. One location is a
+    /// flat "Show in Finder"; several become a submenu, largest first, so the user
+    /// can pick which folder to open instead of fanning out Finder windows.
+    static func menuEntries(for locations: [ScanRowLocation]) -> [ScanRowMenuEntry] {
+        let locations = locations.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
+        guard !locations.isEmpty else { return [] }
+
+        var entries: [ScanRowMenuEntry] = []
+        if locations.count == 1 {
+            let url = locations[0].url
+            entries.append(.action(title: "Show in Finder") { show(url) })
+        } else {
+            entries.append(
+                .submenu(
+                    title: "Show in Finder",
+                    entries: locations.map { location in
+                        .action(title: menuTitle(for: location)) {
+                            show(location.url)
+                        }
+                    }
+                )
+            )
+        }
+
+        let urls = locations.map(\.url)
+        entries.append(
+            .action(title: urls.count == 1 ? "Copy Path" : "Copy Paths") {
+                copyPaths(urls)
+            }
+        )
+        return entries
+    }
 }

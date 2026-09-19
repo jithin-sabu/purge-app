@@ -199,38 +199,13 @@ struct ScanResultRow: View {
             entries.append(.action(title: "Exclude from scans", handler: onExcludeFromScans))
         }
 
-        // Largest first, so the submenu leads with the folder holding the bulk.
-        let locations = (revealLocations?() ?? [])
-            .sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
-        guard !locations.isEmpty else { return entries }
+        let finderEntries = FinderReveal.menuEntries(for: revealLocations?() ?? [])
+        guard !finderEntries.isEmpty else { return entries }
 
         if !entries.isEmpty {
             entries.append(.separator)
         }
-
-        if locations.count == 1 {
-            let url = locations[0].url
-            entries.append(.action(title: "Show in Finder") { FinderReveal.show(url) })
-        } else {
-            entries.append(
-                .submenu(
-                    title: "Show in Finder",
-                    entries: locations.map { location in
-                        .action(title: FinderReveal.menuTitle(for: location)) {
-                            FinderReveal.show(location.url)
-                        }
-                    }
-                )
-            )
-        }
-
-        let urls = locations.map(\.url)
-        entries.append(
-            .action(title: urls.count == 1 ? "Copy Path" : "Copy Paths") {
-                FinderReveal.copyPaths(urls)
-            }
-        )
-
+        entries.append(contentsOf: finderEntries)
         return entries
     }
 
@@ -466,7 +441,7 @@ struct ScanResultRow: View {
 /// and formatting we deliberately defer to right-click. "Show in Finder" therefore
 /// reveals the largest location (the one the visual submenu lists first), and "Copy Path"
 /// copies every location, matching what the menu's "Copy Paths" does.
-private struct ScanRowAccessibilityActions: ViewModifier {
+struct ScanRowAccessibilityActions: ViewModifier {
     let onExcludeFromScans: (() -> Void)?
     let revealLocations: (() -> [ScanRowLocation])?
 
@@ -508,6 +483,27 @@ private struct ScanRowAccessibilityActions: ViewModifier {
 }
 
 // MARK: - Row context menu
+
+extension View {
+    /// Same Show in Finder / Copy Path overlay App Caches and Dev Tools use.
+    /// `locations` is evaluated on right-click, never during `body`.
+    func finderRevealMenu(
+        isMenuActive: Binding<Bool>,
+        locations: @escaping () -> [ScanRowLocation]
+    ) -> some View {
+        overlay {
+            ScanRowContextMenu(isMenuActive: isMenuActive, entries: {
+                FinderReveal.menuEntries(for: locations())
+            })
+        }
+        .modifier(
+            ScanRowAccessibilityActions(
+                onExcludeFromScans: nil,
+                revealLocations: locations
+            )
+        )
+    }
+}
 
 /// One entry in a scan row's right-click menu.
 enum ScanRowMenuEntry {
