@@ -17,6 +17,7 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
     let options: [Option]
     let selection: Option
     let optionLabel: (Option) -> String
+    var isOptionEnabled: (Option) -> Bool = { _ in true }
     let onSelect: (Option) -> Void
     @ViewBuilder let trigger: Trigger
 
@@ -71,8 +72,10 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
             ForEach(options, id: \.self) { option in
                 AppDropdownRow(
                     label: optionLabel(option),
-                    isSelected: option == selection
+                    isSelected: option == selection,
+                    isEnabled: isOptionEnabled(option)
                 ) {
+                    guard isOptionEnabled(option) else { return }
                     onSelect(option)
                     panel.dismiss()
                 }
@@ -92,6 +95,7 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
 private struct AppDropdownRow: View {
     let label: String
     let isSelected: Bool
+    var isEnabled: Bool = true
     let onSelect: () -> Void
 
     @State private var isHovered = false
@@ -115,15 +119,18 @@ private struct AppDropdownRow: View {
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                isHovered ? AppColors.bgElevated : .clear,
+                isHovered && isEnabled ? AppColors.bgElevated : .clear,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
             )
             .contentShape(Rectangle())
+            .opacity(isEnabled ? 1 : 0.4)
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
         .onHover { isHovered = $0 }
         .accessibilityLabel(label)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityHint(isEnabled ? "" : "Available after the scan finishes")
     }
 }
 

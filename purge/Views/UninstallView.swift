@@ -3,6 +3,9 @@ import SwiftUI
 
 /// Ordering for the app grid. Separate from Large Files' `SortOption` because the
 /// date here is install date, not last-used, and the labels say so.
+///
+/// Default is name: leftover sizes must never reshuffle the list. Size order is
+/// offered only after every app's total has been measured, and is not persisted.
 enum AppSortOption: String, CaseIterable, Identifiable {
     case largest
     case smallest
@@ -32,6 +35,15 @@ enum AppSortOption: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Size order keys on leftover-inclusive totals, which are not known until
+    /// the background pass finishes. Name and date never wait.
+    var needsFullMeasurement: Bool {
+        switch self {
+        case .largest, .smallest: return true
+        case .nameAZ, .recentlyInstalled, .oldestInstalled: return false
+        }
+    }
+
     func sorted(_ apps: [InstalledApp]) -> [InstalledApp] {
         switch self {
         case .largest: return apps.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
@@ -51,7 +63,9 @@ struct UninstallView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var appSearchQuery = ""
-    @AppStorage("sort.uninstaller") private var sortRaw = AppSortOption.largest.rawValue
+    /// Session-only: leaving this tab rebuilds the view, and a launch starts
+    /// fresh, so size sort never survives a trip away from Uninstall.
+    @State private var selectedSort = AppSortOption.nameAZ
     @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
 
     /// The active view lives on the store so the tab header can swap its action
@@ -65,7 +79,10 @@ struct UninstallView: View {
     }
 
     private var currentSort: AppSortOption {
-        AppSortOption(rawValue: sortRaw) ?? .largest
+        if selectedSort.needsFullMeasurement, !store.hasMeasuredAllRemovableTotals {
+            return .nameAZ
+        }
+        return selectedSort
     }
 
     private static let columns = Array(
@@ -94,6 +111,11 @@ struct UninstallView: View {
         // shows a segment that is no longer there.
         .onChange(of: showsLeftoversSegment) { shows in
             if !shows { store.uninstallSection = .installedApps }
+        }
+        .onChange(of: store.hasMeasuredAllRemovableTotals) { measured in
+            if !measured, selectedSort.needsFullMeasurement {
+                selectedSort = .nameAZ
+            }
         }
     }
 
@@ -274,7 +296,10 @@ struct UninstallView: View {
                     options: AppSortOption.allCases,
                     selection: currentSort,
                     optionLabel: { $0.displayName },
-                    onSelect: { sortRaw = $0.rawValue }
+                    isOptionEnabled: { option in
+                        !option.needsFullMeasurement || store.hasMeasuredAllRemovableTotals
+                    },
+                    onSelect: { selectedSort = $0 }
                 ) {
                     FilterChip(
                         style: .dropdown,
@@ -371,6 +396,8 @@ struct UninstallView: View {
                         AppTile(
                             app: app,
                             totalBytes: store.removableBytes(for: app),
+                            isSizePending: store.removableBytes(for: app) == 0
+                                && !store.hasMeasuredAllRemovableTotals,
                             isSelected: store.selectedAppIDs.contains(app.id)
                         ) {
                             store.toggleAppSelected(id: app.id)
@@ -443,6 +470,8 @@ private struct AppTile: View {
     let app: InstalledApp
     /// Bundle plus all matched leftovers once measured, bundle size until then.
     let totalBytes: Int64
+    /// True while this tile still has no size to show (Spotlight and `du` pending).
+    let isSizePending: Bool
     let isSelected: Bool
     let onToggle: () -> Void
 
@@ -461,7 +490,7 @@ private struct AppTile: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                Text(formatBytes(totalBytes))
+                Text(isSizePending ? "…" : formatBytes(totalBytes))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -501,7 +530,7 @@ private struct AppTile: View {
         // Full name on hover, since the tile truncates longer ones.
         .help(app.name)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(app.name), \(formatBytes(totalBytes))\(app.isRunning ? ", open" : "")")
+        .accessibilityLabel("\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))\(app.isRunning ? ", open" : "")")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)

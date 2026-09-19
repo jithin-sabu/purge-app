@@ -223,8 +223,8 @@ final class PurgeStore: ObservableObject {
 
     // MARK: Uninstaller (issue #45)
 
-    /// Apps the picker offers, as selectable tiles. Sorted largest-first once
-    /// sizes resolve.
+    /// Apps the picker offers, as selectable tiles. Order is decided in the
+    /// view (alphabetical by default); this array is not pre-sorted by size.
     @Published var installedApps: [InstalledApp] = []
     @Published var isScanningInstalledApps = false
     @Published private(set) var hasCompletedInstalledAppsScan = false
@@ -1410,8 +1410,8 @@ final class PurgeStore: ObservableObject {
         await scanInstalledApps()
     }
 
-    /// Populates the app picker. Apps stream in and are re-sorted largest-first as
-    /// their sizes land, the same progressive fill the other scans use.
+    /// Populates the app picker. Names (and any Spotlight size) stream in first
+    /// so the list can paint; bundle `du` and leftover totals follow in place.
     func scanInstalledApps() async {
         refreshPermission()
         guard hasFullDiskAccess else { return }
@@ -1431,19 +1431,53 @@ final class PurgeStore: ObservableObject {
         for await app in uninstallScanner.installedAppsStream() {
             guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
             collected.append(app)
-            installedApps = collected.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
+            installedApps = collected
         }
         // Only a stream that ran to completion counts as a finished scan. A
         // cancelled or superseded run leaves `hasCompletedInstalledAppsScan`
         // false so `scanInstalledAppsIfNeeded` will scan again rather than trust a
         // partial list.
         guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
-        installedApps = collected.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
+        installedApps = collected
         hasCompletedInstalledAppsScan = true
 
-        // Fill in each tile's "total freed" (bundle + all matched leftovers) in
-        // the background, so the list appears immediately and the numbers settle in.
-        Task { await measureRemovableTotals(generation: generation) }
+        // Bundle sizes first, then leftover-inclusive totals. Both write in
+        // place so alphabetical order never jumps.
+        Task {
+            await measureBundleSizes(generation: generation)
+            await measureRemovableTotals(generation: generation)
+        }
+    }
+
+    /// Replaces Spotlight's first-pass size with a `du` walk, chunk by chunk, so
+    /// the number on each tile settles without waiting for every app up front.
+    private func measureBundleSizes(generation: Int) async {
+        let urls = installedApps.map(\.bundleURL)
+        guard !urls.isEmpty else { return }
+
+        var index = 0
+        while index < urls.count {
+            if installedAppsScanGeneration != generation || Task.isCancelled { return }
+            let end = min(index + FolderSizing.duChunkSize, urls.count)
+            let chunk = Array(urls[index..<end])
+            index = end
+
+            let sizes = await Task.detached(priority: .utility) {
+                FolderSizing.directorySizesForChunk(chunk)
+            }.value
+
+            guard installedAppsScanGeneration == generation else { return }
+            var updated = installedApps
+            var changed = false
+            for i in updated.indices {
+                let path = updated[i].bundleURL.standardizedFileURL.path
+                if let size = sizes[path] {
+                    updated[i].bundleSizeBytes = size
+                    changed = true
+                }
+            }
+            if changed { installedApps = updated }
+        }
     }
 
     /// For each app, sums the bundle plus every leftover matched to it, so the
