@@ -2663,7 +2663,7 @@
     "key": "cursor-agent-leftover",
     "display_name": "Cursor Agent Leftovers",
     "tag": "medium",
-    "explanation": "Isolated checkouts Cursor agents leave behind. Fine to remove if you are done with that job, but look first in case you still need the files.",
+    "explanation": "Isolated Git checkouts and leftover temp or empty-window folders under ~/.cursor/projects. Fine to remove if you are done with that job, but look first in case you still need the files.",
     "bundle_ids": [],
     "aliases": [
       "cursor-agent-leftover"

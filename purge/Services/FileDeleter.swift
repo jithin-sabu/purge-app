@@ -125,6 +125,20 @@ nonisolated final class FileDeleter: Sendable {
             let decision = DeletionSafetyPolicy.evaluate(url)
             switch decision {
             case .allow:
+                if CursorAgentLeftoverScanPolicy.looksLikeCursorLeftoverPath(
+                    url,
+                    home: FileManager.default.homeDirectoryForCurrentUser
+                ),
+                   !CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(url) {
+                    skippedItems.append(SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: "This file was skipped for safety",
+                        isUserVisible: true
+                    ))
+                    continue
+                }
+
                 onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
                 let size = pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.directoryByteSize(at: url)
 

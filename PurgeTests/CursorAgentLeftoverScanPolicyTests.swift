@@ -5,13 +5,25 @@ import Testing
 @Suite("Cursor agent leftover path shape never includes settings or live project folders")
 struct CursorAgentLeftoverWhitelistTests {
     @Test
-    func leafWorktreeIsAllowed() {
-        let url = TestPaths.homeURL(".cursor", "worktrees", "purge", "abc")
+    func leafWorktreeIsAllowed() throws {
+        let fm = FileManager.default
+        let token = UUID().uuidString.prefix(8)
+        let url = TestPaths.homeURL(".cursor", "worktrees", "purge-test-\(token)", "abc")
+        try fm.createDirectory(at: url, withIntermediateDirectories: true)
+        try Data().write(to: url.appendingPathComponent(".git"))
+        defer { try? fm.removeItem(at: url.deletingLastPathComponent()) }
+
         #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
         #expect(CursorAgentLeftoverScanPolicy.isEligibleForDeletion(
             url,
             home: FileManager.default.homeDirectoryForCurrentUser
         ))
+    }
+
+    @Test
+    func twoComponentWorktreeWithoutGitIsRefused() {
+        let url = TestPaths.homeURL(".cursor", "worktrees", "purge", "abc")
+        #expect(DeletionSafetyPolicy.evaluate(url) != .allow)
     }
 
     @Test
@@ -58,6 +70,17 @@ struct CursorAgentLeftoverWhitelistTests {
     }
 
     @Test
+    func genericTmpSlugWithoutUUIDIsRefused() {
+        let url = TestPaths.homeURL(".cursor", "projects", "tmp-scratch")
+        #expect(DeletionSafetyPolicy.evaluate(url) != .allow)
+        #expect(!CursorAgentLeftoverScanPolicy.isJunkProjectSlug("tmp-scratch"))
+        #expect(!CursorAgentLeftoverScanPolicy.isJunkProjectSlug("private-tmp-notes"))
+        #expect(CursorAgentLeftoverScanPolicy.isJunkProjectSlug(
+            "tmp-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        ))
+    }
+
+    @Test
     func numericEmptyWindowNamespaceIsAllowed() {
         let url = TestPaths.homeURL(".cursor", "projects", "1775773462384")
         #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
@@ -101,6 +124,8 @@ struct CursorAgentLeftoverScanPolicyTests {
             openWorkspacePaths: [],
             emptyWindowBackupIDs: [],
             processWorkingDirectories: [],
+            cursorProcessSnapshot: .available,
+            windowsSnapshot: .available,
             temporaryDirectory: tmp
         )
     }
@@ -197,17 +222,75 @@ struct CursorAgentLeftoverScanPolicyTests {
     }
 
     @Test
-    func runningCursorWithoutProcessCwdsHidesAllWorktrees() throws {
+    func runningCursorWithoutProcessSnapshotHidesAllWorktrees() throws {
         let home = try makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
         try gitWorktree(at: home.appendingPathComponent(".cursor/worktrees/purge/abc", isDirectory: true))
 
         var live = idleLive(tmp: home.appendingPathComponent("tmp", isDirectory: true))
         live.cursorIsRunning = true
+        live.cursorProcessSnapshot = .unavailable
         live.processWorkingDirectories = []
 
         let found = CursorAgentLeftoverScanPolicy.unusedWorktrees(home: home, live: live)
         #expect(found.isEmpty)
+    }
+
+    @Test
+    func runningCursorWithSuccessfulProcessSnapshotStillListsFinishedWorktree() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try gitWorktree(at: home.appendingPathComponent(".cursor/worktrees/purge/abc", isDirectory: true))
+
+        var live = idleLive(tmp: home.appendingPathComponent("tmp", isDirectory: true))
+        live.cursorIsRunning = true
+        live.cursorProcessSnapshot = .available
+        live.processWorkingDirectories = [home.path]
+
+        let found = CursorAgentLeftoverScanPolicy.unusedWorktrees(home: home, live: live)
+        #expect(found.count == 1)
+    }
+
+    @Test
+    func numericNamespaceHiddenWhenWindowsSnapshotUnavailableAndCursorRunning() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let slug = "1789734813690"
+        try FileManager.default.createDirectory(
+            at: home.appendingPathComponent(".cursor/projects/\(slug)", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        var live = idleLive(tmp: home.appendingPathComponent("tmp", isDirectory: true))
+        live.cursorIsRunning = true
+        live.windowsSnapshot = .unavailable
+        #expect(CursorAgentLeftoverScanPolicy.unusedJunkProjectNamespaces(home: home, live: live).isEmpty)
+
+        live.windowsSnapshot = .available
+        #expect(CursorAgentLeftoverScanPolicy.unusedJunkProjectNamespaces(home: home, live: live).count == 1)
+    }
+
+    @Test
+    func worktreeReachedThroughSymlinkIsRefused() throws {
+        let fm = FileManager.default
+        let token = UUID().uuidString.prefix(8)
+        let real = TestPaths.homeURL(".cursor", "worktrees", "purge-real-\(token)", "abc")
+        try fm.createDirectory(at: real, withIntermediateDirectories: true)
+        try Data().write(to: real.appendingPathComponent(".git"))
+        let link = TestPaths.homeURL(".cursor", "worktrees", "purge-link-\(token)")
+        try fm.createSymbolicLink(
+            at: link,
+            withDestinationURL: real.deletingLastPathComponent()
+        )
+        defer {
+            try? fm.removeItem(at: link)
+            try? fm.removeItem(at: real.deletingLastPathComponent())
+        }
+
+        let viaLink = link.appendingPathComponent("abc")
+        try Data().write(to: viaLink.appendingPathComponent(".git"))
+        #expect(DeletionSafetyPolicy.evaluate(viaLink) != .allow)
+        #expect(!CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(viaLink))
     }
 
     @Test

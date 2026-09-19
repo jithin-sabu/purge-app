@@ -23,6 +23,11 @@ enum CursorAgentLeftoverScanPolicy {
     static let explanationKey = "cursor-agent-leftover"
     static let cursorBundleID = "com.todesktop.230313mzl4w4u92"
 
+    nonisolated enum SnapshotStatus: Equatable {
+        case available
+        case unavailable
+    }
+
     /// Snapshot of "is this folder still in use" signals. Production fills it
     /// from the running system; tests pass a fixture.
     nonisolated struct LiveContext: Equatable {
@@ -30,6 +35,12 @@ enum CursorAgentLeftoverScanPolicy {
         var openWorkspacePaths: Set<String>
         var emptyWindowBackupIDs: Set<String>
         var processWorkingDirectories: Set<String>
+        /// Whether Cursor-related process cwd inspection finished. An empty
+        /// cwd set is not evidence of success.
+        var cursorProcessSnapshot: SnapshotStatus
+        /// Whether `storage.json` was present and parsed. Missing or invalid
+        /// data is unavailable, not "no windows".
+        var windowsSnapshot: SnapshotStatus
         var temporaryDirectory: URL
 
         nonisolated static func current(
@@ -38,11 +49,14 @@ enum CursorAgentLeftoverScanPolicy {
             let cursorSupport = home
                 .appendingPathComponent("Library/Application Support/Cursor", isDirectory: true)
             let windows = readOpenWindows(from: cursorSupport)
+            let processes = CursorProcessWorkingDirectories.snapshot()
             return LiveContext(
                 cursorIsRunning: isCursorRunning(),
                 openWorkspacePaths: windows.folders,
                 emptyWindowBackupIDs: windows.emptyWindowIDs,
-                processWorkingDirectories: ProcessWorkingDirectories.allStandardizedPaths(),
+                processWorkingDirectories: processes.directories,
+                cursorProcessSnapshot: processes.status,
+                windowsSnapshot: windows.status,
                 temporaryDirectory: FileManager.default.temporaryDirectory.standardizedFileURL
             )
         }
@@ -58,6 +72,10 @@ enum CursorAgentLeftoverScanPolicy {
     }
 
     nonisolated static func isWhitelistedPath(_ path: String, home: String) -> Bool {
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        guard !containsSymlinkComponent(url, home: home) else { return false }
+        guard staysInsideIntendedCursorRoot(url, home: home) else { return false }
+
         let worktreesRoot = "\(home)/.cursor/worktrees/"
         if path.hasPrefix(worktreesRoot) {
             return isWhitelistedWorktreePath(path, prefix: worktreesRoot)
@@ -67,7 +85,12 @@ enum CursorAgentLeftoverScanPolicy {
         if path.hasPrefix(projectsRoot) {
             let relative = String(path.dropFirst(projectsRoot.count))
             guard !relative.isEmpty, !relative.contains("/") else { return false }
-            return isJunkProjectSlug(relative)
+            guard isJunkProjectSlug(relative) else { return false }
+            if isNumericProjectSlug(relative),
+               numericNamespacesBlockedByUnavailableWindows(home: home) {
+                return false
+            }
+            return true
         }
 
         return false
@@ -76,8 +99,30 @@ enum CursorAgentLeftoverScanPolicy {
     nonisolated static func isJunkProjectSlug(_ name: String) -> Bool {
         if name.hasPrefix(".") { return false }
         if name.hasPrefix("var-folders-") { return true }
-        if name.hasPrefix("tmp-") || name.hasPrefix("private-tmp-") { return true }
-        return name.count >= 10 && name.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+        if name.hasPrefix("tmp-") || name.hasPrefix("private-tmp-") {
+            return uuidSuffix(in: name) != nil
+        }
+        return isNumericProjectSlug(name)
+    }
+
+    nonisolated static func isNumericProjectSlug(_ name: String) -> Bool {
+        name.count >= 10 && name.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+    }
+
+    /// Dev Tools trash leftover folders through `deleteItems`, not the
+    /// privileged uninstall helper. Call this immediately before `trashItem`.
+    nonisolated static func looksLikeCursorLeftoverPath(_ url: URL, home: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let homePath = home.standardizedFileURL.path
+        return path.hasPrefix("\(homePath)/.cursor/worktrees/")
+            || path.hasPrefix("\(homePath)/.cursor/projects/")
+    }
+
+    nonisolated static func passesImmediateTrashBoundary(
+        _ url: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Bool {
+        isWhitelistedPath(url.standardizedFileURL.path, home: home.standardizedFileURL.path)
     }
 
     // MARK: - Discovery
@@ -99,9 +144,7 @@ enum CursorAgentLeftoverScanPolicy {
     ) -> [URL] {
         let root = home.appendingPathComponent(".cursor/worktrees", isDirectory: true)
         let leaves = worktreeLeaves(in: root, fileManager: fileManager)
-        // If Cursor is running and we could not see any process cwd, we cannot
-        // tell a live agent checkout from a finished one. Hide the lot.
-        if live.cursorIsRunning && live.processWorkingDirectories.isEmpty {
+        if live.cursorIsRunning && live.cursorProcessSnapshot != .available {
             return []
         }
         return leaves.filter { !isLiveWorktree($0, live: live, fileManager: fileManager) }
@@ -126,6 +169,10 @@ enum CursorAgentLeftoverScanPolicy {
             }
             let slug = url.lastPathComponent
             guard isJunkProjectSlug(slug) else { return nil }
+            if isNumericProjectSlug(slug),
+               live.cursorIsRunning && live.windowsSnapshot != .available {
+                return nil
+            }
             guard !isLiveJunkProject(slug: slug, live: live) else { return nil }
             return url
         }
@@ -139,10 +186,10 @@ enum CursorAgentLeftoverScanPolicy {
         fileManager: FileManager = .default
     ) -> Bool {
         let path = url.standardizedFileURL.path
-        if live.openWorkspacePaths.contains(where: { pathsOverlap($0, path) }) {
+        if live.openWorkspacePaths.contains(where: { $0 == path || $0.hasPrefix(path + "/") }) {
             return true
         }
-        if live.processWorkingDirectories.contains(where: { pathsOverlap($0, path) }) {
+        if live.processWorkingDirectories.contains(where: { $0 == path || $0.hasPrefix(path + "/") }) {
             return true
         }
         return hasGitLock(at: url, fileManager: fileManager)
@@ -228,7 +275,7 @@ enum CursorAgentLeftoverScanPolicy {
         let parts = relative.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         guard parts.allSatisfy({ !$0.isEmpty && !$0.hasPrefix(".") }) else { return false }
         if parts.count == 2 {
-            return true
+            return hasGitMarker(at: URL(fileURLWithPath: path, isDirectory: true), fileManager: .default)
         }
         if parts.count == 1 {
             return hasGitMarker(at: URL(fileURLWithPath: path, isDirectory: true), fileManager: .default)
@@ -282,10 +329,6 @@ enum CursorAgentLeftoverScanPolicy {
         return nil
     }
 
-    private nonisolated static func pathsOverlap(_ lhs: String, _ rhs: String) -> Bool {
-        lhs == rhs || lhs.hasPrefix(rhs + "/") || rhs.hasPrefix(lhs + "/")
-    }
-
     private nonisolated static func uuidSuffix(in slug: String) -> String? {
         let pattern = #/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/#
         guard let match = slug.firstMatch(of: pattern) else { return nil }
@@ -298,12 +341,13 @@ enum CursorAgentLeftoverScanPolicy {
 
     nonisolated static func readOpenWindows(
         from cursorApplicationSupport: URL
-    ) -> (folders: Set<String>, emptyWindowIDs: Set<String>) {
+    ) -> (status: SnapshotStatus, folders: Set<String>, emptyWindowIDs: Set<String>) {
         let storage = cursorApplicationSupport
             .appendingPathComponent("User/globalStorage/storage.json", isDirectory: false)
-        guard let data = try? Data(contentsOf: storage),
+        guard FileManager.default.fileExists(atPath: storage.path),
+              let data = try? Data(contentsOf: storage),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return ([], [])
+            return (.unavailable, [], [])
         }
 
         var folders: Set<String> = []
@@ -338,7 +382,54 @@ enum CursorAgentLeftoverScanPolicy {
             }
         }
 
-        return (folders, emptyWindowIDs)
+        return (.available, folders, emptyWindowIDs)
+    }
+
+    private nonisolated static func numericNamespacesBlockedByUnavailableWindows(home: String) -> Bool {
+        guard isCursorRunning() else { return false }
+        let support = URL(fileURLWithPath: home)
+            .appendingPathComponent("Library/Application Support/Cursor", isDirectory: true)
+        return readOpenWindows(from: support).status != .available
+    }
+
+    nonisolated static func containsSymlinkComponent(_ url: URL, home: String) -> Bool {
+        let path = url.standardizedFileURL.path
+        guard path == home || path.hasPrefix(home + "/") else { return true }
+        var current = URL(fileURLWithPath: home, isDirectory: true)
+        let remainder = path.dropFirst(home.count)
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+        for part in remainder {
+            current.appendPathComponent(part)
+            if isSymlink(current) { return true }
+        }
+        return false
+    }
+
+    private nonisolated static func staysInsideIntendedCursorRoot(_ url: URL, home: String) -> Bool {
+        let path = url.standardizedFileURL.path
+        let worktreesRoot = "\(home)/.cursor/worktrees"
+        let projectsRoot = "\(home)/.cursor/projects"
+        let lexicalRoot: String
+        if path == worktreesRoot || path.hasPrefix(worktreesRoot + "/") {
+            lexicalRoot = worktreesRoot
+        } else if path == projectsRoot || path.hasPrefix(projectsRoot + "/") {
+            lexicalRoot = projectsRoot
+        } else {
+            return false
+        }
+
+        let rootURL = URL(fileURLWithPath: lexicalRoot, isDirectory: true)
+        if containsSymlinkComponent(rootURL, home: home) { return false }
+
+        let resolved = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let resolvedRoot = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
+        guard resolvedRoot == lexicalRoot else { return false }
+        return resolved == resolvedRoot || resolved.hasPrefix(resolvedRoot + "/")
+    }
+
+    private nonisolated static func isSymlink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
     }
 
     private nonisolated static func path(fromFileURI uri: String) -> String? {
@@ -347,27 +438,60 @@ enum CursorAgentLeftoverScanPolicy {
     }
 }
 
-/// Current working directories of every visible process, used to keep a live
-/// agent checkout off the list even when Cursor's window is still on the
-/// main repo.
-enum ProcessWorkingDirectories {
-    nonisolated static func allStandardizedPaths() -> Set<String> {
+/// Working directories of processes running from Cursor.app, used to keep a
+/// live agent checkout off the list even when the window is still on the
+/// main repo. Success is tracked separately from the cwd set: other apps'
+/// cwds must not count as a completed Cursor snapshot.
+enum CursorProcessWorkingDirectories {
+    struct Snapshot {
+        var status: CursorAgentLeftoverScanPolicy.SnapshotStatus
+        var directories: Set<String>
+    }
+
+    nonisolated static func snapshot() -> Snapshot {
         let bytesNeeded = proc_listallpids(nil, 0)
-        guard bytesNeeded > 0 else { return [] }
+        guard bytesNeeded > 0 else {
+            return Snapshot(status: .unavailable, directories: [])
+        }
         let capacity = Int(bytesNeeded) / MemoryLayout<pid_t>.size
         var pids = [pid_t](repeating: 0, count: max(capacity, 1))
         let filledBytes = proc_listallpids(&pids, Int32(MemoryLayout<pid_t>.size * pids.count))
-        guard filledBytes > 0 else { return [] }
+        guard filledBytes > 0 else {
+            return Snapshot(status: .unavailable, directories: [])
+        }
         let count = Int(filledBytes) / MemoryLayout<pid_t>.size
 
-        var paths: Set<String> = []
-        paths.reserveCapacity(count)
+        var cursorPids: [pid_t] = []
         for pid in pids.prefix(count) where pid > 0 {
-            if let cwd = currentWorkingDirectory(of: pid), !cwd.isEmpty {
-                paths.insert((cwd as NSString).standardizingPath)
+            if isCursorExecutable(pid) {
+                cursorPids.append(pid)
             }
         }
-        return paths
+
+        if CursorAgentLeftoverScanPolicy.isCursorRunning() && cursorPids.isEmpty {
+            return Snapshot(status: .unavailable, directories: [])
+        }
+
+        var directories: Set<String> = []
+        for pid in cursorPids {
+            if let cwd = currentWorkingDirectory(of: pid), !cwd.isEmpty {
+                directories.insert((cwd as NSString).standardizingPath)
+            }
+        }
+
+        if CursorAgentLeftoverScanPolicy.isCursorRunning() && !cursorPids.isEmpty && directories.isEmpty {
+            return Snapshot(status: .unavailable, directories: [])
+        }
+
+        return Snapshot(status: .available, directories: directories)
+    }
+
+    private nonisolated static func isCursorExecutable(_ pid: pid_t) -> Bool {
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        let length = proc_pidpath(pid, &buffer, UInt32(MAXPATHLEN))
+        guard length > 0 else { return false }
+        let path = String(cString: buffer)
+        return path.contains("/Cursor.app/")
     }
 
     private nonisolated static func currentWorkingDirectory(of pid: pid_t) -> String? {
