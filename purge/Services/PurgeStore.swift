@@ -1431,6 +1431,8 @@ final class PurgeStore: ObservableObject {
         for await app in uninstallScanner.installedAppsStream() {
             guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
             collected.append(app)
+            // Warm the shared icon cache before the grid/list re-renders this app.
+            _ = BrandIconService.shared.installedAppIcon(at: app.bundleURL)
             installedApps = collected
         }
         // Only a stream that ran to completion counts as a finished scan. A
@@ -1511,7 +1513,9 @@ final class PurgeStore: ObservableObject {
     /// True once every listed app has a measured total, so the size sort can use
     /// the totals without reshuffling tiles while measurement is still in flight.
     var hasMeasuredAllRemovableTotals: Bool {
-        !installedApps.isEmpty && removableBytesByAppID.count >= installedApps.count
+        let ids = Set(installedApps.map(\.id))
+        guard !ids.isEmpty else { return false }
+        return ids.isSubset(of: removableBytesByAppID.keys)
     }
 
     // MARK: - Orphan leftovers (issue #26)

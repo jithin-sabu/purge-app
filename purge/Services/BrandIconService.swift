@@ -239,6 +239,20 @@ final class BrandIconService {
         return image
     }
 
+    /// Cached icon for a known `.app` path. Prefer this over calling
+    /// `NSWorkspace.shared.icon(forFile:)` in SwiftUI `body` — non-lazy uninstall
+    /// rows re-evaluate often during size updates and sort.
+    func installedAppIcon(at url: URL) -> NSImage {
+        let path = url.standardizedFileURL.path
+        let cacheKey = "p|\(path)"
+        if let cached = installedAppIconCache[cacheKey], let image = cached {
+            return image
+        }
+        let image = NSWorkspace.shared.icon(forFile: path)
+        installedAppIconCache[cacheKey] = image
+        return image
+    }
+
     func installedAppIcon(appName: String) -> NSImage? {
         let trimmed = appName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

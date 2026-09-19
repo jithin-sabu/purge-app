@@ -676,7 +676,7 @@ private struct AppListRow: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
 
-            Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
+            Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
                 .resizable()
                 .frame(width: 36, height: 36)
                 .accessibilityHidden(true)
@@ -784,7 +784,7 @@ private struct AppTile: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
+            Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
                 .resizable()
                 .frame(width: 56, height: 56)
                 .frame(maxWidth: .infinity)
@@ -955,7 +955,7 @@ struct UninstallHeaderActions: View {
                         inactiveTitle: "Uninstall",
                         activeTitle: "Uninstall",
                         selectedCount: store.selectedApps.count,
-                        selectedBytes: store.selectedAppsRemovableBytes
+                        selectedBytes: nil
                     )
                 }
             }
@@ -1055,7 +1055,7 @@ struct UninstallReviewSheet: View {
                 .fixedSize()
                 .accessibilityLabel("Select all \(app.name) items")
 
-                Image(nsImage: NSWorkspace.shared.icon(forFile: app.bundleURL.path))
+                Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
                     .resizable()
                     .frame(width: 24, height: 24)
                 Text(app.name)
