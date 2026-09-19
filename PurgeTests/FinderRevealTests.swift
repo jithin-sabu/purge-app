@@ -82,6 +82,7 @@ struct FinderRevealTests {
         let entries = FinderReveal.menuEntries(for: [ScanRowLocation(url: url, sizeBytes: 1_000)])
 
         #expect(entries.count == 2)
+        guard entries.count >= 2 else { return }
         guard case .action(let showTitle, _) = entries[0] else {
             Issue.record("expected a flat Show in Finder action")
             return
@@ -108,6 +109,7 @@ struct FinderRevealTests {
         let entries = FinderReveal.menuEntries(for: [smaller, larger])
 
         #expect(entries.count == 2)
+        guard entries.count >= 2 else { return }
         guard case .submenu(let title, let sub) = entries[0] else {
             Issue.record("expected a Show in Finder submenu")
             return
@@ -119,6 +121,7 @@ struct FinderRevealTests {
         #expect(title == "Show in Finder")
         #expect(copyTitle == "Copy Paths")
         #expect(sub.count == 2)
+        guard sub.count >= 2 else { return }
         guard case .action(let firstTitle, _) = sub[0],
               case .action(let secondTitle, _) = sub[1]
         else {
