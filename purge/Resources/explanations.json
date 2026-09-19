@@ -2660,6 +2660,17 @@
     "scope": "dev_tools"
   },
   {
+    "key": "cursor-agent-leftover",
+    "display_name": "Cursor Agent Leftovers",
+    "tag": "medium",
+    "explanation": "Isolated checkouts Cursor agents leave behind. Fine to remove if you are done with that job, but look first in case you still need the files.",
+    "bundle_ids": [],
+    "aliases": [
+      "cursor-agent-leftover"
+    ],
+    "scope": "dev_tools"
+  },
+  {
     "key": "obsolete-cursor-extension",
     "display_name": "Obsolete Cursor Extension",
     "tag": "safe",

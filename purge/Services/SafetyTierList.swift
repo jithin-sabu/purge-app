@@ -123,6 +123,10 @@ enum SafetyTierList {
                 || pathLower.contains("/.vscode/extensions/") {
                 return .safe
             }
+            if pathLower.contains("/.cursor/worktrees/")
+                || pathLower.contains("/.cursor/projects/") {
+                return .medium
+            }
         }
 
         if lower.contains("obsolete") && lower.contains("extension") {
