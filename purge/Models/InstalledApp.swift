@@ -22,10 +22,10 @@ nonisolated struct InstalledApp: Identifiable, Hashable {
     /// True when the app is running now, so the uninstall flow can offer to quit
     /// it before trashing the bundle.
     let isRunning: Bool
-    /// When the bundle landed on this volume, the closest proxy for "installed on".
-    /// Defaults to `.distantPast` so a bundle whose date can't be read sorts last
-    /// under "recently installed".
-    var dateAdded: Date = .distantPast
+    /// When the user last opened the app, from Spotlight (`kMDItemLastUsedDate`).
+    /// Nil when macOS has no record. That is not the same as the bundle's
+    /// modification date, which moves on every update.
+    var lastOpened: Date? = nil
 
     /// The stem used for name-based leftover matching, e.g. "Rectangle". Kept
     /// separate from `name` so a future display tweak cannot loosen matching.

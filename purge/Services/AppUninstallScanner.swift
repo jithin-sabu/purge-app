@@ -41,7 +41,6 @@ nonisolated final class AppUninstallScanner {
             let name = displayName(for: bundleURL, bundle: bundle)
             let size = InstalledAppBundleSizing.spotlightLogicalSize(at: bundleURL) ?? 0
             let isRunning = bundleID.map { runningIDs.contains($0) } ?? false
-
             continuation.yield(
                 InstalledApp(
                     name: name,
@@ -49,7 +48,7 @@ nonisolated final class AppUninstallScanner {
                     bundleID: bundleID,
                     bundleSizeBytes: size,
                     isRunning: isRunning,
-                    dateAdded: installDate(for: bundleURL)
+                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: bundleURL)
                 )
             )
         }
@@ -113,13 +112,6 @@ nonisolated final class AppUninstallScanner {
 
     private static func runningBundleIDs() -> Set<String> {
         Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier })
-    }
-
-    /// Closest proxy for when the app was installed: the bundle's creation date on
-    /// this volume, falling back to its content modification date.
-    private static func installDate(for bundleURL: URL) -> Date {
-        let values = try? bundleURL.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
-        return values?.creationDate ?? values?.contentModificationDate ?? .distantPast
     }
 
     // MARK: Leftovers for a chosen app
@@ -231,5 +223,16 @@ enum InstalledAppBundleSizing {
             return nil
         }
         return bytes > 0 ? bytes : nil
+    }
+
+    /// When the user last opened this app, according to Spotlight. Nil when the
+    /// index has no last-used date — common for apps that were never launched,
+    /// or when Spotlight has not indexed the volume. Callers still sort those
+    /// apps; they just cannot show a day.
+    nonisolated static func spotlightLastOpened(at url: URL) -> Date? {
+        let path = url.standardizedFileURL.path as CFString
+        guard let item = MDItemCreate(nil, path) else { return nil }
+        guard let raw = MDItemCopyAttribute(item, kMDItemLastUsedDate) else { return nil }
+        return raw as? Date
     }
 }

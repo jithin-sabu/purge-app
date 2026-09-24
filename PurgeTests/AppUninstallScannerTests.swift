@@ -103,6 +103,7 @@ struct AppUninstallScannerTests {
     func spotlightLogicalSizeIgnoresMissingPaths() {
         let missing = URL(fileURLWithPath: "/tmp/purge-missing-\(UUID().uuidString).app")
         #expect(InstalledAppBundleSizing.spotlightLogicalSize(at: missing) == nil)
+        #expect(InstalledAppBundleSizing.spotlightLastOpened(at: missing) == nil)
     }
 }
 
@@ -113,8 +114,45 @@ struct AppSortOptionTests {
         #expect(AppSortOption.largest.needsFullMeasurement)
         #expect(AppSortOption.smallest.needsFullMeasurement)
         #expect(!AppSortOption.nameAZ.needsFullMeasurement)
-        #expect(!AppSortOption.recentlyInstalled.needsFullMeasurement)
-        #expect(!AppSortOption.oldestInstalled.needsFullMeasurement)
+        #expect(!AppSortOption.recentlyUsed.needsFullMeasurement)
+    }
+
+    @Test
+    func menuOffersNoInstallDateSort() {
+        #expect(AppSortOption.allCases == [.largest, .smallest, .nameAZ, .recentlyUsed])
+    }
+
+    @Test
+    func lastUsedSortOrdersKnownOpensAndKeepsUnknownAppsInTheList() {
+        let stale = app(name: "Zoom", opened: Date(timeIntervalSince1970: 1_000))
+        let alsoStale = app(name: "arc", opened: Date(timeIntervalSince1970: 1_000))
+        let fresh = app(name: "Slack", opened: Date(timeIntervalSince1970: 2_000))
+        let unknown = app(name: "Mystery", opened: nil)
+
+        let newestFirst = AppSortOption.recentlyUsed.sorted([stale, unknown, fresh, alsoStale])
+        #expect(newestFirst.map(\.name) == ["Slack", "arc", "Zoom", "Mystery"])
+    }
+
+    @Test
+    func missingOpenDateIsLabeledNotOpened() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let unknown = app(name: "Mystery", opened: nil)
+        let opened = app(name: "Known", opened: Date(timeIntervalSince1970: 5_000))
+        #expect(AppSortOption.recentlyUsed.activityLabel(for: unknown, now: now) == "Not opened")
+        let openedLabel = AppSortOption.recentlyUsed.activityLabel(for: opened, now: now)
+        #expect(openedLabel?.hasPrefix("Opened ") == true)
+        #expect(AppSortOption.nameAZ.activityLabel(for: opened, now: now) == nil)
+    }
+
+    private func app(name: String, opened: Date?) -> InstalledApp {
+        InstalledApp(
+            name: name,
+            bundleURL: URL(fileURLWithPath: "/Applications/\(name).app"),
+            bundleID: nil,
+            bundleSizeBytes: 1,
+            isRunning: false,
+            lastOpened: opened
+        )
     }
 
     @Test
