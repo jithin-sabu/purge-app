@@ -235,6 +235,8 @@ enum CacheDiscoveryPaths {
     }
 
     /// Stale Chromium framework versions inside `.app` bundles (not the `Current` symlink target).
+    /// Versions a running browser is still executing from are dropped later by
+    /// `DeletionSafetyPolicy.staleBrowserFrameworkRefusesDeletion`.
     nonisolated static func staleChromiumFrameworkVersionURLs() -> [URL] {
         let fm = FileManager.default
         let appNames = [

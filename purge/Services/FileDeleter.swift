@@ -197,6 +197,17 @@ nonisolated final class FileDeleter: Sendable {
                         ))
                     }
                 } else {
+                    // Re-check after sizing. A browser can start using a framework
+                    // folder, or retarget Current onto it, during that wait.
+                    guard DeletionSafetyPolicy.isOfferedForCleanup(url) else {
+                        skippedItems.append(SkippedDeletionItem(
+                            path: url.path,
+                            displayName: friendlyTitle,
+                            reason: "This file was skipped for safety",
+                            isUserVisible: true
+                        ))
+                        continue
+                    }
                     do {
                         try FileManager.default.trashItem(at: url, resultingItemURL: nil)
                         bytesMovedToTrash += size

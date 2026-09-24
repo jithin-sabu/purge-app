@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// Outcome of running a candidate path through the safety policy.
 nonisolated enum DeletionSafetyDecision: Equatable {
@@ -332,6 +335,10 @@ enum DeletionSafetyPolicy {
         let key = url.standardizedFileURL.path
 
         if projectArtifactRefusesDeletion(url) { return false }
+        // A running browser can still be mapped to an older framework folder after
+        // a background update. That answer flips when the user quits, so it stays
+        // outside the cache, same as project-artifact refusals.
+        if staleBrowserFrameworkRefusesDeletion(url) { return false }
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
@@ -573,6 +580,72 @@ enum DeletionSafetyPolicy {
         return parts.count == start + 3
     }
 
+    /// One running app, reduced to the paths needed to see which framework it loaded.
+    nonisolated struct RunningProcessPaths: Equatable, Sendable {
+        var bundlePath: String?
+        var executablePath: String?
+    }
+
+    /// `.../Versions/<version>/...` → `<version>`. `Current` is not a version folder.
+    nonisolated static func frameworkVersion(in path: String) -> String? {
+        let parts = path.split(separator: "/").map(String.init)
+        guard let index = parts.lastIndex(of: "Versions"), index + 1 < parts.count else {
+            return nil
+        }
+        let version = parts[index + 1]
+        guard !version.isEmpty, version != "Current" else { return nil }
+        return version
+    }
+
+    /// Outer `.app` bundle that contains this path. Helper `.app` bundles nested
+    /// under `Versions/` are ignored so Chrome helpers still map to Chrome itself.
+    nonisolated static func browserAppPath(containing path: String) -> String? {
+        var accumulated = ""
+        for part in path.split(separator: "/").map(String.init) {
+            accumulated += "/" + part
+            if part.hasSuffix(".app") { return accumulated }
+        }
+        return nil
+    }
+
+    /// Whether `appPath` is running, and which `Versions/<version>` folders its
+    /// processes are executing from.
+    nonisolated static func loadedFrameworkVersions(
+        inAppPath appPath: String,
+        processes: [RunningProcessPaths]
+    ) -> (appIsRunning: Bool, versions: Set<String>) {
+        let prefix = appPath.hasSuffix("/") ? appPath : appPath + "/"
+        var appIsRunning = false
+        var versions = Set<String>()
+        for process in processes {
+            for path in [process.bundlePath, process.executablePath].compactMap({ $0 }) {
+                guard path == appPath || path.hasPrefix(prefix) else { continue }
+                appIsRunning = true
+                if let version = frameworkVersion(in: path) {
+                    versions.insert(version)
+                }
+            }
+        }
+        return (appIsRunning, versions)
+    }
+
+    /// A leftover framework version may be cleaned only when nothing is executing
+    /// from it. `Current`'s target is never a leftover. If the browser is running
+    /// but no process path revealed a version, refuse every leftover: a long-lived
+    /// browser keeps its old framework mapped, and guessing would delete it.
+    nonisolated static func shouldOfferStaleFrameworkVersion(
+        version: String,
+        currentVersion: String?,
+        loadedVersions: Set<String>,
+        appIsRunning: Bool
+    ) -> Bool {
+        guard version != "Current" else { return false }
+        if let currentVersion, version == currentVersion { return false }
+        if loadedVersions.contains(version) { return false }
+        if appIsRunning && loadedVersions.isEmpty { return false }
+        return true
+    }
+
     nonisolated static func isWhitelistedStaleBrowserFrameworkPath(_ path: String) -> Bool {
         guard path.hasPrefix("/Applications/"), path.contains(".app/Contents/Frameworks/") else {
             return false
@@ -580,6 +653,56 @@ enum DeletionSafetyPolicy {
         guard path.contains("/Versions/") else { return false }
         let last = URL(fileURLWithPath: path).lastPathComponent
         return last != "Current" && last != "Versions"
+    }
+
+    /// True when this version folder is still in use, or might be, because the
+    /// owning browser is running and the loaded version could not be read.
+    nonisolated static func staleBrowserFrameworkRefusesDeletion(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        guard isWhitelistedStaleBrowserFrameworkPath(path) else { return false }
+        guard let version = frameworkVersion(in: path),
+              let appPath = browserAppPath(containing: path) else {
+            return true
+        }
+        let (appIsRunning, loadedVersions) = loadedFrameworkVersions(
+            inAppPath: appPath,
+            processes: runningProcessPaths()
+        )
+        return !shouldOfferStaleFrameworkVersion(
+            version: version,
+            currentVersion: currentFrameworkVersion(in: path),
+            loadedVersions: loadedVersions,
+            appIsRunning: appIsRunning
+        )
+    }
+
+    /// Version directory that `Versions/Current` points at. Relative and absolute
+    /// symlink targets both reduce to the version folder name.
+    nonisolated static func currentFrameworkVersion(in path: String) -> String? {
+        let parts = path.split(separator: "/").map(String.init)
+        guard let index = parts.lastIndex(of: "Versions") else { return nil }
+        let versionsPath = "/" + parts[0...index].joined(separator: "/")
+        let currentLink = versionsPath + "/Current"
+        guard let dest = try? FileManager.default.destinationOfSymbolicLink(atPath: currentLink) else {
+            return nil
+        }
+        let name = URL(fileURLWithPath: dest, relativeTo: URL(fileURLWithPath: versionsPath, isDirectory: true))
+            .lastPathComponent
+        guard !name.isEmpty, name != "Current" else { return nil }
+        return name
+    }
+
+    nonisolated static func runningProcessPaths() -> [RunningProcessPaths] {
+        #if canImport(AppKit)
+        return NSWorkspace.shared.runningApplications.map { app in
+            RunningProcessPaths(
+                bundlePath: app.bundleURL?.standardizedFileURL.path,
+                executablePath: app.executableURL?.standardizedFileURL.path
+            )
+        }
+        #else
+        return []
+        #endif
     }
 
     nonisolated static func isWhitelistedEditorExtensionPath(_ path: String, home: String) -> Bool {

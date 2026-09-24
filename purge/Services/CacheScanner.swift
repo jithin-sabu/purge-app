@@ -339,8 +339,8 @@ nonisolated final class CacheScanner {
             let safety = SafetyInfo(
                 level: .medium,
                 headline: headline,
-                explanation: "An older Chromium framework bundled inside \(appName). Removing it frees space; the app should keep using the current version.",
-                recoverySteps: "Reinstall \(appName) from the vendor if the app fails to launch after cleanup.",
+                explanation: "A leftover Chromium framework inside \(appName) that no running process is using. Quit and relaunch \(appName) before an older version still loaded by the running browser can be cleaned; those copies stay hidden until then. \(appName) also deletes leftover versions itself on relaunch.",
+                recoverySteps: "Quit and relaunch \(appName). If it still fails to open, reinstall it from the vendor.",
                 reinstallCommand: nil
             )
             items.append(
