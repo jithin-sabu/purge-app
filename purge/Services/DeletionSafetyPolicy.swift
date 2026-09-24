@@ -670,10 +670,26 @@ enum DeletionSafetyPolicy {
         )
         return !shouldOfferStaleFrameworkVersion(
             version: version,
-            currentVersion: nil,
+            currentVersion: currentFrameworkVersion(in: path),
             loadedVersions: loadedVersions,
             appIsRunning: appIsRunning
         )
+    }
+
+    /// Version directory that `Versions/Current` points at. Relative and absolute
+    /// symlink targets both reduce to the version folder name.
+    nonisolated static func currentFrameworkVersion(in path: String) -> String? {
+        let parts = path.split(separator: "/").map(String.init)
+        guard let index = parts.lastIndex(of: "Versions") else { return nil }
+        let versionsPath = "/" + parts[0...index].joined(separator: "/")
+        let currentLink = versionsPath + "/Current"
+        guard let dest = try? FileManager.default.destinationOfSymbolicLink(atPath: currentLink) else {
+            return nil
+        }
+        let name = URL(fileURLWithPath: dest, relativeTo: URL(fileURLWithPath: versionsPath, isDirectory: true))
+            .lastPathComponent
+        guard !name.isEmpty, name != "Current" else { return nil }
+        return name
     }
 
     nonisolated static func runningProcessPaths() -> [RunningProcessPaths] {

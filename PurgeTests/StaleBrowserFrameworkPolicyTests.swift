@@ -114,4 +114,36 @@ struct StaleBrowserFrameworkPolicyTests {
             appIsRunning: running
         ))
     }
+
+    @Test
+    func currentSymlinkTargetIsRefused() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let versions = root.appendingPathComponent(
+            "Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions",
+            isDirectory: true
+        )
+        let currentDir = versions.appendingPathComponent(current, isDirectory: true)
+        try FileManager.default.createDirectory(at: currentDir, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: versions.appendingPathComponent("Current"),
+            withDestinationURL: URL(fileURLWithPath: current, isDirectory: true)
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let resolved = DeletionSafetyPolicy.currentFrameworkVersion(in: currentDir.path)
+        #expect(resolved == current)
+        #expect(!DeletionSafetyPolicy.shouldOfferStaleFrameworkVersion(
+            version: current,
+            currentVersion: resolved,
+            loadedVersions: [],
+            appIsRunning: false
+        ))
+        #expect(DeletionSafetyPolicy.shouldOfferStaleFrameworkVersion(
+            version: unused,
+            currentVersion: resolved,
+            loadedVersions: [],
+            appIsRunning: false
+        ))
+    }
 }
