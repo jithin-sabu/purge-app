@@ -3,6 +3,29 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.5.3</title>
+      <pubDate>Thu, 24 Sep 2026 13:05:00 +0000</pubDate>
+      <sparkle:version>23</sparkle:version>
+      <sparkle:shortVersionString>1.5.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Find unused Cursor agent folders.</strong> Dev Tools lists finished Cursor agent checkouts under ~/.cursor/worktrees, and leftover temp or empty-window folders under ~/.cursor/projects. Live work, settings, login, real project folders, and chat history stay off the list. These rows are Check First and start unticked.</li>
+          <li><strong>Skip a browser framework the running app still uses.</strong> Purge hides a Chromium framework version a live process is still executing from. If it cannot tell which version that is, every leftover stays hidden until you quit. The browser also deletes leftover versions itself on relaunch.</li>
+          <li><strong>Sort installed apps by when you last opened them.</strong> Apps with no recorded open stay in the list, labeled Not opened, and sort after every app that has a date.</li>
+          <li><strong>Show an uninstaller item in Finder.</strong> Right-click an app, a leftover, or a review row. One location opens directly. Several become a submenu, largest first. Copy Path is on the same menu.</li>
+          <li><strong>Show the uninstaller before sizes finish.</strong> Apps appear immediately, then real totals fill in. The list stays alphabetical until measuring is done. A list view sits next to the grid, and the layout you pick is remembered.</li>
+          <li><strong>Find Application Support folders from removed apps.</strong> Leftovers includes bundle-id folders sitting directly in ~/Library/Application Support. They stay Check First and unticked, and a folder touched in the last 30 days stays hidden.</li>
+          <li><strong>Scans use less memory.</strong> Same results as before, with a tighter ceiling on folder sizing and Large Files thumbnails.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.5.3/Purgev1.5.3.dmg"
+        sparkle:edSignature="MoMtQAatbivlRa+URl2ntxhooT1J3cI77YQgBHzOmXiVB5EilV07K4g5h1rHY24KpVN+VcykgoyHHsHeICuDDQ=="
+        length="7827544"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.5.2</title>
       <pubDate>Tue, 16 Sep 2026 15:00:00 +0000</pubDate>
       <sparkle:version>22</sparkle:version>
