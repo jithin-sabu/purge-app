@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Ordering for the app grid. Separate from Large Files' `SortOption` because the
-/// date here is install date, not last-used, and the labels say so.
+/// Ordering for the app grid. Recently used is the last time the user opened
+/// the app. There is no install-date sort: macOS keeps no reliable first-install
+/// date for drag-installed apps, since updates and restores reset Date Added.
 ///
 /// Default is name: leftover sizes must never reshuffle the list. Size order is
 /// offered only after every app's total has been measured, and is not persisted.
@@ -10,8 +11,7 @@ enum AppSortOption: String, CaseIterable, Identifiable {
     case largest
     case smallest
     case nameAZ
-    case recentlyInstalled
-    case oldestInstalled
+    case recentlyUsed
 
     var id: String { rawValue }
 
@@ -20,8 +20,7 @@ enum AppSortOption: String, CaseIterable, Identifiable {
         case .largest: return "Size (largest first)"
         case .smallest: return "Size (smallest first)"
         case .nameAZ: return "Name (A to Z)"
-        case .recentlyInstalled: return "Recently installed"
-        case .oldestInstalled: return "Oldest installed"
+        case .recentlyUsed: return "Recently used"
         }
     }
 
@@ -30,18 +29,33 @@ enum AppSortOption: String, CaseIterable, Identifiable {
         case .largest: return "Largest"
         case .smallest: return "Smallest"
         case .nameAZ: return "Name"
-        case .recentlyInstalled: return "Newest"
-        case .oldestInstalled: return "Oldest"
+        case .recentlyUsed: return "Used"
         }
     }
 
     /// Size order keys on leftover-inclusive totals, which are not known until
-    /// the background pass finishes. Name and date never wait.
+    /// the background pass finishes. Name and last used never wait.
     var needsFullMeasurement: Bool {
         switch self {
         case .largest, .smallest: return true
-        case .nameAZ, .recentlyInstalled, .oldestInstalled: return false
+        case .nameAZ, .recentlyUsed: return false
         }
+    }
+
+    /// Caption shown while sorting by last used. Name and size return nil.
+    func activityLabel(for app: InstalledApp, now: Date) -> String? {
+        switch self {
+        case .recentlyUsed:
+            guard let opened = app.lastOpened else { return "Not opened" }
+            return "Opened \(Self.lowercasedLead(relativeDateText(for: opened, referenceDate: now)))"
+        case .largest, .smallest, .nameAZ:
+            return nil
+        }
+    }
+
+    private static func lowercasedLead(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.lowercased() + text.dropFirst()
     }
 
     func sorted(_ apps: [InstalledApp]) -> [InstalledApp] {
@@ -49,8 +63,22 @@ enum AppSortOption: String, CaseIterable, Identifiable {
         case .largest: return apps.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
         case .smallest: return apps.sorted { $0.bundleSizeBytes < $1.bundleSizeBytes }
         case .nameAZ: return apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        case .recentlyInstalled: return apps.sorted { $0.dateAdded > $1.dateAdded }
-        case .oldestInstalled: return apps.sorted { $0.dateAdded < $1.dateAdded }
+        case .recentlyUsed: return apps.sorted(by: Self.newerUse)
+        }
+    }
+
+    /// Most recently opened first. Apps with no open date come after every dated
+    /// app, then by name, so the list stays ordered when Spotlight has no day.
+    private static func newerUse(_ lhs: InstalledApp, _ rhs: InstalledApp) -> Bool {
+        switch (lhs.lastOpened, rhs.lastOpened) {
+        case let (left?, right?) where left != right:
+            return left > right
+        case (.some, .none):
+            return true
+        case (.none, .some):
+            return false
+        default:
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
 }
@@ -262,6 +290,13 @@ struct UninstallView: View {
         }
     }
 
+    /// Relative date for the active date sort. Last-used sorts say "Not opened"
+    /// when macOS has no open date, so that app still has a caption for its place
+    /// in the list. Name and size sorts leave this nil.
+    private func activityLabel(for app: InstalledApp) -> String? {
+        currentSort.activityLabel(for: app, now: Date())
+    }
+
     // MARK: Controls
 
     // No Select All here on purpose: selecting every installed app for removal is
@@ -407,6 +442,7 @@ struct UninstallView: View {
                         totalBytes: store.removableBytes(for: app),
                         isSizePending: store.removableBytes(for: app) == 0
                             && !store.hasMeasuredAllRemovableTotals,
+                        activityLabel: activityLabel(for: app),
                         isSelected: store.selectedAppIDs.contains(app.id)
                     ) {
                         store.toggleAppSelected(id: app.id)
@@ -438,6 +474,7 @@ struct UninstallView: View {
                                 totalBytes: store.removableBytes(for: app),
                                 isSizePending: store.removableBytes(for: app) == 0
                                     && !store.hasMeasuredAllRemovableTotals,
+                                activityLabel: activityLabel(for: app),
                                 isSelected: store.selectedAppIDs.contains(app.id)
                             ) {
                                 store.toggleAppSelected(id: app.id)
@@ -707,6 +744,8 @@ private struct AppListRow: View {
     let app: InstalledApp
     let totalBytes: Int64
     let isSizePending: Bool
+    /// Set while a date sort is active. Nil for name and size.
+    let activityLabel: String?
     let isSelected: Bool
     let onToggle: () -> Void
 
@@ -745,6 +784,13 @@ private struct AppListRow: View {
 
             Spacer(minLength: AppStyle.Spacing.small)
 
+            if let activityLabel {
+                Text(activityLabel)
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+            }
+
             Text(isSizePending ? "…" : formatBytes(totalBytes))
                 .font(AppStyle.Typography.metadataEmphasis)
                 .foregroundStyle(AppColors.textSecondary)
@@ -769,7 +815,7 @@ private struct AppListRow: View {
         .help(app.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))"
+            "\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
         )
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -829,6 +875,9 @@ private struct AppTile: View {
     let totalBytes: Int64
     /// True while this tile still has no size to show (Spotlight and `du` pending).
     let isSizePending: Bool
+    /// Relative date while a date sort is active. Nil for name and size, so the
+    /// tile stays the skeleton height.
+    let activityLabel: String?
     let isSelected: Bool
     let onToggle: () -> Void
 
@@ -853,10 +902,17 @@ private struct AppTile: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
+
+                if let activityLabel {
+                    Text(activityLabel)
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: AppTileMetrics.contentHeight)
+        .frame(minHeight: AppTileMetrics.contentHeight)
         .padding(.horizontal, 12)
         .padding(.vertical, 14)
         .background {
@@ -886,9 +942,11 @@ private struct AppTile: View {
         .onTapGesture(perform: onToggle)
         .onHover { isHovering = $0 }
         // Full name on hover, since the tile truncates longer ones.
-        .help(app.name)
+        .help(activityLabel.map { "\(app.name), \($0)" } ?? app.name)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))")
+        .accessibilityLabel(
+            "\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
+        )
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)
