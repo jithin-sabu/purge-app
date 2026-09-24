@@ -2692,7 +2692,7 @@
     "key": "stale-browser-framework",
     "display_name": "Old Browser Framework",
     "tag": "medium",
-    "explanation": "A previous Chromium framework version bundled inside a browser app. Usually safe to remove, but reinstall the browser if it fails to launch.",
+    "explanation": "A leftover Chromium framework that no running process is using. Quit and relaunch the browser before an older version it is still running from can be cleaned. The browser also deletes leftover versions itself on relaunch.",
     "bundle_ids": [],
     "aliases": [
       "stale-browser-framework"
