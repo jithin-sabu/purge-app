@@ -1640,9 +1640,12 @@ final class PurgeStore: ObservableObject {
     /// The review for an app that left the Applications folders outside Purge, or
     /// `nil` when it left nothing worth showing. `survivors` is every app still in
     /// the app roots, so a leftover one of them also claims is never offered.
+    /// `trashedBundleURL` is the bundle's own copy in the Trash, found by file
+    /// number, never a same-named copy left over from an earlier delete.
     func removedAppLeftoverPlan(
         for app: InstalledApp,
-        survivors: [InstalledApp]
+        survivors: [InstalledApp],
+        trashedBundleURL: URL?
     ) async -> RemovedAppLeftoverPlan? {
         var scanned: [UninstallItem] = []
         for await item in uninstallScanner.leftoverStream(for: app) {
@@ -1652,24 +1655,27 @@ final class PurgeStore: ObservableObject {
             .filter { !ExcludedPathsStore.isExcluded($0.path) }
             .sorted(by: uninstallItemOrder)
         guard !items.isEmpty else { return nil }
-
-        let trashed = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".Trash", isDirectory: true)
-            .appendingPathComponent(app.bundleURL.lastPathComponent, isDirectory: true)
-        return RemovedAppLeftoverPlan(
-            app: app,
-            items: items,
-            trashedBundleURL: FileManager.default.fileExists(atPath: trashed.path) ? trashed : nil
-        )
+        return RemovedAppLeftoverPlan(app: app, items: items, trashedBundleURL: trashedBundleURL)
     }
 
     func cancelRemovedAppLeftovers() {
         removedAppLeftoverPlan = nil
     }
 
+    /// Checks the app is still gone before anything moves: the review opens the
+    /// moment a bundle leaves, and an update or a put-back can land while the sheet
+    /// is up. The check runs before the sheet closes because `RemovedAppMonitor`
+    /// reads a closed sheet with no clean running as the end of the review.
     func confirmRemovedAppLeftovers(_ plan: RemovedAppLeftoverPlan) async {
+        let checked = await RemovedAppPresence.revalidate(plan)
+        // A second click while the check ran finds the sheet already gone.
+        guard removedAppLeftoverPlan?.id == plan.id else { return }
         removedAppLeftoverPlan = nil
-        await performLeftoverCleanup(items: plan.selectedItems)
+        guard let checked else {
+            errorMessage = "\(plan.app.name) is on this Mac again, so its files were kept."
+            return
+        }
+        await performLeftoverCleanup(items: checked.selectedItems)
     }
 
     /// Drops an app that left the app roots outside Purge, so the picker never
@@ -1688,6 +1694,13 @@ final class PurgeStore: ObservableObject {
     /// through `AppUninstallScanPolicy.isEligibleForUninstallDeletion`, the same
     /// gate the scanners used to offer them. Shares the live-session overlay,
     /// progress poller, and history entry with the other manual flows.
+    ///
+    /// Escalation matches the uninstaller's leftover pass: an item whose parent
+    /// folder is not writable may go through the administrator helper. That is the
+    /// same class of app data, and without it a root-owned launch daemon left by a
+    /// removed app could never be cleared. Only items the user ticked reach here,
+    /// and the removed-app review never pre-ticks anything outside the home folder
+    /// (`RemovedAppReviewFiltering`).
     private func performLeftoverCleanup(items: [UninstallItem]) async {
         guard !items.isEmpty, !isDeleting else { return }
 
@@ -2224,8 +2237,11 @@ final class PurgeStore: ObservableObject {
         hasFullDiskAccess = granted
     }
 
+    /// Assigns only on a change: every assignment to a `@Published` property
+    /// invalidates every view observing the store, even when the value is the same.
     func refreshPermission() {
-        hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
+        let granted = PermissionChecker().hasFullDiskAccess()
+        if granted != hasFullDiskAccess { hasFullDiskAccess = granted }
     }
 
     func scanGeneral() async {

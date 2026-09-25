@@ -78,17 +78,111 @@ struct RemovedAppWatchPolicyTests {
         #expect(departed.map(\.id) == [gone.id])
     }
 
+    /// Finder renames a trashed bundle when an older copy already sits there. The
+    /// copy that counts is the one with the departed bundle's file number, never a
+    /// stale one that only shares its name.
     @Test
-    func trashedBundleIsRecognizedByItsOriginalName() throws {
-        let root = FileManager.default.temporaryDirectory
+    func trashedCopyIsFoundByFileNumberNotName() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
             .appendingPathComponent("purge-trash-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let app = makeApp()
-        let trashed = root.appendingPathComponent("Rectangle.app", isDirectory: true)
-        try FileManager.default.createDirectory(at: trashed, withIntermediateDirectories: true)
-        #expect(RemovedAppWatchPolicy.isTrashed(app: app, trashDirectory: root))
-        #expect(!RemovedAppWatchPolicy.isTrashed(app: makeApp(name: "Other", bundlePath: "/Applications/Other.app"), trashDirectory: root))
+        let apps = root.appendingPathComponent("Applications", isDirectory: true)
+        let trash = root.appendingPathComponent(".Trash", isDirectory: true)
+        try fm.createDirectory(at: apps, withIntermediateDirectories: true)
+        try fm.createDirectory(at: trash, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+
+        let stale = trash.appendingPathComponent("Rectangle.app", isDirectory: true)
+        try fm.createDirectory(at: stale, withIntermediateDirectories: true)
+        let bundle = apps.appendingPathComponent("Rectangle.app", isDirectory: true)
+        try fm.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let number = try #require(RemovedAppWatchPolicy.fileNumber(atPath: bundle.path))
+
+        let renamed = trash.appendingPathComponent("Rectangle 10.23.45.app", isDirectory: true)
+        try fm.moveItem(at: bundle, to: renamed)
+
+        let found = RemovedAppWatchPolicy.trashedCopy(fileNumber: number, in: trash)
+        #expect(found?.lastPathComponent == renamed.lastPathComponent)
+        #expect(RemovedAppWatchPolicy.trashedCopy(fileNumber: nil, in: trash) == nil)
+    }
+
+    /// A handle on a bundle reports where it went. Only the same file counts: a
+    /// deleted bundle's handle still names its old path, which may hold nothing
+    /// or a replacement by then.
+    @Test
+    func departureKindFollowsTheBundleNotItsName() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
+            .appendingPathComponent("purge-kind-\(UUID().uuidString)", isDirectory: true)
+        let apps = root.appendingPathComponent("Applications", isDirectory: true)
+        let trash = root.appendingPathComponent(".Trash", isDirectory: true)
+        let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        for folder in [apps, trash, desktop] {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        defer { try? fm.removeItem(at: root) }
+
+        func bundle(_ name: String) throws -> (URL, UInt64) {
+            let url = apps.appendingPathComponent("\(name).app", isDirectory: true)
+            try fm.createDirectory(at: url, withIntermediateDirectories: true)
+            return (url, try #require(RemovedAppWatchPolicy.fileNumber(atPath: url.path)))
+        }
+
+        let (trashed, trashedNumber) = try bundle("Trashed")
+        let inTrash = trash.appendingPathComponent("Trashed 10.23.45.app")
+        try fm.moveItem(at: trashed, to: inTrash)
+        #expect(RemovedAppWatchPolicy.departureKind(currentPath: inTrash.path, fileNumber: trashedNumber) == .trashed)
+
+        let (moved, movedNumber) = try bundle("Moved")
+        let onDesktop = desktop.appendingPathComponent("Moved.app")
+        try fm.moveItem(at: moved, to: onDesktop)
+        #expect(RemovedAppWatchPolicy.departureKind(currentPath: onDesktop.path, fileNumber: movedNumber) == .movedElsewhere)
+
+        let (deleted, deletedNumber) = try bundle("Deleted")
+        try fm.removeItem(at: deleted)
+        #expect(RemovedAppWatchPolicy.departureKind(currentPath: deleted.path, fileNumber: deletedNumber) == .deleted)
+
+        let (replaced, replacedNumber) = try bundle("Replaced")
+        try fm.removeItem(at: replaced)
+        try fm.createDirectory(at: replaced, withIntermediateDirectories: true)
+        #expect(RemovedAppWatchPolicy.departureKind(currentPath: replaced.path, fileNumber: replacedNumber) == .deleted)
+
+        #expect(RemovedAppWatchPolicy.departureKind(currentPath: nil, fileNumber: 1) == .deleted)
+    }
+
+    @Test
+    func followDecisionReportsDeletionsOnceQuietAndDropsMovesAndReturns() {
+        let timing = RemovedAppWatchPolicy.FollowTiming.standard
+        func decide(
+            _ kind: RemovedAppWatchPolicy.DepartureKind,
+            back: Bool = false,
+            departure: Duration = .seconds(1),
+            deleted: Duration? = nil,
+            activity: Duration = .seconds(0)
+        ) -> RemovedAppWatchPolicy.FollowDecision {
+            RemovedAppWatchPolicy.followDecision(
+                kind: kind,
+                appIsBack: back,
+                sinceDeparture: departure,
+                sinceDeleted: deleted,
+                sinceActivity: activity,
+                timing: timing
+            )
+        }
+        // `rm`: reported once the roots have been quiet for the quiet period.
+        #expect(decide(.deleted, deleted: .seconds(1), activity: .seconds(1)) == .keepFollowing)
+        #expect(decide(.deleted, deleted: .seconds(2), activity: .seconds(2)) == .report)
+        // An installer still writing keeps it waiting, but never past the cap.
+        #expect(decide(.deleted, deleted: .seconds(29), activity: .milliseconds(100)) == .keepFollowing)
+        #expect(decide(.deleted, deleted: .seconds(30), activity: .milliseconds(100)) == .report)
+        // Moved: followed for the window, then dropped as a move.
+        #expect(decide(.movedElsewhere, departure: .seconds(59)) == .keepFollowing)
+        #expect(decide(.movedElsewhere, departure: .seconds(60)) == .drop)
+        // Trashed later (from the Desktop, say): reported.
+        #expect(decide(.trashed, departure: .seconds(20)) == .report)
+        // The update landed or the app was put back: never reported.
+        #expect(decide(.deleted, back: true, deleted: .seconds(5), activity: .seconds(5)) == .drop)
+        #expect(decide(.trashed, back: true) == .drop)
     }
 
     // MARK: Review decision
@@ -99,6 +193,7 @@ struct RemovedAppWatchPolicyTests {
             for: makeApp(),
             bundleStillExists: false,
             installedBundleIDs: ["com.other.app"],
+            otherCopyExists: false,
             removedByPurge: false
         ))
     }
@@ -109,6 +204,7 @@ struct RemovedAppWatchPolicyTests {
             for: makeApp(),
             bundleStillExists: true,
             installedBundleIDs: [],
+            otherCopyExists: false,
             removedByPurge: false
         ))
     }
@@ -121,6 +217,7 @@ struct RemovedAppWatchPolicyTests {
             for: makeApp(),
             bundleStillExists: false,
             installedBundleIDs: ["com.knollsoft.rectangle"],
+            otherCopyExists: false,
             removedByPurge: false
         ))
     }
@@ -131,6 +228,7 @@ struct RemovedAppWatchPolicyTests {
             for: makeApp(),
             bundleStillExists: false,
             installedBundleIDs: [],
+            otherCopyExists: false,
             removedByPurge: true
         ))
     }
@@ -141,14 +239,76 @@ struct RemovedAppWatchPolicyTests {
             for: makeApp(bundleID: nil),
             bundleStillExists: false,
             installedBundleIDs: [],
+            otherCopyExists: false,
             removedByPurge: false
         ))
         #expect(!RemovedAppWatchPolicy.shouldOfferReview(
             for: makeApp(name: "Purge", bundlePath: "/Applications/Purge.app", bundleID: "io.getpurge.app"),
             bundleStillExists: false,
             installedBundleIDs: [],
+            otherCopyExists: false,
             removedByPurge: false
         ))
+    }
+
+    /// Dragged to the Desktop, on an external drive, or set aside by an updater:
+    /// Launch Services still knows a live copy, so its data is still in use.
+    @Test
+    func aLiveCopyElsewhereIsNotARemoval() {
+        #expect(!RemovedAppWatchPolicy.shouldOfferReview(
+            for: makeApp(),
+            bundleStillExists: false,
+            installedBundleIDs: [],
+            otherCopyExists: true,
+            removedByPurge: false
+        ))
+    }
+
+    @Test
+    func otherCopiesInTheTrashOrAtTheOldPathDoNotCount() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
+            .appendingPathComponent("purge-copies-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let desktopCopy = root.appendingPathComponent("Desktop/Rectangle.app", isDirectory: true)
+        let trashedCopy = root.appendingPathComponent(".Trash/Rectangle.app", isDirectory: true)
+        try fm.createDirectory(at: desktopCopy, withIntermediateDirectories: true)
+        try fm.createDirectory(at: trashedCopy, withIntermediateDirectories: true)
+        let app = makeApp()
+
+        #expect(RemovedAppWatchPolicy.countsAsOtherCopy(desktopCopy, of: app))
+        #expect(!RemovedAppWatchPolicy.countsAsOtherCopy(trashedCopy, of: app))
+        #expect(!RemovedAppWatchPolicy.countsAsOtherCopy(app.bundleURL, of: app))
+        #expect(!RemovedAppWatchPolicy.countsAsOtherCopy(
+            root.appendingPathComponent("Missing/Rectangle.app"), of: app
+        ))
+        #expect(RemovedAppWatchPolicy.isInTrash(path: "/Volumes/Backup/.Trashes/501/Rectangle.app"))
+        #expect(RemovedAppWatchPolicy.isInTrash(path: "/Users/x/Library/Mobile Documents/.Trash/Rectangle.app"))
+    }
+
+    // MARK: Records
+
+    /// A record is a file any process running as the user can write, so only one
+    /// the watcher could have produced is acted on.
+    @Test
+    func onlyRecordsTheWatcherCouldHaveWrittenAreValid() {
+        let roots = ["/Applications", "/Users/x/Applications"]
+        func valid(_ path: String, _ id: String = "com.knollsoft.Rectangle", _ name: String = "Rectangle") -> Bool {
+            RemovedAppWatchPolicy.isValidRecord(path: path, bundleID: id, name: name, roots: roots)
+        }
+        #expect(valid("/Applications/Rectangle.app"))
+        #expect(valid("/Applications/Vendor/Rectangle.app"))
+        #expect(valid("/Users/x/Applications/Rectangle.app"))
+
+        #expect(!valid("/Applications/A/B/Rectangle.app"))
+        #expect(!valid("/Library/LaunchDaemons/Rectangle.app"))
+        #expect(!valid("/Applications/../Library/Rectangle.app"))
+        #expect(!valid("/Applications/Rectangle"))
+        #expect(!valid("/Applications/Rectangle.app", "no-dots"))
+        #expect(!valid("/Applications/Rectangle.app", "com.x/../y"))
+        #expect(!valid("/Applications/Rectangle.app", "com.x.y", ""))
+        #expect(!valid("/Applications/Rectangle.app", "com.x.y", "Line\nbreak"))
+        #expect(!valid("/Applications/Rectangle.app", "com.x.y", String(repeating: "a", count: 200)))
     }
 
     // MARK: Review rows
@@ -164,10 +324,28 @@ struct RemovedAppWatchPolicyTests {
                 item("\(home)/Application Support/Rectangle", category: .applicationSupport, reason: .appName)
             ],
             owner: owner,
-            survivors: []
+            survivors: [],
+            home: URL(fileURLWithPath: "/Users/x")
         )
         #expect(rows.map(\.category) == [.preferences, .applicationSupport])
         #expect(rows.map(\.isSelected) == [true, false])
+    }
+
+    /// The review opens unprompted, so nothing outside the home folder starts
+    /// ticked, even an identifier match. Those are the paths that can need the
+    /// administrator helper.
+    @Test
+    func reviewNeverPreselectsSystemLevelLeftovers() {
+        let rows = RemovedAppReviewFiltering.reviewItems(
+            from: [
+                item("/Library/LaunchDaemons/com.knollsoft.Rectangle.plist", category: .launchDaemons, reason: .bundleID),
+                item("/Users/x/Library/Caches/com.knollsoft.Rectangle", category: .caches, reason: .bundleID)
+            ],
+            owner: makeApp(),
+            survivors: [],
+            home: URL(fileURLWithPath: "/Users/x")
+        )
+        #expect(rows.map(\.isSelected) == [false, true])
     }
 
     /// A folder named after the removed app that a kept app also claims by name
@@ -182,7 +360,8 @@ struct RemovedAppWatchPolicyTests {
                 item("/Users/x/Library/Preferences/com.a.notes.plist", category: .preferences, reason: .bundleID)
             ],
             owner: owner,
-            survivors: [survivor]
+            survivors: [survivor],
+            home: URL(fileURLWithPath: "/Users/x")
         )
         #expect(rows.map(\.path.lastPathComponent) == ["com.a.notes.plist"])
     }
@@ -241,10 +420,31 @@ struct ApplicationsFolderWatcherTests {
         #expect(RemovedAppWatchPolicy.departedApps(previous: before, current: after).isEmpty)
     }
 
-    /// End to end through FSEvents: a bundle moved out is reported once it has stayed
-    /// gone through the settle delay, and one swapped in place (an update) is not.
+    /// A bundle an updater replaced at the same path has a new file number, so it
+    /// is read again instead of being described by the copy it replaced.
+    @Test
+    func indexRereadsABundleSwappedInPlace() throws {
+        let root = try makeRoot()
+        defer { try? fm.removeItem(at: root) }
+        let bundle = try makeBundle(in: root, name: "Alpha", bundleID: "com.test.alpha")
+        let before = ApplicationsFolderWatcher.index(roots: [root], reusing: .init())
+
+        let staged = try makeBundle(in: try makeRoot(), name: "Alpha", bundleID: "com.test.alpha2")
+        defer { try? fm.removeItem(at: staged.deletingLastPathComponent()) }
+        try fm.removeItem(at: bundle)
+        try fm.moveItem(at: staged, to: bundle)
+
+        let after = ApplicationsFolderWatcher.index(roots: [root], reusing: before)
+        #expect(after.bundleIDs == ["com.test.alpha2"])
+        #expect(after.fileNumbers[bundle.standardizedFileURL.path] != before.fileNumbers[bundle.standardizedFileURL.path])
+    }
+
+    /// End to end through FSEvents: a bundle that leaves is reported at once, well
+    /// inside the three seconds the old settle delay waited, and carries the file
+    /// number its Trash copy can be found by. A bundle that comes back shows up in
+    /// the next index, which is what withdraws a review opened during an update.
     @Test(.timeLimit(.minutes(1)))
-    func reportsABundleThatLeavesButNotOneThatIsReplaced() async throws {
+    func reportsADepartureAtOnceAndSeesTheAppComeBack() async throws {
         let root = try makeRoot()
         let elsewhere = try makeRoot()
         defer {
@@ -252,54 +452,157 @@ struct ApplicationsFolderWatcherTests {
             try? fm.removeItem(at: elsewhere)
         }
         let leaving = try makeBundle(in: root, name: "Leaving", bundleID: "com.test.leaving")
-        let updating = try makeBundle(in: root, name: "Updating", bundleID: "com.test.updating")
+        let leavingNumber = RemovedAppWatchPolicy.fileNumber(atPath: leaving.path)
 
         let watcher = ApplicationsFolderWatcher(roots: [root])
         var departures: [ApplicationsFolderWatcher.Departure] = []
+        var indexes: [ApplicationsFolderWatcher.Index] = []
         watcher.onDeparture = { departures.append($0) }
+        watcher.onChange = { indexes.append($0) }
         watcher.start()
         defer { watcher.stop() }
 
-        // Wait for the initial index before touching anything.
-        for _ in 0..<50 where watcher.installedApps.count < 2 {
+        for _ in 0..<50 where watcher.installedApps.isEmpty {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
-        #expect(watcher.installedApps.count == 2)
+        #expect(watcher.installedApps.count == 1)
         // FSEvents needs a moment after the stream starts before it reports.
         try await Task.sleep(nanoseconds: 500_000_000)
 
-        try fm.moveItem(at: leaving, to: elsewhere.appendingPathComponent("Leaving.app"))
-        let staged = elsewhere.appendingPathComponent("Updating.app")
-        try fm.moveItem(at: updating, to: staged)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-        try fm.moveItem(at: staged, to: updating)
-
-        for _ in 0..<100 where departures.count < 2 {
-            try await Task.sleep(nanoseconds: 100_000_000)
+        let movedAt = Date()
+        let moved = elsewhere.appendingPathComponent("Leaving.app")
+        try fm.moveItem(at: leaving, to: moved)
+        for _ in 0..<100 where departures.isEmpty {
+            try await Task.sleep(nanoseconds: 20_000_000)
         }
-
-        let leavingDeparture = try #require(departures.first { $0.app.bundleID == "com.test.leaving" })
+        let departure = try #require(departures.first)
+        #expect(Date().timeIntervalSince(movedAt) < 1.5)
+        #expect(departure.app.bundleID == "com.test.leaving")
+        // The id must not drift once the bundle is gone, or the ignore list and the
+        // record path stop matching it.
+        #expect(departure.app.id == leaving.standardizedFileURL.path)
+        #expect(departure.fileNumber == leavingNumber)
+        #expect(!departure.bundleStillExists)
         #expect(RemovedAppWatchPolicy.shouldOfferReview(
-            for: leavingDeparture.app,
-            bundleStillExists: leavingDeparture.bundleStillExists,
-            installedBundleIDs: leavingDeparture.installedBundleIDs,
+            for: departure.app,
+            bundleStillExists: departure.bundleStillExists,
+            installedBundleIDs: departure.installedBundleIDs,
+            otherCopyExists: false,
             removedByPurge: false
         ))
-        for departure in departures where departure.app.bundleID == "com.test.updating" {
-            #expect(!RemovedAppWatchPolicy.shouldOfferReview(
-                for: departure.app,
-                bundleStillExists: departure.bundleStillExists,
-                installedBundleIDs: departure.installedBundleIDs,
-                removedByPurge: false
-            ))
+
+        let seen = indexes.count
+        try fm.moveItem(at: moved, to: leaving)
+        for _ in 0..<100 where !indexes.dropFirst(seen).contains(where: { $0.bundleIDs.contains("com.test.leaving") }) {
+            try await Task.sleep(nanoseconds: 20_000_000)
         }
+        #expect(indexes.dropFirst(seen).contains { $0.bundleIDs.contains("com.test.leaving") })
+    }
+
+    /// With destination tracking (the background agent), on compressed timings:
+    /// a drag to the Trash is reported at once; a deletion once the roots go quiet;
+    /// a copy moved and left alone never; a moved copy that is then trashed, or
+    /// deleted the way `brew uninstall` purges the Caskroom, when that happens; and
+    /// a `brew upgrade` style swap never.
+    @Test(.timeLimit(.minutes(1)))
+    func trashIsReportedAtOnceAndEverythingElseIsFollowed() async throws {
+        let root = try makeRoot()
+        let outside = try makeRoot()
+        defer {
+            try? fm.removeItem(at: root)
+            try? fm.removeItem(at: outside)
+        }
+        let trash = outside.appendingPathComponent(".Trash", isDirectory: true)
+        let desktop = outside.appendingPathComponent("Desktop", isDirectory: true)
+        let caskroom = outside.appendingPathComponent("Caskroom", isDirectory: true)
+        for folder in [trash, desktop, caskroom] {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        let trashed = try makeBundle(in: root, name: "Trashed", bundleID: "com.test.trashed")
+        let moved = try makeBundle(in: root, name: "Moved", bundleID: "com.test.moved")
+        let movedThenTrashed = try makeBundle(in: root, name: "Later", bundleID: "com.test.later")
+        let uninstalled = try makeBundle(in: root, name: "Uninstalled", bundleID: "com.test.uninstalled")
+        let deleted = try makeBundle(in: root, name: "Deleted", bundleID: "com.test.deleted")
+        let upgraded = try makeBundle(in: root, name: "Upgraded", bundleID: "com.test.upgraded")
+
+        let timing = RemovedAppWatchPolicy.FollowTiming(
+            quietPeriod: .milliseconds(500),
+            maxDeletedWait: .seconds(5),
+            movedFollowWindow: .seconds(2),
+            pollInterval: .milliseconds(50)
+        )
+        let watcher = ApplicationsFolderWatcher(roots: [root], tracksDestinations: true, timing: timing)
+        var departures: [(at: Date, departure: ApplicationsFolderWatcher.Departure)] = []
+        watcher.onDeparture = { departures.append((Date(), $0)) }
+        watcher.start()
+        defer { watcher.stop() }
+
+        for _ in 0..<50 where watcher.installedApps.count < 6 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        #expect(watcher.installedApps.count == 6)
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        func reported(_ id: String) -> (at: Date, departure: ApplicationsFolderWatcher.Departure)? {
+            departures.first { $0.departure.app.bundleID == id }
+        }
+        func waitFor(_ id: String, seconds: Double) async throws {
+            let deadline = Date().addingTimeInterval(seconds)
+            while reported(id) == nil, Date() < deadline {
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+
+        let start = Date()
+        try fm.moveItem(at: trashed, to: trash.appendingPathComponent("Trashed 10.23.45.app"))
+        let onDesktop = desktop.appendingPathComponent("Later.app")
+        try fm.moveItem(at: moved, to: desktop.appendingPathComponent("Moved.app"))
+        try fm.moveItem(at: movedThenTrashed, to: onDesktop)
+        let inCaskroom = caskroom.appendingPathComponent("Uninstalled.app")
+        try fm.moveItem(at: uninstalled, to: inCaskroom)
+        try fm.removeItem(at: deleted)
+        // The upgrade: set the old copy aside, install the new one, drop the old.
+        let backup = caskroom.appendingPathComponent("Upgraded.app")
+        try fm.moveItem(at: upgraded, to: backup)
+        try makeBundle(in: root, name: "Upgraded", bundleID: "com.test.upgraded")
+        try fm.removeItem(at: backup)
+
+        try await waitFor("com.test.trashed", seconds: 1)
+        let trashReport = try #require(reported("com.test.trashed"))
+        #expect(trashReport.departure.kind == .trashed)
+        #expect(trashReport.at.timeIntervalSince(start) < 0.6)
+        #expect(reported("com.test.deleted") == nil)
+
+        try await waitFor("com.test.deleted", seconds: 3)
+        let deleteReport = try #require(reported("com.test.deleted"))
+        #expect(deleteReport.departure.kind == .deleted)
+        #expect(deleteReport.at.timeIntervalSince(start) >= 0.5)
+
+        // Well inside the follow window, the Desktop copy goes to the Trash and
+        // Homebrew purges its Caskroom copy. Both count from that moment.
+        #expect(reported("com.test.later") == nil)
+        #expect(reported("com.test.uninstalled") == nil)
+        let laterMovedAt = Date()
+        try fm.moveItem(at: onDesktop, to: trash.appendingPathComponent("Later.app"))
+        try fm.removeItem(at: inCaskroom)
+        try await waitFor("com.test.later", seconds: 1)
+        try await waitFor("com.test.uninstalled", seconds: 2)
+        let laterReport = try #require(reported("com.test.later"))
+        #expect(laterReport.departure.kind == .trashed)
+        #expect(laterReport.at.timeIntervalSince(laterMovedAt) < 0.5)
+        #expect(reported("com.test.uninstalled")?.departure.kind == .deleted)
+
+        // Past the follow window: the copy left on the Desktop was a move, and the
+        // upgraded app came back, so neither was ever reported.
+        try await Task.sleep(nanoseconds: 2_200_000_000)
+        #expect(reported("com.test.moved") == nil)
+        #expect(reported("com.test.upgraded") == nil)
     }
 }
 
 @Suite("Removed-app handoff files", .serialized)
 struct RemovedAppHandoffTests {
-    @Test
-    func enqueueAndDrainRoundTripsInOrder() throws {
+    private func withTemporaryRoot(_ body: () throws -> Void) throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("purge-handoff-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -307,13 +610,38 @@ struct RemovedAppHandoffTests {
         let previous = RemovedAppHandoff.root
         RemovedAppHandoff.root = root
         defer { RemovedAppHandoff.root = previous }
+        try body()
+    }
 
-        RemovedAppHandoff.enqueue(.init(path: "/Applications/A.app", bundleID: "com.a", name: "A"))
-        RemovedAppHandoff.enqueue(.init(path: "/Applications/B.app", bundleID: "com.b", name: "B"))
+    /// Reading leaves records in place, so a review that has to wait for
+    /// onboarding or Full Disk Access is not lost. Discarding removes one.
+    @Test
+    func pendingRecordsStayUntilDiscarded() throws {
+        try withTemporaryRoot {
+            RemovedAppHandoff.enqueue(.init(path: "/Applications/A.app", bundleID: "com.a", name: "A", fileNumber: 7, removedAt: Date()))
+            RemovedAppHandoff.enqueue(.init(path: "/Applications/B.app", bundleID: "com.b", name: "B"))
 
-        let drained = RemovedAppHandoff.drain()
-        #expect(Set(drained.map(\.name)) == ["A", "B"])
-        #expect(RemovedAppHandoff.drain().isEmpty)
+            #expect(Set(RemovedAppHandoff.pending().map(\.name)) == ["A", "B"])
+            #expect(RemovedAppHandoff.pending().count == 2)
+            #expect(RemovedAppHandoff.pending().first { $0.name == "A" }?.fileNumber == 7)
+
+            RemovedAppHandoff.discard(path: "/Applications/A.app")
+            #expect(RemovedAppHandoff.pending().map(\.name) == ["B"])
+
+            RemovedAppHandoff.clearPending()
+            #expect(RemovedAppHandoff.pending().isEmpty)
+        }
+    }
+
+    /// A record that waited more than a week is dropped rather than reviewed.
+    @Test
+    func oldRecordsExpire() throws {
+        try withTemporaryRoot {
+            let longAgo = Date().addingTimeInterval(-RemovedAppWatchPolicy.recordLifetime - 60)
+            RemovedAppHandoff.enqueue(.init(path: "/Applications/Old.app", bundleID: "com.old", name: "Old", removedAt: longAgo))
+            RemovedAppHandoff.enqueue(.init(path: "/Applications/New.app", bundleID: "com.new", name: "New", removedAt: Date()))
+            #expect(RemovedAppHandoff.pending().map(\.name) == ["New"])
+        }
     }
 
     @Test
