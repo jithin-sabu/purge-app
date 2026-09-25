@@ -95,6 +95,7 @@ Dragging an app to the Trash leaves most of it behind: caches, preferences, cont
 - Matching is strict, so uninstalling one app can't sweep in files shared across a vendor's apps. Exact bundle-id and app-group matches arrive checked; looser name-only matches arrive unchecked for you to confirm
 - A running app is asked to quit first, and only gracefully. If it won't, it's left installed and the rest of the batch still goes through
 - Everything confirmed moves to **Trash** through the same delete engine as the rest of Purge, so it can all come back
+- Optional, off by default: turn on **Review leftovers when an app is deleted** in Settings. A small background watcher then notices when an app leaves **Applications** or **~/Applications** — even if Purge is quit — opens Purge with just that app's leftovers, and gets out of the way after you confirm or dismiss. Nothing moves without that review
 
 ### Safety labels
 

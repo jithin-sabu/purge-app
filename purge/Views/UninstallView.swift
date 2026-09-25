@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Ordering for the app grid. Separate from Large Files' `SortOption` because the
 /// date here is install date, not last-used, and the labels say so.
@@ -1247,6 +1248,97 @@ struct OrphanReviewSheet: View {
             Spacer()
 
             Button("Cancel", action: onCancel)
+                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .keyboardShortcut(.cancelAction)
+
+            Button("Move \(plan.totalSelectedItems) to Trash") {
+                onConfirm(plan)
+            }
+            .buttonStyle(SolidDestructiveButtonStyle())
+            .keyboardShortcut(.defaultAction)
+            .disabled(plan.totalSelectedItems == 0)
+        }
+    }
+}
+
+// MARK: - Removed app review sheet
+
+/// Shown unprompted when an app leaves the Applications folders outside Purge
+/// (issue #65), so it says which app and why Purge appeared before anything else.
+struct RemovedAppLeftoverSheet: View {
+    @State private var plan: RemovedAppLeftoverPlan
+    let onCancel: () -> Void
+    let onConfirm: (RemovedAppLeftoverPlan) -> Void
+
+    init(
+        plan: RemovedAppLeftoverPlan,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping (RemovedAppLeftoverPlan) -> Void
+    ) {
+        _plan = State(initialValue: plan)
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            header
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach($plan.items) { $item in
+                        UninstallItemRow(
+                            item: item,
+                            isSelected: $item.isSelected
+                        )
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(minHeight: 220)
+
+            footer
+        }
+        .padding(AppStyle.Spacing.large)
+        .frame(minWidth: 600, minHeight: 460)
+        .background(AppColors.bgBase)
+    }
+
+    private var appIcon: NSImage {
+        if let trashed = plan.trashedBundleURL {
+            return BrandIconService.shared.installedAppIcon(at: trashed)
+        }
+        return NSWorkspace.shared.icon(for: .applicationBundle)
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: AppStyle.Spacing.medium) {
+            Image(nsImage: appIcon)
+                .resizable()
+                .frame(width: 48, height: 48)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+                Text("\(plan.app.name) left files behind")
+                    .font(AppStyle.Typography.pageTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                Text("\(plan.app.name) was removed from Applications, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it.")
+                    .font(.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+
+            Spacer()
+
+            Button("Keep Files", action: onCancel)
                 .buttonStyle(AppButtonStyle(variant: .bordered))
                 .keyboardShortcut(.cancelAction)
 

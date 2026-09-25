@@ -9,6 +9,7 @@ struct SettingsView: View {
     @ObservedObject private var helper = PrivilegedHelperPreferenceStore.shared
     @ObservedObject private var registrar = ScheduledCleaningRegistrar.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
+    @ObservedObject private var removedApps = RemovedAppMonitor.shared
     @AppStorage(DevToolsStalenessOption.userDefaultsKey)
     private var devToolsStalenessThresholdRaw = DevToolsStalenessOption.defaultOption.rawValue
     @AppStorage(AppearanceMode.userDefaultsKey)
@@ -41,6 +42,7 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 18) {
                     startupSection
+                    deletedAppsSection
                     protectedAppRemovalSection
                     appearanceSection
                     cleaningScheduleSection
@@ -288,6 +290,59 @@ struct SettingsView: View {
             get: { startup.hidesDockIcon },
             set: { startup.setHidesDockIcon($0) }
         )
+    }
+
+    private var deletedAppsSection: some View {
+        settingsSection("Deleted Apps") {
+            settingsToggleRow(
+                title: "Review leftovers when an app is deleted",
+                caption: deletedAppsCaption,
+                warning: deletedAppsWarning,
+                captionAnimatesTextChanges: true,
+                isOn: Binding(
+                    get: { removedApps.isEnabled },
+                    set: { removedApps.setEnabled($0) }
+                )
+            )
+
+            if removedApps.isEnabled, removedApps.needsApproval {
+                settingsSectionDivider
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(AppColors.tagCheckText)
+                        .padding(.top, 1)
+                    Text("Approval is still needed in System Settings before Purge can watch for deleted apps in the background.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button("Open System Settings") {
+                        removedApps.openLoginItemsSettings()
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(16)
+            }
+        }
+        .onAppear { removedApps.refreshAgentStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            removedApps.refreshAgentStatus()
+        }
+    }
+
+    private var deletedAppsCaption: String {
+        """
+        When an app leaves Applications, like dragging it to the Trash in Finder, \
+        Purge opens with the files it left behind — even if Purge was quit. Nothing \
+        moves until you confirm. A small background watcher stays on while this is \
+        enabled; you can turn it off here at any time.
+        """
+    }
+
+    private var deletedAppsWarning: String? {
+        guard removedApps.isEnabled, removedApps.lastRegistrationFailed else { return nil }
+        return "Couldn't start the background watcher. Turn this off and on again to retry."
     }
 
     private var cleaningScheduleSection: some View {

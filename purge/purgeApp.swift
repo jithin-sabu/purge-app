@@ -60,6 +60,12 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            RemovedAppMonitor.shared.handleOpenURL(url)
+        }
+    }
+
     func checkForUpdates() {
         updater.checkForUpdates()
     }
