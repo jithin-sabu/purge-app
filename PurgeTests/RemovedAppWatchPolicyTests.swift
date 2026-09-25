@@ -296,7 +296,7 @@ struct ApplicationsFolderWatcherTests {
     }
 }
 
-@Suite("Removed-app handoff files")
+@Suite("Removed-app handoff files", .serialized)
 struct RemovedAppHandoffTests {
     @Test
     func enqueueAndDrainRoundTripsInOrder() throws {
