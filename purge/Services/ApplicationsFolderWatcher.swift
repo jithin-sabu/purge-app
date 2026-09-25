@@ -5,8 +5,10 @@ import Foundation
 ///
 /// A removed bundle can no longer say which app it was, so the watcher keeps an
 /// index of every bundle's identifier and name, re-lists the roots when their
-/// top level changes, and reports what dropped out of the index once it has
-/// stayed gone through `RemovedAppWatchPolicy.settleDelay`.
+/// top level changes, and reports what dropped out. A bundle that landed in the
+/// Trash is reported at once. Anything else waits through
+/// `RemovedAppWatchPolicy.settleDelay`, so an updater can put the new copy back
+/// before Purge offers to remove its support files.
 ///
 /// Directory-level FSEvents rather than per-file: only entries appearing and
 /// disappearing near the top of each root matter, and per-file events would
@@ -106,7 +108,9 @@ final class ApplicationsFolderWatcher {
             &context,
             watched as CFArray,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            1.0,
+            // No coalescing delay. A one-second latency is what made a Trash drag
+            // feel late next to a watcher that reports the moment the bundle moves.
+            0,
             FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes)
         ) else { return }
         FSEventStreamSetDispatchQueue(stream, DispatchQueue.main)
@@ -135,7 +139,7 @@ final class ApplicationsFolderWatcher {
         rescanTask?.cancel()
         let current = generation
         rescanTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(nanoseconds: 50_000_000)
             guard !Task.isCancelled, let self, self.generation == current else { return }
             let previous = self.apps
             let snapshot = await Self.snapshotOffMain(roots: self.roots, reusing: previous)
@@ -150,24 +154,37 @@ final class ApplicationsFolderWatcher {
     private func scheduleSettleCheck(for app: InstalledApp) {
         settleTasks[app.id]?.cancel()
         let current = generation
+        let trash = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".Trash", isDirectory: true)
+        // Already in the Trash: this is a delete, not an update swapping the bundle.
+        if RemovedAppWatchPolicy.isTrashed(app: app, trashDirectory: trash) {
+            settleTasks[app.id] = Task { [weak self] in
+                await self?.reportDeparture(of: app, generation: current)
+            }
+            return
+        }
         settleTasks[app.id] = Task { [weak self] in
             try? await Task.sleep(for: RemovedAppWatchPolicy.settleDelay)
-            guard !Task.isCancelled, let self, self.generation == current else { return }
-            // A fresh read rather than `apps`: a replacement may have landed at a new
-            // path after the last re-list. It is not stored, so the next re-list still
-            // diffs against the index it last published.
-            let snapshot = await Self.snapshotOffMain(roots: self.roots, reusing: self.apps)
-            guard !Task.isCancelled, self.generation == current else { return }
-            self.settleTasks[app.id] = nil
-            let installedIDs = Set(snapshot.values.compactMap { $0.bundleID?.lowercased() })
-            self.onDeparture?(
-                Departure(
-                    app: app,
-                    bundleStillExists: FileManager.default.fileExists(atPath: app.bundleURL.path),
-                    installedBundleIDs: installedIDs
-                )
-            )
+            await self?.reportDeparture(of: app, generation: current)
         }
+    }
+
+    /// Re-reads the app roots, then reports `app`. A fresh read rather than `apps`:
+    /// a replacement may have landed at a new path after the last re-list. It is
+    /// not stored, so the next re-list still diffs against the index last published.
+    private func reportDeparture(of app: InstalledApp, generation current: Int) async {
+        guard !Task.isCancelled, generation == current else { return }
+        let snapshot = await Self.snapshotOffMain(roots: roots, reusing: apps)
+        guard !Task.isCancelled, generation == current else { return }
+        settleTasks[app.id] = nil
+        let installedIDs = Set(snapshot.values.compactMap { $0.bundleID?.lowercased() })
+        onDeparture?(
+            Departure(
+                app: app,
+                bundleStillExists: FileManager.default.fileExists(atPath: app.bundleURL.path),
+                installedBundleIDs: installedIDs
+            )
+        )
     }
 
     // MARK: Snapshot

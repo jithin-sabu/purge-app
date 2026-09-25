@@ -78,6 +78,19 @@ struct RemovedAppWatchPolicyTests {
         #expect(departed.map(\.id) == [gone.id])
     }
 
+    @Test
+    func trashedBundleIsRecognizedByItsOriginalName() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-trash-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = makeApp()
+        let trashed = root.appendingPathComponent("Rectangle.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: trashed, withIntermediateDirectories: true)
+        #expect(RemovedAppWatchPolicy.isTrashed(app: app, trashDirectory: root))
+        #expect(!RemovedAppWatchPolicy.isTrashed(app: makeApp(name: "Other", bundlePath: "/Applications/Other.app"), trashDirectory: root))
+    }
+
     // MARK: Review decision
 
     @Test

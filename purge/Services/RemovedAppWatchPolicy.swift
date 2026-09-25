@@ -5,11 +5,19 @@ import Foundation
 /// decision can be tested without a live FSEvents stream.
 nonisolated enum RemovedAppWatchPolicy {
 
-    /// How long a vanished bundle must stay gone before Purge speaks up. Updaters
-    /// (Sparkle, the App Store, `brew upgrade`) move the old bundle out and the new
-    /// one in; prompting inside that window would offer to trash the support files
-    /// of an app that is being updated, not removed.
+    /// How long a vanished bundle must stay gone before Purge speaks up, when it
+    /// did not land in the Trash. Updaters (Sparkle, the App Store, `brew upgrade`)
+    /// move the old bundle out and the new one in; prompting inside that window
+    /// would offer to trash the support files of an app that is being updated.
+    /// A bundle already in the Trash was deleted, so it is reviewed immediately.
     static let settleDelay: Duration = .seconds(3)
+
+    /// True when `app`'s bundle is sitting in `trashDirectory` under its original
+    /// name, which is where Finder puts an app dragged to the Trash.
+    static func isTrashed(app: InstalledApp, trashDirectory: URL) -> Bool {
+        let trashed = trashDirectory.appendingPathComponent(app.bundleURL.lastPathComponent, isDirectory: true)
+        return FileManager.default.fileExists(atPath: trashed.path)
+    }
 
     /// FSEvents can report `/Applications` by its data-volume path, and directory
     /// events carry a trailing slash. Both are folded away so paths compare equal to
