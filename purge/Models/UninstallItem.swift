@@ -173,6 +173,22 @@ nonisolated struct OrphanCleanupPlan: Identifiable, Hashable {
     var totalSelectedBytes: Int64 { selectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
 }
 
+/// The leftovers of an app that left the Applications folders outside Purge,
+/// awaiting review (issue #65). The app is already gone, so there is no bundle
+/// row: every item is a support file it left behind.
+nonisolated struct RemovedAppLeftoverPlan: Identifiable, Hashable {
+    let app: InstalledApp
+    var items: [UninstallItem]
+    /// The bundle's copy in the Trash, when there is one to take an icon from.
+    var trashedBundleURL: URL?
+
+    var id: String { app.id }
+
+    var selectedItems: [UninstallItem] { items.filter(\.isSelected) }
+    var totalSelectedItems: Int { selectedItems.count }
+    var totalSelectedBytes: Int64 { selectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+}
+
 /// One app in a multi-app removal: the app and its bundle-plus-leftover items,
 /// each item carrying its own `isSelected` so the review sheet can tick and
 /// untick within an app.

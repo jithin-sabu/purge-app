@@ -257,6 +257,9 @@ final class PurgeStore: ObservableObject {
     /// The reviewed orphan removal awaiting confirmation. Drives the review sheet
     /// via `.sheet(item:)`; nil when closed.
     @Published var orphanCleanupPlan: OrphanCleanupPlan?
+    /// Leftovers of an app removed outside Purge, awaiting review (issue #65).
+    /// Set by `RemovedAppMonitor`; drives its sheet in `ContentView`.
+    @Published var removedAppLeftoverPlan: RemovedAppLeftoverPlan?
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:] {
         didSet { invalidateSafeCleanupSummary() }
@@ -511,6 +514,28 @@ final class PurgeStore: ObservableObject {
     var isManualCleaningInProgress: Bool {
         manualDeletionSession?.phase == .cleaning
             || interactiveSafeCleanupSession?.phase == .cleaning
+    }
+
+    /// `true` while a review sheet, confirmation, clean, or its summary owns the
+    /// window. `ContentView` can present only one of these at a time, so an
+    /// unprompted review waits until this clears.
+    var isShowingReviewOrCleaning: Bool {
+        uninstallPlan != nil
+            || orphanCleanupPlan != nil
+            || removedAppLeftoverPlan != nil
+            || isBuildingUninstallPlan
+            || showDeletionSheet
+            || pendingUnknownDeletion != nil
+            || showLargeFileDeletionSheet
+            || pendingDuplicateCleanup != nil
+            || showMissingLockfileFriction
+            || showUncommittedGitFriction
+            || showHighRiskDeletionSecondConfirm
+            || isDeleting
+            || manualDeletionSession != nil
+            || interactiveSafeCleanupSession != nil
+            || onboardingCelebrationMovedToTrashBytes != nil
+            || errorMessage != nil
     }
 
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
@@ -876,6 +901,7 @@ final class PurgeStore: ObservableObject {
         let bundleURL = pending?.app.bundleURL ?? URL(fileURLWithPath: item.path)
         let bundleName = pending?.app.name ?? item.displayName
         let bundleSize = pending?.items.first(where: { $0.category == .bundle })?.sizeBytes ?? item.sizeBytes
+        RemovedAppMonitor.shared.noteRemovalByPurge(of: [bundleURL])
         guard let bundleReport = try? await fileDeleter.deleteUserSelectedFiles(
             at: [bundleURL],
             pathToDisplayName: [bundleKey: bundleName],
@@ -1606,26 +1632,90 @@ final class PurgeStore: ObservableObject {
 
     func confirmOrphanCleanup(_ plan: OrphanCleanupPlan) async {
         orphanCleanupPlan = nil
-        await performOrphanCleanup(items: plan.selectedItems)
+        await performLeftoverCleanup(items: plan.selectedItems)
     }
 
-    /// Trashes the chosen orphan leftovers, reusing the uninstaller's deletion
-    /// primitive: those paths sit outside the cache allowlist, and
-    /// `deleteUserSelectedFiles` accepts them through
-    /// `AppUninstallScanPolicy.isEligibleForUninstallDeletion`, the same gate the
-    /// scanner used to offer them. Shares the live-session overlay, progress
-    /// poller, and history entry with the other manual flows.
-    private func performOrphanCleanup(items: [UninstallItem]) async {
+    // MARK: - Leftovers of apps removed outside Purge (issue #65)
+
+    /// The review for an app that left the Applications folders outside Purge, or
+    /// `nil` when it left nothing worth showing. `survivors` is every app still in
+    /// the app roots, so a leftover one of them also claims is never offered.
+    /// `trashedBundleURL` is the bundle's own copy in the Trash, found by file
+    /// number, never a same-named copy left over from an earlier delete.
+    func removedAppLeftoverPlan(
+        for app: InstalledApp,
+        survivors: [InstalledApp],
+        trashedBundleURL: URL?
+    ) async -> RemovedAppLeftoverPlan? {
+        var scanned: [UninstallItem] = []
+        for await item in uninstallScanner.leftoverStream(for: app) {
+            scanned.append(item)
+        }
+        let items = RemovedAppReviewFiltering.reviewItems(from: scanned, owner: app, survivors: survivors)
+            .filter { !ExcludedPathsStore.isExcluded($0.path) }
+            .sorted(by: uninstallItemOrder)
+        guard !items.isEmpty else { return nil }
+        return RemovedAppLeftoverPlan(app: app, items: items, trashedBundleURL: trashedBundleURL)
+    }
+
+    func cancelRemovedAppLeftovers() {
+        removedAppLeftoverPlan = nil
+    }
+
+    /// Checks the app is still gone before anything moves: the review opens the
+    /// moment a bundle leaves, and an update or a put-back can land while the sheet
+    /// is up. The check runs before the sheet closes because `RemovedAppMonitor`
+    /// reads a closed sheet with no clean running as the end of the review.
+    func confirmRemovedAppLeftovers(_ plan: RemovedAppLeftoverPlan) async {
+        let checked = await RemovedAppPresence.revalidate(plan)
+        // A second click while the check ran finds the sheet already gone.
+        guard removedAppLeftoverPlan?.id == plan.id else { return }
+        removedAppLeftoverPlan = nil
+        guard let checked else {
+            errorMessage = "\(plan.app.name) is on this Mac again, so its files were kept."
+            return
+        }
+        await performLeftoverCleanup(items: checked.selectedItems)
+    }
+
+    /// Drops an app that left the app roots outside Purge, so the picker never
+    /// offers to uninstall a bundle that is no longer there.
+    func forgetRemovedApp(at bundleURL: URL) {
+        let key = bundleURL.standardizedFileURL.path
+        guard !FileManager.default.fileExists(atPath: key) else { return }
+        installedApps.removeAll { $0.id == key }
+        selectedAppIDs.remove(key)
+        removableBytesByAppID[key] = nil
+    }
+
+    /// Trashes leftovers whose app is already gone (orphans, and apps removed
+    /// outside Purge), reusing the uninstaller's deletion primitive: those paths
+    /// sit outside the cache allowlist, and `deleteUserSelectedFiles` accepts them
+    /// through `AppUninstallScanPolicy.isEligibleForUninstallDeletion`, the same
+    /// gate the scanners used to offer them. Shares the live-session overlay,
+    /// progress poller, and history entry with the other manual flows.
+    ///
+    /// Escalation matches the uninstaller's leftover pass: an item whose parent
+    /// folder is not writable may go through the administrator helper. That is the
+    /// same class of app data, and without it a root-owned launch daemon left by a
+    /// removed app could never be cleared. Only items the user ticked reach here,
+    /// and the removed-app review never pre-ticks anything outside the home folder
+    /// (`RemovedAppReviewFiltering`).
+    private func performLeftoverCleanup(items: [UninstallItem]) async {
         guard !items.isEmpty, !isDeleting else { return }
 
         var urls: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
+        var privilegedEligiblePaths = Set<String>()
         for item in items {
             let key = item.path.standardizedFileURL.path
             urls.append(item.path)
             pathToDisplayName[key] = item.safetyInfo.headline
             pathToExpectedSizeBytes[key] = item.sizeBytes
+            // Shared `/Library` roots (launch daemons, shared support) are not
+            // user-writable; everything in the home Library stays unprivileged.
+            if pathNeedsPrivilege(item.path) { privilegedEligiblePaths.insert(key) }
         }
 
         let progressBuffer = DeletionProgressBuffer()
@@ -1653,6 +1743,7 @@ final class PurgeStore: ObservableObject {
                 at: urls,
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                privilegedEligiblePaths: privilegedEligiblePaths,
                 onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
@@ -1944,6 +2035,7 @@ final class PurgeStore: ObservableObject {
                 sizes[key] = entry.bundle.sizeBytes
                 eligible.insert(key)
             }
+            RemovedAppMonitor.shared.noteRemovalByPurge(of: urls)
             do {
                 let report = try await fileDeleter.deleteUserSelectedFiles(
                     at: urls,
@@ -2145,8 +2237,11 @@ final class PurgeStore: ObservableObject {
         hasFullDiskAccess = granted
     }
 
+    /// Assigns only on a change: every assignment to a `@Published` property
+    /// invalidates every view observing the store, even when the value is the same.
     func refreshPermission() {
-        hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
+        let granted = PermissionChecker().hasFullDiskAccess()
+        if granted != hasFullDiskAccess { hasFullDiskAccess = granted }
     }
 
     func scanGeneral() async {

@@ -107,6 +107,13 @@ struct ContentView: View {
                 onConfirm: { edited in Task { await store.confirmOrphanCleanup(edited) } }
             )
         }
+        .sheet(item: $store.removedAppLeftoverPlan) { plan in
+            RemovedAppLeftoverSheet(
+                plan: plan,
+                onCancel: { store.cancelRemovedAppLeftovers() },
+                onConfirm: { edited in Task { await store.confirmRemovedAppLeftovers(edited) } }
+            )
+        }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
             if isLifecycleActive, let session = store.interactiveSafeCleanupSession {
