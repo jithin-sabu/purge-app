@@ -24,9 +24,6 @@ final class RemovedAppMonitor: ObservableObject {
 
     private enum UDKeys {
         static let isEnabled = "removedApps.offerLeftoverReview"
-        /// Launch argument `-removedApps.allowDevAgent YES` lets a build run from
-        /// Xcode register the agent and act on records while testing this feature.
-        static let allowDevAgent = "removedApps.allowDevAgent"
     }
 
     @Published private(set) var isEnabled: Bool
@@ -71,17 +68,18 @@ final class RemovedAppMonitor: ObservableObject {
         isEnabled = userDefaults.bool(forKey: UDKeys.isEnabled)
     }
 
-    /// False in the unit-test host and in builds run from Xcode. Those share the
-    /// installed app's defaults, so without this every test run and debug launch
-    /// would re-point the login item at a build folder and act on real records.
     private var managesLiveAgent: Bool {
-        let environment = ProcessInfo.processInfo.environment
-        if environment["XCTestConfigurationFilePath"] != nil || environment["XCTestBundlePath"] != nil {
-            return false
-        }
-        let path = Bundle.main.bundleURL.path
-        let isBuildFolder = path.contains("/DerivedData/") || path.contains("/Build/Products/")
-        return !isBuildFolder || ud.bool(forKey: UDKeys.allowDevAgent)
+        Self.managesLiveAgent(environment: ProcessInfo.processInfo.environment)
+    }
+
+    /// False only in the unit-test host. It shares the real defaults, so without
+    /// this every test run would register the login item from a build folder and
+    /// act on real removal records. A build run from Xcode is a real launch and
+    /// works like an installed one; that is how this feature is tried before a
+    /// signed release carries it.
+    nonisolated static func managesLiveAgent(environment: [String: String]) -> Bool {
+        let testHostKeys = ["XCTestConfigurationFilePath", "XCTestBundlePath", "XCTestSessionIdentifier"]
+        return !testHostKeys.contains { environment[$0] != nil }
     }
 
     func attach(store: PurgeStore) {

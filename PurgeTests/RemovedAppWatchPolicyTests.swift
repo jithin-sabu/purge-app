@@ -286,6 +286,17 @@ struct RemovedAppWatchPolicyTests {
         #expect(RemovedAppWatchPolicy.isInTrash(path: "/Users/x/Library/Mobile Documents/.Trash/Rectangle.app"))
     }
 
+    /// Only the unit-test host stays away from the real agent and records. A build
+    /// run from Xcode must act on them, or trying the feature from Xcode silently
+    /// shows nothing (it did: a Debug build dropped a real removal record).
+    @Test
+    func onlyTheTestHostLeavesTheLiveAgentAlone() {
+        #expect(RemovedAppMonitor.managesLiveAgent(environment: [:]))
+        #expect(RemovedAppMonitor.managesLiveAgent(environment: ["HOME": "/Users/x"]))
+        #expect(!RemovedAppMonitor.managesLiveAgent(environment: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]))
+        #expect(!RemovedAppMonitor.managesLiveAgent(environment: ["XCTestSessionIdentifier": "ABC"]))
+    }
+
     // MARK: Records
 
     /// A record is a file any process running as the user can write, so only one
