@@ -106,6 +106,10 @@ final class ApplicationsFolderWatcher {
 
     var installedApps: [InstalledApp] { Array(index.apps.values) }
 
+    /// True while a departure is being followed, so an owner that is about to
+    /// stop the watcher can wait rather than lose it.
+    var isFollowing: Bool { !followTasks.isEmpty }
+
     func start() {
         guard !isStarted else { return }
         isStarted = true

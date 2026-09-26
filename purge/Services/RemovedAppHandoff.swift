@@ -31,7 +31,25 @@ nonisolated enum RemovedAppHandoff {
 
     static let launchURL = URL(string: "purge://removed-apps")!
     static let agentPlistName = "io.getpurge.watch.plist"
-    static let ignoreGrace: TimeInterval = 120
+    /// Long enough to cover an administrator password prompt left open before a
+    /// root-owned bundle moves; the watcher reports the move when it happens.
+    static let ignoreGrace: TimeInterval = 600
+
+    /// Launch argument the agent passes when it starts Purge for a review.
+    /// Read from the argument domain, so it never persists in defaults.
+    static let launchedForReviewKey = "removedApps.launchedForReview"
+
+    /// Posted by Purge at launch with the path of the agent in its own bundle. An
+    /// agent running from any other copy exits, and launchd starts it again from
+    /// the registered one. Registering an agent that is already registered changes
+    /// nothing, so without this a watcher started from an Xcode build, or from a
+    /// copy since replaced, keeps running old code.
+    static let agentOwnerNotification = Notification.Name("io.getpurge.watch.owner")
+
+    /// Where the agent executable sits inside a Purge bundle.
+    static func agentExecutable(inApp appURL: URL) -> URL {
+        appURL.appendingPathComponent("Contents/MacOS/io.getpurge.watch")
+    }
 
     private static var pendingFolder: URL {
         root.appendingPathComponent("pending-removals", isDirectory: true)

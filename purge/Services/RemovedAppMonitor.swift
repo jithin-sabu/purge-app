@@ -51,7 +51,10 @@ final class RemovedAppMonitor: ObservableObject {
     /// The removal being prepared, shown, or cleaned.
     private var current: Pending?
     /// True when no Purge window was on screen before the first review in a run.
-    private var openedWindowForReview = false
+    private var openedWindowForReview = RemovedAppMonitor.startsWindowless
+    /// True when the watcher started Purge for this: it quits again once the
+    /// reviews are done, leaving the Mac as the user had it.
+    private var quitsWhenDone = RemovedAppMonitor.startsWindowless
     private var retryTask: Task<Void, Never>?
     private var drainTask: Task<Void, Never>?
     private var needsAnotherDrain = false
@@ -62,6 +65,12 @@ final class RemovedAppMonitor: ObservableObject {
     private var agentService: SMAppService {
         SMAppService.agent(plistName: RemovedAppHandoff.agentPlistName)
     }
+
+    /// The watcher started Purge to review a removal (`openPurge` in the agent).
+    static let launchedForReview = UserDefaults.standard.bool(forKey: RemovedAppHandoff.launchedForReviewKey)
+
+    /// Such a launch starts without its window, unless onboarding still needs it.
+    static let startsWindowless = launchedForReview && FirstRunGate.hasCompletedOnboarding
 
     init(userDefaults: UserDefaults = .standard) {
         ud = userDefaults
@@ -187,6 +196,19 @@ final class RemovedAppMonitor: ObservableObject {
             }
         }
         refreshAgentStatus()
+        announceAgentOwner()
+    }
+
+    /// Tells an agent started from another copy of Purge to exit, so launchd
+    /// starts this one's. See `RemovedAppHandoff.agentOwnerNotification`.
+    private func announceAgentOwner() {
+        let agent = RemovedAppHandoff.agentExecutable(inApp: Bundle.main.bundleURL)
+        DistributedNotificationCenter.default().postNotificationName(
+            RemovedAppHandoff.agentOwnerNotification,
+            object: agent.resolvingSymlinksInPath().path,
+            userInfo: nil,
+            deliverImmediately: true
+        )
     }
 
     private func unregisterAgent() {
@@ -229,6 +251,10 @@ final class RemovedAppMonitor: ObservableObject {
             if self.needsAnotherDrain {
                 self.needsAnotherDrain = false
                 self.drainPendingRemovals()
+            } else if self.queue.isEmpty, self.phase == .idle {
+                // Nothing to review after all: the app came back, or the record
+                // was not a removal. A Purge started for it goes away again.
+                self.closeWindowIfOpenedForReview()
             }
         }
     }
@@ -255,7 +281,10 @@ final class RemovedAppMonitor: ObservableObject {
         }
         if !store.hasFullDiskAccess {
             store.refreshPermission()
-            guard store.hasFullDiskAccess else { return }
+            guard store.hasFullDiskAccess else {
+                showWindowForAccess()
+                return
+            }
         }
 
         let next = queue.removeFirst()
@@ -390,11 +419,26 @@ final class RemovedAppMonitor: ObservableObject {
         }
     }
 
+    /// A Purge started windowless for a review cannot show it without Full Disk
+    /// Access. Showing the window puts the access prompt in front of the user
+    /// instead of leaving an invisible app holding the removal; it stays open.
+    private func showWindowForAccess() {
+        guard openedWindowForReview else { return }
+        openedWindowForReview = false
+        quitsWhenDone = false
+        AppWindowPresenter.reveal()
+    }
+
     private func closeWindowIfOpenedForReview() {
         defer { openedWindowForReview = false }
         guard openedWindowForReview, let store, store.errorMessage == nil else { return }
         MainWindowLocator.appWindow(in: NSApp.windows)?.close()
-        NSApp.hide(nil)
+        if quitsWhenDone {
+            quitsWhenDone = false
+            NSApp.terminate(nil)
+        } else {
+            NSApp.hide(nil)
+        }
     }
 }
 

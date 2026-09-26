@@ -34,7 +34,9 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
             hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon(),
             launchedAsLoginItem: LaunchContext.launchedAsLoginItem,
             hasCompletedOnboarding: FirstRunGate.hasCompletedOnboarding
-        ) {
+        ) || RemovedAppMonitor.startsWindowless {
+            // Started by the deleted-apps watcher: the window appears only if
+            // there is something to review (`RemovedAppMonitor`).
             InitialWindowSuppressor.suppressInitialWindow()
         }
     }

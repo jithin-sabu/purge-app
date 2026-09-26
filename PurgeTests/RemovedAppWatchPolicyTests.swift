@@ -297,6 +297,49 @@ struct RemovedAppWatchPolicyTests {
         #expect(!RemovedAppMonitor.managesLiveAgent(environment: ["XCTestSessionIdentifier": "ABC"]))
     }
 
+    // MARK: Agent updates
+
+    @Test("The agent restarts once a replaced executable reads the same twice")
+    func agentRestartsAfterReplacementSettles() {
+        #expect(RemovedAppWatchPolicy.agentHome(launched: 10, previous: 10, current: 10) == .unchanged)
+        // First sight of a new copy: it may still be landing.
+        #expect(RemovedAppWatchPolicy.agentHome(launched: 10, previous: 10, current: 20) == .settling)
+        #expect(RemovedAppWatchPolicy.agentHome(launched: 10, previous: 20, current: 20) == .replaced)
+        // Still changing between checks.
+        #expect(RemovedAppWatchPolicy.agentHome(launched: 10, previous: 20, current: 30) == .settling)
+        // Deleted, then the new copy landed (a Finder replace).
+        #expect(RemovedAppWatchPolicy.agentHome(launched: 10, previous: nil, current: 20) == .settling)
+    }
+
+    @Test("An agent whose Purge was trashed or deleted goes quiet rather than restarting")
+    func agentGoesDormantWhenItsPurgeIsGone() {
+        #expect(RemovedAppWatchPolicy.agentHome(launched: 10, previous: 10, current: nil) == .settling)
+        #expect(RemovedAppWatchPolicy.agentHome(launched: 10, previous: nil, current: nil) == .gone)
+        // Put back from the Trash: the same file again.
+        #expect(RemovedAppWatchPolicy.agentHome(launched: 10, previous: nil, current: 10) == .unchanged)
+    }
+
+    @Test("An agent that never read its own file number never acts on it")
+    func agentWithoutLaunchNumberStays() {
+        #expect(RemovedAppWatchPolicy.agentHome(launched: nil, previous: 20, current: 20) == .unchanged)
+        #expect(RemovedAppWatchPolicy.agentHome(launched: nil, previous: nil, current: nil) == .unchanged)
+    }
+
+    @Test("An agent from another Purge copy is stale, the owner's own agent is not")
+    func agentStaleWhenOwnerIsAnotherCopy() {
+        let installed = "/Applications/Purge.app/Contents/MacOS/io.getpurge.watch"
+        let xcode = "/Users/me/Library/Developer/Xcode/DerivedData/purge-abc/Build/Products/Debug/Purge.app/Contents/MacOS/io.getpurge.watch"
+        #expect(RemovedAppWatchPolicy.agentIsStale(ownPath: xcode, ownerPath: installed, ownerExists: true))
+        #expect(!RemovedAppWatchPolicy.agentIsStale(ownPath: installed, ownerPath: installed, ownerExists: true))
+        #expect(!RemovedAppWatchPolicy.agentIsStale(
+            ownPath: installed,
+            ownerPath: "/System/Volumes/Data" + installed,
+            ownerExists: true
+        ))
+        // A copy with no agent in it cannot stop a working one.
+        #expect(!RemovedAppWatchPolicy.agentIsStale(ownPath: xcode, ownerPath: installed, ownerExists: false))
+    }
+
     // MARK: Records
 
     /// A record is a file any process running as the user can write, so only one

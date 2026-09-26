@@ -219,6 +219,42 @@ nonisolated enum RemovedAppWatchPolicy {
         }
     }
 
+    // MARK: Agent updates
+
+    /// What the agent's own executable says about the Purge it came from.
+    enum AgentHome: Equatable, Sendable {
+        /// Still the file the agent started from.
+        case unchanged
+        /// Different from the last check: a copy may still be landing.
+        case settling
+        /// A different file, the same on two checks: Purge was updated. The agent
+        /// exits so launchd starts the new one. A running process keeps its old
+        /// code, and launchd only starts it again when it exits.
+        case replaced
+        /// Nothing there on two checks: Purge was trashed, moved, or deleted. The
+        /// agent stops watching rather than exiting, because launchd would start
+        /// it again from wherever the bundle went, the Trash included.
+        case gone
+    }
+
+    /// `launched` is the file number of the agent's executable when it started,
+    /// `previous` and `current` the numbers at the last two checks (nil when
+    /// nothing is there). Waiting for the same reading twice means a half-copied
+    /// bundle is never launched.
+    static func agentHome(launched: UInt64?, previous: UInt64?, current: UInt64?) -> AgentHome {
+        guard let launched, current != launched else { return .unchanged }
+        guard previous == current else { return .settling }
+        return current == nil ? .gone : .replaced
+    }
+
+    /// Whether Purge announcing `ownerPath` as its agent means this agent, running
+    /// from `ownPath`, is the wrong copy. An owner path with nothing there is
+    /// ignored, so a build without the agent cannot stop a working one.
+    static func agentIsStale(ownPath: String, ownerPath: String, ownerExists: Bool) -> Bool {
+        guard ownerExists else { return false }
+        return normalizedPath(ownPath) != normalizedPath(ownerPath)
+    }
+
     // MARK: Records
 
     /// Checks a removal record before Purge acts on it. The record is a file any

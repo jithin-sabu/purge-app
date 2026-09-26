@@ -334,7 +334,7 @@ struct SettingsView: View {
     private var deletedAppsCaption: String {
         """
         When an app leaves Applications, like dragging it to the Trash in Finder, \
-        Purge opens with the files it left behind — even if Purge was quit. Nothing \
+        Purge opens with the files it left behind, even if Purge was quit. Nothing \
         moves until you confirm. A small background watcher stays on while this is \
         enabled; you can turn it off here at any time.
         """
