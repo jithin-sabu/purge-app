@@ -252,6 +252,7 @@ struct MenuBarContentView: View {
     // MARK: Formatting
 
     private func openPurge() {
+        RemovedAppMonitor.shared.userOpenedWindow()
         AppWindowPresenter.reveal()
     }
 

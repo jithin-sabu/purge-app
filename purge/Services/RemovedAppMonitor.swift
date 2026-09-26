@@ -51,6 +51,7 @@ final class RemovedAppMonitor: ObservableObject {
     /// The removal being prepared, shown, or cleaned.
     private var current: Pending?
     /// True when no Purge window was on screen before the first review in a run.
+    /// Cleared when the user opens the window themselves (`userOpenedWindow`).
     private var openedWindowForReview = RemovedAppMonitor.startsWindowless
     /// True when the watcher started Purge for this: it quits again once the
     /// reviews are done, leaving the Mac as the user had it.
@@ -171,6 +172,14 @@ final class RemovedAppMonitor: ObservableObject {
     /// open a second review of an app the user has just reviewed.
     func noteRemovalByPurge(of bundleURLs: [URL]) {
         RemovedAppHandoff.ignore(paths: bundleURLs.map { $0.standardizedFileURL.path })
+    }
+
+    /// The user opened Purge's window themselves: from the Dock, Finder, Spotlight,
+    /// or the menu bar. The window is theirs now, so ending a review leaves it open
+    /// and does not quit.
+    func userOpenedWindow() {
+        openedWindowForReview = false
+        quitsWhenDone = false
     }
 
     /// Handles `purge://removed-apps` from the background agent. The URL carries
@@ -330,9 +339,7 @@ final class RemovedAppMonitor: ObservableObject {
 
     private func present(_ plan: RemovedAppLeftoverPlan, in store: PurgeStore) {
         if !openedWindowForReview {
-            let window = MainWindowLocator.appWindow(in: NSApp.windows)
-            let windowOnScreen = window.map { $0.isVisible || $0.isMiniaturized } ?? false
-            openedWindowForReview = !windowOnScreen
+            openedWindowForReview = !Self.appWindowIsOnScreen
         }
         phase = .reviewing
         AppWindowPresenter.reveal()
@@ -419,14 +426,20 @@ final class RemovedAppMonitor: ObservableObject {
         }
     }
 
-    /// A Purge started windowless for a review cannot show it without Full Disk
-    /// Access. Showing the window puts the access prompt in front of the user
-    /// instead of leaving an invisible app holding the removal; it stays open.
+    /// A Purge with no window on screen (started by the watcher, or at login in
+    /// menu-bar-only mode) cannot show a review without Full Disk Access. Showing
+    /// the window puts the access prompt in front of the user instead of leaving
+    /// an invisible app holding the removal; it stays open.
     private func showWindowForAccess() {
-        guard openedWindowForReview else { return }
         openedWindowForReview = false
         quitsWhenDone = false
+        guard !Self.appWindowIsOnScreen else { return }
         AppWindowPresenter.reveal()
+    }
+
+    private static var appWindowIsOnScreen: Bool {
+        let window = MainWindowLocator.appWindow(in: NSApp.windows)
+        return window.map { $0.isVisible || $0.isMiniaturized } ?? false
     }
 
     private func closeWindowIfOpenedForReview() {
