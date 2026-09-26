@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Security
 
 /// Background agent that watches Applications folders when Purge itself is not
 /// running (issue #65). Records each real removal and opens Purge to review
@@ -21,6 +22,8 @@ enum PurgeWatchMain {
     private static var ownPath: String?
     private static var launchedFileNumber: UInt64?
     private static var lastFileNumber: UInt64?
+    /// Checks spent waiting for a replaced Purge to finish landing.
+    private static var replacedChecks = 0
     /// Nil while dormant.
     private static var watcher: ApplicationsFolderWatcher?
 
@@ -127,8 +130,14 @@ enum PurgeWatchMain {
         case .settling:
             break
         case .replaced:
+            replacedChecks += 1
             // A removal being followed is reported within a minute; wait for it.
-            if watcher?.isFollowing != true { exit(0) }
+            guard watcher?.isFollowing != true else { return }
+            // Finder copies a bundle file by file, and launchd waits minutes
+            // before retrying a start that failed on a half-copied one. A valid
+            // signature means every file is in place. Five minutes covers a
+            // copy that never validates, such as an unsigned local build.
+            if newCopyIsComplete() || replacedChecks >= 30 { exit(0) }
         case .gone:
             watcher?.stop()
             watcher = nil
@@ -145,6 +154,14 @@ enum PurgeWatchMain {
         ) {
             exit(0)
         }
+    }
+
+    private static func newCopyIsComplete() -> Bool {
+        guard let appURL = containingApp() else { return false }
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(appURL as CFURL, [], &code) == errSecSuccess,
+              let code else { return false }
+        return SecStaticCodeCheckValidity(code, [], nil) == errSecSuccess
     }
 
     // MARK: Paths

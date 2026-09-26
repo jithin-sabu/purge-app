@@ -150,6 +150,29 @@ struct RemovedAppWatchPolicyTests {
         #expect(RemovedAppWatchPolicy.departureKind(currentPath: nil, fileNumber: 1) == .deleted)
     }
 
+    /// Dragging an app in from a disk image creates the bundle before its
+    /// `Info.plist`. An index taken mid-copy must not keep the identifier-less
+    /// entry, or deleting the app soon after installing it is never reviewed.
+    @Test("A bundle indexed before its Info.plist arrived is read again")
+    func bundleIndexedMidCopyIsReadAgain() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
+            .appendingPathComponent("purge-midcopy-\(UUID().uuidString)", isDirectory: true)
+        let contents = root.appendingPathComponent("Chrome.app/Contents", isDirectory: true)
+        try fm.createDirectory(at: contents, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+        let key = root.appendingPathComponent("Chrome.app").standardizedFileURL.path
+
+        let midCopy = ApplicationsFolderWatcher.index(roots: [root], reusing: .init())
+        #expect(midCopy.apps[key]?.bundleID == nil)
+
+        let plist: NSDictionary = ["CFBundleIdentifier": "com.google.Chrome", "CFBundleName": "Google Chrome"]
+        try plist.write(to: contents.appendingPathComponent("Info.plist"))
+        let landed = ApplicationsFolderWatcher.index(roots: [root], reusing: midCopy)
+        #expect(landed.apps[key]?.bundleID == "com.google.Chrome")
+        #expect(landed.apps[key]?.name == "Google Chrome")
+    }
+
     @Test
     func followDecisionReportsDeletionsOnceQuietAndDropsMovesAndReturns() {
         let timing = RemovedAppWatchPolicy.FollowTiming.standard

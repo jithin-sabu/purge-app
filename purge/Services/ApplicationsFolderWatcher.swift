@@ -74,6 +74,9 @@ final class ApplicationsFolderWatcher {
     private var followTasks: [String: Task<Void, Never>] = [:]
     private var stream: FSEventStreamRef?
     private var rescanTask: Task<Void, Never>?
+    /// Re-lists the roots while a bundle has no readable identifier yet.
+    private var recheckTask: Task<Void, Never>?
+    private var incompleteRechecks = 0
     /// Watches the parent of each root that did not exist at start, so a
     /// `~/Applications` created later is picked up without watching all of home.
     private var parentSources: [DispatchSourceFileSystemObject] = []
@@ -124,6 +127,7 @@ final class ApplicationsFolderWatcher {
             index = snapshot
             openStream()
             onChange?(snapshot)
+            recheckIfIncomplete(snapshot)
         }
     }
 
@@ -133,6 +137,9 @@ final class ApplicationsFolderWatcher {
         generation += 1
         rescanTask?.cancel()
         rescanTask = nil
+        recheckTask?.cancel()
+        recheckTask = nil
+        incompleteRechecks = 0
         // Each follow task closes the handle it owns when it wakes cancelled.
         followTasks.values.forEach { $0.cancel() }
         followTasks.removeAll()
@@ -226,6 +233,7 @@ final class ApplicationsFolderWatcher {
             RemovedAppWatchPolicy.isRelevantChange(atPath: $0, roots: rootPaths)
         }
         guard mustRescan || relevant else { return }
+        incompleteRechecks = 0
         scheduleRescan()
     }
 
@@ -251,6 +259,29 @@ final class ApplicationsFolderWatcher {
                 self.route(app, fileNumber: previous.fileNumbers[app.id], handle: departedHandles[app.id])
             }
             self.onChange?(snapshot)
+            self.recheckIfIncomplete(snapshot)
+        }
+    }
+
+    /// A bundle being copied in (dragged from a disk image, extracted from an
+    /// archive) appears before its `Info.plist` does. Nothing near the top of the
+    /// roots changes when the plist lands, so no event would ever say to read it
+    /// again, and a later removal would be dropped for having no identifier. The
+    /// roots are listed again every two seconds, for up to five minutes, until
+    /// every bundle can be read. Only unreadable entries are read again.
+    private func recheckIfIncomplete(_ snapshot: Index) {
+        guard snapshot.apps.values.contains(where: { $0.bundleID == nil }) else {
+            incompleteRechecks = 0
+            return
+        }
+        guard recheckTask == nil, incompleteRechecks < 150 else { return }
+        incompleteRechecks += 1
+        let current = generation
+        recheckTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, self.generation == current else { return }
+            self.recheckTask = nil
+            self.scheduleRescan()
         }
     }
 
@@ -375,10 +406,11 @@ final class ApplicationsFolderWatcher {
 
     /// Every `.app` directly inside each root or one folder down, the same reach as
     /// the uninstaller's picker. An entry is reused from `previous` only while its
-    /// file number is unchanged, so a bundle an updater swapped in place is read
-    /// again rather than described by the copy it replaced. A root that exists but
-    /// cannot be listed keeps its previous entries: a failed read must not look like
-    /// every app in it was deleted.
+    /// file number is unchanged and it has an identifier, so a bundle an updater
+    /// swapped in place, or one first read mid-copy, is read again rather than
+    /// described by what was there before. A root that exists but cannot be
+    /// listed keeps its previous entries: a failed read must not look like every
+    /// app in it was deleted.
     nonisolated static func index(roots: [URL], reusing previous: Index) -> Index {
         let fm = FileManager.default
         var result = Index()
@@ -388,7 +420,9 @@ final class ApplicationsFolderWatcher {
             let key = url.standardizedFileURL.path
             guard result.apps[key] == nil else { return }
             let number = RemovedAppWatchPolicy.fileNumber(atPath: key)
-            if let number, previous.fileNumbers[key] == number, let known = previous.apps[key] {
+            // An entry without an identifier is read again: it was usually indexed
+            // mid-copy, before its `Info.plist` arrived.
+            if let number, previous.fileNumbers[key] == number, let known = previous.apps[key], known.bundleID != nil {
                 result.apps[key] = known
             } else {
                 // A plain path URL, not the listing's own: a URL from
