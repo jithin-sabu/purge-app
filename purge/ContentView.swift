@@ -228,6 +228,12 @@ struct ContentView: View {
 
     private func scanIfNeeded() async {
         guard isLifecycleActive, !isRunningPreview else { return }
+        // A grant that came with macOS's "Quit & Reopen" is only visible here, on
+        // the first launch after it. Its reveal replaces the ordinary launch scan.
+        if store.consumeFullDiskAccessGrant() {
+            await store.revealFullDiskAccessGrant()
+            return
+        }
         // The menu bar model kicks off the launch scan; racing a second
         // `scanAll` here would cancel and restart it from scratch.
         guard !store.isScanningAll else { return }
@@ -792,7 +798,9 @@ struct SidebarSummaryView: View {
     var body: some View {
         VStack(spacing: AppStyle.Spacing.small) {
             DeletedAppsWatcherNotice()
-            if !store.hasFullDiskAccess {
+            if let findings = store.accessGrantFindings {
+                AccessGrantedNotice(findings: findings)
+            } else if !store.hasFullDiskAccess {
                 LimitedScanNotice()
             }
             storageCard

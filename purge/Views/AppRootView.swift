@@ -57,6 +57,9 @@ struct AppRootView: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       store.refreshPermission()
     }
+    .onChange(of: store.hasFullDiskAccess) { _ in
+      handleAccessChange()
+    }
     .onAppear {
       isMainAppRevealed = hasCompletedOnboarding
     }
@@ -78,6 +81,15 @@ struct AppRootView: View {
         isMainAppRevealed = false
       }
     }
+  }
+
+  /// A grant made in System Settings while the look-deeper screen is closed still
+  /// gets a rescan and a word about what turned up. The screen reveals its own
+  /// grants and claims them first, and onboarding has its own step for this.
+  private func handleAccessChange() {
+    let isNewGrant = store.consumeFullDiskAccessGrant()
+    guard isNewGrant, hasCompletedOnboarding, !store.isLookDeeperPresented else { return }
+    Task { await store.revealFullDiskAccessGrant() }
   }
 
   private func revealMainAppAfterMount() {

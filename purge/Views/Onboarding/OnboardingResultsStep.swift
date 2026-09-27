@@ -14,13 +14,19 @@ struct OnboardingResultsSnapshot {
 }
 
 extension PurgeStore {
+  static let devArtifactCategoryTitle = "Dev tool artifacts"
+
   var onboardingResultsCategories: [OnboardingResultsCategory] {
+    resultsCategories(for: manualSafeCleanupCandidates())
+  }
+
+  func resultsCategories(for candidates: [DeletionCandidate]) -> [OnboardingResultsCategory] {
     var browserBytes: Int64 = 0
     var appCacheBytes: Int64 = 0
     var systemJunkBytes: Int64 = 0
     var devArtifactBytes: Int64 = 0
 
-    for candidate in manualSafeCleanupCandidates() {
+    for candidate in candidates {
       if let item = cacheItems.first(where: { cacheItem in
         cacheItem.locations.contains { $0.path.standardizedFileURL.path == candidate.path.standardizedFileURL.path }
       }) {
@@ -36,14 +42,14 @@ extension PurgeStore {
       }
     }
 
-    let candidates = [
+    let categories = [
       OnboardingResultsCategory(title: "App caches", symbol: "internaldrive", bytes: appCacheBytes),
-      OnboardingResultsCategory(title: "Dev tool artifacts", symbol: "hammer", bytes: devArtifactBytes),
+      OnboardingResultsCategory(title: Self.devArtifactCategoryTitle, symbol: "hammer", bytes: devArtifactBytes),
       OnboardingResultsCategory(title: "Browser caches", symbol: "globe", bytes: browserBytes),
       OnboardingResultsCategory(title: "System junk", symbol: "doc.text", bytes: systemJunkBytes),
     ]
 
-    return candidates
+    return categories
       .filter { $0.bytes > 0 }
       .sorted { $0.bytes > $1.bytes }
       .prefix(4)

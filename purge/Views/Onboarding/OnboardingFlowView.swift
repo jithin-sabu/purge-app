@@ -7,7 +7,7 @@ struct OnboardingFlowView: View {
   @EnvironmentObject private var diskStore: DiskSummaryStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  @State private var step: OnboardingStep = .welcome
+  @State private var step: OnboardingStep
   @StateObject private var revealController = OnboardingScanRevealController()
   @State private var celebrationMovedToTrashBytes: Int64 = 0
   @State private var pinnedCleanupCandidates: [PurgeStore.DeletionCandidate] = []
@@ -26,6 +26,18 @@ struct OnboardingFlowView: View {
   }
 
   @AppStorage("onboarding.pendingCelebration") private var pendingCelebration = false
+  /// Set when the look-deeper step opens System Settings. macOS may offer to quit
+  /// and reopen Purge after the toggle; this brings the relaunch back to that step,
+  /// where the reveal picks up the grant.
+  @AppStorage(Self.pendingDeeperScanKey) private var pendingDeeperScan = false
+  static let pendingDeeperScanKey = "onboarding.pendingDeeperScan"
+
+  init(hasCompletedOnboarding: Binding<Bool>, isExitingToHome: Binding<Bool>) {
+    _hasCompletedOnboarding = hasCompletedOnboarding
+    _isExitingToHome = isExitingToHome
+    let resumesLookDeeper = UserDefaults.standard.bool(forKey: Self.pendingDeeperScanKey)
+    _step = State(initialValue: resumesLookDeeper ? .lookDeeper : .welcome)
+  }
 
   var body: some View {
   ZStack {
@@ -108,7 +120,8 @@ struct OnboardingFlowView: View {
         LookDeeperView(
           context: .onboarding(didClean: didCleanBeforeLookDeeper),
           onNotNow: exitAfterLookDeeper,
-          onGranted: exitAfterLookDeeper
+          onFinished: exitAfterLookDeeper,
+          onOpenSettings: { pendingDeeperScan = true }
         )
         .frame(maxHeight: .infinity)
       }
@@ -174,6 +187,7 @@ struct OnboardingFlowView: View {
 
   /// Leaves onboarding the way the user chose before the look-deeper step.
   private func exitAfterLookDeeper() {
+    pendingDeeperScan = false
     switch lookDeeperExit {
     case .home:
       finishOnboarding()

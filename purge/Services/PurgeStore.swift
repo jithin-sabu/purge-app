@@ -297,6 +297,9 @@ final class PurgeStore: ObservableObject {
     /// Access. Set by the sidebar notice, the locked tabs, and a deleted-app review
     /// that needs access to find leftovers.
     @Published var isLookDeeperPresented = false
+    /// Set after access is granted outside the look-deeper screen and the rescan
+    /// lands. The sidebar shows it once, until dismissed.
+    @Published var accessGrantFindings: LockedPlacesFindings?
     /// Lifetime bytes Purge has moved to the trash. Not a reclaim figure: most of it
     /// only becomes free space once the user empties the trash.
     @Published var totalMovedToTrashBytes: Int64 = 0
