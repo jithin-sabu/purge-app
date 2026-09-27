@@ -124,63 +124,6 @@ struct OnboardingSecondaryButton: View {
   }
 }
 
-struct OnboardingPermissionRow: View {
-  let title: String
-  let description: String
-  let badgeText: String
-  let badgeTone: AppBadge.Tone
-  let buttonTitle: String
-  var isGranted: Bool = false
-  let action: () -> Void
-
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-  var body: some View {
-    HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
-      VStack(alignment: .leading, spacing: 4) {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(title)
-            .font(.subheadline.weight(.semibold))
-            .fixedSize(horizontal: false, vertical: true)
-          AppBadge(text: badgeText, tone: badgeTone)
-        }
-
-        Text(description)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .layoutPriority(1)
-
-      Button(action: action) {
-        HStack(spacing: 6) {
-          if isGranted {
-            Image(systemName: "checkmark")
-              .font(.caption.weight(.semibold))
-          }
-          Text(isGranted ? "Enabled" : buttonTitle)
-            .lineLimit(1)
-        }
-      }
-      .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
-      .fixedSize(horizontal: true, vertical: false)
-      .layoutPriority(0)
-      .disabled(isGranted)
-      .accessibilityLabel(isGranted ? "\(title), enabled" : "\(buttonTitle) for \(title)")
-    }
-    .padding(.horizontal, AppStyle.Spacing.medium)
-    .padding(.vertical, AppStyle.Spacing.small)
-    .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
-    .overlay {
-      RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-        .stroke(AppColors.borderSubtle)
-    }
-    .shadow(color: .black.opacity(0.15), radius: 15, x: -8, y: 8)
-    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isGranted)
-  }
-}
-
 struct OnboardingProgressBar: View {
   let progress: Double
 

@@ -490,6 +490,8 @@ private struct AnimatedDeleteActionWidthReader: View {
 /// completion layout immediately, exactly as before.
 struct SafeCleanupCelebrationOverlay: View {
     @ObservedObject var session: DeletionSession
+    /// Onboarding says "Continue" when another step follows.
+    var doneTitle = "Done"
     let onDone: () -> Void
 
     @EnvironmentObject private var store: PurgeStore
@@ -522,8 +524,9 @@ struct SafeCleanupCelebrationOverlay: View {
         dark: NSColor(calibratedWhite: 0.08, alpha: 1)
     )
 
-    init(session: DeletionSession, onDone: @escaping () -> Void) {
+    init(session: DeletionSession, doneTitle: String = "Done", onDone: @escaping () -> Void) {
         self.session = session
+        self.doneTitle = doneTitle
         self.onDone = onDone
         // Sessions created already-complete mount straight into the final layout;
         // live runs mount in the cleaning phase even if the engine has since finished
@@ -654,7 +657,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     }
 
                     Button(action: onDone) {
-                        Text("Done")
+                        Text(doneTitle)
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .foregroundStyle(AppColors.buttonPrimaryText)
                             .frame(maxWidth: 300)

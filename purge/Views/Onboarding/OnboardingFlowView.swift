@@ -13,6 +13,17 @@ struct OnboardingFlowView: View {
   @State private var pinnedCleanupCandidates: [PurgeStore.DeletionCandidate] = []
   @State private var resultsSnapshot: OnboardingResultsSnapshot?
   @State private var isResultsCleaning = false
+  /// Where the flow goes once the look-deeper step is done: home after a clean, or
+  /// into App Caches for someone who chose to review the list first.
+  @State private var lookDeeperExit: LookDeeperExit = .home
+  /// Whether anything was cleaned before the look-deeper step, which sets its
+  /// opening line.
+  @State private var didCleanBeforeLookDeeper = false
+
+  private enum LookDeeperExit {
+    case home
+    case review
+  }
 
   @AppStorage("onboarding.pendingCelebration") private var pendingCelebration = false
 
@@ -36,7 +47,10 @@ struct OnboardingFlowView: View {
     }
 
     if let session = store.interactiveSafeCleanupSession {
-      SafeCleanupCelebrationOverlay(session: session) {
+      SafeCleanupCelebrationOverlay(
+        session: session,
+        doneTitle: store.hasFullDiskAccess ? "Done" : "Continue"
+      ) {
         completeResultsCleanupCelebration()
       }
       .transition(reduceMotion ? .opacity : .safeCleanupCelebrationBlur)
@@ -61,7 +75,7 @@ struct OnboardingFlowView: View {
 
   private var showsFooter: Bool {
     switch step {
-    case .firstScan, .cleaning, .celebration:
+    case .firstScan, .cleaning, .celebration, .lookDeeper:
       return false
     default:
       return true
@@ -74,8 +88,6 @@ struct OnboardingFlowView: View {
       switch step {
       case .welcome:
         OnboardingWelcomeStep()
-      case .permissions:
-        OnboardingPermissionsStep()
       case .firstScan:
         OnboardingFirstScanStep(
           revealController: revealController,
@@ -92,6 +104,13 @@ struct OnboardingFlowView: View {
         OnboardingCelebrationView(bytesMovedToTrash: celebrationMovedToTrashBytes) {
           finishOnboarding()
         }
+      case .lookDeeper:
+        LookDeeperView(
+          context: .onboarding(didClean: didCleanBeforeLookDeeper),
+          onNotNow: exitAfterLookDeeper,
+          onGranted: exitAfterLookDeeper
+        )
+        .frame(maxHeight: .infinity)
       }
     }
     .id(step)
@@ -104,15 +123,7 @@ struct OnboardingFlowView: View {
       switch step {
       case .welcome:
         OnboardingPrimaryButton(title: "Get started", systemImage: "arrow.forward") {
-          advance(to: .permissions)
-        }
-      case .permissions:
-        OnboardingPrimaryButton(
-          title: "Run my first scan",
-          systemImage: "magnifyingglass",
-          isEnabled: store.hasFullDiskAccess
-        ) {
-          startFirstScan()
+          advance(to: .firstScan)
         }
       case .results:
         VStack(spacing: AppStyle.Spacing.xxSmall) {
@@ -149,27 +160,43 @@ struct OnboardingFlowView: View {
     if bytes > 0 {
       return "Clean \(formatBytes(bytes)) now"
     }
-    return "Clean now"
-  }
-
-  private func startFirstScan() {
-    store.refreshPermission()
-    guard store.hasFullDiskAccess else { return }
-    advance(to: .firstScan)
+    return store.hasFullDiskAccess ? "Clean now" : "Continue"
   }
 
   private func exitToReviewPath() {
-    pendingCelebration = true
-    UserDefaults.standard.set(SafetyFilter.all.rawValue, forKey: "filter.appCaches")
-    store.selectedTab = .appCaches
+    lookDeeperExit = .review
+    guard store.hasFullDiskAccess else {
+      advance(to: .lookDeeper)
+      return
+    }
+    exitAfterLookDeeper()
+  }
 
-    beginExitToHome()
+  /// Leaves onboarding the way the user chose before the look-deeper step.
+  private func exitAfterLookDeeper() {
+    switch lookDeeperExit {
+    case .home:
+      finishOnboarding()
+    case .review:
+      pendingCelebration = true
+      UserDefaults.standard.set(SafetyFilter.all.rawValue, forKey: "filter.appCaches")
+      store.selectedTab = .appCaches
+      beginExitToHome()
+    }
   }
 
   private func startResultsCleanup() {
     guard !isResultsCleaning else { return }
     let candidates = store.manualSafeCleanupCandidates()
-    guard !candidates.isEmpty else { return }
+    // A limited scan on a tidy Mac can find nothing to clean. Nothing moved, so
+    // the ask opens with "only looked in the easy places" rather than "That was".
+    guard !candidates.isEmpty else {
+      if !store.hasFullDiskAccess {
+        lookDeeperExit = .home
+        advance(to: .lookDeeper)
+      }
+      return
+    }
 
     pinnedCleanupCandidates = candidates
     resultsSnapshot = OnboardingResultsSnapshot(
@@ -197,6 +224,17 @@ struct OnboardingFlowView: View {
 
   private func completeResultsCleanupCelebration() {
     isResultsCleaning = false
+
+    // Without access, the celebration hands over to the look-deeper step instead
+    // of the main window. The overlay fades out over it.
+    if !store.hasFullDiskAccess {
+      lookDeeperExit = .home
+      didCleanBeforeLookDeeper = true
+      clearCleanupPresentationState()
+      store.dismissInteractiveSafeCleanupCelebration()
+      advance(to: .lookDeeper)
+      return
+    }
 
     if reduceMotion {
       store.dismissInteractiveSafeCleanupCelebration()
