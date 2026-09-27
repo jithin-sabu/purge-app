@@ -2229,8 +2229,8 @@ final class PurgeStore: ObservableObject {
     ///
     /// The probe lists `~/Library/Safari`, `~/Library/Containers`, and
     /// `~/Library/Application Support`; on a real machine those hold hundreds of
-    /// entries, so it is genuine filesystem work. The onboarding permissions step polls
-    /// it once a second while on screen, and running it inline on the main actor showed
+    /// entries, so it is genuine filesystem work. `LookDeeperView` polls it once a second
+    /// while on screen (the onboarding permissions step used to), and running it inline on the main actor showed
     /// up in profiles as a periodic hitch during exactly the phase users described as
     /// laggy. Publishing the result is left to the caller so it can animate the change.
     nonisolated func probeFullDiskAccess() async -> Bool {
