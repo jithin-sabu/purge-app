@@ -25,14 +25,14 @@ nonisolated final class CacheScanner {
         ])
     }
 
-    func scanGeneralStream() -> AsyncStream<CacheScanEvent> {
+    func scanGeneralStream(access: ScanAccess) -> AsyncStream<CacheScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self else {
                     continuation.finish()
                     return
                 }
-                await self.runGeneralScan(continuation: continuation)
+                await self.runGeneralScan(access: access, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -42,7 +42,10 @@ nonisolated final class CacheScanner {
         FolderSizing.directoryByteSize(at: url)
     }
 
-    private func runGeneralScan(continuation: AsyncStream<CacheScanEvent>.Continuation) async {
+    private func runGeneralScan(
+        access: ScanAccess,
+        continuation: AsyncStream<CacheScanEvent>.Continuation
+    ) async {
         let discoveryStart = Date()
         let home = FileManager.default.homeDirectoryForCurrentUser
         let cachesURL = home.appendingPathComponent("Library/Caches", isDirectory: true)
@@ -50,7 +53,6 @@ nonisolated final class CacheScanner {
         // Seed with paths the Dev Tools scan owns so they are skipped here instead of
         // appearing under App Caches and later being pulled out when the dev scan runs.
         var collectedPaths = DevScanner.claimedGlobalCachePaths()
-        let hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
 
         continuation.yield(.status("Scanning App Caches..."))
         let contents: [URL]
@@ -79,28 +81,34 @@ nonisolated final class CacheScanner {
             sizeJobs.append(SizeJob(path: directory.standardizedFileURL))
         }
 
-        if hasFullDiskAccess {
-            continuation.yield(.status("Scanning Application Support caches..."))
-            let appSupportItems = applicationSupportCacheItems(home: home, collectedPaths: &collectedPaths)
-            for item in appSupportItems {
-                if Task.isCancelled {
-                    continuation.finish()
-                    return
-                }
-                continuation.yield(.found(item))
-                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+        // Application Support is readable without Full Disk Access, and it is where
+        // Chromium browsers, Electron apps and Adobe keep their biggest caches, so
+        // it belongs in the limited scan. The sensitive roots under it are already
+        // skipped by `excludedApplicationSupportRoots`.
+        continuation.yield(.status("Scanning Application Support caches..."))
+        let appSupportItems = applicationSupportCacheItems(home: home, collectedPaths: &collectedPaths)
+        for item in appSupportItems {
+            if Task.isCancelled {
+                continuation.finish()
+                return
             }
+            continuation.yield(.found(item))
+            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+        }
 
-            let adobeItems = adobeMediaCacheItems(home: home, collectedPaths: &collectedPaths)
-            for item in adobeItems {
-                if Task.isCancelled {
-                    continuation.finish()
-                    return
-                }
-                continuation.yield(.found(item))
-                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+        let adobeItems = adobeMediaCacheItems(home: home, collectedPaths: &collectedPaths)
+        for item in adobeItems {
+            if Task.isCancelled {
+                continuation.finish()
+                return
             }
+            continuation.yield(.found(item))
+            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+        }
 
+        // Everything below lives in other apps' containers. Without Full Disk Access
+        // macOS asks the user about each one, so a limited scan leaves them alone.
+        if access == .full {
             let telegramItems = telegramMediaCacheItems(home: home, collectedPaths: &collectedPaths)
             for item in telegramItems {
                 if Task.isCancelled {

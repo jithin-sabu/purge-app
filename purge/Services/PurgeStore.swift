@@ -2244,33 +2244,38 @@ final class PurgeStore: ObservableObject {
         if granted != hasFullDiskAccess { hasFullDiskAccess = granted }
     }
 
-    func scanGeneral() async {
+    /// The access the next scan runs with. Refreshes the published flag on the way,
+    /// so the UI and the scan never disagree about what was readable.
+    private func currentScanAccess() -> ScanAccess {
         refreshPermission()
-        guard hasFullDiskAccess else { return }
+        return hasFullDiskAccess ? .full : .limited
+    }
+
+    func scanGeneral() async {
+        let access = currentScanAccess()
         scanGeneration += 1
         let generation = scanGeneration
         scanPhase = .scanning
         clearGeneralScanState()
-        await runGeneralScan(generation: generation)
+        await runGeneralScan(generation: generation, access: access)
         await finishStandaloneScanIfCurrent(generation: generation)
     }
 
     func scanDeveloper() async {
-        refreshPermission()
-        guard hasFullDiskAccess else { return }
+        let access = currentScanAccess()
         scanGeneration += 1
         let generation = scanGeneration
         scanPhase = .scanning
         clearDeveloperScanState()
-        await runDeveloperScan(generation: generation)
+        await runDeveloperScan(generation: generation, access: access)
         await finishStandaloneScanIfCurrent(generation: generation)
     }
 
     func scanAll() async {
-        // Every scan path funnels through here or the standalone variants; without
-        // FDA the walk of user content folders would fire per-folder TCC prompts.
-        refreshPermission()
-        guard hasFullDiskAccess else { return }
+        // Every scan path funnels through here or the standalone variants. Without
+        // Full Disk Access the scanners run limited and stay out of the folders that
+        // would fire per-folder TCC prompts; see `ScanAccess`.
+        let access = currentScanAccess()
         let previousTask = scanTask
         let previousGeneration = scanGeneration
         if let previousTask, !previousTask.isCancelled {
@@ -2291,7 +2296,7 @@ final class PurgeStore: ObservableObject {
         let generation = scanGeneration
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.runFullScan(generation: generation)
+            await self.runFullScan(generation: generation, access: access)
         }
         scanTask = task
         await task.value
@@ -2300,7 +2305,7 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    private func runFullScan(generation: Int) async {
+    private func runFullScan(generation: Int, access: ScanAccess) async {
         let fullStart = Date()
         ScanPhaseTiming.log("runFullScan started")
         scanCompletionHideTask?.cancel()
@@ -2316,19 +2321,20 @@ final class PurgeStore: ObservableObject {
             ScanPhaseTiming.finish("runFullScan total", since: fullStart)
         }
 
-        await runGeneralScan(generation: generation)
+        await runGeneralScan(generation: generation, access: access)
         guard !Task.isCancelled, scanGeneration == generation else { return }
-        await runDeveloperScan(generation: generation)
+        await runDeveloperScan(generation: generation, access: access)
         guard !Task.isCancelled, scanGeneration == generation else { return }
         finishScan(generation: generation)
     }
 
-    private func runGeneralScan(generation: Int) async {
+    private func runGeneralScan(generation: Int, access: ScanAccess) async {
         let generalStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         isScanningGeneral = true
         await gitChecker.clearSessionCache()
+        await gitChecker.setAccess(access)
         defer {
             if scanGeneration == generation {
                 isScanningGeneral = false
@@ -2342,7 +2348,7 @@ final class PurgeStore: ObservableObject {
         let coalesce = CacheScanCoalesceBuffers()
         defer { coalesce.debounceTask?.cancel() }
 
-        for await event in cacheScanner.scanGeneralStream() {
+        for await event in cacheScanner.scanGeneralStream(access: access) {
             guard scanGeneration == generation, !Task.isCancelled else { return }
             switch event {
             case .status(let status):
@@ -2376,13 +2382,14 @@ final class PurgeStore: ObservableObject {
         )
     }
 
-    private func runDeveloperScan(generation: Int) async {
+    private func runDeveloperScan(generation: Int, access: ScanAccess) async {
         let developerStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         simulatorSizingGeneration += 1
         isScanningDeveloper = true
         await gitChecker.clearSessionCache()
+        await gitChecker.setAccess(access)
         defer {
             if scanGeneration == generation {
                 isScanningDeveloper = false
@@ -2398,7 +2405,7 @@ final class PurgeStore: ObservableObject {
         let coalesce = DeveloperScanCoalesceBuffers()
         defer { coalesce.debounceTask?.cancel() }
 
-        for await event in devScanner.scanDevToolsStream() {
+        for await event in devScanner.scanDevToolsStream(access: access) {
             guard scanGeneration == generation, !Task.isCancelled else { return }
             switch event {
             case .status(let status):
@@ -2451,10 +2458,10 @@ final class PurgeStore: ObservableObject {
             )
         }
 
-        startProjectDiscovery(generation: generation)
+        startProjectDiscovery(generation: generation, access: access)
     }
 
-    private func startProjectDiscovery(generation: Int) {
+    private func startProjectDiscovery(generation: Int, access: ScanAccess) {
         projectDiscoveryTask?.cancel()
         projectDiscoveryTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -2473,7 +2480,7 @@ final class PurgeStore: ObservableObject {
             let coalesce = ProjectGroupCoalesceBuffers()
             defer { coalesce.debounceTask?.cancel() }
 
-            for await event in devScanner.discoverProjectsStream() {
+            for await event in devScanner.discoverProjectsStream(access: access) {
                 guard scanGeneration == generation, !Task.isCancelled else { return }
                 switch event {
                 case .projectGroupFound(let group):
@@ -2555,8 +2562,9 @@ final class PurgeStore: ObservableObject {
 
     @discardableResult
     func performScheduledClean() async -> ScheduledCleaningSummary {
-        refreshPermission()
-        guard ScheduledCleaningPreferenceStore.shared.isEnabled, hasFullDiskAccess else {
+        // No access check: the candidates come from the last scan, which already ran
+        // with whatever access Purge had, so a limited scan only offers limited paths.
+        guard ScheduledCleaningPreferenceStore.shared.isEnabled else {
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
         return await performSafeCleanup(
@@ -2736,11 +2744,15 @@ final class PurgeStore: ObservableObject {
         }
 
         let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates()
+        let access = currentScanAccess()
 
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
         for candidate in syncCandidates {
+            // Access can be turned off after a full scan. Moving something out of a
+            // protected folder without it would prompt, so it waits for access again.
+            guard ProtectedLocations.isReadable(candidate.path, access: access) else { continue }
             let git = await gitChecker.cleanupStatus(for: candidate.path)
             guard git == .clean else { continue }
             let std = candidate.path.standardizedFileURL

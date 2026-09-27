@@ -112,20 +112,20 @@ nonisolated final class DevScanner {
         Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0
     }
 
-    func scanDevToolsStream() -> AsyncStream<DeveloperScanEvent> {
+    func scanDevToolsStream(access: ScanAccess) -> AsyncStream<DeveloperScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self else {
                     continuation.finish()
                     return
                 }
-                await self.runDeveloperScan(continuation: continuation)
+                await self.runDeveloperScan(access: access, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    func discoverProjectsStream() -> AsyncStream<DeveloperScanEvent> {
+    func discoverProjectsStream(access: ScanAccess) -> AsyncStream<DeveloperScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .background) { [weak self] in
                 guard let self else {
@@ -133,17 +133,20 @@ nonisolated final class DevScanner {
                     return
                 }
                 continuation.yield(.status("Scanning Developer Projects..."))
-                _ = await self.discoverProjects(continuation: continuation)
+                _ = await self.discoverProjects(access: access, continuation: continuation)
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    private func runDeveloperScan(continuation: AsyncStream<DeveloperScanEvent>.Continuation) async {
+    private func runDeveloperScan(
+        access: ScanAccess,
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation
+    ) async {
         continuation.yield(.status("Scanning Dev Tools..."))
         let globalDiscoveryStart = Date()
-        let (tools, toolSizeJobs) = scanGlobalCachePlaceholders()
+        let (tools, toolSizeJobs) = scanGlobalCachePlaceholders(access: access)
         ScanPhaseTiming.finish(
             "global dev tool discovery",
             since: globalDiscoveryStart,
@@ -522,17 +525,24 @@ nonisolated final class DevScanner {
         ]
     }
 
-    private func scanGlobalCachePlaceholders() -> ([DevTool], [DevToolSizeJob]) {
+    private func scanGlobalCachePlaceholders(access: ScanAccess) -> ([DevTool], [DevToolSizeJob]) {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let staticDefinitions = Self.globalCacheDefinitions()
+        var staticDefinitions = Self.globalCacheDefinitions()
             + discoverObsoleteEditorExtensionDefinitions(home: home)
-            + discoverCursorAgentLeftoverDefinitions(home: home)
+        // Cursor worktrees are judged by reading the git dir their `.git` file points
+        // at, which is usually a repo in Documents or Desktop. A limited scan cannot
+        // look there without a prompt, so it skips them rather than guess.
+        if access == .full {
+            staticDefinitions += discoverCursorAgentLeftoverDefinitions(home: home)
+        }
 
         let built = staticDefinitions.compactMap { entry -> DevTool? in
             let label = entry.label
             let paths = entry.paths
             let existing = paths.filter {
-                FileManager.default.fileExists(atPath: $0.path)
+                // Checked before `fileExists`: the check itself is what would prompt.
+                ProtectedLocations.isReadable($0, access: access)
+                    && FileManager.default.fileExists(atPath: $0.path)
                     && DeletionSafetyPolicy.isOfferedForCleanup($0)
                     && !ExcludedPathsStore.isExcluded($0)
             }
@@ -751,6 +761,7 @@ nonisolated final class DevScanner {
     private static let maxDirectoryEntriesBeforeSkip = 2000
 
     private func discoverProjects(
+        access: ScanAccess,
         maxDepth: Int = 4,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
     ) async -> [ProjectGroup] {
@@ -897,6 +908,10 @@ nonisolated final class DevScanner {
                 if name.hasPrefix(".") { continue }
 
                 if shouldSkipDescending(into: name) { continue }
+                // The home root walks one level down, which would open Desktop,
+                // Documents and Downloads. Their own root entries are dropped the
+                // same way below.
+                if access == .limited, ProtectedLocations.contains(entry) { continue }
 
                 var isDirectory = false
                 if let v = try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory {
@@ -908,7 +923,8 @@ nonisolated final class DevScanner {
             }
         }
 
-        for root in roots where fm.fileExists(atPath: root.path) {
+        for root in roots where ProtectedLocations.isReadable(root, access: access)
+            && fm.fileExists(atPath: root.path) {
             // When the root is the home directory itself, limit to depth 1
             // to avoid scanning deep into personal folders like Documents recursively
             // since those are already covered by their own dedicated root entries above
