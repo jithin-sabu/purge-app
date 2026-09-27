@@ -89,7 +89,9 @@ struct LookDeeperHeaderButton: View {
     }
 }
 
-/// One quiet line in the sidebar, on every tab, until access is granted.
+/// A slim tappable card in the sidebar, on every tab, until access is granted. The
+/// whole card is the button, like the suggestion rows at the top of System Settings,
+/// so it reads as "there when you're ready" rather than a warning.
 struct LimitedScanNotice: View {
     @EnvironmentObject private var store: PurgeStore
 
@@ -97,28 +99,49 @@ struct LimitedScanNotice: View {
         Button {
             store.isLookDeeperPresented = true
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
                 Image(systemName: "lock")
                     .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 26, height: 26)
+                    .background(AppColors.bgCard, in: Circle())
+                    .overlay { Circle().stroke(AppColors.borderSubtle) }
                     .accessibilityHidden(true)
+
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Some places are still locked")
+                    Text("Some places are locked")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
                     Text("Let Purge look deeper")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
+
                 Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
-            .foregroundStyle(.secondary)
             .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.vertical, AppStyle.Spacing.xSmall)
-            .contentShape(Rectangle())
+            .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+            .background(
+                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                    .fill(AppColors.bgElevated)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Some places are still locked. Let Purge look deeper.")
+        .buttonStyle(LimitedScanNoticeButtonStyle())
+        .accessibilityLabel("Some places are locked. Let Purge look deeper.")
         .transition(.opacity)
+    }
+}
+
+private struct LimitedScanNoticeButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 
