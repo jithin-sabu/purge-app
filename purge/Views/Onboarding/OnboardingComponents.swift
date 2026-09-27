@@ -125,27 +125,6 @@ struct OnboardingPrimaryButton: View {
   }
 }
 
-/// A borderless onboarding action for the quieter choice beside a primary button.
-struct OnboardingTextButton: View {
-  let title: String
-  let action: () -> Void
-
-  @Environment(\.isEnabled) private var isEnabled
-
-  var body: some View {
-    Button(action: action) {
-      Text(title)
-        .font(.system(size: 14, weight: .medium, design: .rounded))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .opacity(isEnabled ? 1 : 0.45)
-  }
-}
-
 struct OnboardingSecondaryButton: View {
   let title: String
   let action: () -> Void

@@ -153,8 +153,7 @@ struct OnboardingFlowView: View {
         ) {
           startResultsCleanup()
         }
-        // A plain text action: reviewing is the way out, not an equal choice.
-        OnboardingTextButton(title: "Review everything first") {
+        OnboardingSecondaryButton(title: "Review everything first") {
           exitToReviewPath()
         }
         .disabled(isResultsCleaning)
