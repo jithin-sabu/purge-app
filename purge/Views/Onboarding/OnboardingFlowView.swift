@@ -46,7 +46,10 @@ struct OnboardingFlowView: View {
 
     VStack(spacing: 0) {
       stepBody
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Results sizes to its content so it and the footer center as one group.
+        // Filling the height left the footer pinned to the bottom with a wide gap
+        // under the category list.
+        .frame(maxWidth: .infinity, maxHeight: step == .results ? nil : .infinity)
         .padding(.horizontal, OnboardingLayout.horizontalPadding)
         .padding(.top, OnboardingLayout.verticalPadding)
 
@@ -54,9 +57,10 @@ struct OnboardingFlowView: View {
         footer
           .padding(.horizontal, OnboardingLayout.horizontalPadding)
           .padding(.bottom, OnboardingLayout.verticalPadding)
-          .padding(.top, step == .results ? AppStyle.Spacing.xSmall : AppStyle.Spacing.medium)
+          .padding(.top, step == .results ? OnboardingLayout.resultsFooterGap : AppStyle.Spacing.medium)
       }
     }
+    .frame(maxHeight: .infinity)
 
     if let session = store.interactiveSafeCleanupSession {
       SafeCleanupCelebrationOverlay(
@@ -145,7 +149,7 @@ struct OnboardingFlowView: View {
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-          Text("Cleaned items move to your Trash so you can recover anything. Empty Trash to reclaim the space.")
+          Text("Cleaned items go to the Trash, so nothing is lost.\nEmpty it when you want the space back.")
             .font(.subheadline)
             .foregroundStyle(.tertiary)
             .multilineTextAlignment(.center)

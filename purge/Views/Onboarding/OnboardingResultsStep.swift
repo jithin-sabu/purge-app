@@ -188,6 +188,6 @@ struct OnboardingResultsStep: View {
       .frame(maxWidth: 300)
       .frame(maxWidth: .infinity)
     }
-    .frame(maxWidth: OnboardingLayout.contentMaxWidth, maxHeight: .infinity)
+    .frame(maxWidth: OnboardingLayout.contentMaxWidth)
   }
 }

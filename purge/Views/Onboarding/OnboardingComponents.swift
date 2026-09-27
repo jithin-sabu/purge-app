@@ -30,6 +30,8 @@ struct OnboardingLayout {
   static let verticalPadding: CGFloat = 40
   static let buttonWidth: CGFloat = 240
   static let scrollingListMaxHeight: CGFloat = 460
+  /// Space between the results category list and the reassurance lines below it.
+  static let resultsFooterGap: CGFloat = 36
   /// Fixed height for streamed scan rows so the list does not reflow per item.
   static let scanRowHeight: CGFloat = 56
 }
