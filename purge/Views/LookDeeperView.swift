@@ -81,26 +81,30 @@ struct LookDeeperView: View {
           .onboardingBlurIn(index: 1)
       }
 
-      HStack(alignment: .top, spacing: AppStyle.Spacing.small) {
-        LookDeeperListCard(title: "What's in there", rows: [
-          .init(symbol: "square.stack.3d.up", text: "Caches from App Store apps"),
-          .init(symbol: "arrow.down.circle", text: "Big forgotten files in Downloads, Documents and Desktop"),
-          .init(symbol: "shippingbox", text: "Bits left behind by apps you've already deleted"),
-        ])
-        LookDeeperListCard(title: "What Purge won't do", rows: [
-          .init(symbol: "hand.raised", text: "Delete anything unless you ask. Large files are only ever shown to you."),
-          .init(symbol: "desktopcomputer", text: "Send your files anywhere. Everything stays on your Mac."),
-          .init(symbol: "trash", text: "Skip the Trash. Anything Purge removes can be put back."),
-        ])
+      // What access unlocks, as tiles, then what Purge promises, as one quiet row.
+      // Each promise is something Purge does, not a limit on the permission:
+      // Full Disk Access itself can read and write, so "can't" would not be true.
+      HStack(spacing: AppStyle.Spacing.small) {
+        LookDeeperTile(symbol: "square.stack.3d.up", text: "App Store app caches")
+        LookDeeperTile(symbol: "doc.text.magnifyingglass", text: "Big forgotten files")
+        LookDeeperTile(symbol: "shippingbox", text: "Deleted apps' leftovers")
       }
       .onboardingBlurIn(index: 2)
 
-      Text("Apple calls this switch Full Disk Access. The name sounds bigger than it is. It's the only way macOS lets an app see these folders, and you can turn it off in System Settings whenever you want.")
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-        .fixedSize(horizontal: false, vertical: true)
-        .onboardingBlurIn(index: 3)
+      VStack(spacing: AppStyle.Spacing.small) {
+        HStack(spacing: AppStyle.Spacing.large) {
+          LookDeeperPromise(symbol: "eye", text: "Only cleans when you say")
+          LookDeeperPromise(symbol: "icloud.slash", text: "Nothing leaves your Mac")
+          LookDeeperPromise(symbol: "trash", text: "Everything goes to the Trash")
+        }
+
+        Text("macOS calls this Full Disk Access. Turn it off anytime in System Settings.")
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .onboardingBlurIn(index: 3)
 
       VStack(spacing: AppStyle.Spacing.small) {
         OnboardingPrimaryButton(title: "Let Purge in", systemImage: "arrow.up.forward", action: letPurgeIn)
@@ -108,7 +112,7 @@ struct LookDeeperView: View {
           .keyboardShortcut(.cancelAction)
 
         if didOpenSettings {
-          Text("System Settings is open. Turn on Purge under Full Disk Access, then come back here. If macOS offers to quit and reopen Purge, go ahead.")
+          Text("Turn on Purge in System Settings, then come back. If macOS offers to reopen Purge, go ahead.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
@@ -191,9 +195,9 @@ struct LookDeeperView: View {
   private var leadText: String {
     switch context {
     case .onboarding(didClean: true):
-      return "That was the easy stuff. macOS keeps a few folders locked, and a lot of clutter tends to hide in them."
+      return "That was the easy part. More clutter hides in folders macOS keeps locked."
     case .onboarding(didClean: false), .sheet:
-      return "So far Purge has only looked in the easy places. macOS keeps a few folders locked, and a lot of clutter tends to hide in them."
+      return "Some clutter hides in folders macOS keeps locked."
     }
   }
 
@@ -252,43 +256,49 @@ struct LookDeeperView: View {
   }
 }
 
-private struct LookDeeperListCard: View {
-  struct Row: Identifiable {
-    let symbol: String
-    let text: String
-    var id: String { text }
-  }
-
-  let title: String
-  let rows: [Row]
+/// One thing access unlocks: an icon over two or three words.
+private struct LookDeeperTile: View {
+  let symbol: String
+  let text: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-      Text(title)
-        .font(.subheadline.weight(.semibold))
-
-      ForEach(rows) { row in
-        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
-          Image(systemName: row.symbol)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .frame(width: 18)
-            .accessibilityHidden(true)
-          Text(row.text)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-      }
+    VStack(spacing: AppStyle.Spacing.xSmall) {
+      Image(systemName: symbol)
+        .font(.system(size: 20, weight: .regular))
+        .foregroundStyle(.secondary)
+        .frame(height: 24)
+        .accessibilityHidden(true)
+      Text(text)
+        .font(.callout)
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
     }
-    .frame(maxWidth: .infinity, alignment: .topLeading)
-    .padding(AppStyle.Spacing.medium)
+    .frame(maxWidth: .infinity, minHeight: 88)
+    .padding(.horizontal, AppStyle.Spacing.small)
     .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
     .overlay {
       RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
         .stroke(AppColors.borderSubtle)
     }
     .accessibilityElement(children: .combine)
+  }
+}
+
+/// One promise: a small icon and a few words, in a single row with the others.
+private struct LookDeeperPromise: View {
+  let symbol: String
+  let text: String
+
+  var body: some View {
+    Label {
+      Text(text)
+    } icon: {
+      Image(systemName: symbol)
+        .accessibilityHidden(true)
+    }
+    .font(.callout)
+    .foregroundStyle(.secondary)
+    .fixedSize()
   }
 }
 
