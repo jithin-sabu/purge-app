@@ -30,8 +30,11 @@ struct OnboardingLayout {
   static let verticalPadding: CGFloat = 40
   static let buttonWidth: CGFloat = 240
   static let scrollingListMaxHeight: CGFloat = 460
-  /// Space between the results category list and the reassurance lines below it.
-  static let resultsFooterGap: CGFloat = 36
+  /// Space between the results (total and category list) and the action group
+  /// below it. Clearly more than the 40pt between the total and the list inside
+  /// `OnboardingResultsStep`, so the two read as separate groups, without the old
+  /// stretched gap.
+  static let resultsFooterGap: CGFloat = 64
   /// Fixed height for streamed scan rows so the list does not reflow per item.
   static let scanRowHeight: CGFloat = 56
 }
