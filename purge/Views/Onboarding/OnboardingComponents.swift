@@ -82,6 +82,9 @@ struct OnboardingCapsuleButtonStyle: ButtonStyle {
 
 struct OnboardingPrimaryButton: View {
   let title: String
+  /// Before the title, for an icon that names the action (trash).
+  var leadingSystemImage: String? = nil
+  /// After the title, for an icon that points onward (arrow).
   var systemImage: String? = nil
   var isEnabled: Bool = true
   var isLoading: Bool = false
@@ -92,6 +95,11 @@ struct OnboardingPrimaryButton: View {
   var body: some View {
     Button(action: action) {
       HStack(spacing: 8) {
+        if let leadingSystemImage {
+          Image(systemName: leadingSystemImage)
+            .font(.system(size: 12, weight: .semibold))
+        }
+
         Text(title)
 
         if isLoading {
@@ -114,6 +122,27 @@ struct OnboardingPrimaryButton: View {
     .buttonStyle(OnboardingCapsuleButtonStyle(variant: .filled))
     .disabled(!isEnabled || isLoading)
     .keyboardShortcut(.return, modifiers: [])
+  }
+}
+
+/// A borderless onboarding action for the quieter choice beside a primary button.
+struct OnboardingTextButton: View {
+  let title: String
+  let action: () -> Void
+
+  @Environment(\.isEnabled) private var isEnabled
+
+  var body: some View {
+    Button(action: action) {
+      Text(title)
+        .font(.system(size: 14, weight: .medium, design: .rounded))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .opacity(isEnabled ? 1 : 0.45)
   }
 }
 

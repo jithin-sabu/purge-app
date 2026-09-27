@@ -143,19 +143,18 @@ struct OnboardingFlowView: View {
           advance(to: .firstScan)
         }
       case .results:
-        // One line, the one that answers "can I undo this?" at the moment of clicking.
-        Text("Everything goes to the Trash. Empty it to get the space back.")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
-          .fixedSize(horizontal: false, vertical: true)
+        // The label says where things go, the way Finder's "Move to Trash" does, so
+        // no caption has to explain it. Emptying the Trash is covered afterwards by
+        // the celebration, which is when it matters.
         OnboardingPrimaryButton(
-          title: isResultsCleaning ? "Cleaning..." : cleanNowTitle,
+          title: isResultsCleaning ? "Moving to Trash..." : cleanNowTitle,
+          leadingSystemImage: isResultsCleaning ? nil : "trash",
           isLoading: isResultsCleaning
         ) {
           startResultsCleanup()
         }
-        OnboardingSecondaryButton(title: "Review everything first") {
+        // A plain text action: reviewing is the way out, not an equal choice.
+        OnboardingTextButton(title: "Review everything first") {
           exitToReviewPath()
         }
         .disabled(isResultsCleaning)
@@ -169,7 +168,7 @@ struct OnboardingFlowView: View {
   private var cleanNowTitle: String {
     let bytes = resultsSnapshot?.totalBytes ?? store.safeRecoverableBytes
     if bytes > 0 {
-      return "Clean \(formatBytes(bytes)) now"
+      return "Move \(formatBytes(bytes)) to Trash"
     }
     return store.hasFullDiskAccess ? "Clean now" : "Continue"
   }
