@@ -1,6 +1,7 @@
 import AppKit
 
-/// Starts Purge windowless when it was launched at login in menu-bar-only mode.
+/// Starts Purge windowless: at login in the menu bar mode, or when the
+/// deleted-apps watcher started it.
 ///
 /// SwiftUI has no way to decline creating a `WindowGroup`'s first window before
 /// macOS 15, so the window is closed instead of prevented. That can show for a
@@ -30,7 +31,9 @@ enum InitialWindowSuppressor {
 
     private static func closeAppWindows() {
         for window in NSApp.windows where MainWindowLocator.isAppWindow(window) {
-            window.close()
+            // In on-demand mode a plain close would quit the app before a
+            // deleted-apps review had a chance to appear.
+            WindowCloseQuitter.closeWithoutQuitting(window)
         }
     }
 }

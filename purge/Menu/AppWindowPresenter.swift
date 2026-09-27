@@ -20,6 +20,10 @@ enum AppWindowPresenter {
     /// `.menuBarExtraStyle(.window)` that isn't built until the user first opens
     /// the panel, which would leave this nil for anything reaching `reveal()`
     /// beforehand (opening Purge from Spotlight, say).
+    ///
+    /// Also set from the window's root view, for on-demand mode, where there is no
+    /// status item and so no label. Every source hands over the same scene action,
+    /// so the last one to register wins without harm.
     private static var openWindowAction: OpenWindowAction?
 
     static func registerOpenWindowAction(_ action: OpenWindowAction) {

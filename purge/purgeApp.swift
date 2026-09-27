@@ -31,7 +31,7 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
             // Read the key directly rather than touching `.shared`: building the
             // store calls `SMAppService.mainApp.status`, an out-of-process read we
             // have no use for at launch.
-            hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon(),
+            showsMenuBarIcon: StartupPreferenceStore.persistedShowsMenuBarIcon(),
             launchedAsLoginItem: LaunchContext.launchedAsLoginItem,
             hasCompletedOnboarding: FirstRunGate.hasCompletedOnboarding
         ) || RemovedAppMonitor.startsWindowless {
@@ -45,15 +45,17 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         CleaningQuitGuard.shouldAllowTermination() ? .terminateNow : .terminateCancel
     }
 
-    /// Purge lives in the menu bar; closing the window is not quitting. This is
-    /// already the default with a `MenuBarExtra`, but menu-bar-only mode should
-    /// not rest on a default that could change.
+    /// Always `false`, in both modes. In the menu bar mode closing the window is
+    /// not quitting. In on-demand mode it is, but `WindowCloseQuitter` handles
+    /// that, because this callback cannot tell the user closing the window from
+    /// Purge closing it on a windowless launch.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
 
-    /// Covers opening Purge from Finder or Spotlight while it is already running
-    /// — the only "click the app" route left once the Dock icon is hidden.
+    /// Covers the Dock icon, and opening Purge from Finder or Spotlight while it
+    /// is already running — the only "click the app" route left once the Dock
+    /// icon is hidden.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         RemovedAppMonitor.shared.userOpenedWindow()
         guard !hasVisibleWindows else { return true }
@@ -95,6 +97,10 @@ struct PurgeApp: App {
     @StateObject private var menuModel = AppEnvironment.menuModel
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
+    /// Always written by `resolvePersistedModes` in `init()`, so the default is
+    /// never used.
+    @AppStorage(StartupPreferenceStore.showMenuBarIconKey)
+    private var showsMenuBarIcon = false
     @State private var systemThemeObserver: NSObjectProtocol?
     @State private var activeColorScheme: ColorScheme = {
         let mode = AppearanceMode.current
@@ -116,13 +122,26 @@ struct PurgeApp: App {
         activeColorScheme = appearanceMode.resolvedColorScheme
     }
 
+    /// Reads through `@AppStorage` so the scene updates when Settings changes the
+    /// mode. Writes go to the store, which is also where a ⌘-drag out of the menu
+    /// bar lands: SwiftUI sets this binding to `false` when the user removes the
+    /// icon, and that has to switch modes the same way the Settings switch does.
+    private var menuBarIconBinding: Binding<Bool> {
+        Binding(
+            get: { showsMenuBarIcon },
+            set: { StartupPreferenceStore.shared.setShowsMenuBarIcon($0) }
+        )
+    }
+
     init() {
         // Must precede anything that touches user defaults — the gate reads the persisted domain to
         // tell a clean install apart from an update.
-        FirstRunGate.resolve()
+        let firstRun = FirstRunGate.resolve()
+        // Before the Dock policy below reads the preference it may repair.
+        StartupPreferenceStore.resolvePersistedModes(isFreshInstall: firstRun == .freshInstall)
         LargeFileFilterDefaults.register()
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
-        // As early as the app can act, so a login launch in menu-bar-only mode
+        // As early as the app can act, so a login launch with the Dock icon hidden
         // never flashes into the Dock before hiding itself again.
         DockIconPolicy.apply(hidesDockIcon: StartupPreferenceStore.persistedHidesDockIcon())
     }
@@ -162,7 +181,7 @@ struct PurgeApp: App {
             PurgeCommands(store: store)
         }
 
-        MenuBarExtra {
+        MenuBarExtra(isInserted: menuBarIconBinding) {
             MenuBarContentView(model: menuModel, store: store)
                 .environmentObject(store)
                 .environmentObject(diskStore)

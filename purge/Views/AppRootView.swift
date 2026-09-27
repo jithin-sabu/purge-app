@@ -8,6 +8,7 @@ struct AppRootView: View {
   @EnvironmentObject private var store: PurgeStore
   @EnvironmentObject private var diskStore: DiskSummaryStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.openWindow) private var openWindow
 
   /// Onboarding cannot be completed without Full Disk Access, so this only catches installs that
   /// arrived past onboarding without it: an update from a pre-onboarding build, or access revoked
@@ -66,6 +67,10 @@ struct AppRootView: View {
     .onAppear {
       isMainAppRevealed = hasCompletedOnboarding
     }
+    // The status item's label normally registers this. In on-demand mode there is
+    // no status item, so without this a deleted-apps review could not build a
+    // window after a windowless launch.
+    .task { AppWindowPresenter.registerOpenWindowAction(openWindow) }
     .onChange(of: isOnboardingExitingToHome) { isExiting in
       if isExiting {
         revealMainAppAfterMount()

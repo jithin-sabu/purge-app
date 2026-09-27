@@ -36,6 +36,7 @@ enum AppBootstrapper {
         CleaningQuitGuard.isCleaningActive = { [weak store = env.store] in
             store?.isManualCleaningInProgress ?? false
         }
+        WindowCloseQuitter.start()
 
         // Check the installed helper once per app launch. Keeping this here avoids
         // starting registration work just because a view happened to read the

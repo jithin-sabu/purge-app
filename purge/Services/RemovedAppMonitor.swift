@@ -586,8 +586,12 @@ final class RemovedAppMonitor: ObservableObject {
     private func closeWindowIfOpenedForReview() {
         defer { openedWindowForReview = false }
         guard openedWindowForReview, let store, store.errorMessage == nil else { return }
-        MainWindowLocator.appWindow(in: NSApp.windows)?.close()
-        if quitsWhenDone {
+        if let window = MainWindowLocator.appWindow(in: NSApp.windows) {
+            WindowCloseQuitter.closeWithoutQuitting(window)
+        }
+        // In on-demand mode there is no menu bar icon to come back to, so a
+        // windowless Purge left running would only be a Dock icon.
+        if quitsWhenDone || !StartupPreferenceStore.persistedShowsMenuBarIcon() {
             quitsWhenDone = false
             NSApp.terminate(nil)
         } else {

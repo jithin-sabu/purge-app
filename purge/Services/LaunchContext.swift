@@ -3,7 +3,7 @@ import CoreServices
 
 /// Tells a login launch apart from the user opening Purge themselves.
 ///
-/// The distinction is the whole reason menu-bar-only mode is usable: someone
+/// The distinction is the whole reason the menu bar mode is usable: someone
 /// running Purge as a background cleaner does not want a window at every login,
 /// but double-clicking the app and getting nothing back is worse.
 @MainActor
@@ -45,14 +45,19 @@ enum LaunchContext {
 
     /// Every term has to hold before the app starts windowless.
     ///
+    /// Keyed on the menu bar icon, not the Dock icon: the icon is what lets the
+    /// user open the window later, and the login item only exists in that mode.
+    /// With the Dock icon showing too, the app sits in the Dock with no window,
+    /// and clicking it opens one.
+    ///
     /// `hasCompletedOnboarding` is not incidental: without it, a fresh install
     /// that somehow carried the preference would come up as a menu bar icon and
     /// never onboard, with no way to grant Full Disk Access.
     static func shouldSuppressInitialWindow(
-        hidesDockIcon: Bool,
+        showsMenuBarIcon: Bool,
         launchedAsLoginItem: Bool,
         hasCompletedOnboarding: Bool
     ) -> Bool {
-        hidesDockIcon && launchedAsLoginItem && hasCompletedOnboarding
+        showsMenuBarIcon && launchedAsLoginItem && hasCompletedOnboarding
     }
 }

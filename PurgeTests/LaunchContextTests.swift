@@ -30,7 +30,7 @@ struct LaunchContextTests {
     /// Windowless launch is the narrow case. Everything else shows a window,
     /// because an app you cannot open is a far worse failure than a stray window.
     @Test(
-        "Only a login launch, in menu-bar-only mode, past onboarding starts windowless",
+        "Only a login launch, in the menu bar mode, past onboarding starts windowless",
         arguments: [
             (true, true, true, true),
             (false, true, true, false),
@@ -43,14 +43,14 @@ struct LaunchContextTests {
         ]
     )
     func suppressionRequiresEveryTerm(
-        hidesDockIcon: Bool,
+        showsMenuBarIcon: Bool,
         launchedAsLoginItem: Bool,
         hasCompletedOnboarding: Bool,
         expected: Bool
     ) {
         #expect(
             LaunchContext.shouldSuppressInitialWindow(
-                hidesDockIcon: hidesDockIcon,
+                showsMenuBarIcon: showsMenuBarIcon,
                 launchedAsLoginItem: launchedAsLoginItem,
                 hasCompletedOnboarding: hasCompletedOnboarding
             ) == expected
@@ -63,7 +63,7 @@ struct LaunchContextTests {
     func onboardingAlwaysWins() {
         #expect(
             !LaunchContext.shouldSuppressInitialWindow(
-                hidesDockIcon: true,
+                showsMenuBarIcon: true,
                 launchedAsLoginItem: true,
                 hasCompletedOnboarding: false
             )
