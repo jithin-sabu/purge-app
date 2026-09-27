@@ -143,18 +143,12 @@ struct OnboardingFlowView: View {
           advance(to: .firstScan)
         }
       case .results:
-        VStack(spacing: AppStyle.Spacing.xxSmall) {
-          Text("Your documents, photos, and projects are never touched.")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-          Text("Cleaned items go to the Trash, so nothing is lost.\nEmpty it when you want the space back.")
-            .font(.subheadline)
-            .foregroundStyle(.tertiary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-        }
+        // One line, the one that answers "can I undo this?" at the moment of clicking.
+        Text("Everything goes to the Trash. Empty it to get the space back.")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
         OnboardingPrimaryButton(
           title: isResultsCleaning ? "Cleaning..." : cleanNowTitle,
           isLoading: isResultsCleaning
