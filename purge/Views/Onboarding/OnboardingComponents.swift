@@ -131,7 +131,6 @@ struct OnboardingPermissionRow: View {
   let badgeTone: AppBadge.Tone
   let buttonTitle: String
   var isGranted: Bool = false
-  var statusText: String? = nil
   let action: () -> Void
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -150,13 +149,6 @@ struct OnboardingPermissionRow: View {
           .font(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
-
-        if let statusText, !isGranted {
-          Text(statusText)
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(.secondary)
-            .transition(.opacity)
-        }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .layoutPriority(1)
@@ -186,7 +178,6 @@ struct OnboardingPermissionRow: View {
     }
     .shadow(color: .black.opacity(0.15), radius: 15, x: -8, y: 8)
     .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isGranted)
-    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: statusText)
   }
 }
 

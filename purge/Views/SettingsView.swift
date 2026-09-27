@@ -20,7 +20,7 @@ struct SettingsView: View {
     /// When true, the parent owns scrolling and the macOS 26 progressive scroll-edge blur.
     var usesExternalScrollContainer = false
 
-    @State private var loginItemFailed = false
+    @State private var loginItemFailure: LoginItemFailure?
     @State private var isRunningScheduledCleanNow = false
     @State private var scheduledCleanNowMessage: String?
     @State private var isCleaningHistoryExpanded = false
@@ -70,6 +70,7 @@ struct SettingsView: View {
         // helper is enabled in that same pane, so re-read it here too.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             startup.refreshLoginItemStatus()
+            clearLoginItemFailureIfResolved()
             helper.refresh()
         }
         .sheet(item: $selectedHistoryEntry) { entry in
@@ -256,33 +257,76 @@ struct SettingsView: View {
     private var startupSection: some View {
         settingsSection("Startup") {
             settingsToggleRow(
-                title: "Launch Purge at login",
-                caption: "Purge starts quietly with your Mac and waits in the menu bar.",
-                warning: loginItemFailed ? "Couldn't enable this. Check Login Items in System Settings." : nil,
-                isOn: launchAtLoginBinding
+                title: "Keep Purge in the menu bar",
+                caption: menuBarModeCaption,
+                captionAnimatesTextChanges: true,
+                isOn: Binding(
+                    get: { startup.showsMenuBarIcon },
+                    set: { shown in
+                        startup.setShowsMenuBarIcon(shown)
+                        loginItemFailure = nil
+                    }
+                )
             )
 
-            settingsSectionDivider
+            // Both only make sense with an icon to click, so they are not offered
+            // without one. Leaving the menu bar turns them off (`setShowsMenuBarIcon`).
+            if startup.showsMenuBarIcon {
+                Group {
+                    settingsSectionDivider
 
-            settingsToggleRow(
-                title: "Hide Dock icon",
-                caption: """
-                    Purge runs from the menu bar only. Click the menu bar icon to open \
-                    this window again. The app menu is gone while the Dock icon is \
-                    hidden, so ⌘Q won't quit — use Quit in the menu bar dropdown.
-                    """,
-                isOn: hideDockIconBinding
-            )
+                    settingsToggleRow(
+                        title: "Launch Purge at login",
+                        caption: "Purge starts with your Mac and waits in the menu bar. No window opens until you click the icon.",
+                        warning: loginItemFailure?.message,
+                        isOn: launchAtLoginBinding
+                    )
+
+                    settingsSectionDivider
+
+                    settingsToggleRow(
+                        title: "Hide Dock icon",
+                        caption: """
+                            Purge runs from the menu bar only. Click the menu bar icon to open \
+                            this window again. The app menu is gone while the Dock icon is \
+                            hidden, so ⌘Q won't quit. Use Quit in the menu bar dropdown.
+                            """,
+                        isOn: hideDockIconBinding
+                    )
+                }
+                .transition(.opacity)
+            }
         }
+        .animation(scheduleLayoutAnimation, value: startup.showsMenuBarIcon)
+    }
+
+    private var menuBarModeCaption: String {
+        startup.showsMenuBarIcon
+            ? "Purge keeps running after you close the window, so you can scan and clean from the menu bar."
+            : "Purge opens when you need it and quits when you close the window."
     }
 
     private var launchAtLoginBinding: Binding<Bool> {
         Binding(
             get: { startup.launchesAtLogin },
             set: { newValue in
-                loginItemFailed = !startup.setLaunchesAtLogin(newValue)
+                loginItemFailure = startup.setLaunchesAtLogin(newValue)
+                    ? nil
+                    : (newValue ? .enable : .disable)
             }
         )
+    }
+
+    /// The warning outlives the attempt that caused it, so it has to go once the
+    /// user has fixed things in System Settings, or it sits under a switch that
+    /// now shows the state they asked for.
+    private func clearLoginItemFailureIfResolved() {
+        switch loginItemFailure {
+        case .enable where startup.launchesAtLogin, .disable where !startup.launchesAtLogin:
+            loginItemFailure = nil
+        default:
+            break
+        }
     }
 
     private var hideDockIconBinding: Binding<Bool> {
@@ -1292,4 +1336,17 @@ private extension ScheduledCleaningFrequency {
         }
     }
 
+}
+
+/// Which way a login item change failed, so the warning names the right action.
+private enum LoginItemFailure {
+    case enable
+    case disable
+
+    var message: String {
+        switch self {
+        case .enable: "Couldn't turn this on. Check Login Items in System Settings."
+        case .disable: "Couldn't turn this off. Check Login Items in System Settings."
+        }
+    }
 }

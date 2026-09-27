@@ -3,15 +3,11 @@ import SwiftUI
 struct OnboardingPermissionsStep: View {
   @EnvironmentObject private var store: PurgeStore
 
-  /// Shared with Settings so the two surfaces cannot disagree about whether the
-  /// login item is on.
-  @ObservedObject private var startup = StartupPreferenceStore.shared
-  @State private var loginItemFailed = false
   @State private var didOpenFullDiskAccessSettings = false
 
   var body: some View {
     VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
-      OnboardingStepTitle(text: "A couple of quick permissions...")
+      OnboardingStepTitle(text: "One quick permission...")
 
       VStack(spacing: AppStyle.Spacing.small) {
         OnboardingPermissionRow(
@@ -24,18 +20,6 @@ struct OnboardingPermissionsStep: View {
           action: requestFullDiskAccess
         )
         .onboardingBlurIn(index: 0)
-
-        OnboardingPermissionRow(
-          title: "Login item",
-          description: "Keeps Purge running quietly in the background so it's always working for you.",
-          badgeText: "Optional",
-          badgeTone: .neutral,
-          buttonTitle: "Enable login item",
-          isGranted: startup.launchesAtLogin,
-          statusText: loginItemFailed ? "Not enabled" : nil,
-          action: enableLoginItem
-        )
-        .onboardingBlurIn(index: 1)
       }
       .frame(maxWidth: .infinity)
       .padding(.top, AppStyle.Spacing.large)
@@ -59,13 +43,7 @@ struct OnboardingPermissionsStep: View {
       Spacer(minLength: 0)
     }
     .frame(maxWidth: OnboardingLayout.contentMaxWidth, maxHeight: .infinity, alignment: .top)
-    .onAppear { refreshLoginItemStatus() }
     .task { await pollFullDiskAccess() }
-  }
-
-  private func refreshLoginItemStatus() {
-    startup.refreshLoginItemStatus()
-    loginItemFailed = false
   }
 
   private func requestFullDiskAccess() {
@@ -77,12 +55,6 @@ struct OnboardingPermissionsStep: View {
     // `pollFullDiskAccess` is already running for this step and picks the grant up
     // within a second, off the main actor.
     openFullDiskAccessSettings()
-  }
-
-  private func enableLoginItem() {
-    withAnimation(.easeInOut(duration: 0.2)) {
-      loginItemFailed = !startup.setLaunchesAtLogin(true)
-    }
   }
 
   private func pollFullDiskAccess() async {
