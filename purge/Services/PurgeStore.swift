@@ -293,6 +293,10 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var interactiveSafeCleanupRemovedPaths: Set<String> = []
     @Published private(set) var interactiveSafeCleanupMovedToTrashBytes: Int64?
     @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
+    /// Shows `LookDeeperSheet`, the main window's one place to ask for Full Disk
+    /// Access. Set by the sidebar notice, the locked tabs, and a deleted-app review
+    /// that needs access to find leftovers.
+    @Published var isLookDeeperPresented = false
     /// Lifetime bytes Purge has moved to the trash. Not a reclaim figure: most of it
     /// only becomes free space once the user empties the trash.
     @Published var totalMovedToTrashBytes: Int64 = 0

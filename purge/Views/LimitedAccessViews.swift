@@ -1,0 +1,123 @@
+import SwiftUI
+
+// The main window's cues while Full Disk Access is off. Every one reads the store's
+// single `hasFullDiskAccess` value and opens the same `LookDeeperSheet`, so none of
+// them can go stale or ask in its own words.
+
+/// Stands in for a tab that cannot work without Full Disk Access.
+struct LockedFeatureView: View {
+    enum Feature {
+        case largeFiles
+        case uninstaller
+
+        var title: String {
+            switch self {
+            case .largeFiles: return "Large Files needs a look inside your folders"
+            case .uninstaller: return "The uninstaller needs full access"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .largeFiles:
+                return "Big files tend to live in Downloads, Documents and Desktop, and macOS keeps those locked until you say Purge can look. Purge only ever shows them to you. It never cleans them on its own."
+            case .uninstaller:
+                return "Apps leave settings and caches in folders macOS keeps locked. Without access, Purge would remove the app and leave all of that behind, so it waits until it can do the whole job."
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .largeFiles: return "doc.viewfinder"
+            case .uninstaller: return "shippingbox"
+            }
+        }
+    }
+
+    let feature: Feature
+    @EnvironmentObject private var store: PurgeStore
+
+    var body: some View {
+        VStack(spacing: AppStyle.Spacing.medium) {
+            Image(systemName: feature.symbol)
+                .font(.system(size: 36, weight: .regular))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+
+            VStack(spacing: AppStyle.Spacing.xSmall) {
+                Text(feature.title)
+                    .font(.title3.weight(.semibold))
+                    .multilineTextAlignment(.center)
+
+                Text(feature.message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button {
+                store.isLookDeeperPresented = true
+            } label: {
+                Label("Look deeper", systemImage: "lock.open")
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+            }
+            .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+        }
+        .frame(maxWidth: 440)
+        .padding(AppStyle.Spacing.large)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// Sits beside Scan on App Caches and Dev Tools, where the list is real but partial.
+struct LookDeeperHeaderButton: View {
+    @EnvironmentObject private var store: PurgeStore
+
+    var body: some View {
+        Button {
+            store.isLookDeeperPresented = true
+        } label: {
+            Label("Look deeper", systemImage: "lock.open")
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+        }
+        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .help("Some places are still locked. Let Purge look deeper.")
+    }
+}
+
+/// One quiet line in the sidebar, on every tab, until access is granted.
+struct LimitedScanNotice: View {
+    @EnvironmentObject private var store: PurgeStore
+
+    var body: some View {
+        Button {
+            store.isLookDeeperPresented = true
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "lock")
+                    .font(.system(size: 11, weight: .semibold))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Some places are still locked")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.primary)
+                    Text("Let Purge look deeper")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, AppStyle.Spacing.small)
+            .padding(.vertical, AppStyle.Spacing.xSmall)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Some places are still locked. Let Purge look deeper.")
+        .transition(.opacity)
+    }
+}

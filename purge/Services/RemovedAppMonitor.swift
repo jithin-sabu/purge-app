@@ -571,9 +571,12 @@ final class RemovedAppMonitor: ObservableObject {
     /// menu-bar-only mode) cannot show a review without Full Disk Access. Showing
     /// the window puts the access prompt in front of the user instead of leaving
     /// an invisible app holding the removal; it stays open.
+    /// Leftovers live in folders only Full Disk Access can see, so the review waits
+    /// in the queue and the window asks. Granting access runs the queue.
     private func showWindowForAccess() {
         openedWindowForReview = false
         quitsWhenDone = false
+        store?.isLookDeeperPresented = true
         guard !Self.appWindowIsOnScreen else { return }
         AppWindowPresenter.reveal()
     }

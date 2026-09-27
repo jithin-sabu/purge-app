@@ -10,19 +10,14 @@ struct AppRootView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.openWindow) private var openWindow
 
-  /// Onboarding cannot be completed without Full Disk Access, so this only catches installs that
-  /// arrived past onboarding without it: an update from a pre-onboarding build, or access revoked
-  /// in System Settings. Everything downstream can then assume access is granted.
-  private var showsAccessGate: Bool {
-    hasCompletedOnboarding && !store.hasFullDiskAccess
-  }
-
+  /// There is no access gate: without Full Disk Access the app runs limited scans and the
+  /// tabs that need more say so themselves. See `ScanAccess` and `LookDeeperView`.
   private var showsAppChrome: Bool {
-    (hasCompletedOnboarding || isOnboardingExitingToHome) && !showsAccessGate
+    hasCompletedOnboarding || isOnboardingExitingToHome
   }
 
   private var showsMainApp: Bool {
-    (hasCompletedOnboarding || isMainAppRevealed || reduceMotion) && !showsAccessGate
+    hasCompletedOnboarding || isMainAppRevealed || reduceMotion
   }
 
   /// Whether `ContentView` should exist at all. Distinct from `showsMainApp`, which only
@@ -42,7 +37,7 @@ struct AppRootView: View {
       // screen. The pre-mount before the reveal is preserved: `isOnboardingExitingToHome`
       // flips first, and `revealMainAppAfterMount` already waits 120ms before fading in.
       if showsMainAppContent {
-        ContentView(isLifecycleActive: hasCompletedOnboarding && store.hasFullDiskAccess)
+        ContentView(isLifecycleActive: hasCompletedOnboarding)
           .opacity(showsMainApp ? 1 : 0)
           .blur(radius: showsMainApp ? 0 : OnboardingTransitions.dismissBlurRadius)
           .allowsHitTesting(showsMainApp)
@@ -54,8 +49,6 @@ struct AppRootView: View {
           isExitingToHome: $isOnboardingExitingToHome
         )
         .allowsHitTesting(!isOnboardingExitingToHome)
-      } else if showsAccessGate {
-        FullDiskAccessGateView(onGranted: startScanAfterAccessGranted)
       }
     }
     .toolbar(showsAppChrome ? .visible : .hidden, for: .windowToolbar)
@@ -85,13 +78,6 @@ struct AppRootView: View {
         isMainAppRevealed = false
       }
     }
-  }
-
-  /// The gate hands over to a working app: nothing else re-checks access, so the first scan is
-  /// started here rather than left to `ContentView`, which was mounted (and bailed) without it.
-  private func startScanAfterAccessGranted() {
-    guard store.hasFullDiskAccess, !store.isScanningAll else { return }
-    Task { await store.scanAll() }
   }
 
   private func revealMainAppAfterMount() {

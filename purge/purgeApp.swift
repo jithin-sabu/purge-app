@@ -209,7 +209,7 @@ struct PurgeCommands: Commands {
                 Task { await store.scanAll() }
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
-            .disabled(!store.hasFullDiskAccess || store.isDeleting)
+            .disabled(store.isDeleting)
         }
         CommandGroup(replacing: .undoRedo) {}
     }
