@@ -98,8 +98,7 @@ final class RemovedAppMonitor: ObservableObject {
     /// works like an installed one; that is how this feature is tried before a
     /// signed release carries it.
     nonisolated static func managesLiveAgent(environment: [String: String]) -> Bool {
-        let testHostKeys = ["XCTestConfigurationFilePath", "XCTestBundlePath", "XCTestSessionIdentifier"]
-        return !testHostKeys.contains { environment[$0] != nil }
+        !TestHost.isActive(environment: environment)
     }
 
     func attach(store: PurgeStore) {

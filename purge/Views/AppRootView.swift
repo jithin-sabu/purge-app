@@ -87,6 +87,7 @@ struct AppRootView: View {
   /// gets a rescan and a word about what turned up. The screen reveals its own
   /// grants and claims them first, and onboarding has its own step for this.
   private func handleAccessChange() {
+    guard !TestHost.isActive() else { return }
     let isNewGrant = store.consumeFullDiskAccessGrant()
     guard isNewGrant, hasCompletedOnboarding, !store.isLookDeeperPresented else { return }
     Task { await store.revealFullDiskAccessGrant() }

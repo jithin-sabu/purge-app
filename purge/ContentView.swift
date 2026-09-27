@@ -37,6 +37,10 @@ struct ContentView: View {
     @AppStorage(AppearanceMode.userDefaultsKey)
     private var appearanceModeRaw = AppearanceMode.system.rawValue
     private let isRunningPreview = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+    /// Scheduled cleaning used to be kept out of the test host by accident: the host
+    /// never has Full Disk Access, and cleaning required it. Cleaning no longer does,
+    /// so the host is excluded on purpose.
+    private let isRunningAsTestHost = TestHost.isActive()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -51,7 +55,7 @@ struct ContentView: View {
             largeFilesDuplicateIndex = index
         }
         .onChange(of: scenePhase) { phase in
-            guard isLifecycleActive, phase == .active, !isRunningPreview else { return }
+            guard isLifecycleActive, phase == .active, !isRunningPreview, !isRunningAsTestHost else { return }
             Task {
                 await ScheduledCleaningRegistrar.shared.runGracefulActivationSweepIfPastDue()
             }
@@ -246,7 +250,7 @@ struct ContentView: View {
     /// `.active` value, so without this a cold launch would skip the activation
     /// sweep entirely and an overdue clean would sit unexecuted.
     private func runStartupMaintenance() async {
-        guard isLifecycleActive, !isRunningPreview else { return }
+        guard isLifecycleActive, !isRunningPreview, !isRunningAsTestHost else { return }
         await ScheduledCleaningRegistrar.shared.runGracefulActivationSweepIfPastDue()
         await scanIfNeeded()
     }
