@@ -95,20 +95,27 @@ final class StartupPreferenceStore: ObservableObject {
     /// same clean-up as the Settings switch. Leaving the menu bar turns off the
     /// login item and brings the Dock icon back, since both only make sense with
     /// an icon to click.
-    func setShowsMenuBarIcon(_ shown: Bool) {
-        guard shown != showsMenuBarIcon else { return }
+    ///
+    /// Returns whether the mode changed. Leaving the menu bar fails, and changes
+    /// nothing, when the login item will not come off: on demand with a login item
+    /// still registered opens a window at every login, and Settings no longer
+    /// shows the row that would fix it.
+    @discardableResult
+    func setShowsMenuBarIcon(_ shown: Bool) -> Bool {
+        guard shown != showsMenuBarIcon else { return true }
+        if !shown {
+            // Re-read rather than trusting `launchesAtLogin`: the user may have
+            // added Purge in System Settings since Settings last refreshed.
+            if loginItem.isRegistered, !setLaunchesAtLogin(false) {
+                return false
+            }
+            if hidesDockIcon {
+                setHidesDockIcon(false)
+            }
+        }
         showsMenuBarIcon = shown
         ud.set(shown, forKey: UDKeys.showMenuBarIcon)
-        guard !shown else { return }
-
-        if hidesDockIcon {
-            setHidesDockIcon(false)
-        }
-        // Re-read rather than trusting `launchesAtLogin`: the user may have added
-        // Purge in System Settings since Settings last refreshed.
-        if loginItem.isRegistered {
-            setLaunchesAtLogin(false)
-        }
+        return true
     }
 
     func setHidesDockIcon(_ hidden: Bool) {

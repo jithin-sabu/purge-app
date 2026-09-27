@@ -16,6 +16,7 @@ struct StartupPreferenceStoreTests {
     private final class FakeLoginItem: LoginItemControlling {
         var isRegistered = false
         var registerSucceeds = true
+        var unregisterSucceeds = true
         private(set) var unregisterCount = 0
 
         @discardableResult
@@ -27,6 +28,7 @@ struct StartupPreferenceStoreTests {
 
         func unregister() {
             unregisterCount += 1
+            guard unregisterSucceeds else { return }
             isRegistered = false
         }
     }
@@ -272,5 +274,31 @@ struct StartupPreferenceStoreTests {
         #expect(policy.applied.isEmpty)
         #expect(!registered)
         #expect(!loginItem.isRegistered)
+    }
+
+    @Test("Leaving the menu bar changes nothing when the login item will not come off")
+    func failedUnregisterKeepsTheMenuBar() {
+        let (defaults, name) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+        defaults.set(true, forKey: "startup.hideDockIcon")
+        let loginItem = FakeLoginItem()
+        loginItem.isRegistered = true
+        loginItem.unregisterSucceeds = false
+        let policy = DockPolicySpy()
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: loginItem,
+            applyDockPolicy: { policy.record($0) }
+        )
+        let switched = store.setShowsMenuBarIcon(false)
+
+        #expect(!switched)
+        #expect(store.showsMenuBarIcon)
+        #expect(StartupPreferenceStore.persistedShowsMenuBarIcon(userDefaults: defaults))
+        #expect(store.hidesDockIcon)
+        #expect(policy.applied.isEmpty)
+        #expect(store.launchesAtLogin)
     }
 }

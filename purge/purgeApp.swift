@@ -126,6 +126,8 @@ struct PurgeApp: App {
     /// mode. Writes go to the store, which is also where a ⌘-drag out of the menu
     /// bar lands: SwiftUI sets this binding to `false` when the user removes the
     /// icon, and that has to switch modes the same way the Settings switch does.
+    /// If the login item will not come off, the store keeps the menu bar mode and
+    /// the getter still reads `true`, so the icon stays.
     private var menuBarIconBinding: Binding<Bool> {
         Binding(
             get: { showsMenuBarIcon },

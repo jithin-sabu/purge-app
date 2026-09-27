@@ -263,8 +263,9 @@ struct SettingsView: View {
                 isOn: Binding(
                     get: { startup.showsMenuBarIcon },
                     set: { shown in
-                        startup.setShowsMenuBarIcon(shown)
-                        loginItemFailure = nil
+                        // A failed switch leaves the menu bar mode on and the login
+                        // row showing, so the warning lands under the row at fault.
+                        loginItemFailure = startup.setShowsMenuBarIcon(shown) ? nil : .disable
                     }
                 )
             )
