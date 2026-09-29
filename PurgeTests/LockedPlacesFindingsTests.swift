@@ -44,6 +44,19 @@ struct LockedPlacesFindingsTests {
         #expect(large.isWorthLeadingWith)
     }
 
+    /// A scan cut off by its time cap has not looked everywhere yet, so it must
+    /// not report that nothing was hiding.
+    @Test
+    func partialScanDoesNotClaimNothingWasHiding() {
+        var nothing = LockedPlacesFindings(bytes: 0, categories: [])
+        #expect(LookDeeperView.smallFindingsMessage(nothing).contains("Nothing big was hiding"))
+
+        nothing.isPartial = true
+        let message = LookDeeperView.smallFindingsMessage(nothing)
+        #expect(!message.contains("Nothing big was hiding"))
+        #expect(message.contains("still checking"))
+    }
+
     @Test
     func grantCountsOnceAndOnlyAfterRecordedDenial() throws {
         let suite = "purge-tests-access-\(UUID().uuidString)"

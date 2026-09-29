@@ -11,6 +11,9 @@ import Foundation
 struct LockedPlacesFindings {
     let bytes: Int64
     let categories: [OnboardingResultsCategory]
+    /// The scan hit its time cap with project discovery or git checks still
+    /// running, so more may turn up. Nothing can say "nothing was hiding" then.
+    var isPartial = false
 
     /// Below this the number is too small to lead with, and the reveal talks about
     /// what access opened up instead of celebrating a few megabytes.
@@ -47,7 +50,9 @@ extension PurgeStore {
             guard !Task.isCancelled else { break }
             try? await Task.sleep(for: .milliseconds(250))
         }
-        return lockedPlacesFindings()
+        var findings = lockedPlacesFindings()
+        findings.isPartial = isScanningProjects || isEnrichingDeveloper || isEnrichingGeneral
+        return findings
     }
 
     private static let lastKnownFullDiskAccessKey = "access.lastKnownFullDiskAccess"

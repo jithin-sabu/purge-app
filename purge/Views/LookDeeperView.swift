@@ -187,7 +187,10 @@ struct LookDeeperView: View {
   }
 
   static func smallFindingsMessage(_ findings: LockedPlacesFindings) -> String {
-    findings.bytes > 0
+    if findings.isPartial {
+      return "Large Files and the uninstaller are ready. Purge is still checking your projects, so more may turn up."
+    }
+    return findings.bytes > 0
       ? "Large Files and the uninstaller are ready, and Purge found a little more to clean too."
       : "Large Files and the uninstaller are ready. Nothing big was hiding in the locked folders."
   }
