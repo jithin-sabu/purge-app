@@ -177,7 +177,7 @@ nonisolated final class DevScanner {
                 if Task.isCancelled { return }
                 continuation.yield(.status("Scanning iOS Simulators..."))
                 let simDiscoveryStart = Date()
-                let simulators = await self.discoverShutdownSimulatorsWithoutSizes()
+                let simulators = await self.discoverShutdownSimulatorsWithoutSizes(access: access)
                 ScanPhaseTiming.finish(
                     "simulator discovery",
                     since: simDiscoveryStart,
@@ -203,10 +203,11 @@ nonisolated final class DevScanner {
     // MARK: - iOS Simulators
 
     /// Metadata only (`sizeOnDisk` is `nil`). Requires `xcrun` and a CoreSimulator devices folder.
-    func discoverShutdownSimulatorsWithoutSizes() async -> [SimulatorDevice] {
+    func discoverShutdownSimulatorsWithoutSizes(access: ScanAccess = .full) async -> [SimulatorDevice] {
         let devicesRoot = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Developer/CoreSimulator/Devices", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: devicesRoot.path) else { return [] }
+        guard ProtectedLocations.isReadable(devicesRoot, access: access),
+              FileManager.default.fileExists(atPath: devicesRoot.path) else { return [] }
         guard FileManager.default.isExecutableFile(atPath: Self.xcrunPath) else { return [] }
 
         let devices = await loadSimulatorsFromSimctl(devicesRoot: devicesRoot)
@@ -528,7 +529,7 @@ nonisolated final class DevScanner {
     private func scanGlobalCachePlaceholders(access: ScanAccess) -> ([DevTool], [DevToolSizeJob]) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         var staticDefinitions = Self.globalCacheDefinitions()
-            + discoverObsoleteEditorExtensionDefinitions(home: home)
+            + discoverObsoleteEditorExtensionDefinitions(home: home, access: access)
         // Cursor worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop. A limited scan cannot
         // look there without a prompt, so it skips them rather than guess.
@@ -581,20 +582,31 @@ nonisolated final class DevScanner {
         return [(CursorAgentLeftoverScanPolicy.toolLabel, unused)]
     }
 
-    private func discoverObsoleteEditorExtensionDefinitions(home: URL) -> [(label: String, paths: [URL])] {
+    private func discoverObsoleteEditorExtensionDefinitions(
+        home: URL,
+        access: ScanAccess
+    ) -> [(label: String, paths: [URL])] {
         let cursor = obsoleteExtensionPaths(
             in: home.appendingPathComponent(".cursor/extensions", isDirectory: true),
-            label: "Obsolete Cursor Extension"
+            label: "Obsolete Cursor Extension",
+            access: access
         )
         let vscode = obsoleteExtensionPaths(
             in: home.appendingPathComponent(".vscode/extensions", isDirectory: true),
-            label: "Obsolete VS Code Extension"
+            label: "Obsolete VS Code Extension",
+            access: access
         )
         return cursor + vscode
     }
 
-    private func obsoleteExtensionPaths(in extensionsRoot: URL, label: String) -> [(label: String, paths: [URL])] {
+    private func obsoleteExtensionPaths(
+        in extensionsRoot: URL,
+        label: String,
+        access: ScanAccess
+    ) -> [(label: String, paths: [URL])] {
         let fm = FileManager.default
+        // Listing would follow a `~/.cursor` linked into Documents.
+        guard ProtectedLocations.isReadable(extensionsRoot, access: access) else { return [] }
         guard let entries = try? fm.contentsOfDirectory(
             at: extensionsRoot,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -603,6 +615,8 @@ nonisolated final class DevScanner {
 
         var grouped: [String: [(version: String, url: URL)]] = [:]
         for entry in entries {
+            // `standardizedFileURL` below would follow an entry that links out.
+            guard ProtectedLocations.isReadable(entry, access: access) else { continue }
             guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
             let folderName = entry.lastPathComponent
             if let parsed = Self.parseExtensionFolderName(folderName) {
@@ -878,7 +892,11 @@ nonisolated final class DevScanner {
             return Array(result).sorted { String(describing: $0) < String(describing: $1) }
         }
 
-        func walk(directory: URL, depth: Int, maxDepth: Int) {
+        let protectedRoots = ProtectedLocations.resolvedRootPaths(home: home)
+
+        /// `realPath` is `directory` with its root's symlinks resolved, in a limited
+        /// scan only; nil with full access, where nothing needs checking.
+        func walk(directory: URL, realPath: String?, depth: Int, maxDepth: Int) {
             guard depth <= maxDepth else { return }
             directoriesWalked += 1
 
@@ -893,7 +911,7 @@ nonisolated final class DevScanner {
             do {
                 entries = try fm.contentsOfDirectory(
                     at: directory,
-                    includingPropertiesForKeys: [.isDirectoryKey, .nameKey],
+                    includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .nameKey],
                     options: [.skipsPackageDescendants]
                 )
             } catch {
@@ -908,28 +926,39 @@ nonisolated final class DevScanner {
                 if name.hasPrefix(".") { continue }
 
                 if shouldSkipDescending(into: name) { continue }
-                // The home root walks one level down, which would open Desktop,
-                // Documents and Downloads. Their own root entries are dropped the
-                // same way below.
-                if access == .limited, ProtectedLocations.contains(entry) { continue }
+                // Decided on the path alone, before anything reads the entry. The
+                // home root walks one level down, which would open Desktop,
+                // Documents and Downloads. `realPath` is the folder's resolved path,
+                // so a root that links back into home is judged by where it lands.
+                let entryRealPath = realPath.map { $0 + "/" + name }
+                if let entryRealPath, ProtectedLocations.isPath(entryRealPath, inAnyOf: protectedRoots) { continue }
 
-                var isDirectory = false
-                if let v = try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory {
-                    isDirectory = v
-                }
-                guard isDirectory else { continue }
+                // Never through a link: `~/Projects/client` pointing into Documents
+                // would be walked, and its artifacts cleaned, as if it were readable.
+                // These values came with the listing, which does not follow links.
+                let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
 
-                walk(directory: entry, depth: depth + 1, maxDepth: maxDepth)
+                walk(directory: entry, realPath: entryRealPath, depth: depth + 1, maxDepth: maxDepth)
             }
         }
 
-        for root in roots where ProtectedLocations.isReadable(root, access: access)
-            && fm.fileExists(atPath: root.path) {
+        for root in roots {
+            // A limited scan resolves the root with `readlink` alone first, so a
+            // root that is a link into a protected folder is never opened.
+            let realRoot: String?
+            if access == .limited {
+                guard let resolved = ProtectedLocations.readablePath(of: root, home: home) else { continue }
+                realRoot = resolved
+            } else {
+                realRoot = nil
+            }
+            guard fm.fileExists(atPath: root.path) else { continue }
             // When the root is the home directory itself, limit to depth 1
             // to avoid scanning deep into personal folders like Documents recursively
             // since those are already covered by their own dedicated root entries above
             let effectiveMaxDepth = (root.path == home.path) ? 1 : maxDepth
-            walk(directory: root, depth: 0, maxDepth: effectiveMaxDepth)
+            walk(directory: root, realPath: realRoot, depth: 0, maxDepth: effectiveMaxDepth)
         }
 
         // Deduplicate by project root path, keeping the first occurrence
@@ -950,7 +979,7 @@ nonisolated final class DevScanner {
 
         /// Build artifact list per root (expensive sizing runs concurrently).
         let sizingStart = Date()
-        let (groups, artifactsSized) = await buildProjectGroups(for: discoveredRoots, continuation: continuation)
+        let (groups, artifactsSized) = await buildProjectGroups(for: discoveredRoots, access: access, continuation: continuation)
         ScanPhaseTiming.finish(
             "project artifact sizing",
             since: sizingStart,
@@ -1019,6 +1048,7 @@ nonisolated final class DevScanner {
 
     private func buildProjectGroups(
         for discovered: [(URL, [ProjectType])],
+        access: ScanAccess,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
     ) async -> (groups: [ProjectGroup], artifactsSized: Int) {
         guard !discovered.isEmpty else { return ([], 0) }
@@ -1034,7 +1064,7 @@ nonisolated final class DevScanner {
 
             while inFlight < Self.maxConcurrentProjectSizings, let next = pending.next() {
                 group.addTask { [next] in
-                    DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1)
+                    DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access)
                 }
                 inFlight += 1
             }
@@ -1050,7 +1080,7 @@ nonisolated final class DevScanner {
                 if Task.isCancelled { continue }
                 if let next = pending.next() {
                     group.addTask { [next] in
-                        DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1)
+                        DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access)
                     }
                 }
             }
@@ -1063,9 +1093,10 @@ nonisolated final class DevScanner {
 
     private nonisolated static func sizeProjectGroup(
         rootURL: URL,
-        types: [ProjectType]
+        types: [ProjectType],
+        access: ScanAccess
     ) -> (ProjectGroup?, Int) {
-        let rows = DevScanner.collectArtifacts(projectRoot: rootURL, types: types)
+        let rows = DevScanner.collectArtifacts(projectRoot: rootURL, types: types, access: access)
         guard !rows.isEmpty else { return (nil, 0) }
 
         let artifactPaths = rows.map(\.path)
@@ -1124,7 +1155,11 @@ nonisolated final class DevScanner {
         let reinstallSafety: ReinstallSafetyStatus
     }
 
-    nonisolated static func collectArtifacts(projectRoot root: URL, types: [ProjectType]) -> [SizedArtifactIntermediate] {
+    nonisolated static func collectArtifacts(
+        projectRoot root: URL,
+        types: [ProjectType],
+        access: ScanAccess = .full
+    ) -> [SizedArtifactIntermediate] {
         let fm = FileManager.default
         var artifacts: [SizedArtifactIntermediate] = []
         let detected = Set(types)
@@ -1166,6 +1201,9 @@ nonisolated final class DevScanner {
             // project with `requirements.txt` but no `tox.ini` must not offer `.tox`.
             guard rule.matchesRoot(root) else { continue }
             let artifact = root.appendingPathComponent(rule.folder, isDirectory: true)
+            // Before anything reads the artifact: a `node_modules` linked into
+            // Documents would be followed by `fileExists` and prompt.
+            guard ProtectedLocations.isReadable(artifact, access: access) else { continue }
             guard !rule.refusesArtifact(at: artifact) else { continue }
             addIfDir(rule: rule, url: artifact)
         }

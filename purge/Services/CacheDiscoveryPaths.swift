@@ -44,14 +44,20 @@ enum CacheDiscoveryPaths {
     ]
 
     /// Returns every cache candidate path under `~/Library/Application Support/<appRoot>/`.
-    nonisolated static func applicationSupportCacheURLs(in appRoot: URL) -> [URL] {
+    ///
+    /// A limited scan checks each path with `ProtectedLocations.isReadable` before
+    /// anything else reads it, since any of these folders can be a symlink into
+    /// Documents and `fileExists` would follow it there.
+    nonisolated static func applicationSupportCacheURLs(in appRoot: URL, access: ScanAccess = .full) -> [URL] {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: appRoot.path) else { return [] }
+        guard ProtectedLocations.isReadable(appRoot, access: access),
+              fm.fileExists(atPath: appRoot.path) else { return [] }
 
         var results: [URL] = []
         var seen = Set<String>()
 
         func appendIfExists(_ url: URL) {
+            guard ProtectedLocations.isReadable(url, access: access) else { return }
             let key = url.standardizedFileURL.path
             guard !seen.contains(key), fm.fileExists(atPath: url.path) else { return }
             var isDir: ObjCBool = false
@@ -69,7 +75,7 @@ enum CacheDiscoveryPaths {
         }
 
         let userData = appRoot.appendingPathComponent("User Data", isDirectory: true)
-        if fm.fileExists(atPath: userData.path) {
+        if ProtectedLocations.isReadable(userData, access: access), fm.fileExists(atPath: userData.path) {
             appendChromiumProfileCaches(userData: userData, appendIfExists: appendIfExists)
         }
 
@@ -116,15 +122,16 @@ enum CacheDiscoveryPaths {
     /// Adobe media cache directories that actually exist on disk. Absent Adobe
     /// folders (app not installed) simply yield nothing — never an error row.
     nonisolated static func adobeMediaCacheURLs(
-        home: URL
+        home: URL,
+        access: ScanAccess = .full
     ) -> [(url: URL, headline: String, key: String)] {
         let fm = FileManager.default
         let appSupport = home.appendingPathComponent("Library/Application Support", isDirectory: true)
         var results: [(url: URL, headline: String, key: String)] = []
         for entry in adobeMediaCacheEntries {
-            let url = appSupport
-                .appendingPathComponent(entry.relative, isDirectory: true)
-                .standardizedFileURL
+            let candidate = appSupport.appendingPathComponent(entry.relative, isDirectory: true)
+            guard ProtectedLocations.isReadable(candidate, access: access) else { continue }
+            let url = candidate.standardizedFileURL
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { continue }
             results.append((url, entry.headline, entry.key))

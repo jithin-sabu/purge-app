@@ -48,7 +48,9 @@ nonisolated enum ProtectedLocations {
     /// check: it never touches the disk, so it is safe to call before deciding
     /// whether touching the disk is allowed.
     static func contains(_ url: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
-        contains(path: url.standardizedFileURL.path, home: home)
+        // Folded by hand: `standardizedFileURL` checks the disk, and through a
+        // symlink that check would land in the folder this is meant to avoid.
+        contains(path: "/" + lexicalComponents(of: url.path, relativeTo: []).joined(separator: "/"), home: home)
     }
 
     static func contains(path: String, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
@@ -57,10 +59,22 @@ nonisolated enum ProtectedLocations {
         }
     }
 
-    /// Whether a limited scan may read `url`. Follows a symlink at `url` itself
-    /// by reading the link, never the target, so `~/Developer` pointing into
-    /// `~/Documents` is caught without ever opening Documents. Symlinks further
-    /// down are not followed here; the directory walks already skip them.
+    /// A few hops covers every real setup; a chain longer than this is treated
+    /// as unreadable rather than chased.
+    static let maxSymlinkHops = 8
+
+    /// Whether a limited scan may read `url`.
+    ///
+    /// Walks the path one component at a time and reads any symlink on the way
+    /// with `destinationOfSymbolicLink`, which reads the link and never the
+    /// target. So `~/Developer` pointing into `~/Documents` is caught, and so is
+    /// `~/Projects/client/node_modules` when only `client` is the link. Each
+    /// component is checked against the roots before its link is read, so the
+    /// check never reaches inside a protected folder.
+    ///
+    /// Everything here is string work plus `readlink`. `fileExists`, resource
+    /// values, `standardizedFileURL` and `resolvingSymlinksInPath` all follow
+    /// the link to its target, which is the access that prompts.
     static func isReadable(
         _ url: URL,
         access: ScanAccess,
@@ -68,17 +82,87 @@ nonisolated enum ProtectedLocations {
         fileManager: FileManager = .default
     ) -> Bool {
         guard access == .limited else { return true }
-        var current = url.standardizedFileURL
-        // A few hops covers every real setup; a loop longer than this is
-        // treated as unreadable rather than chased.
-        for _ in 0..<8 {
-            guard !contains(current, home: home) else { return false }
-            guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: current.path) else {
-                return true
-            }
-            current = URL(fileURLWithPath: destination, relativeTo: current.deletingLastPathComponent())
-                .standardizedFileURL
+        return readablePath(of: url, home: home, fileManager: fileManager) != nil
+    }
+
+    /// The real path behind `url` with every symlink on the way resolved, or nil
+    /// when a hop lands in a protected root or the chain is too long. Same rules
+    /// and same disk access as `isReadable`: only `readlink`, and never inside a
+    /// root.
+    static func readablePath(
+        of url: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default
+    ) -> String? {
+        let roots = resolvedRootPaths(home: home, fileManager: fileManager)
+        return resolvingLinks(in: url.path, fileManager: fileManager) { isPath($0, inAnyOf: roots) }
+    }
+
+    /// `rootPaths` plus the same roots under home's resolved path. Resolved paths
+    /// are compared against these: a home under `/var` is really under
+    /// `/private/var`. Home itself is never protected, so resolving it is safe.
+    static func resolvedRootPaths(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default
+    ) -> [String] {
+        let roots = rootPaths(home: home)
+        guard let realHome = resolvingLinks(in: home.path, fileManager: fileManager, stopAt: { _ in false }) else {
+            return roots
         }
-        return false
+        let resolved = homeRelativeRoots.map { "\(realHome)/\($0)" }
+        return resolved == roots ? roots : roots + resolved
+    }
+
+    /// Pure string check of `path` against roots from `resolvedRootPaths`.
+    static func isPath(_ path: String, inAnyOf roots: [String]) -> Bool {
+        roots.contains { path == $0 || path.hasPrefix($0 + "/") }
+    }
+
+    /// Resolves every symlink in `path` with `readlink` alone, one component at a
+    /// time. Returns nil as soon as a partial path matches `stopAt`, before its
+    /// link is read, or when the chain runs past `maxSymlinkHops`.
+    private static func resolvingLinks(
+        in path: String,
+        fileManager: FileManager,
+        stopAt: (String) -> Bool
+    ) -> String? {
+        var remaining = lexicalComponents(of: path, relativeTo: [])
+        var resolved: [String] = []
+        var hops = 0
+        while !remaining.isEmpty {
+            let next = resolved + [remaining.removeFirst()]
+            let nextPath = "/" + next.joined(separator: "/")
+            if stopAt(nextPath) { return nil }
+            guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: nextPath) else {
+                resolved = next
+                continue
+            }
+            hops += 1
+            guard hops <= maxSymlinkHops else { return nil }
+            // A relative link resolves against the folder that holds it. The
+            // rest of the original path then continues from the target.
+            let base = destination.hasPrefix("/") ? [] : resolved
+            remaining = lexicalComponents(of: destination, relativeTo: base) + remaining
+            resolved = []
+        }
+        let resolvedPath = "/" + resolved.joined(separator: "/")
+        return stopAt(resolvedPath) ? nil : resolvedPath
+    }
+
+    /// Splits `path` into components with `.` and `..` folded away, without
+    /// touching the disk. `base` is the folder a relative path starts from.
+    private static func lexicalComponents(of path: String, relativeTo base: [String]) -> [String] {
+        var components = path.hasPrefix("/") ? [] : base
+        for part in path.split(separator: "/", omittingEmptySubsequences: true) {
+            switch part {
+            case ".":
+                continue
+            case "..":
+                if !components.isEmpty { components.removeLast() }
+            default:
+                components.append(String(part))
+            }
+        }
+        return components
     }
 }

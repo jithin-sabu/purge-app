@@ -70,6 +70,128 @@ struct ScanAccessTests {
         #expect(ProtectedLocations.isReadable(plain, access: .limited, home: fakeHome))
     }
 
+    /// A link one level down, inside a folder the walk is allowed into. Checking
+    /// only the final path would read `client` as fine and walk into Documents.
+    @Test
+    func nestedSymlinkUnderProjectsIsNotReadable() throws {
+        let fakeHome = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        try fm.createDirectory(at: fakeHome.appendingPathComponent("Documents/client"), withIntermediateDirectories: true)
+        let projects = fakeHome.appendingPathComponent("Projects", isDirectory: true)
+        try fm.createDirectory(at: projects, withIntermediateDirectories: true)
+        let client = projects.appendingPathComponent("client")
+        try fm.createSymbolicLink(atPath: client.path, withDestinationPath: "../Documents/client")
+        let recorder = RecordingFileManager()
+
+        #expect(!ProtectedLocations.isReadable(client, access: .limited, home: fakeHome, fileManager: recorder))
+        #expect(ProtectedLocations.isReadable(projects, access: .limited, home: fakeHome))
+        #expect(ProtectedLocations.isReadable(client, access: .full, home: fakeHome))
+        // The link was read; nothing inside Documents was. The recorded paths are
+        // resolved, so `/var` shows up as `/private/var`.
+        #expect(recorder.readLinks.contains { $0.hasSuffix("/Projects/client") })
+        #expect(!recorder.readLinks.contains { $0.hasSuffix("/Documents") || $0.contains("/Documents/") })
+    }
+
+    /// Safe and scheduled cleanups check each candidate. A `node_modules` whose
+    /// project folder is the link must wait for access like anything in Documents.
+    @Test
+    func cleanupCandidateUnderALinkedParentIsNotReadable() throws {
+        let fakeHome = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        let target = fakeHome.appendingPathComponent("Documents/client", isDirectory: true)
+        try fm.createDirectory(at: target.appendingPathComponent("node_modules"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: fakeHome.appendingPathComponent("Projects"), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: fakeHome.appendingPathComponent("Projects/client"), withDestinationURL: target)
+
+        let candidate = fakeHome.appendingPathComponent("Projects/client/node_modules", isDirectory: true)
+        #expect(!ProtectedLocations.isReadable(candidate, access: .limited, home: fakeHome))
+
+        let plain = fakeHome.appendingPathComponent("Projects/other/node_modules", isDirectory: true)
+        try fm.createDirectory(at: plain, withIntermediateDirectories: true)
+        #expect(ProtectedLocations.isReadable(plain, access: .limited, home: fakeHome))
+    }
+
+    /// Caches and Application Support are in a limited scan, but a folder there
+    /// can still point into Documents.
+    @Test
+    func cacheFolderSymlinkedIntoDocumentsIsNotReadable() throws {
+        let fakeHome = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        let target = fakeHome.appendingPathComponent("Documents/big-cache", isDirectory: true)
+        try fm.createDirectory(at: target, withIntermediateDirectories: true)
+        let caches = fakeHome.appendingPathComponent("Library/Caches", isDirectory: true)
+        try fm.createDirectory(at: caches, withIntermediateDirectories: true)
+        let linkedCache = caches.appendingPathComponent("com.example.app")
+        try fm.createSymbolicLink(at: linkedCache, withDestinationURL: target)
+        let appSupport = fakeHome.appendingPathComponent("Library/Application Support/Example", isDirectory: true)
+        try fm.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: appSupport.appendingPathComponent("Cache"), withDestinationURL: target)
+        let realCache = caches.appendingPathComponent("com.example.other", isDirectory: true)
+        try fm.createDirectory(at: realCache, withIntermediateDirectories: true)
+
+        #expect(!ProtectedLocations.isReadable(linkedCache, access: .limited, home: fakeHome))
+        #expect(!ProtectedLocations.isReadable(appSupport.appendingPathComponent("Cache"), access: .limited, home: fakeHome))
+        #expect(ProtectedLocations.isReadable(realCache, access: .limited, home: fakeHome))
+    }
+
+    /// A link that lands somewhere readable resolves to where it lands, which is
+    /// what the project walk judges the rest of the tree by.
+    @Test
+    func readablePathFollowsLinksToTheirRealLocation() throws {
+        let fakeHome = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        let real = fakeHome.appendingPathComponent("Volumes/Code", isDirectory: true)
+        try fm.createDirectory(at: real, withIntermediateDirectories: true)
+        let link = fakeHome.appendingPathComponent("Developer")
+        try fm.createSymbolicLink(at: link, withDestinationURL: real)
+
+        #expect(ProtectedLocations.readablePath(of: link, home: fakeHome) == physicalPath(real))
+        #expect(
+            ProtectedLocations.readablePath(of: link.appendingPathComponent("app"), home: fakeHome)
+                == physicalPath(real) + "/app"
+        )
+
+        // A link back to home makes `~/Code/Documents` the real Documents.
+        let homeLink = fakeHome.appendingPathComponent("Code")
+        try fm.createSymbolicLink(atPath: homeLink.path, withDestinationPath: ".")
+        #expect(ProtectedLocations.readablePath(of: homeLink, home: fakeHome) == physicalPath(fakeHome))
+        #expect(!ProtectedLocations.isReadable(homeLink.appendingPathComponent("Documents"), access: .limited, home: fakeHome))
+    }
+
+    @Test
+    func longSymlinkChainIsNotReadable() throws {
+        // Physical, so `/var` does not add a hop to every link in the chain.
+        let fakeHome = URL(fileURLWithPath: physicalPath(try makeTemporaryHome()), isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        let end = fakeHome.appendingPathComponent("end", isDirectory: true)
+        try fm.createDirectory(at: end, withIntermediateDirectories: true)
+
+        // prefix0 -> prefix1 -> … -> end, one hop per link.
+        func makeChain(length: Int, prefix: String) throws -> URL {
+            var next = end
+            for index in stride(from: length - 1, through: 0, by: -1) {
+                let link = fakeHome.appendingPathComponent("\(prefix)\(index)")
+                try fm.createSymbolicLink(at: link, withDestinationURL: next)
+                next = link
+            }
+            return next
+        }
+        let short = try makeChain(length: ProtectedLocations.maxSymlinkHops, prefix: "short")
+        let long = try makeChain(length: ProtectedLocations.maxSymlinkHops + 1, prefix: "long")
+
+        #expect(ProtectedLocations.isReadable(short, access: .limited, home: fakeHome))
+        #expect(!ProtectedLocations.isReadable(long, access: .limited, home: fakeHome))
+
+        let loop = fakeHome.appendingPathComponent("loop")
+        try fm.createSymbolicLink(atPath: loop.path, withDestinationPath: "loop")
+        #expect(!ProtectedLocations.isReadable(loop, access: .limited, home: fakeHome))
+    }
+
     @Test
     func gitDirectoryOfPlainRepositoryIsItsDotGit() throws {
         let repo = try makeTemporaryHome()
@@ -115,6 +237,24 @@ struct ScanAccessTests {
         let checker = GitStatusChecker()
         await checker.setAccess(.limited)
         #expect(await checker.cleanupStatus(for: item) == .unknown)
+    }
+
+    /// Records every link `isReadable` reads, to prove it never reads inside a root.
+    private final class RecordingFileManager: FileManager {
+        private(set) var readLinks: [String] = []
+
+        override func destinationOfSymbolicLink(atPath path: String) throws -> String {
+            readLinks.append(path)
+            return try super.destinationOfSymbolicLink(atPath: path)
+        }
+    }
+
+    /// The path with every link resolved, `/private` included, which is the form
+    /// `readablePath` returns. `resolvingSymlinksInPath` strips `/private` again.
+    private func physicalPath(_ url: URL) -> String {
+        guard let resolved = realpath(url.path, nil) else { return url.path }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     private func makeTemporaryHome() throws -> URL {

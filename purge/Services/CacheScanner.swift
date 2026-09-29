@@ -74,7 +74,7 @@ nonisolated final class CacheScanner {
             }
             guard let item = cacheItem(
                 at: directory,
-                home: home,
+                access: access,
                 collectedPaths: &collectedPaths
             ) else { continue }
             continuation.yield(.found(item))
@@ -86,7 +86,7 @@ nonisolated final class CacheScanner {
         // it belongs in the limited scan. The sensitive roots under it are already
         // skipped by `excludedApplicationSupportRoots`.
         continuation.yield(.status("Scanning Application Support caches..."))
-        let appSupportItems = applicationSupportCacheItems(home: home, collectedPaths: &collectedPaths)
+        let appSupportItems = applicationSupportCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
         for item in appSupportItems {
             if Task.isCancelled {
                 continuation.finish()
@@ -96,7 +96,7 @@ nonisolated final class CacheScanner {
             sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
         }
 
-        let adobeItems = adobeMediaCacheItems(home: home, collectedPaths: &collectedPaths)
+        let adobeItems = adobeMediaCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
         for item in adobeItems {
             if Task.isCancelled {
                 continuation.finish()
@@ -109,7 +109,7 @@ nonisolated final class CacheScanner {
         // Everything below lives in other apps' containers. Without Full Disk Access
         // macOS asks the user about each one, so a limited scan leaves them alone.
         if access == .full {
-            let telegramItems = telegramMediaCacheItems(home: home, collectedPaths: &collectedPaths)
+            let telegramItems = telegramMediaCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
             for item in telegramItems {
                 if Task.isCancelled {
                     continuation.finish()
@@ -120,7 +120,7 @@ nonisolated final class CacheScanner {
             }
 
             continuation.yield(.status("Scanning sandboxed app caches..."))
-            let containerItems = allContainerCacheItems(home: home, collectedPaths: &collectedPaths)
+            let containerItems = allContainerCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
             for item in containerItems {
                 if Task.isCancelled {
                     continuation.finish()
@@ -132,7 +132,7 @@ nonisolated final class CacheScanner {
         }
 
         continuation.yield(.status("Scanning browser app bundles..."))
-        let staleFrameworkItems = staleChromiumFrameworkItems(collectedPaths: &collectedPaths)
+        let staleFrameworkItems = staleChromiumFrameworkItems(access: access, collectedPaths: &collectedPaths)
         for item in staleFrameworkItems {
             if Task.isCancelled {
                 continuation.finish()
@@ -149,6 +149,7 @@ nonisolated final class CacheScanner {
                 return
             }
             let displayName = location.displayName
+            guard ProtectedLocations.isReadable(location.url, access: access) else { continue }
             let url = location.url.standardizedFileURL
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { continue }
@@ -184,7 +185,7 @@ nonisolated final class CacheScanner {
 
         continuation.yield(.status("Calculating sizes..."))
         let sizingStart = Date()
-        await runSizeJobs(sizeJobs, continuation: continuation)
+        await runSizeJobs(sizeJobs, access: access, continuation: continuation)
         ScanPhaseTiming.finish(
             "app cache sizing",
             since: sizingStart,
@@ -195,9 +196,12 @@ nonisolated final class CacheScanner {
 
     private func cacheItem(
         at directory: URL,
-        home: URL,
+        access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> CacheItem? {
+        // A cache folder can be a symlink into Documents. Checked on the link
+        // alone, before the resource values and sizing that would follow it.
+        guard ProtectedLocations.isReadable(directory, access: access) else { return nil }
         do {
             let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
             guard values.isDirectory == true else { return nil }
@@ -237,6 +241,7 @@ nonisolated final class CacheScanner {
 
     private func applicationSupportCacheItems(
         home: URL,
+        access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> [CacheItem] {
         let appSupportRoot = home.appendingPathComponent("Library/Application Support", isDirectory: true)
@@ -248,6 +253,7 @@ nonisolated final class CacheScanner {
 
         var items: [CacheItem] = []
         for appDir in appDirs {
+            guard ProtectedLocations.isReadable(appDir, access: access) else { continue }
             guard (try? appDir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
                 continue
             }
@@ -256,11 +262,12 @@ nonisolated final class CacheScanner {
                 continue
             }
 
-            for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir) {
+            for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir, access: access) {
                 guard let item = cacheItemAtDiscoveredPath(
                     cacheURL,
                     headline: applicationSupportHeadline(appFolderName: appFolderName, cacheURL: cacheURL),
                     folderName: appFolderName,
+                    access: access,
                     collectedPaths: &collectedPaths
                 ) else { continue }
                 items.append(item)
@@ -271,14 +278,16 @@ nonisolated final class CacheScanner {
 
     private func adobeMediaCacheItems(
         home: URL,
+        access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> [CacheItem] {
         var items: [CacheItem] = []
-        for entry in CacheDiscoveryPaths.adobeMediaCacheURLs(home: home) {
+        for entry in CacheDiscoveryPaths.adobeMediaCacheURLs(home: home, access: access) {
             guard let item = cacheItemAtDiscoveredPath(
                 entry.url,
                 headline: entry.headline,
                 folderName: entry.key,
+                access: access,
                 collectedPaths: &collectedPaths
             ) else { continue }
             items.append(item)
@@ -288,6 +297,7 @@ nonisolated final class CacheScanner {
 
     private func telegramMediaCacheItems(
         home: URL,
+        access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> [CacheItem] {
         var items: [CacheItem] = []
@@ -296,6 +306,7 @@ nonisolated final class CacheScanner {
                 entry.url,
                 headline: entry.headline,
                 folderName: entry.key,
+                access: access,
                 collectedPaths: &collectedPaths
             ) else { continue }
             items.append(item)
@@ -305,6 +316,7 @@ nonisolated final class CacheScanner {
 
     private func allContainerCacheItems(
         home: URL,
+        access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> [CacheItem] {
         var items: [CacheItem] = []
@@ -319,6 +331,7 @@ nonisolated final class CacheScanner {
                 cacheURL,
                 headline: headline,
                 folderName: folderName,
+                access: access,
                 collectedPaths: &collectedPaths
             ) else { continue }
             items.append(item)
@@ -326,9 +339,10 @@ nonisolated final class CacheScanner {
         return items
     }
 
-    private func staleChromiumFrameworkItems(collectedPaths: inout Set<String>) -> [CacheItem] {
+    private func staleChromiumFrameworkItems(access: ScanAccess, collectedPaths: inout Set<String>) -> [CacheItem] {
         var items: [CacheItem] = []
-        for frameworkVersionURL in CacheDiscoveryPaths.staleChromiumFrameworkVersionURLs() {
+        for frameworkVersionURL in CacheDiscoveryPaths.staleChromiumFrameworkVersionURLs()
+        where ProtectedLocations.isReadable(frameworkVersionURL, access: access) {
             let appName = frameworkVersionURL
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
@@ -372,8 +386,12 @@ nonisolated final class CacheScanner {
         _ url: URL,
         headline: String,
         folderName: String,
+        access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> CacheItem? {
+        // Before `standardizedFileURL` and the modification date, both of which
+        // follow a symlink to its target.
+        guard ProtectedLocations.isReadable(url, access: access) else { return nil }
         let pathKey = url.standardizedFileURL.path
         guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { return nil }
         guard !ExcludedPathsStore.isExcluded(url) else { return nil }
@@ -426,8 +444,12 @@ nonisolated final class CacheScanner {
 
     private func runSizeJobs(
         _ jobs: [SizeJob],
+        access: ScanAccess,
         continuation: AsyncStream<CacheScanEvent>.Continuation
     ) async {
+        // Discovery already dropped locked paths; this keeps `du` honest if a
+        // new discovery path forgets to.
+        let jobs = jobs.filter { ProtectedLocations.isReadable($0.path, access: access) }
         guard !jobs.isEmpty else { return }
 
         let chunkSize = FolderSizing.duChunkSize
