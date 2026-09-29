@@ -23,7 +23,7 @@ struct OnboardingFirstScanStep: View {
         .padding(.bottom, AppStyle.Spacing.xSmall)
         .frame(maxWidth: .infinity)
 
-      OnboardingFadingScrollView(maxHeight: OnboardingLayout.scrollingListMaxHeight) {
+      OnboardingFadingScrollView {
         LazyVStack(spacing: 8) {
           ForEach(revealController.revealedItems) { item in
             ScanListRow(
@@ -35,14 +35,13 @@ struct OnboardingFirstScanStep: View {
               primaryBadgeTone: .neutral
             )
             .frame(height: OnboardingLayout.scanRowHeight)
+            .onboardingScrollEdgeBlur()
             .transition(Self.rowInsertionTransition)
           }
         }
         .padding(.bottom, AppStyle.Spacing.xSmall)
       }
       .accessibilityLabel("Items found, \(revealController.revealedItems.count)")
-
-      Spacer(minLength: 0)
     }
     .frame(maxWidth: OnboardingLayout.contentMaxWidth, maxHeight: .infinity, alignment: .top)
     .onAppear {
