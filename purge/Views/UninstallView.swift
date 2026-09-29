@@ -1035,6 +1035,7 @@ struct UninstallHeaderActions: View {
             }
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
             .disabled(isScanning || isQueued)
+            .keyboardShortcut("r", modifiers: [.command])
 
             // One destructive button whose job follows the active segment: Uninstall
             // for the app grid, Remove for leftovers. Crossfading between them keeps

@@ -205,8 +205,8 @@ struct PurgeCommands: Commands {
                 .disabled(true)
         }
         CommandGroup(after: .newItem) {
-            Button("Scan All") {
-                Task { await store.scanAll() }
+            Button("Scan Everything") {
+                store.scanEverything()
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
             .disabled(store.isDeleting)

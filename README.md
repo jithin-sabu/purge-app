@@ -46,6 +46,13 @@ You do not need to understand any of it to use it. But if you ever want to check
 
 ## Features
 
+### Overview
+
+- **Where your space went**: one bar for the whole disk. Used, free and total come straight from the volume, so they match System Settings. App Caches, Dev Tools, Large Files, installed apps and leftovers from deleted apps each get their own segment, and the rest is shown as everything else
+- A row per category with its size and share of the disk. Click one to open its tab
+- **Scan Everything** (⇧⌘R) scans every category, one at a time so the Mac stays responsive. When you open Purge it does the same on its own, skipping Large Files and the app scans if they ran in the last day
+- Each byte is counted once: an app's cache folder counts under App Caches, not again under the app
+
 ### App Caches
 
 Scans `~/Library/Caches`, sandbox container caches, and common system junk:
@@ -110,12 +117,11 @@ Filter with **All**, **Safe to Clean**, or **Check First** (⌘1–⌘3). Sort b
 
 Unidentified folders are left out of the list entirely. Purge only shows what it knows about.
 
-The labels and explanations are there to be checked, not read cover to cover. Clean the safe items in one click and move on, or open the reasoning behind any single row first. Either way is fine.
+The labels and explanations are there to be checked, not read cover to cover. Select the safe items and clean them, or open the reasoning behind any single row first. Either way is fine.
 
 ### Cleaning
 
-- **Clean**: one-click cleanup from the sidebar. The button names the exact amount it will move, and only touches Safe to Clean items, with git and lockfile checks
-- **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete
+- **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete. Git and lockfile checks run first
 - **Clean Safe Files**: same safe cleanup from the menu bar
 - **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning** and choose **How often** (weekly, monthly, every 3 months, or a **Custom** interval you set in days, weeks, or months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
 - All deletions move items to **Trash**, not permanent removal
@@ -132,15 +138,15 @@ The labels and explanations are there to be checked, not read cover to cover. Cl
 
 - **First-run onboarding**: welcome, permissions (Full Disk Access and optional login item), first scan, results review, and a safe clean walkthrough
 - **Menu bar companion**: recoverable space at a glance, quick open, and scan/clean actions
-- **Disk summary**: sidebar shows used/free space and how much is safe to recover
+- **Disk summary**: the sidebar shows used and free space and what is already in the Trash, and each scan tab shows its size
 - **In-app updates**: the About screen checks for, downloads, and installs new versions
 
 ### Keyboard shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| ⌘R | Scan — rescan App Caches and Dev Tools |
-| ⇧⌘R | Scan All — the same rescan, from any tab |
+| ⌘R | Scan the current tab (Scan Everything on the Overview) |
+| ⇧⌘R | Scan Everything, from any tab |
 | ⌘1–⌘3 | Filter by All, Safe to Clean, or Check First |
 
 ---

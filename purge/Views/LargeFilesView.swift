@@ -1213,6 +1213,7 @@ struct LargeFilesHeaderActions: View {
             }
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
             .disabled(isBusy)
+            .keyboardShortcut("r", modifiers: [.command])
 
             LargeFileDeleteButton(selection: store.largeFileSelection)
         }

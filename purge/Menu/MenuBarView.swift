@@ -203,7 +203,9 @@ struct MenuBarContentView: View {
             MenuTextRow(title: "Clean Safe Files", isEnabled: canClean) {
                 model.clean()
             }
-            MenuTextRow(title: "Scan now", isEnabled: canScan) {
+            // Refreshes the safe-to-clean figure this menu shows. Scan Everything in the
+            // window covers Large Files and apps too, so this says what it scans.
+            MenuTextRow(title: "Scan Caches & Dev Tools", isEnabled: canScan) {
                 model.scanNow()
             }
             MenuTextRow(title: "Open Purge") {
