@@ -26,9 +26,10 @@ struct OnboardingFlowView: View {
   }
 
   @AppStorage("onboarding.pendingCelebration") private var pendingCelebration = false
-  /// Set when the look-deeper step opens System Settings. macOS may offer to quit
-  /// and reopen Purge after the toggle; this brings the relaunch back to that step,
-  /// where the reveal picks up the grant.
+  /// Set when the flow reaches the look-deeper step. A relaunch comes back to it:
+  /// macOS may offer to quit and reopen Purge after the Settings toggle, where the
+  /// reveal picks up the grant, and someone who quits there before opening
+  /// Settings has still finished the scan and maybe a clean.
   @AppStorage(Self.pendingDeeperScanKey) private var pendingDeeperScan = false
   static let pendingDeeperScanKey = "onboarding.pendingDeeperScan"
   /// Saved with `pendingDeeperScan` so the relaunch keeps where the step leads
@@ -135,8 +136,7 @@ struct OnboardingFlowView: View {
         LookDeeperView(
           context: .onboarding(didClean: didCleanBeforeLookDeeper),
           onNotNow: exitAfterLookDeeper,
-          onFinished: exitAfterLookDeeper,
-          onOpenSettings: rememberLookDeeperForRelaunch
+          onFinished: exitAfterLookDeeper
         )
         .frame(maxHeight: .infinity)
       }
@@ -193,8 +193,9 @@ struct OnboardingFlowView: View {
     exitAfterLookDeeper()
   }
 
-  /// macOS may quit and reopen Purge once the toggle is on. Everything the step
-  /// needs on the other side goes into defaults, not just the step itself.
+  /// Purge can quit anywhere on the look-deeper step, and macOS may quit and
+  /// reopen it once the toggle is on. Everything the step needs on the other side
+  /// goes into defaults, not just the step itself.
   private func rememberLookDeeperForRelaunch() {
     let defaults = UserDefaults.standard
     defaults.set(lookDeeperExit.rawValue, forKey: Self.lookDeeperExitKey)
@@ -325,6 +326,7 @@ struct OnboardingFlowView: View {
   }
 
   private func advance(to next: OnboardingStep) {
+    if next == .lookDeeper { rememberLookDeeperForRelaunch() }
     if reduceMotion {
       step = next
     } else {
