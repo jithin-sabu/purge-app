@@ -292,7 +292,11 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var interactiveSafeCleanupTargetPaths: Set<String> = []
     @Published private(set) var interactiveSafeCleanupRemovedPaths: Set<String> = []
     @Published private(set) var interactiveSafeCleanupMovedToTrashBytes: Int64?
-    @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess()
+    @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess() {
+        didSet {
+            if oldValue, !hasFullDiskAccess { dropRowsLockedByRevokedAccess() }
+        }
+    }
     /// Shows `LookDeeperSheet`, the main window's one place to ask for Full Disk
     /// Access. Set by the sidebar notice, the locked tabs, and a deleted-app review
     /// that needs access to find leftovers.
@@ -587,9 +591,14 @@ final class PurgeStore: ObservableObject {
             }
         }
 
+        // Revoking access already drops locked rows (`dropRowsLockedByRevokedAccess`).
+        // This keeps the Clean buttons, their animation and the Trash in step if a
+        // row slips through. Path-only, since views call this while rendering.
+        let isLimited = !hasFullDiskAccess
         var seenPaths = Set<String>()
         return candidates
             .filter { candidate in
+                if isLimited, ProtectedLocations.contains(candidate.path) { return false }
                 let path = candidate.path.standardizedFileURL.path
                 guard !seenPaths.contains(path) else { return false }
                 seenPaths.insert(path)
@@ -675,6 +684,9 @@ final class PurgeStore: ObservableObject {
     }
 
     func presentDeletionSheetResolvingGit(candidates: [DeletionCandidate]) async {
+        // The checker keeps the access of the last scan. Access may have been
+        // turned off since, and `git status` in a git dir under Documents prompts.
+        await gitChecker.setAccess(currentScanAccess())
         var resolved = candidates
         for index in resolved.indices where resolved[index].gitStatus == .unknown {
             resolved[index].gitStatus = await gitChecker.cleanupStatus(for: resolved[index].path)
@@ -753,8 +765,12 @@ final class PurgeStore: ObservableObject {
     }
 
     private func executeStagedDeletion(trigger: CleanupTrigger) async {
-        guard let candidates = stagedDeletionCandidates else { return }
+        guard let staged = stagedDeletionCandidates else { return }
         stagedDeletionCandidates = nil
+        // Same rule as safe cleanup: a row from a full scan whose access has since
+        // been turned off stays where it is. Moving it would prompt.
+        let access = currentScanAccess()
+        let candidates = staged.filter { ProtectedLocations.isReadable($0.path, access: access) }
         let urls = candidates.map(\.path).map(\.standardizedFileURL)
         guard !urls.isEmpty else { return }
 
@@ -1029,11 +1045,34 @@ final class PurgeStore: ObservableObject {
     private func reflectDeletionReportInScanState(_ report: DeletionReport) {
         let deletedPaths = Set(report.deletedItems.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
         guard !deletedPaths.isEmpty else { return }
+        removeScanRows { deletedPaths.contains($0.standardizedFileURL.path) }
+    }
 
+    /// Full Disk Access was turned off with a full scan's rows still up. Those rows
+    /// point into folders Purge can no longer read, so they go now rather than sit
+    /// next to the "Limited scan" notice, counted in totals and offered by Clean
+    /// buttons that would then skip them. Uses the same rule as the scans and the
+    /// cleanups, symlinks included.
+    private func dropRowsLockedByRevokedAccess() {
+        // `isReadable` reads links only. Standardizing the path first would stat
+        // it, and through a symlink into Documents that stat is itself the prompt.
+        var lockedByPath: [String: Bool] = [:]
+        removeScanRows { url in
+            if let locked = lockedByPath[url.path] { return locked }
+            let locked = !ProtectedLocations.isReadable(url, access: .limited)
+            lockedByPath[url.path] = locked
+            return locked
+        }
+        scanSelection.cacheIDs.formIntersection(cacheItems.map(\.id))
+        scanSelection.artifactIDs.formIntersection(projectGroups.flatMap(\.artifacts).map(\.id))
+    }
+
+    /// Drops every scan row whose path `isRemoved` matches, in place, so the lists
+    /// and totals update without a rescan. Paths are passed as stored, so a caller
+    /// that must not touch the disk never has to.
+    private func removeScanRows(where isRemoved: (URL) -> Bool) {
         stagedGeneralCacheItems = stagedGeneralCacheItems.compactMap { item in
-            let remaining = item.locations.filter {
-                !deletedPaths.contains($0.path.standardizedFileURL.path)
-            }
+            let remaining = item.locations.filter { !isRemoved($0.path) }
             guard !remaining.isEmpty else { return nil }
             guard remaining.count != item.locations.count else { return item }
             return item.withLocations(remaining)
@@ -1041,24 +1080,22 @@ final class PurgeStore: ObservableObject {
 
         withAnimation(.easeInOut(duration: 0.2)) {
             cacheItems = cacheItems.compactMap { item in
-                let remaining = item.locations.filter {
-                    !deletedPaths.contains($0.path.standardizedFileURL.path)
-                }
+                let remaining = item.locations.filter { !isRemoved($0.path) }
                 guard !remaining.isEmpty else { return nil }
                 guard remaining.count != item.locations.count else { return item }
                 return item.withLocations(remaining)
             }
 
             devTools = devTools.map { tool in
-                let remainingPaths = tool.paths.filter {
-                    !deletedPaths.contains($0.standardizedFileURL.path)
-                }
+                let remainingPaths = tool.paths.filter { !isRemoved($0) }
                 let pathSizes = tool.pathSizeBytesByPath.filter { key, _ in
                     remainingPaths.contains { $0.standardizedFileURL.path == key }
                 }
                 let newSize = pathSizes.values.reduce(Int64(0), +)
                 let stillDetected = !remainingPaths.isEmpty && newSize > 0
-                if newSize == tool.sizeBytes, stillDetected == tool.isDetected {
+                if remainingPaths.count == tool.paths.count,
+                   newSize == tool.sizeBytes,
+                   stillDetected == tool.isDetected {
                     return tool
                 }
                 return DevTool(
@@ -1078,18 +1115,16 @@ final class PurgeStore: ObservableObject {
             let detectedToolIDs = Set(devTools.filter(\.isDetected).map(\.id))
             scanSelection.devToolIDs.formIntersection(detectedToolIDs)
 
-            simulatorDevices.removeAll { deletedPaths.contains($0.folderURL.standardizedFileURL.path) }
+            simulatorDevices.removeAll { isRemoved($0.folderURL) }
 
             var groups = projectGroups
             for gi in groups.indices {
-                groups[gi].artifacts.removeAll { deletedPaths.contains($0.path.standardizedFileURL.path) }
+                groups[gi].artifacts.removeAll { isRemoved($0.path) }
             }
             projectGroups = groups.filter { !$0.artifacts.isEmpty }
         }
 
-        for path in deletedPaths {
-            devToolRepoStatusByPath.removeValue(forKey: path)
-        }
+        devToolRepoStatusByPath = devToolRepoStatusByPath.filter { !isRemoved(URL(fileURLWithPath: $0.key)) }
 
         if lastScanCompletedAt != nil {
             persistLastScanSafeRecoverableBytes()
@@ -1150,6 +1185,7 @@ final class PurgeStore: ObservableObject {
     func userConfirmedUnknownDeletionFlow() async {
         guard let payload = pendingUnknownDeletion else { return }
         pendingUnknownDeletion = nil
+        await gitChecker.setAccess(currentScanAccess())
         var resolved = payload.candidates
         for idx in resolved.indices where resolved[idx].gitStatus == .unknown {
             resolved[idx].gitStatus = await gitChecker.cleanupStatus(for: resolved[idx].path)
@@ -2569,8 +2605,9 @@ final class PurgeStore: ObservableObject {
 
     @discardableResult
     func performScheduledClean() async -> ScheduledCleaningSummary {
-        // No access check: the candidates come from the last scan, which already ran
-        // with whatever access Purge had, so a limited scan only offers limited paths.
+        // `performSafeCleanup` reruns the developer scan with the access Purge has
+        // now, then checks every candidate with `ProtectedLocations.isReadable`
+        // before it moves, so a revoked grant never cleans a locked folder.
         guard ScheduledCleaningPreferenceStore.shared.isEnabled else {
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
@@ -2741,6 +2778,9 @@ final class PurgeStore: ObservableObject {
         pinnedCandidates: [DeletionCandidate]? = nil,
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async -> ScheduledCleaningSummary {
+        // Pinned candidates skip the rescan that would otherwise set this, and the
+        // checker must not keep `.full` from a scan made before access was revoked.
+        await gitChecker.setAccess(currentScanAccess())
         if pinnedCandidates == nil {
             await scanDeveloper()
             if cacheItems.isEmpty {
@@ -2752,6 +2792,7 @@ final class PurgeStore: ObservableObject {
 
         let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates()
         let access = currentScanAccess()
+        await gitChecker.setAccess(access)
 
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
