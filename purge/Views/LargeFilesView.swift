@@ -1185,21 +1185,34 @@ private struct LargeFileThumbnailIcon: View {
 struct LargeFilesHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
 
+    private var isQueued: Bool {
+        !store.isScanningLargeFiles && store.isScanQueued(.largeFiles)
+    }
+
+    private var isBusy: Bool {
+        store.isScanningLargeFiles || isQueued
+    }
+
+    private var scanTitle: String {
+        if isQueued { return ScanQueueLabels.queued }
+        return store.isScanningLargeFiles ? "Scanning..." : "Scan"
+    }
+
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
             Button {
-                Task { await store.scanLargeFiles() }
+                store.requestScan(.largeFiles)
             } label: {
                 CleaningButtonLabel(
-                    title: store.isScanningLargeFiles ? "Scanning..." : "Scan",
-                    systemImage: store.isScanningLargeFiles ? nil : "arrow.clockwise",
-                    isCleaning: store.isScanningLargeFiles
+                    title: scanTitle,
+                    systemImage: isBusy ? nil : "arrow.clockwise",
+                    isCleaning: isBusy
                 )
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
             }
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
-            .disabled(store.isScanningLargeFiles)
+            .disabled(isBusy)
 
             LargeFileDeleteButton(selection: store.largeFileSelection)
         }

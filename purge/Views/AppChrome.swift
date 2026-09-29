@@ -256,14 +256,20 @@ private struct AnimatedPageTitle: View {
     }
 }
 
+enum ScanQueueLabels {
+    /// A scan button whose scan is waiting behind another one.
+    static let queued = "Up next..."
+}
+
 /// Scan and Clean Selected — top-trailing actions on App Caches / Dev Tools pages.
 struct AppScanCleanActions: View {
     let onScan: () -> Void
     var scanPhase: PurgeStore.ScanPhase = .idle
+    var isQueued = false
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
-            AppScanButton(scanPhase: scanPhase, action: onScan)
+            AppScanButton(scanPhase: scanPhase, isQueued: isQueued, action: onScan)
             AppCleanSelectedButton()
         }
         .fixedSize()
@@ -272,13 +278,16 @@ struct AppScanCleanActions: View {
 
 struct AppScanButton: View {
     let scanPhase: PurgeStore.ScanPhase
+    /// Waiting its turn behind another scan in the queue.
+    var isQueued = false
     let action: () -> Void
 
     private var isBusy: Bool {
-        scanPhase == .scanning || scanPhase == .cancelling
+        isQueued || scanPhase == .scanning || scanPhase == .cancelling
     }
 
     private var title: String {
+        if isQueued { return ScanQueueLabels.queued }
         switch scanPhase {
         case .cancelling:
             return "Cancelling..."

@@ -160,8 +160,7 @@ struct UninstallView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.bgBase)
         .task {
-            await store.scanInstalledAppsIfNeeded()
-            await store.scanOrphanLeftoversIfNeeded()
+            store.requestScanIfNeeded(.apps, .leftovers)
         }
         // The Leftovers segment can vanish (all removed, or a rescan finds none)
         // while it is the active view; fall back to the apps so the tab never
@@ -1017,24 +1016,25 @@ struct UninstallHeaderActions: View {
         store.isScanningInstalledApps || store.isScanningOrphans
     }
 
+    private var isQueued: Bool {
+        !isScanning && (store.isScanQueued(.apps) || store.isScanQueued(.leftovers))
+    }
+
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
             Button {
-                Task {
-                    await store.scanInstalledApps()
-                    await store.scanOrphanLeftovers()
-                }
+                store.requestScan(.apps, .leftovers)
             } label: {
                 CleaningButtonLabel(
-                    title: isScanning ? "Scanning..." : "Rescan",
-                    systemImage: isScanning ? nil : "arrow.clockwise",
-                    isCleaning: isScanning
+                    title: isQueued ? ScanQueueLabels.queued : (isScanning ? "Scanning..." : "Rescan"),
+                    systemImage: isScanning || isQueued ? nil : "arrow.clockwise",
+                    isCleaning: isScanning || isQueued
                 )
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
             }
             .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
-            .disabled(isScanning)
+            .disabled(isScanning || isQueued)
 
             // One destructive button whose job follows the active segment: Uninstall
             // for the app grid, Remove for leftovers. Crossfading between them keeps

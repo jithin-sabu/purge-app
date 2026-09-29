@@ -1,0 +1,139 @@
+import Foundation
+import Testing
+@testable import Purge
+
+@Suite("The Overview counts each byte once")
+struct OverviewBreakdownTests {
+    private let gb: Int64 = 1_000_000_000
+
+    private func item(_ path: String, _ bytes: Int64) -> OverviewSizedItem {
+        OverviewSizedItem(path: path, bytes: bytes)
+    }
+
+    @Test func usedAndFreeComeFromTheVolume() {
+        let breakdown = OverviewBreakdown(totalBytes: 500 * gb, freeBytes: 180 * gb, sources: [:])
+        #expect(breakdown.usedBytes == 320 * gb)
+        #expect(breakdown.everythingElseBytes == 320 * gb)
+        #expect(breakdown.categoryBytes.isEmpty)
+    }
+
+    @Test func everythingElseIsUsedMinusWhatPurgeSorted() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 180 * gb,
+            sources: [
+                .appCaches: .live([item("/Users/a/Library/Caches/com.x", 3 * gb)]),
+                .largeFiles: .live([item("/Users/a/Movies/trip.mov", 12 * gb)]),
+            ]
+        )
+        #expect(breakdown.bytes(for: .appCaches) == 3 * gb)
+        #expect(breakdown.bytes(for: .largeFiles) == 12 * gb)
+        #expect(breakdown.everythingElseBytes == 305 * gb)
+    }
+
+    @Test func anAppKeepsOnlyWhatAppCachesDidNotCount() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 100 * gb,
+            sources: [
+                .appCaches: .live([item("/Users/a/Library/Caches/com.x", 2 * gb)]),
+                .apps: .live([
+                    item("/Applications/X.app", 1 * gb),
+                    item("/Users/a/Library/Caches/com.x", 2 * gb),
+                ]),
+            ]
+        )
+        #expect(breakdown.bytes(for: .appCaches) == 2 * gb)
+        #expect(breakdown.bytes(for: .apps) == 1 * gb)
+    }
+
+    @Test func aFolderLosesTheCacheFoundInsideIt() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 100 * gb,
+            sources: [
+                .appCaches: .live([item("/Users/a/Library/Application Support/Chrome/Default/Cache", 3 * gb)]),
+                .apps: .live([item("/Users/a/Library/Application Support/Chrome", 5 * gb)]),
+            ]
+        )
+        #expect(breakdown.bytes(for: .apps) == 2 * gb)
+    }
+
+    @Test func aFileInsideACountedFolderAddsNothing() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 100 * gb,
+            sources: [
+                .devTools: .live([item("/Users/a/Library/Developer/Xcode/DerivedData", 4 * gb)]),
+                .largeFiles: .live([item("/Users/a/Library/Developer/Xcode/DerivedData/big.o", 1 * gb)]),
+            ]
+        )
+        #expect(breakdown.bytes(for: .largeFiles) == 0)
+    }
+
+    @Test func nestedClaimsAreNotSubtractedTwice() {
+        // Leftovers contains an app folder which itself contains a cache.
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 100 * gb,
+            sources: [
+                .appCaches: .live([item("/L/Support/App/Cache", 1 * gb)]),
+                .apps: .live([item("/L/Support/App", 3 * gb)]),
+                .leftovers: .live([item("/L/Support", 10 * gb)]),
+            ]
+        )
+        #expect(breakdown.bytes(for: .appCaches) == 1 * gb)
+        #expect(breakdown.bytes(for: .apps) == 2 * gb)
+        #expect(breakdown.bytes(for: .leftovers) == 7 * gb)
+        #expect(breakdown.sortedBytes == 10 * gb)
+    }
+
+    @Test func siblingPathsWithASharedPrefixDoNotOverlap() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 100 * gb,
+            sources: [
+                .appCaches: .live([item("/Users/a/Library/Caches/com.app", 1 * gb)]),
+                .leftovers: .live([item("/Users/a/Library/Caches/com.app-helper", 2 * gb)]),
+            ]
+        )
+        #expect(breakdown.bytes(for: .leftovers) == 2 * gb)
+    }
+
+    @Test func aRecordedTotalCountsAsIs() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 100 * gb,
+            sources: [.largeFiles: .recorded(40 * gb), .apps: .none]
+        )
+        #expect(breakdown.bytes(for: .largeFiles) == 40 * gb)
+        #expect(breakdown.categoryBytes[.apps] == nil)
+    }
+
+    @Test func everythingElseNeverGoesNegative() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 100 * gb,
+            freeBytes: 90 * gb,
+            sources: [.largeFiles: .recorded(40 * gb)]
+        )
+        #expect(breakdown.everythingElseBytes == 0)
+    }
+
+    @Test func trailingSlashesDoNotHideAnOverlap() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 100 * gb,
+            sources: [
+                .appCaches: .live([item("/Users/a/Library/Caches/com.x/", 2 * gb)]),
+                .apps: .live([item("/Users/a/Library/Caches/com.x", 2 * gb)]),
+            ]
+        )
+        #expect(breakdown.bytes(for: .apps) == 0)
+    }
+
+    @Test func shareIsAFractionOfTheWholeDisk() {
+        let breakdown = OverviewBreakdown(totalBytes: 400 * gb, freeBytes: 100 * gb, sources: [:])
+        #expect(breakdown.share(of: 100 * gb) == 0.25)
+        #expect(breakdown.share(of: 800 * gb) == 1)
+    }
+}

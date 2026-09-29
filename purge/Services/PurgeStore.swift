@@ -179,6 +179,7 @@ final class PurgeStore: ObservableObject {
         didSet {
             invalidateSafeCleanupSummary()
             cacheItemsRevision &+= 1
+            scheduleScanRecordRefresh()
         }
     }
     /// Cheap stand-in for "the set of cache rows changed", for use as an
@@ -188,15 +189,24 @@ final class PurgeStore: ObservableObject {
         didSet {
             invalidateSafeCleanupSummary()
             devToolsRevision &+= 1
+            scheduleScanRecordRefresh()
         }
     }
     @Published private(set) var devToolsRevision = 0
-    @Published var simulatorDevices: [SimulatorDevice] = []
+    @Published var simulatorDevices: [SimulatorDevice] = [] {
+        didSet { scheduleScanRecordRefresh() }
+    }
     @Published var projectGroups: [ProjectGroup] = [] {
-        didSet { invalidateSafeCleanupSummary() }
+        didSet {
+            invalidateSafeCleanupSummary()
+            scheduleScanRecordRefresh()
+        }
     }
     @Published var largeFiles: [LargeFile] = [] {
-        didSet { largeFilesRevision &+= 1 }
+        didSet {
+            largeFilesRevision &+= 1
+            scheduleScanRecordRefresh()
+        }
     }
     /// Cheap stand-in for "the set of large-file rows changed", for use as an
     /// `.animation(_:value:)` key. The list previously animated on
@@ -225,12 +235,22 @@ final class PurgeStore: ObservableObject {
 
     /// Apps the picker offers, as selectable tiles. Order is decided in the
     /// view (alphabetical by default); this array is not pre-sorted by size.
-    @Published var installedApps: [InstalledApp] = []
+    @Published var installedApps: [InstalledApp] = [] {
+        didSet { scheduleScanRecordRefresh() }
+    }
     @Published var isScanningInstalledApps = false
     @Published private(set) var hasCompletedInstalledAppsScan = false
     /// Bundle-plus-safe-leftover total per app id, filled in the background after
     /// the list loads. Absent until measured; callers fall back to bundle size.
-    @Published private(set) var removableBytesByAppID: [String: Int64] = [:]
+    @Published private(set) var removableBytesByAppID: [String: Int64] = [:] {
+        didSet { scheduleScanRecordRefresh() }
+    }
+    /// Every path counted in an app's total, with its size, so the Overview can
+    /// count a file once when another category (usually App Caches) found it too.
+    /// Written just before `removableBytesByAppID`, whose publish covers both.
+    private(set) var appFootprintItemsByAppID: [String: [OverviewSizedItem]] = [:]
+    /// True while the background pass that fills `removableBytesByAppID` runs.
+    @Published private(set) var isMeasuringRemovableTotals = false
     /// Apps the user has ticked in the picker, keyed by `InstalledApp.id`.
     @Published var selectedAppIDs: Set<String> = []
     /// True while leftovers for the selected apps are being gathered ahead of the
@@ -249,7 +269,9 @@ final class PurgeStore: ObservableObject {
 
     /// Leftovers whose owning app is no longer installed, shown as a section under
     /// the App Uninstaller tab. Always "Check First", never preselected.
-    @Published var orphanLeftovers: [UninstallItem] = []
+    @Published var orphanLeftovers: [UninstallItem] = [] {
+        didSet { scheduleScanRecordRefresh() }
+    }
     @Published var isScanningOrphans = false
     @Published private(set) var hasCompletedOrphanScan = false
     /// Orphan rows the user has ticked, keyed by `UninstallItem.id` (its path).
@@ -326,6 +348,24 @@ final class PurgeStore: ObservableObject {
     /// Paths the user excluded from scans. Purely subtractive: the scanner drops these
     /// after the allowlist gate, so nothing new ever becomes scannable or cleanable.
     @Published private(set) var excludedPaths: Set<String> = ExcludedPathsStore.allExcludedPaths()
+
+    // MARK: Scan queue and records (Overview)
+
+    /// What the one-at-a-time scan queue is running and what is waiting.
+    /// Written only by the queue in `PurgeStore+ScanQueue.swift`.
+    @Published var scanQueue = ScanQueueState()
+    /// Steps the queue must rescan even if this session already has results.
+    var scanQueueForcedSteps = Set<ScanStep>()
+    var scanQueueTask: Task<Void, Never>?
+    /// Tells a finished runner apart from the one that replaced it after a Stop.
+    var scanQueueRunID = 0
+    /// Last finished scan per Overview category, read at launch and kept current.
+    @Published private(set) var scanRecords: [OverviewCategory: ScanRecord] = [:]
+    /// True once App Caches and Dev Tools have finished a scan in this session.
+    @Published private(set) var hasSessionCacheScan = false
+    private let scanRecordStore = ScanRecordStore()
+    private var scanRecordRefreshTask: Task<Void, Never>?
+    private var removableTotalsTask: Task<Void, Never>?
 
     private let cacheScanner = CacheScanner()
     private let devScanner = DevScanner()
@@ -411,6 +451,7 @@ final class PurgeStore: ObservableObject {
         if defaults.object(forKey: StorageKeys.lastScanSafeRecoverableBytes) != nil {
             lastScanSafeRecoverableBytes = Int64(defaults.integer(forKey: StorageKeys.lastScanSafeRecoverableBytes))
         }
+        scanRecords = scanRecordStore.allRecords()
     }
 
     var selectedTotalBytes: Int64 {
@@ -1289,6 +1330,7 @@ final class PurgeStore: ObservableObject {
         guard largeFileScanGeneration == generation else { return }
         largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
         hasCompletedLargeFileScan = true
+        stampScanRecords([.largeFiles])
         startDuplicateScan(for: largeFiles, generation: generation)
     }
 
@@ -1502,6 +1544,10 @@ final class PurgeStore: ObservableObject {
         isScanningInstalledApps = true
         hasCompletedInstalledAppsScan = false
         installedApps = []
+        removableTotalsTask?.cancel()
+        removableTotalsTask = nil
+        isMeasuringRemovableTotals = false
+        appFootprintItemsByAppID = [:]
         removableBytesByAppID = [:]
         defer {
             if installedAppsScanGeneration == generation {
@@ -1526,10 +1572,19 @@ final class PurgeStore: ObservableObject {
         hasCompletedInstalledAppsScan = true
 
         // Bundle sizes first, then leftover-inclusive totals. Both write in
-        // place so alphabetical order never jumps.
-        Task {
-            await measureBundleSizes(generation: generation)
-            await measureRemovableTotals(generation: generation)
+        // place so alphabetical order never jumps. Kept as a task the scan queue
+        // can wait on, so the next scan does not start while this one still walks.
+        isMeasuringRemovableTotals = true
+        removableTotalsTask = Task { [weak self] in
+            guard let self else { return }
+            await self.measureBundleSizes(generation: generation)
+            await self.measureRemovableTotals(generation: generation)
+            guard self.installedAppsScanGeneration == generation else { return }
+            self.isMeasuringRemovableTotals = false
+            self.removableTotalsTask = nil
+            if !Task.isCancelled, self.hasMeasuredAllRemovableTotals {
+                self.stampScanRecords([.apps])
+            }
         }
     }
 
@@ -1577,11 +1632,14 @@ final class PurgeStore: ObservableObject {
         for app in installedApps {
             if installedAppsScanGeneration != generation || Task.isCancelled { return }
             var total: Int64 = 0
+            var items: [OverviewSizedItem] = []
             for await item in uninstallScanner.leftoverStream(for: app) {
                 guard sizedPaths.insert(item.path.standardizedFileURL.path).inserted else { continue }
                 total += item.sizeBytes
+                items.append(OverviewSizedItem(path: item.path.path, bytes: item.sizeBytes))
             }
             guard installedAppsScanGeneration == generation else { return }
+            appFootprintItemsByAppID[app.id] = items
             removableBytesByAppID[app.id] = total
         }
     }
@@ -1640,6 +1698,7 @@ final class PurgeStore: ObservableObject {
         guard orphanScanGeneration == generation, !Task.isCancelled else { return }
         orphanLeftovers = collected.sorted { $0.sizeBytes > $1.sizeBytes }
         hasCompletedOrphanScan = true
+        stampScanRecords([.leftovers])
     }
 
     func toggleOrphanSelected(id: String) {
@@ -2529,6 +2588,9 @@ final class PurgeStore: ObservableObject {
                 if self.scanGeneration == generation {
                     self.isScanningProjects = false
                     self.projectDiscoveryTask = nil
+                    // Project artifacts land after `finishScan`, so the Dev Tools
+                    // record catches up once discovery settles.
+                    self.scheduleScanRecordRefresh()
                 }
                 ScanPhaseTiming.finish("startProjectDiscovery total", since: discoveryStart)
             }
@@ -2585,6 +2647,8 @@ final class PurgeStore: ObservableObject {
         lastScanCompletedAt = completedAt
         defaults.set(completedAt, forKey: StorageKeys.lastScanCompletedAt)
         persistLastScanSafeRecoverableBytes()
+        hasSessionCacheScan = true
+        stampScanRecords([.appCaches, .devTools], at: completedAt)
         scanPhase = .completed
         scanStatusLine = "Scan complete"
         scanCompletionHideTask?.cancel()
@@ -2602,6 +2666,151 @@ final class PurgeStore: ObservableObject {
         let bytes = safeRecoverableBytes
         lastScanSafeRecoverableBytes = bytes
         defaults.set(bytes, forKey: StorageKeys.lastScanSafeRecoverableBytes)
+    }
+
+    // MARK: - Category totals and scan records
+
+    /// Count and size of what one category found. The tab subtitles (with no filter
+    /// applied), the sidebar and the Overview all read these, so they cannot drift apart.
+    struct CategoryTotals: Equatable {
+        var count: Int = 0
+        var bytes: Int64 = 0
+    }
+
+    var appCachesTotals: CategoryTotals {
+        cacheItems.reduce(into: CategoryTotals()) { totals, item in
+            guard SafetyFilter.all.matches(item.safetyInfo) else { return }
+            totals.count += 1
+            totals.bytes += item.sizeBytes
+        }
+    }
+
+    var devToolsTotals: CategoryTotals {
+        var totals = CategoryTotals()
+        for tool in devTools where tool.isDetected && tool.safetyInfo.level != .unknown {
+            totals.count += 1
+            totals.bytes += tool.sizeBytes
+        }
+        for device in simulatorDevices where device.safetyInfo.level != .unknown {
+            totals.count += 1
+            totals.bytes += device.sizeOnDisk ?? 0
+        }
+        for artifact in projectGroups.flatMap(\.artifacts) where artifact.safetyInfo.level != .unknown {
+            totals.count += 1
+            totals.bytes += artifact.sizeBytes
+        }
+        return totals
+    }
+
+    var largeFilesTotals: CategoryTotals {
+        CategoryTotals(count: largeFiles.count, bytes: largeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes })
+    }
+
+    var appsTotals: CategoryTotals {
+        CategoryTotals(
+            count: installedApps.count,
+            bytes: installedApps.reduce(Int64(0)) { $0 + removableBytes(for: $1) }
+        )
+    }
+
+    var leftoversTotals: CategoryTotals {
+        CategoryTotals(count: orphanLeftovers.count, bytes: orphanLeftovers.reduce(Int64(0)) { $0 + $1.sizeBytes })
+    }
+
+    func totals(for category: OverviewCategory) -> CategoryTotals {
+        switch category {
+        case .appCaches: return appCachesTotals
+        case .devTools: return devToolsTotals
+        case .largeFiles: return largeFilesTotals
+        case .apps: return appsTotals
+        case .leftovers: return leftoversTotals
+        }
+    }
+
+    /// True once the category's scan has finished in this session and nothing is
+    /// still adding to it, so its live figures are complete.
+    func isSettled(_ category: OverviewCategory) -> Bool {
+        switch category {
+        case .appCaches:
+            return hasSessionCacheScan && !isScanningAll && !isScanningGeneral
+        case .devTools:
+            return hasSessionCacheScan && !isScanningAll && !isScanningDeveloper && !isScanningProjects
+        case .largeFiles:
+            return hasCompletedLargeFileScan && !isScanningLargeFiles
+        case .apps:
+            return hasCompletedInstalledAppsScan && !isScanningInstalledApps && !isMeasuringRemovableTotals
+        case .leftovers:
+            return hasCompletedOrphanScan && !isScanningOrphans
+        }
+    }
+
+    /// Whether this session holds results for the step, so opening its tab needs no scan.
+    func hasSessionResults(for step: ScanStep) -> Bool {
+        switch step {
+        case .cachesAndDevTools:
+            return hasSessionCacheScan || !cacheItems.isEmpty || !devTools.isEmpty || !projectGroups.isEmpty
+        case .largeFiles:
+            return hasCompletedLargeFileScan
+        case .apps:
+            return hasCompletedInstalledAppsScan
+        case .leftovers:
+            return hasCompletedOrphanScan
+        }
+    }
+
+    /// Records a finished scan: the date, plus the figures it found.
+    private func stampScanRecords(_ categories: [OverviewCategory], at date: Date = Date()) {
+        for category in categories {
+            let totals = totals(for: category)
+            saveScanRecord(ScanRecord(completedAt: date, bytes: totals.bytes, count: totals.count), for: category)
+        }
+    }
+
+    /// Keeps each settled record's figures in step with what is on screen after a
+    /// clean or uninstall, without touching its date. Coalesced, because the inputs
+    /// change many times in a row while metadata passes rewrite rows in place.
+    private func scheduleScanRecordRefresh() {
+        guard scanRecordRefreshTask == nil else { return }
+        scanRecordRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self else { return }
+            self.scanRecordRefreshTask = nil
+            for category in OverviewCategory.allCases where self.isSettled(category) {
+                guard var record = self.scanRecords[category] else { continue }
+                let totals = self.totals(for: category)
+                guard record.bytes != totals.bytes || record.count != totals.count else { continue }
+                record.bytes = totals.bytes
+                record.count = totals.count
+                self.saveScanRecord(record, for: category)
+            }
+        }
+    }
+
+    private func saveScanRecord(_ record: ScanRecord, for category: OverviewCategory) {
+        guard scanRecords[category] != record else { return }
+        scanRecords[category] = record
+        scanRecordStore.save(record, for: category)
+    }
+
+    // MARK: Hooks for the scan queue
+
+    /// Waits for a `scanAll` someone else started (the menu bar, a Look Deeper reveal)
+    /// instead of cancelling it and starting over.
+    func awaitInFlightFullScan() async {
+        await scanTask?.value
+    }
+
+    /// Project discovery runs beside the Dev Tools scan and can outlast it.
+    func awaitProjectDiscovery() async {
+        await projectDiscoveryTask?.value
+    }
+
+    func awaitRemovableTotals() async {
+        await removableTotalsTask?.value
+    }
+
+    func cancelRemovableTotals() {
+        removableTotalsTask?.cancel()
     }
 
     // MARK: - Scheduled cleaning

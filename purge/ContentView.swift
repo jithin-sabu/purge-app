@@ -236,13 +236,11 @@ struct ContentView: View {
         // the first launch after it. Its reveal replaces the ordinary launch scan.
         if store.consumeFullDiskAccessGrant() {
             await store.revealFullDiskAccessGrant()
-            return
         }
-        // The menu bar model kicks off the launch scan; racing a second
-        // `scanAll` here would cancel and restart it from scratch.
-        guard !store.isScanningAll else { return }
-        guard store.cacheItems.isEmpty, store.devTools.isEmpty, store.projectGroups.isEmpty else { return }
-        await store.scanAll()
+        // One step at a time: App Caches and Dev Tools, then Large Files, apps and
+        // leftovers. A scan the menu bar already started is waited on, not restarted,
+        // and steps with results in this session or a recent record are skipped.
+        store.startLaunchScans()
     }
 
     /// Runs any past-due scheduled clean before the first scan so the UI reflects
@@ -422,7 +420,7 @@ struct ContentView: View {
                     items: $store.cacheItems,
                     isLoading: store.isScanningGeneral || store.isScanningAll,
                     scanPhase: store.scanPhase,
-                    onScan: { Task { await store.scanAll() } },
+                    onScan: { store.requestScan(.cachesAndDevTools) },
                     showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
@@ -431,7 +429,7 @@ struct ContentView: View {
                     items: $store.cacheItems,
                     isLoading: store.isScanningGeneral || store.isScanningAll,
                     scanPhase: store.scanPhase,
-                    onScan: { Task { await store.scanAll() } },
+                    onScan: { store.requestScan(.cachesAndDevTools) },
                     showsPageHeader: false
                 )
             }
@@ -447,7 +445,7 @@ struct ContentView: View {
                 DevToolsView(
                     isLoading: store.isScanningDeveloper || store.isScanningAll,
                     scanPhase: store.scanPhase,
-                    onScan: { Task { await store.scanAll() } },
+                    onScan: { store.requestScan(.cachesAndDevTools) },
                     showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
@@ -455,7 +453,7 @@ struct ContentView: View {
                 DevToolsView(
                     isLoading: store.isScanningDeveloper || store.isScanningAll,
                     scanPhase: store.scanPhase,
-                    onScan: { Task { await store.scanAll() } },
+                    onScan: { store.requestScan(.cachesAndDevTools) },
                     showsPageHeader: false
                 )
             }
@@ -472,7 +470,7 @@ struct ContentView: View {
             } else if #available(macOS 26.0, *) {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
-                    onScan: { Task { await store.scanLargeFiles() } },
+                    onScan: { store.requestScan(.largeFiles) },
                     searchQuery: $largeFilesSearchQuery,
                     showsPageHeader: false,
                     usesExternalScrollContainer: true
@@ -480,7 +478,7 @@ struct ContentView: View {
             } else {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
-                    onScan: { Task { await store.scanLargeFiles() } },
+                    onScan: { store.requestScan(.largeFiles) },
                     searchQuery: $largeFilesSearchQuery,
                     showsPageHeader: false
                 )
@@ -488,9 +486,10 @@ struct ContentView: View {
         }
         .underDetailPageHeader(includesSubtitle: store.hasFullDiskAccess)
         // Keyed on access so granting it while this tab is open starts the scan.
+        // Goes through the queue, so it runs next rather than beside another scan.
         .task(id: store.hasFullDiskAccess) {
             guard !isRunningPreview else { return }
-            await store.scanLargeFilesIfNeeded()
+            store.requestScanIfNeeded(.largeFiles)
         }
     }
 
@@ -523,7 +522,11 @@ struct ContentView: View {
                     if !store.hasFullDiskAccess {
                         LookDeeperHeaderButton()
                     }
-                    AppScanCleanActions(onScan: { Task { await store.scanAll() } }, scanPhase: store.scanPhase)
+                    AppScanCleanActions(
+                        onScan: { store.requestScan(.cachesAndDevTools) },
+                        scanPhase: store.scanPhase,
+                        isQueued: store.isScanQueued(.cachesAndDevTools)
+                    )
                 }
             } else if store.selectedTab == .largeFiles, store.hasFullDiskAccess {
                 LargeFilesHeaderActions()
