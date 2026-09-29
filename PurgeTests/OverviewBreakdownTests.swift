@@ -137,3 +137,36 @@ struct OverviewBreakdownTests {
         #expect(breakdown.share(of: 800 * gb) == 1)
     }
 }
+
+@Suite("The Overview bar and labels")
+struct OverviewPresentationTests {
+
+    @Test func smallSegmentsStayVisibleAndTheBarStillFits() {
+        let widths = OverviewDiskBar.widths(for: [3, 4, 300, 200], in: 400)
+        #expect(widths.allSatisfy { $0 >= 4 })
+        let gaps: CGFloat = 2 * 3
+        #expect(abs(widths.reduce(0, +) + gaps - 400) < 0.001)
+    }
+
+    @Test func widthsFollowTheBytesWhenNothingIsTiny() {
+        let widths = OverviewDiskBar.widths(for: [100, 300], in: 402)
+        #expect(abs(widths[0] - 100) < 0.001)
+        #expect(abs(widths[1] - 300) < 0.001)
+    }
+
+    @Test func anEmptyDiskDrawsNothing() {
+        #expect(OverviewDiskBar.widths(for: [], in: 400).isEmpty)
+        #expect(OverviewDiskBar.widths(for: [0, 0], in: 400) == [0, 0])
+    }
+
+    @Test func sharesUnderATenthOfAPercentSaySo() {
+        #expect(OverviewCategoryStyle.shareText(0) == "0%")
+        #expect(OverviewCategoryStyle.shareText(0.0004) == "<0.1%")
+        #expect(OverviewCategoryStyle.shareText(0.078) == "7.8%")
+    }
+
+    @MainActor
+    @Test func overviewIsTheFirstTab() {
+        #expect(PurgeStore.Tab.allCases.first == .overview)
+    }
+}

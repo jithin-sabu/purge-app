@@ -64,14 +64,16 @@ extension View {
     /// content starts passing underneath. The system scroll edge effect doesn't render on
     /// these pages (the detail column pulls its content up under the hidden title bar), so
     /// the material is driven here instead.
-    func detailPageScrollEdge(title: String) -> some View {
-        modifier(DetailPageScrollEdgeModifier(title: title))
+    func detailPageScrollEdge(title: String, includesSubtitle: Bool = false) -> some View {
+        modifier(DetailPageScrollEdgeModifier(title: title, includesSubtitle: includesSubtitle))
     }
 }
 
 @available(macOS 26.0, *)
 private struct DetailPageScrollEdgeModifier: ViewModifier {
     let title: String
+    /// Reserves the subtitle line too, for pages whose visible header shows one.
+    var includesSubtitle = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// 0 at rest, 1 once content has scrolled far enough to need a surface behind the title.
@@ -97,7 +99,7 @@ private struct DetailPageScrollEdgeModifier: ViewModifier {
                 }
             }
             .safeAreaBar(edge: .top, spacing: 0) {
-                AppSectionPageHeader(title: title)
+                AppSectionPageHeader(title: title, subtitle: includesSubtitle ? " " : nil)
                     .padding(.bottom, AppDetailPageLayout.clearanceBelowHeader)
                     .opacity(0)
                     .accessibilityHidden(true)

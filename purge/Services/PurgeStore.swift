@@ -104,6 +104,7 @@ final class PurgeStore: ObservableObject {
     }
 
     enum Tab: String, CaseIterable, Identifiable {
+        case overview = "Overview"
         case appCaches = "App Caches"
         case devTools = "Dev Tools"
         case largeFiles = "Large Files"
@@ -114,6 +115,7 @@ final class PurgeStore: ObservableObject {
         var id: String { rawValue }
         var icon: String {
             switch self {
+            case .overview: return "square.grid.2x2"
             case .appCaches: return "internaldrive"
             case .devTools: return "hammer"
             case .largeFiles: return "tray.full"
@@ -174,12 +176,12 @@ final class PurgeStore: ObservableObject {
         let candidates: [DeletionCandidate]
     }
 
-    @Published var selectedTab: Tab = .appCaches
+    @Published var selectedTab: Tab = .overview
     @Published var cacheItems: [CacheItem] = [] {
         didSet {
             invalidateSafeCleanupSummary()
             cacheItemsRevision &+= 1
-            scheduleScanRecordRefresh()
+            categoryInputsDidChange()
         }
     }
     /// Cheap stand-in for "the set of cache rows changed", for use as an
@@ -189,23 +191,23 @@ final class PurgeStore: ObservableObject {
         didSet {
             invalidateSafeCleanupSummary()
             devToolsRevision &+= 1
-            scheduleScanRecordRefresh()
+            categoryInputsDidChange()
         }
     }
     @Published private(set) var devToolsRevision = 0
     @Published var simulatorDevices: [SimulatorDevice] = [] {
-        didSet { scheduleScanRecordRefresh() }
+        didSet { categoryInputsDidChange() }
     }
     @Published var projectGroups: [ProjectGroup] = [] {
         didSet {
             invalidateSafeCleanupSummary()
-            scheduleScanRecordRefresh()
+            categoryInputsDidChange()
         }
     }
     @Published var largeFiles: [LargeFile] = [] {
         didSet {
             largeFilesRevision &+= 1
-            scheduleScanRecordRefresh()
+            categoryInputsDidChange()
         }
     }
     /// Cheap stand-in for "the set of large-file rows changed", for use as an
@@ -236,14 +238,14 @@ final class PurgeStore: ObservableObject {
     /// Apps the picker offers, as selectable tiles. Order is decided in the
     /// view (alphabetical by default); this array is not pre-sorted by size.
     @Published var installedApps: [InstalledApp] = [] {
-        didSet { scheduleScanRecordRefresh() }
+        didSet { categoryInputsDidChange() }
     }
     @Published var isScanningInstalledApps = false
     @Published private(set) var hasCompletedInstalledAppsScan = false
     /// Bundle-plus-safe-leftover total per app id, filled in the background after
     /// the list loads. Absent until measured; callers fall back to bundle size.
     @Published private(set) var removableBytesByAppID: [String: Int64] = [:] {
-        didSet { scheduleScanRecordRefresh() }
+        didSet { categoryInputsDidChange() }
     }
     /// Every path counted in an app's total, with its size, so the Overview can
     /// count a file once when another category (usually App Caches) found it too.
@@ -270,7 +272,7 @@ final class PurgeStore: ObservableObject {
     /// Leftovers whose owning app is no longer installed, shown as a section under
     /// the App Uninstaller tab. Always "Check First", never preselected.
     @Published var orphanLeftovers: [UninstallItem] = [] {
-        didSet { scheduleScanRecordRefresh() }
+        didSet { categoryInputsDidChange() }
     }
     @Published var isScanningOrphans = false
     @Published private(set) var hasCompletedOrphanScan = false
@@ -357,6 +359,8 @@ final class PurgeStore: ObservableObject {
     /// Steps the queue must rescan even if this session already has results.
     var scanQueueForcedSteps = Set<ScanStep>()
     var scanQueueTask: Task<Void, Never>?
+    /// The step the queue is running, held apart from the runner so Stop can cancel it.
+    var scanQueueStepTask: Task<Void, Never>?
     /// Tells a finished runner apart from the one that replaced it after a Stop.
     var scanQueueRunID = 0
     /// Last finished scan per Overview category, read at launch and kept current.
@@ -365,6 +369,11 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var hasSessionCacheScan = false
     private let scanRecordStore = ScanRecordStore()
     private var scanRecordRefreshTask: Task<Void, Never>?
+    /// Bumped whenever anything a category total reads changes; keys the Overview cache.
+    private(set) var categoryInputsRevision = 0
+    /// The last Overview breakdown and what it was computed from. Scan flushes re-render
+    /// every observer several times a second, and the breakdown walks every path found.
+    var overviewBreakdownCache: (key: OverviewBreakdownKey, breakdown: OverviewBreakdown)?
     private var removableTotalsTask: Task<Void, Never>?
 
     private let cacheScanner = CacheScanner()
@@ -2590,7 +2599,7 @@ final class PurgeStore: ObservableObject {
                     self.projectDiscoveryTask = nil
                     // Project artifacts land after `finishScan`, so the Dev Tools
                     // record catches up once discovery settles.
-                    self.scheduleScanRecordRefresh()
+                    self.categoryInputsDidChange()
                 }
                 ScanPhaseTiming.finish("startProjectDiscovery total", since: discoveryStart)
             }
@@ -2766,10 +2775,12 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Keeps each settled record's figures in step with what is on screen after a
-    /// clean or uninstall, without touching its date. Coalesced, because the inputs
-    /// change many times in a row while metadata passes rewrite rows in place.
-    private func scheduleScanRecordRefresh() {
+    /// Something a category total reads changed. Invalidates the Overview cache and
+    /// keeps each settled record's figures in step with what is on screen after a
+    /// clean or uninstall, without touching its date. The record write is coalesced,
+    /// because the inputs change many times in a row while metadata passes rewrite rows.
+    private func categoryInputsDidChange() {
+        categoryInputsRevision &+= 1
         guard scanRecordRefreshTask == nil else { return }
         scanRecordRefreshTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)

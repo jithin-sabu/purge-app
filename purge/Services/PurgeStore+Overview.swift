@@ -1,0 +1,161 @@
+import Foundation
+
+/// Where an Overview category stands right now.
+nonisolated enum OverviewCategoryPhase: Equatable, Sendable {
+    /// Large Files and the app scans read places a limited scan never touches.
+    case needsAccess
+    case scanning
+    /// Waiting in the queue, or for the other half of the App Caches and Dev Tools step.
+    case waiting
+    /// This session has results.
+    case ready
+    case notScanned
+}
+
+/// Everything the Overview breakdown is computed from, so it is rebuilt only when
+/// one of these changes rather than on every scan flush.
+struct OverviewBreakdownKey: Equatable {
+    let inputsRevision: Int
+    let totalBytes: Int64
+    let freeBytes: Int64
+    let phases: [OverviewCategoryPhase]
+    let records: [OverviewCategory: ScanRecord]
+}
+
+extension PurgeStore {
+    func overviewPhase(for category: OverviewCategory) -> OverviewCategoryPhase {
+        if category.step.needsFullDiskAccess, !hasFullDiskAccess {
+            return .needsAccess
+        }
+        if isScanning(category) {
+            return .scanning
+        }
+        if isWaitingToScan(category) {
+            return .waiting
+        }
+        return hasResults(for: category) ? .ready : .notScanned
+    }
+
+    /// The whole disk split into Purge's categories and everything else.
+    func overviewBreakdown(totalBytes: Int64, freeBytes: Int64) -> OverviewBreakdown {
+        let phases = OverviewCategory.allCases.map(overviewPhase(for:))
+        let key = OverviewBreakdownKey(
+            inputsRevision: categoryInputsRevision,
+            totalBytes: totalBytes,
+            freeBytes: freeBytes,
+            phases: phases,
+            records: scanRecords
+        )
+        if let cached = overviewBreakdownCache, cached.key == key {
+            return cached.breakdown
+        }
+        var sources: [OverviewCategory: OverviewCategorySource] = [:]
+        for (category, phase) in zip(OverviewCategory.allCases, phases) {
+            sources[category] = overviewSource(for: category, phase: phase)
+        }
+        let breakdown = OverviewBreakdown(totalBytes: totalBytes, freeBytes: freeBytes, sources: sources)
+        overviewBreakdownCache = (key, breakdown)
+        return breakdown
+    }
+
+    /// True when the figure on screen is a saved one from an earlier scan.
+    func isShowingRecordedFigure(for category: OverviewCategory) -> Bool {
+        if case .recorded = overviewSource(for: category, phase: overviewPhase(for: category)) {
+            return true
+        }
+        return false
+    }
+
+    /// A scan in progress shows what it has found so far. A category still waiting,
+    /// or skipped at launch because its last scan is recent, shows its saved figure.
+    private func overviewSource(
+        for category: OverviewCategory,
+        phase: OverviewCategoryPhase
+    ) -> OverviewCategorySource {
+        let record = scanRecords[category]
+        switch phase {
+        case .needsAccess:
+            return .none
+        case .scanning, .ready:
+            return .live(overviewItems(for: category))
+        case .waiting:
+            if let record { return .recorded(record.bytes) }
+            return hasResults(for: category) ? .live(overviewItems(for: category)) : .none
+        case .notScanned:
+            if let record { return .recorded(record.bytes) }
+            return .none
+        }
+    }
+
+    private func isScanning(_ category: OverviewCategory) -> Bool {
+        switch category {
+        case .appCaches: return isScanningGeneral || isEnrichingGeneral
+        case .devTools: return isScanningDeveloper || isScanningProjects || isEnrichingDeveloper
+        case .largeFiles: return isScanningLargeFiles
+        case .apps: return isScanningInstalledApps || isMeasuringRemovableTotals
+        case .leftovers: return isScanningOrphans
+        }
+    }
+
+    private func isWaitingToScan(_ category: OverviewCategory) -> Bool {
+        if scanQueue.isQueued(category.step) || scanQueue.active == category.step {
+            return true
+        }
+        // Dev Tools scans after App Caches inside the same step.
+        return category == .devTools && isScanningAll
+    }
+
+    private func hasResults(for category: OverviewCategory) -> Bool {
+        switch category {
+        case .appCaches: return hasSessionCacheScan || !cacheItems.isEmpty
+        case .devTools: return hasSessionCacheScan || !devTools.isEmpty || !projectGroups.isEmpty
+        case .largeFiles, .apps, .leftovers: return hasSessionResults(for: category.step)
+        }
+    }
+
+    private func overviewItems(for category: OverviewCategory) -> [OverviewSizedItem] {
+        switch category {
+        case .appCaches:
+            return cacheItems
+                .filter { SafetyFilter.all.matches($0.safetyInfo) }
+                .flatMap { item in
+                    item.locations.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
+                }
+        case .devTools:
+            var items: [OverviewSizedItem] = []
+            for tool in devTools where tool.isDetected && tool.safetyInfo.level != .unknown {
+                items.append(contentsOf: devToolItems(tool))
+            }
+            for device in simulatorDevices where device.safetyInfo.level != .unknown {
+                items.append(OverviewSizedItem(path: device.folderURL.path, bytes: device.sizeOnDisk ?? 0))
+            }
+            for artifact in projectGroups.flatMap(\.artifacts) where artifact.safetyInfo.level != .unknown {
+                items.append(OverviewSizedItem(path: artifact.path.path, bytes: artifact.sizeBytes))
+            }
+            return items
+        case .largeFiles:
+            return largeFiles.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
+        case .apps:
+            return installedApps.flatMap { app in
+                appFootprintItemsByAppID[app.id]
+                    ?? [OverviewSizedItem(path: app.bundleURL.path, bytes: app.bundleSizeBytes)]
+            }
+        case .leftovers:
+            return orphanLeftovers.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
+        }
+    }
+
+    /// A tool can span several folders. Each gets its own measured size where known;
+    /// otherwise the first carries the whole total and the rest are claimed at zero,
+    /// so nothing inside them is counted again by a later category.
+    private func devToolItems(_ tool: DevTool) -> [OverviewSizedItem] {
+        let pairs = Array(zip(tool.paths, tool.standardizedPaths))
+        let measured = pairs.map { tool.pathSizeBytesByPath[$0.1] }
+        if measured.allSatisfy({ $0 != nil }) {
+            return zip(pairs, measured).map { OverviewSizedItem(path: $0.0.0.path, bytes: $0.1 ?? 0) }
+        }
+        return pairs.enumerated().map { index, pair in
+            OverviewSizedItem(path: pair.0.path, bytes: index == 0 ? tool.sizeBytes : 0)
+        }
+    }
+}

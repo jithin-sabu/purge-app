@@ -360,6 +360,8 @@ struct ContentView: View {
     @ViewBuilder
     private var tabBody: some View {
         switch store.selectedTab {
+        case .overview:
+            overviewTabBody
         case .about:
             aboutTabBody
         // App Caches and Dev Tools work without Full Disk Access (limited scans). Large Files
@@ -494,6 +496,28 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private var overviewTabBody: some View {
+        Group {
+            if #available(macOS 26.0, *) {
+                overviewScrollView
+                    .detailPageScrollEdge(title: "Overview", includesSubtitle: true)
+            } else {
+                overviewScrollView
+                    .underDetailPageHeader(includesSubtitle: true)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var overviewScrollView: some View {
+        ScrollView {
+            OverviewView()
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.bgBase)
+    }
+
+    @ViewBuilder
     private var aboutTabBody: some View {
         Group {
             if #available(macOS 26.0, *) {
@@ -516,8 +540,22 @@ struct ContentView: View {
     }
 
     private var selectedPageHeader: some View {
-        AppSectionPageHeader(title: store.selectedTab.rawValue, subtitle: selectedPageSubtitle) {
-            if store.selectedTab == .appCaches || store.selectedTab == .devTools {
+        // Periodic so "Scanned 5m ago" on the Overview moves without a store change.
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            pageHeader(now: context.date)
+        }
+    }
+
+    private func pageHeader(now: Date) -> some View {
+        AppSectionPageHeader(title: store.selectedTab.rawValue, subtitle: selectedPageSubtitle(now: now)) {
+            if store.selectedTab == .overview {
+                HStack(spacing: AppStyle.Spacing.xSmall) {
+                    if !store.hasFullDiskAccess {
+                        LookDeeperHeaderButton()
+                    }
+                    OverviewScanButton()
+                }
+            } else if store.selectedTab == .appCaches || store.selectedTab == .devTools {
                 HStack(spacing: AppStyle.Spacing.xSmall) {
                     if !store.hasFullDiskAccess {
                         LookDeeperHeaderButton()
@@ -536,8 +574,10 @@ struct ContentView: View {
         }
     }
 
-    private var selectedPageSubtitle: String? {
+    private func selectedPageSubtitle(now: Date) -> String? {
         switch store.selectedTab {
+        case .overview:
+            return overviewPageSubtitle(now: now)
         case .appCaches:
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
@@ -551,6 +591,20 @@ struct ContentView: View {
         case .about:
             return nil
         }
+    }
+
+    /// What the scan queue is doing, or when the Overview's figures were last scanned.
+    private func overviewPageSubtitle(now: Date) -> String? {
+        if let active = store.scanQueue.active {
+            let waiting = store.scanQueue.pending.count
+            let name = OverviewScanButton.name(for: active)
+            return waiting > 0 ? "Scanning \(name), then \(waiting) more…" : "Scanning \(name)…"
+        }
+        if store.isScanningAll {
+            return "Scanning \(OverviewScanButton.name(for: .cachesAndDevTools))…"
+        }
+        guard let latest = store.scanRecords.values.map(\.completedAt).max() else { return nil }
+        return "Scanned \(compactAgoText(from: latest, to: now))"
     }
 
     private func pageSubtitle(count: Int, bytes: Int64) -> String {
