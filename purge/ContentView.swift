@@ -307,20 +307,24 @@ struct ContentView: View {
                     .padding(.bottom, AppStyle.Spacing.large)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(PurgeStore.Tab.allCases) { tab in
-                        AppNavRow(
-                            title: tab.rawValue,
-                            systemImage: tab.icon,
-                            isSelected: store.selectedTab == tab,
-                            action: { store.selectedTab = tab }
-                        )
-                    }
+                    navRow(.overview)
+                    sidebarSectionLabel("Clean")
+                    ForEach(PurgeStore.Tab.cleanTabs) { navRow($0) }
+                    sidebarSectionLabel("Review")
+                    ForEach(PurgeStore.Tab.reviewTabs) { navRow($0) }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, AppStyle.Spacing.small)
 
             Spacer(minLength: AppStyle.Spacing.medium)
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(PurgeStore.Tab.utilityTabs) { navRow($0) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, AppStyle.Spacing.small)
+            .padding(.bottom, AppStyle.Spacing.xSmall)
 
             SidebarSummaryView()
         }
@@ -332,6 +336,52 @@ struct ContentView: View {
         .frame(width: SidebarLayout.width)
         .background(AppColors.bgCard)
         .sidebarCompactTop()
+    }
+
+    private func navRow(_ tab: PurgeStore.Tab) -> some View {
+        AppNavRow(
+            title: tab.rawValue,
+            systemImage: tab.icon,
+            isSelected: store.selectedTab == tab,
+            accessory: navAccessory(for: tab),
+            action: { store.selectedTab = tab }
+        )
+    }
+
+    /// Groups the scan tabs by what Purge may do with what they find.
+    private func sidebarSectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, SidebarLayout.navRowInnerPadding)
+            .padding(.top, AppStyle.Spacing.small)
+            .padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// The same figure the Overview shows for the tab, or a spinner while its scan runs,
+    /// so the scan queue's progress is visible from any tab.
+    private func navAccessory(for tab: PurgeStore.Tab) -> AppNavRow.Accessory {
+        let categories: [OverviewCategory]
+        switch tab {
+        case .appCaches: categories = [.appCaches]
+        case .devTools: categories = [.devTools]
+        case .largeFiles: categories = [.largeFiles]
+        case .uninstaller: categories = [.apps, .leftovers]
+        case .overview, .settings, .about: return .none
+        }
+        let phases = categories.map(store.overviewPhase(for:))
+        if phases.contains(.scanning) {
+            return .progress
+        }
+        let breakdown = store.overviewBreakdown(
+            totalBytes: diskStore.totalDiskBytes,
+            freeBytes: diskStore.freeDiskBytes
+        )
+        let bytes = categories.reduce(Int64(0)) { $0 + breakdown.bytes(for: $1) }
+        guard bytes > 0 else { return .none }
+        let isDimmed = phases.contains(.waiting) || categories.contains(where: store.isShowingRecordedFigure(for:))
+        return .value(formatStorageBytes(bytes), isDimmed: isDimmed)
     }
 
     /// Shared overlaid header so `AnimatedPageTitle` stays mounted across tab switches.
@@ -843,17 +893,10 @@ struct SidebarSummaryView: View {
     @EnvironmentObject var diskStore: DiskSummaryStore
     @EnvironmentObject var trashStore: TrashStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
 
     private enum SummaryFont {
-        static let label = Font.system(size: 12, weight: .medium, design: .rounded)
-        static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
         static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
         static let cardTitle = Font.system(size: 12, weight: .semibold, design: .rounded)
-        static let heroLabel = Font.system(size: 11, weight: .semibold, design: .rounded)
-        /// Qualifier sits behind the figure so the number carries the reclaimable claim.
-        static let heroPrefix = Font.system(size: 13, weight: .medium, design: .rounded)
-        static let hero = Font.system(size: 20, weight: .bold, design: .rounded)
     }
 
     var body: some View {
@@ -865,22 +908,22 @@ struct SidebarSummaryView: View {
                 LimitedScanNotice()
             }
             storageCard
-            reclaimableCard
         }
         .padding(.horizontal, AppStyle.Spacing.small)
         .padding(.bottom, AppStyle.Spacing.small)
     }
 
-    /// Rounded surface shared by both panels, one step above the sidebar so each card
-    /// reads as its own object rather than a region of the sidebar.
+    /// Rounded surface one step above the sidebar so the card reads as its own object
+    /// rather than a region of the sidebar.
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
             .fill(AppColors.bgElevated)
     }
 
-    /// Volume state, reported as observation rather than as anything Purge did. Free space
-    /// is the volume's business and macOS already reports it in Storage settings, so it
-    /// leads the panel purely as context above the reclaimable numbers that Purge acts on.
+    /// Volume state, reported as observation rather than as anything Purge did. The
+    /// Overview breaks the used space down; this card keeps the two volume figures and
+    /// the trash in view on every tab. Cleaning lives on the tabs themselves, so the
+    /// sidebar carries no action of its own.
     private var storageCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Storage")
@@ -892,152 +935,42 @@ struct SidebarSummaryView: View {
                 .padding(.bottom, 6)
 
             storageLegend
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(AppStyle.Spacing.small)
-        .background(cardBackground)
-    }
-
-    /// Safe-to-clean is the hero the Clean button honors. The trash sits below as its own
-    /// secondary path with its own action, so the two never read as one summed total.
-    private var reclaimableCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            hero
-
-            cleanButton
-                .padding(.top, AppStyle.Spacing.small)
-
-            // The one hairline in this card: it sets the trash off as a separate path
-            // below the primary action rather than another line of the same total.
-            Divider()
-                .padding(.top, AppStyle.Spacing.small)
 
             inTrashRow
-                .padding(.top, AppStyle.Spacing.xxSmall)
-
-            totalFootnote
-                .padding(.top, AppStyle.Spacing.xxSmall)
+                .padding(.top, 6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppStyle.Spacing.small)
         .background(cardBackground)
     }
 
-    /// Safe-to-clean is what the Clean button actually moves, so it leads the card as the
-    /// hero — the number carries the claim and the button below repeats it verbatim.
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("Safe to Clean")
-                .font(SummaryFont.heroLabel)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-
-            if isSafeToCleanLoading {
-                ScanningStatusText()
-            } else {
-                Text(heroAmountText)
-                    .font(SummaryFont.hero)
-                    .foregroundStyle(safeToCleanBytes > 0 ? .primary : .secondary)
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(countingAnimation, value: safeToCleanBytes)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(isSafeToCleanLoading ? "Safe to clean, measuring" : heroAccessibilityLabel)
-    }
-
-    private var safeToCleanBytes: Int64 {
-        store.safeRecoverableBytes
-    }
-
-    /// While a scan is running the totals are re-published on a fixed ~140ms beat, so a
-    /// 0.45s eased roll would be retargeted a third of the way through its curve on every
-    /// tick — the digits never reach the ease-out and the climb reads as a stutter rather
-    /// than a count. A linear roll matched to the publish cadence hands off cleanly from
-    /// one tick to the next, so the figure rises continuously; the longer eased curve is
-    /// kept for the settled value, where there is a real start and end to ease between.
-    private var countingAnimation: Animation? {
-        guard !reduceMotion else { return nil }
-        return isCountingUp
-            ? .linear(duration: PurgeStore.scanFlushIntervalSeconds)
-            : .easeInOut(duration: 0.45)
-    }
-
-    private var isCountingUp: Bool {
-        store.scanPhase == .scanning
-            || store.scanPhase == .cancelling
-            || store.isEnrichingGeneral
-            || store.isEnrichingDeveloper
-    }
-
-    /// Before the first size pass lands the number would read a misleading 0, so the hero
-    /// shows a measuring indicator until a real total is available.
-    private var isSafeToCleanLoading: Bool {
-        store.safeRecoverableBytes == 0 && isCountingUp
-    }
-
-
-    private var heroAmountText: String {
-        guard safeToCleanBytes > 0 else { return "0" }
-        return formatBytes(safeToCleanBytes)
-    }
-
-    private var heroAccessibilityLabel: String {
-        guard safeToCleanBytes > 0 else { return "Safe to clean 0" }
-        return "Safe to clean \(formatBytes(safeToCleanBytes))"
-    }
-
-    /// The trash as a secondary path: same secondary-row weight as elsewhere, plus an
-    /// inline outline Empty action. Structural differentiation only — no colour tiers.
+    /// Bytes already in the trash still take up the volume. Emptying it is the user's
+    /// call in Finder; this line only says how much is there.
     private var inTrashRow: some View {
-        HStack(spacing: 6) {
-            Text("In trash")
-                .font(SummaryFont.label)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
+        HStack(spacing: 5) {
+            Image(systemName: "trash")
+                .font(.system(size: 9, weight: .semibold))
+                .frame(width: 6)
+            Text("In Trash")
+            Spacer(minLength: 8)
             if trashStore.access == .measuring {
-                safeToCleanValueLoadingIndicator
+                trashLoadingIndicator
                     .accessibilityLabel("Measuring")
             } else if trashStore.access == .unreadable {
-                // No Full Disk Access: the trash size is genuinely unknown, so say so
-                // rather than showing a zero that would read as an empty trash.
+                // Without Full Disk Access the size is unknown; a zero would read as empty.
                 Text("Unavailable")
-                    .font(SummaryFont.value)
-                    .foregroundStyle(.secondary)
             } else {
-                Text(formatBytes(trashStore.trashBytes))
-                    .font(SummaryFont.value)
-                    .foregroundStyle(trashStore.trashBytes > 0 ? .primary : .secondary)
+                Text(formatStorageBytes(trashStore.trashBytes))
                     .monospacedDigit()
+                    .tracking(-0.4)
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
             }
         }
-        .padding(.vertical, 5)
+        .font(SummaryFont.diskCaption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
         .accessibilityElement(children: .combine)
-    }
-
-    /// The two-step ceiling, stated once at the foot of the card as context, not an action.
-    /// Rounds down so the figure can only ever be beaten, and sums both paths at render time.
-    private var reclaimableTotalBytes: Int64 {
-        store.safeRecoverableBytes + trashStore.trashBytes
-    }
-
-    private var totalFootnote: some View {
-        // When the trash is unreadable its bytes are unknown, so "in total" would be a claim
-        // Purge can't stand behind — the caption drops to the safe figure alone and says so.
-        Text(trashStore.access == .unreadable
-            ? "up to \(formatBytesRoundedDown(store.safeRecoverableBytes)) reclaimable, trash not counted"
-            : "up to \(formatBytesRoundedDown(reclaimableTotalBytes)) reclaimable in total")
-            .font(SummaryFont.diskCaption)
-            .foregroundStyle(.tertiary)
-            .monospacedDigit()
-            .contentTransition(reduceMotion ? .identity : .numericText())
-            .animation(countingAnimation, value: reclaimableTotalBytes)
-            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     /// Used space and free space as two segments of one volume, drawn from the same
@@ -1143,7 +1076,7 @@ struct SidebarSummaryView: View {
     }
 
     @ViewBuilder
-    private var safeToCleanValueLoadingIndicator: some View {
+    private var trashLoadingIndicator: some View {
         if reduceMotion {
             Image(systemName: "clock")
                 .font(.system(size: 11, weight: .semibold))
@@ -1158,144 +1091,6 @@ struct SidebarSummaryView: View {
         }
     }
 
-    private var cleanButton: some View {
-        Button {
-            startInteractiveSafeCleanup()
-        } label: {
-            CleaningButtonLabel(
-                title: cleanButtonTitle,
-                systemImage: nil,
-                isCleaning: store.isInteractiveSafeCleanupInProgress,
-                spinnerTint: AppColors.buttonPrimaryText
-            )
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-        }
-        .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
-        .disabled(!canCleanSafeItems || store.isDeleting || store.isInteractiveSafeCleanupInProgress)
-    }
-
-    private var canCleanSafeItems: Bool {
-        store.safeRecoverableBytes > 0
-    }
-
-    /// States the amount it will actually move, so a small clean reads as small rather
-    /// than as a generic opportunity.
-    private var cleanButtonTitle: String {
-        if store.isInteractiveSafeCleanupInProgress {
-            return "Cleaning..."
-        }
-        return canCleanSafeItems ? "Clean \(formatBytes(store.safeRecoverableBytes))" : "Nothing to clean"
-    }
-
-    private func startInteractiveSafeCleanup() {
-        let candidates = store.manualSafeCleanupCandidates()
-        // A pending onboarding celebration owns the post-clean screen; presenting
-        // the live session too would stack two summaries on the same run.
-        guard store.beginInteractiveSafeCleanup(
-            candidates: candidates,
-            reduceMotion: reduceMotion,
-            presentsLiveSession: !pendingOnboardingCelebration
-        ) else { return }
-
-        Task { @MainActor in
-            let summary = await store.performManualSafeCleanNow(pinnedCandidates: candidates)
-            if store.errorMessage == nil {
-                store.completeInteractiveSafeCleanup(summary: summary)
-            } else {
-                store.cancelInteractiveSafeCleanup()
-            }
-        }
-    }
-
-}
-
-/// While the safe-to-clean total is still being measured, the hero shows the same
-/// playful cycling status words as the menu-bar scan hero, each swap drifting up with a
-/// blur-fade. Driven by a common-modes timer so the cycle survives any tracking run loop,
-/// and torn down on disappear so a scan that outlives the view doesn't keep it animating.
-private struct ScanningStatusText: View {
-    private static let words = [
-        "Pondering…",
-        "Rummaging…",
-        "Snooping around…",
-        "Dusting shelves…",
-        "Sifting…",
-        "Counting crumbs…",
-        "Peeking in caches…",
-        "Lifting the rug…",
-    ]
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @State private var index = Int.random(in: 0 ..< ScanningStatusText.words.count)
-    @State private var cycleTimer: Timer?
-
-    var body: some View {
-        // ZStack so the outgoing and incoming words overlap while animating rather than
-        // reflowing side by side.
-        ZStack(alignment: .leading) {
-            Text(Self.words[index])
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .id(index)
-                .transition(.asymmetric(
-                    insertion: .heroStatusBlurFade(offsetY: 5),
-                    removal: .heroStatusBlurFade(offsetY: -5)
-                ))
-        }
-        .frame(height: 24, alignment: .leading)
-        .accessibilityLabel("Measuring")
-        .onAppear { startCycling() }
-        .onDisappear { stopCycling() }
-        // Reduce Motion holds one word still; toggling it mid-scan stops or resumes the
-        // cycle without waiting for the view to re-appear.
-        .onChange(of: reduceMotion) { _ in startCycling() }
-    }
-
-    /// No-op under Reduce Motion: the word is left static rather than drifting between
-    /// phrases. `stopCycling()` first so flipping the preference on tears down a live timer.
-    private func startCycling() {
-        stopCycling()
-        guard !reduceMotion else { return }
-        let timer = Timer(timeInterval: 1.6, repeats: true) { _ in
-            withAnimation(MenuViewModel.swapAnimation) {
-                index = (index + 1) % Self.words.count
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        cycleTimer = timer
-    }
-
-    private func stopCycling() {
-        cycleTimer?.invalidate()
-        cycleTimer = nil
-    }
-}
-
-/// Blur + fade + small vertical drift for the hero status word swap. Local to this file;
-/// the menu bar keeps its own equivalent behind a fileprivate transition.
-private struct HeroStatusBlurFadeModifier: ViewModifier {
-    let radius: CGFloat
-    let opacity: Double
-    let offsetY: CGFloat
-
-    func body(content: Content) -> some View {
-        content
-            .blur(radius: radius)
-            .opacity(opacity)
-            .offset(y: offsetY)
-    }
-}
-
-extension AnyTransition {
-    fileprivate static func heroStatusBlurFade(offsetY: CGFloat) -> AnyTransition {
-        .modifier(
-            active: HeroStatusBlurFadeModifier(radius: 6, opacity: 0, offsetY: offsetY),
-            identity: HeroStatusBlurFadeModifier(radius: 0, opacity: 1, offsetY: 0)
-        )
-    }
 }
 
 #Preview {

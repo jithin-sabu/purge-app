@@ -124,6 +124,12 @@ final class PurgeStore: ObservableObject {
             case .about: return "info.circle"
             }
         }
+
+        /// The sidebar groups the scan tabs by what Purge may do with what they find:
+        /// caches it can clean, and the user's own things it only helps review.
+        static let cleanTabs: [Tab] = [.appCaches, .devTools]
+        static let reviewTabs: [Tab] = [.largeFiles, .uninstaller]
+        static let utilityTabs: [Tab] = [.settings, .about]
     }
 
     enum ScanPhase: Equatable {

@@ -1762,9 +1762,17 @@ private struct AppNavIcon: View {
 }
 
 struct AppNavRow: View {
+    /// Trailing detail: a category's size, or a spinner while its scan runs.
+    enum Accessory: Equatable {
+        case none
+        case value(String, isDimmed: Bool)
+        case progress
+    }
+
     let title: String
     let systemImage: String
     let isSelected: Bool
+    var accessory: Accessory = .none
     let action: () -> Void
 
     @State private var isHovering = false
@@ -1777,6 +1785,7 @@ struct AppNavRow: View {
                     .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
+                accessoryView
             }
             .foregroundStyle(isSelected ? AppColors.textPrimary : Color.secondary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
@@ -1787,6 +1796,26 @@ struct AppNavRow: View {
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var accessoryView: some View {
+        switch accessory {
+        case .none:
+            EmptyView()
+        case .value(let text, let isDimmed):
+            Text(text)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(isDimmed ? .quaternary : .tertiary)
+                .lineLimit(1)
+        case .progress:
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.5)
+                .frame(width: 12, height: 12)
+                .accessibilityLabel("Scanning")
+        }
     }
 
     private var navBackground: Color {
