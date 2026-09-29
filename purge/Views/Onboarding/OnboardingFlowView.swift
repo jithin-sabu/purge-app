@@ -20,7 +20,7 @@ struct OnboardingFlowView: View {
   /// opening line.
   @State private var didCleanBeforeLookDeeper = false
 
-  private enum LookDeeperExit {
+  private enum LookDeeperExit: String {
     case home
     case review
   }
@@ -31,12 +31,23 @@ struct OnboardingFlowView: View {
   /// where the reveal picks up the grant.
   @AppStorage(Self.pendingDeeperScanKey) private var pendingDeeperScan = false
   static let pendingDeeperScanKey = "onboarding.pendingDeeperScan"
+  /// Saved with `pendingDeeperScan` so the relaunch keeps where the step leads
+  /// and how it opens: "Review everything first" still ends in App Caches, and a
+  /// clean that already happened still gets "That was the easy part".
+  static let lookDeeperExitKey = "onboarding.lookDeeperExit"
+  static let didCleanBeforeLookDeeperKey = "onboarding.didCleanBeforeLookDeeper"
 
   init(hasCompletedOnboarding: Binding<Bool>, isExitingToHome: Binding<Bool>) {
     _hasCompletedOnboarding = hasCompletedOnboarding
     _isExitingToHome = isExitingToHome
-    let resumesLookDeeper = UserDefaults.standard.bool(forKey: Self.pendingDeeperScanKey)
+    let defaults = UserDefaults.standard
+    let resumesLookDeeper = defaults.bool(forKey: Self.pendingDeeperScanKey)
     _step = State(initialValue: resumesLookDeeper ? .lookDeeper : .welcome)
+    if resumesLookDeeper {
+      let exit = defaults.string(forKey: Self.lookDeeperExitKey).flatMap(LookDeeperExit.init(rawValue:))
+      _lookDeeperExit = State(initialValue: exit ?? .home)
+      _didCleanBeforeLookDeeper = State(initialValue: defaults.bool(forKey: Self.didCleanBeforeLookDeeperKey))
+    }
   }
 
   var body: some View {
@@ -125,7 +136,7 @@ struct OnboardingFlowView: View {
           context: .onboarding(didClean: didCleanBeforeLookDeeper),
           onNotNow: exitAfterLookDeeper,
           onFinished: exitAfterLookDeeper,
-          onOpenSettings: { pendingDeeperScan = true }
+          onOpenSettings: rememberLookDeeperForRelaunch
         )
         .frame(maxHeight: .infinity)
       }
@@ -169,7 +180,8 @@ struct OnboardingFlowView: View {
     if bytes > 0 {
       return "Move \(formatBytes(bytes)) to Trash"
     }
-    return store.hasFullDiskAccess ? "Clean now" : "Continue"
+    // Nothing to move, so the button only moves the flow on.
+    return "Continue"
   }
 
   private func exitToReviewPath() {
@@ -181,9 +193,20 @@ struct OnboardingFlowView: View {
     exitAfterLookDeeper()
   }
 
+  /// macOS may quit and reopen Purge once the toggle is on. Everything the step
+  /// needs on the other side goes into defaults, not just the step itself.
+  private func rememberLookDeeperForRelaunch() {
+    let defaults = UserDefaults.standard
+    defaults.set(lookDeeperExit.rawValue, forKey: Self.lookDeeperExitKey)
+    defaults.set(didCleanBeforeLookDeeper, forKey: Self.didCleanBeforeLookDeeperKey)
+    pendingDeeperScan = true
+  }
+
   /// Leaves onboarding the way the user chose before the look-deeper step.
   private func exitAfterLookDeeper() {
     pendingDeeperScan = false
+    UserDefaults.standard.removeObject(forKey: Self.lookDeeperExitKey)
+    UserDefaults.standard.removeObject(forKey: Self.didCleanBeforeLookDeeperKey)
     switch lookDeeperExit {
     case .home:
       finishOnboarding()
@@ -198,10 +221,13 @@ struct OnboardingFlowView: View {
   private func startResultsCleanup() {
     guard !isResultsCleaning else { return }
     let candidates = store.manualSafeCleanupCandidates()
-    // A limited scan on a tidy Mac can find nothing to clean. Nothing moved, so
-    // the ask opens with "only looked in the easy places" rather than "That was".
+    // A tidy Mac can have nothing to clean. Nothing moved, so without access the
+    // ask opens with "Some clutter hides" rather than "That was"; with access
+    // there is nothing left to offer and onboarding is done.
     guard !candidates.isEmpty else {
-      if !store.hasFullDiskAccess {
+      if store.hasFullDiskAccess {
+        finishOnboarding()
+      } else {
         lookDeeperExit = .home
         advance(to: .lookDeeper)
       }
