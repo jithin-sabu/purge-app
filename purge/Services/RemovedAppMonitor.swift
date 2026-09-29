@@ -129,6 +129,20 @@ final class RemovedAppMonitor: ObservableObject {
             .filter { $0 }
             .sink { [weak self] _ in onNextRunloopTurn { self?.processQueue() } }
             .store(in: &cancellables)
+        // Access usually lands while the look-deeper sheet is up, which then shows
+        // what it found. The review waits for that sheet to close so there is only
+        // ever one on screen. Closing it without access leaves the queue alone, or
+        // the sheet would come straight back.
+        store.$isLookDeeperPresented
+            .removeDuplicates()
+            .filter { !$0 }
+            .sink { [weak self] _ in
+                onNextRunloopTurn {
+                    guard let self, self.store?.hasFullDiskAccess == true else { return }
+                    self.processQueue()
+                }
+            }
+            .store(in: &cancellables)
         UserDefaults.standard.publisher(for: \.hasCompletedOnboarding)
             .removeDuplicates()
             .filter { $0 }
@@ -424,6 +438,8 @@ final class RemovedAppMonitor: ObservableObject {
         // Keep the queue. Onboarding finishing or Full Disk Access being granted
         // calls back into here.
         guard FirstRunGate.hasCompletedOnboarding else { return }
+        // Closing it runs the queue again (see `attach`).
+        guard !store.isLookDeeperPresented else { return }
         guard !store.isShowingReviewOrCleaning else {
             scheduleRetry()
             return
@@ -455,7 +471,7 @@ final class RemovedAppMonitor: ObservableObject {
                 return
             }
             guard phase == .preparing, current?.app.id == next.app.id else { return }
-            guard !store.isShowingReviewOrCleaning else {
+            guard !store.isShowingReviewOrCleaning, !store.isLookDeeperPresented else {
                 phase = .idle
                 current = nil
                 queue.insert(next, at: 0)
