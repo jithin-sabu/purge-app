@@ -935,7 +935,10 @@ nonisolated final class DevScanner {
 
                 // Never through a link: `~/Projects/client` pointing into Documents
                 // would be walked, and its artifacts cleaned, as if it were readable.
-                // These values came with the listing, which does not follow links.
+                // Both keys describe the entry itself, not its target, so listing
+                // with them prefetched stats nothing through a link. That is also
+                // why a linked folder was never walked, with or without access:
+                // `isDirectory` is false for it.
                 let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
 

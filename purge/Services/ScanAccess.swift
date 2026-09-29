@@ -50,13 +50,11 @@ nonisolated enum ProtectedLocations {
     static func contains(_ url: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
         // Folded by hand: `standardizedFileURL` checks the disk, and through a
         // symlink that check would land in the folder this is meant to avoid.
-        contains(path: "/" + lexicalComponents(of: url.path, relativeTo: []).joined(separator: "/"), home: home)
+        contains(path: "/" + lexicalComponents(of: url.path).joined(separator: "/"), home: home)
     }
 
     static func contains(path: String, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
-        rootPaths(home: home).contains { root in
-            path == root || path.hasPrefix(root + "/")
-        }
+        isPath(path, inAnyOf: rootPaths(home: home))
     }
 
     /// A few hops covers every real setup; a chain longer than this is treated
@@ -114,23 +112,40 @@ nonisolated enum ProtectedLocations {
     }
 
     /// Pure string check of `path` against roots from `resolvedRootPaths`.
+    ///
+    /// Ignores case: the default APFS volume does, and so does TCC, so a link
+    /// to `~/documents/code` opens Documents. On a case-sensitive volume this
+    /// only errs toward leaving a folder alone.
     static func isPath(_ path: String, inAnyOf roots: [String]) -> Bool {
-        roots.contains { path == $0 || path.hasPrefix($0 + "/") }
+        let path = path.lowercased()
+        return roots.contains { root in
+            let root = root.lowercased()
+            return path == root || path.hasPrefix(root + "/")
+        }
     }
 
     /// Resolves every symlink in `path` with `readlink` alone, one component at a
     /// time. Returns nil as soon as a partial path matches `stopAt`, before its
     /// link is read, or when the chain runs past `maxSymlinkHops`.
+    ///
+    /// `..` steps back from the resolved path, the way the kernel does, not from
+    /// the text: with `client` a link into Documents, `~/Projects/client/../x` is
+    /// in Documents. Folding it first would clear it as `~/Projects/x`.
     private static func resolvingLinks(
         in path: String,
         fileManager: FileManager,
         stopAt: (String) -> Bool
     ) -> String? {
-        var remaining = lexicalComponents(of: path, relativeTo: [])
+        var remaining = pathComponents(of: path)
         var resolved: [String] = []
         var hops = 0
         while !remaining.isEmpty {
-            let next = resolved + [remaining.removeFirst()]
+            let component = remaining.removeFirst()
+            if component == ".." {
+                if !resolved.isEmpty { resolved.removeLast() }
+                continue
+            }
+            let next = resolved + [component]
             let nextPath = "/" + next.joined(separator: "/")
             if stopAt(nextPath) { return nil }
             guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: nextPath) else {
@@ -139,28 +154,32 @@ nonisolated enum ProtectedLocations {
             }
             hops += 1
             guard hops <= maxSymlinkHops else { return nil }
-            // A relative link resolves against the folder that holds it. The
-            // rest of the original path then continues from the target.
-            let base = destination.hasPrefix("/") ? [] : resolved
-            remaining = lexicalComponents(of: destination, relativeTo: base) + remaining
-            resolved = []
+            // A relative link resolves against the folder that holds it, which is
+            // `resolved` as it stands. The rest of the path continues from the target.
+            if destination.hasPrefix("/") { resolved = [] }
+            remaining = pathComponents(of: destination) + remaining
         }
         let resolvedPath = "/" + resolved.joined(separator: "/")
         return stopAt(resolvedPath) ? nil : resolvedPath
     }
 
-    /// Splits `path` into components with `.` and `..` folded away, without
-    /// touching the disk. `base` is the folder a relative path starts from.
-    private static func lexicalComponents(of path: String, relativeTo base: [String]) -> [String] {
-        var components = path.hasPrefix("/") ? [] : base
-        for part in path.split(separator: "/", omittingEmptySubsequences: true) {
-            switch part {
-            case ".":
-                continue
-            case "..":
+    /// `path` split into components, with `.` dropped and `..` kept for
+    /// `resolvingLinks` to apply.
+    private static func pathComponents(of path: String) -> [String] {
+        path.split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+            .filter { $0 != "." }
+    }
+
+    /// Splits `path` into components with `.` and `..` folded away as text,
+    /// without touching the disk.
+    private static func lexicalComponents(of path: String) -> [String] {
+        var components: [String] = []
+        for part in pathComponents(of: path) {
+            if part == ".." {
                 if !components.isEmpty { components.removeLast() }
-            default:
-                components.append(String(part))
+            } else {
+                components.append(part)
             }
         }
         return components

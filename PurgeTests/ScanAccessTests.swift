@@ -41,6 +41,15 @@ struct ScanAccessTests {
         #expect(!ProtectedLocations.contains(home.appendingPathComponent("Library/ContainersBackup"), home: home))
     }
 
+    /// APFS and TCC both ignore case, so `~/documents` is Documents.
+    @Test
+    func protectedRootsMatchInAnyCase() {
+        #expect(ProtectedLocations.contains(home.appendingPathComponent("documents/code"), home: home))
+        #expect(ProtectedLocations.contains(home.appendingPathComponent("DESKTOP"), home: home))
+        #expect(ProtectedLocations.contains(home.appendingPathComponent("library/containers/com.example"), home: home))
+        #expect(!ProtectedLocations.contains(home.appendingPathComponent("documentsArchive"), home: home))
+    }
+
     @Test
     func fullAccessReadsEverything() {
         let documents = home.appendingPathComponent("Documents/project")
@@ -91,6 +100,65 @@ struct ScanAccessTests {
         // resolved, so `/var` shows up as `/private/var`.
         #expect(recorder.readLinks.contains { $0.hasSuffix("/Projects/client") })
         #expect(!recorder.readLinks.contains { $0.hasSuffix("/Documents") || $0.contains("/Documents/") })
+    }
+
+    /// A link spelled `documents` resolves to Documents on the default volume.
+    /// An exact-case check would clear it and open the folder.
+    @Test
+    func symlinkIntoProtectedFolderInOtherCaseIsNotReadable() throws {
+        let fakeHome = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        try fm.createDirectory(at: fakeHome.appendingPathComponent("Documents/code"), withIntermediateDirectories: true)
+        let projects = fakeHome.appendingPathComponent("Projects")
+        try fm.createSymbolicLink(atPath: projects.path, withDestinationPath: "documents/code")
+        let recorder = RecordingFileManager()
+
+        #expect(!ProtectedLocations.isReadable(projects, access: .limited, home: fakeHome, fileManager: recorder))
+        #expect(!recorder.readLinks.contains { $0.lowercased().contains("/documents") })
+    }
+
+    /// `..` after a link steps out of the link's target, as the kernel resolves
+    /// it. Folded as text, `Projects/client/../x` would read as `Projects/x`.
+    @Test
+    func parentStepAfterALinkLeavesTheLinksTarget() throws {
+        let fakeHome = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        try fm.createDirectory(at: fakeHome.appendingPathComponent("Documents/client"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: fakeHome.appendingPathComponent("Projects/other"), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(
+            atPath: fakeHome.appendingPathComponent("Projects/client").path,
+            withDestinationPath: "../Documents/client"
+        )
+
+        let throughLink = URL(fileURLWithPath: fakeHome.path + "/Projects/client/../x", isDirectory: true)
+        let throughFolder = URL(fileURLWithPath: fakeHome.path + "/Projects/other/../x", isDirectory: true)
+        #expect(!ProtectedLocations.isReadable(throughLink, access: .limited, home: fakeHome))
+        #expect(ProtectedLocations.isReadable(throughFolder, access: .limited, home: fakeHome))
+    }
+
+    /// The project walk decides on these prefetched values before it recurses.
+    /// Neither may describe a link's target, or listing `~/Projects` would stat
+    /// `~/Projects/client` through a link into Documents.
+    @Test
+    func directoryListingDescribesLinksNotTheirTargets() throws {
+        let fakeHome = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        let projects = fakeHome.appendingPathComponent("Projects", isDirectory: true)
+        try fm.createDirectory(at: fakeHome.appendingPathComponent("Elsewhere/client"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: projects, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(atPath: projects.appendingPathComponent("client").path, withDestinationPath: "../Elsewhere/client")
+
+        let entries = try fm.contentsOfDirectory(
+            at: projects,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .nameKey],
+            options: [.skipsPackageDescendants]
+        )
+        let values = try #require(entries.first).resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        #expect(values.isSymbolicLink == true)
+        #expect(values.isDirectory == false)
     }
 
     /// Safe and scheduled cleanups check each candidate. A `node_modules` whose
@@ -199,7 +267,7 @@ struct ScanAccessTests {
         let dotGit = repo.appendingPathComponent(".git", isDirectory: true)
         try FileManager.default.createDirectory(at: dotGit, withIntermediateDirectories: true)
 
-        #expect(GitRepositoryFinder.gitDirectory(forRepository: repo) == dotGit.standardizedFileURL)
+        #expect(GitRepositoryFinder.gitDirectory(forRepository: repo)?.path == dotGit.path)
     }
 
     @Test
@@ -215,11 +283,30 @@ struct ScanAccessTests {
                 == "/Users/tester/Documents/app/.git/worktrees/feature"
         )
 
+        // Joined as text, `..` included: resolving it is `isReadable`'s job.
         try "gitdir: ../main/.git/worktrees/feature\n".write(to: dotGit, atomically: true, encoding: .utf8)
         #expect(
             GitRepositoryFinder.gitDirectory(forRepository: repo)?.path
-                == repo.deletingLastPathComponent().appendingPathComponent("main/.git/worktrees/feature").standardizedFileURL.path
+                == repo.path + "/../main/.git/worktrees/feature"
         )
+    }
+
+    /// A relative `gitdir:` can climb out through a link. Standardizing it would
+    /// stat inside Documents; kept as text, `isReadable` sees where it lands.
+    @Test
+    func worktreeGitDirThroughALinkIntoDocumentsIsNotReadable() throws {
+        let fakeHome = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let fm = FileManager.default
+        try fm.createDirectory(at: fakeHome.appendingPathComponent("Documents/app"), withIntermediateDirectories: true)
+        let repo = fakeHome.appendingPathComponent("Developer/feature", isDirectory: true)
+        try fm.createDirectory(at: repo, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(atPath: repo.appendingPathComponent("app").path, withDestinationPath: "../../Documents/app")
+        try "gitdir: app/../x/.git\n".write(to: repo.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+
+        let gitDir = try #require(GitRepositoryFinder.gitDirectory(forRepository: repo))
+        #expect(gitDir.path == repo.path + "/app/../x/.git")
+        #expect(!ProtectedLocations.isReadable(gitDir, access: .limited, home: fakeHome))
     }
 
     /// The worktree in `~/Developer` whose git dir lives in `~/Documents` is the case
@@ -231,6 +318,25 @@ struct ScanAccessTests {
         let realHome = FileManager.default.homeDirectoryForCurrentUser.path
         try "gitdir: \(realHome)/Documents/purge-test-\(UUID().uuidString)/.git/worktrees/x\n"
             .write(to: repo.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        let item = repo.appendingPathComponent("Carthage-output", isDirectory: true)
+        try FileManager.default.createDirectory(at: item, withIntermediateDirectories: true)
+
+        let checker = GitStatusChecker()
+        await checker.setAccess(.limited)
+        #expect(await checker.cleanupStatus(for: item) == .unknown)
+    }
+
+    /// `.git` itself linked into Documents. Following it to look for a `gitdir:`
+    /// line, or even to see that it exists, would open Documents.
+    @Test
+    func limitedScanDoesNotFollowADotGitLink() async throws {
+        let repo = try makeTemporaryHome()
+        defer { try? FileManager.default.removeItem(at: repo) }
+        let realHome = FileManager.default.homeDirectoryForCurrentUser.path
+        try FileManager.default.createSymbolicLink(
+            atPath: repo.appendingPathComponent(".git").path,
+            withDestinationPath: "\(realHome)/Documents/purge-test-\(UUID().uuidString)/.git"
+        )
         let item = repo.appendingPathComponent("Carthage-output", isDirectory: true)
         try FileManager.default.createDirectory(at: item, withIntermediateDirectories: true)
 
