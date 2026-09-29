@@ -58,12 +58,15 @@ extension PurgeStore {
         return breakdown
     }
 
-    /// True when the figure on screen is a saved one from an earlier scan.
+    /// True when the figure on screen is a saved one from an earlier scan. Mirrors
+    /// `overviewSource` without building the item lists, since rows and the sidebar ask
+    /// on every render.
     func isShowingRecordedFigure(for category: OverviewCategory) -> Bool {
-        if case .recorded = overviewSource(for: category, phase: overviewPhase(for: category)) {
-            return true
+        guard scanRecords[category] != nil else { return false }
+        switch overviewPhase(for: category) {
+        case .waiting, .notScanned: return true
+        case .needsAccess, .scanning, .ready: return false
         }
-        return false
     }
 
     /// A scan in progress shows what it has found so far. A category still waiting,

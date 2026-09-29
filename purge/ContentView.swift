@@ -64,6 +64,11 @@ struct ContentView: View {
             guard isActive else { return }
             Task { await runStartupMaintenance() }
         }
+        // Access granted while Purge is open: queue the scans it unlocks, as a launch would.
+        .onChange(of: store.hasFullDiskAccess) { granted in
+            guard granted, isLifecycleActive, !isRunningPreview, !isRunningAsTestHost else { return }
+            store.startLaunchScans()
+        }
         .sheet(isPresented: $store.isLookDeeperPresented) {
             LookDeeperSheet()
         }
@@ -736,23 +741,21 @@ struct ContentView: View {
         SafetyFilter(rawValue: appCachesFilterRaw) ?? .all
     }
 
-    private var appCachesDisplayableItems: [CacheItem] {
-        store.cacheItems.filter { SafetyFilter.all.matches($0.safetyInfo) }
-    }
-
     private var appCachesVisibleItems: [CacheItem] {
         store.cacheItems.filter {
             appCachesSafetyFilter.matches($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
         }
     }
 
+    // With no filter the subtitle quotes the shared totals the sidebar and Overview use.
     private var appCachesSubtitleItemCount: Int {
-        appCachesSafetyFilter == .all ? appCachesDisplayableItems.count : appCachesVisibleItems.count
+        appCachesSafetyFilter == .all ? store.appCachesTotals.count : appCachesVisibleItems.count
     }
 
     private var appCachesSubtitleTotalSize: Int64 {
-        let items = appCachesSafetyFilter == .all ? appCachesDisplayableItems : appCachesVisibleItems
-        return items.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        appCachesSafetyFilter == .all
+            ? store.appCachesTotals.bytes
+            : appCachesVisibleItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
     private var devToolsSafetyFilter: SafetyFilter {
@@ -760,19 +763,11 @@ struct ContentView: View {
     }
 
     private var devToolsSubtitleItemCount: Int {
-        devToolsSafetyFilter == .all ? devToolsTotalRowCount : devToolsVisibleItemCount
+        devToolsSafetyFilter == .all ? store.devToolsTotals.count : devToolsVisibleItemCount
     }
 
     private var devToolsSubtitleTotalSize: Int64 {
-        devToolsSafetyFilter == .all ? devToolsTotalByteSize : devToolsVisibleByteSize
-    }
-
-    private var devToolsTotalRowCount: Int {
-        store.devTools.filter { $0.isDetected && $0.safetyInfo.level != .unknown }.count +
-            store.simulatorDevices.filter { $0.safetyInfo.level != .unknown }.count +
-            store.projectGroups.reduce(0) { sum, group in
-                sum + group.artifacts.filter { $0.safetyInfo.level != .unknown }.count
-            }
+        devToolsSafetyFilter == .all ? store.devToolsTotals.bytes : devToolsVisibleByteSize
     }
 
     private var devToolsVisibleItemCount: Int {
@@ -780,21 +775,6 @@ struct ContentView: View {
         let sims = store.simulatorDevices.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
         let artifacts = store.projectGroups.reduce(0) { sum, group in
             sum + group.artifacts.filter(projectArtifactVisible).count
-        }
-        return tools + sims + artifacts
-    }
-
-    private var devToolsTotalByteSize: Int64 {
-        let tools = store.devTools
-            .filter { $0.isDetected && $0.safetyInfo.level != .unknown }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let sims = store.simulatorDevices
-            .filter { $0.safetyInfo.level != .unknown }
-            .reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
-        let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
-            sum + group.artifacts
-                .filter { $0.safetyInfo.level != .unknown }
-                .reduce(Int64(0)) { $0 + $1.sizeBytes }
         }
         return tools + sims + artifacts
     }
