@@ -101,15 +101,13 @@ struct LimitedScanNotice: View {
         } label: {
             HStack(spacing: AppStyle.Spacing.xSmall) {
                 Image(systemName: "lock")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 26, height: 26)
-                    .background(AppColors.bgCard, in: Circle())
-                    .overlay { Circle().stroke(AppColors.borderSubtle) }
+                    .frame(width: 20)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Some places are locked")
+                    Text("Limited scan")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
                     Text("Let Purge look deeper")
@@ -133,7 +131,7 @@ struct LimitedScanNotice: View {
             .contentShape(RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
         }
         .buttonStyle(LimitedScanNoticeButtonStyle())
-        .accessibilityLabel("Some places are locked. Let Purge look deeper.")
+        .accessibilityLabel("Limited scan. Let Purge look deeper.")
         .transition(.opacity)
     }
 }
