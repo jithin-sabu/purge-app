@@ -294,9 +294,15 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var interactiveSafeCleanupMovedToTrashBytes: Int64?
     @Published var hasFullDiskAccess = PermissionChecker().hasFullDiskAccess() {
         didSet {
+            readableWithoutFullDiskAccess.removeAll()
             if oldValue, !hasFullDiskAccess { dropRowsLockedByRevokedAccess() }
         }
     }
+    /// `ProtectedLocations.isReadable` answers by stored path. The Clean-button
+    /// filter asks while views render, and each answer costs a `readlink` per
+    /// path component, so it is asked once. Emptied when access changes and when
+    /// a scan starts, since a link can be repointed between scans.
+    private var readableWithoutFullDiskAccess: [String: Bool] = [:]
     /// Shows `LookDeeperSheet`, the main window's one place to ask for Full Disk
     /// Access. Set by the sidebar notice, the locked tabs, and a deleted-app review
     /// that needs access to find leftovers.
@@ -554,7 +560,18 @@ final class PurgeStore: ObservableObject {
     func manualSafeCleanupCandidates() -> [DeletionCandidate] {
         var candidates: [DeletionCandidate] = []
 
+        // Revoking access already drops locked rows (`dropRowsLockedByRevokedAccess`).
+        // This keeps the Clean buttons, their animation and the Trash in step if a
+        // row slips through, by the rule the cleanup itself applies. Checked before
+        // a candidate is built, since building one standardizes its path, and that
+        // stat through a link into Documents is the prompt.
+        let isLimited = !hasFullDiskAccess
+        func isReachable(_ url: URL) -> Bool {
+            !isLimited || isReadableWithoutFullDiskAccess(url)
+        }
+
         for artifact in projectGroups.flatMap(\.artifacts) {
+            guard isReachable(artifact.path) else { continue }
             guard artifact.safetyInfo.level == .safe else { continue }
             guard artifact.reinstallSafety != .missingLockfile else { continue }
             guard artifact.gitStatus == .clean else { continue }
@@ -563,7 +580,7 @@ final class PurgeStore: ObservableObject {
 
         for tool in devTools where tool.isDetected && tool.safetyInfo.level == .safe {
             guard tool.reinstallSafety != .missingLockfile else { continue }
-            for url in tool.paths {
+            for url in tool.paths where isReachable(url) {
                 let candidate = devToolDeletionCandidate(tool, path: url)
                 guard candidate.gitStatus == .clean else { continue }
                 candidates.append(candidate)
@@ -573,7 +590,7 @@ final class PurgeStore: ObservableObject {
         for item in cacheItems where item.safetyInfo.level == .safe {
             guard item.reinstallSafety != .missingLockfile else { continue }
             guard item.gitStatus == .clean else { continue }
-            for location in item.locations {
+            for location in item.locations where isReachable(location.path) {
                 let path = location.path.standardizedFileURL
                 guard DeletionSafetyPolicy.isOfferedForCleanup(path) else { continue }
                 candidates.append(
@@ -591,14 +608,9 @@ final class PurgeStore: ObservableObject {
             }
         }
 
-        // Revoking access already drops locked rows (`dropRowsLockedByRevokedAccess`).
-        // This keeps the Clean buttons, their animation and the Trash in step if a
-        // row slips through. Path-only, since views call this while rendering.
-        let isLimited = !hasFullDiskAccess
         var seenPaths = Set<String>()
         return candidates
             .filter { candidate in
-                if isLimited, ProtectedLocations.contains(candidate.path) { return false }
                 let path = candidate.path.standardizedFileURL.path
                 guard !seenPaths.contains(path) else { return false }
                 seenPaths.insert(path)
@@ -1056,15 +1068,16 @@ final class PurgeStore: ObservableObject {
     private func dropRowsLockedByRevokedAccess() {
         // `isReadable` reads links only. Standardizing the path first would stat
         // it, and through a symlink into Documents that stat is itself the prompt.
-        var lockedByPath: [String: Bool] = [:]
-        removeScanRows { url in
-            if let locked = lockedByPath[url.path] { return locked }
-            let locked = !ProtectedLocations.isReadable(url, access: .limited)
-            lockedByPath[url.path] = locked
-            return locked
-        }
+        removeScanRows { !isReadableWithoutFullDiskAccess($0) }
         scanSelection.cacheIDs.formIntersection(cacheItems.map(\.id))
         scanSelection.artifactIDs.formIntersection(projectGroups.flatMap(\.artifacts).map(\.id))
+    }
+
+    private func isReadableWithoutFullDiskAccess(_ url: URL) -> Bool {
+        if let known = readableWithoutFullDiskAccess[url.path] { return known }
+        let readable = ProtectedLocations.isReadable(url, access: .limited)
+        readableWithoutFullDiskAccess[url.path] = readable
+        return readable
     }
 
     /// Drops every scan row whose path `isRemoved` matches, in place, so the lists
@@ -2376,6 +2389,7 @@ final class PurgeStore: ObservableObject {
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         isScanningGeneral = true
+        readableWithoutFullDiskAccess.removeAll()
         await gitChecker.clearSessionCache()
         await gitChecker.setAccess(access)
         defer {
@@ -2431,6 +2445,7 @@ final class PurgeStore: ObservableObject {
         errorMessage = nil
         simulatorSizingGeneration += 1
         isScanningDeveloper = true
+        readableWithoutFullDiskAccess.removeAll()
         await gitChecker.clearSessionCache()
         await gitChecker.setAccess(access)
         defer {

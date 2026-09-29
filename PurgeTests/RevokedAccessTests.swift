@@ -42,6 +42,32 @@ struct RevokedAccessTests {
         #expect(store.manualSafeCleanupCandidates().map(\.path) == [open.path])
     }
 
+    /// A row that reached the store while access was already off. Its path looks
+    /// fine and its project folder links into Documents, so a path-only check
+    /// would count it on the Clean button and the clean would then skip it.
+    @Test
+    func cleanButtonSkipsARowLinkedIntoALockedPlace() throws {
+        let unique = "purge-test-\(UUID().uuidString)"
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(unique, isDirectory: true)
+            .resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // The target does not exist: the check reads the link and stops at Documents.
+        try FileManager.default.createSymbolicLink(
+            atPath: folder.appendingPathComponent("client").path,
+            withDestinationPath: home.appendingPathComponent("Documents/\(unique)").path
+        )
+        let linked = artifact(at: folder.appendingPathComponent("client/node_modules"))
+        let open = artifact(at: folder.appendingPathComponent("other/node_modules"))
+
+        let store = PurgeStore()
+        store.hasFullDiskAccess = false
+        store.projectGroups = [group(for: linked), group(for: open)]
+
+        #expect(store.manualSafeCleanupCandidates().map(\.path) == [open.path])
+    }
+
     private func artifact(at path: URL) -> ProjectCacheArtifact {
         ProjectCacheArtifact(
             kind: .nodeModules,
