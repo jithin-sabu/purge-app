@@ -245,7 +245,7 @@ struct ContentView: View {
         }
         // One step at a time: App Caches and Dev Tools, then Large Files, apps and
         // leftovers. A scan the menu bar already started is waited on, not restarted,
-        // and steps with results in this session or a recent record are skipped.
+        // and steps that already have results in this session are skipped.
         store.startLaunchScans()
     }
 

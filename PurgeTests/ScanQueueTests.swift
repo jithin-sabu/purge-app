@@ -86,78 +86,29 @@ struct ScanQueueStateTests {
     }
 }
 
-@Suite("The launch scan skips what is already fresh")
+@Suite("The launch scan queues whatever this session has not scanned")
 struct LaunchScanPlanTests {
-    private let now = Date(timeIntervalSince1970: 1_800_000_000)
-
-    private func record(hoursAgo: Double) -> ScanRecord {
-        ScanRecord(completedAt: now.addingTimeInterval(-hoursAgo * 3600), bytes: 1, count: 1)
-    }
-
     @Test func aFirstLaunchScansEverythingInOrder() {
-        let steps = LaunchScanPlan.steps(
-            hasCacheResults: false,
-            hasFullDiskAccess: true,
-            loadedThisSession: [],
-            records: [:],
-            now: now
-        )
+        let steps = LaunchScanPlan.steps(hasFullDiskAccess: true, loadedThisSession: [])
         #expect(steps == [.cachesAndDevTools, .largeFiles, .apps, .leftovers])
     }
 
     @Test func withoutFullDiskAccessOnlyCachesAndDevToolsScan() {
-        let steps = LaunchScanPlan.steps(
-            hasCacheResults: false,
-            hasFullDiskAccess: false,
-            loadedThisSession: [],
-            records: [:],
-            now: now
-        )
+        let steps = LaunchScanPlan.steps(hasFullDiskAccess: false, loadedThisSession: [])
         #expect(steps == [.cachesAndDevTools])
     }
 
     @Test func existingCacheResultsAreNotRescanned() {
-        let steps = LaunchScanPlan.steps(
-            hasCacheResults: true,
-            hasFullDiskAccess: false,
-            loadedThisSession: [.cachesAndDevTools],
-            records: [:],
-            now: now
-        )
+        let steps = LaunchScanPlan.steps(hasFullDiskAccess: false, loadedThisSession: [.cachesAndDevTools])
         #expect(steps.isEmpty)
-    }
-
-    @Test func aRecentRecordSkipsTheSlowScans() {
-        let steps = LaunchScanPlan.steps(
-            hasCacheResults: false,
-            hasFullDiskAccess: true,
-            loadedThisSession: [],
-            records: [.largeFiles: record(hoursAgo: 3), .apps: record(hoursAgo: 23), .leftovers: record(hoursAgo: 30)],
-            now: now
-        )
-        #expect(steps == [.cachesAndDevTools, .leftovers])
     }
 
     @Test func resultsFromThisSessionAreNotRescanned() {
         let steps = LaunchScanPlan.steps(
-            hasCacheResults: true,
             hasFullDiskAccess: true,
-            loadedThisSession: [.largeFiles, .apps],
-            records: [:],
-            now: now
+            loadedThisSession: [.cachesAndDevTools, .largeFiles, .apps]
         )
         #expect(steps == [.leftovers])
-    }
-
-    @Test func aRecordDatedInTheFutureIsNotTrusted() {
-        let steps = LaunchScanPlan.steps(
-            hasCacheResults: true,
-            hasFullDiskAccess: true,
-            loadedThisSession: [.apps, .leftovers],
-            records: [.largeFiles: record(hoursAgo: -5)],
-            now: now
-        )
-        #expect(steps == [.largeFiles])
     }
 }
 

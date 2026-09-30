@@ -80,8 +80,8 @@ extension PurgeStore {
         }
     }
 
-    /// A scan in progress shows what it has found so far. A category still waiting,
-    /// or skipped at launch because its last scan is recent, shows its saved figure.
+    /// A scan in progress shows what it has found so far. A category still waiting
+    /// for its turn, or not scanned this session, shows its saved figure.
     private func overviewSource(
         for category: OverviewCategory,
         phase: OverviewCategoryPhase

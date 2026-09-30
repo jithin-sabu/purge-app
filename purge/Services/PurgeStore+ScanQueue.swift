@@ -14,14 +14,11 @@ extension PurgeStore {
 
     /// The window opened: scan what has no results yet, one step after another,
     /// in the order App Caches and Dev Tools, Large Files, apps, leftovers.
-    func startLaunchScans(now: Date = Date()) {
+    func startLaunchScans() {
         refreshPermission()
         let steps = LaunchScanPlan.steps(
-            hasCacheResults: hasSessionResults(for: .cachesAndDevTools),
             hasFullDiskAccess: hasFullDiskAccess,
-            loadedThisSession: Set(ScanStep.allCases.filter { hasSessionResults(for: $0) }),
-            records: scanRecords,
-            now: now
+            loadedThisSession: Set(ScanStep.allCases.filter { hasSessionResults(for: $0) })
         )
         scanQueue.enqueue(steps)
         startScanQueueIfIdle()

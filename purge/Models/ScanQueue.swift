@@ -109,40 +109,19 @@ nonisolated struct ScanQueueState: Equatable, Sendable {
     }
 }
 
-/// Which steps run when the window opens.
+/// Which steps run when the window opens: every one that has no results in this
+/// session, in order.
 ///
-/// App Caches and Dev Tools are quick and cleaning depends on fresh results, so they
-/// scan whenever there are none yet. Large Files and the app scans walk far more of
-/// the disk; in on-demand mode Purge launches every time it is opened, so they are
-/// skipped when a recent result is on record and the Overview shows that instead.
-/// Scan Everything ignores this and rescans all of them.
+/// A saved record is not a reason to skip a step. It only holds totals, so a skipped
+/// step would look finished on the Overview and then scan anyway the moment its tab
+/// opened. Scanning everything at launch means each tab is ready once its row is.
 nonisolated enum LaunchScanPlan {
-    static let freshness: TimeInterval = 24 * 60 * 60
-
     static func steps(
-        hasCacheResults: Bool,
         hasFullDiskAccess: Bool,
-        loadedThisSession: Set<ScanStep>,
-        records: [OverviewCategory: ScanRecord],
-        now: Date,
-        freshness: TimeInterval = LaunchScanPlan.freshness
+        loadedThisSession: Set<ScanStep>
     ) -> [ScanStep] {
-        var steps: [ScanStep] = []
-        if !hasCacheResults {
-            steps.append(.cachesAndDevTools)
+        ScanStep.allCases.filter { step in
+            !loadedThisSession.contains(step) && (!step.needsFullDiskAccess || hasFullDiskAccess)
         }
-        guard hasFullDiskAccess else { return steps }
-        for step in [ScanStep.largeFiles, .apps, .leftovers] {
-            guard !loadedThisSession.contains(step) else { continue }
-            let isFresh = step.categories.allSatisfy { category in
-                guard let completedAt = records[category]?.completedAt else { return false }
-                let age = now.timeIntervalSince(completedAt)
-                return age >= 0 && age < freshness
-            }
-            if !isFresh {
-                steps.append(step)
-            }
-        }
-        return steps
     }
 }

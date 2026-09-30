@@ -2773,7 +2773,6 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Whether this session holds results for the step, so opening its tab needs no scan.
     /// The scan queue just made the App Caches and Dev Tools step active and is about
     /// to start `scanAll`. Marking it now, in the same turn, keeps the Overview from
     /// showing old figures as done for the moment before the scan begins.
@@ -2781,6 +2780,7 @@ final class PurgeStore: ObservableObject {
         cacheScanStage = .appCaches
     }
 
+    /// Whether this session holds results for the step, so opening its tab needs no scan.
     func hasSessionResults(for step: ScanStep) -> Bool {
         switch step {
         case .cachesAndDevTools:
