@@ -75,9 +75,10 @@ nonisolated struct ScanQueueState: Equatable, Sendable {
 
     /// Moves steps to the front, keeping their relative order, so a tab the user
     /// opens runs next instead of waiting behind the rest of a launch scan. A step
-    /// that is already running is left alone.
-    mutating func prioritize(_ steps: [ScanStep]) {
-        let front = steps.filter { $0 != active }
+    /// that is already running is left alone, unless `requeueingActive` asks for it
+    /// to run again once it ends: a Scan button, or access that changed mid-scan.
+    mutating func prioritize(_ steps: [ScanStep], requeueingActive: Bool = false) {
+        let front = requeueingActive ? steps : steps.filter { $0 != active }
         pending.removeAll { front.contains($0) }
         var seen = Set<ScanStep>()
         pending.insert(contentsOf: front.filter { seen.insert($0).inserted }, at: 0)

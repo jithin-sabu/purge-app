@@ -90,7 +90,8 @@ struct SettingsView: View {
             Text("This removes all saved cleanup records from this Mac. It cannot be undone.")
         }
         .onChange(of: devToolsStalenessThresholdRaw) { _ in
-            Task { await store.scanAll() }
+            // Through the queue, so it waits its turn behind a running scan.
+            store.requestScan(.cachesAndDevTools)
         }
         .alert(
             "Scheduled clean",

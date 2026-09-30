@@ -46,6 +46,15 @@ struct ScanQueueStateTests {
         #expect(queue.pending == [.apps])
     }
 
+    @Test func requeueingRunsTheRunningStepAgainNext() {
+        var queue = ScanQueueState()
+        queue.enqueue([.largeFiles, .apps])
+        _ = queue.startNext()
+        queue.prioritize([.largeFiles], requeueingActive: true)
+        #expect(queue.active == .largeFiles)
+        #expect(queue.pending == [.largeFiles, .apps])
+    }
+
     @Test func prioritizeAddsAStepThatWasNotWaiting() {
         var queue = ScanQueueState()
         queue.enqueue([.apps])

@@ -171,7 +171,7 @@ final class MenuViewModel: ObservableObject {
     /// Manual "scan now": always rescans, ignoring the staleness window.
     func scanNow() {
         menuScanArmed = true
-        runScan(forced: true)
+        runScan(forced: true, rescan: true)
     }
 
     /// Entry point for the notification's Clean action. Routes through the same
@@ -212,14 +212,15 @@ final class MenuViewModel: ObservableObject {
     /// Rescans without leaving the ready/clear state: the menu keeps showing
     /// the cached number and it updates in place when the scan lands.
     private func startBackgroundRefresh() {
-        // `isScanningAll` covers scans owned by the main window: `scanAll`
-        // cancels-and-restarts any in-flight scan, so piling on here would
-        // throw away that scan's progress just to redo the same work.
+        // A scan already running or waiting in the queue will refresh the number
+        // anyway; asking again would only scan the same folders twice.
         guard let store, backgroundRefreshTask == nil, !store.isDeleting,
-              !store.isScanningAll else { return }
+              !store.isScanningAll,
+              store.scanQueue.active != .cachesAndDevTools,
+              !store.isScanQueued(.cachesAndDevTools) else { return }
         backgroundRefreshTask = Task { @MainActor [weak self] in
             // The store-scan subscription settles the visible state.
-            await store.scanAll()
+            await store.scanThroughQueue(.cachesAndDevTools, forced: true)
             guard let self, !Task.isCancelled else { return }
             self.backgroundRefreshTask = nil
         }
@@ -230,7 +231,9 @@ final class MenuViewModel: ObservableObject {
         backgroundRefreshTask = nil
     }
 
-    private func runScan(forced: Bool) {
+    /// `forced` skips the busy check. `rescan` scans even when this session already
+    /// has results; without it, a scan the window's queue already ran is enough.
+    private func runScan(forced: Bool, rescan: Bool = false) {
         guard let store else { return }
         // Block re-scan while checking or cleaning.
         if case .cleaning = state { return }
@@ -244,11 +247,18 @@ final class MenuViewModel: ObservableObject {
         // first layout pass, which shows as a scale-in from the corner.
         setState(.checking)
         activeWorkTask = Task { @MainActor [weak self] in
-            // The store-scan subscription settles the visible state once the
-            // scan (ours, or whichever superseded it) actually completes.
-            await store.scanAll()
+            // Through the window's queue, so this never walks the disk beside a
+            // Large Files or apps scan. The store-scan subscription settles the
+            // visible state once the scan actually completes.
+            await store.scanThroughQueue(.cachesAndDevTools, forced: rescan)
             guard let self, !Task.isCancelled else { return }
             self.activeWorkTask = nil
+            // When the window's queue already had this session's results, no scan
+            // ran and the subscription never fires, so settle on them here.
+            if case .checking = self.state, !store.isScanningAll,
+               store.hasSessionResults(for: .cachesAndDevTools) {
+                self.resolveAfterScan()
+            }
         }
     }
 

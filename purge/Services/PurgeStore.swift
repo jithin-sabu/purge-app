@@ -371,11 +371,18 @@ final class PurgeStore: ObservableObject {
     var scanQueueStepTask: Task<Void, Never>?
     /// Tells a finished runner apart from the one that replaced it after a Stop.
     var scanQueueRunID = 0
+    /// True while a scheduled clean runs its own scans. The queue starts nothing
+    /// until it is released, so those scans never run beside a queued one.
+    var isScanQueueHeld = false
+    /// The access behind the App Caches and Dev Tools results on screen, or behind
+    /// the scan filling them. Nil until one has run in this session.
+    private(set) var generalResultsAccess: ScanAccess?
+    private(set) var developerResultsAccess: ScanAccess?
     /// Last finished scan per Overview category, read at launch and kept current.
     @Published private(set) var scanRecords: [OverviewCategory: ScanRecord] = [:]
     /// True once App Caches and Dev Tools have finished a scan in this session.
     @Published private(set) var hasSessionCacheScan = false
-    private let scanRecordStore = ScanRecordStore()
+    private let scanRecordStore: ScanRecordStore
     private var scanRecordRefreshTask: Task<Void, Never>?
     /// Bumped whenever anything a category total reads changes; keys the Overview cache.
     private(set) var categoryInputsRevision = 0
@@ -384,15 +391,17 @@ final class PurgeStore: ObservableObject {
     var overviewBreakdownCache: (key: OverviewBreakdownKey, breakdown: OverviewBreakdown)?
     private var removableTotalsTask: Task<Void, Never>?
 
-    private let cacheScanner = CacheScanner()
-    private let devScanner = DevScanner()
+    private let cacheScanner: CacheScanner
+    private let devScanner: DevScanner
+    /// Access and scan results for App Caches and Dev Tools. `live` outside tests.
+    let scanSources: ScanSources
     private let largeFileScanner = LargeFileScanner()
     private let aiModelScanner = AIModelScanner()
     private let uninstallScanner = AppUninstallScanner()
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
     private let fileDeleter = FileDeleter()
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private let gitChecker = GitStatusChecker()
 
     private enum ScanCoalesce {
@@ -457,7 +466,15 @@ final class PurgeStore: ObservableObject {
         totalMovedToTrashBytes > 0
     }
 
-    init() {
+    /// `defaults` and `scanSources` are for tests; the app uses the standard ones.
+    init(defaults: UserDefaults = .standard, scanSources: ScanSources? = nil) {
+        let cacheScanner = CacheScanner()
+        let devScanner = DevScanner()
+        self.cacheScanner = cacheScanner
+        self.devScanner = devScanner
+        self.scanSources = scanSources ?? .live(cacheScanner: cacheScanner, devScanner: devScanner)
+        self.defaults = defaults
+        self.scanRecordStore = ScanRecordStore(defaults: defaults)
         var moved = Int64(defaults.integer(forKey: StorageKeys.totalMovedToTrashBytes))
         if moved > Self.maxStorableLifetimeMovedBytes {
             moved = 0
@@ -2372,7 +2389,7 @@ final class PurgeStore: ObservableObject {
     /// Assigns only on a change: every assignment to a `@Published` property
     /// invalidates every view observing the store, even when the value is the same.
     func refreshPermission() {
-        let granted = PermissionChecker().hasFullDiskAccess()
+        let granted = scanSources.fullDiskAccess()
         if granted != hasFullDiskAccess { hasFullDiskAccess = granted }
     }
 
@@ -2385,9 +2402,7 @@ final class PurgeStore: ObservableObject {
 
     func scanGeneral() async {
         let access = currentScanAccess()
-        // A standalone pass supersedes any full scan, which then never reaches the
-        // point where it would clear its stage.
-        cacheScanStage = .idle
+        supersedeFullScan()
         scanGeneration += 1
         let generation = scanGeneration
         scanPhase = .scanning
@@ -2398,13 +2413,40 @@ final class PurgeStore: ObservableObject {
 
     func scanDeveloper() async {
         let access = currentScanAccess()
-        cacheScanStage = .idle
+        supersedeFullScan()
         scanGeneration += 1
         let generation = scanGeneration
         scanPhase = .scanning
         clearDeveloperScanState()
         await runDeveloperScan(generation: generation, access: access)
         await finishStandaloneScanIfCurrent(generation: generation)
+    }
+
+    /// A standalone pass replaces any full scan in flight. That scan stops at its
+    /// next check and, no longer current, never clears its own flags. Left set,
+    /// `isScanningAll` would make the queue wait on a scan that already ended and
+    /// hold every Scan button on "Scanning...".
+    private func supersedeFullScan() {
+        scanTask?.cancel()
+        scanTask = nil
+        isScanningAll = false
+        cacheScanStage = .idle
+    }
+
+    /// True when App Caches or Dev Tools were scanned, or are being scanned, without
+    /// Full Disk Access and Purge has it now. Those results leave out everything
+    /// access unlocks, so they do not count as this session's results.
+    var cacheResultsNeedAccessRescan: Bool {
+        hasFullDiskAccess && (generalResultsAccess == .limited || developerResultsAccess == .limited)
+    }
+
+    /// Access just landed while a limited App Caches and Dev Tools scan runs. It
+    /// stops here instead of finishing results that are already out of date, and the
+    /// rescan the caller queues runs with access.
+    func interruptLimitedCacheScan() {
+        guard cacheResultsNeedAccessRescan else { return }
+        scanTask?.cancel()
+        projectDiscoveryTask?.cancel()
     }
 
     func scanAll() async {
@@ -2451,6 +2493,9 @@ final class PurgeStore: ObservableObject {
         cacheScanStage = .appCaches
         clearGeneralScanState()
         clearDeveloperScanState()
+        // Both halves are cleared now, so both belong to this scan from here on.
+        generalResultsAccess = access
+        developerResultsAccess = access
         defer {
             if scanGeneration == generation {
                 isScanningAll = false
@@ -2476,6 +2521,7 @@ final class PurgeStore: ObservableObject {
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         isScanningGeneral = true
+        generalResultsAccess = access
         readableWithoutFullDiskAccess.removeAll()
         await gitChecker.clearSessionCache()
         await gitChecker.setAccess(access)
@@ -2492,7 +2538,7 @@ final class PurgeStore: ObservableObject {
         let coalesce = CacheScanCoalesceBuffers()
         defer { coalesce.debounceTask?.cancel() }
 
-        for await event in cacheScanner.scanGeneralStream(access: access) {
+        for await event in scanSources.general(access) {
             guard scanGeneration == generation, !Task.isCancelled else { return }
             switch event {
             case .status(let status):
@@ -2532,6 +2578,7 @@ final class PurgeStore: ObservableObject {
         errorMessage = nil
         simulatorSizingGeneration += 1
         isScanningDeveloper = true
+        developerResultsAccess = access
         readableWithoutFullDiskAccess.removeAll()
         await gitChecker.clearSessionCache()
         await gitChecker.setAccess(access)
@@ -2550,7 +2597,7 @@ final class PurgeStore: ObservableObject {
         let coalesce = DeveloperScanCoalesceBuffers()
         defer { coalesce.debounceTask?.cancel() }
 
-        for await event in devScanner.scanDevToolsStream(access: access) {
+        for await event in scanSources.developer(access) {
             guard scanGeneration == generation, !Task.isCancelled else { return }
             switch event {
             case .status(let status):
@@ -2629,7 +2676,7 @@ final class PurgeStore: ObservableObject {
             let coalesce = ProjectGroupCoalesceBuffers()
             defer { coalesce.debounceTask?.cancel() }
 
-            for await event in devScanner.discoverProjectsStream(access: access) {
+            for await event in scanSources.projects(access) {
                 guard scanGeneration == generation, !Task.isCancelled else { return }
                 switch event {
                 case .projectGroupFound(let group):
@@ -2784,6 +2831,7 @@ final class PurgeStore: ObservableObject {
     func hasSessionResults(for step: ScanStep) -> Bool {
         switch step {
         case .cachesAndDevTools:
+            guard !cacheResultsNeedAccessRescan else { return false }
             return hasSessionCacheScan || !cacheItems.isEmpty || !devTools.isEmpty || !projectGroups.isEmpty
         case .largeFiles:
             return hasCompletedLargeFileScan
@@ -3050,11 +3098,15 @@ final class PurgeStore: ObservableObject {
         // checker must not keep `.full` from a scan made before access was revoked.
         await gitChecker.setAccess(currentScanAccess())
         if pinnedCandidates == nil {
-            await scanDeveloper()
-            if cacheItems.isEmpty {
-                await scanGeneral()
-            } else {
-                await hydrateCacheSafetyMetadataParallel()
+            // Waits out a queued scan and keeps the next one from starting, so these
+            // two never walk the disk beside it or cut a queued full scan short.
+            await withScanQueueHeld {
+                await scanDeveloper()
+                if cacheItems.isEmpty {
+                    await scanGeneral()
+                } else {
+                    await hydrateCacheSafetyMetadataParallel()
+                }
             }
         }
 
