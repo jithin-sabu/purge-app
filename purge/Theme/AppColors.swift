@@ -17,14 +17,15 @@ enum AppColors {
 
     // MARK: - Overview categories
 
-    // Cool hues for what Purge can clean, warm hues for what is the user's to review.
-    // Neighbours on the bar differ in lightness as well as hue, so they stay apart
-    // for anyone who can't tell the hues apart.
-    static let overviewAppCaches = Color(light: .hex(0x3D8FD9), dark: .hex(0x7CC4FF))
-    static let overviewDevTools = Color(light: .hex(0x1F4FAE), dark: .hex(0x3F7BE0))
-    static let overviewLargeFiles = Color(light: .hex(0xD9971A), dark: .hex(0xF2B84B))
-    static let overviewApps = Color(light: .hex(0x9C4F16), dark: .hex(0xA65A1E))
-    static let overviewLeftovers = Color(light: .hex(0xE0795A), dark: .hex(0xF09A77))
+    // The Okabe–Ito palette, made to stay distinct with any kind of color blindness:
+    // sky blue, blue, orange, vermillion, reddish purple. Light mode uses the
+    // published values; dark mode lifts each a little so it holds up on the dark card.
+    // Neighbours on the bar differ in lightness as well as hue.
+    static let overviewAppCaches = Color(light: .hex(0x56B4E9), dark: .hex(0x6CC3F0))
+    static let overviewDevTools = Color(light: .hex(0x0072B2), dark: .hex(0x3A94D0))
+    static let overviewLargeFiles = Color(light: .hex(0xE69F00), dark: .hex(0xF0B020))
+    static let overviewApps = Color(light: .hex(0xD55E00), dark: .hex(0xE8772A))
+    static let overviewLeftovers = Color(light: .hex(0xCC79A7), dark: .hex(0xDA93BA))
     /// Close to the sidebar's "used" grey, and well apart from free space in both themes.
     static let overviewEverythingElse = Color(light: .hex(0x8A8C96), dark: .hex(0xA3A6B4))
 
