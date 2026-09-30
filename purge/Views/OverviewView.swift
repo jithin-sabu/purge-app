@@ -197,6 +197,9 @@ private struct OverviewCategoryRow: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
+    // The same stored filters the App Caches and Dev Tools tabs read.
+    @AppStorage("filter.appCaches") private var appCachesFilterRaw = SafetyFilter.all.rawValue
+    @AppStorage("filter.devTools") private var devToolsFilterRaw = SafetyFilter.all.rawValue
 
     private var phase: OverviewCategoryPhase { store.overviewPhase(for: category) }
     private var record: ScanRecord? { store.scanRecords[category] }
@@ -381,10 +384,15 @@ private struct OverviewCategoryRow: View {
             store.isLookDeeperPresented = true
             return
         }
+        // The row's line is the safe-to-clean figure, so the tab opens on that list.
+        // With nothing safe, the filter is left alone rather than opening on an empty list.
+        let hasSafeItems = (store.safeCleanupBytes(for: category) ?? 0) > 0
         switch category {
         case .appCaches:
+            if hasSafeItems { appCachesFilterRaw = SafetyFilter.safe.rawValue }
             store.selectedTab = .appCaches
         case .devTools:
+            if hasSafeItems { devToolsFilterRaw = SafetyFilter.safe.rawValue }
             store.selectedTab = .devTools
         case .largeFiles:
             store.selectedTab = .largeFiles
