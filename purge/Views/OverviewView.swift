@@ -9,8 +9,8 @@ struct OverviewView: View {
     @EnvironmentObject private var trashStore: TrashStore
     @ObservedObject private var schedule = ScheduledCleaningPreferenceStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The bar segment or row under the pointer. Each side lights up the other.
-    @State private var highlight: OverviewHighlight?
+    /// The bar segment under the pointer. Its row lifts and the others fade.
+    @State private var highlightedID: String?
 
     var body: some View {
         // Relative times ("Scanned 3h ago") move on their own.
@@ -31,8 +31,8 @@ struct OverviewView: View {
                     diskSummary(breakdown)
                     OverviewDiskBar(
                         segments: barSegments(breakdown),
-                        highlightedID: highlight?.id,
-                        onHover: { id in setHighlight(id, from: .bar) }
+                        highlightedID: highlightedID,
+                        onHover: { highlightedID = $0 }
                     )
                 }
             }
@@ -48,22 +48,12 @@ struct OverviewView: View {
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
         .padding(.bottom, AppStyle.Spacing.large)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: highlight)
-    }
-
-    /// `nil` clears the highlight only if this side set it, so leaving a row does not
-    /// undo a highlight the bar has since taken over, or the other way round.
-    private func setHighlight(_ id: String?, from source: OverviewHighlight.Source) {
-        if let id {
-            highlight = OverviewHighlight(id: id, source: source)
-        } else if highlight?.source == source {
-            highlight = nil
-        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: highlightedID)
     }
 
     private func linkedRowState(_ id: String) -> OverviewLinkedRowState {
-        guard let highlight, highlight.source == .bar else { return .normal }
-        return highlight.id == id ? .emphasized : .dimmed
+        guard let highlightedID else { return .normal }
+        return highlightedID == id ? .emphasized : .dimmed
     }
 
     // MARK: Disk summary
@@ -124,8 +114,7 @@ struct OverviewView: View {
                     bytes: breakdown.bytes(for: category),
                     share: breakdown.share(of: breakdown.bytes(for: category)),
                     now: now,
-                    linkedState: linkedRowState(category.rawValue),
-                    onHover: { hovering in setHighlight(hovering ? category.rawValue : nil, from: .row) }
+                    linkedState: linkedRowState(category.rawValue)
                 )
             }
         }
@@ -141,8 +130,7 @@ struct OverviewView: View {
                 detail: "macOS, your documents and photos, and files Purge doesn't sort",
                 bytes: breakdown.everythingElseBytes,
                 share: breakdown.share(of: breakdown.everythingElseBytes),
-                linkedState: linkedRowState(OverviewDiskBar.everythingElseID),
-                onHover: { hovering in setHighlight(hovering ? OverviewDiskBar.everythingElseID : nil, from: .row) }
+                linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
             )
             InsetCardDivider()
             OverviewPlainRow(
@@ -151,8 +139,7 @@ struct OverviewView: View {
                 detail: "Available for new files",
                 bytes: breakdown.freeBytes,
                 share: breakdown.share(of: breakdown.freeBytes),
-                linkedState: linkedRowState(OverviewDiskBar.freeID),
-                onHover: { hovering in setHighlight(hovering ? OverviewDiskBar.freeID : nil, from: .row) }
+                linkedState: linkedRowState(OverviewDiskBar.freeID)
             )
         }
         .overviewCard()
@@ -206,7 +193,6 @@ private struct OverviewCategoryRow: View {
     let share: Double
     let now: Date
     let linkedState: OverviewLinkedRowState
-    let onHover: (Bool) -> Void
 
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -262,7 +248,6 @@ private struct OverviewCategoryRow: View {
     private func setHovering(_ hovering: Bool) {
         guard hovering != isHovering else { return }
         isHovering = hovering
-        onHover(hovering)
         if hovering {
             NSCursor.pointingHand.push()
         } else {
@@ -463,7 +448,6 @@ private struct OverviewPlainRow: View {
     let bytes: Int64
     let share: Double
     let linkedState: OverviewLinkedRowState
-    let onHover: (Bool) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -492,25 +476,15 @@ private struct OverviewPlainRow: View {
         .padding(.vertical, 11)
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.bgElevated.opacity(0.5) : .clear)
-        .contentShape(Rectangle())
-        // Not clickable, so no pointing hand; hovering still picks out its segment.
-        .onHover(perform: onHover)
-        .onDisappear { onHover(false) }
         .accessibilityElement(children: .combine)
     }
 }
 
 // MARK: - Bar and row highlight
 
-struct OverviewHighlight: Equatable {
-    enum Source { case bar, row }
-    let id: String
-    let source: Source
-}
-
 /// How a row looks while the pointer is on the bar: the matching row lifts, the
 /// others lose their color and fade, so the eye goes straight to the one that
-/// matches. Hovering a row itself leaves the other rows alone.
+/// matches. It only runs this way: hovering a row leaves the bar alone.
 enum OverviewLinkedRowState: Equatable {
     case normal
     case emphasized
