@@ -16,8 +16,9 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
-    @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.all.rawValue
-    @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.all.rawValue
+    // Same defaults as the tabs, so the subtitle counts what the list shows.
+    @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.safe.rawValue
     @AppStorage(LargeFileFilterDefaults.categoryKey) private var largeFilesCategoryFilterRaw = LargeFileCategoryFilter.all
 
     /// Large Files search text. Held here rather than inside `LargeFilesView` so the
@@ -742,7 +743,7 @@ struct ContentView: View {
     }
 
     private var appCachesSafetyFilter: SafetyFilter {
-        SafetyFilter(rawValue: appCachesFilterRaw) ?? .all
+        store.safetyFilter(for: .appCaches, saved: SafetyFilter(rawValue: appCachesFilterRaw) ?? .all)
     }
 
     private var appCachesVisibleItems: [CacheItem] {
@@ -763,7 +764,7 @@ struct ContentView: View {
     }
 
     private var devToolsSafetyFilter: SafetyFilter {
-        SafetyFilter(rawValue: devToolsFilterRaw) ?? .all
+        store.safetyFilter(for: .devTools, saved: SafetyFilter(rawValue: devToolsFilterRaw) ?? .all)
     }
 
     private var devToolsSubtitleItemCount: Int {

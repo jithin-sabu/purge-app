@@ -182,7 +182,14 @@ final class PurgeStore: ObservableObject {
         let candidates: [DeletionCandidate]
     }
 
-    @Published var selectedTab: Tab = .overview
+    @Published var selectedTab: Tab = .overview {
+        didSet {
+            if selectedTab != safetyFilterVisitTab { safetyFilterVisitTab = nil }
+        }
+    }
+    /// The tab the Overview opened on Safe for this one visit, without saving Safe as
+    /// that tab's filter. Leaving the tab or picking a filter ends the visit.
+    @Published private(set) var safetyFilterVisitTab: Tab?
     @Published var cacheItems: [CacheItem] = [] {
         didSet {
             invalidateSafeCleanupSummary()
@@ -541,28 +548,69 @@ final class PurgeStore: ObservableObject {
 
     private func computeSafeCleanupSummary() -> SafeCleanupSummary {
         var summary = SafeCleanupSummary()
-        summary.appCacheBytes = cacheItems.reduce(Int64(0)) { total, item in
-            guard item.safetyInfo.level == .safe,
-                  item.reinstallSafety != .missingLockfile,
-                  item.gitStatus == .clean else { return total }
-            return total + item.sizeBytes
-        }
-        summary.devToolBytes = devTools.reduce(Int64(0)) { total, tool in
-            guard tool.isDetected,
-                  tool.safetyInfo.level == .safe,
-                  tool.reinstallSafety != .missingLockfile,
-                  !tool.paths.contains(where: { devToolRepoStatusByPath[$0.standardizedFileURL.path] == .dirty }) else {
-                return total
-            }
-            return total + tool.sizeBytes
-        }
-        summary.projectArtifactBytes = projectGroups.flatMap(\.artifacts).reduce(Int64(0)) { total, artifact in
-            guard artifact.safetyInfo.level == .safe,
-                  artifact.reinstallSafety != .missingLockfile,
-                  artifact.gitStatus == .clean else { return total }
-            return total + artifact.sizeBytes
-        }
+        summary.appCacheBytes = cacheItems.filter(countsAsSafeCleanup).reduce(Int64(0)) { $0 + $1.sizeBytes }
+        summary.devToolBytes = devTools.filter(countsAsSafeCleanup).reduce(Int64(0)) { $0 + $1.sizeBytes }
+        summary.projectArtifactBytes = projectGroups.flatMap(\.artifacts)
+            .filter(countsAsSafeCleanup)
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
         return summary
+    }
+
+    private func countsAsSafeCleanup(_ item: CacheItem) -> Bool {
+        item.safetyInfo.level == .safe
+            && item.reinstallSafety != .missingLockfile
+            && item.gitStatus == .clean
+    }
+
+    private func countsAsSafeCleanup(_ tool: DevTool) -> Bool {
+        tool.isDetected
+            && tool.safetyInfo.level == .safe
+            && tool.reinstallSafety != .missingLockfile
+            && !tool.paths.contains(where: { devToolRepoStatusByPath[$0.standardizedFileURL.path] == .dirty })
+    }
+
+    private func countsAsSafeCleanup(_ artifact: ProjectCacheArtifact) -> Bool {
+        artifact.safetyInfo.level == .safe
+            && artifact.reinstallSafety != .missingLockfile
+            && artifact.gitStatus == .clean
+    }
+
+    /// Opening App Caches or Dev Tools from its Overview row, whose one line is the
+    /// safe-to-clean figure. The tab shows Safe for this visit, and once the scan has
+    /// settled, exactly what that figure counts is selected, replacing any earlier
+    /// selection, so Clean Selected moves the amount the row showed. With nothing
+    /// safe, the tab opens as it would from the sidebar.
+    func openFromOverview(_ category: OverviewCategory) {
+        let tab: Tab
+        switch category {
+        case .appCaches: tab = .appCaches
+        case .devTools: tab = .devTools
+        case .largeFiles, .apps, .leftovers: return
+        }
+        if (safeCleanupBytes(for: category) ?? 0) > 0 {
+            safetyFilterVisitTab = tab
+            if isSettled(category) {
+                scanSelection.removeAll()
+                switch category {
+                case .appCaches:
+                    scanSelection.cacheIDs = Set(cacheItems.filter(countsAsSafeCleanup).map(\.id))
+                default:
+                    scanSelection.devToolIDs = Set(devTools.filter(countsAsSafeCleanup).map(\.id))
+                    scanSelection.artifactIDs = Set(projectGroups.flatMap(\.artifacts).filter(countsAsSafeCleanup).map(\.id))
+                }
+            }
+        }
+        selectedTab = tab
+    }
+
+    /// The filter a tab shows: Safe during an Overview visit, the saved one otherwise.
+    func safetyFilter(for tab: Tab, saved: SafetyFilter) -> SafetyFilter {
+        safetyFilterVisitTab == tab ? .safe : saved
+    }
+
+    /// The user picked a filter. It is saved by the tab and replaces the visit's Safe.
+    func endSafetyFilterVisit() {
+        safetyFilterVisitTab = nil
     }
 
     var safeRecoverableBytes: Int64 {

@@ -250,6 +250,100 @@ struct ScanQueueStoreTests {
         fake.cleanUp()
     }
 
+    // MARK: Opening App Caches and Dev Tools from the Overview
+
+    @Test
+    func theOverviewOpensAppCachesOnSafeForOneVisitWithTheRowSelected() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        store.requestScan(.cachesAndDevTools)
+        #expect(await eventually { isIdle(store) })
+        let safe = cacheItem("com.safe.app", bytes: 3_000_000_000, level: .safe, git: .clean)
+        let dirty = cacheItem("com.dirty.app", bytes: 1_000_000_000, level: .safe, git: .dirty)
+        let checkFirst = cacheItem("com.check.app", bytes: 2_000_000_000, level: .medium, git: .clean)
+        store.cacheItems = [safe, dirty, checkFirst]
+        // Picked earlier on Dev Tools; Clean Selected counts both tabs.
+        store.scanSelection.devToolIDs = ["some-tool"]
+
+        store.openFromOverview(.appCaches)
+
+        #expect(store.selectedTab == .appCaches)
+        #expect(store.safetyFilter(for: .appCaches, saved: .all) == .safe)
+        #expect(store.scanSelection.cacheIDs == [safe.id])
+        #expect(store.scanSelection.devToolIDs.isEmpty)
+        #expect(store.selectedTotalBytes == store.safeCleanupBytes(for: .appCaches))
+
+        // The visit ends when the user leaves; the saved filter was never touched.
+        store.selectedTab = .overview
+        #expect(store.safetyFilter(for: .appCaches, saved: .all) == .all)
+        fake.cleanUp()
+    }
+
+    @Test
+    func pickingAFilterEndsTheVisit() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        store.cacheItems = [cacheItem("com.safe.app", bytes: 1_000_000_000, level: .safe, git: .clean)]
+        store.openFromOverview(.appCaches)
+        #expect(store.safetyFilter(for: .appCaches, saved: .all) == .safe)
+
+        store.endSafetyFilterVisit()
+        #expect(store.safetyFilter(for: .appCaches, saved: .all) == .all)
+        #expect(store.selectedTab == .appCaches)
+        fake.cleanUp()
+    }
+
+    @Test
+    func withNothingSafeTheTabOpensAsItWouldFromTheSidebar() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        store.cacheItems = [cacheItem("com.check.app", bytes: 1_000_000_000, level: .medium, git: .clean)]
+        store.scanSelection.cacheIDs = ["kept"]
+
+        store.openFromOverview(.appCaches)
+
+        #expect(store.selectedTab == .appCaches)
+        #expect(store.safetyFilter(for: .appCaches, saved: .all) == .all)
+        #expect(store.scanSelection.cacheIDs == ["kept"])
+        fake.cleanUp()
+    }
+
+    @Test
+    func aRowOpenedMidScanShowsSafeButSelectsNothingYet() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        fake.holdsGeneral = true
+        store.requestScan(.cachesAndDevTools)
+        // The scan itself, not just its flag: the flag goes up a moment before.
+        #expect(await eventually { fake.generalAccesses == [.full] })
+        store.cacheItems = [cacheItem("com.safe.app", bytes: 1_000_000_000, level: .safe, git: .clean)]
+
+        store.openFromOverview(.appCaches)
+
+        // Items are still arriving, so a selection now would not match the final figure.
+        #expect(store.safetyFilter(for: .appCaches, saved: .all) == .safe)
+        #expect(store.scanSelection.cacheIDs.isEmpty)
+        fake.cleanUp()
+        #expect(await eventually { isIdle(store) })
+    }
+
+    private func cacheItem(_ folder: String, bytes: Int64, level: SafetyLevel, git: GitWorktreeStatus) -> CacheItem {
+        CacheItem(
+            definitionKey: folder,
+            location: CacheLocation(
+                path: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/\(folder)"),
+                sizeBytes: bytes,
+                lastModified: .distantPast,
+                folderName: folder
+            ),
+            appName: folder,
+            safetyInfo: SafetyInfo(level: level, headline: folder, explanation: "", recoverySteps: "", reinstallCommand: nil),
+            gitStatus: git
+        )
+    }
+
     // MARK: Helpers
 
     private func isIdle(_ store: PurgeStore) -> Bool {
@@ -307,7 +401,12 @@ private final class FakeScans {
         steps.forEach { $0.resume() }
     }
 
+    /// Releases every held scan and stops holding new ones, so a scan that starts
+    /// after this call cannot hang the test either.
     func cleanUp() {
+        holdsGeneral = false
+        holdsDeveloper = false
+        holdsFullAccessSteps = false
         heldGeneral.forEach { $0.finish() }
         heldDeveloper.forEach { $0.finish() }
         finishHeldSteps()

@@ -35,14 +35,19 @@ struct AppCachesView<PageHeader: View>: View {
     @AppStorage("filter.appCaches") private var filterRaw: String = SafetyFilter.safe.rawValue
     @AppStorage("sort.appCaches") private var sortRaw: String = SortOption.sizeDesc.rawValue
 
+    /// Safe while the Overview has this tab open for a visit, the saved filter otherwise.
     private var currentSafetyFilter: SafetyFilter {
-        SafetyFilter(rawValue: filterRaw) ?? .all
+        store.safetyFilter(for: .appCaches, saved: SafetyFilter(rawValue: filterRaw) ?? .all)
     }
 
+    /// Picking a filter saves it and ends an Overview visit's Safe.
     private var safetyFilterBinding: Binding<SafetyFilter> {
         Binding(
-            get: { SafetyFilter(rawValue: filterRaw) ?? .all },
-            set: { filterRaw = $0.rawValue }
+            get: { currentSafetyFilter },
+            set: {
+                filterRaw = $0.rawValue
+                store.endSafetyFilterVisit()
+            }
         )
     }
 
