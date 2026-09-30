@@ -50,7 +50,7 @@ You do not need to understand any of it to use it. But if you ever want to check
 
 - **Where your space went**: one bar for the whole disk. Used, free and total come straight from the volume, so they match System Settings. App Caches, Dev Tools, Large Files, installed apps and leftovers from deleted apps each get their own segment, and the rest is shown as everything else
 - A row per category with its size and share of the disk. Click one to open its tab
-- **Scan Everything** (⇧⌘R) scans every category, one at a time so the Mac stays responsive. When you open Purge it does the same on its own, skipping Large Files and the app scans if they ran in the last day
+- **Scan Everything** (⇧⌘R) scans every category, one at a time so the Mac stays responsive. When you open Purge it does the same on its own. Large Files and the app scans need Full Disk Access; without it only App Caches and Dev Tools scan
 - Each byte is counted once: an app's cache folder counts under App Caches, not again under the app
 
 ### App Caches
