@@ -1,0 +1,81 @@
+name: DMG
+
+# Packages an unsigned Release disk image for trying a branch build.
+# Official releases stay on scripts/make-dmg.sh, which signs and notarizes.
+on:
+  push:
+    branches:
+      - cursor/overview-dmg-2d0e
+
+jobs:
+  dmg:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build unsigned Release
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project purge.xcodeproj \
+            -scheme purge \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_HARDENED_RUNTIME=NO
+
+      - name: Package DMG
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/Purge.app"
+          if [ ! -d "$APP" ]; then
+            echo "Purge.app was not produced. Products:" >&2
+            find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 3 -type d -name '*.app' -print >&2 || true
+            exit 1
+          fi
+
+          # Ad-hoc sign inside-out. This is not a Developer ID signature, so
+          # Gatekeeper will still ask the user to open the app explicitly.
+          if [ -d "$APP/Contents/Frameworks" ]; then
+            find "$APP/Contents/Frameworks" -depth \( \
+              -name '*.framework' -o -name '*.dylib' -o -name '*.xpc' -o -name '*.app' \
+            \) -print0 | while IFS= read -r -d '' item; do
+              codesign --force --sign - "$item"
+            done
+          fi
+          codesign --force --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          STAGING="$RUNNER_TEMP/dmg-src"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          cp -R "$APP" "$STAGING/Purge.app"
+          ln -s /Applications "$STAGING/Applications"
+
+          DMG="$GITHUB_WORKSPACE/Purge-${VERSION}-overview-${SHORT_SHA}.dmg"
+          hdiutil create \
+            -volname "Purge" \
+            -srcfolder "$STAGING" \
+            -ov \
+            -format UDZO \
+            "$DMG"
+          shasum -a 256 "$DMG" | tee "${DMG}.sha256"
+          echo "dmg=$(basename "$DMG")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Purge-overview-dmg
+          path: |
+            Purge-*.dmg
+            Purge-*.dmg.sha256
+          if-no-files-found: error
+          retention-days: 30
