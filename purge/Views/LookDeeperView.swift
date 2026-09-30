@@ -67,6 +67,13 @@ struct LookDeeperView: View {
     }
   }
 
+  @ViewBuilder
+  private var promises: some View {
+    LookDeeperPromise(symbol: "eye", text: "Only cleans when you say")
+    LookDeeperPromise(symbol: "icloud.slash", text: "Nothing leaves your Mac")
+    LookDeeperPromise(symbol: "trash", text: "Everything goes to the Trash")
+  }
+
   private var askingBody: some View {
     VStack(spacing: AppStyle.Spacing.large) {
       VStack(spacing: AppStyle.Spacing.small) {
@@ -92,10 +99,10 @@ struct LookDeeperView: View {
       .onboardingBlurIn(index: 2)
 
       VStack(spacing: AppStyle.Spacing.small) {
-        HStack(spacing: AppStyle.Spacing.large) {
-          LookDeeperPromise(symbol: "eye", text: "Only cleans when you say")
-          LookDeeperPromise(symbol: "icloud.slash", text: "Nothing leaves your Mac")
-          LookDeeperPromise(symbol: "trash", text: "Everything goes to the Trash")
+        // One row where it fits (onboarding); stacked in the narrower sheet.
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: AppStyle.Spacing.large) { promises }
+          VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) { promises }
         }
 
         Text("macOS calls this Full Disk Access. Turn it off anytime in System Settings.")
@@ -297,6 +304,8 @@ private struct LookDeeperPromise: View {
       Text(text)
     } icon: {
       Image(systemName: symbol)
+        // One width for every icon, so stacked promises start their text in line.
+        .frame(width: 18)
         .accessibilityHidden(true)
     }
     .font(.callout)
@@ -310,15 +319,19 @@ struct LookDeeperSheet: View {
   @EnvironmentObject private var store: PurgeStore
   @Environment(\.dismiss) private var dismiss
 
+  /// The same width as the app's other sheets. The onboarding step is laid out for
+  /// the whole window; over the main window it would read as oversized.
+  static let width: CGFloat = 580
+  static let padding: CGFloat = 32
+
   var body: some View {
     LookDeeperView(
       context: .sheet,
       onNotNow: { dismiss() },
       onFinished: { dismiss() }
     )
-    .padding(.horizontal, OnboardingLayout.horizontalPadding)
-    .padding(.vertical, OnboardingLayout.verticalPadding)
-    .frame(width: LookDeeperView.contentWidth + OnboardingLayout.horizontalPadding * 2)
+    .padding(Self.padding)
+    .frame(width: Self.width)
     .background(AppColors.bgBase)
   }
 }
