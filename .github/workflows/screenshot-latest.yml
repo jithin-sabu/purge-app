@@ -39,21 +39,23 @@ jobs:
           mkdir -p "$HOME/Library/Safari" "$HOME/Library/Containers" "$HOME/Library/Caches"
 
           osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' || true
+          defaults write com.apple.dock autohide -bool true
+          killall Dock || true
 
           open "$APP"
 
-          # Wait until the window exists, then give the launch scan time to settle.
-          for _ in $(seq 1 20); do
+          # Wait until the window exists. The launch scan keeps going after that,
+          # so later captures are taken once categories have had time to finish.
+          for _ in $(seq 1 15); do
             sleep 2
             osascript -e 'tell application "Purge" to activate' || true
           done
-          sleep 25
 
-          swift - "$GITHUB_WORKSPACE" <<'SWIFT'
+          cat > "$RUNNER_TEMP/capture.swift" <<'SWIFT'
           import CoreGraphics
           import Foundation
 
-          let outDir = CommandLine.arguments[1]
+          let outPath = CommandLine.arguments[1]
           let info = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
           var bestID: CGWindowID?
           var bestArea: CGFloat = 0
@@ -72,32 +74,30 @@ jobs:
                   bestID = id
               }
           }
-
-          func capture(_ args: [String]) throws {
-              let task = Process()
-              task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-              task.arguments = args
-              try task.run()
-              task.waitUntilExit()
-              if task.terminationStatus != 0 {
-                  fputs("screencapture exit \(task.terminationStatus)\n", stderr)
-                  exit(task.terminationStatus)
-              }
+          guard let bestID else {
+              fputs("no Purge window\n", stderr)
+              exit(1)
           }
-
-          if let bestID {
-              print("capturing window \(bestID)")
-              try capture(["-x", "-l", String(bestID), "\(outDir)/latest-window.png"])
-          }
-          try capture(["-x", "\(outDir)/latest-desktop.png"])
+          print("capturing window \(bestID) -> \(outPath)")
+          let task = Process()
+          task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+          task.arguments = ["-x", "-l", String(bestID), outPath]
+          try task.run()
+          task.waitUntilExit()
+          if task.terminationStatus != 0 { exit(task.terminationStatus) }
           SWIFT
 
+          swift "$RUNNER_TEMP/capture.swift" "$GITHUB_WORKSPACE/latest-window-early.png"
+          sleep 90
+          osascript -e 'tell application "Purge" to activate' || true
+          swift "$RUNNER_TEMP/capture.swift" "$GITHUB_WORKSPACE/latest-window.png"
+          sleep 90
+          osascript -e 'tell application "Purge" to activate' || true
+          swift "$RUNNER_TEMP/capture.swift" "$GITHUB_WORKSPACE/latest-window-late.png"
           ls -lh "$GITHUB_WORKSPACE"/*.png
 
       - uses: actions/upload-artifact@v4
         with:
           name: latest-screenshots
-          path: |
-            latest-window.png
-            latest-desktop.png
+          path: latest-window*.png
           if-no-files-found: error
