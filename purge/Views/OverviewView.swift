@@ -147,11 +147,14 @@ struct OverviewView: View {
         }
     }
 
+    static let trashNoteThresholdBytes: Int64 = 1_000_000_000
+
     private func footnoteLines(now: Date) -> [String] {
         var lines: [String] = []
         // Trash is plural (iCloud Drive keeps its own), and emptying it is the user's
-        // call in Finder, so this only says where the space is.
-        if trashStore.access == .readable, trashStore.trashBytes > 0 {
+        // call in Finder, so this only says where the space is. Below a gigabyte,
+        // emptying it would not change anything the page shows.
+        if trashStore.access == .readable, trashStore.trashBytes >= Self.trashNoteThresholdBytes {
             lines.append(
                 "\(formatBytes(trashStore.trashBytes)) of the used space is already in the Trash, "
                     + "including iCloud Drive. Emptying it in Finder frees it."
