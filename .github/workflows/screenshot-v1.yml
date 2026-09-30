@@ -15,7 +15,7 @@ jobs:
       - name: Build unsigned Release
         run: |
           set -euo pipefail
-          cp Secrets.xcconfig.template Secrets.xcconfig
+          printf 'AIRTABLE_API_KEY = placeholder\n' > Secrets.xcconfig
           xcodebuild build \
             -project purge.xcodeproj \
             -scheme purge \
