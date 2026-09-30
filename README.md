@@ -138,7 +138,7 @@ The labels and explanations are there to be checked, not read cover to cover. Se
 
 - **First-run onboarding**: welcome, permissions (Full Disk Access and optional login item), first scan, results review, and a safe clean walkthrough
 - **Menu bar companion**: recoverable space at a glance, quick open, and scan/clean actions
-- **Disk summary**: the sidebar shows used and free space and what is already in the Trash, and each scan tab shows its size
+- **Disk summary**: the Overview shows used and free space; the sidebar shows what is already in the Trash, and each scan tab's size
 - **In-app updates**: the About screen checks for, downloads, and installs new versions
 
 ### Keyboard shortcuts

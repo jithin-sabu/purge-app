@@ -875,16 +875,10 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
 
 struct SidebarSummaryView: View {
     @EnvironmentObject var store: PurgeStore
-    @EnvironmentObject var diskStore: DiskSummaryStore
     @EnvironmentObject var trashStore: TrashStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private enum SummaryFont {
-        static let label = Font.system(size: 12, weight: .medium, design: .rounded)
-        static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
-        static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
-        static let cardTitle = Font.system(size: 12, weight: .semibold, design: .rounded)
-    }
+    private static let font = Font.system(size: 12, weight: .medium, design: .rounded)
 
     var body: some View {
         VStack(spacing: AppStyle.Spacing.small) {
@@ -892,78 +886,60 @@ struct SidebarSummaryView: View {
             if !store.hasFullDiskAccess {
                 LimitedScanNotice()
             }
-            storageCard
+            trashCard
         }
         .padding(.horizontal, AppStyle.Spacing.small)
         .padding(.bottom, AppStyle.Spacing.small)
     }
 
-    /// Rounded surface one step above the sidebar so the card reads as its own object
-    /// rather than a region of the sidebar.
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-            .fill(AppColors.bgElevated)
-    }
-
-    /// Volume state, reported as observation rather than as anything Purge did. The
-    /// Overview breaks the used space down; this card keeps the two volume figures and
-    /// the trash in view on every tab. Cleaning lives on the tabs themselves, so the
-    /// sidebar carries no action of its own.
-    private var storageCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Storage")
-                .font(SummaryFont.cardTitle)
+    /// What is already in the Trash, as one sentence on its own card. Cleaning moves
+    /// files there, so this is the figure that changes after a clean, on every tab; the
+    /// Overview covers used and free space. A sentence on a card, not a label and a
+    /// value in a row, so it never reads as another tab. Emptying the Trash is the
+    /// user's call in Finder, so the card carries no action.
+    private var trashCard: some View {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
+            Image(systemName: "trash")
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
-                .padding(.bottom, 10)
-
-            storageBar
-                .padding(.bottom, 6)
-
-            storageLegend
-
-            // The one hairline in the card: it sets the trash off from the volume
-            // figures above rather than reading as another share of the same bar.
-            Divider()
-                .padding(.top, AppStyle.Spacing.small)
-
-            inTrashRow
-                .padding(.top, AppStyle.Spacing.xxSmall)
+                .accessibilityHidden(true)
+            trashSentence
+            Spacer(minLength: 0)
         }
+        .font(Self.font)
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.xSmall + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(AppStyle.Spacing.small)
-        .background(cardBackground)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                .fill(AppColors.bgElevated)
+        )
+        .accessibilityElement(children: .combine)
     }
 
-    /// Bytes already in the trash still take up the volume. Emptying it is the user's
-    /// call in Finder; this row only says how much is there.
-    private var inTrashRow: some View {
-        HStack(spacing: 6) {
-            Text("In trash")
-                .font(SummaryFont.label)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            if trashStore.access == .measuring {
+    @ViewBuilder
+    private var trashSentence: some View {
+        switch trashStore.access {
+        case .measuring:
+            // The spinner holds the number's place, so the sentence does not jump.
+            HStack(spacing: 4) {
                 trashLoadingIndicator
-                    .accessibilityLabel("Measuring")
-            } else if trashStore.access == .unreadable {
-                // No Full Disk Access: the trash size is genuinely unknown, so say so
-                // rather than showing a zero that would read as an empty trash.
-                Text("Unavailable")
-                    .font(SummaryFont.value)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(formatBytes(trashStore.trashBytes))
-                    .font(SummaryFont.value)
-                    .foregroundStyle(trashStore.trashBytes > 0 ? .primary : .secondary)
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
+                Text("in Trash").foregroundStyle(.secondary)
             }
+            .accessibilityLabel("Measuring the Trash")
+        case .unreadable:
+            // No Full Disk Access: the size is genuinely unknown, and a zero would
+            // read as an empty Trash.
+            Text("Trash size unavailable").foregroundStyle(.secondary)
+        case .readable where trashStore.trashBytes <= 0:
+            Text("Trash is empty").foregroundStyle(.secondary)
+        case .readable:
+            (Text(formatBytes(trashStore.trashBytes)).foregroundColor(.primary).fontWeight(.semibold)
+                + Text(" in Trash").foregroundColor(.secondary))
+                .monospacedDigit()
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
         }
-        .padding(.vertical, 5)
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -981,110 +957,6 @@ struct SidebarSummaryView: View {
                 .tint(.secondary)
         }
     }
-
-    /// Used space and free space as two segments of one volume, drawn from the same
-    /// free/total figures as the legend. The fills are muted greys rather than an accent,
-    /// so the bar stays observational — not progress toward a goal. The lighter used block
-    /// is inset over the darker full-width track so the two segments read as one meter
-    /// rather than two capsules butted together.
-    private var storageBar: some View {
-        GeometryReader { geo in
-            // One bar split into used and free. Only the outer ends are rounded; the inner
-            // edges where they meet are square, so a uniform card-coloured gap divides them
-            // without tapering.
-            let gap: CGFloat = 3
-            let r = Self.storageBarRadius
-            let usable = max(0, geo.size.width - gap)
-            let usedWidth = usable * diskUsageFraction
-            HStack(spacing: gap) {
-                UnevenRoundedRectangle(
-                    topLeadingRadius: r,
-                    bottomLeadingRadius: r,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0,
-                    style: .continuous
-                )
-                .fill(AppColors.storageBarUsed)
-                .frame(width: usedWidth)
-
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 0,
-                    bottomLeadingRadius: 0,
-                    bottomTrailingRadius: r,
-                    topTrailingRadius: r,
-                    style: .continuous
-                )
-                .fill(AppColors.storageBarFree)
-            }
-        }
-        .frame(height: 10)
-        .accessibilityElement()
-        .accessibilityLabel(diskUsageAccessibilityLabel)
-    }
-
-    /// Half the bar height, so the outer ends read as a full capsule/pill.
-    private static let storageBarRadius: CGFloat = 5
-
-    private var storageLegend: some View {
-        HStack(spacing: 0) {
-            storageLegendItem(
-                color: AppColors.storageBarUsed,
-                amount: formatStorageBytes(usedDiskBytes),
-                suffix: "used",
-                isProminent: true
-            )
-
-            Spacer(minLength: 8)
-
-            storageLegendItem(
-                color: AppColors.storageBarFree,
-                amount: formatStorageBytes(diskStore.freeDiskBytes),
-                suffix: "free",
-                isProminent: false
-            )
-        }
-    }
-
-    private func storageLegendItem(
-        color: Color,
-        amount: String,
-        suffix: String,
-        isProminent: Bool
-    ) -> some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 6, height: 6)
-
-            HStack(spacing: 0) {
-                Text(amount)
-                    .monospacedDigit()
-                    .tracking(-0.4)
-
-                Text(" \(suffix)")
-            }
-            .font(SummaryFont.diskCaption)
-            .foregroundStyle(isProminent ? .secondary : .tertiary)
-            .lineLimit(1)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var usedDiskBytes: Int64 {
-        max(0, diskStore.totalDiskBytes - diskStore.freeDiskBytes)
-    }
-
-    private var diskUsageFraction: CGFloat {
-        let total = diskStore.totalDiskBytes
-        guard total > 0 else { return 0 }
-        return min(1, CGFloat(Double(usedDiskBytes) / Double(total)))
-    }
-
-    private var diskUsageAccessibilityLabel: String {
-        "\(formatStorageBytes(usedDiskBytes)) used of \(formatStorageBytes(diskStore.totalDiskBytes))"
-    }
-
-
 }
 
 #Preview {
