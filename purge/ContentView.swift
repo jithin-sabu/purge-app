@@ -377,7 +377,10 @@ struct ContentView: View {
         case .overview, .settings, .about: return .none
         }
         let phases = categories.map(store.overviewPhase(for:))
-        if phases.contains(.scanning) {
+        // The Uninstaller covers two scans. Once one is redone and the other still
+        // waits, the tab is mid-rescan, not finished with half a figure.
+        let isMidRescan = phases.contains(.waiting) && phases.contains { $0 != .waiting }
+        if phases.contains(.scanning) || isMidRescan {
             return .progress
         }
         let breakdown = store.overviewBreakdown(
@@ -386,7 +389,7 @@ struct ContentView: View {
         )
         let bytes = categories.reduce(Int64(0)) { $0 + breakdown.bytes(for: $1) }
         guard bytes > 0 else { return .none }
-        let isDimmed = phases.contains(.waiting) || categories.contains(where: store.isShowingRecordedFigure(for:))
+        let isDimmed = categories.contains(where: store.isShowingRecordedFigure(for:))
         return .value(formatStorageBytes(bytes), isDimmed: isDimmed)
     }
 

@@ -75,13 +75,14 @@ extension PurgeStore {
     func isShowingRecordedFigure(for category: OverviewCategory) -> Bool {
         guard scanRecords[category] != nil else { return false }
         switch overviewPhase(for: category) {
-        case .waiting, .notScanned: return true
-        case .needsAccess, .scanning, .ready: return false
+        case .notScanned: return true
+        case .needsAccess, .waiting, .scanning, .ready: return false
         }
     }
 
-    /// A scan in progress shows what it has found so far. A category still waiting
-    /// for its turn, or not scanned this session, shows its saved figure.
+    /// A scan in progress shows what it has found so far. A category waiting for its
+    /// turn shows nothing: it is about to be measured again, so the old figure would
+    /// only be replaced. One not scanned this session shows its saved figure.
     private func overviewSource(
         for category: OverviewCategory,
         phase: OverviewCategoryPhase
@@ -93,8 +94,7 @@ extension PurgeStore {
         case .scanning, .ready:
             return .live(overviewItems(for: category))
         case .waiting:
-            if let record { return .recorded(record.bytes) }
-            return hasResults(for: category) ? .live(overviewItems(for: category)) : .none
+            return .none
         case .notScanned:
             if let record { return .recorded(record.bytes) }
             return .none

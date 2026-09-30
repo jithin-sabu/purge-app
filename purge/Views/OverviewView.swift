@@ -256,7 +256,7 @@ private struct OverviewCategoryRow: View {
     }
 
     private var scanTimeHelp: String {
-        guard phase != .scanning, let record else { return "" }
+        guard phase == .ready || phase == .notScanned, let record else { return "" }
         return "Scanned \(compactAgoText(from: record.completedAt, to: now))"
     }
 
@@ -289,8 +289,8 @@ private struct OverviewCategoryRow: View {
         case .notScanned where !isRecorded:
             Button("Scan") { store.requestScan(category.step) }
                 .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
-        case .waiting where !isRecorded && bytes == 0:
-            // Nothing found yet and no earlier figure: a "0 bytes" here would read as a result.
+        case .waiting:
+            // About to be measured again: no figure, not even the last one, until it scans.
             EmptyView()
         default:
             HStack(spacing: AppStyle.Spacing.small) {
@@ -301,7 +301,7 @@ private struct OverviewCategoryRow: View {
                 Text(formatStorageBytes(bytes))
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
-                    .foregroundStyle(isRecorded || phase == .waiting ? .secondary : .primary)
+                    .foregroundStyle(isRecorded ? .secondary : .primary)
                     .frame(minWidth: 64, alignment: .trailing)
             }
         }

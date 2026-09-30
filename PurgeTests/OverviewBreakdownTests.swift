@@ -179,6 +179,16 @@ struct OverviewPresentationTests {
     }
 
     @MainActor
+    @Test func aCategoryQueuedForARescanShowsNoFigure() {
+        let store = PurgeStore()
+        store.scanQueue.enqueue([.cachesAndDevTools])
+        #expect(store.overviewPhase(for: .appCaches) == .waiting)
+        #expect(!store.isShowingRecordedFigure(for: .appCaches))
+        let breakdown = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
+        #expect(breakdown.bytes(for: .appCaches) == 0)
+    }
+
+    @MainActor
     @Test func devToolsWaitsWhileAppCachesScans() {
         let store = PurgeStore()
         store.markCacheScanStarting()
