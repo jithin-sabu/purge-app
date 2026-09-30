@@ -1,0 +1,103 @@
+name: Screenshot latest
+
+on:
+  push:
+    branches:
+      - cursor/latest-screenshot-2d0e
+
+jobs:
+  shot:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build unsigned Release
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project purge.xcodeproj \
+            -scheme purge \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_HARDENED_RUNTIME=NO
+
+      - name: Launch 1.7.0 and capture the window
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/Purge.app"
+          test -d "$APP"
+          codesign --force --deep --sign - "$APP"
+          xattr -cr "$APP" || true
+
+          # Skip onboarding so the window opens on Overview, the 1.7 home tab.
+          defaults write io.getpurge.app hasCompletedOnboarding -bool true
+          mkdir -p "$HOME/Library/Safari" "$HOME/Library/Containers" "$HOME/Library/Caches"
+
+          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' || true
+
+          open "$APP"
+
+          # Wait until the window exists, then give the launch scan time to settle.
+          for _ in $(seq 1 20); do
+            sleep 2
+            osascript -e 'tell application "Purge" to activate' || true
+          done
+          sleep 25
+
+          swift - "$GITHUB_WORKSPACE" <<'SWIFT'
+          import CoreGraphics
+          import Foundation
+
+          let outDir = CommandLine.arguments[1]
+          let info = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+          var bestID: CGWindowID?
+          var bestArea: CGFloat = 0
+          for window in info {
+              let owner = window[kCGWindowOwnerName as String] as? String ?? ""
+              let name = window[kCGWindowName as String] as? String ?? ""
+              let layer = window[kCGWindowLayer as String] as? Int ?? 0
+              let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
+              let width = bounds["Width"] ?? 0
+              let height = bounds["Height"] ?? 0
+              let id = window[kCGWindowNumber as String] as? CGWindowID ?? 0
+              print("window owner=\(owner) name=\(name) id=\(id) layer=\(layer) \(width)x\(height)")
+              let area = width * height
+              if owner.lowercased() == "purge", layer == 0, area > bestArea {
+                  bestArea = area
+                  bestID = id
+              }
+          }
+
+          func capture(_ args: [String]) throws {
+              let task = Process()
+              task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+              task.arguments = args
+              try task.run()
+              task.waitUntilExit()
+              if task.terminationStatus != 0 {
+                  fputs("screencapture exit \(task.terminationStatus)\n", stderr)
+                  exit(task.terminationStatus)
+              }
+          }
+
+          if let bestID {
+              print("capturing window \(bestID)")
+              try capture(["-x", "-l", String(bestID), "\(outDir)/latest-window.png"])
+          }
+          try capture(["-x", "\(outDir)/latest-desktop.png"])
+          SWIFT
+
+          ls -lh "$GITHUB_WORKSPACE"/*.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: latest-screenshots
+          path: |
+            latest-window.png
+            latest-desktop.png
+          if-no-files-found: error
