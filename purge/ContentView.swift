@@ -917,7 +917,7 @@ struct SidebarSummaryView: View {
             storageLegend
 
             inTrashRow
-                .padding(.top, 6)
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppStyle.Spacing.small)
@@ -925,33 +925,35 @@ struct SidebarSummaryView: View {
     }
 
     /// Bytes already in the trash still take up the volume. Emptying it is the user's
-    /// call in Finder; this line only says how much is there.
+    /// call in Finder; this line only says how much is there. Styled like the faded
+    /// "free" figure above it, with the word "trash" carrying the meaning instead of an
+    /// icon, and inset to line up with the legend text rather than its dots.
     private var inTrashRow: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "trash")
-                .font(.system(size: 9, weight: .semibold))
-                .frame(width: 6)
-            Text("In Trash")
-            Spacer(minLength: 8)
-            if trashStore.access == .measuring {
-                trashLoadingIndicator
-                    .accessibilityLabel("Measuring")
-            } else if trashStore.access == .unreadable {
+        HStack(spacing: 0) {
+            switch trashStore.access {
+            case .measuring:
+                Text("Measuring trash…")
+            case .unreadable:
                 // Without Full Disk Access the size is unknown; a zero would read as empty.
-                Text("Unavailable")
-            } else {
+                Text("Trash size unavailable")
+            case .readable:
                 Text(formatStorageBytes(trashStore.trashBytes))
                     .monospacedDigit()
                     .tracking(-0.4)
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
+                Text(" in trash")
             }
         }
         .font(SummaryFont.diskCaption)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.tertiary)
         .lineLimit(1)
+        .padding(.leading, Self.legendTextInset)
         .accessibilityElement(children: .combine)
     }
+
+    /// Legend dot (6) plus its spacing (5), so a dotless line starts where the legend text does.
+    private static let legendTextInset: CGFloat = 11
 
     /// Used space and free space as two segments of one volume, drawn from the same
     /// free/total figures as the legend. The fills are muted greys rather than an accent,
@@ -1055,21 +1057,6 @@ struct SidebarSummaryView: View {
         "\(formatStorageBytes(usedDiskBytes)) used of \(formatStorageBytes(diskStore.totalDiskBytes))"
     }
 
-    @ViewBuilder
-    private var trashLoadingIndicator: some View {
-        if reduceMotion {
-            Image(systemName: "clock")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 16, height: 16)
-        } else {
-            ProgressView()
-                .controlSize(.small)
-                .scaleEffect(0.62)
-                .frame(width: 16, height: 16)
-                .tint(.secondary)
-        }
-    }
 
 }
 
