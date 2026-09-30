@@ -36,6 +36,17 @@ extension PurgeStore {
         return hasResults(for: category) ? .ready : .notScanned
     }
 
+    /// The safe-to-clean share of App Caches or Dev Tools. Nil for the categories
+    /// Purge never cleans on its own.
+    func safeCleanupBytes(for category: OverviewCategory) -> Int64? {
+        let summary = safeCleanupSummary
+        switch category {
+        case .appCaches: return summary.appCacheBytes
+        case .devTools: return summary.devToolBytes + summary.projectArtifactBytes
+        case .largeFiles, .apps, .leftovers: return nil
+        }
+    }
+
     /// The whole disk split into Purge's categories and everything else.
     func overviewBreakdown(totalBytes: Int64, freeBytes: Int64) -> OverviewBreakdown {
         let phases = OverviewCategory.allCases.map(overviewPhase(for:))

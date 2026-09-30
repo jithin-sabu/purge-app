@@ -7,6 +7,9 @@ nonisolated struct ScanRecord: Codable, Equatable, Sendable {
     var completedAt: Date
     var bytes: Int64
     var count: Int
+    /// App Caches and Dev Tools only: how much of it is safe to clean, the one
+    /// figure their Overview rows show. Absent in records saved before it existed.
+    var safeBytes: Int64? = nil
 }
 
 nonisolated struct ScanRecordStore {

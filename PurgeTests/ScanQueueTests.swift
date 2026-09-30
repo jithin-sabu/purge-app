@@ -188,6 +188,22 @@ struct ScanRecordStoreTests {
         #expect(all[.leftovers] == record)
     }
 
+    @Test func aRecordSavedBeforeSafeBytesStillReads() {
+        let defaults = makeDefaults()
+        let old = #"{"completedAt":800000000,"bytes":4000000000,"count":58}"#
+        defaults.set(Data(old.utf8), forKey: ScanRecordStore.key(for: .appCaches))
+        let record = ScanRecordStore(defaults: defaults).record(for: .appCaches)
+        #expect(record?.count == 58)
+        #expect(record?.safeBytes == nil)
+    }
+
+    @Test func safeBytesReadBack() {
+        let store = ScanRecordStore(defaults: makeDefaults())
+        let record = ScanRecord(completedAt: Date(timeIntervalSince1970: 1_800_000_000), bytes: 4, count: 2, safeBytes: 3)
+        store.save(record, for: .devTools)
+        #expect(store.record(for: .devTools)?.safeBytes == 3)
+    }
+
     @Test func aCorruptValueReadsAsNoRecord() {
         let defaults = makeDefaults()
         defaults.set(Data("not json".utf8), forKey: ScanRecordStore.key(for: .apps))

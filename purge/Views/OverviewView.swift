@@ -193,7 +193,7 @@ private struct OverviewCategoryRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            OverviewCategoryIcon(category: category)
+            OverviewColorEdge(color: OverviewCategoryStyle.color(category))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -216,6 +216,9 @@ private struct OverviewCategoryRow: View {
         .padding(.vertical, 11)
         .background(isHovering ? AppColors.bgElevated.opacity(0.5) : .clear)
         .contentShape(Rectangle())
+        // When the figure was measured. Only on hover: App Caches and Dev Tools rescan
+        // every launch, so a time on every row would mostly say "just now".
+        .help(scanTimeHelp)
         // No chevron: the hover fill and the pointing hand say the row opens its tab.
         .onHover(perform: setHovering)
         .onDisappear { setHovering(false) }
@@ -235,6 +238,11 @@ private struct OverviewCategoryRow: View {
         } else {
             NSCursor.pop()
         }
+    }
+
+    private var scanTimeHelp: String {
+        guard phase != .scanning, let record else { return "" }
+        return "Scanned \(compactAgoText(from: record.completedAt, to: now))"
     }
 
     private var showsFigure: Bool {
@@ -294,13 +302,10 @@ private struct OverviewCategoryRow: View {
             }
             return "Scanning…"
         case .waiting:
-            if let record, isRecorded {
-                return "Up next · last scan \(compactAgoText(from: record.completedAt, to: now))"
-            }
             return "Up next"
         case .notScanned:
             if let record, isRecorded {
-                return "\(recordedDetail(record)) · scanned \(compactAgoText(from: record.completedAt, to: now))"
+                return recordedDetail(record)
             }
             return "Not scanned yet"
         case .ready:
@@ -308,43 +313,49 @@ private struct OverviewCategoryRow: View {
         }
     }
 
+    /// One fact per row, the one worth acting on. Item counts live on each tab.
     private var liveDetail: String {
         let totals = store.totals(for: category)
         switch category {
-        case .appCaches:
-            return cacheDetail(count: totals.count, safeBytes: store.safeCleanupSummary.appCacheBytes)
-        case .devTools:
-            let summary = store.safeCleanupSummary
-            return cacheDetail(count: totals.count, safeBytes: summary.devToolBytes + summary.projectArtifactBytes)
+        case .appCaches, .devTools:
+            return cacheDetail(safeBytes: store.safeCleanupBytes(for: category) ?? 0)
         case .largeFiles:
-            let size = LargeFileSizeThreshold.current()
-            let age = LargeFileAgeThreshold.current()
-            let base = "\(totals.count) \(totals.count == 1 ? "file" : "files") larger than \(size.label)"
-            return age == .anyTime ? base : "\(base), last used \(age.label.lowercased())"
+            return largeFilesDetail(count: totals.count)
         case .apps:
             let unused = store.installedApps.filter { app in
                 guard let opened = app.lastOpened else { return false }
                 return now.timeIntervalSince(opened) > 90 * 24 * 60 * 60
             }.count
-            let base = "\(totals.count) \(totals.count == 1 ? "app" : "apps") and their files"
-            return unused > 0 ? "\(base), \(unused) not opened in 90 days" : base
+            return unused > 0
+                ? "\(unused) not opened in 90 days"
+                : "\(totals.count) \(totals.count == 1 ? "app" : "apps")"
         case .leftovers:
-            guard totals.count > 0 else { return "Nothing left behind by deleted apps" }
-            return "\(totals.count) \(totals.count == 1 ? "item" : "items") left by apps you deleted"
+            guard totals.count > 0 else { return "Nothing left behind" }
+            return "\(totals.count) \(totals.count == 1 ? "item" : "items")"
         }
     }
 
-    private func cacheDetail(count: Int, safeBytes: Int64) -> String {
-        let base = "\(count) \(count == 1 ? "item" : "items")"
-        return safeBytes > 0 ? "\(base), \(formatBytes(safeBytes)) safe to clean" : base
+    private func largeFilesDetail(count: Int) -> String {
+        "\(count) \(count == 1 ? "file" : "files") over \(LargeFileSizeThreshold.current().label)"
     }
 
+    private func cacheDetail(safeBytes: Int64) -> String {
+        safeBytes > 0 ? "\(formatBytes(safeBytes)) safe to clean" : "Nothing safe to clean"
+    }
+
+    /// The same fact as the live line, where the record holds it.
     private func recordedDetail(_ record: ScanRecord) -> String {
         switch category {
-        case .appCaches, .devTools, .leftovers:
+        case .appCaches, .devTools:
+            if let safeBytes = record.safeBytes {
+                return cacheDetail(safeBytes: safeBytes)
+            }
+            return "\(record.count) \(record.count == 1 ? "item" : "items")"
+        case .leftovers:
+            guard record.count > 0 else { return "Nothing left behind" }
             return "\(record.count) \(record.count == 1 ? "item" : "items")"
         case .largeFiles:
-            return "\(record.count) \(record.count == 1 ? "file" : "files")"
+            return largeFilesDetail(count: record.count)
         case .apps:
             return "\(record.count) \(record.count == 1 ? "app" : "apps")"
         }
@@ -372,18 +383,15 @@ private struct OverviewCategoryRow: View {
     }
 }
 
-private struct OverviewCategoryIcon: View {
-    let category: OverviewCategory
+/// A short upright stripe in the category's bar color, tying the row to its segment.
+private struct OverviewColorEdge: View {
+    let color: Color
 
     var body: some View {
-        Image(systemName: OverviewCategoryStyle.symbol(category))
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(OverviewCategoryStyle.color(category))
-            .frame(width: 30, height: 30)
-            .background(
-                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                    .fill(AppColors.bgElevated)
-            )
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(color)
+            // As tall as the name and the line under it.
+            .frame(width: 4, height: 30)
             .accessibilityHidden(true)
     }
 }
@@ -399,10 +407,7 @@ private struct OverviewPlainRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            Circle()
-                .fill(color)
-                .frame(width: 10, height: 10)
-                .frame(width: 30)
+            OverviewColorEdge(color: color)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
@@ -460,16 +465,6 @@ enum OverviewCategoryStyle {
         // counts only the apps themselves, and this total includes their files.
         case .apps: return "Installed apps"
         case .leftovers: return "Leftovers from deleted apps"
-        }
-    }
-
-    static func symbol(_ category: OverviewCategory) -> String {
-        switch category {
-        case .appCaches: return "internaldrive"
-        case .devTools: return "hammer"
-        case .largeFiles: return "tray.full"
-        case .apps: return "app"
-        case .leftovers: return "shippingbox"
         }
     }
 

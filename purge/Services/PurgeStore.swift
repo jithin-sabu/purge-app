@@ -2798,7 +2798,10 @@ final class PurgeStore: ObservableObject {
     private func stampScanRecords(_ categories: [OverviewCategory], at date: Date = Date()) {
         for category in categories {
             let totals = totals(for: category)
-            saveScanRecord(ScanRecord(completedAt: date, bytes: totals.bytes, count: totals.count), for: category)
+            saveScanRecord(
+                ScanRecord(completedAt: date, bytes: totals.bytes, count: totals.count, safeBytes: safeCleanupBytes(for: category)),
+                for: category
+            )
         }
     }
 
@@ -2816,9 +2819,12 @@ final class PurgeStore: ObservableObject {
             for category in OverviewCategory.allCases where self.isSettled(category) {
                 guard var record = self.scanRecords[category] else { continue }
                 let totals = self.totals(for: category)
-                guard record.bytes != totals.bytes || record.count != totals.count else { continue }
+                let safeBytes = self.safeCleanupBytes(for: category)
+                guard record.bytes != totals.bytes || record.count != totals.count || record.safeBytes != safeBytes
+                else { continue }
                 record.bytes = totals.bytes
                 record.count = totals.count
+                record.safeBytes = safeBytes
                 self.saveScanRecord(record, for: category)
             }
         }
