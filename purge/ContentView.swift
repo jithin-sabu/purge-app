@@ -64,10 +64,10 @@ struct ContentView: View {
             guard isActive else { return }
             Task { await runStartupMaintenance() }
         }
-        // Access granted while Purge is open: queue the scans it unlocks, as a launch would.
+        // Access granted while Purge is open: rescan with it, and the Overview fills in.
         .onChange(of: store.hasFullDiskAccess) { granted in
             guard granted, isLifecycleActive, !isRunningPreview, !isRunningAsTestHost else { return }
-            store.startLaunchScans()
+            store.scanAfterAccessGranted()
         }
         .sheet(isPresented: $store.isLookDeeperPresented) {
             LookDeeperSheet()
@@ -238,9 +238,10 @@ struct ContentView: View {
     private func scanIfNeeded() async {
         guard isLifecycleActive, !isRunningPreview else { return }
         // A grant that came with macOS's "Quit & Reopen" is only visible here, on
-        // the first launch after it. Its reveal replaces the ordinary launch scan.
+        // the first launch after it. Land on the Overview so the unlocked figures
+        // fill in where the user can see them.
         if store.consumeFullDiskAccessGrant() {
-            await store.revealFullDiskAccessGrant()
+            store.selectedTab = .overview
         }
         // One step at a time: App Caches and Dev Tools, then Large Files, apps and
         // leftovers. A scan the menu bar already started is waited on, not restarted,
@@ -884,9 +885,7 @@ struct SidebarSummaryView: View {
     var body: some View {
         VStack(spacing: AppStyle.Spacing.small) {
             DeletedAppsWatcherNotice()
-            if let findings = store.accessGrantFindings {
-                AccessGrantedNotice(findings: findings)
-            } else if !store.hasFullDiskAccess {
+            if !store.hasFullDiskAccess {
                 LimitedScanNotice()
             }
             storageCard

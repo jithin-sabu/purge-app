@@ -83,14 +83,12 @@ struct AppRootView: View {
     }
   }
 
-  /// A grant made in System Settings while the look-deeper screen is closed still
-  /// gets a rescan and a word about what turned up. The screen reveals its own
-  /// grants and claims them first, and onboarding has its own step for this.
+  /// Records the new value so a relaunch does not count this grant again. The main
+  /// window rescans on its own (`scanAfterAccessGranted`), and onboarding has its
+  /// own step for showing what access found.
   private func handleAccessChange() {
     guard !TestHost.isActive() else { return }
-    let isNewGrant = store.consumeFullDiskAccessGrant()
-    guard isNewGrant, hasCompletedOnboarding, !store.isLookDeeperPresented else { return }
-    Task { await store.revealFullDiskAccessGrant() }
+    store.consumeFullDiskAccessGrant()
   }
 
   private func revealMainAppAfterMount() {

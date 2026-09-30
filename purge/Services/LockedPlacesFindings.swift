@@ -60,18 +60,11 @@ extension PurgeStore {
     /// True exactly once per grant: access is on now, and the last value Purge
     /// recorded was off. Persisted, so a grant that came with macOS's "Quit &
     /// Reopen" still counts on the next launch. Every caller records the current
-    /// value, which is how the look-deeper screen claims a grant it already showed.
+    /// value, which is how the look-deeper screen claims a grant it already handled.
     @discardableResult
     func consumeFullDiskAccessGrant(userDefaults: UserDefaults = .standard) -> Bool {
         let previous = userDefaults.object(forKey: Self.lastKnownFullDiskAccessKey) as? Bool
         userDefaults.set(hasFullDiskAccess, forKey: Self.lastKnownFullDiskAccessKey)
         return previous == false && hasFullDiskAccess
-    }
-
-    /// For a grant made while the look-deeper screen was not open: rescan, then let
-    /// the sidebar say what turned up.
-    func revealFullDiskAccessGrant() async {
-        let findings = await scanLockedPlaces()
-        accessGrantFindings = findings
     }
 }

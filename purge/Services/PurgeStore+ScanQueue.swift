@@ -27,6 +27,14 @@ extension PurgeStore {
         startScanQueueIfIdle()
     }
 
+    /// Full Disk Access just landed. App Caches and Dev Tools already have results,
+    /// but limited ones, so they rescan first; then the steps access unlocks queue
+    /// as they would at launch.
+    func scanAfterAccessGranted() {
+        requestScan(.cachesAndDevTools)
+        startLaunchScans()
+    }
+
     /// A tab's own Scan button: rescan these next, ahead of anything waiting.
     func requestScan(_ steps: ScanStep...) {
         let allowed = steps.filter { !$0.needsFullDiskAccess || hasFullDiskAccess }

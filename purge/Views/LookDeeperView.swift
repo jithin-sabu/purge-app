@@ -7,8 +7,9 @@ import SwiftUI
 /// a real way out. Onboarding shows it after the first clean; the main window
 /// shows it as a sheet from the sidebar notice and the locked tabs.
 ///
-/// When access lands while it is on screen, the same view runs the deeper scan
-/// and shows what the permission found, right where the user said yes.
+/// When access lands during onboarding, the same view runs the deeper scan and
+/// shows what the permission found, right where the user said yes. As a sheet it
+/// just closes onto the Overview, whose figures fill in as the unlocked scans run.
 struct LookDeeperView: View {
   enum Context {
     /// Last onboarding step. `didClean` is false when the user went to review
@@ -21,7 +22,8 @@ struct LookDeeperView: View {
   let context: Context
   /// "Not now". Onboarding finishes; the sheet closes.
   let onNotNow: () -> Void
-  /// After the reveal, when the user moves on.
+  /// After the reveal in onboarding, when the user moves on. The sheet calls it as
+  /// soon as access lands.
   let onFinished: () -> Void
   /// When "Let Purge in" opens System Settings.
   var onOpenSettings: () -> Void = {}
@@ -240,7 +242,7 @@ struct LookDeeperView: View {
         store.applyFullDiskAccess(granted)
       }
       if granted {
-        await revealDeeperScan()
+        await handleGrant()
         return
       }
       do {
@@ -251,9 +253,16 @@ struct LookDeeperView: View {
     }
   }
 
-  private func revealDeeperScan() async {
-    // Claim the grant so the sidebar does not announce it a second time.
+  private func handleGrant() async {
+    // Claim the grant so a relaunch does not treat it as new.
     store.consumeFullDiskAccessGrant()
+    guard case .onboarding = context else {
+      // The main window already queues the scans access unlocks, and the Overview
+      // shows them landing. A second screen saying the same thing is one too many.
+      store.selectedTab = .overview
+      onFinished()
+      return
+    }
     phase = .scanning
     let started = ContinuousClock.now
     let findings = await store.scanLockedPlaces()

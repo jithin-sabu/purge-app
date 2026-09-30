@@ -129,9 +129,9 @@ final class RemovedAppMonitor: ObservableObject {
             .filter { $0 }
             .sink { [weak self] _ in onNextRunloopTurn { self?.processQueue() } }
             .store(in: &cancellables)
-        // Access usually lands while the look-deeper sheet is up, which then shows
-        // what it found. The review waits for that sheet to close so there is only
-        // ever one on screen. Closing it without access leaves the queue alone, or
+        // Access usually lands while the look-deeper sheet is up, which closes when
+        // it does. The review waits for that sheet to close so there is only ever
+        // one on screen. Closing it without access leaves the queue alone, or
         // the sheet would come straight back.
         store.$isLookDeeperPresented
             .removeDuplicates()
