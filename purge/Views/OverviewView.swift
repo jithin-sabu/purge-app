@@ -216,11 +216,25 @@ private struct OverviewCategoryRow: View {
         .padding(.vertical, 11)
         .background(isHovering ? AppColors.bgElevated.opacity(0.5) : .clear)
         .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
+        // No chevron: the hover fill and the pointing hand say the row opens its tab.
+        .onHover(perform: setHovering)
+        .onDisappear { setHovering(false) }
         .onTapGesture { open() }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { open() }
+    }
+
+    /// Pushes the pointing hand once per hover and always pops it, so a row that
+    /// goes away under the pointer cannot leave the cursor stuck.
+    private func setHovering(_ hovering: Bool) {
+        guard hovering != isHovering else { return }
+        isHovering = hovering
+        if hovering {
+            NSCursor.pointingHand.push()
+        } else {
+            NSCursor.pop()
+        }
     }
 
     private var showsFigure: Bool {
@@ -266,9 +280,6 @@ private struct OverviewCategoryRow: View {
                     .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                     .foregroundStyle(isRecorded || phase == .waiting ? .secondary : .primary)
                     .frame(minWidth: 64, alignment: .trailing)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
             }
         }
     }
@@ -409,10 +420,6 @@ private struct OverviewPlainRow: View {
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                 .frame(minWidth: 64, alignment: .trailing)
-            // Keeps sizes aligned with the chevron column in the card above.
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
-                .hidden()
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
