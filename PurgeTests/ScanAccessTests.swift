@@ -21,6 +21,22 @@ struct ScanAccessTests {
         }
     }
 
+    /// Sizing these without Full Disk Access made macOS ask for "Media & Apple Music".
+    @Test
+    func appleMediaCachesAreProtected() {
+        for relative in [
+            "Library/Caches/com.apple.Music",
+            "Library/Caches/com.apple.Music/SubscriptionPlayCache",
+            "Library/Caches/com.apple.iTunes",
+            "Library/Caches/com.apple.TV/Artwork"
+        ] {
+            #expect(ProtectedLocations.contains(home.appendingPathComponent(relative), home: home), "\(relative)")
+            #expect(!ProtectedLocations.isReadable(home.appendingPathComponent(relative), access: .limited, home: home), "\(relative)")
+        }
+        // A sibling that only shares the prefix is still scanned.
+        #expect(!ProtectedLocations.contains(home.appendingPathComponent("Library/Caches/com.apple.MusicKit"), home: home))
+    }
+
     @Test
     func cachesAndDotFoldersAreNotProtected() {
         for relative in [

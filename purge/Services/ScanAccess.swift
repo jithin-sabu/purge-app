@@ -24,8 +24,9 @@ nonisolated enum ScanAccess: Sendable, Equatable {
 /// granting access found: anything under these roots was out of reach before.
 nonisolated enum ProtectedLocations {
     /// Home-relative roots. The first three prompt per folder, the containers
-    /// and iCloud roots prompt or hang on file providers, and the rest are
-    /// refused silently but still count as locked.
+    /// and iCloud roots prompt or hang on file providers, Safari, Mail and
+    /// Messages are refused silently but still count as locked, and the media
+    /// caches prompt for "Media & Apple Music".
     static let homeRelativeRoots: [String] = [
         "Desktop",
         "Documents",
@@ -37,6 +38,25 @@ nonisolated enum ProtectedLocations {
         "Library/Safari",
         "Library/Mail",
         "Library/Messages"
+    ] + mediaCacheRoots
+
+    /// Apple's music and TV caches. Sizing `~/Library/Caches` without Full Disk
+    /// Access made macOS ask for "Media & Apple Music" on Purge's behalf, and the
+    /// scan sat in `open()` until someone answered (tccd's log, 2026-09-30:
+    /// kTCCServiceMediaLibrary from `du` batches holding `com.apple.Music` and
+    /// `com.apple.iTunes`/`com.apple.TV`). The rest are the same media stack and are
+    /// left out on the same grounds: a limited scan loses a few small caches, a full
+    /// scan still covers them. If another Caches folder ever prompts, find its
+    /// service with `/usr/bin/log show --predicate 'process == "tccd"'` and add it here.
+    static let mediaCacheRoots: [String] = [
+        "Library/Caches/com.apple.Music",
+        "Library/Caches/com.apple.iTunes",
+        "Library/Caches/com.apple.TV",
+        "Library/Caches/com.apple.podcasts",
+        "Library/Caches/com.apple.watchlistd",
+        "Library/Caches/com.apple.AMPLibraryAgent",
+        "Library/Caches/com.apple.AMPArtworkAgent",
+        "Library/Caches/com.apple.AMPDevicesAgent"
     ]
 
     static func rootPaths(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [String] {

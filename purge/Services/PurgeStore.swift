@@ -1621,7 +1621,8 @@ final class PurgeStore: ObservableObject {
     func scanInstalledAppsIfNeeded() async {
         refreshPermission()
         guard hasFullDiskAccess else { return }
-        guard !isScanningInstalledApps, !hasCompletedInstalledAppsScan else { return }
+        // A list whose measuring was stopped part way is not finished either.
+        guard !isScanningInstalledApps, !(hasCompletedInstalledAppsScan && hasFinishedMeasuringApps) else { return }
         await scanInstalledApps()
     }
 
@@ -1747,6 +1748,14 @@ final class PurgeStore: ObservableObject {
         let ids = Set(installedApps.map(\.id))
         guard !ids.isEmpty else { return false }
         return ids.isSubset(of: removableBytesByAppID.keys)
+    }
+
+    /// Every app found has its full total, or there were none to measure. Stop can
+    /// cut the measuring pass short, and a partial sum would read as the real figure
+    /// on the Overview and overwrite the saved one, so until this holds the apps do
+    /// not count as scanned and opening the tab measures them again.
+    var hasFinishedMeasuringApps: Bool {
+        installedApps.isEmpty || hasMeasuredAllRemovableTotals
     }
 
     // MARK: - Orphan leftovers (issue #26)
@@ -2875,6 +2884,7 @@ final class PurgeStore: ObservableObject {
             return hasCompletedLargeFileScan && !isScanningLargeFiles
         case .apps:
             return hasCompletedInstalledAppsScan && !isScanningInstalledApps && !isMeasuringRemovableTotals
+                && hasFinishedMeasuringApps
         case .leftovers:
             return hasCompletedOrphanScan && !isScanningOrphans
         }
@@ -2896,7 +2906,7 @@ final class PurgeStore: ObservableObject {
         case .largeFiles:
             return hasCompletedLargeFileScan
         case .apps:
-            return hasCompletedInstalledAppsScan
+            return hasCompletedInstalledAppsScan && hasFinishedMeasuringApps
         case .leftovers:
             return hasCompletedOrphanScan
         }
