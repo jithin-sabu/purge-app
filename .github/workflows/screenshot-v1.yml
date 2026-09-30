@@ -1,0 +1,112 @@
+name: Screenshot v1
+
+on:
+  push:
+    branches:
+      - cursor/v1-screenshot-2d0e
+
+jobs:
+  shot:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build unsigned Release
+        run: |
+          set -euo pipefail
+          cp Secrets.xcconfig.template Secrets.xcconfig
+          xcodebuild build \
+            -project purge.xcodeproj \
+            -scheme purge \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            ENABLE_HARDENED_RUNTIME=NO
+
+      - name: Launch v1.0 and capture the window
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/purge.app"
+          test -d "$APP"
+          codesign --force --deep --sign - "$APP"
+          xattr -cr "$APP" || true
+
+          # v1.0 opens onboarding until this flag is set, then shows the main window.
+          defaults write io.getpurge.app hasCompletedOnboarding -bool true
+          # The 1.0 access check only tries to list ~/Library/Safari.
+          mkdir -p "$HOME/Library/Safari" "$HOME/Library/Caches"
+
+          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' || true
+
+          open "$APP"
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 2
+            if pgrep -x purge >/dev/null; then
+              osascript -e 'tell application "purge" to activate' || true
+            fi
+          done
+
+          swift - "$GITHUB_WORKSPACE" <<'SWIFT'
+          import CoreGraphics
+          import Foundation
+
+          let outDir = CommandLine.arguments[1]
+          let info = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+          var bestID: CGWindowID?
+          var bestArea: CGFloat = 0
+          for window in info {
+              let owner = window[kCGWindowOwnerName as String] as? String ?? ""
+              let name = window[kCGWindowName as String] as? String ?? ""
+              let layer = window[kCGWindowLayer as String] as? Int ?? 0
+              let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
+              let width = bounds["Width"] ?? 0
+              let height = bounds["Height"] ?? 0
+              let id = window[kCGWindowNumber as String] as? CGWindowID ?? 0
+              print("window owner=\(owner) name=\(name) id=\(id) layer=\(layer) \(width)x\(height)")
+              let area = width * height
+              if owner.lowercased() == "purge", layer == 0, area > bestArea {
+                  bestArea = area
+                  bestID = id
+              }
+          }
+
+          let desktop = "\(outDir)/v1-desktop.png"
+          let task = Process()
+          task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+          if let bestID {
+              let windowShot = "\(outDir)/v1-window.png"
+              task.arguments = ["-x", "-l", String(bestID), windowShot]
+              print("capturing window \(bestID)")
+          } else {
+              task.arguments = ["-x", desktop]
+              print("no purge window; capturing desktop")
+          }
+          try task.run()
+          task.waitUntilExit()
+          if task.terminationStatus != 0 {
+              fputs("screencapture exit \(task.terminationStatus)\n", stderr)
+              exit(task.terminationStatus)
+          }
+
+          if bestID != nil {
+              let fallback = Process()
+              fallback.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+              fallback.arguments = ["-x", desktop]
+              try fallback.run()
+              fallback.waitUntilExit()
+          }
+          SWIFT
+
+          ls -lh "$GITHUB_WORKSPACE"/*.png || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v1-screenshots
+          path: |
+            v1-window.png
+            v1-desktop.png
+          if-no-files-found: error
