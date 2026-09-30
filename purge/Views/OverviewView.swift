@@ -105,7 +105,7 @@ struct OverviewView: View {
                 )
             }
         }
-        .background(cardBackground)
+        .overviewCard()
     }
 
     private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
@@ -127,16 +127,7 @@ struct OverviewView: View {
                 share: breakdown.share(of: breakdown.freeBytes)
             )
         }
-        .background(cardBackground)
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-            .fill(AppColors.bgCard)
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                    .strokeBorder(AppColors.borderSubtle)
-            }
+        .overviewCard()
     }
 
     // MARK: Footnotes
@@ -463,6 +454,21 @@ private struct OverviewPlainRow: View {
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Card
+
+private extension View {
+    /// The card surface. Rows are clipped to its rounded shape so a row's hover fill
+    /// stays inside the corners, and the border is drawn over them so the fill
+    /// can't cover it.
+    func overviewCard() -> some View {
+        let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+        return self
+            .background(shape.fill(AppColors.bgCard))
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(AppColors.borderSubtle))
     }
 }
 
