@@ -169,6 +169,15 @@ struct OverviewPresentationTests {
         #expect(abs(layout[2].x + layout[2].width - 402) < 0.001)
     }
 
+    @Test func hoveringTheBarFindsTheSegmentAndGapsGoToTheNearest() {
+        let layout = OverviewDiskBar.layout(for: [100, 0, 300], in: 402)
+        #expect(OverviewDiskBar.segmentIndex(at: 50, in: layout) == 0)
+        #expect(OverviewDiskBar.segmentIndex(at: 250, in: layout) == 2)
+        // In the 2 pt gap, a hair nearer the first segment. The empty one never wins.
+        #expect(OverviewDiskBar.segmentIndex(at: 100.5, in: layout) == 0)
+        #expect(OverviewDiskBar.segmentIndex(at: 101.5, in: layout) == 2)
+    }
+
     @MainActor
     @Test func devToolsWaitsWhileAppCachesScans() {
         let store = PurgeStore()

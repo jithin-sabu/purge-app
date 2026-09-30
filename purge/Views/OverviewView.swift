@@ -9,6 +9,8 @@ struct OverviewView: View {
     @EnvironmentObject private var trashStore: TrashStore
     @ObservedObject private var schedule = ScheduledCleaningPreferenceStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The bar segment or row under the pointer. Each side lights up the other.
+    @State private var highlight: OverviewHighlight?
 
     var body: some View {
         // Relative times ("Scanned 3h ago") move on their own.
@@ -27,7 +29,11 @@ struct OverviewView: View {
             if breakdown.totalBytes > 0 {
                 VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
                     diskSummary(breakdown)
-                    OverviewDiskBar(segments: barSegments(breakdown))
+                    OverviewDiskBar(
+                        segments: barSegments(breakdown),
+                        highlightedID: highlight?.id,
+                        onHover: { id in setHighlight(id, from: .bar) }
+                    )
                 }
             }
 
@@ -42,6 +48,22 @@ struct OverviewView: View {
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
         .padding(.bottom, AppStyle.Spacing.large)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: highlight)
+    }
+
+    /// `nil` clears the highlight only if this side set it, so leaving a row does not
+    /// undo a highlight the bar has since taken over, or the other way round.
+    private func setHighlight(_ id: String?, from source: OverviewHighlight.Source) {
+        if let id {
+            highlight = OverviewHighlight(id: id, source: source)
+        } else if highlight?.source == source {
+            highlight = nil
+        }
+    }
+
+    private func linkedRowState(_ id: String) -> OverviewLinkedRowState {
+        guard let highlight, highlight.source == .bar else { return .normal }
+        return highlight.id == id ? .emphasized : .dimmed
     }
 
     // MARK: Disk summary
@@ -75,13 +97,13 @@ struct OverviewView: View {
             )
         }
         segments.append(OverviewDiskBar.Segment(
-            id: "everythingElse",
+            id: OverviewDiskBar.everythingElseID,
             label: "Everything else",
             bytes: breakdown.everythingElseBytes,
             color: AppColors.overviewEverythingElse
         ))
         segments.append(OverviewDiskBar.Segment(
-            id: "free",
+            id: OverviewDiskBar.freeID,
             label: "Free",
             bytes: breakdown.freeBytes,
             color: AppColors.storageBarFree
@@ -101,7 +123,9 @@ struct OverviewView: View {
                     category: category,
                     bytes: breakdown.bytes(for: category),
                     share: breakdown.share(of: breakdown.bytes(for: category)),
-                    now: now
+                    now: now,
+                    linkedState: linkedRowState(category.rawValue),
+                    onHover: { hovering in setHighlight(hovering ? category.rawValue : nil, from: .row) }
                 )
             }
         }
@@ -116,7 +140,9 @@ struct OverviewView: View {
                 title: "Everything else",
                 detail: "macOS, your documents and photos, and files Purge doesn't sort",
                 bytes: breakdown.everythingElseBytes,
-                share: breakdown.share(of: breakdown.everythingElseBytes)
+                share: breakdown.share(of: breakdown.everythingElseBytes),
+                linkedState: linkedRowState(OverviewDiskBar.everythingElseID),
+                onHover: { hovering in setHighlight(hovering ? OverviewDiskBar.everythingElseID : nil, from: .row) }
             )
             InsetCardDivider()
             OverviewPlainRow(
@@ -124,7 +150,9 @@ struct OverviewView: View {
                 title: "Free",
                 detail: "Available for new files",
                 bytes: breakdown.freeBytes,
-                share: breakdown.share(of: breakdown.freeBytes)
+                share: breakdown.share(of: breakdown.freeBytes),
+                linkedState: linkedRowState(OverviewDiskBar.freeID),
+                onHover: { hovering in setHighlight(hovering ? OverviewDiskBar.freeID : nil, from: .row) }
             )
         }
         .overviewCard()
@@ -177,6 +205,8 @@ private struct OverviewCategoryRow: View {
     let bytes: Int64
     let share: Double
     let now: Date
+    let linkedState: OverviewLinkedRowState
+    let onHover: (Bool) -> Void
 
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -212,7 +242,8 @@ private struct OverviewCategoryRow: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: phase)
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
-        .background(isHovering ? AppColors.bgElevated.opacity(0.5) : .clear)
+        .overviewLinked(linkedState)
+        .background(isHovering || linkedState == .emphasized ? AppColors.bgElevated.opacity(0.5) : .clear)
         .contentShape(Rectangle())
         // When the figure was measured. Only on hover: App Caches and Dev Tools rescan
         // every launch, so a time on every row would mostly say "just now".
@@ -231,6 +262,7 @@ private struct OverviewCategoryRow: View {
     private func setHovering(_ hovering: Bool) {
         guard hovering != isHovering else { return }
         isHovering = hovering
+        onHover(hovering)
         if hovering {
             NSCursor.pointingHand.push()
         } else {
@@ -430,6 +462,8 @@ private struct OverviewPlainRow: View {
     let detail: String
     let bytes: Int64
     let share: Double
+    let linkedState: OverviewLinkedRowState
+    let onHover: (Bool) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -456,7 +490,38 @@ private struct OverviewPlainRow: View {
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
+        .overviewLinked(linkedState)
+        .background(linkedState == .emphasized ? AppColors.bgElevated.opacity(0.5) : .clear)
+        .contentShape(Rectangle())
+        // Not clickable, so no pointing hand; hovering still picks out its segment.
+        .onHover(perform: onHover)
+        .onDisappear { onHover(false) }
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Bar and row highlight
+
+struct OverviewHighlight: Equatable {
+    enum Source { case bar, row }
+    let id: String
+    let source: Source
+}
+
+/// How a row looks while the pointer is on the bar: the matching row lifts, the
+/// others lose their color and fade, so the eye goes straight to the one that
+/// matches. Hovering a row itself leaves the other rows alone.
+enum OverviewLinkedRowState: Equatable {
+    case normal
+    case emphasized
+    case dimmed
+}
+
+private extension View {
+    func overviewLinked(_ state: OverviewLinkedRowState) -> some View {
+        self
+            .saturation(state == .dimmed ? 0 : 1)
+            .opacity(state == .dimmed ? 0.4 : 1)
     }
 }
 
@@ -570,10 +635,18 @@ struct OverviewDiskBar: View {
     }
 
     let segments: [Segment]
+    /// The segment to keep at full strength; the rest fade. Nil shows them all.
+    var highlightedID: String?
+    /// The segment under the pointer, or nil when it leaves the bar.
+    var onHover: (String?) -> Void = { _ in }
+
+    static let everythingElseID = "everythingElse"
+    static let freeID = "free"
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let height: CGFloat = 14
+    private static let fadedOpacity: Double = 0.3
     private nonisolated static let gap: CGFloat = 2
     private nonisolated static let minimumWidth: CGFloat = 4
 
@@ -588,18 +661,42 @@ struct OverviewDiskBar: View {
                 ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
                     Rectangle()
                         .fill(segment.color)
+                        .opacity(highlightedID == nil || highlightedID == segment.id ? 1 : Self.fadedOpacity)
                         .frame(width: layout[index].width)
                         .offset(x: layout[index].x)
-                        .help("\(segment.label): \(formatStorageBytes(segment.bytes))")
                 }
             }
             .frame(width: geometry.size.width, height: Self.height, alignment: .leading)
             .clipShape(Capsule(style: .continuous))
             .animation(reduceMotion ? nil : OverviewMotion.bar, value: layout)
+            // One hover for the whole bar, read by position: the 2 pt gaps between
+            // segments then belong to the nearest one instead of flickering to nothing.
+            .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let location):
+                    onHover(Self.segmentIndex(at: location.x, in: layout).map { segments[$0].id })
+                case .ended:
+                    onHover(nil)
+                }
+            }
         }
         .frame(height: Self.height)
         .accessibilityElement()
         .accessibilityLabel(accessibilityText)
+    }
+
+    /// The visible segment under `x`, or the nearest one when `x` falls in a gap.
+    nonisolated static func segmentIndex(at x: CGFloat, in layout: [Placement]) -> Int? {
+        let visible = layout.indices.filter { layout[$0].width > 0 }
+        if let hit = visible.first(where: { x >= layout[$0].x && x <= layout[$0].x + layout[$0].width }) {
+            return hit
+        }
+        return visible.min { distance(x, to: layout[$0]) < distance(x, to: layout[$1]) }
+    }
+
+    private nonisolated static func distance(_ x: CGFloat, to placement: Placement) -> CGFloat {
+        x < placement.x ? placement.x - x : x - (placement.x + placement.width)
     }
 
     nonisolated struct Placement: Equatable, Sendable {
