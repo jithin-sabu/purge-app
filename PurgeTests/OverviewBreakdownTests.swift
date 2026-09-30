@@ -159,6 +159,24 @@ struct OverviewPresentationTests {
         #expect(OverviewDiskBar.widths(for: [0, 0], in: 400) == [0, 0])
     }
 
+    @Test func emptySegmentsKeepTheirPlaceAtZeroWidth() {
+        let layout = OverviewDiskBar.layout(for: [100, 0, 300], in: 402)
+        #expect(layout.count == 3)
+        #expect(layout[0] == .init(x: 0, width: 100))
+        // The empty one sits where the next segment starts, so it can grow from there.
+        #expect(layout[1].width == 0)
+        #expect(abs(layout[2].x - 102) < 0.001)
+        #expect(abs(layout[2].x + layout[2].width - 402) < 0.001)
+    }
+
+    @MainActor
+    @Test func devToolsWaitsWhileAppCachesScans() {
+        let store = PurgeStore()
+        store.markCacheScanStarting()
+        #expect(store.overviewPhase(for: .appCaches) == .scanning)
+        #expect(store.overviewPhase(for: .devTools) == .waiting)
+    }
+
     @Test func sharesUnderATenthOfAPercentSaySo() {
         #expect(OverviewCategoryStyle.shareText(0) == "0%")
         #expect(OverviewCategoryStyle.shareText(0.0004) == "<0.1%")

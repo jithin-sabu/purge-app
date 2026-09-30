@@ -88,6 +88,11 @@ extension PurgeStore {
             guard let self else { return }
             while !Task.isCancelled, let step = self.scanQueue.startNext() {
                 let forced = self.scanQueueForcedSteps.remove(step) != nil
+                // Mirrors `runScanStep`: only when a new full scan will actually run.
+                if step == .cachesAndDevTools, !self.isScanningAll,
+                   forced || !self.hasSessionResults(for: .cachesAndDevTools) {
+                    self.markCacheScanStarting()
+                }
                 let stepTask = Task { @MainActor [weak self] in
                     guard let self else { return }
                     await self.runScanStep(step, forced: forced)

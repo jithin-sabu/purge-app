@@ -90,22 +90,29 @@ extension PurgeStore {
         }
     }
 
+    /// A step the queue is running counts as scanning from start to finish, even in
+    /// the gaps between its passes, so a row never drops back to "Up next" mid-scan.
     private func isScanning(_ category: OverviewCategory) -> Bool {
         switch category {
-        case .appCaches: return isScanningGeneral || isEnrichingGeneral
-        case .devTools: return isScanningDeveloper || isScanningProjects || isEnrichingDeveloper
-        case .largeFiles: return isScanningLargeFiles
-        case .apps: return isScanningInstalledApps || isMeasuringRemovableTotals
-        case .leftovers: return isScanningOrphans
+        case .appCaches:
+            return cacheScanStage == .appCaches || isScanningGeneral || isEnrichingGeneral
+        case .devTools:
+            return cacheScanStage == .devTools || isScanningDeveloper || isScanningProjects || isEnrichingDeveloper
+        case .largeFiles:
+            return scanQueue.active == .largeFiles || isScanningLargeFiles
+        case .apps:
+            return scanQueue.active == .apps || isScanningInstalledApps || isMeasuringRemovableTotals
+        case .leftovers:
+            return scanQueue.active == .leftovers || isScanningOrphans
         }
     }
 
     private func isWaitingToScan(_ category: OverviewCategory) -> Bool {
-        if scanQueue.isQueued(category.step) || scanQueue.active == category.step {
+        if scanQueue.isQueued(category.step) {
             return true
         }
         // Dev Tools scans after App Caches inside the same step.
-        return category == .devTools && isScanningAll
+        return category == .devTools && cacheScanStage == .appCaches
     }
 
     private func hasResults(for category: OverviewCategory) -> Bool {

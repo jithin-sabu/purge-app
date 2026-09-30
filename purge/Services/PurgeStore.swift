@@ -300,6 +300,11 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var isScanningAll = false
     @Published private(set) var isEnrichingGeneral = false
     @Published private(set) var isEnrichingDeveloper = false
+    /// Which half of the App Caches and Dev Tools scan is running. The flags above
+    /// drop for a moment between that scan's passes (caches, dev tools, project
+    /// discovery, git checks), so the Overview reads this instead and each row goes
+    /// from waiting to scanning to done exactly once.
+    @Published private(set) var cacheScanStage: CacheScanStage = .idle
     @Published private(set) var scanPhase: ScanPhase = .idle
     @Published private(set) var scanStatusLine = ""
     @Published private(set) var pendingCacheSizePaths: Set<String> = []
@@ -2380,6 +2385,9 @@ final class PurgeStore: ObservableObject {
 
     func scanGeneral() async {
         let access = currentScanAccess()
+        // A standalone pass supersedes any full scan, which then never reaches the
+        // point where it would clear its stage.
+        cacheScanStage = .idle
         scanGeneration += 1
         let generation = scanGeneration
         scanPhase = .scanning
@@ -2390,6 +2398,7 @@ final class PurgeStore: ObservableObject {
 
     func scanDeveloper() async {
         let access = currentScanAccess()
+        cacheScanStage = .idle
         scanGeneration += 1
         let generation = scanGeneration
         scanPhase = .scanning
@@ -2439,17 +2448,24 @@ final class PurgeStore: ObservableObject {
         errorMessage = nil
         scanPhase = .scanning
         isScanningAll = true
+        cacheScanStage = .appCaches
         clearGeneralScanState()
         clearDeveloperScanState()
         defer {
             if scanGeneration == generation {
                 isScanningAll = false
+                // Project discovery carries Dev Tools on after this returns and
+                // clears the stage itself when it ends.
+                if projectDiscoveryTask == nil {
+                    cacheScanStage = .idle
+                }
             }
             ScanPhaseTiming.finish("runFullScan total", since: fullStart)
         }
 
         await runGeneralScan(generation: generation, access: access)
         guard !Task.isCancelled, scanGeneration == generation else { return }
+        cacheScanStage = .devTools
         await runDeveloperScan(generation: generation, access: access)
         guard !Task.isCancelled, scanGeneration == generation else { return }
         finishScan(generation: generation)
@@ -2600,6 +2616,7 @@ final class PurgeStore: ObservableObject {
                 if self.scanGeneration == generation {
                     self.isScanningProjects = false
                     self.projectDiscoveryTask = nil
+                    self.cacheScanStage = .idle
                     // Project artifacts land after `finishScan`, so the Dev Tools
                     // record catches up once discovery settles.
                     self.categoryInputsDidChange()
@@ -2757,6 +2774,13 @@ final class PurgeStore: ObservableObject {
     }
 
     /// Whether this session holds results for the step, so opening its tab needs no scan.
+    /// The scan queue just made the App Caches and Dev Tools step active and is about
+    /// to start `scanAll`. Marking it now, in the same turn, keeps the Overview from
+    /// showing old figures as done for the moment before the scan begins.
+    func markCacheScanStarting() {
+        cacheScanStage = .appCaches
+    }
+
     func hasSessionResults(for step: ScanStep) -> Bool {
         switch step {
         case .cachesAndDevTools:

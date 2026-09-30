@@ -162,6 +162,54 @@ extension View {
     func shimmering() -> some View {
         modifier(ShimmerModifier())
     }
+
+    /// A light band sweeping across text, in place of a spinner, while it loads.
+    /// Off, it leaves the view alone, so turning it on and off keeps the text's
+    /// identity and its content transitions.
+    func shimmeringText(_ isActive: Bool) -> some View {
+        modifier(TextShimmerModifier(isActive: isActive))
+    }
+}
+
+struct TextShimmerModifier: ViewModifier {
+    let isActive: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let period: Double = 1.6
+    /// The band as a share of the text's width.
+    private static let bandShare: CGFloat = 0.5
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if isActive, !reduceMotion {
+                    // The same text drawn in the primary color, shown only under a band
+                    // that travels from fully off the left edge to fully off the right,
+                    // so the loop resets with nothing visible.
+                    TimelineView(.animation) { timeline in
+                        let progress = timeline.date.timeIntervalSinceReferenceDate
+                            .truncatingRemainder(dividingBy: Self.period) / Self.period
+                        content
+                            .foregroundStyle(.primary)
+                            .mask {
+                                GeometryReader { geo in
+                                    let band = geo.size.width * Self.bandShare
+                                    LinearGradient(
+                                        colors: [.clear, .white, .clear],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                    .frame(width: band)
+                                    .offset(x: -band + CGFloat(progress) * (geo.size.width + band))
+                                }
+                            }
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+                }
+            }
+    }
 }
 
 struct ShimmerModifier: ViewModifier {

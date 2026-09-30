@@ -8,6 +8,7 @@ struct OverviewView: View {
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @EnvironmentObject private var trashStore: TrashStore
     @ObservedObject private var schedule = ScheduledCleaningPreferenceStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         // Relative times ("Scanned 3h ago") move on their own.
@@ -49,17 +50,17 @@ struct OverviewView: View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
             Text("\(formatStorageBytes(breakdown.usedBytes)) used")
                 .font(.system(size: 26, weight: .bold, design: .rounded))
-                .monospacedDigit()
+                .overviewNumberTransition(breakdown.usedBytes, reduceMotion: reduceMotion)
             Text("of \(formatStorageBytes(breakdown.totalBytes))")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
-                .monospacedDigit()
+                .overviewNumberTransition(breakdown.totalBytes, reduceMotion: reduceMotion)
             Spacer(minLength: AppStyle.Spacing.small)
             // Right end, above the free part of the bar.
             Text("\(formatStorageBytes(breakdown.freeBytes)) free")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
-                .monospacedDigit()
+                .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
         }
         .accessibilityElement(children: .combine)
     }
@@ -183,6 +184,7 @@ private struct OverviewCategoryRow: View {
     let now: Date
 
     @EnvironmentObject private var store: PurgeStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
     private var phase: OverviewCategoryPhase { store.overviewPhase(for: category) }
@@ -207,7 +209,9 @@ private struct OverviewCategoryRow: View {
             Spacer(minLength: AppStyle.Spacing.small)
 
             trailing
+                .transition(.opacity)
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: phase)
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
         .background(isHovering ? AppColors.bgElevated.opacity(0.5) : .clear)
@@ -223,20 +227,16 @@ private struct OverviewCategoryRow: View {
         phase == .ready || phase == .scanning || isRecorded
     }
 
-    @ViewBuilder
+    /// While scanning, the text itself shimmers; a spinner beside it would come and
+    /// go with every pass of the scan.
     private var statusLine: some View {
-        HStack(spacing: 5) {
-            if phase == .scanning {
-                ProgressView()
-                    .controlSize(.small)
-                    .scaleEffect(0.55)
-                    .frame(width: 12, height: 12)
-            }
-            Text(statusText)
-                .lineLimit(1)
-        }
-        .font(.system(size: 12))
-        .foregroundStyle(.secondary)
+        Text(statusText)
+            .lineLimit(1)
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .contentTransition(reduceMotion ? .identity : .numericText())
+            .animation(reduceMotion ? nil : OverviewMotion.number, value: statusText)
+            .shimmeringText(phase == .scanning)
     }
 
     @ViewBuilder
@@ -260,10 +260,10 @@ private struct OverviewCategoryRow: View {
                 Text(OverviewCategoryStyle.shareText(share))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.tertiary)
-                    .monospacedDigit()
+                    .overviewNumberTransition(share, reduceMotion: reduceMotion)
                 Text(formatStorageBytes(bytes))
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
+                    .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                     .foregroundStyle(isRecorded || phase == .waiting ? .secondary : .primary)
                     .frame(minWidth: 64, alignment: .trailing)
                 Image(systemName: "chevron.right")
@@ -384,6 +384,8 @@ private struct OverviewPlainRow: View {
     let bytes: Int64
     let share: Double
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             Circle()
@@ -402,10 +404,10 @@ private struct OverviewPlainRow: View {
             Text(OverviewCategoryStyle.shareText(share))
                 .font(AppStyle.Typography.metadata)
                 .foregroundStyle(.tertiary)
-                .monospacedDigit()
+                .overviewNumberTransition(share, reduceMotion: reduceMotion)
             Text(formatStorageBytes(bytes))
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                 .frame(minWidth: 64, alignment: .trailing)
             // Keeps sizes aligned with the chevron column in the card above.
             Image(systemName: "chevron.right")
@@ -416,6 +418,27 @@ private struct OverviewPlainRow: View {
         .padding(.vertical, 11)
         .accessibilityElement(children: .combine)
     }
+}
+
+// MARK: - Number transitions
+
+extension View {
+    /// Rolls a size or share to its new value the way figures do elsewhere in the
+    /// app, instead of snapping on each scan update.
+    func overviewNumberTransition<V: Equatable>(_ value: V, reduceMotion: Bool) -> some View {
+        self
+            .monospacedDigit()
+            .contentTransition(reduceMotion ? .identity : .numericText())
+            .animation(reduceMotion ? nil : OverviewMotion.number, value: value)
+    }
+}
+
+enum OverviewMotion {
+    /// The app's number roll (see the page header subtitle).
+    static let number = Animation.easeInOut(duration: 0.45)
+    /// The disk bar's segments. A little longer than the scan's publish beat, so each
+    /// update picks up from the last one mid-glide and the bar fills without steps.
+    static let bar = Animation.easeOut(duration: 0.6)
 }
 
 // MARK: - Styling shared with the sidebar
@@ -482,37 +505,63 @@ struct OverviewDiskBar: View {
 
     let segments: [Segment]
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private static let height: CGFloat = 14
-    private static let gap: CGFloat = 2
-    private static let minimumWidth: CGFloat = 4
+    private nonisolated static let gap: CGFloat = 2
+    private nonisolated static let minimumWidth: CGFloat = 4
 
     var body: some View {
         GeometryReader { geometry in
-            let visible = segments.filter { $0.bytes > 0 }
-            let widths = Self.widths(for: visible.map(\.bytes), in: geometry.size.width)
-            HStack(spacing: Self.gap) {
-                ForEach(Array(visible.enumerated()), id: \.element.id) { index, segment in
-                    segmentShape(isFirst: index == 0, isLast: index == visible.count - 1)
+            let layout = Self.layout(for: segments.map(\.bytes), in: geometry.size.width)
+            // Every segment stays in the bar, empty ones at zero width, so a category
+            // that turns up mid-scan grows out of its neighbour instead of popping in,
+            // and the widths animate as one. The capsule clip rounds whichever
+            // segments happen to sit at the ends.
+            ZStack(alignment: .leading) {
+                ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
+                    Rectangle()
                         .fill(segment.color)
-                        .frame(width: widths[index])
+                        .frame(width: layout[index].width)
+                        .offset(x: layout[index].x)
                         .help("\(segment.label): \(formatStorageBytes(segment.bytes))")
                 }
             }
+            .frame(width: geometry.size.width, height: Self.height, alignment: .leading)
+            .clipShape(Capsule(style: .continuous))
+            .animation(reduceMotion ? nil : OverviewMotion.bar, value: layout)
         }
         .frame(height: Self.height)
         .accessibilityElement()
         .accessibilityLabel(accessibilityText)
     }
 
-    private func segmentShape(isFirst: Bool, isLast: Bool) -> UnevenRoundedRectangle {
-        let radius = Self.height / 2
-        return UnevenRoundedRectangle(
-            topLeadingRadius: isFirst ? radius : 0,
-            bottomLeadingRadius: isFirst ? radius : 0,
-            bottomTrailingRadius: isLast ? radius : 0,
-            topTrailingRadius: isLast ? radius : 0,
-            style: .continuous
-        )
+    nonisolated struct Placement: Equatable, Sendable {
+        let x: CGFloat
+        let width: CGFloat
+    }
+
+    /// Where each segment sits, empty ones included at zero width. The gap goes
+    /// before every visible segment but the first.
+    nonisolated static func layout(for bytes: [Int64], in totalWidth: CGFloat) -> [Placement] {
+        let visibleIndices = bytes.indices.filter { bytes[$0] > 0 }
+        let visibleWidths = widths(for: visibleIndices.map { bytes[$0] }, in: totalWidth)
+        var placements = [Placement]()
+        placements.reserveCapacity(bytes.count)
+        var x: CGFloat = 0
+        var visibleIndex = 0
+        for index in bytes.indices {
+            guard bytes[index] > 0 else {
+                placements.append(Placement(x: x, width: 0))
+                continue
+            }
+            if visibleIndex > 0 { x += gap }
+            let width = visibleWidths[visibleIndex]
+            placements.append(Placement(x: x, width: width))
+            x += width
+            visibleIndex += 1
+        }
+        return placements
     }
 
     private var accessibilityText: String {
@@ -522,7 +571,7 @@ struct OverviewDiskBar: View {
             .joined(separator: ", ")
     }
 
-    static func widths(for bytes: [Int64], in totalWidth: CGFloat) -> [CGFloat] {
+    nonisolated static func widths(for bytes: [Int64], in totalWidth: CGFloat) -> [CGFloat] {
         guard !bytes.isEmpty else { return [] }
         let available = max(0, totalWidth - gap * CGFloat(bytes.count - 1))
         let sum = bytes.reduce(0, +)

@@ -26,6 +26,13 @@ nonisolated enum ScanStep: String, CaseIterable, Sendable {
     }
 }
 
+/// Which half of the App Caches and Dev Tools step is running, or neither.
+nonisolated enum CacheScanStage: Equatable, Sendable {
+    case idle
+    case appCaches
+    case devTools
+}
+
 /// The categories the Overview breaks the disk into, in the order each byte is
 /// claimed: a file found by an earlier category is never counted again by a later one.
 nonisolated enum OverviewCategory: String, CaseIterable, Sendable {
