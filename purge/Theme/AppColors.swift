@@ -26,6 +26,12 @@ enum AppColors {
     static let overviewLargeFiles = Color(light: .hex(0xE69F00), dark: .hex(0xF0B020))
     static let overviewApps = Color(light: .hex(0xD55E00), dark: .hex(0xE8772A))
     static let overviewLeftovers = Color(light: .hex(0xCC79A7), dark: .hex(0xDA93BA))
+    /// Icon tiles carry a white glyph, which the pale sky blue and pink can't hold,
+    /// so those two tiles use a deeper shade than their bar segment. Dev Tools goes
+    /// deeper too in dark mode, so its tile stays apart from the App Caches one.
+    static let overviewAppCachesTile = Color(light: .hex(0x3399D3), dark: .hex(0x3A9BD5))
+    static let overviewDevToolsTile = Color(light: .hex(0x0072B2), dark: .hex(0x1E78BA))
+    static let overviewLeftoversTile = Color(light: .hex(0xB35A8D), dark: .hex(0xBE6C9C))
     /// Close to the sidebar's "used" grey, and well apart from free space in both themes.
     static let overviewEverythingElse = Color(light: .hex(0x8A8C96), dark: .hex(0xA3A6B4))
 

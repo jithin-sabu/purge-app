@@ -111,6 +111,7 @@ struct OverviewView: View {
     private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
         VStack(spacing: 0) {
             OverviewPlainRow(
+                symbol: "ellipsis",
                 color: AppColors.overviewEverythingElse,
                 title: "Everything else",
                 detail: "macOS, your documents and photos, and files Purge doesn't sort",
@@ -193,7 +194,10 @@ private struct OverviewCategoryRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            OverviewColorEdge(color: OverviewCategoryStyle.color(category))
+            OverviewIconTile(
+                symbol: OverviewCategoryStyle.symbol(category),
+                color: OverviewCategoryStyle.tileColor(category)
+            )
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -383,20 +387,50 @@ private struct OverviewCategoryRow: View {
     }
 }
 
-/// A short upright stripe in the category's bar color, tying the row to its segment.
-private struct OverviewColorEdge: View {
+/// A System Settings style tile: the category color with a soft top-to-bottom
+/// gradient, a hairline rim, and a white filled glyph. Leave `symbol` out for an
+/// empty tile, which is how free space is drawn.
+private struct OverviewIconTile: View {
+    var symbol: String?
     let color: Color
 
+    static let size: CGFloat = 28
+    private static let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 2, style: .continuous)
-            .fill(color)
-            // As tall as the name and the line under it.
-            .frame(width: 4, height: 30)
-            .accessibilityHidden(true)
+        Group {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.18), radius: 0.5, y: 0.5)
+                    .frame(width: Self.size, height: Self.size)
+                    .background {
+                        Self.shape
+                            .fill(color)
+                            // Lighter at the top, a touch darker at the bottom.
+                            .overlay(Self.shape.fill(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0)], startPoint: .top, endPoint: .bottom)))
+                            .overlay(Self.shape.fill(LinearGradient(colors: [.black.opacity(0), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom)))
+                    }
+                    .overlay {
+                        Self.shape.strokeBorder(
+                            LinearGradient(colors: [.white.opacity(0.35), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom),
+                            lineWidth: 0.5
+                        )
+                    }
+            } else {
+                // Free space: an empty tile, outlined in the bar's free color.
+                Self.shape
+                    .strokeBorder(color, style: StrokeStyle(lineWidth: 1.5, dash: [3, 2.5]))
+                    .frame(width: Self.size, height: Self.size)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
 private struct OverviewPlainRow: View {
+    var symbol: String?
     let color: Color
     let title: String
     let detail: String
@@ -407,7 +441,7 @@ private struct OverviewPlainRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            OverviewColorEdge(color: color)
+            OverviewIconTile(symbol: symbol, color: color)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
@@ -465,6 +499,27 @@ enum OverviewCategoryStyle {
         // counts only the apps themselves, and this total includes their files.
         case .apps: return "Installed apps"
         case .leftovers: return "Leftovers from deleted apps"
+        }
+    }
+
+    static func symbol(_ category: OverviewCategory) -> String {
+        switch category {
+        case .appCaches: return "internaldrive.fill"
+        case .devTools: return "hammer.fill"
+        case .largeFiles: return "doc.fill"
+        case .apps: return "square.grid.2x2.fill"
+        case .leftovers: return "shippingbox.fill"
+        }
+    }
+
+    /// The icon tile's color: the bar color, deepened where white would not show or
+    /// the two blues would run together.
+    static func tileColor(_ category: OverviewCategory) -> Color {
+        switch category {
+        case .appCaches: return AppColors.overviewAppCachesTile
+        case .devTools: return AppColors.overviewDevToolsTile
+        case .leftovers: return AppColors.overviewLeftoversTile
+        case .largeFiles, .apps: return color(category)
         }
     }
 
