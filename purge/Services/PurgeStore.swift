@@ -371,6 +371,12 @@ final class PurgeStore: ObservableObject {
     var scanQueueStepTask: Task<Void, Never>?
     /// Tells a finished runner apart from the one that replaced it after a Stop.
     var scanQueueRunID = 0
+    /// How long the App Caches and Dev Tools step may hold up the rest. Without Full
+    /// Disk Access its `du` can sit in `open()` until someone answers a privacy
+    /// prompt, and Stop leaves that step running, so the queue stops waiting after
+    /// this and moves on. The other steps have no limit: Large Files and the app
+    /// scans often run longer than this on a big home folder, and Stop cancels them.
+    var cacheStepPatience: TimeInterval = 180
     /// True while a scheduled clean runs its own scans. The queue starts nothing
     /// until it is released, so those scans never run beside a queued one.
     var isScanQueueHeld = false
@@ -382,6 +388,9 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var scanRecords: [OverviewCategory: ScanRecord] = [:]
     /// True once App Caches and Dev Tools have finished a scan in this session.
     @Published private(set) var hasSessionCacheScan = false
+    /// True once the App Caches half has finished in this session, even if it found
+    /// nothing. The pair above only turns true after Dev Tools finishes too.
+    @Published private(set) var hasSessionGeneralScan = false
     private let scanRecordStore: ScanRecordStore
     private var scanRecordRefreshTask: Task<Void, Never>?
     /// Bumped whenever anything a category total reads changes; keys the Overview cache.
@@ -2570,6 +2579,9 @@ final class PurgeStore: ObservableObject {
             since: hydrateStart,
             detail: "\(hydrateCount) cache items"
         )
+        if scanGeneration == generation, !Task.isCancelled {
+            hasSessionGeneralScan = true
+        }
     }
 
     private func runDeveloperScan(generation: Int, access: ScanAccess) async {

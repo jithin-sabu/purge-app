@@ -36,6 +36,18 @@ extension PurgeStore {
         return hasResults(for: category) ? .ready : .notScanned
     }
 
+    /// Which Uninstaller view the Leftovers row opens. Installed Apps only when this
+    /// session's scan finished and found nothing; while it waits, scans or shows a
+    /// saved figure, the row opens Leftovers, which fills in as the scan lands.
+    var overviewLeftoversSection: UninstallSection {
+        overviewPhase(for: .leftovers) == .ready && orphanLeftovers.isEmpty ? .installedApps : .leftovers
+    }
+
+    /// Whether leftovers are still to come: their scan is queued or running.
+    var isLeftoversScanPending: Bool {
+        scanQueue.active == .leftovers || scanQueue.isQueued(.leftovers) || isScanningOrphans
+    }
+
     /// The safe-to-clean share of App Caches or Dev Tools. Nil for the categories
     /// Purge never cleans on its own.
     func safeCleanupBytes(for category: OverviewCategory) -> Int64? {
@@ -128,7 +140,7 @@ extension PurgeStore {
 
     private func hasResults(for category: OverviewCategory) -> Bool {
         switch category {
-        case .appCaches: return hasSessionCacheScan || !cacheItems.isEmpty
+        case .appCaches: return hasSessionCacheScan || hasSessionGeneralScan || !cacheItems.isEmpty
         case .devTools: return hasSessionCacheScan || !devTools.isEmpty || !projectGroups.isEmpty
         case .largeFiles, .apps, .leftovers: return hasSessionResults(for: category.step)
         }

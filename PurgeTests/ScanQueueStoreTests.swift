@@ -157,6 +157,99 @@ struct ScanQueueStoreTests {
         fake.cleanUp()
     }
 
+    // MARK: Review follow-ups
+
+    @Test
+    func aLongLargeFilesStepKeepsTheQueueWaiting() async throws {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        store.cacheStepPatience = 0.1
+        fake.holdsFullAccessSteps = true
+        store.requestScan(.largeFiles)
+        #expect(await eventually { fake.log == ["step largeFiles"] })
+        store.requestScan(.apps)
+
+        // Well past the cache step's patience: Large Files has none.
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(fake.log == ["step largeFiles"])
+        #expect(store.scanQueue.active == .largeFiles)
+
+        fake.holdsFullAccessSteps = false
+        fake.finishHeldSteps()
+        #expect(await eventually { isIdle(store) })
+        #expect(fake.log == ["step largeFiles", "step apps"])
+        fake.cleanUp()
+    }
+
+    @Test
+    func aStalledCacheStepStillLetsTheQueueMoveOn() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        store.cacheStepPatience = 0.1
+        fake.holdsGeneral = true
+        store.requestScan(.cachesAndDevTools, .largeFiles)
+        #expect(await eventually { fake.log == ["step largeFiles"] })
+        fake.cleanUp()
+    }
+
+    @Test
+    func aTabOpenedAtTheGrantWaitsForTheAccessRescan() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        store.startLaunchScans()
+        #expect(await eventually { isIdle(store) })
+
+        fake.hasAccess = true
+        store.refreshPermission()
+        store.scanAfterAccessGranted()
+        // What the Large Files tab's task does when access flips while it is open.
+        store.requestScanIfNeeded(.largeFiles)
+
+        #expect(await eventually { isIdle(store) })
+        #expect(Array(fake.events.prefix(3)) == ["general limited", "general full", "step largeFiles"])
+        fake.cleanUp()
+    }
+
+    @Test
+    func appCachesThatFoundNothingIsDoneWhileDevToolsScans() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        ScanRecordStore(defaults: fake.defaults).save(
+            ScanRecord(completedAt: .distantPast, bytes: 5_000_000_000, count: 12),
+            for: .appCaches
+        )
+        let store = fake.makeStore()
+        fake.holdsDeveloper = true
+        store.requestScan(.cachesAndDevTools)
+        #expect(await eventually { fake.developerAccesses == [.full] })
+
+        #expect(store.overviewPhase(for: .appCaches) == .ready)
+        #expect(!store.isShowingRecordedFigure(for: .appCaches))
+        fake.cleanUp()
+        #expect(await eventually { isIdle(store) })
+    }
+
+    @Test
+    func theLeftoversRowOpensLeftoversUntilAScanFindsNone() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        ScanRecordStore(defaults: fake.defaults).save(
+            ScanRecord(completedAt: .distantPast, bytes: 2_000_000_000, count: 12),
+            for: .leftovers
+        )
+        let store = fake.makeStore()
+        // Showing last launch's "12 items".
+        #expect(store.isShowingRecordedFigure(for: .leftovers))
+        #expect(store.overviewLeftoversSection == .leftovers)
+
+        // Waiting its turn.
+        store.scanQueue.enqueue([.leftovers])
+        #expect(store.overviewLeftoversSection == .leftovers)
+        fake.cleanUp()
+    }
+
     // MARK: Helpers
 
     private func isIdle(_ store: PurgeStore) -> Bool {
@@ -185,21 +278,28 @@ struct ScanQueueStoreTests {
 private final class FakeScans {
     var hasAccess = false
     var holdsGeneral = false
+    var holdsDeveloper = false
     var holdsFullAccessSteps = false
     private(set) var generalAccesses: [ScanAccess] = []
     private(set) var developerAccesses: [ScanAccess] = []
     /// Full Disk Access steps as they start, plus anything a test adds.
     var log: [String] = []
+    /// Every scan in the order it started: App Caches with its access, and the steps.
+    private(set) var events: [String] = []
 
     private var heldGeneral: [AsyncStream<CacheScanEvent>.Continuation] = []
+    private var heldDeveloper: [AsyncStream<DeveloperScanEvent>.Continuation] = []
     private var heldSteps: [CheckedContinuation<Void, Never>] = []
     private let suiteName = "purge-tests-\(UUID().uuidString)"
 
     func makeStore() -> PurgeStore {
-        let store = PurgeStore(defaults: UserDefaults(suiteName: suiteName)!, scanSources: sources)
+        let store = PurgeStore(defaults: defaults, scanSources: sources)
         store.refreshPermission()
         return store
     }
+
+    /// The throwaway defaults the store reads and writes, for seeding saved records.
+    var defaults: UserDefaults { UserDefaults(suiteName: suiteName)! }
 
     func finishHeldSteps() {
         let steps = heldSteps
@@ -209,6 +309,7 @@ private final class FakeScans {
 
     func cleanUp() {
         heldGeneral.forEach { $0.finish() }
+        heldDeveloper.forEach { $0.finish() }
         finishHeldSteps()
         UserDefaults.standard.removePersistentDomain(forName: suiteName)
     }
@@ -218,6 +319,7 @@ private final class FakeScans {
             fullDiskAccess: { self.hasAccess },
             general: { access in
                 self.generalAccesses.append(access)
+                self.events.append("general \(access)")
                 let (stream, continuation) = AsyncStream<CacheScanEvent>.makeStream()
                 if self.holdsGeneral {
                     self.heldGeneral.append(continuation)
@@ -228,11 +330,18 @@ private final class FakeScans {
             },
             developer: { access in
                 self.developerAccesses.append(access)
-                return Self.finishedStream()
+                let (stream, continuation) = AsyncStream<DeveloperScanEvent>.makeStream()
+                if self.holdsDeveloper {
+                    self.heldDeveloper.append(continuation)
+                } else {
+                    continuation.finish()
+                }
+                return stream
             },
             projects: { _ in Self.finishedStream() },
             fullAccessStep: { step, _ in
                 self.log.append("step \(step.rawValue)")
+                self.events.append("step \(step.rawValue)")
                 if self.holdsFullAccessSteps {
                     await withCheckedContinuation { self.heldSteps.append($0) }
                 }

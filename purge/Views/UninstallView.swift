@@ -125,10 +125,11 @@ struct UninstallView: View {
     /// button to match; this view reads and writes it through `store`.
     private var section: UninstallSection { store.uninstallSection }
 
-    /// The Leftovers segment appears only once a scan has found something, so the
-    /// tab looks exactly as before for the common case of no orphans.
+    /// The Leftovers segment appears once a scan has found something, so the tab
+    /// looks exactly as before for the common case of no orphans. It also stays up
+    /// while the Overview's Leftovers row has opened it ahead of the scan.
     private var showsLeftoversSegment: Bool {
-        !store.orphanLeftovers.isEmpty
+        !store.orphanLeftovers.isEmpty || (section == .leftovers && store.isLeftoversScanPending)
     }
 
     private var currentSort: AppSortOption {
@@ -208,9 +209,13 @@ struct UninstallView: View {
     @ViewBuilder
     private var leftoversScroll: some View {
         if store.orphanLeftovers.isEmpty {
-            // Only reachable in the brief window between the last item being
-            // removed and the segment falling back to Installed Apps.
-            Color.clear
+            if store.isLeftoversScanPending {
+                leftoversSkeleton
+            } else {
+                // Only reachable in the brief window between the last item being
+                // removed, or a scan finding none, and the fall back to Installed Apps.
+                Color.clear
+            }
         } else {
             VStack(spacing: 0) {
                 leftoversToolbar
@@ -531,6 +536,24 @@ struct UninstallView: View {
         case .grid:
             skeletonGrid
         }
+    }
+
+    /// Leftovers opened from the Overview before its scan has landed.
+    private var leftoversSkeleton: some View {
+        ScrollView {
+            LazyVStack(spacing: 6) {
+                ForEach(0..<8, id: \.self) { _ in
+                    SkeletonAppListRow()
+                }
+            }
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+            .padding(.top, 2)
+            .padding(.bottom, AppStyle.Spacing.large)
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.bgBase)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Finding leftovers from deleted apps")
     }
 
     private var skeletonList: some View {

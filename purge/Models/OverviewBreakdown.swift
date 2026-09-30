@@ -10,10 +10,16 @@ nonisolated struct OverviewSizedItem: Equatable, Sendable {
         self.bytes = max(0, bytes)
     }
 
+    /// Trailing slashes dropped, and `/var`, `/tmp` and `/etc` spelled as the
+    /// `/private` folders they link to, so one folder reached both ways is counted
+    /// once. String work only: resolving the path would stat the disk on every render.
     static func normalized(_ path: String) -> String {
         var trimmed = path
         while trimmed.count > 1, trimmed.hasSuffix("/") {
             trimmed.removeLast()
+        }
+        for root in ["/var", "/tmp", "/etc"] where trimmed == root || trimmed.hasPrefix(root + "/") {
+            return "/private" + trimmed
         }
         return trimmed
     }
@@ -24,6 +30,8 @@ nonisolated enum OverviewCategorySource: Equatable, Sendable {
     /// Results from this session, itemised so overlaps can be removed.
     case live([OverviewSizedItem])
     /// Only the total from an earlier scan is known, so it is counted as recorded.
+    /// Its overlaps with other categories cannot be taken out, so it only fills
+    /// what the live figures leave of the used space.
     case recorded(Int64)
     /// Nothing to show: never scanned, or not readable without Full Disk Access.
     case none
@@ -72,18 +80,22 @@ nonisolated struct OverviewBreakdown: Equatable, Sendable {
         var claims = ClaimedPaths()
         var result: [OverviewCategory: Int64] = [:]
         for category in OverviewCategory.allCases {
-            switch sources[category] ?? .none {
-            case .live(let items):
-                var total: Int64 = 0
-                for item in items {
-                    total += claims.claim(item)
-                }
-                result[category] = total
-            case .recorded(let bytes):
-                result[category] = max(0, bytes)
-            case .none:
-                break
+            guard case .live(let items) = sources[category] ?? .none else { continue }
+            var total: Int64 = 0
+            for item in items {
+                total += claims.claim(item)
             }
+            result[category] = total
+        }
+        // A recorded total may include bytes a live category already counts (an app
+        // record includes its cache folder). Capped at the used space the live
+        // figures leave, so the bar and the row shares still describe this disk.
+        var unsorted = max(0, usedBytes - result.values.reduce(0, +))
+        for category in OverviewCategory.allCases {
+            guard case .recorded(let bytes) = sources[category] ?? .none else { continue }
+            let counted = min(max(0, bytes), unsorted)
+            result[category] = counted
+            unsorted -= counted
         }
         categoryBytes = result
     }

@@ -111,12 +111,42 @@ struct OverviewBreakdownTests {
     }
 
     @Test func everythingElseNeverGoesNegative() {
+        // Hard links counted by two scans can add up to more than the used space.
         let breakdown = OverviewBreakdown(
             totalBytes: 100 * gb,
             freeBytes: 90 * gb,
-            sources: [.largeFiles: .recorded(40 * gb)]
+            sources: [.largeFiles: .live([item("/Users/me/Movies/big.mov", 40 * gb)])]
         )
         #expect(breakdown.everythingElseBytes == 0)
+    }
+
+    @Test func aRecordedTotalOnlyFillsWhatTheLiveFiguresLeave() {
+        // After Stop: App Caches is live, Installed apps is last launch's record,
+        // which also counted the cache folder App Caches has now.
+        let breakdown = OverviewBreakdown(
+            totalBytes: 100 * gb,
+            freeBytes: 20 * gb,
+            sources: [
+                .appCaches: .live([item("/Users/me/Library/Caches/com.app", 30 * gb)]),
+                .apps: .recorded(70 * gb)
+            ]
+        )
+        #expect(breakdown.bytes(for: .apps) == 50 * gb)
+        #expect(breakdown.sortedBytes == breakdown.usedBytes)
+        #expect(breakdown.sortedBytes + breakdown.everythingElseBytes + breakdown.freeBytes == breakdown.totalBytes)
+    }
+
+    @Test func aFolderUnderVarAndPrivateVarIsCountedOnce() {
+        let breakdown = OverviewBreakdown(
+            totalBytes: 500 * gb,
+            freeBytes: 100 * gb,
+            sources: [
+                .appCaches: .live([item("/private/var/folders/ab/C/com.app", 2 * gb)]),
+                .apps: .live([item("/var/folders/ab/C/com.app", 2 * gb), item("/Applications/App.app", 1 * gb)])
+            ]
+        )
+        #expect(breakdown.bytes(for: .appCaches) == 2 * gb)
+        #expect(breakdown.bytes(for: .apps) == 1 * gb)
     }
 
     @Test func trailingSlashesDoNotHideAnOverlap() {

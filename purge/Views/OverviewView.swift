@@ -400,7 +400,7 @@ private struct OverviewCategoryRow: View {
             store.uninstallSection = .installedApps
             store.selectedTab = .uninstaller
         case .leftovers:
-            store.uninstallSection = store.orphanLeftovers.isEmpty ? .installedApps : .leftovers
+            store.uninstallSection = store.overviewLeftoversSection
             store.selectedTab = .uninstaller
         }
     }

@@ -96,6 +96,10 @@ extension PurgeStore {
         }
         guard !needed.isEmpty else { return }
         scanQueue.prioritize(needed)
+        // A rescan someone asked for stays ahead of a tab that merely opened: after
+        // a grant, the limited App Caches results must be redone before a long
+        // Large Files or apps walk starts.
+        scanQueue.prioritize(scanQueue.pending.filter { scanQueueForcedSteps.contains($0) })
         startScanQueueIfIdle()
     }
 
@@ -139,7 +143,11 @@ extension PurgeStore {
                     await self.runScanStep(step, forced: forced)
                 }
                 self.scanQueueStepTask = stepTask
-                await Self.waitForStep(stepTask, patience: Self.scanStepPatience)
+                if step == .cachesAndDevTools {
+                    await Self.waitForStep(stepTask, patience: self.cacheStepPatience)
+                } else {
+                    await stepTask.value
+                }
                 guard self.scanQueueRunID == runID else { return }
                 self.scanQueueStepTask = nil
                 self.scanQueue.finishActive()
@@ -150,12 +158,6 @@ extension PurgeStore {
             self.startScanQueueIfIdle()
         }
     }
-
-    /// How long one step may hold up the rest. A scan can stall with no fault of its
-    /// own (a folder macOS holds open until someone answers a privacy prompt), and one
-    /// stalled step must not keep every later scan, and every tab waiting on one, from
-    /// ever running. The stalled scan carries on; the queue just stops waiting for it.
-    static let scanStepPatience: TimeInterval = 180
 
     /// Returns when the step finishes or its patience runs out, whichever comes first.
     private static func waitForStep(_ task: Task<Void, Never>, patience: TimeInterval) async {
