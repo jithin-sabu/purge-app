@@ -875,6 +875,8 @@ struct SidebarSummaryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum SummaryFont {
+        static let label = Font.system(size: 12, weight: .medium, design: .rounded)
+        static let value = Font.system(size: 13, weight: .semibold, design: .rounded)
         static let diskCaption = Font.system(size: 11, weight: .medium, design: .rounded)
         static let cardTitle = Font.system(size: 12, weight: .semibold, design: .rounded)
     }
@@ -916,8 +918,13 @@ struct SidebarSummaryView: View {
 
             storageLegend
 
+            // The one hairline in the card: it sets the trash off from the volume
+            // figures above rather than reading as another share of the same bar.
+            Divider()
+                .padding(.top, AppStyle.Spacing.small)
+
             inTrashRow
-                .padding(.top, 4)
+                .padding(.top, AppStyle.Spacing.xxSmall)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppStyle.Spacing.small)
@@ -925,35 +932,52 @@ struct SidebarSummaryView: View {
     }
 
     /// Bytes already in the trash still take up the volume. Emptying it is the user's
-    /// call in Finder; this line only says how much is there. Styled like the faded
-    /// "free" figure above it, with the word "trash" carrying the meaning instead of an
-    /// icon, and inset to line up with the legend text rather than its dots.
+    /// call in Finder; this row only says how much is there.
     private var inTrashRow: some View {
-        HStack(spacing: 0) {
-            switch trashStore.access {
-            case .measuring:
-                Text("Measuring trash…")
-            case .unreadable:
-                // Without Full Disk Access the size is unknown; a zero would read as empty.
-                Text("Trash size unavailable")
-            case .readable:
-                Text(formatStorageBytes(trashStore.trashBytes))
+        HStack(spacing: 6) {
+            Text("In trash")
+                .font(SummaryFont.label)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            if trashStore.access == .measuring {
+                trashLoadingIndicator
+                    .accessibilityLabel("Measuring")
+            } else if trashStore.access == .unreadable {
+                // No Full Disk Access: the trash size is genuinely unknown, so say so
+                // rather than showing a zero that would read as an empty trash.
+                Text("Unavailable")
+                    .font(SummaryFont.value)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(formatBytes(trashStore.trashBytes))
+                    .font(SummaryFont.value)
+                    .foregroundStyle(trashStore.trashBytes > 0 ? .primary : .secondary)
                     .monospacedDigit()
-                    .tracking(-0.4)
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
-                Text(" in trash")
             }
         }
-        .font(SummaryFont.diskCaption)
-        .foregroundStyle(.tertiary)
-        .lineLimit(1)
-        .padding(.leading, Self.legendTextInset)
+        .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
     }
 
-    /// Legend dot (6) plus its spacing (5), so a dotless line starts where the legend text does.
-    private static let legendTextInset: CGFloat = 11
+    @ViewBuilder
+    private var trashLoadingIndicator: some View {
+        if reduceMotion {
+            Image(systemName: "clock")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: 16)
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.62)
+                .frame(width: 16, height: 16)
+                .tint(.secondary)
+        }
+    }
 
     /// Used space and free space as two segments of one volume, drawn from the same
     /// free/total figures as the legend. The fills are muted greys rather than an accent,
