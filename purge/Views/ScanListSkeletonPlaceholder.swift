@@ -147,7 +147,7 @@ struct CleaningOverlay: View {
                 ProgressView()
                     .controlSize(.regular)
                 Text(message)
-                    .font(.subheadline)
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.secondary)
             }
         }

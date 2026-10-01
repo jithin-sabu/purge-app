@@ -60,7 +60,7 @@ struct DeletionConfirmSheet: View {
                     .foregroundStyle(AppColors.textPrimary)
 
                 Text("Purge moves these to Trash. You can put anything back if you change your mind.")
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -127,7 +127,7 @@ struct DeletionConfirmSheet: View {
                     .font(AppStyle.Typography.pageTitle)
                     .foregroundStyle(AppColors.textPrimary)
                 Text("Purge couldn't identify every folder you picked. Only continue if you know it's safe to remove. You'll confirm once more before anything moves.")
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -166,7 +166,7 @@ struct DeletionConfirmSheet: View {
                         .truncationMode(.middle)
                     if let command = item.reinstallCommand, !command.isEmpty {
                         Text(command)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(AppStyle.Typography.metadata)
                             .foregroundStyle(AppColors.textTertiary)
                             .lineLimit(1)
                             .truncationMode(.middle)

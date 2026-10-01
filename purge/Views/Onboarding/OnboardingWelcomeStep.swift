@@ -13,12 +13,12 @@ struct OnboardingWelcomeStep: View {
 
       VStack(spacing: -4) {
         Text("Welcome to")
-          .font(.system(size: 18, weight: .medium, design: .rounded))
+          .font(AppStyle.Typography.sectionTitle.weight(.medium))
           .foregroundStyle(AppColors.textPrimary.opacity(0.8))
           .tracking(0.2)
 
         Text("Purge")
-          .font(.system(size: 50, weight: .semibold, design: .rounded))
+          .font(AppStyle.Typography.display.weight(.semibold))
           .foregroundStyle(AppColors.textPrimary)
       }
       .multilineTextAlignment(.center)

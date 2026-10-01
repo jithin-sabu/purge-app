@@ -25,8 +25,8 @@ struct DeletedAppsWatcherNoticeCard: View {
     let onTurnOff: () -> Void
 
     private enum NoticeFont {
-        static let title = Font.system(size: 12, weight: .semibold, design: .rounded)
-        static let body = Font.system(size: 11, weight: .medium, design: .rounded)
+        static let title = AppStyle.Typography.callout.weight(.semibold)
+        static let body = AppStyle.Typography.metadataEmphasis
     }
 
     var body: some View {

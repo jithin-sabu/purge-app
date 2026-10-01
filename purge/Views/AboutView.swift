@@ -69,15 +69,15 @@ struct AboutView: View {
                 .onTapGesture { registerIconTap() }
 
             Text("Purge")
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .font(AppStyle.Typography.title)
 
             if let devModeFlash {
                 Text(devModeFlash)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(AppStyle.Typography.callout.weight(.medium))
                     .foregroundStyle(.secondary)
             } else {
                 Text("Version \(appVersion)")
-                    .font(.system(size: 12, weight: .regular))
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(.secondary)
             }
 
@@ -134,13 +134,13 @@ struct AboutView: View {
                 .accessibilityHidden(true)
 
             Text("Nothing cleaned yet")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .font(AppStyle.Typography.title)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .accessibilityLabel("Nothing cleaned yet")
 
             Text("Run your first scan to get started")
-                .font(.system(size: 12, weight: .regular))
+                .font(AppStyle.Typography.callout)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
         }
@@ -150,14 +150,14 @@ struct AboutView: View {
     private var lifetimeStatsContent: some View {
         VStack(spacing: 8) {
             Text("Lifetime moved to trash")
-                .font(.system(size: 11, weight: .semibold))
+                .font(AppStyle.Typography.metadata.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .multilineTextAlignment(.center)
                 .accessibilityHidden(true)
 
             Text(formatBytes(store.totalMovedToTrashBytes))
-                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .font(AppStyle.Typography.displaySmall)
                 .monospacedDigit()
                 .multilineTextAlignment(.center)
                 .accessibilityLabel("Lifetime moved to trash, \(formatBytes(store.totalMovedToTrashBytes))")
@@ -227,10 +227,10 @@ struct AboutView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Jithin on X")
             }
-            .font(.subheadline)
+            .font(AppStyle.Typography.metadata)
 
             Text(footerVersionText)
-                .font(.caption)
+                .font(AppStyle.Typography.metadata)
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
@@ -325,7 +325,7 @@ private struct LifetimeSizeComparisonChip: View {
             Text("That's room for \(item.label)")
                 .lineLimit(1)
         }
-        .font(.system(size: 13, weight: .medium))
+        .font(AppStyle.Typography.rowTitle)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -345,7 +345,7 @@ private struct AboutAllowlistSummaryBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("what purge can clean")
-                .font(.system(size: 11, weight: .semibold))
+                .font(AppStyle.Typography.metadata.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
@@ -357,7 +357,7 @@ private struct AboutAllowlistSummaryBlock: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(SafetyAllowlistSummary.boundaryLine)
-                .font(.system(size: 11, weight: .regular))
+                .font(AppStyle.Typography.metadata)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -378,11 +378,11 @@ private struct AboutAllowlistCategoryRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(category.title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(.primary)
 
                 Text(category.description)
-                    .font(.system(size: 11, weight: .regular))
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -408,7 +408,7 @@ private struct AboutActionRow: View {
                     .frame(width: 16)
 
                 Text(label)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(AppStyle.Typography.body)
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 

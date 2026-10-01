@@ -287,13 +287,13 @@ struct ScanResultRow: View {
     private var rowLoadedTextColumn: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(primaryLabel)
-                .font(.headline.weight(.semibold))
+                .font(AppStyle.Typography.headline)
                 .lineLimit(1)
 
             Text(safetyInfo.explanation)
                 .lineLimit(explanationLineLimit)
                 .truncationMode(.tail)
-                .font(.subheadline)
+                .font(AppStyle.Typography.metadata)
                 .foregroundStyle(.secondary)
                 .frame(
                     minHeight: explanationMinHeight,
@@ -347,7 +347,7 @@ struct ScanResultRow: View {
         } loaded: {
             VStack(alignment: .trailing, spacing: 8) {
                 Text(formattedSize)
-                    .font(.subheadline.weight(.medium))
+                    .font(AppStyle.Typography.metadata.weight(.medium))
                     .foregroundStyle(.primary)
                     .monospacedDigit()
 

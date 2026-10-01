@@ -666,7 +666,7 @@ struct DevToolsView<PageHeader: View>: View {
     private var placeholderNoData: some View {
         VStack(spacing: 8) {
             Text("No dev tool folders surfaced yet.")
-                .font(.headline)
+                .font(AppStyle.Typography.headline)
             Text(scanPhase == .completed ? "Your Mac is looking clean. Check back later." : "Run a scan after adding projects or tool-generated folders.")
                 .foregroundStyle(.secondary)
         }
@@ -1113,7 +1113,7 @@ struct DevToolsView<PageHeader: View>: View {
     private var emptyFilterState: some View {
         VStack(spacing: 4) {
             Text("Nothing here.")
-                .font(.headline)
+                .font(AppStyle.Typography.headline)
             Text("No items match this filter.")
                 .foregroundStyle(.secondary)
         }

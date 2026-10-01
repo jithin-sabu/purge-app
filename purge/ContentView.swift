@@ -358,7 +358,7 @@ struct ContentView: View {
     /// Groups the scan tabs by what Purge may do with what they find.
     private func sidebarSectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
+            .font(AppStyle.Typography.metadata.weight(.semibold))
             .foregroundStyle(.tertiary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
             .padding(.top, AppStyle.Spacing.small)
@@ -878,7 +878,7 @@ struct SidebarSummaryView: View {
     @EnvironmentObject var trashStore: TrashStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let font = Font.system(size: 12, weight: .medium, design: .rounded)
+    private static let font = AppStyle.Typography.callout.weight(.medium)
 
     var body: some View {
         VStack(spacing: AppStyle.Spacing.small) {

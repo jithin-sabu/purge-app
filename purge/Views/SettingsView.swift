@@ -634,7 +634,7 @@ struct SettingsView: View {
     private var cleaningHistoryExpandRow: some View {
         HStack(spacing: 10) {
             Text(isCleaningHistoryExpanded ? "Show less" : "Show all")
-                .font(.system(size: 13, weight: .regular))
+                .font(AppStyle.Typography.body)
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -706,7 +706,7 @@ struct SettingsView: View {
                     .lineLimit(1)
 
                 Text(entry.path)
-                    .font(.caption2.monospaced())
+                    .font(AppStyle.Typography.micro.weight(.regular).monospaced())
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .lineLimit(1)
@@ -801,7 +801,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center) {
                 Text(title)
-                    .font(.headline)
+                    .font(AppStyle.Typography.headline)
 
                 Spacer(minLength: 12)
 
@@ -831,7 +831,7 @@ struct SettingsView: View {
 
             if let warning {
                 Text(warning)
-                    .font(.caption)
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.statusCheckText)
             }
         }
@@ -1062,23 +1062,23 @@ struct SettingsView: View {
     }
 
     private var scheduleStatusLabelFont: Font {
-        .system(size: 11, weight: .medium)
+        AppStyle.Typography.metadataEmphasis
     }
 
     private var scheduleStatusPrimaryFont: Font {
-        .system(size: 13, weight: .regular)
+        AppStyle.Typography.body
     }
 
     private var scheduleStatusSecondaryFont: Font {
-        .system(size: 12, weight: .regular)
+        AppStyle.Typography.callout
     }
 
     private var scheduleStatusTertiaryFont: Font {
-        .system(size: 11, weight: .regular)
+        AppStyle.Typography.metadata
     }
 
     private var scheduleStatusLinkFont: Font {
-        .system(size: 11, weight: .medium)
+        AppStyle.Typography.metadataEmphasis
     }
 
     private var scheduleTextTransition: ContentTransition {
@@ -1213,7 +1213,7 @@ private struct SettingsPickerButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13))
+            .font(AppStyle.Typography.body)
             .foregroundStyle(.primary)
             .padding(.horizontal, 10)
             .frame(height: AppStyle.Control.height)
@@ -1253,7 +1253,7 @@ private struct AppearanceOptionButton: View {
                     }
 
                 Text(mode.displayName)
-                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .font(AppStyle.Typography.metadata.weight(isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
             }
         }

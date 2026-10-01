@@ -496,7 +496,7 @@ struct LargeFilesView: View {
                 .font(.system(size: 38))
                 .foregroundStyle(.secondary)
             Text("No Large Files Found")
-                .font(.title3)
+                .font(AppStyle.Typography.sectionTitle.weight(.regular))
             Text("Try a lower size threshold or a shorter last-used window.")
                 .foregroundStyle(.secondary)
         }
@@ -506,7 +506,7 @@ struct LargeFilesView: View {
     private var emptyFilterState: some View {
         VStack(spacing: 4) {
             Text("Nothing here.")
-                .font(.headline)
+                .font(AppStyle.Typography.headline)
             // Name the query when there is one: with a search field in the chrome the
             // generic "this filter" leaves the user guessing whether it was the query,
             // the category, or the size threshold that emptied the list.
@@ -630,7 +630,7 @@ private struct LargeFileDuplicateStatus: View {
                         .scaleEffect(0.7)
                         .frame(width: 12, height: 12)
                     Text("Checking for duplicates…")
-                        .font(.system(size: 12))
+                        .font(AppStyle.Typography.callout)
                         .foregroundStyle(AppColors.textTertiary)
                         .lineLimit(1)
                 }
@@ -715,7 +715,6 @@ private struct LargeFileSearchField: View {
     /// Matches FilterChip's metrics so the row's controls share a baseline.
     private static let horizontalPadding: CGFloat = 10
     private static let verticalPadding: CGFloat = 5
-    private static let labelSize: CGFloat = 13
 
     private var hasText: Bool { !query.isEmpty }
 
@@ -729,7 +728,7 @@ private struct LargeFileSearchField: View {
 
             TextField("Search", text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: Self.labelSize))
+                .font(AppStyle.Typography.body)
                 .foregroundStyle(AppColors.textPrimary)
                 .focused($isFocused)
                 .focusEffectDisabledIfAvailable()
@@ -985,7 +984,7 @@ private struct LargeFileRow: View {
             Spacer(minLength: 12)
 
             Text(file.formattedSize)
-                .font(.subheadline.weight(.medium))
+                .font(AppStyle.Typography.metadata.weight(.medium))
                 .foregroundStyle(.primary)
                 .monospacedDigit()
         }
@@ -1044,7 +1043,7 @@ private struct LargeFileRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(file.displayName)
-                    .font(.headline.weight(.semibold))
+                    .font(AppStyle.Typography.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1077,7 +1076,7 @@ private struct LargeFileRow: View {
                             .accessibilityLabel("\(otherCopyCount) other identical \(noun) found")
                     }
                 }
-                .font(.subheadline)
+                .font(AppStyle.Typography.metadata)
                 .lineLimit(1)
             }
         }
@@ -1144,7 +1143,7 @@ private struct LargeFileThumbnailIcon: View {
     private var extensionBadge: some View {
         if !fileExtension.isEmpty {
             Text(".\(fileExtension)")
-                .font(.system(size: 8, weight: .semibold))
+                .font(AppStyle.Typography.micro)
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 3)
@@ -1251,7 +1250,7 @@ struct LargeFileDeletionConfirmSheet: View {
                     .foregroundStyle(AppColors.textPrimary)
 
                 Text("These are your own files. Purge moves only the ones you picked to Trash, and you can put them back if you change your mind.")
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1367,7 +1366,7 @@ struct LargeFileDeletionConfirmSheet: View {
                     Text("…and \(remainingConsumedGroupCount) more sets where every copy is selected.")
                 }
             }
-            .font(.subheadline)
+            .font(AppStyle.Typography.metadata)
             .foregroundStyle(AppColors.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -1432,7 +1431,7 @@ struct DuplicateCleanupSheet: View {
                     .foregroundStyle(AppColors.textPrimary)
 
                 Text("Every copy is identical, so keeping any one is safe. Purge keeps the copy in a real folder over one in Downloads, a cache, or a build folder, and prefers the original name. The rest go to Trash. Tap a copy to keep it instead.")
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

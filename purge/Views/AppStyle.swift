@@ -47,6 +47,8 @@ enum AppStyle {
         static let display = Font.system(size: 56, weight: .bold, design: .rounded)
         /// Large totals: Overview, onboarding results.
         static let displaySmall = Font.system(size: 36, weight: .bold, design: .rounded)
+        /// Onboarding and empty-state headings.
+        static let title = Font.system(size: 26, weight: .semibold, design: .rounded)
         static let pageTitle = Font.system(size: 20, weight: .semibold, design: .rounded)
         /// Sheet titles, card headers, large buttons.
         static let sectionTitle = Font.system(size: 15, weight: .semibold)
@@ -69,7 +71,7 @@ extension View {
     /// Shared style for explanatory helper text in Settings, so caption styling
     /// can never drift between sections.
     func settingsCaption() -> some View {
-        self.font(.callout)
+        self.font(AppStyle.Typography.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }

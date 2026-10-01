@@ -45,7 +45,7 @@ struct CustomCleaningIntervalSheet: View {
                     .foregroundStyle(AppColors.textPrimary)
 
                 Text("Pick your own interval. Purge will quietly clean the same safe items on that rhythm.")
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -53,7 +53,7 @@ struct CustomCleaningIntervalSheet: View {
             HStack(spacing: AppStyle.Spacing.small) {
                 TextField("", text: $amountText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13).monospacedDigit())
+                    .font(AppStyle.Typography.body.monospacedDigit())
                     .multilineTextAlignment(.center)
                     .focused($amountFieldFocused)
                     .frame(width: 34)

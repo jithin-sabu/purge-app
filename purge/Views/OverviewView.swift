@@ -61,16 +61,16 @@ struct OverviewView: View {
     private func diskSummary(_ breakdown: OverviewBreakdown) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
             Text("\(formatStorageBytes(breakdown.usedBytes)) used")
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(AppStyle.Typography.title.weight(.bold))
                 .overviewNumberTransition(breakdown.usedBytes, reduceMotion: reduceMotion)
             Text("of \(formatStorageBytes(breakdown.totalBytes))")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(AppStyle.Typography.rowTitle)
                 .foregroundStyle(.secondary)
                 .overviewNumberTransition(breakdown.totalBytes, reduceMotion: reduceMotion)
             Spacer(minLength: AppStyle.Spacing.small)
             // Right end, above the free part of the bar.
             Text("\(formatStorageBytes(breakdown.freeBytes)) free")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(AppStyle.Typography.rowTitle)
                 .foregroundStyle(.secondary)
                 .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
         }
@@ -212,7 +212,7 @@ private struct OverviewCategoryRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(OverviewCategoryStyle.name(category))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(AppStyle.Typography.headline)
                     if OverviewCategoryStyle.isReview(category), showsFigure {
                         AppBadge(text: "Review first", tone: .warning)
                     }
@@ -269,7 +269,7 @@ private struct OverviewCategoryRow: View {
     private var statusLine: some View {
         Text(statusText)
             .lineLimit(1)
-            .font(.system(size: 12))
+            .font(AppStyle.Typography.callout)
             .foregroundStyle(.secondary)
             .contentTransition(reduceMotion ? .identity : .numericText())
             .animation(reduceMotion ? nil : OverviewMotion.number, value: statusText)
@@ -299,7 +299,7 @@ private struct OverviewCategoryRow: View {
                     .foregroundStyle(.tertiary)
                     .overviewNumberTransition(share, reduceMotion: reduceMotion)
                 Text(formatStorageBytes(bytes))
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(AppStyle.Typography.sectionTitle)
                     .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                     .foregroundStyle(isRecorded ? .secondary : .primary)
                     .frame(minWidth: 64, alignment: .trailing)
@@ -456,9 +456,9 @@ private struct OverviewPlainRow: View {
             OverviewIconTile(symbol: symbol, color: color)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(AppStyle.Typography.headline)
                 Text(detail)
-                    .font(.system(size: 12))
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -468,7 +468,7 @@ private struct OverviewPlainRow: View {
                 .foregroundStyle(.tertiary)
                 .overviewNumberTransition(share, reduceMotion: reduceMotion)
             Text(formatStorageBytes(bytes))
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(AppStyle.Typography.sectionTitle)
                 .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                 .frame(minWidth: 64, alignment: .trailing)
         }

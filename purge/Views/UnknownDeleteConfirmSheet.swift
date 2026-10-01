@@ -83,7 +83,7 @@ struct UnknownDeleteConfirmSheet: View {
                     .font(AppStyle.Typography.pageTitle)
                     .foregroundStyle(AppColors.textPrimary)
                 Text("Purge couldn't identify this file. Only delete it if you know what it is. It can't be put back afterward.")
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -124,7 +124,7 @@ struct UnknownDeleteConfirmSheet: View {
 
             if !sharedExplanation.isEmpty {
                 Text(sharedExplanation)
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }

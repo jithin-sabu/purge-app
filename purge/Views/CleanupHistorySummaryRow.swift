@@ -19,7 +19,7 @@ struct CleanupHistorySummaryRow: View {
 
             VStack(alignment: .trailing, spacing: 3) {
                 Text(formatBytes(entry.bytesMovedToTrash))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(.primary)
 
                 Text(detailText)
@@ -48,10 +48,10 @@ struct CleanupHistorySummaryRow: View {
     }()
 
     private var scheduleStatusPrimaryFont: Font {
-        .system(size: 13, weight: .regular)
+        AppStyle.Typography.body
     }
 
     private var scheduleStatusTertiaryFont: Font {
-        .system(size: 11, weight: .regular)
+        AppStyle.Typography.metadata
     }
 }

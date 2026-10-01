@@ -165,7 +165,7 @@ struct PurgeApp: App {
                         applyAppAppearance()
                     }
                 }
-                .font(.system(.body, design: .rounded))
+                .font(AppStyle.Typography.body)
                 .preferredColorScheme(activeColorScheme)
                 .onChange(of: appearanceModeRaw) { _ in
                     applyAppAppearance()

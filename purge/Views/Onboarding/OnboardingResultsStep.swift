@@ -158,13 +158,13 @@ struct OnboardingResultsStep: View {
       VStack(alignment: .center, spacing: 32) {
         VStack(alignment: .center, spacing: 0) {
           Text(formatBytes(totalBytes))
-            .font(.system(size: 56, weight: .bold, design: .rounded))
+            .font(AppStyle.Typography.display)
             .monospacedDigit()
             .multilineTextAlignment(.center)
             .accessibilityLabel("\(formatBytes(totalBytes)) ready to clean")
 
           Text("ready to clean on your Mac")
-            .font(.title2.weight(.medium))
+            .font(AppStyle.Typography.sectionTitle.weight(.medium))
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
         }

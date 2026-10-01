@@ -143,7 +143,7 @@ struct OnboardingSizeComparisonLine: View {
 
   private var prefixLabel: some View {
     Text("That's room for")
-      .font(.title3.weight(.regular))
+      .font(AppStyle.Typography.sectionTitle.weight(.regular))
       .foregroundStyle(.secondary)
   }
 
@@ -152,7 +152,7 @@ struct OnboardingSizeComparisonLine: View {
       ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
         if index > 0 {
           Text("or")
-            .font(.title3.weight(.regular))
+            .font(AppStyle.Typography.sectionTitle.weight(.regular))
             .foregroundStyle(.tertiary)
         }
 
@@ -179,7 +179,7 @@ private struct OnboardingSizeComparisonChip: View {
       Text(item.label)
         .lineLimit(1)
     }
-    .font(.title3.weight(.medium))
+    .font(AppStyle.Typography.sectionTitle.weight(.medium))
     .foregroundStyle(.secondary)
     .padding(.horizontal, 12)
     .padding(.vertical, 6)
@@ -210,13 +210,13 @@ struct OnboardingResultsCategoryRow: View {
         .accessibilityHidden(true)
 
       Text(title)
-        .font(.callout)
+        .font(AppStyle.Typography.callout)
         .foregroundStyle(.secondary)
 
       Spacer(minLength: AppStyle.Spacing.xxSmall)
 
       Text(formattedSize)
-        .font(.callout)
+        .font(AppStyle.Typography.callout)
         .foregroundStyle(.secondary)
         .monospacedDigit()
         .frame(width: Self.sizeColumnWidth, alignment: .trailing)
@@ -232,7 +232,7 @@ struct OnboardingStepTitle: View {
 
   var body: some View {
     Text(text)
-      .font(.system(size: 26, weight: .semibold, design: .rounded))
+      .font(AppStyle.Typography.title)
       .multilineTextAlignment(.center)
       .frame(maxWidth: .infinity, alignment: .center)
   }
@@ -249,7 +249,7 @@ struct OnboardingLoadingStepTitle: View {
 
   var body: some View {
     Text(displayText)
-      .font(.system(size: 26, weight: .semibold, design: .rounded))
+      .font(AppStyle.Typography.title)
       .multilineTextAlignment(.center)
       .frame(maxWidth: .infinity, alignment: .center)
       .accessibilityLabel("\(baseText).")

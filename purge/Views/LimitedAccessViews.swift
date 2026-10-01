@@ -46,11 +46,11 @@ struct LockedFeatureView: View {
 
             VStack(spacing: AppStyle.Spacing.xSmall) {
                 Text(feature.title)
-                    .font(.title3.weight(.semibold))
+                    .font(AppStyle.Typography.sectionTitle)
                     .multilineTextAlignment(.center)
 
                 Text(feature.message)
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -104,10 +104,10 @@ struct LimitedScanNotice: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Limited scan")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(AppStyle.Typography.callout.weight(.semibold))
                         .foregroundStyle(.primary)
                     Text("Let Purge look deeper")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(AppStyle.Typography.metadataEmphasis)
                         .foregroundStyle(.secondary)
                 }
 

@@ -600,7 +600,7 @@ struct UninstallView: View {
                 .font(.system(size: 38))
                 .foregroundStyle(.secondary)
             Text(title)
-                .font(.title3)
+                .font(AppStyle.Typography.sectionTitle.weight(.regular))
             Text(detail)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -1164,7 +1164,7 @@ struct UninstallReviewSheet: View {
                 .foregroundStyle(AppColors.textPrimary)
 
             Text("Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted for good, so you can put anything back if you change your mind.")
-                .font(.callout)
+                .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1308,7 +1308,7 @@ struct OrphanReviewSheet: View {
                 .font(AppStyle.Typography.pageTitle)
                 .foregroundStyle(AppColors.textPrimary)
             Text("These folders belong to apps you no longer have installed. This is app data, not a rebuildable cache, so it will not come back on its own. Everything moves to the Trash, so you can put it back until you empty it.")
-                .font(.callout)
+                .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1398,7 +1398,7 @@ struct RemovedAppLeftoverSheet: View {
                     .font(AppStyle.Typography.pageTitle)
                     .foregroundStyle(AppColors.textPrimary)
                 Text("\(plan.app.name) was removed from Applications, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it.")
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1449,7 +1449,7 @@ private struct UninstallSearchField: View {
 
             TextField("Search apps", text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(AppStyle.Typography.body)
                 .foregroundStyle(AppColors.textPrimary)
                 .focused($isFocused)
                 .focusEffectDisabledIfAvailable()

@@ -19,21 +19,21 @@ struct OnboardingCelebrationView: View {
       VStack(spacing: AppStyle.Spacing.small) {
         if bytesMovedToTrash > 0 {
           Text(formatBytes(Int64(animatedMovedBytes)))
-            .font(.system(size: 52, weight: .bold, design: .rounded))
+            .font(AppStyle.Typography.display)
             .contentTransition(.numericText())
             .monospacedDigit()
             .accessibilityLabel("\(formatBytes(bytesMovedToTrash)) moved to trash, not yet reclaimed")
 
           Text("moved to trash, not yet reclaimed")
-            .font(.title2.weight(.semibold))
+            .font(AppStyle.Typography.sectionTitle)
             .foregroundStyle(.secondary)
         } else {
           Text("You're all set")
-            .font(.system(size: 40, weight: .bold, design: .rounded))
+            .font(AppStyle.Typography.displaySmall)
         }
 
         Text(spaceContextLine)
-          .font(.body)
+          .font(AppStyle.Typography.body)
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
@@ -46,7 +46,7 @@ struct OnboardingCelebrationView: View {
       VStack(spacing: AppStyle.Spacing.small) {
         if bytesMovedToTrash > 0 {
           Text("Empty your Trash to reclaim this space.")
-            .font(.callout)
+            .font(AppStyle.Typography.callout)
             .foregroundStyle(.tertiary)
             .multilineTextAlignment(.center)
         }

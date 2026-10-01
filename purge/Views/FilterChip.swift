@@ -46,7 +46,6 @@ struct FilterChip: View {
     private static let horizontalPadding: CGFloat = 10
     private static let verticalPadding: CGFloat = 5
     private static let contentSpacing: CGFloat = 6
-    private static let labelSize: CGFloat = 13
 
     var body: some View {
         HStack(spacing: Self.contentSpacing) {
@@ -55,7 +54,7 @@ struct FilterChip: View {
                     // Badged symbols (e.g. clock.badge.xmark) report a taller
                     // ideal size than a plain glyph. Size and clip so every
                     // chip shares one height.
-                    .font(.system(size: 12, weight: .medium))
+                    .font(AppStyle.Typography.callout.weight(.medium))
                     .foregroundStyle(foregroundColor)
                     .frame(width: 14, height: 14)
                     .clipped()
@@ -73,13 +72,13 @@ struct FilterChip: View {
                     .accessibilityHidden(true)
             } else if let count {
                 Text("\(count)")
-                    .font(.system(size: Self.labelSize, weight: .medium))
+                    .font(AppStyle.Typography.rowTitle)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .foregroundStyle(countColor)
             }
         }
-        .font(.system(size: Self.labelSize))
+        .font(AppStyle.Typography.body)
         .foregroundStyle(foregroundColor)
         .padding(.horizontal, Self.horizontalPadding)
         .padding(.vertical, Self.verticalPadding)
@@ -100,11 +99,11 @@ struct FilterChip: View {
         if style == .tab {
             ZStack(alignment: .leading) {
                 Text(label)
-                    .font(.system(size: Self.labelSize, weight: .semibold))
+                    .font(AppStyle.Typography.headline)
                     .opacity(0)
                     .accessibilityHidden(true)
                 Text(label)
-                    .font(.system(size: Self.labelSize, weight: isSelected ? .semibold : .regular))
+                    .font(AppStyle.Typography.body.weight(isSelected ? .semibold : .regular))
             }
             .animation(nil, value: isSelected)
             .lineLimit(1)

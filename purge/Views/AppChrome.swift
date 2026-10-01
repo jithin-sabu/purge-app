@@ -13,7 +13,7 @@ struct AppBrandMark: View {
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
 
             Text("Purge")
-                .font(.system(size: 14, weight: .semibold))
+                .font(AppStyle.Typography.sectionTitle)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Purge")
@@ -148,7 +148,7 @@ struct AppSectionPageHeader<Trailing: View>: View {
 
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.subheadline)
+                        .font(AppStyle.Typography.metadata)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .contentTransition(reduceMotion ? .identity : .numericText())
@@ -579,7 +579,7 @@ struct SafeCleanupCelebrationOverlay: View {
 
                     VStack(spacing: AppStyle.Spacing.small) {
                         Text(formatBytes(displayedBytes))
-                            .font(.system(size: 54, weight: .bold, design: .rounded))
+                            .font(AppStyle.Typography.display)
                             .foregroundStyle(.white)
                             .monospacedDigit()
                             .contentTransition(reduceMotion ? .identity : .numericText())
@@ -587,7 +587,7 @@ struct SafeCleanupCelebrationOverlay: View {
                             .accessibilityAddTraits(.isHeader)
 
                         Text(subtitleText)
-                            .font(.title2.weight(.semibold))
+                            .font(AppStyle.Typography.sectionTitle)
                             .foregroundStyle(.white.opacity(0.78))
                             .multilineTextAlignment(.center)
                             .contentTransition(.opacity)
@@ -644,7 +644,7 @@ struct SafeCleanupCelebrationOverlay: View {
                             Image(systemName: "trash")
                             Text("Empty your Trash to reclaim this space.")
                         }
-                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .font(AppStyle.Typography.body.weight(.medium))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
                     }
@@ -656,7 +656,7 @@ struct SafeCleanupCelebrationOverlay: View {
                             Image(systemName: "key")
                             Text("Emptying the Trash may ask for your password.")
                         }
-                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .font(AppStyle.Typography.body.weight(.medium))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
                     }
@@ -715,7 +715,7 @@ struct SafeCleanupCelebrationOverlay: View {
             .frame(height: 4)
 
             Text(currentItemText)
-                .font(.system(.body, design: .rounded, weight: .medium))
+                .font(AppStyle.Typography.body.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -968,7 +968,7 @@ private struct CompletionTimeTagline: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.white.opacity(0.72))
             }
-            .font(.system(.body, design: .rounded, weight: .medium))
+            .font(AppStyle.Typography.body.weight(.medium))
             .lineLimit(1)
             .truncationMode(.tail)
         }
@@ -1006,7 +1006,7 @@ private struct CompletionBoltAnchor: View {
             .scaleEffect(isEnergized ? 1.12 : 1)
             .rotationEffect(.degrees(isEnergized ? 14 : -12))
         }
-        .font(.caption)
+        .font(AppStyle.Typography.metadata)
         .animation(reduceMotion ? nil : Self.chargeSpring, value: isEnergized)
         .onAppear { reactToToken(flashToken) }
         .onChange(of: flashToken) { reactToToken($0) }
@@ -1108,7 +1108,7 @@ private struct CleanFailureDisclosure: View {
                         .font(.caption2.weight(.semibold))
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
-                .font(.callout)
+                .font(AppStyle.Typography.callout)
                 .foregroundStyle(.white.opacity(0.6))
             }
             .buttonStyle(.plain)
@@ -1126,7 +1126,7 @@ private struct CleanFailureDisclosure: View {
 
                     if hiddenCount > 0 {
                         Text("+\(hiddenCount) more")
-                            .font(.caption)
+                            .font(AppStyle.Typography.metadata)
                             .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
@@ -1197,19 +1197,19 @@ private struct NeedsAdministratorPanel: View {
                     .accessibilityHidden(true)
 
                 Text(title)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(AppStyle.Typography.sectionTitle)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
 
                 if let namesLine {
                     Text(namesLine)
-                        .font(.system(size: 14))
+                        .font(AppStyle.Typography.sectionTitle.weight(.regular))
                         .foregroundStyle(.white.opacity(0.6))
                         .multilineTextAlignment(.center)
                 }
 
                 Text(explanation)
-                    .font(.system(size: 15))
+                    .font(AppStyle.Typography.sectionTitle.weight(.regular))
                     .foregroundStyle(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1236,7 +1236,7 @@ private struct NeedsAdministratorPanel: View {
                 }
 
                 Text(trustLine)
-                    .font(.system(size: 13))
+                    .font(AppStyle.Typography.body)
                     .foregroundStyle(.white.opacity(0.5))
                     .multilineTextAlignment(.center)
                     .padding(.top, 2)
@@ -1258,11 +1258,11 @@ private struct NeedsAdministratorPanel: View {
     private var statusLine: some View {
         if isHelperEnabled {
             Label("Secure removal is on", systemImage: "checkmark.seal.fill")
-                .font(.system(size: 13, weight: .medium))
+                .font(AppStyle.Typography.rowTitle)
                 .foregroundStyle(.green)
         } else if needsApproval {
             Text("In System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back.")
-                .font(.system(size: 13))
+                .font(AppStyle.Typography.body)
                 .foregroundStyle(.white.opacity(0.68))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1286,13 +1286,13 @@ private struct CleanFailureRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(failure.displayName)
-                    .font(.callout)
+                    .font(AppStyle.Typography.callout)
                     .foregroundStyle(.white.opacity(0.78))
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 Text(failure.reason.explanation)
-                    .font(.caption)
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -1461,40 +1461,6 @@ extension AnyTransition {
     }
 }
 
-/// Chip title that reserves semibold width so selection doesn't shift neighbors.
-struct AppChipTitle: View {
-    let text: String
-    var isSelected: Bool
-    var size: CGFloat = 13
-
-    var body: some View {
-        ZStack(alignment: .leading) {
-            Text(text)
-                .font(.system(size: size, weight: .semibold))
-                .opacity(0)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.system(size: size, weight: isSelected ? .semibold : .regular))
-        }
-        .lineLimit(1)
-        .fixedSize(horizontal: true, vertical: false)
-    }
-}
-
-/// Fixed icon slot so filled/outline SF Symbols don't shift chip layout.
-struct AppChipIcon: View {
-    let systemName: String
-    var color: Color
-
-    var body: some View {
-        Image(systemName: systemName)
-            .imageScale(.small)
-            .foregroundStyle(color)
-            .frame(width: 14, height: 14)
-            .accessibilityHidden(true)
-    }
-}
-
 struct AppBadge: View {
     enum Tone {
         case neutral
@@ -1570,7 +1536,7 @@ private struct AppNavIcon: View {
                 .opacity(currentFillProgress)
                 .scaleEffect(0.86 + (0.14 * currentFillProgress))
         }
-        .font(.system(size: 13, weight: .medium))
+        .font(AppStyle.Typography.rowTitle)
         .frame(width: 16)
         .foregroundStyle(isSelected ? AppColors.textPrimary : .secondary)
             .onAppear {
@@ -1638,7 +1604,7 @@ struct AppNavRow: View {
             HStack(spacing: AppStyle.Spacing.xSmall) {
                 AppNavIcon(systemImage: systemImage, isSelected: isSelected)
                 Text(title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .font(AppStyle.Typography.body.weight(isSelected ? .semibold : .medium))
                     .lineLimit(1)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
                 accessoryView
@@ -1661,7 +1627,7 @@ struct AppNavRow: View {
             EmptyView()
         case .value(let text, let isDimmed):
             Text(text)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .font(AppStyle.Typography.metadataEmphasis)
                 .monospacedDigit()
                 .foregroundStyle(isDimmed ? .quaternary : .tertiary)
                 .lineLimit(1)

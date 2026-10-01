@@ -31,7 +31,7 @@ struct CleanupHistoryDetailView: View {
     private var sheetHeader: some View {
         HStack(alignment: .center, spacing: 12) {
             Text(entry.trigger == .scheduled ? "Automatic clean" : "Manual clean")
-                .font(.headline)
+                .font(AppStyle.Typography.headline)
 
             Spacer(minLength: 12)
 
@@ -89,7 +89,7 @@ struct CleanupHistoryDetailView: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
+            .font(AppStyle.Typography.metadata.weight(.semibold))
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
     }
@@ -100,12 +100,12 @@ struct CleanupHistoryDetailView: View {
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(fileURL.lastPathComponent)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(AppStyle.Typography.body)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
-                    .font(.system(size: 11, weight: .regular))
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
@@ -114,7 +114,7 @@ struct CleanupHistoryDetailView: View {
 
             if item.sizeBytes > 0 {
                 Text(formatBytes(item.sizeBytes))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(.secondary)
             }
         }
@@ -126,17 +126,17 @@ struct CleanupHistoryDetailView: View {
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(fileURL.lastPathComponent)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(AppStyle.Typography.body)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(item.reason)
-                    .font(.system(size: 11, weight: .regular))
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
-                    .font(.system(size: 11, weight: .regular))
+                    .font(AppStyle.Typography.metadata)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }

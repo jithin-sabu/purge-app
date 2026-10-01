@@ -388,7 +388,7 @@ struct AppCachesView<PageHeader: View>: View {
     private var emptyFilterState: some View {
         VStack(spacing: 4) {
             Text("Nothing here.")
-                .font(.headline)
+                .font(AppStyle.Typography.headline)
             Text("No items match this filter.")
                 .foregroundStyle(.secondary)
         }
@@ -409,7 +409,7 @@ struct AppCachesView<PageHeader: View>: View {
                 .font(.system(size: 38))
                 .foregroundStyle(.secondary)
             Text(scanPhase == .completed ? "Your Mac is looking clean." : "No Caches Found")
-                .font(.title3)
+                .font(AppStyle.Typography.sectionTitle.weight(.regular))
             Text(scanPhase == .completed ? "Check back later." : "Run a scan to inspect recoverable application caches.")
                 .foregroundStyle(.secondary)
         }
