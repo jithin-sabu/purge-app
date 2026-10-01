@@ -450,7 +450,9 @@ struct LargeFilesView: View {
                         section: section,
                         files: store.largeFiles,
                         selection: store.largeFileSelection,
-                        onToggle: toggleSelection(forFileID:)
+                        onToggle: toggleSelection(forFileID:),
+                        onExclude: store.excludeLargeFileFromScans,
+                        onExcludeFolder: store.excludeLargeFileFolderFromScans
                     )
                     .listRowInsets(ScanListRowInsets.standard)
                     .listRowBackground(Color.clear)
@@ -467,7 +469,9 @@ struct LargeFilesView: View {
                         file: file,
                         selection: store.largeFileSelection,
                         duplicateCopyCount: duplicateIndex.copyCount(forFileID: file.id),
-                        onToggle: { toggleSelection(forFileID: file.id) }
+                        onToggle: { toggleSelection(forFileID: file.id) },
+                        onExclude: { store.excludeLargeFileFromScans(file) },
+                        onExcludeFolder: { store.excludeLargeFileFolderFromScans(file) }
                     )
                     .listRowInsets(ScanListRowInsets.standard)
                     .listRowBackground(Color.clear)
@@ -834,6 +838,8 @@ private struct DuplicateGroupCard: View {
     /// re-render on selection.
     let selection: LargeFileSelection
     let onToggle: (String) -> Void
+    let onExclude: (LargeFile) -> Void
+    let onExcludeFolder: (LargeFile) -> Void
 
     private static let headerHeight: CGFloat = 20
     private static let innerSpacing: CGFloat = 6
@@ -865,7 +871,9 @@ private struct DuplicateGroupCard: View {
                     // is noise.
                     duplicateCopyCount: nil,
                     isNested: true,
-                    onToggle: { onToggle(file.id) }
+                    onToggle: { onToggle(file.id) },
+                    onExclude: { onExclude(file) },
+                    onExcludeFolder: { onExcludeFolder(file) }
                 )
             }
         }
@@ -924,8 +932,32 @@ private struct LargeFileRow: View {
     /// legible as a distinct item rather than dissolving into the container.
     var isNested: Bool = false
     let onToggle: () -> Void
+    let onExclude: () -> Void
+    let onExcludeFolder: () -> Void
+
+    @State private var isContextMenuActive = false
 
     private var isSelected: Bool { selection.ids.contains(file.id) }
+
+    /// The folder option only makes sense for a file the user can see in Finder.
+    /// An AI model row stands for a manifest plus blobs in a store the user never
+    /// browses, so excluding "its folder" would mean excluding every model.
+    private var canExcludeFolder: Bool { file.sourceLabel == nil }
+
+    private var folderName: String {
+        file.path.deletingLastPathComponent().lastPathComponent
+    }
+
+    /// Built on right-click, not during `body` — see `ScanRowContextMenu.entries`.
+    private func contextMenuEntries() -> [ScanRowMenuEntry] {
+        var entries: [ScanRowMenuEntry] = [.action(title: "Exclude from scans", handler: onExclude)]
+        if canExcludeFolder {
+            entries.append(.action(title: "Exclude folder \u{201C}\(folderName)\u{201D} from scans", handler: onExcludeFolder))
+        }
+        entries.append(.separator)
+        entries.append(contentsOf: FinderReveal.menuEntries(for: [ScanRowLocation(url: fileURL)]))
+        return entries
+    }
 
     /// Copies *other than this row*. The row is itself one of the group's members,
     /// so a badge carrying the group total reads as "and this many more elsewhere"
@@ -994,18 +1026,29 @@ private struct LargeFileRow: View {
         .onTapGesture {
             onToggle()
         }
-        .modifier(ScanRowCardChrome())
+        .modifier(ScanRowCardChrome(showsContextMenuHighlight: isContextMenuActive))
         .overlay {
             if isNested {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
             }
         }
+        // Same right-click overlay the other scan rows use, rather than SwiftUI's
+        // `.contextMenu`, which makes the List paint its blue row highlight.
+        .overlay {
+            ScanRowContextMenu(isMenuActive: $isContextMenuActive, entries: contextMenuEntries)
+        }
+        .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction {
             onToggle()
         }
+        // The overlay only answers a secondary click; these give VoiceOver and the
+        // keyboard the same exclusion actions. Show in Finder already has one on
+        // the location label.
+        .accessibilityAction(named: Text("Exclude from scans"), onExclude)
+        .modifier(ExcludeFolderAccessibilityAction(isAvailable: canExcludeFolder, handler: onExcludeFolder))
     }
 
     /// Non-interactive checkbox that only reflects selection state, so the whole
@@ -1081,6 +1124,19 @@ private struct LargeFileRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ExcludeFolderAccessibilityAction: ViewModifier {
+    let isAvailable: Bool
+    let handler: () -> Void
+
+    func body(content: Content) -> some View {
+        if isAvailable {
+            content.accessibilityAction(named: Text("Exclude folder from scans"), handler)
+        } else {
+            content
+        }
     }
 }
 

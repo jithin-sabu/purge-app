@@ -664,11 +664,12 @@ struct SettingsView: View {
     /// eligibility when the path still passes the normal allowlist gate.
     private var excludedAppsSection: some View {
         settingsSection("Excluded from scans") {
-            settingsRowLabel(
+            settingsControlRow(
                 title: "Excluded paths",
-                caption: "Excluded paths are never scanned or cleaned. Right-click any scan result and choose 'Exclude from scans'."
-            )
-            .padding(16)
+                caption: "Scans skip these files and folders and everything inside them. Add a folder here, or right-click any scan result and choose Exclude from scans."
+            ) {
+                statusTextButton("Add folder\u{2026}", isDisabled: false, action: chooseFoldersToExclude)
+            }
 
             let entries = excludedEntries
 
@@ -771,6 +772,24 @@ struct SettingsView: View {
             return FolderSizing.directoryByteSize(at: url)
         }.value
         excludedPathSizes[path] = size
+    }
+
+    /// Lets someone exclude a folder before it ever shows up in a scan, which is the
+    /// usual case for an archive kept on purpose (#46). A plain panel, not a sheet:
+    /// Settings can be embedded in the main window or live in its own.
+    private func chooseFoldersToExclude() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+        panel.prompt = "Exclude"
+        panel.message = "Purge won\u{2019}t scan or clean anything inside the folders you choose."
+        panel.begin { response in
+            guard response == .OK else { return }
+            store.excludeFoldersFromScans(panel.urls)
+        }
     }
 
     private func removeExclusion(entry: ExcludedPathEntry) {

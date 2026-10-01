@@ -8,10 +8,23 @@ import Foundation
 /// home-directory walk was blocking the UI; it measured as a ~1.15s freeze on
 /// first switch to the Large Files tab.
 nonisolated final class LargeFileScanner {
-    func scanStream(minBytes: Int64, staleDays: Int) -> AsyncStream<LargeFile> {
+    /// `roots` and `exclusions` default to the policy's home folders and the saved
+    /// exclusion list; tests pass their own.
+    func scanStream(
+        minBytes: Int64,
+        staleDays: Int,
+        roots: [URL]? = nil,
+        exclusions: ScanExclusions? = nil
+    ) -> AsyncStream<LargeFile> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
-                await Self.run(minBytes: minBytes, staleDays: staleDays, continuation: continuation)
+                await Self.run(
+                    minBytes: minBytes,
+                    staleDays: staleDays,
+                    roots: roots,
+                    exclusions: exclusions,
+                    continuation: continuation
+                )
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -26,10 +39,13 @@ nonisolated final class LargeFileScanner {
     private static func run(
         minBytes: Int64,
         staleDays: Int,
+        roots: [URL]?,
+        exclusions: ScanExclusions?,
         continuation: AsyncStream<LargeFile>.Continuation
     ) async {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser
+        let exclusions = exclusions ?? .current()
         let now = Date()
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
@@ -37,9 +53,17 @@ nonisolated final class LargeFileScanner {
             .isUserImmutableKey, .isSystemImmutableKey
         ]
 
-        for root in LargeFileScanPolicy.scanRoots(home: home) {
+        for root in roots ?? LargeFileScanPolicy.scanRoots(home: home) {
             if Task.isCancelled { break }
             guard fm.fileExists(atPath: root.path) else { continue }
+            // Folders the user excluded are never entered, not just hidden from the
+            // results, so an excluded archive also stops costing scan time (#46).
+            let excluded = exclusions.scoped(to: root)
+            if excluded.excludesRoot { continue }
+            // How the enumerator spells the root, taken from its first child rather
+            // than from `root`: it can differ (`/private/var` for `/var`), and
+            // matching is on the path below this prefix. See `ScanExclusions`.
+            var walkedRootPrefix: String?
 
             guard let enumerator = fm.enumerator(
                 at: root,
@@ -56,14 +80,25 @@ nonisolated final class LargeFileScanner {
 
                         let values = try? fileURL.resourceValues(forKeys: resourceKeys)
 
+                        var isUserExcluded: Bool {
+                            guard !excluded.isEmpty else { return false }
+                            if walkedRootPrefix == nil, enumerator.level == 1 {
+                                walkedRootPrefix = fileURL.deletingLastPathComponent().path + "/"
+                            }
+                            let path = fileURL.path
+                            guard let prefix = walkedRootPrefix, path.hasPrefix(prefix) else { return false }
+                            return excluded.contains(relativePath: path.dropFirst(prefix.count))
+                        }
+
                         if values?.isDirectory == true || values?.isPackage == true {
-                            if LargeFileScanPolicy.isExcludedDirectory(fileURL) {
+                            if LargeFileScanPolicy.isExcludedDirectory(fileURL) || isUserExcluded {
                                 enumerator.skipDescendants()
                             }
                             continue
                         }
 
                         guard values?.isRegularFile == true else { continue }
+                        if isUserExcluded { continue }
 
                         let size = Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
                         guard size >= minBytes else { continue }

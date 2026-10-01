@@ -365,6 +365,9 @@ final class PurgeStore: ObservableObject {
     /// Paths the user excluded from scans. Purely subtractive: the scanner drops these
     /// after the allowlist gate, so nothing new ever becomes scannable or cleanable.
     @Published private(set) var excludedPaths: Set<String> = ExcludedPathsStore.allExcludedPaths()
+    /// Bumped whenever `excludedPaths` changes, so a Large Files scan already under way
+    /// can tell that the list it started with is out of date.
+    private var exclusionRevision = 0
 
     // MARK: Scan queue and records (Overview)
 
@@ -1402,23 +1405,43 @@ final class PurgeStore: ObservableObject {
         let staleDays = LargeFileAgeThreshold.currentThresholdDays()
         var collected: [LargeFile] = []
 
+        // The walk skips the exclusions it started with. One added while it runs
+        // (right-clicking a row that's already listed) is applied here instead:
+        // otherwise the next flush of `collected` would put the excluded rows back.
+        var seenExclusionRevision = exclusionRevision
+        var exclusionsChangedDuringScan = false
+        func admits(_ file: LargeFile) -> Bool {
+            if seenExclusionRevision != exclusionRevision {
+                seenExclusionRevision = exclusionRevision
+                exclusionsChangedDuringScan = true
+                collected.removeAll { ExcludedPathsStore.isExcluded($0.path) }
+            }
+            return !exclusionsChangedDuringScan || !ExcludedPathsStore.isExcluded(file.path)
+        }
+
         // Models resolve from a handful of manifests, so they land almost
         // instantly — running them ahead of the file walk puts the biggest
         // items on screen first instead of after a full home-directory sweep.
+        // They live outside the walked folders, so the exclusion check is per row.
         for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
+            guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
             collected.append(model)
         }
         largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
 
         for await file in largeFileScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
+            guard admits(file) else { continue }
             collected.append(file)
             if collected.count % 25 == 0 {
                 largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
             }
         }
         guard largeFileScanGeneration == generation else { return }
+        if seenExclusionRevision != exclusionRevision {
+            collected.removeAll { ExcludedPathsStore.isExcluded($0.path) }
+        }
         largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
         hasCompletedLargeFileScan = true
         stampScanRecords([.largeFiles])
@@ -3972,6 +3995,7 @@ final class PurgeStore: ObservableObject {
 
     private func refreshExcludedPaths() {
         excludedPaths = ExcludedPathsStore.allExcludedPaths()
+        exclusionRevision &+= 1
     }
 
     /// Subtracts every location from future scans and drops the row. Only removes paths
@@ -4083,6 +4107,51 @@ final class PurgeStore: ObservableObject {
     func removeExclusion(path: URL) {
         ExcludedPathsStore.remove(path: path)
         refreshExcludedPaths()
+    }
+
+    /// Subtracts one Large Files row from future scans and drops it. For an AI model
+    /// that is its manifest, the path the model is discovered through.
+    func excludeLargeFileFromScans(_ file: LargeFile) {
+        ExcludedPathsStore.write(path: file.path, displayName: file.displayName)
+        refreshExcludedPaths()
+        pruneExcludedLargeFiles()
+    }
+
+    /// Subtracts the folder holding a Large Files row, so nothing inside it is walked
+    /// or listed again (#46).
+    func excludeLargeFileFolderFromScans(_ file: LargeFile) {
+        excludeFoldersFromScans([file.path.deletingLastPathComponent()])
+    }
+
+    /// Folders the user picked in Settings. Exclusions only ever subtract, so any
+    /// folder is safe to add. One already covered by an existing exclusion is skipped
+    /// rather than listed twice.
+    func excludeFoldersFromScans(_ folders: [URL]) {
+        var added = false
+        for folder in folders where !ExcludedPathsStore.isExcluded(folder) {
+            ExcludedPathsStore.write(
+                path: folder,
+                displayName: FileManager.default.displayName(atPath: folder.path)
+            )
+            added = true
+        }
+        guard added else { return }
+        refreshExcludedPaths()
+        pruneExcludedLargeFiles()
+    }
+
+    /// Drops Large Files rows the exclusion list now covers, along with their
+    /// selection and duplicate badges. The other tabs pick up a new exclusion on
+    /// their next scan.
+    private func pruneExcludedLargeFiles() {
+        let removedIDs = Set(largeFiles.filter { ExcludedPathsStore.isExcluded($0.path) }.map(\.id))
+        guard !removedIDs.isEmpty else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            largeFiles.removeAll { removedIDs.contains($0.id) }
+        }
+        largeFileSelection.ids.subtract(removedIDs)
+        // A pair that just lost a member is no longer a duplicate.
+        largeFileDuplicates.removeFiles(ids: removedIDs)
     }
 
     /// Mark a row with a manual category. Persists `user_overrides.json` keyed
