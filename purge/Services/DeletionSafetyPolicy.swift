@@ -305,9 +305,11 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/Adobe/Common/Media Cache Files",
             "\(home)/Library/Application Support/Adobe/Common/Media Cache",
             // AUDIT: Docker's container holds images/volumes. Re-pullable but
-            // deleting can be costly — Check First, not Safe. (App Caches scan
-            // already excludes com.docker.* bundle IDs; this entry is used by
-            // the Dev Tools path.)
+            // deleting can be costly — Check First, not Safe. This list only
+            // decides that the path may be offered; the tier comes from the
+            // `docker` entry in explanations.json (pinned by DockerSafetyTierTests).
+            // (App Caches scan already excludes com.docker.* bundle IDs; this
+            // entry is used by the Dev Tools path.)
             "\(home)/Library/Containers/com.docker.docker",
             "\(home)/.vagrant.d/boxes",
             "/Applications/Install macOS"

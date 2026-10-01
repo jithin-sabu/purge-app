@@ -1030,8 +1030,8 @@
   {
     "key": "docker",
     "display_name": "Docker Containers",
-    "tag": "safe",
-    "explanation": "This stores temporary data used by Docker, a developer tool for running software in isolated containers. Deleting it is safe but Docker may need to re-download some container data.",
+    "tag": "medium",
+    "explanation": "This is Docker Desktop's virtual disk. It holds every image, container, and volume you have. Images can be pulled again, but volumes often hold database data that exists nowhere else. Quit Docker Desktop first. To free space without losing volumes, use Docker Desktop's own cleanup or run docker system prune.",
     "bundle_ids": [
       "com.docker.docker"
     ],
