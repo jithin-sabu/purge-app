@@ -24,7 +24,7 @@ struct CleanupHistoryDetailView: View {
             }
             .scrollContentBackground(.hidden)
         }
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .frame(minWidth: 480, minHeight: 320, maxHeight: 560)
     }
 
@@ -151,7 +151,7 @@ struct CleanupHistoryDetailView: View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                AppColors.bgElevated,
+                AppColors.fillSecondary,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
             )
             .overlay {

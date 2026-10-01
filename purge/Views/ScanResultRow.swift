@@ -219,7 +219,7 @@ struct ScanResultRow: View {
                 Toggle("", isOn: .constant(isSelected))
                     .labelsHidden()
                     .toggleStyle(.checkbox)
-                    .tint(AppColors.buttonPrimaryBg)
+                    .tint(AppColors.actionPrimary)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }

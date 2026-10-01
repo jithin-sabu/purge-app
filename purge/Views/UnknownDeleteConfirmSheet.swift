@@ -69,14 +69,14 @@ struct UnknownDeleteConfirmSheet: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 520, minHeight: 460)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: AppStyle.Spacing.small) {
             Image(systemName: "questionmark.circle.fill")
                 .font(.system(size: 26))
-                .foregroundStyle(AppColors.tagCheckText)
+                .foregroundStyle(AppColors.statusCheckText)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text("We're not sure what this is")
@@ -108,7 +108,7 @@ struct UnknownDeleteConfirmSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
+                .fill(AppColors.surfaceCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -120,7 +120,7 @@ struct UnknownDeleteConfirmSheet: View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
             Text(SafetyLevel.unknown.displayName)
                 .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.tagDangerText)
+                .foregroundStyle(AppColors.statusDangerText)
 
             if !sharedExplanation.isEmpty {
                 Text(sharedExplanation)
@@ -133,7 +133,7 @@ struct UnknownDeleteConfirmSheet: View {
         .padding(AppStyle.Spacing.small)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                .fill(AppColors.tagDangerBg)
+                .fill(AppColors.statusDangerFill)
         )
     }
 }

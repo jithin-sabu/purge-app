@@ -341,7 +341,7 @@ struct ContentView: View {
             alignment: .topLeading
         )
         .frame(width: SidebarLayout.width)
-        .background(AppColors.bgCard)
+        .background(AppColors.surfaceCard)
         .sidebarCompactTop()
     }
 
@@ -399,7 +399,7 @@ struct ContentView: View {
     private var tabContent: some View {
         ZStack(alignment: .top) {
             ZStack {
-                AppColors.bgBase
+                AppColors.surfaceBase
                     .ignoresSafeArea()
 
                 tabBody
@@ -408,7 +408,7 @@ struct ContentView: View {
 
             selectedPageHeader
         }
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     // Deliberately a plain `switch`, i.e. the incoming tab is built fresh. Keeping
@@ -471,7 +471,7 @@ struct ContentView: View {
             SettingsView(showsPageHeader: false, usesExternalScrollContainer: true)
         }
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     @ViewBuilder
@@ -574,7 +574,7 @@ struct ContentView: View {
             OverviewView()
         }
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     @ViewBuilder
@@ -596,7 +596,7 @@ struct ContentView: View {
             AboutView(showsPageHeader: false, usesExternalScrollContainer: true)
         }
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private var selectedPageHeader: some View {
@@ -912,7 +912,7 @@ struct SidebarSummaryView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgElevated)
+                .fill(AppColors.fillSecondary)
         )
         .accessibilityElement(children: .combine)
     }

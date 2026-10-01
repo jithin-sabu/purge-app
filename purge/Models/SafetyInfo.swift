@@ -46,9 +46,9 @@ nonisolated enum SafetyLevel: String, CaseIterable, Codable, Hashable {
     @MainActor
     var color: Color {
         switch self {
-        case .safe: return AppColors.tagSafeText
-        case .medium: return AppColors.tagCheckText
-        case .unknown: return AppColors.tagUnsureText
+        case .safe: return AppColors.statusSafeText
+        case .medium: return AppColors.statusCheckText
+        case .unknown: return AppColors.statusUnsureText
         }
     }
 

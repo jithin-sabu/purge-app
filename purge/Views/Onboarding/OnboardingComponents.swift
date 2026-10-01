@@ -55,7 +55,7 @@ struct OnboardingCapsuleButtonStyle: ButtonStyle {
     configuration.label
       .font(.system(size: 14, weight: .semibold, design: .rounded))
       .tracking(0.15)
-      .foregroundStyle(variant == .filled ? AppColors.buttonPrimaryText : AppColors.textPrimary)
+      .foregroundStyle(variant == .filled ? AppColors.onActionPrimary : AppColors.textPrimary)
       .frame(width: OnboardingLayout.buttonWidth)
       .padding(.vertical, 8)
       .background(background(isPressed: configuration.isPressed), in: Capsule(style: .continuous))
@@ -72,9 +72,9 @@ struct OnboardingCapsuleButtonStyle: ButtonStyle {
   private func background(isPressed: Bool) -> Color {
     switch variant {
     case .filled:
-      return AppColors.buttonPrimaryBg
+      return AppColors.actionPrimary
     case .elevated:
-      return isPressed ? AppColors.bgOverlay : AppColors.bgElevated
+      return isPressed ? AppColors.fillSecondaryPressed : AppColors.fillSecondary
     }
   }
 }
@@ -110,7 +110,7 @@ struct OnboardingPrimaryButton: View {
               .controlSize(.small)
               .scaleEffect(0.62)
               .frame(width: 13, height: 13)
-              .tint(AppColors.buttonPrimaryText)
+              .tint(AppColors.onActionPrimary)
           }
         } else if let systemImage {
           Image(systemName: systemImage)

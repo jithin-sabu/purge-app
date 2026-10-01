@@ -58,7 +58,7 @@ struct OnboardingCelebrationView: View {
     .padding(.horizontal, OnboardingLayout.horizontalPadding)
     .padding(.vertical, OnboardingLayout.verticalPadding)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(AppColors.bgBase)
+    .background(AppColors.surfaceBase)
     .onAppear {
       if bytesMovedToTrash > 0 {
         withAnimation(.easeOut(duration: 0.85)) {

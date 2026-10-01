@@ -170,7 +170,7 @@ struct LargeFilesView: View {
                 standardBody
             }
         }
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .onReceive(store.largeFileDuplicates.indexPublisher) { index in
             duplicateIndex = index
         }
@@ -488,7 +488,7 @@ struct LargeFilesView: View {
         // row's `.onTapGesture`, so disable the List's own selection to stop it.
         .disablingListSelection()
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.largeFilesRevision)
     }
 
@@ -773,12 +773,12 @@ private struct LargeFileSearchField: View {
         .frame(width: 220)
         .background {
             Capsule(style: .continuous)
-                .fill(AppColors.bgElevated)
+                .fill(AppColors.fillSecondary)
         }
         .overlay {
             Capsule(style: .continuous)
                 .strokeBorder(
-                    isFocused ? AppColors.buttonPrimaryBg : AppColors.borderSubtle,
+                    isFocused ? AppColors.actionPrimary : AppColors.borderSubtle,
                     lineWidth: 1
                 )
         }
@@ -879,7 +879,7 @@ private struct DuplicateGroupCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
-                .fill(AppColors.bgElevated)
+                .fill(AppColors.fillSecondary)
         }
         .overlay {
             RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
@@ -1022,7 +1022,7 @@ private struct LargeFileRow: View {
         Toggle("", isOn: .constant(isSelected))
             .labelsHidden()
             .toggleStyle(.checkbox)
-            .tint(AppColors.buttonPrimaryBg)
+            .tint(AppColors.actionPrimary)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -1296,7 +1296,7 @@ struct LargeFileDeletionConfirmSheet: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 580, minHeight: 500)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     /// One selected file as a card, matching the scan rows: its icon, name, and
@@ -1333,7 +1333,7 @@ struct LargeFileDeletionConfirmSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
+                .fill(AppColors.surfaceCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -1360,7 +1360,7 @@ struct LargeFileDeletionConfirmSheet: View {
     private var allCopiesWarning: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(AppColors.tagCheckText)
+                .foregroundStyle(AppColors.statusCheckText)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -1380,7 +1380,7 @@ struct LargeFileDeletionConfirmSheet: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
-                .fill(AppColors.tagCheckBg)
+                .fill(AppColors.statusCheckFill)
         )
         .accessibilityElement(children: .combine)
     }
@@ -1473,7 +1473,7 @@ struct DuplicateCleanupSheet: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 580, minHeight: 500)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     /// One duplicate set as a card, matching the duplicate rows on the tab: a
@@ -1505,7 +1505,7 @@ struct DuplicateCleanupSheet: View {
         }
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
+                .fill(AppColors.surfaceCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -1518,7 +1518,7 @@ struct DuplicateCleanupSheet: View {
         // Copies in a set share a name, so the folder is what tells them apart.
         return HStack(spacing: AppStyle.Spacing.small) {
             Image(systemName: isKeeper ? "largecircle.fill.circle" : "circle")
-                .foregroundStyle(isKeeper ? AppColors.buttonPrimaryBg : AppColors.textTertiary)
+                .foregroundStyle(isKeeper ? AppColors.actionPrimary : AppColors.textTertiary)
                 .accessibilityHidden(true)
 
             Text(file.path.deletingLastPathComponent().path)
@@ -1546,12 +1546,12 @@ struct DuplicateCleanupSheet: View {
     private func statusTag(isKeeper: Bool) -> some View {
         Text(isKeeper ? "Keep" : "Trash")
             .font(AppStyle.Typography.metadataEmphasis)
-            .foregroundStyle(isKeeper ? AppColors.tagSafeText : AppColors.tagDangerText)
+            .foregroundStyle(isKeeper ? AppColors.statusSafeText : AppColors.statusDangerText)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
             .padding(.vertical, 2)
             .background(
                 Capsule(style: .continuous)
-                    .fill(isKeeper ? AppColors.tagSafeBg : AppColors.tagDangerBg)
+                    .fill(isKeeper ? AppColors.statusSafeFill : AppColors.statusDangerFill)
             )
     }
 }

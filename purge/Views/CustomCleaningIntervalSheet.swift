@@ -60,7 +60,7 @@ struct CustomCleaningIntervalSheet: View {
                     .padding(.horizontal, 8)
                     .frame(height: AppStyle.Control.height)
                     .background(
-                        AppColors.bgOverlay,
+                        AppColors.surfaceRaised,
                         in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
                     )
                     .overlay {
@@ -86,7 +86,7 @@ struct CustomCleaningIntervalSheet: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 420)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         // Clicking anywhere off the field drops its focus ring.
         .contentShape(Rectangle())
         .onTapGesture { amountFieldFocused = false }

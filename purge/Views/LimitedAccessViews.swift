@@ -126,7 +126,7 @@ struct LimitedScanNotice: View {
             .padding(.vertical, AppStyle.Spacing.xSmall + 2)
             .background(
                 RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                    .fill(AppColors.bgElevated)
+                    .fill(AppColors.fillSecondary)
             )
             .contentShape(RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
         }

@@ -31,7 +31,7 @@ struct AboutView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .top)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private var aboutScrollContent: some View {
@@ -249,7 +249,7 @@ struct AboutView: View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                AppColors.bgElevated,
+                AppColors.fillSecondary,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
             )
             .overlay {

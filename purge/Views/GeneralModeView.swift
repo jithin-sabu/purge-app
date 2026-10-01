@@ -166,7 +166,7 @@ struct AppCachesView<PageHeader: View>: View {
                 standardBody(plan: plan)
             }
         }
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private func standardBody(plan: ListPlan) -> some View {
@@ -356,7 +356,7 @@ struct AppCachesView<PageHeader: View>: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
         // O(1) stand-in for "the row set changed". `items.map(\.id)` allocated and then
         // compared an array of every row's id string on every body evaluation.

@@ -14,21 +14,21 @@ enum FilterChipTier {
 
     var selectedBackground: Color {
         switch self {
-        case .neutral: return AppColors.bgOverlay
-        case .safe: return AppColors.tagSafeBg
-        case .checkFirst: return AppColors.tagCheckBg
-        case .danger: return AppColors.tagDangerBg
-        case .unsure: return AppColors.tagUnsureBg
+        case .neutral: return AppColors.surfaceRaised
+        case .safe: return AppColors.statusSafeFill
+        case .checkFirst: return AppColors.statusCheckFill
+        case .danger: return AppColors.statusDangerFill
+        case .unsure: return AppColors.statusUnsureFill
         }
     }
 
     var selectedForeground: Color {
         switch self {
         case .neutral: return AppColors.textPrimary
-        case .safe: return AppColors.tagSafeText
-        case .checkFirst: return AppColors.tagCheckText
-        case .danger: return AppColors.tagDangerText
-        case .unsure: return AppColors.tagUnsureText
+        case .safe: return AppColors.statusSafeText
+        case .checkFirst: return AppColors.statusCheckText
+        case .danger: return AppColors.statusDangerText
+        case .unsure: return AppColors.statusUnsureText
         }
     }
 }
@@ -119,7 +119,7 @@ struct FilterChip: View {
         if style == .tab, isSelected {
             return tier.selectedBackground
         }
-        return AppColors.bgElevated
+        return AppColors.fillSecondary
     }
 
     private var foregroundColor: Color {

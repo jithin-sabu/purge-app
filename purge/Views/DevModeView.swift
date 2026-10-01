@@ -549,7 +549,7 @@ struct DevToolsView<PageHeader: View>: View {
                 standardBody
             }
         }
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private var standardBody: some View {
@@ -848,7 +848,7 @@ struct DevToolsView<PageHeader: View>: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
         .animation(rowInsertionAnimation, value: developerTotalRowCount)
         .animation(expandCollapseAnimation, value: expandedProjectRoots)

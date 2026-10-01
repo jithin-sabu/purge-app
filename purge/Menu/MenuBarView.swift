@@ -9,7 +9,7 @@ import SwiftUI
 enum MenuPalette {
     static let accent = dynamic(light: 0x185FA5, dark: 0x2F7FD1)
     static let amber = dynamic(light: 0xE08A00, dark: 0xF2B84B)
-    static let success = AppColors.tagSafeText
+    static let success = AppColors.statusSafeText
 
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in

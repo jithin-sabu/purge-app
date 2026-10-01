@@ -159,7 +159,7 @@ struct UninstallView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .task {
             store.requestScanIfNeeded(.apps, .leftovers)
         }
@@ -237,7 +237,7 @@ struct UninstallView: View {
                     .padding(.bottom, AppStyle.Spacing.large)
                 }
                 .scrollContentBackground(.hidden)
-                .background(AppColors.bgBase)
+                .background(AppColors.surfaceBase)
             }
         }
     }
@@ -460,7 +460,7 @@ struct UninstallView: View {
             .padding(.bottom, AppStyle.Spacing.large)
         }
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         // Layout animations may draw a moving row beyond its final slot.
         // Keep that intermediate drawing inside the visible collection viewport.
         .clipped()
@@ -502,7 +502,7 @@ struct UninstallView: View {
             .padding(.bottom, AppStyle.Spacing.large)
         }
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         // Reordering edge tiles must not paint over the surrounding window.
         .clipped()
     }
@@ -551,7 +551,7 @@ struct UninstallView: View {
             .padding(.bottom, AppStyle.Spacing.large)
         }
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Finding leftovers from deleted apps")
     }
@@ -568,7 +568,7 @@ struct UninstallView: View {
             .padding(.bottom, AppStyle.Spacing.large)
         }
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Finding installed apps")
     }
@@ -587,7 +587,7 @@ struct UninstallView: View {
             .padding(.bottom, AppStyle.Spacing.large)
         }
         .scrollContentBackground(.hidden)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Finding installed apps")
     }
@@ -630,7 +630,7 @@ private struct UninstallViewModeSwitcher: View {
         .padding(Self.inset)
         .background {
             Capsule(style: .continuous)
-                .fill(AppColors.bgElevated)
+                .fill(AppColors.fillSecondary)
         }
         .overlay {
             Capsule(style: .continuous)
@@ -687,7 +687,7 @@ private struct UninstallItemRow: View {
             Toggle("", isOn: $isSelected)
                 .labelsHidden()
                 .toggleStyle(.checkbox)
-                .tint(AppColors.buttonPrimaryBg)
+                .tint(AppColors.actionPrimary)
                 .disabled(isToggleDisabled)
                 // Leftover list rows select from the whole-row tap, like App Caches.
                 // Review-sheet rows keep a live checkbox because they have no row tap.
@@ -712,7 +712,7 @@ private struct UninstallItemRow: View {
                 if let keptForApp = item.keptForApp {
                     Text("Kept, still used by \(keptForApp)")
                         .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(AppColors.tagCheckText)
+                        .foregroundStyle(AppColors.statusCheckText)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -730,7 +730,7 @@ private struct UninstallItemRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(isContextMenuActive ? AppColors.bgOverlay : AppColors.bgCard)
+                .fill(isContextMenuActive ? AppColors.surfaceCardHover : AppColors.surfaceCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -782,7 +782,7 @@ private struct AppListRow: View {
             Toggle("", isOn: .constant(isSelected))
                 .labelsHidden()
                 .toggleStyle(.checkbox)
-                .tint(AppColors.buttonPrimaryBg)
+                .tint(AppColors.actionPrimary)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
 
@@ -826,7 +826,7 @@ private struct AppListRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(isSelected || isHovering || isContextMenuActive ? AppColors.bgOverlay : AppColors.bgCard)
+                .fill(isSelected || isHovering || isContextMenuActive ? AppColors.surfaceCardHover : AppColors.surfaceCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -873,7 +873,7 @@ private struct SkeletonAppListRow: View {
         .padding(.vertical, AppStyle.Spacing.small)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
+                .fill(AppColors.surfaceCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -940,11 +940,11 @@ private struct AppTile: View {
         .padding(.vertical, 14)
         .background {
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgElevated)
+                .fill(AppColors.fillSecondary)
                 .overlay {
                     if isSelected || isHovering || isContextMenuActive {
                         RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                            .fill(AppColors.bgOverlay)
+                            .fill(AppColors.surfaceRaised)
                     }
                 }
         }
@@ -957,7 +957,7 @@ private struct AppTile: View {
         .overlay {
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
                 .stroke(
-                    isSelected ? AppColors.buttonPrimaryBg : AppColors.borderSubtle,
+                    isSelected ? AppColors.actionPrimary : AppColors.borderSubtle,
                     lineWidth: isSelected ? 2 : 1
                 )
         }
@@ -984,13 +984,13 @@ private struct AppTile: View {
         if isSelected {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 20))
-                .foregroundStyle(AppColors.buttonPrimaryBg)
-                .background(Circle().fill(AppColors.bgElevated).padding(1))
+                .foregroundStyle(AppColors.actionPrimary)
+                .background(Circle().fill(AppColors.fillSecondary).padding(1))
         } else {
             Image(systemName: "circle")
                 .font(.system(size: 20))
                 .foregroundStyle(isHovering ? AppColors.textSecondary : AppColors.textTertiary)
-                .background(Circle().fill(AppColors.bgElevated).padding(1))
+                .background(Circle().fill(AppColors.fillSecondary).padding(1))
         }
     }
 }
@@ -1015,7 +1015,7 @@ private struct SkeletonAppTile: View {
         .padding(.vertical, 14)
         .background {
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgElevated)
+                .fill(AppColors.fillSecondary)
         }
         .overlay {
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -1088,7 +1088,7 @@ struct UninstallHeaderActions: View {
                         title: "Preparing...",
                         systemImage: nil,
                         isCleaning: true,
-                        spinnerTint: AppColors.buttonPrimaryText
+                        spinnerTint: AppColors.onActionPrimary
                     )
                 } else {
                     AnimatedDeleteActionLabel(
@@ -1161,7 +1161,7 @@ struct UninstallReviewSheet: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 600, minHeight: 540)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private var header: some View {
@@ -1203,7 +1203,7 @@ struct UninstallReviewSheet: View {
                 if app.isRunning {
                     Text("will be quit first")
                         .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(AppColors.tagCheckText)
+                        .foregroundStyle(AppColors.statusCheckText)
                 }
                 Spacer()
                 Text(formatBytes(appPlan.wrappedValue.selectedBytes))
@@ -1306,7 +1306,7 @@ struct OrphanReviewSheet: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 600, minHeight: 520)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private var header: some View {
@@ -1383,7 +1383,7 @@ struct RemovedAppLeftoverSheet: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 600, minHeight: 460)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private var appIcon: NSImage {
@@ -1485,12 +1485,12 @@ private struct UninstallSearchField: View {
         .padding(.vertical, 5)
         .frame(width: 180)
         .background {
-            Capsule(style: .continuous).fill(AppColors.bgElevated)
+            Capsule(style: .continuous).fill(AppColors.fillSecondary)
         }
         .overlay {
             Capsule(style: .continuous)
                 .strokeBorder(
-                    isFocused ? AppColors.buttonPrimaryBg : AppColors.borderSubtle,
+                    isFocused ? AppColors.actionPrimary : AppColors.borderSubtle,
                     lineWidth: 1
                 )
         }

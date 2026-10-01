@@ -35,7 +35,7 @@ struct DeletedAppsWatcherNoticeCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AppColors.tagCheckText)
+                        .foregroundStyle(AppColors.statusCheckText)
                         .accessibilityHidden(true)
 
                     Text(WatcherHealth.problemTitle)
@@ -56,7 +56,7 @@ struct DeletedAppsWatcherNoticeCard: View {
                         title: isRestarting ? "Restarting…" : fixTitle,
                         systemImage: nil,
                         isCleaning: isRestarting,
-                        spinnerTint: AppColors.buttonPrimaryText
+                        spinnerTint: AppColors.onActionPrimary
                     )
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 8)
@@ -78,11 +78,11 @@ struct DeletedAppsWatcherNoticeCard: View {
             .padding(AppStyle.Spacing.small)
             .background(
                 RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                    .fill(AppColors.bgElevated)
+                    .fill(AppColors.fillSecondary)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                    .strokeBorder(AppColors.tagCheckText.opacity(0.35), lineWidth: 0.5)
+                    .strokeBorder(AppColors.statusCheckText.opacity(0.35), lineWidth: 0.5)
             }
             .accessibilityElement(children: .contain)
             .transition(.opacity)

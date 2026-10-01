@@ -60,7 +60,7 @@ struct SettingsView: View {
         .padding(.bottom, contentBottomPadding)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(maxHeight: usesExternalScrollContainer ? nil : .infinity, alignment: .topLeading)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
         .onAppear {
             startup.refreshLoginItemStatus()
             helper.refresh()
@@ -196,8 +196,8 @@ struct SettingsView: View {
 
     private var helperStatusTint: Color {
         switch helperPhase {
-        case .on: return AppColors.tagSafeText
-        case .awaitingApproval, .failed: return AppColors.tagCheckText
+        case .on: return AppColors.statusSafeText
+        case .awaitingApproval, .failed: return AppColors.statusCheckText
         case .off: return AppColors.textSecondary
         }
     }
@@ -415,8 +415,8 @@ struct SettingsView: View {
 
     private func deletedAppsStatusTint(_ health: WatcherHealth) -> Color {
         switch health {
-        case .running: return AppColors.tagSafeText
-        case .needsApproval, .notRunning, .failedToStart: return AppColors.tagCheckText
+        case .running: return AppColors.statusSafeText
+        case .needsApproval, .notRunning, .failedToStart: return AppColors.statusCheckText
         case .off, .checking: return AppColors.textSecondary
         }
     }
@@ -832,7 +832,7 @@ struct SettingsView: View {
             if let warning {
                 Text(warning)
                     .font(.caption)
-                    .foregroundStyle(AppColors.tagCheckText)
+                    .foregroundStyle(AppColors.statusCheckText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -854,7 +854,7 @@ struct SettingsView: View {
             )
         }
         .toggleStyle(.switch)
-        .tint(AppColors.tagSafeText)
+        .tint(AppColors.statusSafeText)
         .padding(16)
     }
 
@@ -1040,7 +1040,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                AppColors.bgElevated,
+                AppColors.fillSecondary,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
             )
             .overlay {
@@ -1218,7 +1218,7 @@ private struct SettingsPickerButtonStyle: ButtonStyle {
             .padding(.horizontal, 10)
             .frame(height: AppStyle.Control.height)
             .background(
-                configuration.isPressed ? AppColors.bgElevated : AppColors.bgOverlay,
+                configuration.isPressed ? AppColors.fillSecondary : AppColors.surfaceRaised,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
             )
             .overlay {

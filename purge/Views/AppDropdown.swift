@@ -83,7 +83,7 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
         }
         .padding(6)
         .frame(width: popupWidth)
-        .background(AppColors.bgOverlay)
+        .background(AppColors.surfaceRaised)
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle)
@@ -119,7 +119,7 @@ private struct AppDropdownRow: View {
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                isHovered && isEnabled ? AppColors.bgElevated : .clear,
+                isHovered && isEnabled ? AppColors.fillSecondary : .clear,
                 in: RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
             )
             .contentShape(Rectangle())

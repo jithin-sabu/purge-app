@@ -90,13 +90,13 @@ struct OverviewView: View {
             id: OverviewDiskBar.everythingElseID,
             label: "Everything else",
             bytes: breakdown.everythingElseBytes,
-            color: AppColors.overviewEverythingElse
+            color: AppColors.Chart.everythingElse
         ))
         segments.append(OverviewDiskBar.Segment(
             id: OverviewDiskBar.freeID,
             label: "Free",
             bytes: breakdown.freeBytes,
-            color: AppColors.storageBarFree
+            color: AppColors.Chart.freeSpace
         ))
         return segments
     }
@@ -125,7 +125,7 @@ struct OverviewView: View {
         VStack(spacing: 0) {
             OverviewPlainRow(
                 symbol: "ellipsis",
-                color: AppColors.overviewEverythingElse,
+                color: AppColors.Chart.everythingElse,
                 title: "Everything else",
                 detail: "macOS, your documents and photos, and files Purge doesn't sort",
                 bytes: breakdown.everythingElseBytes,
@@ -134,7 +134,7 @@ struct OverviewView: View {
             )
             InsetCardDivider()
             OverviewPlainRow(
-                color: AppColors.storageBarFree,
+                color: AppColors.Chart.freeSpace,
                 title: "Free",
                 detail: "Available for new files",
                 bytes: breakdown.freeBytes,
@@ -229,7 +229,7 @@ private struct OverviewCategoryRow: View {
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
         .overviewLinked(linkedState)
-        .background(isHovering || linkedState == .emphasized ? AppColors.bgElevated.opacity(0.5) : .clear)
+        .background(isHovering || linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .contentShape(Rectangle())
         // When the figure was measured. Only on hover: App Caches and Dev Tools rescan
         // every launch, so a time on every row would mostly say "just now".
@@ -475,7 +475,7 @@ private struct OverviewPlainRow: View {
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
         .overviewLinked(linkedState)
-        .background(linkedState == .emphasized ? AppColors.bgElevated.opacity(0.5) : .clear)
+        .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .combine)
     }
 }
@@ -508,7 +508,7 @@ private extension View {
     func overviewCard() -> some View {
         let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
         return self
-            .background(shape.fill(AppColors.bgCard))
+            .background(shape.fill(AppColors.surfaceCard))
             .clipShape(shape)
             .overlay(shape.strokeBorder(AppColors.borderSubtle))
     }
@@ -564,20 +564,20 @@ enum OverviewCategoryStyle {
     /// the two blues would run together.
     static func tileColor(_ category: OverviewCategory) -> Color {
         switch category {
-        case .appCaches: return AppColors.overviewAppCachesTile
-        case .devTools: return AppColors.overviewDevToolsTile
-        case .leftovers: return AppColors.overviewLeftoversTile
+        case .appCaches: return AppColors.Chart.appCachesTile
+        case .devTools: return AppColors.Chart.devToolsTile
+        case .leftovers: return AppColors.Chart.leftoversTile
         case .largeFiles, .apps: return color(category)
         }
     }
 
     static func color(_ category: OverviewCategory) -> Color {
         switch category {
-        case .appCaches: return AppColors.overviewAppCaches
-        case .devTools: return AppColors.overviewDevTools
-        case .largeFiles: return AppColors.overviewLargeFiles
-        case .apps: return AppColors.overviewApps
-        case .leftovers: return AppColors.overviewLeftovers
+        case .appCaches: return AppColors.Chart.appCaches
+        case .devTools: return AppColors.Chart.devTools
+        case .largeFiles: return AppColors.Chart.largeFiles
+        case .apps: return AppColors.Chart.apps
+        case .leftovers: return AppColors.Chart.leftovers
         }
     }
 

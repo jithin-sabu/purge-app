@@ -670,7 +670,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     Button(action: onDone) {
                         Text(doneTitle)
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppColors.buttonPrimaryText)
+                            .foregroundStyle(AppColors.onActionPrimary)
                             .frame(maxWidth: 300)
                             .padding(.vertical, 11)
                             .background(celebrationAccent, in: Capsule(style: .continuous))
@@ -951,10 +951,6 @@ struct SafeCleanupCelebrationOverlay: View {
     }
 }
 
-private enum CompletionCelebrationAccent {
-    static let timeHighlight = Color(red: 1, green: 0.78, blue: 0.05)
-}
-
 private struct CompletionTimeTagline: View {
     let elapsedSeconds: Double
     let boltFlashToken: Int
@@ -1003,7 +999,7 @@ private struct CompletionBoltAnchor: View {
     @State private var echoGeneration = 0
     @State private var chargeTask: Task<Void, Never>?
 
-    private static let flashColor = CompletionCelebrationAccent.timeHighlight
+    private static let flashColor = AppColors.accentCelebrate
     private static let chargeSpring = Animation.spring(response: 0.58, dampingFraction: 0.62)
 
     var body: some View {
@@ -1241,13 +1237,13 @@ private struct NeedsAdministratorPanel: View {
                         if isWorking {
                             ProgressView()
                                 .controlSize(.small)
-                                .tint(AppColors.buttonPrimaryText)
+                                .tint(AppColors.onActionPrimary)
                         } else {
                             Text(primaryTitle)
                                 .font(.system(size: 15, weight: .semibold))
                         }
                     }
-                    .foregroundStyle(AppColors.buttonPrimaryText)
+                    .foregroundStyle(AppColors.onActionPrimary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 11)
                     .background(AppColors.textPrimary, in: Capsule(style: .continuous))
@@ -1554,22 +1550,22 @@ struct AppButtonStyle: ButtonStyle {
         case .bordered, .ghost:
             return .primary
         case .filled:
-            return AppColors.buttonPrimaryText
+            return AppColors.onActionPrimary
         case .destructive:
-            return AppColors.tagDangerText
+            return AppColors.statusDangerText
         }
     }
 
     private func background(configuration: Configuration) -> Color {
         switch variant {
         case .bordered:
-            return configuration.isPressed ? AppColors.bgOverlay : AppColors.bgElevated
+            return configuration.isPressed ? AppColors.fillSecondaryPressed : AppColors.fillSecondary
         case .filled:
-            return AppColors.buttonPrimaryBg
+            return AppColors.actionPrimary
         case .ghost:
-            return configuration.isPressed ? AppColors.bgOverlay : .clear
+            return configuration.isPressed ? AppColors.fillSecondaryPressed : .clear
         case .destructive:
-            return AppColors.tagDangerText.opacity(configuration.isPressed ? 0.18 : 0.1)
+            return AppColors.statusDangerText.opacity(configuration.isPressed ? 0.18 : 0.1)
         }
     }
 
@@ -1577,10 +1573,10 @@ struct AppButtonStyle: ButtonStyle {
     private var border: some View {
         if isCapsule {
             Capsule(style: .continuous)
-                .stroke(variant == .filled ? Color.clear : AppColors.buttonSecondaryBorder)
+                .stroke(variant == .filled ? Color.clear : AppColors.borderStrong)
         } else {
             RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                .stroke(variant == .filled ? Color.clear : AppColors.buttonSecondaryBorder)
+                .stroke(variant == .filled ? Color.clear : AppColors.borderStrong)
         }
     }
 }
@@ -1599,7 +1595,7 @@ struct SolidDestructiveButtonStyle: ButtonStyle {
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                    .fill(AppColors.destructiveFill)
+                    .fill(AppColors.actionDestructive)
             )
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
     }
@@ -1667,30 +1663,30 @@ struct AppBadge: View {
     private var foregroundColor: Color {
         switch tone {
         case .accent: return AppColors.textSecondary
-        case .neutral: return AppColors.tagUnsureText
-        case .safe: return AppColors.tagSafeText
-        case .warning: return AppColors.tagCheckText
-        case .danger: return AppColors.tagDangerText
+        case .neutral: return AppColors.statusUnsureText
+        case .safe: return AppColors.statusSafeText
+        case .warning: return AppColors.statusCheckText
+        case .danger: return AppColors.statusDangerText
         }
     }
 
     private var backgroundColor: Color {
         switch tone {
-        case .accent: return AppColors.bgElevated
-        case .neutral: return AppColors.tagUnsureBg
-        case .safe: return AppColors.tagSafeBg
-        case .warning: return AppColors.tagCheckBg
-        case .danger: return AppColors.tagDangerBg
+        case .accent: return AppColors.fillSecondary
+        case .neutral: return AppColors.statusUnsureFill
+        case .safe: return AppColors.statusSafeFill
+        case .warning: return AppColors.statusCheckFill
+        case .danger: return AppColors.statusDangerFill
         }
     }
 
     private var borderColor: Color {
         switch tone {
         case .accent: return AppColors.borderSubtle
-        case .neutral: return AppColors.tagUnsureText.opacity(0.22)
-        case .safe: return AppColors.tagSafeText.opacity(0.22)
-        case .warning: return AppColors.tagCheckText.opacity(0.22)
-        case .danger: return AppColors.tagDangerText.opacity(0.22)
+        case .neutral: return AppColors.statusUnsureText.opacity(0.22)
+        case .safe: return AppColors.statusSafeText.opacity(0.22)
+        case .warning: return AppColors.statusCheckText.opacity(0.22)
+        case .danger: return AppColors.statusDangerText.opacity(0.22)
         }
     }
 }
@@ -1820,10 +1816,10 @@ struct AppNavRow: View {
 
     private var navBackground: Color {
         if isSelected {
-            return AppColors.bgElevated
+            return AppColors.fillSecondary
         }
         if isHovering {
-            return AppColors.bgOverlay
+            return AppColors.surfaceRaised
         }
         return .clear
     }

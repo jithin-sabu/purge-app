@@ -43,7 +43,7 @@ struct DeletionConfirmSheet: View {
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 580, minHeight: showsElevatedRiskLayout ? 520 : 500)
-        .background(AppColors.bgBase)
+        .background(AppColors.surfaceBase)
     }
 
     private func locationLabel(for item: PurgeStore.DeletionCandidate) -> String {
@@ -120,7 +120,7 @@ struct DeletionConfirmSheet: View {
         HStack(alignment: .top, spacing: AppStyle.Spacing.small) {
             Image(systemName: "questionmark.circle.fill")
                 .font(.system(size: 26))
-                .foregroundStyle(AppColors.tagCheckText)
+                .foregroundStyle(AppColors.statusCheckText)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text("Some of these aren't identified")
@@ -197,7 +197,7 @@ struct DeletionConfirmSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
-                .fill(AppColors.bgCard)
+                .fill(AppColors.surfaceCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
@@ -212,16 +212,16 @@ struct DeletionConfirmSheet: View {
         switch level {
         case .safe:
             text = "Safe"
-            fg = AppColors.tagSafeText
-            bg = AppColors.tagSafeBg
+            fg = AppColors.statusSafeText
+            bg = AppColors.statusSafeFill
         case .medium:
             text = "Check first"
-            fg = AppColors.tagCheckText
-            bg = AppColors.tagCheckBg
+            fg = AppColors.statusCheckText
+            bg = AppColors.statusCheckFill
         case .unknown:
             text = "Not sure"
-            fg = AppColors.tagDangerText
-            bg = AppColors.tagDangerBg
+            fg = AppColors.statusDangerText
+            bg = AppColors.statusDangerFill
         }
         return Text(text)
             .font(AppStyle.Typography.metadataEmphasis)

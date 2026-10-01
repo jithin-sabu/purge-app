@@ -53,7 +53,7 @@ struct OnboardingFlowView: View {
 
   var body: some View {
   ZStack {
-    AppColors.bgBase
+    AppColors.surfaceBase
       .ignoresSafeArea()
 
     VStack(spacing: 0) {

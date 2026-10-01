@@ -294,7 +294,7 @@ private struct LookDeeperTile: View {
     }
     .frame(maxWidth: .infinity, minHeight: 88)
     .padding(.horizontal, AppStyle.Spacing.small)
-    .background(AppColors.bgCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
+    .background(AppColors.surfaceCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
     .overlay {
       RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
         .stroke(AppColors.borderSubtle)
@@ -341,7 +341,7 @@ struct LookDeeperSheet: View {
     )
     .padding(Self.padding)
     .frame(width: Self.width)
-    .background(AppColors.bgBase)
+    .background(AppColors.surfaceBase)
   }
 }
 
