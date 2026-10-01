@@ -2,29 +2,22 @@ import AppKit
 import Darwin
 import Foundation
 
-/// Cursor leftover agent folders (issue #60).
-///
-/// Two layouts, both huge in the wild and both easy to confuse with a live job:
-///
-/// 1. Parallel-agent Git checkouts under `~/.cursor/worktrees/<project>/<id>`.
-/// 2. Junk per-cwd namespaces under `~/.cursor/projects/` left by temp
-///    directories (`var-folders-*`, `tmp-*`) and abandoned empty windows
-///    (numeric backup ids).
+/// Cursor leftover agent folders (issue #60): junk per-cwd namespaces under
+/// `~/.cursor/projects/` left by temp directories (`var-folders-*`, `tmp-*`)
+/// and abandoned empty windows (numeric backup ids). Cursor's parallel-agent
+/// checkouts under `~/.cursor/worktrees` are `AgentWorktreeScanPolicy`'s, with
+/// every other tool's.
 ///
 /// Age is never a gate. A folder from this morning can already be junk; one
-/// from months ago can still be a running agent. A worktree is listed only once
-/// its repository no longer has it registered (issue #61, see
-/// `GitWorktreeRegistration`), and gets its own labeled row. Live work is
-/// detected from open Cursor windows, process working directories, Git locks,
-/// and whether a temp workspace still exists. Settings, login, MCP config, extensions,
+/// from months ago can still be a live window. Live work is detected from open
+/// Cursor windows, process working directories, and whether a temp workspace
+/// still exists. Settings, login, MCP config, extensions,
 /// and real project namespaces are never offered. Chat history for a living
 /// workspace is out of scope.
 enum CursorAgentLeftoverScanPolicy {
 
     static let toolLabel = "Cursor Agent Leftovers"
     static let explanationKey = "cursor-agent-leftover"
-    static let orphanedWorktreesLabel = "Orphaned Cursor Worktrees"
-    static let orphanedWorktreesExplanationKey = "orphaned-cursor-worktree"
     static let cursorBundleID = "com.todesktop.230313mzl4w4u92"
 
     nonisolated enum SnapshotStatus: Equatable {
@@ -80,11 +73,6 @@ enum CursorAgentLeftoverScanPolicy {
         guard !containsSymlinkComponent(url, home: home) else { return false }
         guard staysInsideIntendedCursorRoot(url, home: home) else { return false }
 
-        let worktreesRoot = "\(home)/.cursor/worktrees/"
-        if path.hasPrefix(worktreesRoot) {
-            return isWhitelistedWorktreePath(path, prefix: worktreesRoot)
-        }
-
         let projectsRoot = "\(home)/.cursor/projects/"
         if path.hasPrefix(projectsRoot) {
             let relative = String(path.dropFirst(projectsRoot.count))
@@ -118,57 +106,19 @@ enum CursorAgentLeftoverScanPolicy {
     nonisolated static func looksLikeCursorLeftoverPath(_ url: URL, home: URL) -> Bool {
         let path = url.standardizedFileURL.path
         let homePath = home.standardizedFileURL.path
-        return path.hasPrefix("\(homePath)/.cursor/worktrees/")
-            || path.hasPrefix("\(homePath)/.cursor/projects/")
+        return path.hasPrefix("\(homePath)/.cursor/projects/")
     }
 
-    /// The path-shape gate plus, for a worktree, the registration check again:
-    /// Purge never trashes a checkout its repository still lists, even if the
-    /// repository took it back between the scan and the clean.
     nonisolated static func passesImmediateTrashBoundary(
         _ url: URL,
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> Bool {
-        let path = url.standardizedFileURL.path
-        let homePath = home.standardizedFileURL.path
-        guard isWhitelistedPath(path, home: homePath) else { return false }
-        if path.hasPrefix("\(homePath)/.cursor/worktrees/") {
-            return GitWorktreeRegistration.state(of: URL(fileURLWithPath: path, isDirectory: true)) == .orphaned
-        }
-        return true
+        isWhitelistedPath(url.standardizedFileURL.path, home: home.standardizedFileURL.path)
     }
 
     // MARK: - Discovery
 
-    /// Directories that exist on disk, match the leftover layouts, and look unused.
-    /// Worktrees among them are orphaned ones only.
-    nonisolated static func unusedDirectories(
-        home: URL,
-        live: LiveContext,
-        fileManager: FileManager = .default
-    ) -> [URL] {
-        unusedWorktrees(home: home, live: live, fileManager: fileManager)
-            + unusedJunkProjectNamespaces(home: home, live: live, fileManager: fileManager)
-    }
-
-    /// Worktree leaves their repository no longer lists, minus any Cursor still
-    /// has open. A registered worktree never shows, however long it sat idle.
-    nonisolated static func unusedWorktrees(
-        home: URL,
-        live: LiveContext,
-        fileManager: FileManager = .default
-    ) -> [URL] {
-        let root = home.appendingPathComponent(".cursor/worktrees", isDirectory: true)
-        let leaves = worktreeLeaves(in: root, fileManager: fileManager)
-        if live.cursorIsRunning && live.cursorProcessSnapshot != .available {
-            return []
-        }
-        return leaves.filter {
-            GitWorktreeRegistration.state(of: $0, fileManager: fileManager) == .orphaned
-                && !isLiveWorktree($0, live: live, fileManager: fileManager)
-        }
-    }
-
+    /// Junk namespaces that exist on disk and look unused.
     nonisolated static func unusedJunkProjectNamespaces(
         home: URL,
         live: LiveContext,
@@ -198,21 +148,6 @@ enum CursorAgentLeftoverScanPolicy {
     }
 
     // MARK: - Live detection
-
-    nonisolated static func isLiveWorktree(
-        _ url: URL,
-        live: LiveContext,
-        fileManager: FileManager = .default
-    ) -> Bool {
-        let path = url.standardizedFileURL.path
-        if live.openWorkspacePaths.contains(where: { $0 == path || $0.hasPrefix(path + "/") }) {
-            return true
-        }
-        if live.processWorkingDirectories.contains(where: { $0 == path || $0.hasPrefix(path + "/") }) {
-            return true
-        }
-        return hasGitLock(at: url, fileManager: fileManager)
-    }
 
     nonisolated static func isLiveJunkProject(slug: String, live: LiveContext) -> Bool {
         if live.emptyWindowBackupIDs.contains(slug) {
@@ -253,100 +188,7 @@ enum CursorAgentLeftoverScanPolicy {
         return nil
     }
 
-    // MARK: - Worktree layout
-
-    /// Leaves only. `~/.cursor/worktrees` and per-repo grouping folders stay
-    /// untouched so a live checkout in the same project cannot be swept.
-    nonisolated static func worktreeLeaves(in root: URL, fileManager: FileManager) -> [URL] {
-        guard let projects = try? fileManager.contentsOfDirectory(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-
-        var leaves: [URL] = []
-        for project in projects {
-            guard (try? project.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
-                continue
-            }
-            let projectURL = project.standardizedFileURL
-            let children = directoryChildren(of: projectURL, fileManager: fileManager)
-            let gitAtProject = hasGitMarker(at: projectURL, fileManager: fileManager)
-
-            var yieldedChild = false
-            for child in children where hasGitMarker(at: child, fileManager: fileManager) {
-                leaves.append(child)
-                yieldedChild = true
-            }
-
-            if !yieldedChild && gitAtProject {
-                leaves.append(projectURL)
-            }
-        }
-        return leaves
-    }
-
     // MARK: - Internals
-
-    private nonisolated static func isWhitelistedWorktreePath(_ path: String, prefix: String) -> Bool {
-        let relative = String(path.dropFirst(prefix.count))
-        guard !relative.isEmpty else { return false }
-        let parts = relative.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
-        guard parts.allSatisfy({ !$0.isEmpty && !$0.hasPrefix(".") }) else { return false }
-        if parts.count == 2 {
-            return hasGitMarker(at: URL(fileURLWithPath: path, isDirectory: true), fileManager: .default)
-        }
-        if parts.count == 1 {
-            return hasGitMarker(at: URL(fileURLWithPath: path, isDirectory: true), fileManager: .default)
-        }
-        return false
-    }
-
-    private nonisolated static func directoryChildren(of url: URL, fileManager: FileManager) -> [URL] {
-        guard let entries = try? fileManager.contentsOfDirectory(
-            at: url,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-        return entries.compactMap { entry in
-            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
-                return nil
-            }
-            return entry.standardizedFileURL
-        }
-    }
-
-    nonisolated static func hasGitMarker(at url: URL, fileManager: FileManager) -> Bool {
-        fileManager.fileExists(atPath: url.appendingPathComponent(".git").path)
-    }
-
-    nonisolated static func hasGitLock(at url: URL, fileManager: FileManager) -> Bool {
-        let git = url.appendingPathComponent(".git")
-        var isDir: ObjCBool = false
-        guard fileManager.fileExists(atPath: git.path, isDirectory: &isDir) else { return false }
-        if isDir.boolValue {
-            return fileManager.fileExists(atPath: git.appendingPathComponent("index.lock").path)
-                || fileManager.fileExists(atPath: git.appendingPathComponent("HEAD.lock").path)
-        }
-        guard let text = try? String(contentsOf: git, encoding: .utf8),
-              let gitDir = gitDirPath(from: text) else {
-            return false
-        }
-        return fileManager.fileExists(atPath: (gitDir as NSString).appendingPathComponent("index.lock"))
-            || fileManager.fileExists(atPath: (gitDir as NSString).appendingPathComponent("HEAD.lock"))
-            || fileManager.fileExists(atPath: (gitDir as NSString).appendingPathComponent("locked"))
-    }
-
-    private nonisolated static func gitDirPath(from gitFileContents: String) -> String? {
-        for rawLine in gitFileContents.split(whereSeparator: \.isNewline) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            let prefix = "gitdir:"
-            guard line.lowercased().hasPrefix(prefix) else { continue }
-            let value = line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
-            return value.isEmpty ? nil : value
-        }
-        return nil
-    }
 
     private nonisolated static func uuidSuffix(in slug: String) -> String? {
         let pattern = #/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/#
@@ -427,16 +269,8 @@ enum CursorAgentLeftoverScanPolicy {
 
     private nonisolated static func staysInsideIntendedCursorRoot(_ url: URL, home: String) -> Bool {
         let path = url.standardizedFileURL.path
-        let worktreesRoot = "\(home)/.cursor/worktrees"
-        let projectsRoot = "\(home)/.cursor/projects"
-        let lexicalRoot: String
-        if path == worktreesRoot || path.hasPrefix(worktreesRoot + "/") {
-            lexicalRoot = worktreesRoot
-        } else if path == projectsRoot || path.hasPrefix(projectsRoot + "/") {
-            lexicalRoot = projectsRoot
-        } else {
-            return false
-        }
+        let lexicalRoot = "\(home)/.cursor/projects"
+        guard path == lexicalRoot || path.hasPrefix(lexicalRoot + "/") else { return false }
 
         let rootURL = URL(fileURLWithPath: lexicalRoot, isDirectory: true)
         if containsSymlinkComponent(rootURL, home: home) { return false }

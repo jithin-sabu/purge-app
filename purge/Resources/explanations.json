@@ -2876,13 +2876,13 @@
     "kind": "code"
   },
   {
-    "key": "orphaned-cursor-worktree",
-    "display_name": "Orphaned Cursor Worktrees",
+    "key": "orphaned-git-worktree",
+    "display_name": "Orphaned Git Worktrees",
     "tag": "medium",
     "explanation": "Agent checkouts Git no longer tracks. Look inside first for uncommitted work.",
     "bundle_ids": [],
     "aliases": [
-      "orphaned-cursor-worktree"
+      "orphaned-git-worktree"
     ],
     "scope": "dev_tools",
     "kind": "code"

@@ -54,20 +54,10 @@ struct GitWorktreeRegistrationTests {
         try #require(process.terminationStatus == 0, "git \(arguments.joined(separator: " ")) failed")
     }
 
-    private func idleLive(_ fixture: Fixture) -> CursorAgentLeftoverScanPolicy.LiveContext {
-        CursorAgentLeftoverScanPolicy.LiveContext(
-            cursorIsRunning: false,
-            openWorkspacePaths: [],
-            emptyWindowBackupIDs: [],
-            processWorkingDirectories: [],
-            cursorProcessSnapshot: .available,
-            windowsSnapshot: .available,
-            temporaryDirectory: fixture.root.appendingPathComponent("tmp", isDirectory: true)
-        )
-    }
+    private let idle = AgentWorktreeScanPolicy.LiveContext(processWorkingDirectories: [], openWorkspacePaths: [])
 
     private func listed(_ fixture: Fixture) -> [String] {
-        CursorAgentLeftoverScanPolicy.unusedWorktrees(home: fixture.home, live: idleLive(fixture))
+        AgentWorktreeScanPolicy.orphanedWorktrees(home: fixture.home, claudeProjects: [], live: idle)
             .map(\.lastPathComponent)
     }
 
@@ -169,10 +159,10 @@ struct GitWorktreeRegistrationTests {
         let fixture = try makeFixture()
         defer { fixture.remove() }
         try FileManager.default.removeItem(at: fixture.repo)
-        var live = idleLive(fixture)
+        var live = idle
         live.openWorkspacePaths = [fixture.worktree.standardizedFileURL.path]
 
-        #expect(CursorAgentLeftoverScanPolicy.unusedWorktrees(home: fixture.home, live: live).isEmpty)
+        #expect(AgentWorktreeScanPolicy.orphanedWorktrees(home: fixture.home, claudeProjects: [], live: live).isEmpty)
     }
 
     /// The last check before Trash, on the real home folder because that is the only
@@ -191,10 +181,10 @@ struct GitWorktreeRegistrationTests {
         try fm.createDirectory(at: group, withIntermediateDirectories: true)
         try git(in: fixture.repo, "worktree", "add", "-q", "--detach", leaf.path)
 
-        #expect(!CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(leaf))
+        #expect(!AgentWorktreeScanPolicy.passesImmediateTrashBoundary(leaf))
 
         try fm.removeItem(at: fixture.repo)
-        #expect(CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(leaf))
+        #expect(AgentWorktreeScanPolicy.passesImmediateTrashBoundary(leaf))
     }
 
     private func relativePath(from directory: String, to target: String) -> String {

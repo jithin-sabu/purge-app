@@ -192,8 +192,15 @@ nonisolated enum ProcessWorkingDirectories {
 
     /// Every inspectable process's working directory, minus `/`, where most apps sit.
     static func allDirectories() -> Set<String> {
+        allDirectoriesIfReadable() ?? []
+    }
+
+    /// Nil when the process list itself could not be read, so a caller can tell
+    /// "nothing is in use" from "could not look".
+    static func allDirectoriesIfReadable() -> Set<String>? {
+        guard let pids = allProcessIDs() else { return nil }
         var directories: Set<String> = []
-        for pid in allProcessIDs() ?? [] {
+        for pid in pids {
             guard let cwd = currentWorkingDirectory(of: pid), !cwd.isEmpty, cwd != "/" else { continue }
             directories.insert((cwd as NSString).standardizingPath)
         }

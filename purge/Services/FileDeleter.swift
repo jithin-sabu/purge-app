@@ -125,11 +125,12 @@ nonisolated final class FileDeleter: Sendable {
             let decision = DeletionSafetyPolicy.evaluate(url)
             switch decision {
             case .allow:
-                if CursorAgentLeftoverScanPolicy.looksLikeCursorLeftoverPath(
-                    url,
-                    home: FileManager.default.homeDirectoryForCurrentUser
-                ),
-                   !CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(url) {
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                let failsCursorBoundary = CursorAgentLeftoverScanPolicy.looksLikeCursorLeftoverPath(url, home: home)
+                    && !CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(url)
+                let failsWorktreeBoundary = AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(url, home: home)
+                    && !AgentWorktreeScanPolicy.passesImmediateTrashBoundary(url)
+                if failsCursorBoundary || failsWorktreeBoundary {
                     skippedItems.append(SkippedDeletionItem(
                         path: url.path,
                         displayName: friendlyTitle,

@@ -123,8 +123,11 @@ enum SafetyTierList {
                 || pathLower.contains("/.vscode/extensions/") {
                 return .safe
             }
-            if pathLower.contains("/.cursor/worktrees/")
-                || pathLower.contains("/.cursor/projects/") {
+            if pathLower.contains("/.cursor/projects/")
+                || AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(
+                    path,
+                    home: FileManager.default.homeDirectoryForCurrentUser
+                ) {
                 return .medium
             }
         }

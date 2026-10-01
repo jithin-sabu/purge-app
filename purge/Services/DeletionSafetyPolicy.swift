@@ -718,9 +718,9 @@ enum DeletionSafetyPolicy {
         return true
     }
 
-    /// Cursor agent leftovers only: a leaf worktree under `~/.cursor/worktrees`,
-    /// or a junk temp/empty-window namespace under `~/.cursor/projects`. Never
-    /// the `.cursor` root, settings, login, or a real project folder.
+    /// Cursor agent leftovers only: a junk temp/empty-window namespace under
+    /// `~/.cursor/projects`. Never the `.cursor` root, settings, login, or a
+    /// real project folder.
     nonisolated static func isWhitelistedCursorAgentLeftoverPath(_ path: String, home: String) -> Bool {
         CursorAgentLeftoverScanPolicy.isWhitelistedPath(path, home: home)
     }
@@ -817,6 +817,12 @@ enum DeletionSafetyPolicy {
         if isWhitelistedCursorAgentLeftoverPath(path, home: home) {
             return .allow
         }
+        // Agent worktree leaves under the tools' own home folders (Cursor, Codex,
+        // Conductor, T3 Code). Whether one is orphaned is a scan and trash-time
+        // check; this only proves the path is that kind of folder.
+        if AgentWorktreeScanPolicy.isWhitelistedHomeRootPath(path, home: home) {
+            return .allow
+        }
 
         for blocked in neverDeletePrefixes(home: home) {
             if path == blocked || path.hasPrefix(blocked + "/") {
@@ -836,6 +842,11 @@ enum DeletionSafetyPolicy {
         // above it: this matches on a name plus nearby evidence, not on an audited
         // absolute path, so the protections for Pictures, Music, Mail and the rest win.
         if isWhitelistedProjectArtifactPath(standardized, home: home) {
+            return .allow
+        }
+        // Claude Code's `<project>/.claude/worktrees/<name>`. Below the never-delete
+        // guards for the same reason as project artifacts: the project can be anywhere.
+        if AgentWorktreeScanPolicy.isWhitelistedProjectWorktreePath(path, home: home) {
             return .allow
         }
 

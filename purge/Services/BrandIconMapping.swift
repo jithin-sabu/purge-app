@@ -120,7 +120,7 @@ enum BrandIconMapping {
         "corepack-cache": "nodedotjs",
         "obsolete-cursor-extension": "cursor",
         "cursor-agent-leftover": "cursor",
-        "orphaned-cursor-worktree": "cursor",
+        "orphaned-git-worktree": "git",
         "zsh": "iterm2",
     ]
 
