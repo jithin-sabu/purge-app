@@ -25,7 +25,6 @@ enum BrandIconMapping {
         "1password": "1password",
         "dropbox": "dropbox",
         "google-drive": "googledrive",
-        "onedrive": "googledrive",
         "microsoft-teams": "microsoftteams",
         "microsoft-word": "microsoftword",
         "microsoft-excel": "microsoftexcel",

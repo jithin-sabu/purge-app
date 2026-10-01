@@ -1,10 +1,10 @@
 {
   "slugs": [
     "1password",
+    "adobe",
     "affinitydesigner",
     "affinityphoto",
     "alfred",
-    "adobe",
     "android",
     "androidstudio",
     "anthropic",
@@ -23,6 +23,7 @@
     "figma",
     "firefox",
     "flutter",
+    "ghostty",
     "git",
     "github",
     "go",

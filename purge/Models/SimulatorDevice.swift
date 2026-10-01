@@ -34,7 +34,7 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
                 headline: headline,
                 // CoreSimulator marks a device unavailable for more than one reason
                 // (missing runtime, unsupported device type), so don't name one.
-                explanation: "Xcode can no longer run this device.",
+                explanation: "Xcode can no longer run this device. \(cost)",
                 recoverySteps: "",
                 reinstallCommand: nil
             )
