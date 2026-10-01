@@ -38,47 +38,6 @@ struct OnboardingLayout {
   static let scanRowHeight: CGFloat = 56
 }
 
-/// Full-width capsule used for the onboarding footer actions — taller and larger-typed
-/// than `AppButtonStyle`, which is sized for in-app chrome.
-struct OnboardingCapsuleButtonStyle: ButtonStyle {
-  enum Variant {
-    case filled
-    case elevated
-  }
-
-  var variant: Variant = .filled
-
-  @Environment(\.isEnabled) private var isEnabled
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.system(size: 14, weight: .semibold, design: .rounded))
-      .tracking(0.15)
-      .foregroundStyle(variant == .filled ? AppColors.onActionPrimary : AppColors.textPrimary)
-      .frame(width: OnboardingLayout.buttonWidth)
-      .padding(.vertical, 8)
-      .background(background(isPressed: configuration.isPressed), in: Capsule(style: .continuous))
-      .overlay {
-        if variant == .elevated {
-          Capsule(style: .continuous)
-            .stroke(AppColors.borderSubtle)
-        }
-      }
-      .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
-      .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: isEnabled)
-  }
-
-  private func background(isPressed: Bool) -> Color {
-    switch variant {
-    case .filled:
-      return AppColors.actionPrimary
-    case .elevated:
-      return isPressed ? AppColors.fillSecondaryPressed : AppColors.fillSecondary
-    }
-  }
-}
-
 struct OnboardingPrimaryButton: View {
   let title: String
   /// Before the title, for an icon that names the action (trash).
@@ -110,7 +69,6 @@ struct OnboardingPrimaryButton: View {
               .controlSize(.small)
               .scaleEffect(0.62)
               .frame(width: 13, height: 13)
-              .tint(AppColors.onActionPrimary)
           }
         } else if let systemImage {
           Image(systemName: systemImage)
@@ -118,7 +76,7 @@ struct OnboardingPrimaryButton: View {
         }
       }
     }
-    .buttonStyle(OnboardingCapsuleButtonStyle(variant: .filled))
+    .buttonStyle(.purge(.primary, size: .large, width: .fixed(OnboardingLayout.buttonWidth)))
     .disabled(!isEnabled || isLoading)
     .keyboardShortcut(.return, modifiers: [])
   }
@@ -132,7 +90,7 @@ struct OnboardingSecondaryButton: View {
     Button(action: action) {
       Text(title)
     }
-    .buttonStyle(OnboardingCapsuleButtonStyle(variant: .elevated))
+    .buttonStyle(.purge(.secondary, size: .large, width: .fixed(OnboardingLayout.buttonWidth)))
   }
 }
 

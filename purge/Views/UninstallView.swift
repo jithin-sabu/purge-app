@@ -1053,10 +1053,8 @@ struct UninstallHeaderActions: View {
                     systemImage: isScanning || isQueued ? nil : "arrow.clockwise",
                     isCleaning: isScanning || isQueued
                 )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
             }
-            .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+            .buttonStyle(.purge(.secondary))
             .disabled(isScanning || isQueued)
             .keyboardShortcut("r", modifiers: [.command])
 
@@ -1087,8 +1085,7 @@ struct UninstallHeaderActions: View {
                     CleaningButtonLabel(
                         title: "Preparing...",
                         systemImage: nil,
-                        isCleaning: true,
-                        spinnerTint: AppColors.onActionPrimary
+                        isCleaning: true
                     )
                 } else {
                     AnimatedDeleteActionLabel(
@@ -1099,10 +1096,8 @@ struct UninstallHeaderActions: View {
                     )
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
         }
-        .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
+        .buttonStyle(.purge(.primary))
         .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
         .transition(.opacity)
     }
@@ -1117,10 +1112,8 @@ struct UninstallHeaderActions: View {
                 selectedCount: store.selectedOrphanCount,
                 selectedBytes: store.selectedOrphanBytes
             )
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
         }
-        .buttonStyle(AppButtonStyle(variant: .destructive, isCapsule: true))
+        .buttonStyle(.purge(.primary))
         .disabled(store.selectedOrphanCount == 0 || store.isDeleting)
         .transition(.opacity)
     }
@@ -1255,13 +1248,13 @@ struct UninstallReviewSheet: View {
             Spacer()
 
             Button("Cancel", action: onCancel)
-                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .buttonStyle(.purge(.secondary))
                 .keyboardShortcut(.cancelAction)
 
             Button("Move \(plan.totalSelectedItems) to Trash") {
                 onConfirm(plan)
             }
-            .buttonStyle(SolidDestructiveButtonStyle())
+            .buttonStyle(.purge(.destructive))
             .keyboardShortcut(.defaultAction)
             .disabled(plan.totalSelectedItems == 0)
         }
@@ -1330,13 +1323,13 @@ struct OrphanReviewSheet: View {
             Spacer()
 
             Button("Cancel", action: onCancel)
-                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .buttonStyle(.purge(.secondary))
                 .keyboardShortcut(.cancelAction)
 
             Button("Move \(plan.totalSelectedItems) to Trash") {
                 onConfirm(plan)
             }
-            .buttonStyle(SolidDestructiveButtonStyle())
+            .buttonStyle(.purge(.destructive))
             .keyboardShortcut(.defaultAction)
             .disabled(plan.totalSelectedItems == 0)
         }
@@ -1421,13 +1414,13 @@ struct RemovedAppLeftoverSheet: View {
             Spacer()
 
             Button("Keep Files", action: onCancel)
-                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .buttonStyle(.purge(.secondary))
                 .keyboardShortcut(.cancelAction)
 
             Button("Move \(plan.totalSelectedItems) to Trash") {
                 onConfirm(plan)
             }
-            .buttonStyle(SolidDestructiveButtonStyle())
+            .buttonStyle(.purge(.destructive))
             .keyboardShortcut(.defaultAction)
             .disabled(plan.totalSelectedItems == 0)
         }

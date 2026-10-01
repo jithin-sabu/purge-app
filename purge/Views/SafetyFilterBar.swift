@@ -239,7 +239,7 @@ struct FilterSortToolbar: View {
                 selectedBytes: selectedInScopeBytes
             )
         }
-        .buttonStyle(AppButtonStyle(variant: .filled))
+        .buttonStyle(.purge(.primary))
         .disabled(bulkDisabled)
         .fixedSize()
     }

@@ -107,7 +107,7 @@ struct CustomCleaningIntervalSheet: View {
             Spacer()
 
             Button("Cancel", action: onCancel)
-                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .buttonStyle(.purge(.secondary))
                 .keyboardShortcut(.cancelAction)
 
             Button("Save") {
@@ -115,7 +115,7 @@ struct CustomCleaningIntervalSheet: View {
                     onConfirm(amount, unit)
                 }
             }
-            .buttonStyle(AppButtonStyle(variant: .filled))
+            .buttonStyle(.purge(.primary))
             .keyboardShortcut(.defaultAction)
             .disabled(parsedAmount == nil)
         }

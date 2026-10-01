@@ -39,11 +39,29 @@ enum AppStyle {
         static let scanCardHorizontalPadding: CGFloat = 14
     }
 
+    /// The type scale. Every `.font(...)` on text picks one of these, adding
+    /// `.weight(...)` when it needs emphasis; no view sets a point size of its
+    /// own. SF Rounded is kept for result numbers and page titles.
     enum Typography {
+        /// Freed bytes on the cleanup celebration.
+        static let display = Font.system(size: 56, weight: .bold, design: .rounded)
+        /// Large totals: Overview, onboarding results.
+        static let displaySmall = Font.system(size: 36, weight: .bold, design: .rounded)
         static let pageTitle = Font.system(size: 20, weight: .semibold, design: .rounded)
+        /// Sheet titles, card headers, large buttons.
+        static let sectionTitle = Font.system(size: 15, weight: .semibold)
+        /// Group headers, emphasis, regular buttons.
+        static let headline = Font.system(size: 13, weight: .semibold)
+        static let body = Font.system(size: 13)
+        /// List row titles, menu rows.
         static let rowTitle = Font.system(size: 13, weight: .medium)
+        /// Helper text under controls, small buttons.
+        static let callout = Font.system(size: 12)
+        /// Sizes, dates, paths.
         static let metadata = Font.system(size: 11)
         static let metadataEmphasis = Font.system(size: 11, weight: .medium)
+        /// Badges and count pills.
+        static let micro = Font.system(size: 10, weight: .semibold)
     }
 }
 

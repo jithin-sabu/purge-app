@@ -540,7 +540,7 @@ struct SettingsView: View {
                 Text(isRunningScheduledCleanNow ? "Cleaning…" : "Run now")
             }
         }
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .buttonStyle(.purge(.secondary))
         .disabled(isRunningScheduledCleanNow || store.isDeleting)
     }
 

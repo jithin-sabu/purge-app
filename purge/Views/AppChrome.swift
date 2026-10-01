@@ -307,10 +307,8 @@ struct AppScanButton: View {
                 systemImage: isBusy ? nil : "arrow.clockwise",
                 isCleaning: isBusy
             )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
         }
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .buttonStyle(.purge(.secondary))
         .keyboardShortcut("r", modifiers: [.command])
         .disabled(isBusy)
     }
@@ -332,10 +330,8 @@ struct AppCleanSelectedButton: View {
                     selectedCount: store.selectedCount,
                     selectedBytes: store.selectedTotalBytes
                 )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
             }
-            .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+            .buttonStyle(.purge(.primary))
             .disabled(store.selectedCount == 0 || store.isDeleting)
         }
     }
@@ -345,7 +341,6 @@ struct CleaningButtonLabel: View {
     let title: String
     let systemImage: String?
     var isCleaning: Bool = false
-    var spinnerTint: Color = AppColors.textPrimary
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -360,7 +355,6 @@ struct CleaningButtonLabel: View {
                         .controlSize(.small)
                         .scaleEffect(0.62)
                         .frame(width: 13, height: 13)
-                        .tint(spinnerTint)
                 }
             } else if let systemImage {
                 Image(systemName: systemImage)
@@ -667,15 +661,8 @@ struct SafeCleanupCelebrationOverlay: View {
                         .multilineTextAlignment(.center)
                     }
 
-                    Button(action: onDone) {
-                        Text(doneTitle)
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(AppColors.onActionPrimary)
-                            .frame(maxWidth: 300)
-                            .padding(.vertical, 11)
-                            .background(celebrationAccent, in: Capsule(style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                    Button(doneTitle, action: onDone)
+                        .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
                     .keyboardShortcut(.defaultAction)
                     .disabled(!footerVisible)
                 }
@@ -1233,38 +1220,19 @@ private struct NeedsAdministratorPanel: View {
 
             VStack(spacing: 12) {
                 Button(action: onPrimaryAction) {
-                    Group {
-                        if isWorking {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(AppColors.onActionPrimary)
-                        } else {
-                            Text(primaryTitle)
-                                .font(.system(size: 15, weight: .semibold))
-                        }
+                    if isWorking {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text(primaryTitle)
                     }
-                    .foregroundStyle(AppColors.onActionPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(AppColors.textPrimary, in: Capsule(style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.purge(.primary, size: .large, width: .fill))
                 .disabled(isWorking)
 
                 if isSingle {
-                    Button(action: onRevealInFinder) {
-                        Text("Remove in Finder instead")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .background(Color.white.opacity(0.08), in: Capsule(style: .continuous))
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
+                    Button("Remove in Finder instead", action: onRevealInFinder)
+                        .buttonStyle(.purge(.secondary, size: .large, width: .fill))
                 }
 
                 Text(trustLine)
@@ -1332,7 +1300,7 @@ private struct CleanFailureRow: View {
                     HStack(spacing: 10) {
                         if failure.reason.showsOpenSettings {
                             Button("Open Settings", action: onOpenSettings)
-                                .buttonStyle(CleanFailureActionButtonStyle())
+                                .buttonStyle(.purge(.quiet, size: .small))
                         }
                         if failure.reason.showsRetry {
                             Button {
@@ -1346,7 +1314,7 @@ private struct CleanFailureRow: View {
                                     Text(failure.reason.retryTitle)
                                 }
                             }
-                            .buttonStyle(CleanFailureActionButtonStyle())
+                            .buttonStyle(.purge(.quiet, size: .small))
                             .disabled(isRetrying)
                         }
                     }
@@ -1355,14 +1323,6 @@ private struct CleanFailureRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct CleanFailureActionButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.white.opacity(configuration.isPressed ? 0.55 : 0.72))
     }
 }
 
@@ -1498,106 +1458,6 @@ extension AnyTransition {
             active: SafeCleanupCelebrationBlurModifier(radius: 18, opacity: 0),
             identity: SafeCleanupCelebrationBlurModifier(radius: 0, opacity: 1)
         )
-    }
-}
-
-struct AppButtonStyle: ButtonStyle {
-    enum Variant {
-        case bordered
-        case filled
-        case ghost
-        case destructive
-    }
-
-    var variant: Variant = .bordered
-    var isCapsule: Bool = false
-
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(labelFont)
-            .foregroundStyle(foregroundStyle)
-            .padding(.horizontal, isCapsule ? 14 : 10)
-            .padding(.vertical, isCapsule ? 7 : 6)
-            .background(background(configuration: configuration))
-            .overlay(border)
-            .clipShape(buttonShape)
-            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
-            .animation(stateAnimation, value: isEnabled)
-    }
-
-    private var stateAnimation: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.28)
-    }
-
-    private var labelFont: Font {
-        let size: CGFloat = isCapsule ? 13 : 12
-        let design: Font.Design = isCapsule ? .rounded : .default
-        return .system(size: size, weight: .semibold, design: design)
-    }
-
-    private var buttonShape: AnyShape {
-        if isCapsule {
-            return AnyShape(Capsule(style: .continuous))
-        }
-        return AnyShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
-    }
-
-    private var foregroundStyle: Color {
-        switch variant {
-        case .bordered, .ghost:
-            return .primary
-        case .filled:
-            return AppColors.onActionPrimary
-        case .destructive:
-            return AppColors.statusDangerText
-        }
-    }
-
-    private func background(configuration: Configuration) -> Color {
-        switch variant {
-        case .bordered:
-            return configuration.isPressed ? AppColors.fillSecondaryPressed : AppColors.fillSecondary
-        case .filled:
-            return AppColors.actionPrimary
-        case .ghost:
-            return configuration.isPressed ? AppColors.fillSecondaryPressed : .clear
-        case .destructive:
-            return AppColors.statusDangerText.opacity(configuration.isPressed ? 0.18 : 0.1)
-        }
-    }
-
-    @ViewBuilder
-    private var border: some View {
-        if isCapsule {
-            Capsule(style: .continuous)
-                .stroke(variant == .filled ? Color.clear : AppColors.borderStrong)
-        } else {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                .stroke(variant == .filled ? Color.clear : AppColors.borderStrong)
-        }
-    }
-}
-
-/// A delete confirmation's primary button: a solid red fill with white text, the
-/// standard destructive treatment shared by every "move to Trash" sheet. Metrics
-/// track `AppButtonStyle(.bordered)` so it and Cancel keep one height.
-struct SolidDestructiveButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
-                    .fill(AppColors.actionDestructive)
-            )
-            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.45)
     }
 }
 
@@ -1838,7 +1698,7 @@ struct AppSortMenu: View {
             Label(selection.shortDisplayName, systemImage: "arrow.up.arrow.down")
                 .labelStyle(.titleAndIcon)
         }
-        .buttonStyle(AppButtonStyle(variant: .bordered))
+        .buttonStyle(.purge(.secondary))
         .fixedSize()
         .accessibilityLabel("Sort by \(selection.displayName)")
     }

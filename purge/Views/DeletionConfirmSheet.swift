@@ -240,13 +240,13 @@ struct DeletionConfirmSheet: View {
             Spacer()
 
             Button("Cancel", action: onCancel)
-                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .buttonStyle(.purge(.secondary))
                 .keyboardShortcut(.cancelAction)
 
             Button(primaryTitle) {
                 onConfirm()
             }
-            .buttonStyle(SolidDestructiveButtonStyle())
+            .buttonStyle(.purge(.destructive))
             .keyboardShortcut(.defaultAction)
         }
     }

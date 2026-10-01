@@ -55,23 +55,18 @@ struct DeletedAppsWatcherNoticeCard: View {
                     CleaningButtonLabel(
                         title: isRestarting ? "Restarting…" : fixTitle,
                         systemImage: nil,
-                        isCleaning: isRestarting,
-                        spinnerTint: AppColors.onActionPrimary
+                        isCleaning: isRestarting
                     )
                     .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
                 }
-                .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+                .buttonStyle(.purge(.primary))
                 .disabled(isRestarting)
                 .padding(.top, AppStyle.Spacing.small)
 
                 Button("Turn Off", action: onTurnOff)
-                    .buttonStyle(.plain)
-                    .font(NoticeFont.body)
-                    .foregroundStyle(.secondary)
+                    .buttonStyle(.purge(.quiet, size: .small))
                     .frame(maxWidth: .infinity)
-                    .padding(.top, AppStyle.Spacing.xSmall)
+                    .padding(.top, AppStyle.Spacing.xxSmall)
                     .help("Stop reviewing leftovers when an app is deleted")
             }
             .frame(maxWidth: .infinity, alignment: .leading)

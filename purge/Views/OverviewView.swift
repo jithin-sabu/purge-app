@@ -288,7 +288,7 @@ private struct OverviewCategoryRow: View {
                 .padding(.trailing, 2)
         case .notScanned where !isRecorded:
             Button("Scan") { store.requestScan(category.step) }
-                .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+                .buttonStyle(.purge(.secondary))
         case .waiting:
             // About to be measured again: no figure, not even the last one, until it scans.
             EmptyView()
@@ -759,10 +759,8 @@ struct OverviewScanButton: View {
                 systemImage: systemImage,
                 isCleaning: isFinishingCacheScan
             )
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
         }
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .buttonStyle(.purge(.secondary))
         .keyboardShortcut("r", modifiers: [.command])
         .disabled(isFinishingCacheScan || store.isDeleting)
         .help(queue.isRunning ? "Stop scanning" : "Scan App Caches, Dev Tools, Large Files and apps, one after another")

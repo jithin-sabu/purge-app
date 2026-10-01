@@ -60,10 +60,8 @@ struct LockedFeatureView: View {
                 store.isLookDeeperPresented = true
             } label: {
                 Label("Look deeper", systemImage: "lock.open")
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
             }
-            .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+            .buttonStyle(.purge(.primary))
         }
         .frame(maxWidth: 440)
         .padding(AppStyle.Spacing.large)
@@ -81,10 +79,8 @@ struct LookDeeperHeaderButton: View {
             store.isLookDeeperPresented = true
         } label: {
             Label("Look deeper", systemImage: "lock.open")
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
         }
-        .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+        .buttonStyle(.purge(.secondary))
         .help("Some places are still locked. Let Purge look deeper.")
     }
 }

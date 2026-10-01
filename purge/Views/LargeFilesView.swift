@@ -208,10 +208,8 @@ struct LargeFilesView: View {
                     systemImage: isLoading ? nil : "arrow.clockwise",
                     isCleaning: isLoading
                 )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
             }
-            .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+            .buttonStyle(.purge(.secondary))
             .disabled(isLoading)
 
             LargeFileDeleteButton(selection: store.largeFileSelection)
@@ -521,8 +519,8 @@ struct LargeFilesView: View {
                 Button("Clear Search") {
                     searchQuery = ""
                 }
-                .buttonStyle(.link)
-                .padding(.top, 2)
+                .buttonStyle(.purge(.secondary, size: .small))
+                .padding(.top, AppStyle.Spacing.xxSmall)
             } else {
                 Text("No files match this filter.")
                     .foregroundStyle(.secondary)
@@ -606,10 +604,8 @@ private struct LargeFileDeleteButton: View {
                 selectedCount: store.selectedLargeFileCount,
                 selectedBytes: store.selectedLargeFileBytes
             )
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
         }
-        .buttonStyle(AppButtonStyle(variant: .filled, isCapsule: true))
+        .buttonStyle(.purge(.primary))
         .disabled(store.selectedLargeFileCount == 0 || store.isDeleting)
     }
 }
@@ -679,8 +675,8 @@ private struct LargeFileSelectAllBar: View {
 
             if let onKeepOneOfEach {
                 // Sits with the sort control, not beside "Select All": both are
-                // AppButtonStyle boxes, so grouping them keeps the boxed controls on
-                // one baseline instead of one box riding proud of the plain-text
+                // PurgeButtonStyle pills, so grouping them keeps the pill controls on
+                // one baseline instead of one pill riding proud of the plain-text
                 // checkbox. A real Button is fine here — the bar is above the List,
                 // not inside it, so it can't trigger the scroll-to-clicked-row jump
                 // the rows guard against.
@@ -688,7 +684,7 @@ private struct LargeFileSelectAllBar: View {
                     Label("Delete extra copies", systemImage: "trash")
                         .labelStyle(.titleAndIcon)
                 }
-                .buttonStyle(AppButtonStyle(variant: .bordered))
+                .buttonStyle(.purge(.secondary))
                 .fixedSize()
                 .help("Keep one copy of each set and review the rest before deleting")
             }
@@ -1208,10 +1204,8 @@ struct LargeFilesHeaderActions: View {
                     systemImage: isBusy ? nil : "arrow.clockwise",
                     isCleaning: isBusy
                 )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
             }
-            .buttonStyle(AppButtonStyle(variant: .bordered, isCapsule: true))
+            .buttonStyle(.purge(.secondary))
             .disabled(isBusy)
             .keyboardShortcut("r", modifiers: [.command])
 
@@ -1284,13 +1278,13 @@ struct LargeFileDeletionConfirmSheet: View {
                 Spacer()
 
                 Button("Cancel", action: onCancel)
-                    .buttonStyle(AppButtonStyle(variant: .bordered))
+                    .buttonStyle(.purge(.secondary))
                     .keyboardShortcut(.cancelAction)
 
                 Button("Move \(files.count) to Trash") {
                     onConfirm()
                 }
-                .buttonStyle(SolidDestructiveButtonStyle())
+                .buttonStyle(.purge(.destructive))
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -1461,13 +1455,13 @@ struct DuplicateCleanupSheet: View {
                 Spacer()
 
                 Button("Cancel", action: onCancel)
-                    .buttonStyle(AppButtonStyle(variant: .bordered))
+                    .buttonStyle(.purge(.secondary))
                     .keyboardShortcut(.cancelAction)
 
                 Button("Move \(deleteCount) to Trash") {
                     onConfirm(keeperByGroup)
                 }
-                .buttonStyle(SolidDestructiveButtonStyle())
+                .buttonStyle(.purge(.destructive))
                 .keyboardShortcut(.defaultAction)
             }
         }
