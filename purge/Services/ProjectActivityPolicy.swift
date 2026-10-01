@@ -159,15 +159,16 @@ nonisolated enum ProjectActivityPolicy {
 /// Working directories of running processes, read with `proc_pidinfo`. Only the
 /// user's own processes can be inspected; the rest are skipped.
 nonisolated enum ProcessWorkingDirectories {
+    /// `proc_listallpids` returns a number of pids from both calls, not bytes.
+    /// Reading it as bytes divided by 4 twice and saw about 1 process in 16.
     static func allProcessIDs() -> [pid_t]? {
-        let bytesNeeded = proc_listallpids(nil, 0)
-        guard bytesNeeded > 0 else { return nil }
-        let capacity = Int(bytesNeeded) / MemoryLayout<pid_t>.size
-        var pids = [pid_t](repeating: 0, count: max(capacity, 1))
-        let filledBytes = proc_listallpids(&pids, Int32(MemoryLayout<pid_t>.size * pids.count))
-        guard filledBytes > 0 else { return nil }
-        let count = Int(filledBytes) / MemoryLayout<pid_t>.size
-        return pids.prefix(count).filter { $0 > 0 }
+        let countNeeded = proc_listallpids(nil, 0)
+        guard countNeeded > 0 else { return nil }
+        // Headroom for processes started between the two calls.
+        var pids = [pid_t](repeating: 0, count: Int(countNeeded) + 64)
+        let filled = proc_listallpids(&pids, Int32(MemoryLayout<pid_t>.size * pids.count))
+        guard filled > 0 else { return nil }
+        return pids.prefix(Int(filled)).filter { $0 > 0 }
     }
 
     static func executablePath(of pid: pid_t) -> String? {

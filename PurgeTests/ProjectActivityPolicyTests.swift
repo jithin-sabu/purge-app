@@ -275,3 +275,34 @@ struct ProjectListingFilterTests {
         #expect(listed(fixture, staleDays: showAll, cwds: [fixture.root.path]) == nil)
     }
 }
+
+@Suite("Process working directories cover every running process")
+struct ProcessWorkingDirectoriesTests {
+    /// `proc_listallpids` counts pids, not bytes. Read as bytes, the list held about
+    /// 1 process in 16, so a project open in a terminal or editor went unseen.
+    @Test
+    func listReachesBothEndsOfThePidRange() throws {
+        let pids = try #require(ProcessWorkingDirectories.allProcessIDs())
+        #expect(pids.contains(1))
+        #expect(pids.contains(getpid()))
+    }
+
+    @Test
+    func childProcessWorkingDirectoryIsFound() throws {
+        let fm = FileManager.default
+        let folder = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: folder) }
+
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        child.arguments = ["30"]
+        child.currentDirectoryURL = folder
+        try child.run()
+        defer { child.terminate() }
+
+        let resolved = folder.resolvingSymlinksInPath().path
+        let directories = ProcessWorkingDirectories.allDirectories()
+        #expect(directories.contains { $0 == resolved || $0 == "/private" + resolved })
+    }
+}
