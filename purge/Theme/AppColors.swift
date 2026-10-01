@@ -1,56 +1,58 @@
 import AppKit
 import SwiftUI
 
-/// Every colour in the app. Tokens are named by job (text, surface, fill,
-/// border, action, status, chart) so the name says where a colour belongs.
+/// Every colour in the app. The neutrals are a warm graphite: low-chroma greys
+/// leaning slightly yellow, so light mode reads like paper rather than glare.
+/// Tokens are named by job (text, surface, fill, border, action, status,
+/// chart) so the name says where a colour belongs.
 /// Views pick one of these instead of raw hex or SwiftUI's `.secondary` greys.
 /// Plain white and black are only for shadows, masks, and glyphs on coloured
 /// tiles. Values and contrast notes live in docs/design-system.md.
 enum AppColors {
     // MARK: - Text
 
-    /// Body text and titles. Charcoal, not black: 13.6:1 on a light card.
-    static let textPrimary = Color(light: 0x2C2E35, dark: 0xE9EAED)
+    /// Body text and titles. Warm graphite, not black: 13.8:1 on a light card.
+    static let textPrimary = Color(light: 0x2E2D2B, dark: 0xECEAE6)
     /// Supporting text: metadata, captions, idle sidebar items. 6:1 or better.
-    static let textSecondary = Color(light: 0x61636C, dark: 0xA1A3AC)
+    static let textSecondary = Color(light: 0x64625E, dark: 0xA6A39D)
     /// Icons, chevrons, placeholders and timestamps. Never a sentence someone
-    /// has to read (3.8:1 light, 4.2:1 dark).
-    static let textTertiary = Color(light: 0x80828C, dark: 0x7D7F89)
+    /// has to read (3.8:1 light, 4.1:1 dark).
+    static let textTertiary = Color(light: 0x85827C, dark: 0x807D78)
 
     // MARK: - Surfaces
 
     /// The window background.
-    static let surfaceBase = Color(light: 0xF6F6F8, dark: 0x15161A)
+    static let surfaceBase = Color(light: 0xF6F5F3, dark: 0x171615)
     /// Grouped content: cards, lists, sheets.
-    static let surfaceCard = Color(light: 0xFFFFFF, dark: 0x1C1D22)
+    static let surfaceCard = Color(light: 0xFFFFFF, dark: 0x1E1D1C)
     /// One step above whatever it sits on: menus, dropdowns, pickers, and the
     /// hover on the window background.
-    static let surfaceRaised = Color(light: 0xFFFFFF, dark: 0x2A2B33)
+    static let surfaceRaised = Color(light: 0xFFFFFF, dark: 0x2B2A28)
     /// A hovered or selected row on a card. (Rows used `surfaceRaised` before,
     /// which is white on a white card in light mode, so hover never showed.)
-    static let surfaceCardHover = Color(light: 0xF2F3F5, dark: 0x2A2B33)
+    static let surfaceCardHover = Color(light: 0xF4F2EF, dark: 0x2A2927)
 
     // MARK: - Fills
 
     /// Secondary button fill, selected sidebar item, search fields, tracks.
-    static let fillSecondary = Color(light: 0xEEEFF2, dark: 0x26272E)
-    static let fillSecondaryHover = Color(light: 0xE7E8EC, dark: 0x2D2E36)
-    static let fillSecondaryPressed = Color(light: 0xDFE0E5, dark: 0x34353E)
+    static let fillSecondary = Color(light: 0xEFEDEA, dark: 0x282725)
+    static let fillSecondaryHover = Color(light: 0xE8E6E2, dark: 0x2F2E2C)
+    static let fillSecondaryPressed = Color(light: 0xDFDCD8, dark: 0x373533)
 
     // MARK: - Borders
 
-    static let borderSubtle = Color(light: 0xE4E5E9, dark: 0x2E2F37)
+    static let borderSubtle = Color(light: 0xE6E3DF, dark: 0x302F2D)
     /// Borders that outline a control: secondary buttons, pickers, checkboxes.
-    static let borderStrong = Color(light: 0xD3D5DA, dark: 0x3A3B44)
+    static let borderStrong = Color(light: 0xD5D2CD, dark: 0x3D3B38)
 
     // MARK: - Actions
 
     /// The one main action on a screen. Also the checkbox and focus accent.
     static let actionPrimary = Color(nsColor: actionPrimaryNSColor)
-    static let actionPrimaryHover = Color(light: 0x40424B, dark: 0xF4F5F7)
-    static let actionPrimaryPressed = Color(light: 0x2A2C32, dark: 0xD5D6DA)
+    static let actionPrimaryHover = Color(light: 0x42403D, dark: 0xF6F4F1)
+    static let actionPrimaryPressed = Color(light: 0x2A2927, dark: 0xD8D5D0)
     /// Label colour on top of `actionPrimary`.
-    static let onActionPrimary = Color(light: 0xFFFFFF, dark: 0x15161A)
+    static let onActionPrimary = Color(light: 0xFFFFFF, dark: 0x171615)
     /// Solid fill for confirming a move to Trash. White label on top.
     static let actionDestructive = Color(light: 0xD1312A, dark: 0xD9372D)
     static let actionDestructiveHover = Color(light: 0xBC2B25, dark: 0xE2453B)
@@ -64,8 +66,8 @@ enum AppColors {
     static let statusCheckFill = Color(light: 0xFAEEDA, dark: 0x332910)
     static let statusDangerText = Color(light: 0xB4302A, dark: 0xF47468)
     static let statusDangerFill = Color(light: 0xFBE8E5, dark: 0x321B19)
-    static let statusUnsureText = Color(light: 0x565861, dark: 0xA7A9B2)
-    static let statusUnsureFill = Color(light: 0xEEEEF1, dark: 0x26272D)
+    static let statusUnsureText = Color(light: 0x5A5853, dark: 0xA9A6A0)
+    static let statusUnsureFill = Color(light: 0xEFEDEA, dark: 0x282725)
 
     // MARK: - Overlays
 
@@ -101,9 +103,9 @@ enum AppColors {
         static let leftoversTile = Color(light: 0xB35A8D, dark: 0xBE6C9C)
         /// Close to the sidebar's "used" grey, and well apart from free space in
         /// both themes.
-        static let everythingElse = Color(light: 0x8A8C96, dark: 0xA3A6B4)
+        static let everythingElse = Color(light: 0x8C8983, dark: 0xA8A49D)
         /// Free space on the storage bars.
-        static let freeSpace = Color(light: 0xD6D7DA, dark: 0x4C4E5A)
+        static let freeSpace = Color(light: 0xDAD7D2, dark: 0x4E4B47)
     }
 
     // MARK: - AppKit
@@ -111,7 +113,7 @@ enum AppColors {
     /// AppKit checkbox / control accent, the same colour as `actionPrimary`.
     static var controlAccentNSColor: NSColor { actionPrimaryNSColor }
 
-    private static let actionPrimaryNSColor = NSColor(light: 0x34363E, dark: 0xE9EAED)
+    private static let actionPrimaryNSColor = NSColor(light: 0x353431, dark: 0xECEAE6)
 }
 
 private extension NSColor {

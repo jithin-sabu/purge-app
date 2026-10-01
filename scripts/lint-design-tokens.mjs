@@ -19,7 +19,7 @@ const tokenFiles = new Set([
 
 const rules = [
   {
-    pattern: /Color\((red|green|blue|hue|white):|\.hex\(0x/,
+    pattern: /Color\((red|green|blue|hue|white):|\b0x[0-9A-Fa-f]{6}\b/,
     message: "raw colour; use an AppColors token",
   },
   {

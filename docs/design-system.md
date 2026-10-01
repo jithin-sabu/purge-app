@@ -6,35 +6,35 @@ Every colour, button, font and radius in Purge comes from three files:
 - `purge/Views/AppStyle.swift`: type scale, radii, spacing, row metrics
 - `purge/Views/PurgeButtonStyle.swift`: the one button style
 
-`node scripts/lint-design-tokens.mjs` (also `npm run lint:design`, and a CI step) fails when a view uses a raw colour, a SwiftUI grey like `.secondary`, a point size or text style on text, a literal corner radius, or a removed button style. Add `design-lint: allow` to a line only when there is a real reason, and say why in a comment.
+`node scripts/lint-design-tokens.mjs` (also `npm run lint:design`, and a CI step) fails when a view uses a raw colour, a SwiftUI grey like `.secondary`, a point size or text style on text, a literal corner radius, a hex colour outside the theme file, or a removed button style. Add `design-lint: allow` to a line only when there is a real reason, and say why in a comment.
 
 ## Colour
 
-Tokens are named by job. Light mode uses a charcoal ink instead of near-black, so text and the primary button don't land hard on the light surfaces. Contrast is against `surfaceCard`, or against the status fill for tags.
+Tokens are named by job. The neutrals are a warm graphite: low-chroma greys leaning slightly yellow, following Linear's 2026 move away from cool, blue-tinted greys. Light mode uses graphite ink instead of near-black, so text and the primary button don't land hard on the light surfaces. Contrast is against `surfaceCard`, or against the status fill for tags.
 
 | Token | Light | Dark | Use for | Contrast (L / D) |
 | --- | --- | --- | --- | --- |
-| `textPrimary` | `#2C2E35` | `#E9EAED` | Body text, titles | 13.6 / 14.0 |
-| `textSecondary` | `#61636C` | `#A1A3AC` | Metadata, captions, idle sidebar items | 6.0 / 6.7 |
-| `textTertiary` | `#80828C` | `#7D7F89` | Icons, chevrons, placeholders, timestamps. Never a sentence | 3.8 / 4.2 |
-| `surfaceBase` | `#F6F6F8` | `#15161A` | Window background | |
-| `surfaceCard` | `#FFFFFF` | `#1C1D22` | Cards, lists, sheets | |
-| `surfaceRaised` | `#FFFFFF` | `#2A2B33` | Menus, dropdowns, pickers, hover on the window background | |
-| `surfaceCardHover` | `#F2F3F5` | `#2A2B33` | Hovered or selected row on a card | |
-| `fillSecondary` | `#EEEFF2` | `#26272E` | Secondary buttons, selected sidebar item, fields, tracks | |
-| `fillSecondaryHover` | `#E7E8EC` | `#2D2E36` | | |
-| `fillSecondaryPressed` | `#DFE0E5` | `#34353E` | | |
-| `borderSubtle` | `#E4E5E9` | `#2E2F37` | Card hairlines, dividers | |
-| `borderStrong` | `#D3D5DA` | `#3A3B44` | Outlines of controls | |
-| `actionPrimary` | `#34363E` | `#E9EAED` | The one main action; checkbox and focus accent | 12.1 / 15.0 with its label |
-| `onActionPrimary` | `#FFFFFF` | `#15161A` | Label on `actionPrimary` | |
+| `textPrimary` | `#2E2D2B` | `#ECEAE6` | Body text, titles | 13.8 / 14.0 |
+| `textSecondary` | `#64625E` | `#A6A39D` | Metadata, captions, idle sidebar items | 6.1 / 6.7 |
+| `textTertiary` | `#85827C` | `#807D78` | Icons, chevrons, placeholders, timestamps. Never a sentence | 3.8 / 4.1 |
+| `surfaceBase` | `#F6F5F3` | `#171615` | Window background | |
+| `surfaceCard` | `#FFFFFF` | `#1E1D1C` | Cards, lists, sheets | |
+| `surfaceRaised` | `#FFFFFF` | `#2B2A28` | Menus, dropdowns, pickers, hover on the window background | |
+| `surfaceCardHover` | `#F4F2EF` | `#2A2927` | Hovered or selected row on a card | |
+| `fillSecondary` | `#EFEDEA` | `#282725` | Secondary buttons, selected sidebar item, fields, tracks | |
+| `fillSecondaryHover` | `#E8E6E2` | `#2F2E2C` | | |
+| `fillSecondaryPressed` | `#DFDCD8` | `#373533` | | |
+| `borderSubtle` | `#E6E3DF` | `#302F2D` | Card hairlines, dividers | |
+| `borderStrong` | `#D5D2CD` | `#3D3B38` | Outlines of controls | |
+| `actionPrimary` | `#353431` | `#ECEAE6` | The one main action; checkbox and focus accent | 12.5 / 15.0 with its label |
+| `onActionPrimary` | `#FFFFFF` | `#171615` | Label on `actionPrimary` | |
 | `actionDestructive` | `#D1312A` | `#D9372D` | Confirming a move to Trash, white label | 5.0 / 4.6 |
 | `statusSafeText` / `Fill` | `#1F7A35` / `#E6F4EA` | `#5FD36B` / `#1B2E22` | Safe tag | 4.8 / 7.5 |
 | `statusCheckText` / `Fill` | `#8A5300` / `#FAEEDA` | `#F2B84B` / `#332910` | Check first tag | 5.5 / 8.0 |
 | `statusDangerText` / `Fill` | `#B4302A` / `#FBE8E5` | `#F47468` / `#321B19` | In use, errors | 5.2 / 5.8 |
-| `statusUnsureText` / `Fill` | `#565861` / `#EEEEF1` | `#A7A9B2` / `#26272D` | Unknown | 6.1 / 6.0 |
+| `statusUnsureText` / `Fill` | `#5A5853` / `#EFEDEA` | `#A9A6A0` / `#282725` | Unknown | 6.1 / 6.2 |
 
-Hover and pressed shades exist for `actionPrimary` and `actionDestructive` too. `AppColors.Chart` holds the Overview breakdown colours (Okabe and Ito, colour-blind safe) and the free-space grey.
+Hover and pressed shades exist for `actionPrimary` and `actionDestructive` too. `AppColors.Chart` holds the Overview breakdown colours (Okabe and Ito, colour-blind safe) and the warm greys for "everything else" and free space.
 
 The cleanup celebration forces dark mode and draws on `surfaceBase`, so it uses the ordinary dark tokens. Plain white and black are only for shadows, masks, glyphs on coloured chart tiles, and the menu bar dropdown's native selection highlight.
 
