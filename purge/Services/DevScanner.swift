@@ -57,7 +57,8 @@ nonisolated final class DevScanner {
         "Corepack Cache": "corepack-cache",
         "Obsolete Cursor Extension": "obsolete-cursor-extension",
         "Obsolete VS Code Extension": "obsolete-vscode-extension",
-        "Cursor Agent Leftovers": "cursor-agent-leftover"
+        "Cursor Agent Leftovers": "cursor-agent-leftover",
+        "Orphaned Cursor Worktrees": "orphaned-cursor-worktree"
     ]
 
     private func safetyInfo(forToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
@@ -572,10 +573,14 @@ nonisolated final class DevScanner {
     }
 
     private func discoverCursorAgentLeftoverDefinitions(home: URL) -> [(label: String, paths: [URL])] {
-        let live = CursorAgentLeftoverScanPolicy.LiveContext.current(home: home)
-        let unused = CursorAgentLeftoverScanPolicy.unusedDirectories(home: home, live: live)
-        guard !unused.isEmpty else { return [] }
-        return [(CursorAgentLeftoverScanPolicy.toolLabel, unused)]
+        typealias Policy = CursorAgentLeftoverScanPolicy
+        let live = Policy.LiveContext.current(home: home)
+        // Orphaned worktrees get their own row so the label says why they are listed.
+        let entries: [(label: String, paths: [URL])] = [
+            (Policy.orphanedWorktreesLabel, Policy.unusedWorktrees(home: home, live: live)),
+            (Policy.toolLabel, Policy.unusedJunkProjectNamespaces(home: home, live: live))
+        ]
+        return entries.filter { !$0.paths.isEmpty }
     }
 
     private func discoverObsoleteEditorExtensionDefinitions(

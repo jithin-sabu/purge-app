@@ -12,15 +12,19 @@ import Foundation
 ///    (numeric backup ids).
 ///
 /// Age is never a gate. A folder from this morning can already be junk; one
-/// from months ago can still be a running agent. Live work is detected from
-/// open Cursor windows, process working directories, Git locks, and whether
-/// a temp workspace still exists. Settings, login, MCP config, extensions,
+/// from months ago can still be a running agent. A worktree is listed only once
+/// its repository no longer has it registered (issue #61, see
+/// `GitWorktreeRegistration`), and gets its own labeled row. Live work is
+/// detected from open Cursor windows, process working directories, Git locks,
+/// and whether a temp workspace still exists. Settings, login, MCP config, extensions,
 /// and real project namespaces are never offered. Chat history for a living
 /// workspace is out of scope.
 enum CursorAgentLeftoverScanPolicy {
 
     static let toolLabel = "Cursor Agent Leftovers"
     static let explanationKey = "cursor-agent-leftover"
+    static let orphanedWorktreesLabel = "Orphaned Cursor Worktrees"
+    static let orphanedWorktreesExplanationKey = "orphaned-cursor-worktree"
     static let cursorBundleID = "com.todesktop.230313mzl4w4u92"
 
     nonisolated enum SnapshotStatus: Equatable {
@@ -118,16 +122,26 @@ enum CursorAgentLeftoverScanPolicy {
             || path.hasPrefix("\(homePath)/.cursor/projects/")
     }
 
+    /// The path-shape gate plus, for a worktree, the registration check again:
+    /// Purge never trashes a checkout its repository still lists, even if the
+    /// repository took it back between the scan and the clean.
     nonisolated static func passesImmediateTrashBoundary(
         _ url: URL,
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> Bool {
-        isWhitelistedPath(url.standardizedFileURL.path, home: home.standardizedFileURL.path)
+        let path = url.standardizedFileURL.path
+        let homePath = home.standardizedFileURL.path
+        guard isWhitelistedPath(path, home: homePath) else { return false }
+        if path.hasPrefix("\(homePath)/.cursor/worktrees/") {
+            return GitWorktreeRegistration.state(of: URL(fileURLWithPath: path, isDirectory: true)) == .orphaned
+        }
+        return true
     }
 
     // MARK: - Discovery
 
     /// Directories that exist on disk, match the leftover layouts, and look unused.
+    /// Worktrees among them are orphaned ones only.
     nonisolated static func unusedDirectories(
         home: URL,
         live: LiveContext,
@@ -137,6 +151,8 @@ enum CursorAgentLeftoverScanPolicy {
             + unusedJunkProjectNamespaces(home: home, live: live, fileManager: fileManager)
     }
 
+    /// Worktree leaves their repository no longer lists, minus any Cursor still
+    /// has open. A registered worktree never shows, however long it sat idle.
     nonisolated static func unusedWorktrees(
         home: URL,
         live: LiveContext,
@@ -147,7 +163,10 @@ enum CursorAgentLeftoverScanPolicy {
         if live.cursorIsRunning && live.cursorProcessSnapshot != .available {
             return []
         }
-        return leaves.filter { !isLiveWorktree($0, live: live, fileManager: fileManager) }
+        return leaves.filter {
+            GitWorktreeRegistration.state(of: $0, fileManager: fileManager) == .orphaned
+                && !isLiveWorktree($0, live: live, fileManager: fileManager)
+        }
     }
 
     nonisolated static func unusedJunkProjectNamespaces(

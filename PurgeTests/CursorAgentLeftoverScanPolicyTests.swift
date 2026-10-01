@@ -192,6 +192,15 @@ struct CursorAgentLeftoverScanPolicyTests {
         let gitDir = home.appendingPathComponent("fake.git/worktrees/abc", isDirectory: true)
         try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
         try Data().write(to: gitDir.appendingPathComponent("index.lock"))
+        // Registered to another checkout, so the leaf is an orphan and only the lock keeps it off.
+        let other = home.appendingPathComponent("other", isDirectory: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        try Data().write(to: other.appendingPathComponent(".git"))
+        try "\(other.appendingPathComponent(".git").path)\n".write(
+            to: gitDir.appendingPathComponent("gitdir"),
+            atomically: true,
+            encoding: .utf8
+        )
         try "gitdir: \(gitDir.path)\n".write(
             to: leaf.appendingPathComponent(".git"),
             atomically: true,
@@ -391,5 +400,15 @@ struct CursorAgentLeftoverScanPolicyTests {
         )
         #expect(info.level == .medium)
         #expect(info.headline == "Cursor Agent Leftovers")
+    }
+
+    @Test
+    func orphanedWorktreesHaveTheirOwnCheckFirstLabel() {
+        let info = DevScanner.automaticSafetyInfo(
+            forDevToolLabel: CursorAgentLeftoverScanPolicy.orphanedWorktreesLabel,
+            primaryPath: nil
+        )
+        #expect(info.level == .medium)
+        #expect(info.headline == "Orphaned Cursor Worktrees")
     }
 }
