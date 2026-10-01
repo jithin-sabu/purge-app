@@ -41,7 +41,6 @@ enum AppStyle {
         static let sfSymbolPointSize: CGFloat = 18
         /// Project group headers (node_modules, Flutter, etc.) — slightly smaller than scan rows (28pt).
         static let projectGroupIconSize: CGFloat = 16
-        static let projectGroupIconCornerRadius: CGFloat = 5
         /// Aligns expanded artifact text with the project title (parent checkbox + spacing).
         static let projectArtifactLeadingInset: CGFloat = 34
         /// Inner horizontal padding for scan result cards (matches `ScanResultRow` chrome).

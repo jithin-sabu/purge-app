@@ -6,12 +6,19 @@ struct BundledExplanationRecord: Codable, Sendable {
     let tag: String
     let explanation: String
     let bundleIds: [String]?
+    /// Raw `kind` value; see `CacheKind`.
+    let kind: String?
 
     enum CodingKeys: String, CodingKey {
         case displayName = "display_name"
         case tag
         case explanation
         case bundleIds = "bundle_ids"
+        case kind
+    }
+
+    nonisolated var cacheKind: CacheKind? {
+        kind.flatMap(CacheKind.init(rawValue:))
     }
 
     nonisolated var safetyLevel: SafetyLevel {
@@ -36,6 +43,7 @@ private struct BundledArrayEntry: Codable {
     let explanation: String
     let bundleIds: [String]?
     let aliases: [String]?
+    let kind: String?
 
     enum CodingKeys: String, CodingKey {
         case key
@@ -44,6 +52,7 @@ private struct BundledArrayEntry: Codable {
         case explanation
         case bundleIds = "bundle_ids"
         case aliases
+        case kind
     }
 
     var record: BundledExplanationRecord {
@@ -51,7 +60,8 @@ private struct BundledArrayEntry: Codable {
             displayName: displayName,
             tag: tag,
             explanation: explanation,
-            bundleIds: bundleIds
+            bundleIds: bundleIds,
+            kind: kind
         )
     }
 }
@@ -198,6 +208,12 @@ enum ExplanationDatabase {
 
     nonisolated static func record(forKey key: String) -> BundledExplanationRecord? {
         loadFromBundle()[key]
+    }
+
+    /// The `kind` of a definition, which picks the row symbol when the cache
+    /// has no brand glyph.
+    nonisolated static func kind(forKey key: String) -> CacheKind? {
+        record(forKey: key)?.cacheKind
     }
 
     nonisolated static func safetyInfo(from record: BundledExplanationRecord, reinstallCommand: String? = nil) -> SafetyInfo {

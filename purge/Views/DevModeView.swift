@@ -932,8 +932,7 @@ struct DevToolsView<PageHeader: View>: View {
                     HStack(alignment: .center, spacing: 10) {
                         AdaptiveBrandIconImage(
                             source: .projectGroup(group),
-                            squareSize: AppStyle.Row.projectGroupIconSize,
-                            cornerRadius: AppStyle.Row.projectGroupIconCornerRadius
+                            squareSize: AppStyle.Row.projectGroupIconSize
                         )
                         .accessibilityLabel(projectGroupIconAccessibilityLabel(for: group))
                         Text(group.displayName)

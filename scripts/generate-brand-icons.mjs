@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
- * Generates PNG brand icons from simple-icons for bundling in the macOS app.
+ * Generates PNG brand glyphs from simple-icons for bundling in the macOS app.
  * Run: npm run generate:icons
+ *
+ * Each slug gets one white silhouette, `<slug>.png`. The app loads it as a
+ * template image and tints it with the row's text colour, so light and dark
+ * mode look the same (see BrandIconService.brandGlyph).
  *
  * Uses simple-icons v14 for most brands and simple-icons-v16 for newer icons (e.g. cursor).
  * Slugs missing from simple-icons can ship SVG sources in scripts/brand-icon-sources/.
@@ -43,19 +47,24 @@ function svgForIcon(icon, fillHex) {
   return `<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="${icon.path}" fill="#${fillHex}"/></svg>`;
 }
 
-async function renderSupplementalSvg(slug, variant) {
-  const suffix = variant === "dark" ? "-dark" : "";
-  const preferred = path.join(supplementalDir, `${slug}${suffix}.svg`);
+// Supplemental SVGs: prefer the white `-dark` variant, since only the shape
+// (alpha) matters once the app tints the image.
+async function renderSupplementalSvg(slug) {
+  const preferred = path.join(supplementalDir, `${slug}-dark.svg`);
   const fallback = path.join(supplementalDir, `${slug}.svg`);
   const svgPath = fs.existsSync(preferred) ? preferred : fallback;
   if (!fs.existsSync(svgPath)) return false;
 
-  const outName = variant === "dark" ? `${slug}-dark.png` : `${slug}.png`;
   await sharp(svgPath)
     .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
-    .toFile(path.join(outDir, outName));
+    .toFile(path.join(outDir, `${slug}.png`));
   return true;
+}
+
+// Older builds wrote a coloured `<slug>.png` plus a white `<slug>-dark.png`.
+for (const name of fs.readdirSync(outDir)) {
+  if (name.endsWith("-dark.png")) fs.unlinkSync(path.join(outDir, name));
 }
 
 let ok = 0;
@@ -64,19 +73,15 @@ let failed = [];
 for (const slug of slugs) {
   const icon = iconForSlug(slug);
   if (!icon) {
-    const lightOk = await renderSupplementalSvg(slug, "light");
-    const darkOk = await renderSupplementalSvg(slug, "dark");
-    if (lightOk && darkOk) {
+    if (await renderSupplementalSvg(slug)) {
       ok++;
       continue;
     }
     failed.push(slug);
     continue;
   }
-  const lightSvg = svgForIcon(icon, icon.hex);
-  const darkSvg = svgForIcon(icon, "FFFFFF");
-  await sharp(Buffer.from(lightSvg)).resize(size, size).png().toFile(path.join(outDir, `${slug}.png`));
-  await sharp(Buffer.from(darkSvg)).resize(size, size).png().toFile(path.join(outDir, `${slug}-dark.png`));
+  const glyphSvg = svgForIcon(icon, "FFFFFF");
+  await sharp(Buffer.from(glyphSvg)).resize(size, size).png().toFile(path.join(outDir, `${slug}.png`));
   ok++;
 }
 

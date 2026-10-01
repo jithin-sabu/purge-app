@@ -125,7 +125,7 @@ struct ScanListRow<Footer: View>: View {
                 .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous))
                 .opacity(0.88)
         case .brand(let source):
-            AdaptiveBrandIconImage(source: source, cornerRadius: AppStyle.Radius.xs)
+            AdaptiveBrandIconImage(source: source)
         }
     }
 }
