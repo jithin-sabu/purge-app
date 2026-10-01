@@ -50,6 +50,24 @@ struct AgentWorktreeScanPolicyTests {
         ])
     }
 
+    /// On a real Mac `.claude` and everything in it carry the hidden flag, and a
+    /// listing that skips hidden files found no Claude Code worktrees at all.
+    @Test
+    func hiddenFlagDoesNotHideClaudeCodeWorktrees() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let project = home.appendingPathComponent("Documents/app", isDirectory: true)
+        var leaf = try orphan(at: project.appendingPathComponent(".claude/worktrees/brave-turing"))
+        var worktrees = leaf.deletingLastPathComponent()
+        var hidden = URLResourceValues()
+        hidden.isHidden = true
+        try worktrees.setResourceValues(hidden)
+        try leaf.setResourceValues(hidden)
+        #expect(try leaf.resourceValues(forKeys: [.isHiddenKey]).isHidden == true)
+
+        #expect(found(home, projects: [project]) == ["Documents/app/.claude/worktrees/brave-turing"])
+    }
+
     @Test
     func claudeCodeWorktreesNeedTheProjectToBeKnown() throws {
         let home = try makeHome()

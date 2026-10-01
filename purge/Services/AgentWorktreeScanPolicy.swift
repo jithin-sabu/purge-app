@@ -200,13 +200,15 @@ nonisolated enum AgentWorktreeScanPolicy {
         }
     }
 
+    /// Dot-names are skipped by hand: `.skipsHiddenFiles` also drops entries with the
+    /// hidden flag, and Claude Code's `.claude` folder and everything in it carry it.
     private static func subdirectories(of url: URL, fileManager: FileManager) -> [URL] {
         guard let entries = try? fileManager.contentsOfDirectory(
             at: url,
-            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-            options: [.skipsHiddenFiles]
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
         ) else { return [] }
         return entries.compactMap { entry in
+            guard !entry.lastPathComponent.hasPrefix(".") else { return nil }
             let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
             guard values?.isDirectory == true, values?.isSymbolicLink != true else { return nil }
             return URL(fileURLWithPath: url.path, isDirectory: true)
