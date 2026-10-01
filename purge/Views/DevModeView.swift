@@ -894,14 +894,9 @@ struct DevToolsView<PageHeader: View>: View {
 
     private var iosSimulatorsSectionHeader: some View {
         devToolsSectionHeader {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("iOS Simulators")
-                    .font(AppStyle.Typography.metadataEmphasis)
-                    .foregroundStyle(AppColors.textSecondary)
-                Text("Shutdown devices only — booted simulators stay hidden.")
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textTertiary)
-            }
+            Text("iOS Simulators")
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
         }
     }
 
