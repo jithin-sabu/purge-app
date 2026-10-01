@@ -1,18 +1,22 @@
 import AppKit
+import CoreImage
 import SwiftUI
 
-/// A list row icon: a monochrome brand glyph or an SF Symbol.
+/// A list row icon: a monochrome brand glyph, an installed app's icon drawn in
+/// greyscale, or an SF Symbol.
 enum BrandRowIcon: Equatable {
     /// A brand silhouette from the bundled Simple Icons set, drawn as a template
     /// so it takes the row's text colour in light and dark alike.
     case glyph(NSImage)
+    /// The installed app's own icon, for a brand Simple Icons doesn't carry.
+    case appIcon(NSImage)
     case symbol(String)
 
     static func == (lhs: BrandRowIcon, rhs: BrandRowIcon) -> Bool {
         switch (lhs, rhs) {
         case (.symbol(let a), .symbol(let b)):
             return a == b
-        case (.glyph(let a), .glyph(let b)):
+        case (.glyph(let a), .glyph(let b)), (.appIcon(let a), .appIcon(let b)):
             return a === b
         default:
             return false
@@ -21,7 +25,8 @@ enum BrandRowIcon: Equatable {
 }
 
 /// Resolves row icons for App Caches, Dev Tools and project groups. A known brand
-/// gets its monochrome glyph. Otherwise the definition's `kind` picks an SF Symbol
+/// gets its monochrome glyph, or its installed app's icon in greyscale when Simple
+/// Icons doesn't carry it. Otherwise the definition's `kind` picks an SF Symbol
 /// that says what the cache is. Caches Purge doesn't recognise get
 /// `questionmark.folder`, so they look different from known ones.
 final class BrandIconService {
@@ -43,8 +48,9 @@ final class BrandIconService {
     /// again (definition lookups, bundle reads) on the main thread.
     private var rowIconCache: [String: BrandRowIcon] = [:]
 
-    /// Icons for installed `.app` bundles, used by the App Uninstaller.
-    private var installedAppIconCache: [String: NSImage] = [:]
+    /// Icons for installed `.app` bundles. A miss is kept too, so an app that isn't
+    /// installed is not searched for again on every render.
+    private var installedAppIconCache: [String: NSImage?] = [:]
 
     private init() {}
 
@@ -108,6 +114,9 @@ final class BrandIconService {
            let image = brandGlyph(slug: slug) {
             return .glyph(image)
         }
+        if let image = installedBrandAppIcon(forDefinitionKey: key) {
+            return .appIcon(image)
+        }
         if let kind = ExplanationDatabase.kind(forKey: key) {
             return .symbol(kind.symbolName)
         }
@@ -146,17 +155,73 @@ final class BrandIconService {
     func installedAppIcon(at url: URL) -> NSImage {
         let path = url.standardizedFileURL.path
         let cacheKey = "p|\(path)"
+        if let cached = installedAppIconCache[cacheKey], let image = cached {
+            return image
+        }
+        let image = NSWorkspace.shared.icon(forFile: path)
+        installedAppIconCache[cacheKey] = image
+        return image
+    }
+
+    /// The installed app's icon in greyscale for a brand with no glyph, or nil when
+    /// the key isn't one of those brands or the app isn't installed.
+    private func installedBrandAppIcon(forDefinitionKey key: String) -> NSImage? {
+        guard let appName = BrandIconMapping.applicationName(forDefinitionKey: key) else { return nil }
+        let cacheKey = "g|\(key)"
         if let cached = installedAppIconCache[cacheKey] {
             return cached
         }
-        let image = NSWorkspace.shared.icon(forFile: path)
+        let icon = ExplanationDatabase.allBundleIDs(forKey: key).lazy.compactMap(installedAppIcon(bundleID:)).first
+            ?? installedAppIcon(appName: appName)
+        let image = icon.map(Self.greyscale)
+        installedAppIconCache[cacheKey] = image
+        return image
+    }
+
+    /// Desaturated once here rather than with a SwiftUI filter, which would run on
+    /// every render of every row.
+    private static func greyscale(_ icon: NSImage) -> NSImage {
+        let side = AppStyle.Row.listIconFrameSize
+        var rect = NSRect(x: 0, y: 0, width: side * 2, height: side * 2)
+        guard let source = icon.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return icon }
+        let output = CIImage(cgImage: source).applyingFilter(
+            "CIColorControls",
+            parameters: [kCIInputSaturationKey: 0]
+        )
+        guard let image = CIContext().createCGImage(output, from: output.extent) else { return icon }
+        return NSImage(cgImage: image, size: NSSize(width: side, height: side))
+    }
+
+    private func installedAppIcon(bundleID: String) -> NSImage? {
+        guard !bundleID.isEmpty else { return nil }
+        let cacheKey = "b|\(bundleID)"
+        if let cached = installedAppIconCache[cacheKey] {
+            return cached
+        }
+        let image = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            .map { NSWorkspace.shared.icon(forFile: $0.path) }
+        installedAppIconCache[cacheKey] = image
+        return image
+    }
+
+    private func installedAppIcon(appName: String) -> NSImage? {
+        let cacheKey = "n|\(appName)"
+        if let cached = installedAppIconCache[cacheKey] {
+            return cached
+        }
+        let roots = ["/Applications", "/System/Applications", NSHomeDirectory() + "/Applications"]
+        let image = roots
+            .map { ($0 as NSString).appendingPathComponent("\(appName).app") }
+            .first { FileManager.default.fileExists(atPath: $0) }
+            .map { NSWorkspace.shared.icon(forFile: $0) }
         installedAppIconCache[cacheKey] = image
         return image
     }
 }
 
 /// A row icon: the monochrome brand glyph or the kind's SF Symbol, both in the
-/// secondary text colour so light and dark look the same.
+/// secondary text colour so light and dark look the same, or an app icon already
+/// turned greyscale by the service.
 struct AdaptiveBrandIconImage: View {
     enum Source: Equatable {
         case cacheItem(CacheItem)
@@ -190,6 +255,11 @@ struct AdaptiveBrandIconImage: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .foregroundStyle(AppColors.textSecondary)
+                .frame(width: slotSize, height: slotSize)
+        case .appIcon(let image):
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
                 .frame(width: slotSize, height: slotSize)
         }
     }
