@@ -45,7 +45,7 @@ struct DeletedAppsWatcherNoticeCard: View {
 
                 Text(message)
                     .font(NoticeFont.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, AppStyle.Spacing.xxSmall)
 

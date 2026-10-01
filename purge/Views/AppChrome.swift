@@ -149,7 +149,7 @@ struct AppSectionPageHeader<Trailing: View>: View {
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColors.textSecondary)
                         .monospacedDigit()
                         .contentTransition(reduceMotion ? .identity : .numericText())
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: subtitle)
@@ -524,10 +524,8 @@ struct SafeCleanupCelebrationOverlay: View {
     private static let minimumCleaningDwell: TimeInterval = 1.2
 
     private let celebrationAccent = AppColors.textPrimary
-    private let sheetBackground = Color(
-        light: NSColor(calibratedWhite: 0.08, alpha: 1),
-        dark: NSColor(calibratedWhite: 0.08, alpha: 1)
-    )
+    /// The overlay forces dark mode, so this is the dark window background.
+    private let sheetBackground = AppColors.surfaceBase
 
     init(session: DeletionSession, doneTitle: String = "Done", onDone: @escaping () -> Void) {
         self.session = session
@@ -554,7 +552,7 @@ struct SafeCleanupCelebrationOverlay: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color.black.opacity(0.38)
+            AppColors.scrim
                 .ignoresSafeArea()
 
             if showsConfetti {
@@ -580,7 +578,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     VStack(spacing: AppStyle.Spacing.small) {
                         Text(formatBytes(displayedBytes))
                             .font(AppStyle.Typography.display)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.textPrimary)
                             .monospacedDigit()
                             .contentTransition(reduceMotion ? .identity : .numericText())
                             .multilineTextAlignment(.center)
@@ -588,7 +586,7 @@ struct SafeCleanupCelebrationOverlay: View {
 
                         Text(subtitleText)
                             .font(AppStyle.Typography.sectionTitle)
-                            .foregroundStyle(.white.opacity(0.78))
+                            .foregroundStyle(AppColors.textSecondary)
                             .multilineTextAlignment(.center)
                             .contentTransition(.opacity)
 
@@ -599,7 +597,7 @@ struct SafeCleanupCelebrationOverlay: View {
                             VStack(spacing: AppStyle.Spacing.small) {
                                 if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
                                     OnboardingSizeComparisonLine(items: comparisonItems)
-                                        .foregroundStyle(.white.opacity(0.78))
+                                        .foregroundStyle(AppColors.textSecondary)
                                 }
 
                                 if tagline != nil {
@@ -645,7 +643,7 @@ struct SafeCleanupCelebrationOverlay: View {
                             Text("Empty your Trash to reclaim this space.")
                         }
                         .font(AppStyle.Typography.body.weight(.medium))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(AppColors.textTertiary)
                         .multilineTextAlignment(.center)
                     }
 
@@ -657,7 +655,7 @@ struct SafeCleanupCelebrationOverlay: View {
                             Text("Emptying the Trash may ask for your password.")
                         }
                         .font(AppStyle.Typography.body.weight(.medium))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(AppColors.textTertiary)
                         .multilineTextAlignment(.center)
                     }
 
@@ -706,7 +704,7 @@ struct SafeCleanupCelebrationOverlay: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.14))
+                        .fill(AppColors.fillSecondaryPressed)
                     Capsule(style: .continuous)
                         .fill(celebrationAccent)
                         .frame(width: max(0, min(1, displayedFraction)) * geo.size.width)
@@ -716,7 +714,7 @@ struct SafeCleanupCelebrationOverlay: View {
 
             Text(currentItemText)
                 .font(AppStyle.Typography.body.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -957,16 +955,16 @@ private struct CompletionTimeTagline: View {
             } else {
                 Image(systemName: "clock")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppColors.textTertiary)
             }
 
             HStack(spacing: 0) {
                 Text("done in ")
                     .fontWeight(.regular)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                 Text(timeText)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.white.opacity(0.72))
+                    .foregroundStyle(AppColors.textSecondary)
             }
             .font(AppStyle.Typography.body.weight(.medium))
             .lineLimit(1)
@@ -997,7 +995,7 @@ private struct CompletionBoltAnchor: View {
 
             ZStack {
                 Image(systemName: "bolt.fill")
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppColors.textTertiary)
                     .opacity(isEnergized ? 0 : 1)
                 Image(systemName: "bolt.fill")
                     .foregroundStyle(Self.flashColor)
@@ -1109,7 +1107,7 @@ private struct CleanFailureDisclosure: View {
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .font(AppStyle.Typography.callout)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(AppColors.textTertiary)
             }
             .buttonStyle(.plain)
 
@@ -1127,7 +1125,7 @@ private struct CleanFailureDisclosure: View {
                     if hiddenCount > 0 {
                         Text("+\(hiddenCount) more")
                             .font(AppStyle.Typography.metadata)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(AppColors.textTertiary)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
@@ -1193,24 +1191,24 @@ private struct NeedsAdministratorPanel: View {
             VStack(spacing: 8) {
                 Image(systemName: "lock.shield")
                     .font(.system(size: 30, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(AppColors.textSecondary)
                     .accessibilityHidden(true)
 
                 Text(title)
                     .font(AppStyle.Typography.sectionTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .multilineTextAlignment(.center)
 
                 if let namesLine {
                     Text(namesLine)
                         .font(AppStyle.Typography.sectionTitle.weight(.regular))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(AppColors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
 
                 Text(explanation)
                     .font(AppStyle.Typography.sectionTitle.weight(.regular))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 1)
@@ -1237,7 +1235,7 @@ private struct NeedsAdministratorPanel: View {
 
                 Text(trustLine)
                     .font(AppStyle.Typography.body)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(AppColors.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.top, 2)
             }
@@ -1246,11 +1244,11 @@ private struct NeedsAdministratorPanel: View {
         .frame(maxWidth: 400)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.06))
+                .fill(AppColors.surfaceCard)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
         }
     }
 
@@ -1259,11 +1257,11 @@ private struct NeedsAdministratorPanel: View {
         if isHelperEnabled {
             Label("Secure removal is on", systemImage: "checkmark.seal.fill")
                 .font(AppStyle.Typography.rowTitle)
-                .foregroundStyle(.green)
+                .foregroundStyle(AppColors.statusSafeText)
         } else if needsApproval {
             Text("In System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back.")
                 .font(AppStyle.Typography.body)
-                .foregroundStyle(.white.opacity(0.68))
+                .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1280,20 +1278,20 @@ private struct CleanFailureRow: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: failure.reason.systemImage)
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(AppColors.textTertiary)
                 .frame(width: 14, alignment: .center)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(failure.displayName)
                     .font(AppStyle.Typography.callout)
-                    .foregroundStyle(.white.opacity(0.78))
+                    .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 Text(failure.reason.explanation)
                     .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppColors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if failure.reason.showsOpenSettings || failure.reason.showsRetry {
@@ -1538,7 +1536,7 @@ private struct AppNavIcon: View {
         }
         .font(AppStyle.Typography.rowTitle)
         .frame(width: 16)
-        .foregroundStyle(isSelected ? AppColors.textPrimary : .secondary)
+        .foregroundStyle(isSelected ? AppColors.textPrimary : AppColors.textSecondary)
             .onAppear {
                 fillProgress = isSelected ? 1 : 0
             }
@@ -1609,7 +1607,7 @@ struct AppNavRow: View {
                 Spacer(minLength: AppStyle.Spacing.xSmall)
                 accessoryView
             }
-            .foregroundStyle(isSelected ? AppColors.textPrimary : Color.secondary)
+            .foregroundStyle(isSelected ? AppColors.textPrimary : AppColors.textSecondary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
             .padding(.vertical, 6)
             .background(navBackground, in: RoundedRectangle(cornerRadius: SidebarLayout.selectionCornerRadius, style: .continuous))
@@ -1629,7 +1627,7 @@ struct AppNavRow: View {
             Text(text)
                 .font(AppStyle.Typography.metadataEmphasis)
                 .monospacedDigit()
-                .foregroundStyle(isDimmed ? .quaternary : .tertiary)
+                .foregroundStyle(isDimmed ? AppColors.textTertiary.opacity(0.5) : AppColors.textTertiary)
                 .lineLimit(1)
         case .progress:
             ProgressView()

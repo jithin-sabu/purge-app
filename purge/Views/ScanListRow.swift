@@ -55,7 +55,7 @@ struct ScanListRow<Footer: View>: View {
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
                             .font(AppStyle.Typography.metadata)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppColors.textSecondary)
                             .lineLimit(2)
                     }
                 }
@@ -68,7 +68,7 @@ struct ScanListRow<Footer: View>: View {
                     VStack(alignment: .trailing, spacing: 8) {
                         Text(formattedSize)
                             .font(AppStyle.Typography.metadata)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
 
                         if let primaryBadgeText {
@@ -116,7 +116,7 @@ struct ScanListRow<Footer: View>: View {
         case .symbol(let name):
             Image(systemName: name)
                 .font(.system(size: 20))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .frame(width: 28, height: 28)
         case .image(let image):
             Image(nsImage: image)

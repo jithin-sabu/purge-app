@@ -27,7 +27,7 @@ struct SkeletonBar: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.secondary.opacity(SkeletonOpacity.medium))
+            .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
             .frame(width: width, height: height)
             .accessibilityHidden(true)
     }
@@ -40,7 +40,7 @@ struct SkeletonFillBar: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color.secondary.opacity(SkeletonOpacity.medium))
+            .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
             .frame(maxWidth: .infinity)
             .frame(height: height)
             .accessibilityHidden(true)
@@ -148,7 +148,7 @@ struct CleaningOverlay: View {
                     .controlSize(.regular)
                 Text(message)
                     .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
             }
         }
         .accessibilityElement(children: .combine)
@@ -190,7 +190,7 @@ struct TextShimmerModifier: ViewModifier {
                         let progress = timeline.date.timeIntervalSinceReferenceDate
                             .truncatingRemainder(dividingBy: Self.period) / Self.period
                         content
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(AppColors.textPrimary)
                             .mask {
                                 GeometryReader { geo in
                                     let band = geo.size.width * Self.bandShare

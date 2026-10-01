@@ -65,13 +65,13 @@ struct OverviewView: View {
                 .overviewNumberTransition(breakdown.usedBytes, reduceMotion: reduceMotion)
             Text("of \(formatStorageBytes(breakdown.totalBytes))")
                 .font(AppStyle.Typography.rowTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .overviewNumberTransition(breakdown.totalBytes, reduceMotion: reduceMotion)
             Spacer(minLength: AppStyle.Spacing.small)
             // Right end, above the free part of the bar.
             Text("\(formatStorageBytes(breakdown.freeBytes)) free")
                 .font(AppStyle.Typography.rowTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
         }
         .accessibilityElement(children: .combine)
@@ -157,7 +157,7 @@ struct OverviewView: View {
                 }
             }
             .font(AppStyle.Typography.metadata)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(AppColors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -270,7 +270,7 @@ private struct OverviewCategoryRow: View {
         Text(statusText)
             .lineLimit(1)
             .font(AppStyle.Typography.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppColors.textSecondary)
             .contentTransition(reduceMotion ? .identity : .numericText())
             .animation(reduceMotion ? nil : OverviewMotion.number, value: statusText)
             .shimmeringText(phase == .scanning)
@@ -284,7 +284,7 @@ private struct OverviewCategoryRow: View {
             // every locked row would repeat the same ask three times.
             Image(systemName: "lock")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(AppColors.textTertiary)
                 .padding(.trailing, 2)
         case .notScanned where !isRecorded:
             Button("Scan") { store.requestScan(category.step) }
@@ -296,12 +296,12 @@ private struct OverviewCategoryRow: View {
             HStack(spacing: AppStyle.Spacing.small) {
                 Text(OverviewCategoryStyle.shareText(share))
                     .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppColors.textTertiary)
                     .overviewNumberTransition(share, reduceMotion: reduceMotion)
                 Text(formatStorageBytes(bytes))
                     .font(AppStyle.Typography.sectionTitle)
                     .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
-                    .foregroundStyle(isRecorded ? .secondary : .primary)
+                    .foregroundStyle(isRecorded ? AppColors.textSecondary : AppColors.textPrimary)
                     .frame(minWidth: 64, alignment: .trailing)
             }
         }
@@ -459,13 +459,13 @@ private struct OverviewPlainRow: View {
                     .font(AppStyle.Typography.headline)
                 Text(detail)
                     .font(AppStyle.Typography.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
             }
             Spacer(minLength: AppStyle.Spacing.small)
             Text(OverviewCategoryStyle.shareText(share))
                 .font(AppStyle.Typography.metadata)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(AppColors.textTertiary)
                 .overviewNumberTransition(share, reduceMotion: reduceMotion)
             Text(formatStorageBytes(bytes))
                 .font(AppStyle.Typography.sectionTitle)

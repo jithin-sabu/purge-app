@@ -266,7 +266,7 @@ struct ScanResultRow: View {
     private var rowIconView: some View {
         if rendersAsPlaceholder {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.secondary.opacity(SkeletonOpacity.light))
+                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.light))
                 .frame(width: 28, height: 28)
                 .accessibilityHidden(true)
                 .shimmering()
@@ -294,7 +294,7 @@ struct ScanResultRow: View {
                 .lineLimit(explanationLineLimit)
                 .truncationMode(.tail)
                 .font(AppStyle.Typography.metadata)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .frame(
                     minHeight: explanationMinHeight,
                     alignment: usesCompactExplanation ? .leading : .topLeading
@@ -348,7 +348,7 @@ struct ScanResultRow: View {
             VStack(alignment: .trailing, spacing: 8) {
                 Text(formattedSize)
                     .font(AppStyle.Typography.metadata.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppColors.textPrimary)
                     .monospacedDigit()
 
                 AppBadge(text: statusLabel, tone: statusTone)
@@ -658,8 +658,8 @@ struct ScanRowCardChrome: ViewModifier {
                     cardShape
                         .fill(
                             showsContextMenuHighlight
-                                ? Color.primary.opacity(0.10)
-                                : Color.primary.opacity(0.05)
+                                ? AppColors.fillSecondaryPressed
+                                : AppColors.fillSecondary
                         )
                 }
                 .clipShape(cardShape)
@@ -675,7 +675,7 @@ struct ScanRowCardChrome: ViewModifier {
                 .background {
                     if showsContextMenuHighlight {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.primary.opacity(0.08))
+                            .fill(AppColors.fillSecondary)
                     }
                 }
                 .opacity(canSelectForBulk ? 1 : 0.55)

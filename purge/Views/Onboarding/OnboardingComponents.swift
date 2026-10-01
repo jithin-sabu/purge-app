@@ -101,7 +101,7 @@ struct OnboardingProgressBar: View {
     GeometryReader { geo in
       ZStack(alignment: .leading) {
         RoundedRectangle(cornerRadius: 4, style: .continuous)
-          .fill(Color.primary.opacity(0.1))
+          .fill(AppColors.fillSecondary)
         RoundedRectangle(cornerRadius: 4, style: .continuous)
           .fill(AppColors.textPrimary)
           .frame(width: max(0, geo.size.width * min(1, max(0, progress))))
@@ -144,7 +144,7 @@ struct OnboardingSizeComparisonLine: View {
   private var prefixLabel: some View {
     Text("That's room for")
       .font(AppStyle.Typography.sectionTitle.weight(.regular))
-      .foregroundStyle(.secondary)
+      .foregroundStyle(AppColors.textSecondary)
   }
 
   private var comparisonChips: some View {
@@ -153,7 +153,7 @@ struct OnboardingSizeComparisonLine: View {
         if index > 0 {
           Text("or")
             .font(AppStyle.Typography.sectionTitle.weight(.regular))
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(AppColors.textTertiary)
         }
 
         OnboardingSizeComparisonChip(item: item)
@@ -180,16 +180,16 @@ private struct OnboardingSizeComparisonChip: View {
         .lineLimit(1)
     }
     .font(AppStyle.Typography.sectionTitle.weight(.medium))
-    .foregroundStyle(.secondary)
+    .foregroundStyle(AppColors.textSecondary)
     .padding(.horizontal, 12)
     .padding(.vertical, 6)
     .background {
       Capsule(style: .continuous)
-        .fill(Color.primary.opacity(0.07))
+        .fill(AppColors.fillSecondary)
     }
     .overlay {
       Capsule(style: .continuous)
-        .stroke(Color.primary.opacity(0.16), lineWidth: 1)
+        .stroke(AppColors.borderStrong, lineWidth: 1)
     }
   }
 }
@@ -205,19 +205,19 @@ struct OnboardingResultsCategoryRow: View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
       Image(systemName: symbol)
         .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(AppColors.textTertiary)
         .frame(width: 18, alignment: .center)
         .accessibilityHidden(true)
 
       Text(title)
         .font(AppStyle.Typography.callout)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(AppColors.textSecondary)
 
       Spacer(minLength: AppStyle.Spacing.xxSmall)
 
       Text(formattedSize)
         .font(AppStyle.Typography.callout)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(AppColors.textSecondary)
         .monospacedDigit()
         .frame(width: Self.sizeColumnWidth, alignment: .trailing)
     }

@@ -2,10 +2,10 @@ import AppKit
 import SwiftUI
 
 /// Every colour in the app. Tokens are named by job (text, surface, fill,
-/// border, action, status, onScrim) so the name says where a colour belongs.
-/// Views never use raw hex, `Color.white/.black`, or SwiftUI's `.secondary`
-/// greys; they pick one of these. Values and contrast notes live in
-/// docs/design-system.md.
+/// border, action, status, chart) so the name says where a colour belongs.
+/// Views pick one of these instead of raw hex or SwiftUI's `.secondary` greys.
+/// Plain white and black are only for shadows, masks, and glyphs on coloured
+/// tiles. Values and contrast notes live in docs/design-system.md.
 enum AppColors {
     // MARK: - Text
 
@@ -67,20 +67,12 @@ enum AppColors {
     static let statusUnsureText = Color(light: 0x565861, dark: 0xA7A9B2)
     static let statusUnsureFill = Color(light: 0xEEEEF1, dark: 0x26272D)
 
-    // MARK: - On a scrim
+    // MARK: - Overlays
 
-    /// The dimming layer behind the cleanup celebration and the secure removal
-    /// panel. Darker in light mode so white text on it stays above 4.5:1.
-    static let scrim = Color(
-        light: NSColor(white: 0, alpha: 0.62),
-        dark: NSColor(white: 0, alpha: 0.38)
-    )
-    /// Text and controls drawn on `scrim` look the same in both modes.
-    static let onScrimText = Color.white
-    static let onScrimSecondary = Color.white.opacity(0.78)
-    static let onScrimTertiary = Color.white.opacity(0.6)
-    static let onScrimFill = Color.white.opacity(0.08)
-    static let onScrimStroke = Color.white.opacity(0.12)
+    /// The dimming layer behind the cleanup celebration while it fades in. The
+    /// celebration itself forces dark mode and draws on `surfaceBase`, so its
+    /// text and buttons use the ordinary dark-mode tokens.
+    static let scrim = Color.black.opacity(0.38)
 
     // MARK: - Accent
 

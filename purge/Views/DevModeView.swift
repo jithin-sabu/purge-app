@@ -668,7 +668,7 @@ struct DevToolsView<PageHeader: View>: View {
             Text("No dev tool folders surfaced yet.")
                 .font(AppStyle.Typography.headline)
             Text(scanPhase == .completed ? "Your Mac is looking clean. Check back later." : "Run a scan after adding projects or tool-generated folders.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -837,7 +837,7 @@ struct DevToolsView<PageHeader: View>: View {
 
                     Text("Finding projects…")
                         .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColors.textSecondary)
                         .listRowInsets(ScanListRowInsets.standard)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -888,7 +888,7 @@ struct DevToolsView<PageHeader: View>: View {
         devToolsSectionHeader {
             Text("Developer Projects")
                 .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
         }
     }
 
@@ -897,10 +897,10 @@ struct DevToolsView<PageHeader: View>: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("iOS Simulators")
                     .font(AppStyle.Typography.metadataEmphasis)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                 Text("Shutdown devices only — booted simulators stay hidden.")
                     .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppColors.textTertiary)
             }
         }
     }
@@ -941,12 +941,12 @@ struct DevToolsView<PageHeader: View>: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text(formatBytes(visibleGroupByteTotal(groupID: group.id)))
                             .font(AppStyle.Typography.rowTitle)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
                         ZStack {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppColors.textSecondary)
                         }
                         .frame(width: 12, height: 12)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0), anchor: .center)
@@ -1115,7 +1115,7 @@ struct DevToolsView<PageHeader: View>: View {
             Text("Nothing here.")
                 .font(AppStyle.Typography.headline)
             Text("No items match this filter.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

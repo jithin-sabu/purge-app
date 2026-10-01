@@ -72,7 +72,7 @@ extension View {
     /// can never drift between sections.
     func settingsCaption() -> some View {
         self.font(AppStyle.Typography.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppColors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

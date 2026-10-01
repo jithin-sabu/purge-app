@@ -494,11 +494,11 @@ struct LargeFilesView: View {
         VStack(spacing: 10) {
             Image(systemName: "tray.full")
                 .font(.system(size: 38))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
             Text("No Large Files Found")
                 .font(AppStyle.Typography.sectionTitle.weight(.regular))
             Text("Try a lower size threshold or a shorter last-used window.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -512,7 +512,7 @@ struct LargeFilesView: View {
             // the category, or the size threshold that emptied the list.
             if hasActiveQuery {
                 Text("No files match \"\(searchQuery)\".")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .multilineTextAlignment(.center)
@@ -523,7 +523,7 @@ struct LargeFilesView: View {
                 .padding(.top, AppStyle.Spacing.xxSmall)
             } else {
                 Text("No files match this filter.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -985,7 +985,7 @@ private struct LargeFileRow: View {
 
             Text(file.formattedSize)
                 .font(AppStyle.Typography.metadata.weight(.medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(AppColors.textPrimary)
                 .monospacedDigit()
         }
         .padding(.horizontal, 14)
@@ -1053,7 +1053,7 @@ private struct LargeFileRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .underline(isHoveringLocation)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColors.textSecondary)
                         .contentShape(Rectangle())
                         .onTapGesture(perform: revealInFinder)
                         .onHover { isHoveringLocation = $0 }
@@ -1063,9 +1063,9 @@ private struct LargeFileRow: View {
                         .accessibilityAction(.default, revealInFinder)
 
                     Text("·")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColors.textSecondary)
                     Text("Last used \(dateText)")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColors.textSecondary)
                         .layoutPriority(-1)
 
                     if let otherCopyCount {
@@ -1145,7 +1145,7 @@ private struct LargeFileThumbnailIcon: View {
             Text(".\(fileExtension)")
                 .font(AppStyle.Typography.micro)
                 .lineLimit(1)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .padding(.horizontal, 3)
                 .padding(.vertical, 1)
                 .background(Capsule(style: .continuous).fill(.regularMaterial))

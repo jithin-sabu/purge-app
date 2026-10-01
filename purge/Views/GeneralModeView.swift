@@ -390,7 +390,7 @@ struct AppCachesView<PageHeader: View>: View {
             Text("Nothing here.")
                 .font(AppStyle.Typography.headline)
             Text("No items match this filter.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -407,11 +407,11 @@ struct AppCachesView<PageHeader: View>: View {
         VStack(spacing: 10) {
             Image(systemName: "externaldrive.badge.checkmark")
                 .font(.system(size: 38))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
             Text(scanPhase == .completed ? "Your Mac is looking clean." : "No Caches Found")
                 .font(AppStyle.Typography.sectionTitle.weight(.regular))
             Text(scanPhase == .completed ? "Check back later." : "Run a scan to inspect recoverable application caches.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

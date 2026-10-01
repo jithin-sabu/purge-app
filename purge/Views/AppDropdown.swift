@@ -105,14 +105,14 @@ private struct AppDropdownRow: View {
             HStack(spacing: 6) {
                 Text(label)
                     .font(AppStyle.Typography.body)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
 
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppColors.textPrimary)
                     .opacity(isSelected ? 1 : 0)
             }
             .padding(.horizontal, 8)

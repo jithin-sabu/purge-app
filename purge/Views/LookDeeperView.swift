@@ -84,7 +84,7 @@ struct LookDeeperView: View {
 
         Text(leadText)
           .font(AppStyle.Typography.sectionTitle.weight(.regular))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(AppColors.textSecondary)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
           .onboardingBlurIn(index: 1)
@@ -109,7 +109,7 @@ struct LookDeeperView: View {
 
         Text("macOS calls this Full Disk Access. Turn it off anytime in System Settings.")
           .font(AppStyle.Typography.metadata)
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(AppColors.textTertiary)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -123,7 +123,7 @@ struct LookDeeperView: View {
         if didOpenSettings {
           Text("Turn on Purge in System Settings, then come back. If macOS offers to reopen Purge, go ahead.")
             .font(AppStyle.Typography.metadata)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppColors.textSecondary)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .transition(.opacity)
@@ -139,7 +139,7 @@ struct LookDeeperView: View {
       OnboardingLoadingStepTitle(baseText: "Looking deeper")
       Text("Checking the places that were locked.")
         .font(AppStyle.Typography.sectionTitle.weight(.regular))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(AppColors.textSecondary)
     }
     .transition(OnboardingTransitions.stepTransition(reduceMotion: reduceMotion))
   }
@@ -154,7 +154,7 @@ struct LookDeeperView: View {
             .monospacedDigit()
           Text("more to clean, from places that were locked")
             .font(AppStyle.Typography.sectionTitle.weight(.medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppColors.textSecondary)
             .multilineTextAlignment(.center)
         }
         .accessibilityElement(children: .combine)
@@ -174,14 +174,14 @@ struct LookDeeperView: View {
 
         Text("Large Files and the uninstaller are open now too.")
           .font(AppStyle.Typography.callout)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(AppColors.textSecondary)
           .onboardingBlurIn(index: findings.categories.count + 1)
       } else {
         OnboardingStepTitle(text: "Purge can see everything now")
           .onboardingBlurIn(index: 0)
         Text(Self.smallFindingsMessage(findings))
           .font(AppStyle.Typography.sectionTitle.weight(.regular))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(AppColors.textSecondary)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
           .onboardingBlurIn(index: 1)
@@ -284,7 +284,7 @@ private struct LookDeeperTile: View {
     VStack(spacing: AppStyle.Spacing.xSmall) {
       Image(systemName: symbol)
         .font(.system(size: 20, weight: .regular))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(AppColors.textSecondary)
         .frame(height: 24)
         .accessibilityHidden(true)
       Text(text)
@@ -318,7 +318,7 @@ private struct LookDeeperPromise: View {
         .accessibilityHidden(true)
     }
     .font(AppStyle.Typography.callout)
-    .foregroundStyle(.secondary)
+    .foregroundStyle(AppColors.textSecondary)
     .fixedSize()
   }
 }

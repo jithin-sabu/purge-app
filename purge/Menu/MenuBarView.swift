@@ -393,7 +393,7 @@ private struct MenuStorageBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(0.12))
+                    .fill(AppColors.fillSecondaryPressed)
                 Capsule(style: .continuous)
                     .fill(tint)
                     .frame(width: max(0, min(1, fraction)) * geo.size.width)

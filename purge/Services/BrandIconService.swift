@@ -321,7 +321,7 @@ struct AdaptiveBrandIconImage: View {
         case .symbol(let name):
             Image(systemName: name)
                 .font(.system(size: symbolPointSize))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .frame(width: slotSize, height: slotSize)
         case .bitmap(let image):
             Image(nsImage: image)

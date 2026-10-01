@@ -90,7 +90,7 @@ struct CleanupHistoryDetailView: View {
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
             .font(AppStyle.Typography.metadata.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppColors.textSecondary)
             .textCase(.uppercase)
     }
 
@@ -101,12 +101,12 @@ struct CleanupHistoryDetailView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(fileURL.lastPathComponent)
                     .font(AppStyle.Typography.body)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
                     .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppColors.textTertiary)
                     .lineLimit(1)
             }
 
@@ -115,7 +115,7 @@ struct CleanupHistoryDetailView: View {
             if item.sizeBytes > 0 {
                 Text(formatBytes(item.sizeBytes))
                     .font(AppStyle.Typography.rowTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
             }
         }
     }
@@ -127,17 +127,17 @@ struct CleanupHistoryDetailView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(fileURL.lastPathComponent)
                     .font(AppStyle.Typography.body)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 Text(item.reason)
                     .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
                     .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppColors.textTertiary)
                     .lineLimit(1)
             }
 

@@ -26,7 +26,7 @@ struct OnboardingCelebrationView: View {
 
           Text("moved to trash, not yet reclaimed")
             .font(AppStyle.Typography.sectionTitle)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppColors.textSecondary)
         } else {
           Text("You're all set")
             .font(AppStyle.Typography.displaySmall)
@@ -34,7 +34,7 @@ struct OnboardingCelebrationView: View {
 
         Text(spaceContextLine)
           .font(AppStyle.Typography.body)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(AppColors.textSecondary)
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, AppStyle.Spacing.xSmall)
@@ -47,7 +47,7 @@ struct OnboardingCelebrationView: View {
         if bytesMovedToTrash > 0 {
           Text("Empty your Trash to reclaim this space.")
             .font(AppStyle.Typography.callout)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(AppColors.textTertiary)
             .multilineTextAlignment(.center)
         }
 

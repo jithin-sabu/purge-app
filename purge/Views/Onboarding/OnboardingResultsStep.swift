@@ -165,7 +165,7 @@ struct OnboardingResultsStep: View {
 
           Text("ready to clean on your Mac")
             .font(AppStyle.Typography.sectionTitle.weight(.medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppColors.textSecondary)
             .multilineTextAlignment(.center)
         }
 

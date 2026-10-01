@@ -359,7 +359,7 @@ struct ContentView: View {
     private func sidebarSectionLabel(_ title: String) -> some View {
         Text(title)
             .font(AppStyle.Typography.metadata.weight(.semibold))
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(AppColors.textTertiary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
             .padding(.top, AppStyle.Spacing.small)
             .padding(.bottom, 2)
@@ -901,7 +901,7 @@ struct SidebarSummaryView: View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: "trash")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .accessibilityHidden(true)
             trashSentence
             Spacer(minLength: 0)
@@ -924,18 +924,18 @@ struct SidebarSummaryView: View {
             // The spinner holds the number's place, so the sentence does not jump.
             HStack(spacing: 4) {
                 trashLoadingIndicator
-                Text("in Trash").foregroundStyle(.secondary)
+                Text("in Trash").foregroundStyle(AppColors.textSecondary)
             }
             .accessibilityLabel("Measuring the Trash")
         case .unreadable:
             // No Full Disk Access: the size is genuinely unknown, and a zero would
             // read as an empty Trash.
-            Text("Trash size unavailable").foregroundStyle(.secondary)
+            Text("Trash size unavailable").foregroundStyle(AppColors.textSecondary)
         case .readable where trashStore.trashBytes <= 0:
-            Text("Trash is empty").foregroundStyle(.secondary)
+            Text("Trash is empty").foregroundStyle(AppColors.textSecondary)
         case .readable:
-            (Text(formatBytes(trashStore.trashBytes)).foregroundColor(.primary).fontWeight(.semibold)
-                + Text(" in Trash").foregroundColor(.secondary))
+            (Text(formatBytes(trashStore.trashBytes)).foregroundColor(AppColors.textPrimary).fontWeight(.semibold)
+                + Text(" in Trash").foregroundColor(AppColors.textSecondary))
                 .monospacedDigit()
                 .contentTransition(reduceMotion ? .identity : .numericText())
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: trashStore.trashBytes)
@@ -947,14 +947,14 @@ struct SidebarSummaryView: View {
         if reduceMotion {
             Image(systemName: "clock")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .frame(width: 16, height: 16)
         } else {
             ProgressView()
                 .controlSize(.small)
                 .scaleEffect(0.62)
                 .frame(width: 16, height: 16)
-                .tint(.secondary)
+                .tint(AppColors.textSecondary)
         }
     }
 }

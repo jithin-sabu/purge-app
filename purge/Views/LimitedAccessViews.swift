@@ -41,7 +41,7 @@ struct LockedFeatureView: View {
         VStack(spacing: AppStyle.Spacing.medium) {
             Image(systemName: feature.symbol)
                 .font(.system(size: 36, weight: .regular))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .accessibilityHidden(true)
 
             VStack(spacing: AppStyle.Spacing.xSmall) {
@@ -51,7 +51,7 @@ struct LockedFeatureView: View {
 
                 Text(feature.message)
                     .font(AppStyle.Typography.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -98,24 +98,24 @@ struct LimitedScanNotice: View {
             HStack(spacing: AppStyle.Spacing.xSmall) {
                 Image(systemName: "lock")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                     .frame(width: 20)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Limited scan")
                         .font(AppStyle.Typography.callout.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(AppColors.textPrimary)
                     Text("Let Purge look deeper")
                         .font(AppStyle.Typography.metadataEmphasis)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColors.textSecondary)
                 }
 
                 Spacer(minLength: 0)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(AppColors.textTertiary)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, AppStyle.Spacing.small)

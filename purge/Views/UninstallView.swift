@@ -598,11 +598,11 @@ struct UninstallView: View {
         VStack(spacing: 10) {
             Image(systemName: symbol)
                 .font(.system(size: 38))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
             Text(title)
                 .font(AppStyle.Typography.sectionTitle.weight(.regular))
             Text(detail)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -658,7 +658,7 @@ private struct UninstallViewModeSwitcher: View {
                     if isOn {
                         Capsule(style: .continuous)
                             // Quiet lift over the track — avoids the native white thumb.
-                            .fill(Color.primary.opacity(0.08))
+                            .fill(AppColors.surfaceRaised)
                     }
                 }
                 .contentShape(Capsule(style: .continuous))
@@ -854,11 +854,11 @@ private struct SkeletonAppListRow: View {
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .stroke(Color.secondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
+                .stroke(AppColors.textSecondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
                 .frame(width: 14, height: 14)
 
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.secondary.opacity(SkeletonOpacity.medium))
+                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
                 .frame(width: 36, height: 36)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -922,14 +922,14 @@ private struct AppTile: View {
 
                 Text(isSizePending ? "…" : formatBytes(totalBytes))
                     .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppColors.textSecondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
 
                 if let activityLabel {
                     Text(activityLabel)
                         .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppColors.textSecondary)
                         .lineLimit(1)
                 }
             }
@@ -1001,7 +1001,7 @@ private struct SkeletonAppTile: View {
     var body: some View {
         VStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.secondary.opacity(SkeletonOpacity.medium))
+                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
                 .frame(width: 56, height: 56)
 
             VStack(spacing: 6) {
