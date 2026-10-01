@@ -55,13 +55,16 @@ cp -R "$APP" "$STAGING/"
 echo "==> Creating $DMG"
 mkdir -p "$OUT_DIR"
 rm -f "$DMG"
-# Layout matches Assets/dmg/dmg_bg.png, which is a 1200x736 @2x asset.
+# dmg_bg.png is 1200x736 at 144 dpi: 600x368 points, drawn 1:1 in the
+# icon view. Finder stores the title bar inside window bounds (~32 pt
+# on macOS 11+), so a 368 pt window leaves only 336 pt of content and
+# clips the bottom of the art. 400 pt makes the content area 368 pt.
 create-dmg \
   --volname "Purge" \
   --volicon "$REPO_ROOT/Assets/dmg/VolumeIcon.icns" \
   --background "$REPO_ROOT/Assets/dmg/dmg_bg.png" \
   --window-pos 200 120 \
-  --window-size 600 368 \
+  --window-size 600 400 \
   --icon-size 100 \
   --text-size 16 \
   --icon "Purge.app" 175 192 \
