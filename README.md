@@ -73,6 +73,8 @@ Three sections in one view:
 
 In **Settings → Developer Projects**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which projects appear. Age is measured from the last time anything in the project changed, including git activity, not from the date on `node_modules` or `target`. A project in use right now, with a terminal or dev server running inside it or a git command in progress, never appears.
 
+Git worktrees made by AI coding tools (Cursor, Codex, Conductor, T3 Code, and Claude Code) appear under **Orphaned Git Worktrees** only once their repository no longer lists them. A worktree Git still uses never appears however old it is, and neither does one a terminal or agent is working inside.
+
 ### Large Files
 
 Find space-hogging personal files without digging through folders:
