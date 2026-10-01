@@ -30,6 +30,16 @@ struct LargeFileExclusionTests {
         #expect(scoped.isEmpty)
     }
 
+    @Test
+    func coversMatchesThePathAndAnythingBelowIt() {
+        let exclusions = ScanExclusions(keys: ["/Users/me/Movies/Archive"])
+        #expect(exclusions.covers(path: "/Users/me/Movies/Archive"))
+        #expect(exclusions.covers(path: "/Users/me/Movies/Archive/2019/film.mov"))
+        #expect(!exclusions.covers(path: "/Users/me/Movies/Archived/film.mov"))
+        #expect(!exclusions.covers(path: "/Users/me/Movies"))
+        #expect(!ScanExclusions(keys: []).covers(path: "/Users/me/Movies/Archive"))
+    }
+
     // MARK: - Scanner walk
 
     /// A throwaway root under the temporary directory. That directory sits behind
@@ -57,6 +67,10 @@ struct LargeFileExclusionTests {
             roots: [root],
             exclusions: ScanExclusions(keys: keys)
         )
+        return await collect(stream, under: root)
+    }
+
+    private func collect(_ stream: AsyncStream<LargeFile>, under root: URL) async -> Set<String> {
         var found: Set<String> = []
         let rootName = root.lastPathComponent + "/"
         for await file in stream {
@@ -101,5 +115,24 @@ struct LargeFileExclusionTests {
         let found = await scan(root: root, excluding: [])
 
         #expect(found == ["a.bin", "Sub/b.bin"])
+    }
+
+    /// The walk's skip only knows the list it started with, and misses a folder
+    /// whose own entry can't be read. The final check before a file is listed is
+    /// what catches both, so it alone must keep an excluded folder's files out.
+    @Test
+    func finalCheckDropsFilesTheWalkDidNotSkip() async throws {
+        let root = try makeRoot(files: ["keep.bin", "Archive/old.bin", "Archive/Deep/older.bin"])
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let stream = LargeFileScanner().scanStream(
+            minBytes: 1,
+            staleDays: 0,
+            roots: [root],
+            exclusions: ScanExclusions(keys: []),
+            isExcluded: { $0.pathComponents.contains("Archive") }
+        )
+
+        #expect(await collect(stream, under: root) == ["keep.bin"])
     }
 }

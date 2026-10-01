@@ -23,6 +23,17 @@ nonisolated struct ScanExclusions: Sendable {
         ScanExclusions(keys: ExcludedPathsStore.allExcludedPaths())
     }
 
+    /// Whether `path`, or a folder above it, is excluded. A plain string check with
+    /// no lock and no disk access, for loops that run on the main actor. `path` must
+    /// already be standardized (a `LargeFile.id`), and a path that reaches a key only
+    /// through a symlink is missed, so callers that delete use
+    /// `ExcludedPathsStore.isExcluded` instead.
+    func covers(path: String) -> Bool {
+        guard !keys.isEmpty else { return false }
+        if keys.contains(path) { return true }
+        return keys.contains { key in path.hasPrefix(key.hasSuffix("/") ? key : key + "/") }
+    }
+
     func scoped(to root: URL) -> Scoped {
         scoped(resolvedRootPath: root.standardizedFileURL.resolvingSymlinksInPath().path)
     }

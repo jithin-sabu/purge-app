@@ -9,12 +9,14 @@ import Foundation
 /// first switch to the Large Files tab.
 nonisolated final class LargeFileScanner {
     /// `roots` and `exclusions` default to the policy's home folders and the saved
-    /// exclusion list; tests pass their own.
+    /// exclusion list. `isExcluded` is the final check on each file before it is
+    /// listed and defaults to the store; tests pass their own.
     func scanStream(
         minBytes: Int64,
         staleDays: Int,
         roots: [URL]? = nil,
-        exclusions: ScanExclusions? = nil
+        exclusions: ScanExclusions? = nil,
+        isExcluded: (@Sendable (URL) -> Bool)? = nil
     ) -> AsyncStream<LargeFile> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
@@ -23,6 +25,7 @@ nonisolated final class LargeFileScanner {
                     staleDays: staleDays,
                     roots: roots,
                     exclusions: exclusions,
+                    isExcluded: isExcluded ?? { ExcludedPathsStore.isExcluded($0) },
                     continuation: continuation
                 )
             }
@@ -41,6 +44,7 @@ nonisolated final class LargeFileScanner {
         staleDays: Int,
         roots: [URL]?,
         exclusions: ScanExclusions?,
+        isExcluded: @Sendable (URL) -> Bool,
         continuation: AsyncStream<LargeFile>.Continuation
     ) async {
         let fm = FileManager.default
@@ -117,6 +121,15 @@ nonisolated final class LargeFileScanner {
                         // last because it costs syscalls and only a handful of files, already
                         // past the size and staleness filters, get this far.
                         if FileProtection.blocksRemoval(fileURL) { continue }
+
+                        // The skip above is the fast path, not the guarantee. It only
+                        // knows the list as it was when this root started, and it
+                        // misses a folder whose own entry couldn't be read (no
+                        // `isDirectory`, so no `skipDescendants`). This asks the store,
+                        // with symlinks resolved, about the few files that got this far.
+                        // It runs here, off the main actor, so a list that changes
+                        // mid-scan never costs the UI a check per file.
+                        if isExcluded(fileURL) { continue }
 
                         continuation.yield(
                             LargeFile(
