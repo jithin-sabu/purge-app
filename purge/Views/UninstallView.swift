@@ -729,11 +729,11 @@ private struct UninstallItemRow: View {
         .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(isContextMenuActive ? AppColors.surfaceCardHover : AppColors.surfaceCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
         .modifier(OptionalRowTap(enabled: togglesOnRowTap && !isToggleDisabled) {
@@ -825,11 +825,11 @@ private struct AppListRow: View {
         .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(isSelected || isHovering || isContextMenuActive ? AppColors.surfaceCardHover : AppColors.surfaceCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
         .contentShape(Rectangle())
@@ -853,30 +853,30 @@ private struct AppListRow: View {
 private struct SkeletonAppListRow: View {
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
                 .stroke(AppColors.textSecondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
                 .frame(width: 14, height: 14)
 
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
                 .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
                 .frame(width: 36, height: 36)
 
             VStack(alignment: .leading, spacing: 6) {
-                SkeletonBar(width: 120, height: 12, cornerRadius: 4)
-                SkeletonBar(width: 180, height: 9, cornerRadius: 4)
+                SkeletonBar(width: 120, height: 12, cornerRadius: AppStyle.Radius.xs)
+                SkeletonBar(width: 180, height: 9, cornerRadius: AppStyle.Radius.xs)
             }
 
             Spacer()
-            SkeletonBar(width: 54, height: 10, cornerRadius: 4)
+            SkeletonBar(width: 54, height: 10, cornerRadius: AppStyle.Radius.xs)
         }
         .padding(.horizontal, AppStyle.Spacing.small)
         .padding(.vertical, AppStyle.Spacing.small)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.surfaceCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
         .shimmering()
@@ -939,11 +939,11 @@ private struct AppTile: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 14)
         .background {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.fillSecondary)
                 .overlay {
                     if isSelected || isHovering || isContextMenuActive {
-                        RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                        RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                             .fill(AppColors.surfaceRaised)
                     }
                 }
@@ -955,7 +955,7 @@ private struct AppTile: View {
                 .padding(10)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .stroke(
                     isSelected ? AppColors.actionPrimary : AppColors.borderSubtle,
                     lineWidth: isSelected ? 2 : 1
@@ -1000,13 +1000,13 @@ private struct AppTile: View {
 private struct SkeletonAppTile: View {
     var body: some View {
         VStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
                 .frame(width: 56, height: 56)
 
             VStack(spacing: 6) {
-                SkeletonBar(width: 96, height: 12, cornerRadius: 4)
-                SkeletonBar(width: 52, height: 10, cornerRadius: 4)
+                SkeletonBar(width: 96, height: 12, cornerRadius: AppStyle.Radius.xs)
+                SkeletonBar(width: 52, height: 10, cornerRadius: AppStyle.Radius.xs)
             }
         }
         .frame(maxWidth: .infinity)
@@ -1014,11 +1014,11 @@ private struct SkeletonAppTile: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 14)
         .background {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.fillSecondary)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .stroke(AppColors.borderSubtle, lineWidth: 1)
         }
         .shimmering()

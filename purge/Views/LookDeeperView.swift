@@ -294,9 +294,9 @@ private struct LookDeeperTile: View {
     }
     .frame(maxWidth: .infinity, minHeight: 88)
     .padding(.horizontal, AppStyle.Spacing.small)
-    .background(AppColors.surfaceCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
+    .background(AppColors.surfaceCard, in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous))
     .overlay {
-      RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+      RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
         .stroke(AppColors.borderSubtle)
     }
     .accessibilityElement(children: .combine)

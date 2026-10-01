@@ -121,10 +121,10 @@ struct LimitedScanNotice: View {
             .padding(.horizontal, AppStyle.Spacing.small)
             .padding(.vertical, AppStyle.Spacing.xSmall + 2)
             .background(
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .fill(AppColors.fillSecondary)
             )
-            .contentShape(RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous))
         }
         .buttonStyle(LimitedScanNoticeButtonStyle())
         .accessibilityLabel("Limited scan. Let Purge look deeper.")

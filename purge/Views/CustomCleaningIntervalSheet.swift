@@ -61,10 +61,10 @@ struct CustomCleaningIntervalSheet: View {
                     .frame(height: AppStyle.Control.height)
                     .background(
                         AppColors.surfaceRaised,
-                        in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
                     )
                     .overlay {
-                        RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                        RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
                             .strokeBorder(
                                 amountFieldFocused ? AppColors.textPrimary : AppColors.borderSubtle,
                                 lineWidth: amountFieldFocused ? 1 : 0.5

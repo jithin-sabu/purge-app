@@ -152,10 +152,10 @@ struct CleanupHistoryDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 AppColors.fillSecondary,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
             }
     }

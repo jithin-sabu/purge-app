@@ -406,7 +406,7 @@ private struct OverviewIconTile: View {
     let color: Color
 
     static let size: CGFloat = 28
-    private static let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+    private static let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
 
     var body: some View {
         Group {
@@ -506,7 +506,7 @@ private extension View {
     /// stays inside the corners, and the border is drawn over them so the fill
     /// can't cover it.
     func overviewCard() -> some View {
-        let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
         return self
             .background(shape.fill(AppColors.surfaceCard))
             .clipShape(shape)

@@ -196,11 +196,11 @@ struct DeletionConfirmSheet: View {
         .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.surfaceCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
     }

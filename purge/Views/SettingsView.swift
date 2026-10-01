@@ -1041,10 +1041,10 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 AppColors.fillSecondary,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
             }
     }
@@ -1219,10 +1219,10 @@ private struct SettingsPickerButtonStyle: ButtonStyle {
             .frame(height: AppStyle.Control.height)
             .background(
                 configuration.isPressed ? AppColors.fillSecondary : AppColors.surfaceRaised,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
                     .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
             }
             .opacity(isEnabled ? 1 : 0.45)
@@ -1241,12 +1241,12 @@ private struct AppearanceOptionButton: View {
             VStack(spacing: 7) {
                 thumbnail
                     .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                             .strokeBorder(AppColors.borderStrong, lineWidth: 0.5)
                     }
                     .overlay {
                         if isSelected {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                                 .inset(by: -3)
                                 .strokeBorder(AppColors.textPrimary, lineWidth: 2)
                         }
@@ -1268,7 +1268,7 @@ private struct AppearanceOptionButton: View {
             .resizable()
             .scaledToFit()
             .frame(width: 64, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
     }
 }
 

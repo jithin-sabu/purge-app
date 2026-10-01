@@ -10,7 +10,7 @@ struct AppBrandMark: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: iconSize, height: iconSize)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous))
 
             Text("Purge")
                 .font(AppStyle.Typography.sectionTitle)
@@ -1243,11 +1243,11 @@ private struct NeedsAdministratorPanel: View {
         .padding(24)
         .frame(maxWidth: 400)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xl, style: .continuous)
                 .fill(AppColors.surfaceCard)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xl, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
         }
     }
@@ -1477,9 +1477,9 @@ struct AppBadge: View {
             .foregroundStyle(foregroundColor)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
-            .background(backgroundColor, in: RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous))
+            .background(backgroundColor, in: RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                     .strokeBorder(borderColor, lineWidth: 0.5)
             }
     }

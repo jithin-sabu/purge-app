@@ -64,7 +64,7 @@ struct AboutView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 64, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous))
                 .contentShape(Rectangle())
                 .onTapGesture { registerIconTap() }
 
@@ -250,10 +250,10 @@ struct AboutView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 AppColors.fillSecondary,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
             }
     }

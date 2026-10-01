@@ -107,11 +107,11 @@ struct UnknownDeleteConfirmSheet: View {
         .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.surfaceCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
     }
@@ -132,7 +132,7 @@ struct UnknownDeleteConfirmSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppStyle.Spacing.small)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                 .fill(AppColors.statusDangerFill)
         )
     }

@@ -873,11 +873,11 @@ private struct DuplicateGroupCard: View {
         .frame(height: height)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.fillSecondary)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
@@ -997,7 +997,7 @@ private struct LargeFileRow: View {
         .modifier(ScanRowCardChrome())
         .overlay {
             if isNested {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.panel, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
             }
         }
@@ -1325,11 +1325,11 @@ struct LargeFileDeletionConfirmSheet: View {
         .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.surfaceCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
     }
@@ -1372,7 +1372,7 @@ struct LargeFileDeletionConfirmSheet: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                 .fill(AppColors.statusCheckFill)
         )
         .accessibilityElement(children: .combine)
@@ -1497,11 +1497,11 @@ struct DuplicateCleanupSheet: View {
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.surfaceCard)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
     }

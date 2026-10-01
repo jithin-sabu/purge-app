@@ -15,6 +15,9 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
+      - name: Lint design tokens
+        run: node scripts/lint-design-tokens.mjs
+
       - name: Build (unsigned)
         run: |
           xcodebuild clean build \

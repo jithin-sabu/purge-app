@@ -72,11 +72,11 @@ struct DeletedAppsWatcherNoticeCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(AppStyle.Spacing.small)
             .background(
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .fill(AppColors.fillSecondary)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                     .strokeBorder(AppColors.statusCheckText.opacity(0.35), lineWidth: 0.5)
             }
             .accessibilityElement(children: .contain)

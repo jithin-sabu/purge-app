@@ -100,9 +100,9 @@ struct OnboardingProgressBar: View {
   var body: some View {
     GeometryReader { geo in
       ZStack(alignment: .leading) {
-        RoundedRectangle(cornerRadius: 4, style: .continuous)
+        RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
           .fill(AppColors.fillSecondary)
-        RoundedRectangle(cornerRadius: 4, style: .continuous)
+        RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
           .fill(AppColors.textPrimary)
           .frame(width: max(0, geo.size.width * min(1, max(0, progress))))
           .animation(.easeInOut(duration: 0.3), value: progress)

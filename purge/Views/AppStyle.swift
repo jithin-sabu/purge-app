@@ -1,11 +1,19 @@
 import SwiftUI
 
 enum AppStyle {
+    /// Corner radii. Action buttons and chips are capsules, so they take no
+    /// radius token.
     enum Radius {
-        static let chip: CGFloat = 6
-        static let control: CGFloat = 8
-        static let panel: CGFloat = 12
-        static let card: CGFloat = 14
+        /// Badges, progress bars, skeleton bars, small icon tiles.
+        static let xs: CGFloat = 4
+        /// Chips inside a field, dropdown rows, thumbnails, Overview tiles.
+        static let sm: CGFloat = 6
+        /// Controls that hold a value: pickers, fields, segmented controls.
+        static let md: CGFloat = 8
+        /// Cards, list rows, sheets, notices.
+        static let lg: CGFloat = 14
+        /// Panels floating on the cleanup celebration.
+        static let xl: CGFloat = 18
     }
 
     enum Control {
@@ -20,6 +28,7 @@ enum AppStyle {
         static let small: CGFloat = 12
         static let medium: CGFloat = 16
         static let large: CGFloat = 24
+        static let xLarge: CGFloat = 32
     }
 
     enum Row {

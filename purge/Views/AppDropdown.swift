@@ -85,10 +85,10 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
         .frame(width: popupWidth)
         .background(AppColors.surfaceRaised)
         .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle)
         )
-        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.control, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous))
     }
 }
 
@@ -120,7 +120,7 @@ private struct AppDropdownRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 isHovered && isEnabled ? AppColors.fillSecondary : .clear,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.chip, style: .continuous)
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
             )
             .contentShape(Rectangle())
             .opacity(isEnabled ? 1 : 0.4)

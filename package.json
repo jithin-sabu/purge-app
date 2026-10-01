@@ -2,7 +2,8 @@
   "name": "purge-brand-icons",
   "private": true,
   "scripts": {
-    "generate:icons": "node scripts/generate-brand-icons.mjs"
+    "generate:icons": "node scripts/generate-brand-icons.mjs",
+    "lint:design": "node scripts/lint-design-tokens.mjs"
   },
   "devDependencies": {
     "sharp": "^0.33.5",

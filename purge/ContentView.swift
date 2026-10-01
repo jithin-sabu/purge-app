@@ -911,7 +911,7 @@ struct SidebarSummaryView: View {
         .padding(.vertical, AppStyle.Spacing.xSmall + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.card, style: .continuous)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.fillSecondary)
         )
         .accessibilityElement(children: .combine)

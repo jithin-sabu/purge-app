@@ -434,7 +434,7 @@ private struct MenuTextRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 if hovering, isEnabled {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
                         .fill(Color(nsColor: .selectedContentBackgroundColor))
                 }
             }
