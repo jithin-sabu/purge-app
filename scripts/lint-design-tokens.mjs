@@ -37,7 +37,7 @@ const rules = [
     skipIcons: true,
   },
   {
-    pattern: /cornerRadius: *\d/,
+    pattern: /cornerRadius: *\d|\.cornerRadius\( *\d/,
     message: "literal corner radius; use AppStyle.Radius",
   },
   {
@@ -54,13 +54,30 @@ function swiftFiles(dir) {
   });
 }
 
-// The line that starts the view a modifier chain hangs off. SF Symbols size
-// their glyph with a font, which is fine, so rules marked skipIcons ignore
-// chains that start at an Image.
+// The view a modifier chain hangs off. SF Symbols size their glyph with a
+// font, which is fine, so rules marked skipIcons ignore chains that start at an
+// Image. When the receiver's initializer spans several lines, walk back to its
+// opening parenthesis and return all of them, so `Image(` on the first line counts.
 function chainStart(lines, index) {
   let i = index;
   while (i > 0 && lines[i].trimStart().startsWith(".")) i -= 1;
-  return lines[i];
+  let receiver = lines[i];
+  let depth = parenBalance(lines[i]);
+  while (depth < 0 && i > 0) {
+    i -= 1;
+    receiver = lines[i] + "\n" + receiver;
+    depth += parenBalance(lines[i]);
+  }
+  return receiver;
+}
+
+function parenBalance(line) {
+  let balance = 0;
+  for (const char of line) {
+    if (char === "(") balance += 1;
+    else if (char === ")") balance -= 1;
+  }
+  return balance;
 }
 
 const problems = [];

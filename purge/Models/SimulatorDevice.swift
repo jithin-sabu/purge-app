@@ -32,7 +32,9 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
             return SafetyInfo(
                 level: .safe,
                 headline: headline,
-                explanation: "Its iOS runtime is no longer installed, so it can't run.",
+                // CoreSimulator marks a device unavailable for more than one reason
+                // (missing runtime, unsupported device type), so don't name one.
+                explanation: "Xcode can no longer run this device.",
                 recoverySteps: "",
                 reinstallCommand: nil
             )
