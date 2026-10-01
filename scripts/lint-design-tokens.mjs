@@ -41,7 +41,7 @@ const rules = [
     message: "literal corner radius; use AppStyle.Radius",
   },
   {
-    pattern: /\b(AppButtonStyle|SolidDestructiveButtonStyle|OnboardingCapsuleButtonStyle)\b/,
+    pattern: /\b(AppButtonStyle|SolidDestructiveButtonStyle|OnboardingCapsuleButtonStyle|statusTextButton)\b/,
     message: "removed button style; use PurgeButtonStyle (.purge(...))",
   },
 ];

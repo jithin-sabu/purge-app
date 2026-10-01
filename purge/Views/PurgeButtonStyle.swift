@@ -9,7 +9,8 @@ import SwiftUI
 ///   toolbar, sheets and Settings, `.large` (38pt) for onboarding and the
 ///   cleanup celebration.
 ///
-/// Every action is a pill. Controls that hold a value (pickers, fields,
+/// Every action is a pill (an icon-only button is the square-width case, a
+/// circle). Controls that hold a value (pickers, fields,
 /// segmented controls) use a rounded rectangle instead, so shape alone tells an
 /// action from a setting.
 struct PurgeButtonStyle: ButtonStyle {
@@ -33,6 +34,10 @@ struct PurgeButtonStyle: ButtonStyle {
         case fill
         /// A fixed width, for stacked actions that should line up (onboarding).
         case fixed(CGFloat)
+        /// As wide as it is tall, so the pill becomes a circle. For icon-only
+        /// buttons: give the label a `Label` with `.labelStyle(.iconOnly)` so
+        /// VoiceOver still reads its title, and a `.help` tooltip.
+        case square
     }
 
     var role: Role = .secondary
@@ -70,7 +75,7 @@ private struct PurgeButtonBody: View {
             .foregroundStyle(foreground)
             .tint(foreground)
             .lineLimit(1)
-            .padding(.horizontal, horizontalPadding)
+            .padding(.horizontal, isSquare ? 0 : horizontalPadding)
             .frame(height: height)
             .background(background, in: Capsule(style: .continuous))
             .overlay {
@@ -96,7 +101,14 @@ private struct PurgeButtonBody: View {
             configuration.label.frame(maxWidth: .infinity)
         case .fixed(let value):
             configuration.label.frame(width: max(0, value - horizontalPadding * 2))
+        case .square:
+            configuration.label.frame(width: height)
         }
+    }
+
+    private var isSquare: Bool {
+        if case .square = width { return true }
+        return false
     }
 
     private var height: CGFloat {

@@ -55,10 +55,11 @@ The cleanup celebration forces dark mode and draws on `surfaceBase`, so it uses 
 | `.regular` | 30pt | 13pt semibold | Toolbar, sheets, Settings |
 | `.large` | 38pt | 15pt semibold | Onboarding, cleanup celebration |
 
-`width:` is `.fit` (default), `.fill`, or `.fixed(points)` for stacked actions that should line up.
+`width:` is `.fit` (default), `.fill`, `.fixed(points)` for stacked actions that should line up, or `.square` for an icon-only button, which draws as a circle.
 
 Rules:
 
+- Icon-only buttons (`width: .square`) are for actions whose glyph needs no words, like removing a row from a list. The label is a `Label` with `.labelStyle(.iconOnly)` so VoiceOver still reads the title, and the button carries a `.help` tooltip.
 - Every action is a pill. Controls that hold a value (pickers, fields, segmented controls) use a `md` rounded rectangle, so shape tells an action from a setting.
 - One primary per view. A sheet ends with Cancel, then one primary or destructive action.
 - Hover, pressed and disabled (0.45 opacity) come from the style. Don't add them per view.

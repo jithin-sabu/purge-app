@@ -179,7 +179,8 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let action = helperStatusAction {
-                statusTextButton(action.title, isDisabled: false, action: action.perform)
+                Button(action.title, action: action.perform)
+                    .buttonStyle(.purge(.secondary, size: .small))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -394,11 +395,11 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let fixTitle = health.fixTitle {
-                statusTextButton(
-                    removedApps.isRestartingWatcher ? "Restarting…" : fixTitle,
-                    isDisabled: removedApps.isRestartingWatcher,
-                    action: { removedApps.fixWatcher() }
-                )
+                Button(removedApps.isRestartingWatcher ? "Restarting…" : fixTitle) {
+                    removedApps.fixWatcher()
+                }
+                .buttonStyle(.purge(.secondary, size: .small))
+                .disabled(removedApps.isRestartingWatcher)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -576,9 +577,13 @@ struct SettingsView: View {
         // The only header-level control in Settings: it acts on the whole list
         // below, not on a single setting, so it can't live on a row.
         settingsSection("Cleaning History") {
-            statusTextButton("Clear history", isDisabled: history.archive.entries.isEmpty) {
+            // Quiet: it sits in a section header and asks for confirmation before
+            // anything happens, so it shouldn't pull the eye like a row's control.
+            Button("Clear history") {
                 showClearHistoryConfirmation = true
             }
+            .buttonStyle(.purge(.quiet, size: .small))
+            .disabled(history.archive.entries.isEmpty)
         } content: {
             Group {
                 if displayedHistoryEntries.isEmpty {
@@ -668,7 +673,10 @@ struct SettingsView: View {
                 title: "Excluded paths",
                 caption: "Scans skip these files and folders and everything inside them. Add a folder here, or right-click any scan result and choose Exclude from scans."
             ) {
-                statusTextButton("Add folder\u{2026}", isDisabled: false, action: chooseFoldersToExclude)
+                Button(action: chooseFoldersToExclude) {
+                    Label("Add folder\u{2026}", systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.purge(.secondary))
             }
 
             let entries = excludedEntries
@@ -718,9 +726,15 @@ struct SettingsView: View {
 
             excludedSizeLabel(forPath: entry.path)
 
-            statusTextButton("Remove", isDisabled: false) {
+            Button {
                 removeExclusion(entry: entry)
+            } label: {
+                Label("Remove \(entry.displayName)", systemImage: "xmark")
+                    .labelStyle(.iconOnly)
+                    .imageScale(.small)
             }
+            .buttonStyle(.purge(.secondary, size: .small, width: .square))
+            .help("Remove from exclusions. \(entry.displayName) is scanned again next time.")
         }
         .padding(16)
         .task(id: entry.path) {
@@ -922,13 +936,14 @@ struct SettingsView: View {
     }
 
     private var autoCleanDisabledStatus: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
             Text("Auto-clean is off. Turn it on to keep your Mac clean automatically.")
                 .font(scheduleStatusSecondaryFont)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            statusTextButton("Enable", isDisabled: false, action: enableAutoClean)
+            Button("Enable", action: enableAutoClean)
+                .buttonStyle(.purge(.secondary, size: .small))
         }
     }
 
@@ -998,21 +1013,6 @@ struct SettingsView: View {
                     .accessibilityHidden(true)
             }
         }
-    }
-
-    private func statusTextButton(
-        _ title: String,
-        isDisabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(scheduleStatusLinkFont)
-                .foregroundStyle(AppColors.textPrimary)
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .opacity(isDisabled ? 0.45 : 1)
     }
 
     private var settingsHorizontalContentInset: CGFloat { AppDetailPageLayout.horizontalInset }
@@ -1094,10 +1094,6 @@ struct SettingsView: View {
 
     private var scheduleStatusTertiaryFont: Font {
         AppStyle.Typography.metadata
-    }
-
-    private var scheduleStatusLinkFont: Font {
-        AppStyle.Typography.metadataEmphasis
     }
 
     private var scheduleTextTransition: ContentTransition {
