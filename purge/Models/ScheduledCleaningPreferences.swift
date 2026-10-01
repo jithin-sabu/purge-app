@@ -96,9 +96,9 @@ enum DevToolsStalenessOption: Int, Codable, CaseIterable, Identifiable {
     var description: String {
         switch self {
         case .showAll:
-            return "All detected project folders will appear in Developer Projects regardless of when they were last used."
+            return "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now."
         case .oneMonth, .threeMonths, .sixMonths, .twelveMonths, .twoYears:
-            return "Project folders not touched within this period are considered stale and will appear in Developer Projects for cleanup. Choose Show all to see every detected project regardless of age."
+            return "Projects you have not worked on within this period appear in Developer Projects for cleanup. Editing any file or using git in a project counts as working on it, and a project in use right now never appears. Choose Show all to see every detected project regardless of age."
         }
     }
 

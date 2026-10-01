@@ -71,7 +71,7 @@ Three sections in one view:
 - **iOS Simulators**: unused simulator runtimes grouped together (booted simulators are skipped)
 - **Developer projects**: `node_modules`, Python virtual environments, Rust `target`, Flutter build output, Xcode `Pods`, Android `.gradle`, and other artifacts grouped by project
 
-In **Settings → Developer Projects**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which project folders appear.
+In **Settings → Developer Projects**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which projects appear. Age is measured from the last time anything in the project changed, including git activity, not from the date on `node_modules` or `target`. A project in use right now, with a terminal or dev server running inside it or a git command in progress, never appears.
 
 ### Large Files
 

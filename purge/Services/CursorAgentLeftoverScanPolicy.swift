@@ -449,23 +449,13 @@ enum CursorProcessWorkingDirectories {
     }
 
     nonisolated static func snapshot() -> Snapshot {
-        let bytesNeeded = proc_listallpids(nil, 0)
-        guard bytesNeeded > 0 else {
+        guard let pids = ProcessWorkingDirectories.allProcessIDs() else {
             return Snapshot(status: .unavailable, directories: [])
         }
-        let capacity = Int(bytesNeeded) / MemoryLayout<pid_t>.size
-        var pids = [pid_t](repeating: 0, count: max(capacity, 1))
-        let filledBytes = proc_listallpids(&pids, Int32(MemoryLayout<pid_t>.size * pids.count))
-        guard filledBytes > 0 else {
-            return Snapshot(status: .unavailable, directories: [])
-        }
-        let count = Int(filledBytes) / MemoryLayout<pid_t>.size
 
         var cursorPids: [pid_t] = []
-        for pid in pids.prefix(count) where pid > 0 {
-            if isCursorExecutable(pid) {
-                cursorPids.append(pid)
-            }
+        for pid in pids where isCursorExecutable(pid) {
+            cursorPids.append(pid)
         }
 
         if CursorAgentLeftoverScanPolicy.isCursorRunning() && cursorPids.isEmpty {
@@ -474,7 +464,7 @@ enum CursorProcessWorkingDirectories {
 
         var directories: Set<String> = []
         for pid in cursorPids {
-            if let cwd = currentWorkingDirectory(of: pid), !cwd.isEmpty {
+            if let cwd = ProcessWorkingDirectories.currentWorkingDirectory(of: pid), !cwd.isEmpty {
                 directories.insert((cwd as NSString).standardizingPath)
             }
         }
@@ -487,22 +477,6 @@ enum CursorProcessWorkingDirectories {
     }
 
     private nonisolated static func isCursorExecutable(_ pid: pid_t) -> Bool {
-        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-        let length = proc_pidpath(pid, &buffer, UInt32(MAXPATHLEN))
-        guard length > 0 else { return false }
-        let path = String(cString: buffer)
-        return path.contains("/Cursor.app/")
-    }
-
-    private nonisolated static func currentWorkingDirectory(of pid: pid_t) -> String? {
-        var info = proc_vnodepathinfo()
-        let size = MemoryLayout<proc_vnodepathinfo>.stride
-        let result = proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, Int32(size))
-        guard result == Int32(size) else { return nil }
-        return withUnsafePointer(to: &info.pvi_cdir.vip_path) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { chars in
-                String(cString: chars)
-            }
-        }
+        ProcessWorkingDirectories.executablePath(of: pid)?.contains("/Cursor.app/") ?? false
     }
 }

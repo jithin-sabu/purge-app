@@ -108,10 +108,6 @@ nonisolated final class DevScanner {
         return false
     }
 
-    nonisolated static func daysBetween(_ start: Date, _ end: Date) -> Int {
-        Calendar.current.dateComponents([.day], from: start, to: end).day ?? 0
-    }
-
     func scanDevToolsStream(access: ScanAccess) -> AsyncStream<DeveloperScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) { [weak self] in
@@ -982,7 +978,17 @@ nonisolated final class DevScanner {
 
         /// Build artifact list per root (expensive sizing runs concurrently).
         let sizingStart = Date()
-        let (groups, artifactsSized) = await buildProjectGroups(for: discoveredRoots, access: access, continuation: continuation)
+        let filter = ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.currentThresholdDays(),
+            now: Date(),
+            live: .current()
+        )
+        let (groups, artifactsSized) = await buildProjectGroups(
+            for: discoveredRoots,
+            access: access,
+            filter: filter,
+            continuation: continuation
+        )
         ScanPhaseTiming.finish(
             "project artifact sizing",
             since: sizingStart,
@@ -1052,6 +1058,7 @@ nonisolated final class DevScanner {
     private func buildProjectGroups(
         for discovered: [(URL, [ProjectType])],
         access: ScanAccess,
+        filter: ProjectListingFilter,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
     ) async -> (groups: [ProjectGroup], artifactsSized: Int) {
         guard !discovered.isEmpty else { return ([], 0) }
@@ -1067,7 +1074,7 @@ nonisolated final class DevScanner {
 
             while inFlight < Self.maxConcurrentProjectSizings, let next = pending.next() {
                 group.addTask { [next] in
-                    DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access)
+                    DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access, filter: filter)
                 }
                 inFlight += 1
             }
@@ -1083,7 +1090,7 @@ nonisolated final class DevScanner {
                 if Task.isCancelled { continue }
                 if let next = pending.next() {
                     group.addTask { [next] in
-                        DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access)
+                        DevScanner.sizeProjectGroup(rootURL: next.0, types: next.1, access: access, filter: filter)
                     }
                 }
             }
@@ -1094,13 +1101,40 @@ nonisolated final class DevScanner {
     /// How many project roots may be sized at once. See `buildProjectGroups`.
     private static let maxConcurrentProjectSizings = 4
 
-    private nonisolated static func sizeProjectGroup(
+    /// What decides whether a discovered project is listed. Read once per scan.
+    struct ProjectListingFilter: Sendable {
+        /// `DevToolsStalenessOption` days, or `showAll`'s 0.
+        let staleDays: Int
+        let now: Date
+        let live: ProjectActivityPolicy.LiveContext
+    }
+
+    nonisolated static func sizeProjectGroup(
         rootURL: URL,
         types: [ProjectType],
-        access: ScanAccess
+        access: ScanAccess,
+        filter: ProjectListingFilter
     ) -> (ProjectGroup?, Int) {
         let rows = DevScanner.collectArtifacts(projectRoot: rootURL, types: types, access: access)
         guard !rows.isEmpty else { return (nil, 0) }
+
+        // Decided per project and before sizing: a project someone is using keeps
+        // all of its folders, and there is no point running `du` on them.
+        if ProjectActivityPolicy.isInUse(projectRoot: rootURL, live: filter.live, access: access) {
+            return (nil, 0)
+        }
+        if filter.staleDays != DevToolsStalenessOption.showAll.rawValue {
+            let cutoff = Calendar.current.date(byAdding: .day, value: -filter.staleDays, to: filter.now)
+                ?? filter.now
+            if ProjectActivityPolicy.hasActivity(
+                since: cutoff,
+                projectRoot: rootURL,
+                artifactPaths: rows.map(\.path),
+                access: access
+            ) {
+                return (nil, 0)
+            }
+        }
 
         let artifactPaths = rows.map(\.path)
         let sizesByPath = FolderSizing.directorySizes(at: artifactPaths)
@@ -1126,25 +1160,12 @@ nonisolated final class DevScanner {
         }
         sized.sort { $0.sizeBytes > $1.sizeBytes }
 
-        let staleDays = DevToolsStalenessOption.currentThresholdDays()
-        let now = Date()
-        let staleArtifacts: [ProjectCacheArtifact]
-        if staleDays == DevToolsStalenessOption.showAll.rawValue {
-            staleArtifacts = sized
-        } else {
-            staleArtifacts = sized.filter {
-                Self.daysBetween($0.lastModified, now) >= staleDays
-            }
-        }
-
-        guard !staleArtifacts.isEmpty else { return (nil, rows.count) }
-
         return (
             ProjectGroup(
                 displayName: rootURL.lastPathComponent,
                 rootPath: rootURL,
                 inferredTypes: types,
-                artifacts: staleArtifacts
+                artifacts: sized
             ),
             rows.count
         )
