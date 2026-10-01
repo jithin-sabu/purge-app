@@ -2867,7 +2867,7 @@
     "key": "cursor-agent-leftover",
     "display_name": "Cursor Agent Leftovers",
     "tag": "medium",
-    "explanation": "Folders Cursor left under ~/.cursor/projects for temp workspaces and empty windows that are now closed. Fine to remove if you are done with that job, but look first in case you still need the files.",
+    "explanation": "Folders from Cursor temp workspaces and empty windows that are now closed.",
     "bundle_ids": [],
     "aliases": [
       "cursor-agent-leftover"
@@ -2879,7 +2879,7 @@
     "key": "orphaned-cursor-worktree",
     "display_name": "Orphaned Cursor Worktrees",
     "tag": "medium",
-    "explanation": "Checkouts Cursor agents made that their Git repository no longer lists. The repository was deleted or moved, or Git dropped them, so Git can no longer use these folders. Worktrees Git still lists are never shown here, however old. Look first if you left changes you never committed.",
+    "explanation": "Agent checkouts Git no longer tracks. Look inside first for uncommitted work.",
     "bundle_ids": [],
     "aliases": [
       "orphaned-cursor-worktree"
