@@ -614,6 +614,7 @@ struct ContentView: View {
                         LookDeeperHeaderButton()
                     }
                     OverviewScanButton()
+                    OverviewCleanSafeButton()
                 }
             } else if store.selectedTab == .appCaches || store.selectedTab == .devTools {
                 HStack(spacing: AppStyle.Spacing.xSmall) {

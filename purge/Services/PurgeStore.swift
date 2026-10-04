@@ -3170,6 +3170,30 @@ final class PurgeStore: ObservableObject {
         cancelInteractiveSafeCleanup()
     }
 
+    /// The Overview's Clean button: moves every safe App Caches and Dev Tools item to
+    /// the Trash, the same set the menu bar and the scheduled clean move, with the
+    /// cleanup overlay showing progress and the summary.
+    func cleanSafeItemsFromOverview(reduceMotion: Bool) {
+        let candidates = manualSafeCleanupCandidates()
+        // A pending onboarding celebration owns the post-clean screen; presenting
+        // the live session too would stack two summaries on the same run.
+        let pendingCelebration = defaults.bool(forKey: Self.pendingOnboardingCelebrationKey)
+        guard beginInteractiveSafeCleanup(
+            candidates: candidates,
+            reduceMotion: reduceMotion,
+            presentsLiveSession: !pendingCelebration
+        ) else { return }
+
+        Task { @MainActor in
+            let summary = await performManualSafeCleanNow(pinnedCandidates: candidates)
+            if errorMessage == nil {
+                completeInteractiveSafeCleanup(summary: summary)
+            } else {
+                cancelInteractiveSafeCleanup()
+            }
+        }
+    }
+
     private static func uniqueStandardizedPaths(for candidates: [DeletionCandidate]) -> [String] {
         var seen = Set<String>()
         var paths: [String] = []
