@@ -2,7 +2,8 @@ import SwiftUI
 
 /// The whole disk at a glance: how much of it each thing Purge finds takes up, and
 /// the rest. Used, free and total come from the volume, so they match System Settings.
-/// Cleaning happens on each tab; this page only shows where the space is.
+/// The header's Clean button moves the safe part of App Caches and Dev Tools in one
+/// go; everything else is cleaned by hand on its tab.
 struct OverviewView: View {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
@@ -774,5 +775,140 @@ struct OverviewScanButton: View {
     private var systemImage: String? {
         if isFinishingCacheScan { return nil }
         return queue.isRunning ? "stop.fill" : "arrow.clockwise"
+    }
+}
+
+// MARK: - Clean safe items
+
+/// Moves every safe App Caches and Dev Tools item to the Trash, after a short
+/// confirmation: the same set the menu bar and the scheduled clean move. The tabs'
+/// Clean Selected is for picking by hand; this is the one click for the safe part.
+/// Hidden when there is nothing safe to clean.
+///
+/// The title carries no size on purpose. Beside the category totals on this page a
+/// smaller figure reads as a mistake; the popover gives the amount next to the
+/// total it comes from.
+struct OverviewCleanSafeButton: View {
+    @EnvironmentObject private var store: PurgeStore
+    @EnvironmentObject private var diskStore: DiskSummaryStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isConfirming = false
+
+    private var bytes: Int64 { store.safeRecoverableBytes }
+    private var isCleaning: Bool { store.isInteractiveSafeCleanupInProgress }
+
+    /// The figure moves while either scan runs, so the button waits for both.
+    private var isReady: Bool {
+        store.isSettled(.appCaches) && store.isSettled(.devTools)
+    }
+
+    var body: some View {
+        if bytes > 0 || isCleaning {
+            Button {
+                isConfirming = true
+            } label: {
+                CleaningButtonLabel(
+                    title: isCleaning ? "Cleaning..." : "Clean Safe Items",
+                    // The same glyph as Clean Selected and Uninstall on the other tabs.
+                    systemImage: isCleaning ? nil : "trash.fill",
+                    isCleaning: isCleaning
+                )
+            }
+            .buttonStyle(.purge(.primary))
+            .disabled(!isReady || store.isDeleting || isCleaning)
+            .help(isReady
+                ? "Move every Safe item in App Caches and Dev Tools to the Trash"
+                : "Waiting for App Caches and Dev Tools to finish scanning")
+            .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
+                OverviewCleanSafeConfirmation(
+                    breakdown: store.overviewBreakdown(
+                        totalBytes: diskStore.totalDiskBytes,
+                        freeBytes: diskStore.freeDiskBytes
+                    ),
+                    onCancel: { isConfirming = false },
+                    onConfirm: {
+                        isConfirming = false
+                        store.cleanSafeItemsFromOverview(reduceMotion: reduceMotion)
+                    },
+                    onReview: { category in
+                        isConfirming = false
+                        store.openFromOverview(category)
+                    }
+                )
+                .environmentObject(store)
+            }
+        }
+    }
+}
+
+/// What the Clean button will move, by tab, with a way to look first. Review opens
+/// the tab on its Safe list with exactly these items selected.
+private struct OverviewCleanSafeConfirmation: View {
+    @EnvironmentObject private var store: PurgeStore
+    /// The Overview's own figures, so each "of" total matches its row.
+    let breakdown: OverviewBreakdown
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+    let onReview: (OverviewCategory) -> Void
+
+    private static let categories: [OverviewCategory] = [.appCaches, .devTools]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                Text("Move \(formatBytes(store.safeRecoverableBytes)) to the Trash?")
+                    .font(AppStyle.Typography.sectionTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                Text("Only items marked Safe. They rebuild when needed, and you can put anything back from the Trash.")
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(spacing: AppStyle.Spacing.xSmall) {
+                ForEach(Self.categories, id: \.self) { category in
+                    let bytes = store.safeCleanupBytes(for: category) ?? 0
+                    if bytes > 0 {
+                        row(category, bytes: bytes)
+                    }
+                }
+            }
+
+            HStack(spacing: AppStyle.Spacing.xSmall) {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.purge(.secondary))
+                    .keyboardShortcut(.cancelAction)
+                Button("Move to Trash", action: onConfirm)
+                    .buttonStyle(.purge(.destructive))
+            }
+        }
+        .padding(AppStyle.Spacing.large)
+        .frame(width: 400)
+    }
+
+    private func row(_ category: OverviewCategory, bytes: Int64) -> some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            OverviewIconTile(
+                symbol: OverviewCategoryStyle.symbol(category),
+                color: OverviewCategoryStyle.tileColor(category)
+            )
+            Text(OverviewCategoryStyle.name(category))
+                .font(AppStyle.Typography.headline)
+                .foregroundStyle(AppColors.textPrimary)
+                .lineLimit(1)
+                .fixedSize()
+            Spacer(minLength: AppStyle.Spacing.small)
+            (Text(formatBytes(bytes)).foregroundColor(AppColors.textPrimary)
+                + Text(" of \(formatStorageBytes(breakdown.bytes(for: category)))"))
+                .font(AppStyle.Typography.body)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
+            Button("Review") { onReview(category) }
+                .buttonStyle(.purge(.quiet, size: .small))
+        }
+        .accessibilityElement(children: .contain)
     }
 }
