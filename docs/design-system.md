@@ -36,7 +36,7 @@ Tokens are named by job. The neutrals are a warm graphite: low-chroma greys lean
 
 Hover and pressed shades exist for `actionPrimary` and `actionDestructive` too. `AppColors.Chart` holds the Overview breakdown colours (Okabe and Ito, colour-blind safe) and the warm greys for "everything else" and free space.
 
-The cleanup celebration forces dark mode and draws on `surfaceBase`, so it uses the ordinary dark tokens. Plain white and black are only for shadows, masks, glyphs on coloured chart tiles, and the menu bar dropdown's native selection highlight.
+The cleanup celebration follows the app's appearance and draws on `surfaceBase`, so it uses the ordinary tokens in both modes. Plain white and black are only for shadows, masks, glyphs on coloured chart tiles, and the menu bar dropdown's native selection highlight.
 
 ## Buttons
 

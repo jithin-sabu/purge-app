@@ -72,14 +72,15 @@ enum AppColors {
     // MARK: - Overlays
 
     /// The dimming layer behind the cleanup celebration while it fades in. The
-    /// celebration itself forces dark mode and draws on `surfaceBase`, so its
-    /// text and buttons use the ordinary dark-mode tokens.
+    /// celebration follows the app's appearance and draws on `surfaceBase`, so
+    /// its text and buttons use the ordinary tokens.
     static let scrim = Color.black.opacity(0.38)
 
     // MARK: - Accent
 
-    /// The time highlight on the cleanup celebration.
-    static let accentCelebrate = Color(light: 0xFFC70D, dark: 0xFFC70D)
+    /// The time highlight on the cleanup celebration. Light mode goes deeper so
+    /// the bolt still reads on the pale background.
+    static let accentCelebrate = Color(light: 0xD18F00, dark: 0xFFC70D)
 
     // MARK: - Charts
 

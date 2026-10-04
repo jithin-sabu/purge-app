@@ -524,7 +524,7 @@ struct SafeCleanupCelebrationOverlay: View {
     private static let minimumCleaningDwell: TimeInterval = 1.2
 
     private let celebrationAccent = AppColors.textPrimary
-    /// The overlay forces dark mode, so this is the dark window background.
+    /// Follows the app's appearance, like the window behind it.
     private let sheetBackground = AppColors.surfaceBase
 
     init(session: DeletionSession, doneTitle: String = "Done", onDone: @escaping () -> Void) {
@@ -696,7 +696,6 @@ struct SafeCleanupCelebrationOverlay: View {
             mirrorLiveProgress(bytesMovedToTrash: newValue)
         }
         .onDisappear { sequenceTask?.cancel() }
-        .environment(\.colorScheme, .dark)
     }
 
     private var progressGroup: some View {
