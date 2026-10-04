@@ -784,8 +784,13 @@ struct OverviewScanButton: View {
 /// confirmation: the same set the menu bar and the scheduled clean move. The tabs'
 /// Clean Selected is for picking by hand; this is the one click for the safe part.
 /// Hidden when there is nothing safe to clean.
+///
+/// The title carries no size on purpose. Beside the category totals on this page a
+/// smaller figure reads as a mistake; the popover gives the amount next to the
+/// total it comes from.
 struct OverviewCleanSafeButton: View {
     @EnvironmentObject private var store: PurgeStore
+    @EnvironmentObject private var diskStore: DiskSummaryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isConfirming = false
 
@@ -803,8 +808,9 @@ struct OverviewCleanSafeButton: View {
                 isConfirming = true
             } label: {
                 CleaningButtonLabel(
-                    title: isCleaning ? "Cleaning..." : "Clean \(formatBytes(bytes))",
-                    systemImage: nil,
+                    title: isCleaning ? "Cleaning..." : "Clean Safe Items",
+                    // The same glyph as Clean Selected and Uninstall on the other tabs.
+                    systemImage: isCleaning ? nil : "trash.fill",
                     isCleaning: isCleaning
                 )
             }
@@ -815,6 +821,10 @@ struct OverviewCleanSafeButton: View {
                 : "Waiting for App Caches and Dev Tools to finish scanning")
             .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
                 OverviewCleanSafeConfirmation(
+                    breakdown: store.overviewBreakdown(
+                        totalBytes: diskStore.totalDiskBytes,
+                        freeBytes: diskStore.freeDiskBytes
+                    ),
                     onCancel: { isConfirming = false },
                     onConfirm: {
                         isConfirming = false
@@ -835,6 +845,8 @@ struct OverviewCleanSafeButton: View {
 /// the tab on its Safe list with exactly these items selected.
 private struct OverviewCleanSafeConfirmation: View {
     @EnvironmentObject private var store: PurgeStore
+    /// The Overview's own figures, so each "of" total matches its row.
+    let breakdown: OverviewBreakdown
     let onCancel: () -> Void
     let onConfirm: () -> Void
     let onReview: (OverviewCategory) -> Void
@@ -872,7 +884,7 @@ private struct OverviewCleanSafeConfirmation: View {
             }
         }
         .padding(AppStyle.Spacing.large)
-        .frame(width: 360)
+        .frame(width: 400)
     }
 
     private func row(_ category: OverviewCategory, bytes: Int64) -> some View {
@@ -884,11 +896,16 @@ private struct OverviewCleanSafeConfirmation: View {
             Text(OverviewCategoryStyle.name(category))
                 .font(AppStyle.Typography.headline)
                 .foregroundStyle(AppColors.textPrimary)
+                .lineLimit(1)
+                .fixedSize()
             Spacer(minLength: AppStyle.Spacing.small)
-            Text(formatBytes(bytes))
+            (Text(formatBytes(bytes)).foregroundColor(AppColors.textPrimary)
+                + Text(" of \(formatStorageBytes(breakdown.bytes(for: category)))"))
                 .font(AppStyle.Typography.body)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
             Button("Review") { onReview(category) }
                 .buttonStyle(.purge(.quiet, size: .small))
         }
