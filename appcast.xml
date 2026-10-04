@@ -3,6 +3,28 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.7.1</title>
+      <pubDate>Sun, 04 Oct 2026 23:24:43 +0000</pubDate>
+      <sparkle:version>27</sparkle:version>
+      <sparkle:shortVersionString>1.7.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Clean Safe Items from the Overview.</strong> One button moves the Safe items in App Caches and Dev Tools, after showing how much comes from each.</li>
+          <li><strong>Select All picks Safe items first.</strong> On the All filter it ticks only Safe items, and a link adds the Check First items if you want them.</li>
+          <li><strong>Projects you're working on stay off the list.</strong> Developer Projects now judges age by the project's own files and Git activity, and hides projects that are open in a terminal, dev server or editor.</li>
+          <li><strong>Orphaned Git worktrees from every agent tool.</strong> A new Check First row lists worktrees from Cursor, Codex, Conductor, T3 Code and Claude Code only once Git no longer lists them.</li>
+          <li><strong>Exclude folders from Large Files.</strong> Right-click a row or use Settings, and Large Files skips that folder from then on.</li>
+          <li><strong>Docker Desktop is now Check First.</strong> Its folder holds every image, container and volume, so one-click and scheduled cleaning no longer pick it up.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.7.1/Purgev1.7.1.dmg"
+        sparkle:edSignature="qm645tPVc6fHL8hnrC3bE67OkgDentlrMl285wMNLvV+owp7dFANwf+utb/9hZ8deAhVfE0RUDdtKeci2LG8Dg=="
+        length="8448635"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.7.0</title>
       <pubDate>Thu, 01 Oct 2026 02:46:15 +0000</pubDate>
       <sparkle:version>26</sparkle:version>
