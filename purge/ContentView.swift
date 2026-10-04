@@ -43,6 +43,17 @@ struct ContentView: View {
     /// so the host is excluded on purpose.
     private let isRunningAsTestHost = TestHost.isActive()
 
+#if DEBUG
+    /// Launch with `-debug.previewCleanupCompletionBytes <bytes>` to open the cleanup
+    /// completion screen without moving anything to the Trash.
+    @State private var debugCompletionPreview: DeletionSession? = {
+        // Read as a string: `integer(forKey:)` clamps argument values to 32 bits.
+        let raw = UserDefaults.standard.string(forKey: "debug.previewCleanupCompletionBytes")
+        guard let bytes = raw.flatMap({ Int64($0) }), bytes > 0 else { return nil }
+        return .completed(bytesMovedToTrash: bytes, elapsedSeconds: 2.1, movedToTrashCount: 128, failedItems: [])
+    }()
+#endif
+
     var body: some View {
         HStack(spacing: 0) {
             sidebar
@@ -152,6 +163,15 @@ struct ContentView: View {
                 .transition(reduceMotion ? .opacity : .safeCleanupCelebrationBlur)
                 .zIndex(90)
             }
+
+#if DEBUG
+            if isLifecycleActive, let session = debugCompletionPreview {
+                SafeCleanupCelebrationOverlay(session: session) {
+                    debugCompletionPreview = nil
+                }
+                .zIndex(95)
+            }
+#endif
         }
         .animation(
             reduceMotion ? nil : .easeInOut(duration: 0.35),

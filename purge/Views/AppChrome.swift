@@ -497,6 +497,8 @@ struct SafeCleanupCelebrationOverlay: View {
     @ObservedObject var session: DeletionSession
     /// Onboarding says "Continue" when another step follows.
     var doneTitle = "Done"
+    /// Onboarding passes `false`: that screen is still part of setup.
+    var allowsSupportNudge = true
     let onDone: () -> Void
 
     @EnvironmentObject private var store: PurgeStore
@@ -519,6 +521,11 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var failuresExpanded = false
     @State private var retryingFailureIDs: Set<UUID> = []
     @State private var boltFlashToken = 0
+    /// Set once per screen when the lifetime total reached a new milestone.
+    @State private var supportMilestoneBytes: Int64?
+    /// The quiet line under Done, for big cleans between milestones.
+    @State private var supportFooterLine: SupportNudge.Line?
+    @State private var supportLinkOpened = false
 
     private static let confettiThresholdBytes: Int64 = 2 * 1024 * 1024 * 1024
     private static let minimumCleaningDwell: TimeInterval = 1.2
@@ -527,9 +534,15 @@ struct SafeCleanupCelebrationOverlay: View {
     /// Follows the app's appearance, like the window behind it.
     private let sheetBackground = AppColors.surfaceBase
 
-    init(session: DeletionSession, doneTitle: String = "Done", onDone: @escaping () -> Void) {
+    init(
+        session: DeletionSession,
+        doneTitle: String = "Done",
+        allowsSupportNudge: Bool = true,
+        onDone: @escaping () -> Void
+    ) {
         self.session = session
         self.doneTitle = doneTitle
+        self.allowsSupportNudge = allowsSupportNudge
         self.onDone = onDone
         // Sessions created already-complete mount straight into the final layout;
         // live runs mount in the cleaning phase even if the engine has since finished
@@ -637,6 +650,16 @@ struct SafeCleanupCelebrationOverlay: View {
                         )
                     }
 
+                    if session.phase == .complete, let supportMilestoneBytes {
+                        SupportNudgeCard(
+                            milestoneBytes: supportMilestoneBytes,
+                            linkOpened: supportLinkOpened,
+                            onOpenLink: openSupportLink
+                        )
+                        .padding(.bottom, AppStyle.Spacing.xSmall)
+                        .transition(.opacity)
+                    }
+
                     if reservesTrashDisclaimerSpace {
                         HStack(spacing: 5) {
                             Image(systemName: "trash")
@@ -663,6 +686,16 @@ struct SafeCleanupCelebrationOverlay: View {
                         .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
                     .keyboardShortcut(.defaultAction)
                     .disabled(!footerVisible)
+
+                    if session.phase == .complete, let supportFooterLine {
+                        SupportFooterLink(
+                            line: supportFooterLine,
+                            linkOpened: supportLinkOpened,
+                            onOpenLink: openSupportLink
+                        )
+                            .padding(.top, AppStyle.Spacing.xxSmall)
+                            .transition(.opacity)
+                    }
                 }
                 .opacity(footerVisible ? 1 : 0)
             }
@@ -841,6 +874,37 @@ struct SafeCleanupCelebrationOverlay: View {
         if let tagline {
             TimeTagline.store(tagline)
         }
+        resolveSupportNudge()
+    }
+
+    /// Runs once the run is complete and the store has added it to the lifetime
+    /// total. A milestone gets the card; a big clean between milestones may get the
+    /// quiet line under Done (see `SupportNudge.showsFooterLink`), never both. Any failure keeps both away: that screen has
+    /// other work to do.
+    private func resolveSupportNudge() {
+        guard allowsSupportNudge, supportMilestoneBytes == nil, supportFooterLine == nil,
+              session.failedItems.isEmpty else { return }
+        if let milestone = SupportNudge.milestone(
+            lifetimeBytes: store.totalMovedToTrashBytes,
+            cleanBytes: session.finalBytesMovedToTrash
+        ) {
+            SupportNudge.recordShown(milestoneBytes: milestone)
+            supportMilestoneBytes = milestone
+        } else if SupportNudge.showsFooterLink(cleanBytes: session.finalBytesMovedToTrash) {
+            supportFooterLine = SupportNudge.selectLine(for: SupportNudge.CleanFacts(
+                bytes: session.finalBytesMovedToTrash,
+                itemCount: session.movedToTrashCount,
+                lifetimeBytes: store.totalMovedToTrashBytes
+            ))
+        }
+    }
+
+    private func openSupportLink() {
+        SupportNudge.recordLinkOpened()
+        NSWorkspace.shared.open(SupportNudge.url)
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            supportLinkOpened = true
+        }
     }
 
     private func mirrorLiveProgress(bytesMovedToTrash: Int64) {
@@ -876,6 +940,7 @@ struct SafeCleanupCelebrationOverlay: View {
                 checkmarkProgress = 1
                 checkmarkScale = 1
                 confettiArmed = true
+                resolveSupportNudge()
                 withAnimation(.easeInOut(duration: 0.35)) {
                     progressGroupVisible = false
                     subtitleShowsComplete = true
@@ -928,10 +993,97 @@ struct SafeCleanupCelebrationOverlay: View {
                 boltFlashToken += 1
             }
             try? await Task.sleep(nanoseconds: 150_000_000)
+            // Inserted with the footer so the header glides up once, instead of
+            // jumping while the counter is still settling.
             withAnimation(.easeInOut(duration: 0.3)) {
+                resolveSupportNudge()
                 footerVisible = true
             }
         }
+    }
+}
+
+/// The milestone version of the support ask: one pill naming the lifetime total,
+/// with the coffee link as a small secondary button. Shown once per milestone (see
+/// `SupportNudge`), so it has no dismiss.
+private struct SupportNudgeCard: View {
+    let milestoneBytes: Int64
+    let linkOpened: Bool
+    let onOpenLink: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "rosette")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppColors.textSecondary)
+                .accessibilityHidden(true)
+
+            Text("Over \(formatBytes(milestoneBytes)) cleaned up with Purge")
+                .font(AppStyle.Typography.rowTitle)
+                .foregroundStyle(AppColors.textPrimary)
+
+            Text("·")
+                .font(AppStyle.Typography.rowTitle)
+                .foregroundStyle(AppColors.textTertiary)
+                .accessibilityHidden(true)
+
+            if linkOpened {
+                Text("Thanks, that means a lot.")
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .padding(.trailing, 6)
+            } else {
+                Button(action: onOpenLink) {
+                    Label("Buy me a coffee", systemImage: "cup.and.saucer")
+                }
+                .buttonStyle(.purge(.secondary, size: .small))
+            }
+        }
+        .lineLimit(1)
+        .padding(.leading, 14)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .background(Capsule(style: .continuous).fill(AppColors.surfaceCard))
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// The everyday version of the support ask: one dim line under Done, no dismiss.
+/// The line changes with each clean (see `SupportNudge.lines(for:)`); only the
+/// coffee part is the link, so it reads as a fact plus an option.
+private struct SupportFooterLink: View {
+    let line: SupportNudge.Line
+    let linkOpened: Bool
+    let onOpenLink: () -> Void
+
+    private var text: AttributedString {
+        var text = AttributedString(line.prefix)
+        var link = AttributedString(line.linkText)
+        link.link = SupportNudge.url
+        link.foregroundColor = AppColors.textSecondary
+        link.underlineStyle = .single
+        text.append(link)
+        return text
+    }
+
+    var body: some View {
+        Group {
+            if linkOpened {
+                Text("Thanks, that means a lot.")
+            } else {
+                Text(text)
+                    .environment(\.openURL, OpenURLAction { _ in
+                        onOpenLink()
+                        return .handled
+                    })
+            }
+        }
+        .font(AppStyle.Typography.callout)
+        .foregroundStyle(AppColors.textTertiary)
     }
 }
 

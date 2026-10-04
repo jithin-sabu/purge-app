@@ -202,7 +202,9 @@ struct AboutView: View {
                 InsetCardDivider()
 
                 AboutActionRow(icon: "cup.and.saucer.fill", label: "Buy me a coffee") {
-                    NSWorkspace.shared.open(buyMeACoffeeURL)
+                    // Counts as having seen the ask, so cleanups stop mentioning it.
+                    SupportNudge.recordLinkOpened()
+                    NSWorkspace.shared.open(SupportNudge.url)
                 }
             }
         }
@@ -300,10 +302,6 @@ struct AboutView: View {
 
     private var xProfileURL: URL {
         URL(string: "https://x.com/sabu_jithin")!
-    }
-
-    private var buyMeACoffeeURL: URL {
-        URL(string: "https://buymeacoffee.com/jithinsabu")!
     }
 
     static let repoBaseURL = URL(string: "https://github.com/jithin-sabu/purge-app")!

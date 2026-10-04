@@ -77,7 +77,8 @@ struct OnboardingFlowView: View {
     if let session = store.interactiveSafeCleanupSession {
       SafeCleanupCelebrationOverlay(
         session: session,
-        doneTitle: store.hasFullDiskAccess ? "Done" : "Continue"
+        doneTitle: store.hasFullDiskAccess ? "Done" : "Continue",
+        allowsSupportNudge: false
       ) {
         completeResultsCleanupCelebration()
       }
