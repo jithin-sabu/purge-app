@@ -238,10 +238,6 @@ struct DevToolsView<PageHeader: View>: View {
         return rows
     }
 
-    private func eligibleSimulatorIndicesForToolbarSelectAll() -> [Int] {
-        visibleSimulatorIndices().filter { store.simulatorDevices[$0].safetyInfo.level == .safe }
-    }
-
     private func isEligibleForManualBulkSelection(_ info: SafetyInfo) -> Bool {
         true
     }
@@ -372,28 +368,62 @@ struct DevToolsView<PageHeader: View>: View {
         return pairs
     }
 
-    private var hasEligibleSelectableRows: Bool {
-        !eligibleStandardToolIndices().isEmpty
-            || !eligibleProjectArtifactPairs().isEmpty
-            || !visibleSimulatorIndices().isEmpty
+    private enum SelectAllKey: Hashable {
+        case tool(String)
+        case artifact(groupID: String, artifactID: String)
+        case simulator(UUID)
     }
 
-    private var selectAllDeveloperState: SelectAllTriState {
-        let toolIx = eligibleStandardToolIndices()
-        let pairs = eligibleProjectArtifactPairs()
-        let simSafeIx = eligibleSimulatorIndicesForToolbarSelectAll()
-        let total = toolIx.count + pairs.count + simSafeIx.count
-        guard total > 0 else { return .none }
-
+    /// Every visible row in one list, so Select All treats tools, project artifacts
+    /// and simulators alike: safe ones first on the All filter.
+    private var selectAll: SafeFirstSelectAll<SelectAllKey> {
         let sel = store.scanSelection
-        var selected = 0
-        for ti in toolIx where sel.devToolIDs.contains(store.devTools[ti].id) { selected += 1 }
-        for p in pairs where sel.artifactIDs.contains(store.projectGroups[p.0].artifacts[p.1].id) { selected += 1 }
-        for si in simSafeIx where sel.simulatorIDs.contains(store.simulatorDevices[si].id) { selected += 1 }
+        var entries: [SafeFirstSelectAll<SelectAllKey>.Entry] = []
+        for ti in eligibleStandardToolIndices() {
+            let tool = store.devTools[ti]
+            entries.append(.init(
+                key: .tool(tool.id),
+                isSafe: tool.safetyInfo.level == .safe,
+                isSelected: sel.devToolIDs.contains(tool.id),
+                bytes: tool.sizeBytes
+            ))
+        }
+        for (gi, ai) in eligibleProjectArtifactPairs() {
+            let group = store.projectGroups[gi]
+            let artifact = group.artifacts[ai]
+            entries.append(.init(
+                key: .artifact(groupID: group.id, artifactID: artifact.id),
+                isSafe: artifact.safetyInfo.level == .safe,
+                isSelected: sel.artifactIDs.contains(artifact.id),
+                bytes: artifact.sizeBytes
+            ))
+        }
+        for si in visibleSimulatorIndices() {
+            let device = store.simulatorDevices[si]
+            entries.append(.init(
+                key: .simulator(device.id),
+                isSafe: device.safetyInfo.level == .safe,
+                isSelected: sel.simulatorIDs.contains(device.id),
+                bytes: device.sizeOnDisk ?? 0
+            ))
+        }
+        return SafeFirstSelectAll(entries: entries, filter: currentSafetyFilter)
+    }
 
-        if selected == 0 { return .none }
-        if selected == total { return .all }
-        return .mixed
+    private func applySelectAll(_ change: SafeFirstSelectAll<SelectAllKey>.Change) {
+        for key in change.select { setSelected(key, true) }
+        for key in change.deselect { setSelected(key, false) }
+    }
+
+    private func setSelected(_ key: SelectAllKey, _ isSelected: Bool) {
+        switch key {
+        case .tool(let id):
+            store.setDevToolSelected(id: id, isSelected: isSelected)
+        case .artifact(let groupID, let artifactID):
+            store.setProjectArtifactSelected(groupID: groupID, artifactID: artifactID, isSelected: isSelected)
+        case .simulator(let id):
+            store.setSimulatorDeviceSelected(id: id, isSelected: isSelected)
+        }
     }
 
     private var selectedInScopeCount: Int {
@@ -613,11 +643,7 @@ struct DevToolsView<PageHeader: View>: View {
         // container (which would revert list scroll).
         ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
             HStack(alignment: .bottom) {
-                TriStateCheckbox(title: "Select All", state: selectAllDeveloperState) {
-                    toggleDeveloperSelectAll()
-                }
-                .fixedSize()
-                .disabled(!hasEligibleSelectableRows)
+                SafeFirstSelectAllControl(model: selectAll, apply: applySelectAll)
                 Spacer()
                 AppSortMenu(selection: sortOptionBinding)
             }
@@ -1066,40 +1092,6 @@ struct DevToolsView<PageHeader: View>: View {
                 expandedProjectRoots.remove(groupID)
             } else {
                 expandedProjectRoots.insert(groupID)
-            }
-        }
-    }
-
-    private func toggleDeveloperSelectAll() {
-        let toolsIx = eligibleStandardToolIndices()
-        let pairs = eligibleProjectArtifactPairs()
-        let simSafeIx = eligibleSimulatorIndicesForToolbarSelectAll()
-        guard !toolsIx.isEmpty || !pairs.isEmpty || !simSafeIx.isEmpty else { return }
-
-        let sel = store.scanSelection
-        let allSimSafeSelected = simSafeIx.allSatisfy { sel.simulatorIDs.contains(store.simulatorDevices[$0].id) }
-        let allOn =
-            toolsIx.allSatisfy { sel.devToolIDs.contains(store.devTools[$0].id) } &&
-            pairs.allSatisfy { sel.artifactIDs.contains(store.projectGroups[$0.0].artifacts[$0.1].id) } &&
-            allSimSafeSelected
-
-        let newVal = !allOn
-        for ti in toolsIx {
-            store.setDevToolSelected(id: store.devTools[ti].id, isSelected: newVal)
-        }
-        for p in pairs {
-            store.setProjectArtifactSelected(groupIndex: p.0, artifactIndex: p.1, isSelected: newVal)
-        }
-        for si in simSafeIx {
-            store.setSimulatorDeviceSelected(id: store.simulatorDevices[si].id, isSelected: newVal)
-        }
-        if newVal {
-            for si in visibleSimulatorIndices() where store.simulatorDevices[si].safetyInfo.level != .safe {
-                store.setSimulatorDeviceSelected(id: store.simulatorDevices[si].id, isSelected: false)
-            }
-        } else {
-            for si in store.simulatorDevices.indices {
-                store.setSimulatorDeviceSelected(id: store.simulatorDevices[si].id, isSelected: false)
             }
         }
     }

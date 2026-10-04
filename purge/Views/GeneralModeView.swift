@@ -129,15 +129,18 @@ struct AppCachesView<PageHeader: View>: View {
         return plan
     }
 
-    private func selectAllState(plan: ListPlan) -> SelectAllTriState {
-        let ix = plan.sortedVisibleIndices
-        guard !ix.isEmpty else { return .none }
+    private func selectAll(plan: ListPlan) -> SafeFirstSelectAll<String> {
         let selectedIDs = store.scanSelection.cacheIDs
-        var selected = 0
-        for index in ix where selectedIDs.contains(items[index].id) { selected += 1 }
-        if selected == ix.count { return .all }
-        if selected == 0 { return .none }
-        return .mixed
+        let entries = plan.sortedVisibleIndices.map { index in
+            let item = items[index]
+            return SafeFirstSelectAll<String>.Entry(
+                key: item.id,
+                isSafe: item.safetyInfo.level == .safe,
+                isSelected: selectedIDs.contains(item.id),
+                bytes: item.sizeBytes
+            )
+        }
+        return SafeFirstSelectAll(entries: entries, filter: currentSafetyFilter)
     }
 
     private func selectedInScope(plan: ListPlan) -> (count: Int, bytes: Int64) {
@@ -225,11 +228,10 @@ struct AppCachesView<PageHeader: View>: View {
         // container (which would revert list scroll).
         ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
             HStack(alignment: .bottom) {
-                TriStateCheckbox(title: "Select All", state: selectAllState(plan: plan)) {
-                    toggleSelectAll(plan: plan)
+                SafeFirstSelectAllControl(model: selectAll(plan: plan)) { change in
+                    store.setAllCachesSelected(true, ids: change.select)
+                    store.setAllCachesSelected(false, ids: change.deselect)
                 }
-                .fixedSize()
-                .disabled(plan.isEmpty)
                 Spacer()
                 AppSortMenu(selection: sortOptionBinding)
             }
@@ -393,14 +395,6 @@ struct AppCachesView<PageHeader: View>: View {
                 .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func toggleSelectAll(plan: ListPlan) {
-        let ix = plan.sortedVisibleIndices
-        guard !ix.isEmpty else { return }
-        let ids = ix.map { items[$0].id }
-        let allOn = ids.allSatisfy { store.scanSelection.cacheIDs.contains($0) }
-        store.setAllCachesSelected(!allOn, ids: ids)
     }
 
     private var emptyState: some View {

@@ -141,6 +141,34 @@ struct TriStateCheckbox: NSViewRepresentable {
     }
 }
 
+// MARK: - Select All, safe rows first
+
+/// The Select All checkbox for App Caches and Dev Tools, with the link that adds
+/// the Check First rows on the All filter. See `SafeFirstSelectAll`.
+struct SafeFirstSelectAllControl<Key: Hashable>: View {
+    let model: SafeFirstSelectAll<Key>
+    let apply: (SafeFirstSelectAll<Key>.Change) -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.xSmall) {
+            TriStateCheckbox(title: model.title, state: model.state) {
+                apply(model.toggled())
+            }
+            .fixedSize()
+            .disabled(!model.isEnabled)
+
+            if let link = model.checkFirstLink {
+                Button(link.title) {
+                    apply(link.change)
+                }
+                .buttonStyle(.purge(.quiet, size: .small))
+                .help("Check First items may hold something you'd miss. Look them over before cleaning.")
+                .transition(.opacity)
+            }
+        }
+    }
+}
+
 // MARK: - Toolbar row (chips + sort + bulk action)
 
 struct FilterSortToolbar: View {
