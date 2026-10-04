@@ -166,6 +166,8 @@ struct SafeFirstSelectAllControl<Key: Hashable>: View {
                 .transition(.opacity)
             }
         }
+        // As tall as the link's button, so the checkbox stays put as the link comes and goes.
+        .frame(minHeight: 24)
     }
 }
 
