@@ -23,7 +23,8 @@ struct DeletionConfirmSheet: View {
         !unknownCandidates.isEmpty
     }
 
-    private static let groupedSectionOrder: [SafetyLevel] = [.safe, .medium]
+    /// Check First leads, so a pick the user may not have meant is the first thing read.
+    private static let groupedSectionOrder: [SafetyLevel] = [.medium, .safe]
 
     private var groupedBenign: [(SafetyLevel, [PurgeStore.DeletionCandidate])] {
         let grouped = Dictionary(grouping: benignCandidates, by: { $0.safetyInfo.level })
@@ -69,6 +70,9 @@ struct DeletionConfirmSheet: View {
                 LazyVStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
                     ForEach(groupedBenign, id: \.0) { level, items in
                         sectionHeader(level.displayName)
+                        if level == .medium {
+                            checkFirstNote(count: items.count)
+                        }
                         ForEach(items) { item in
                             candidateCard(item)
                         }
@@ -135,6 +139,21 @@ struct DeletionConfirmSheet: View {
     }
 
     // MARK: - Shared pieces
+
+    private func checkFirstNote(count: Int) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppColors.statusCheckText)
+                .accessibilityHidden(true)
+            Text(count == 1
+                ? "This one may hold something you'd miss. If you're not sure about it, cancel and untick it."
+                : "These may hold something you'd miss. If you're not sure about one, cancel and untick it.")
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
