@@ -81,6 +81,13 @@ final class IntentRouter {
         } else {
             store.scanEverything()
         }
+        await waitForCacheScan()
+        guard store.hasSessionResults(for: .cachesAndDevTools) else { return .stopped }
+        return .scanned(safeBytes: store.safeRecoverableBytes)
+    }
+
+    /// Returns once App Caches and Dev Tools are neither queued nor running.
+    private func waitForCacheScan() async {
         await store.waitUntilSettled(.cachesAndDevTools)
         // The queue stops waiting on a slow cache scan after a while and moves on,
         // and project discovery can run past the step. Neither is done yet.
@@ -88,8 +95,15 @@ final class IntentRouter {
         where !busy.0 && !busy.1 {
             break
         }
-        guard store.hasSessionResults(for: .cachesAndDevTools) else { return .stopped }
-        return .scanned(safeBytes: store.safeRecoverableBytes)
+    }
+
+    /// Results recent enough to clean from without scanning again: from this
+    /// session, newer than the menu bar's freshness window, and gathered with
+    /// the access Purge has now.
+    private func hasFreshCacheResults(now: Date) -> Bool {
+        guard store.hasSessionResults(for: .cachesAndDevTools),
+              let scannedAt = store.lastScanCompletedAt else { return false }
+        return now.timeIntervalSince(scannedAt) <= MenuViewModel.stalenessWindow
     }
 
     enum CleanOutcome: Equatable {
@@ -103,18 +117,37 @@ final class IntentRouter {
     }
 
     /// Clean Safe Junk: what the menu bar's Clean does, run from Spotlight or
-    /// Siri. Opens the Overview, scans, then cleans Safe items only through the
+    /// Siri. Opens the Overview and cleans Safe items only through the
     /// Overview's Clean Safe Items, which moves them to the Trash and shows the
     /// usual cleaning screen. It does not ask first, matching the menu bar's
     /// Clean: only Safe items move, and the Trash keeps them recoverable.
-    func cleanSafeJunk(reduceMotion: Bool) async -> CleanOutcome {
-        switch await scanMac() {
-        case .needsSetup: return .needsSetup
-        case .busyCleaning: return .busyCleaning
-        case .stopped: return .stopped
-        case .scanned(let bytes) where bytes <= 0: return .nothingToClean
-        case .scanned: break
+    ///
+    /// Scanning is the slow part, so it scans only when it has to: results from
+    /// the last hour are cleaned straight away, a scan already running is
+    /// waited on, and otherwise only App Caches and Dev Tools are rescanned,
+    /// the part a clean uses. The clean re-checks every item against the
+    /// safety rules either way, as the menu bar's does with its saved results.
+    func cleanSafeJunk(reduceMotion: Bool, now: Date = Date()) async -> CleanOutcome {
+        guard onboardingDone() else {
+            reveal()
+            return .needsSetup
         }
+        store.selectedTab = .overview
+        reveal()
+        guard !store.isDeleting, !store.isInteractiveSafeCleanupInProgress else { return .busyCleaning }
+
+        let cacheScanRunning = store.isScanningAll
+            || store.scanQueue.active == .cachesAndDevTools
+            || store.isScanQueued(.cachesAndDevTools)
+        if cacheScanRunning {
+            await waitForCacheScan()
+        } else if !hasFreshCacheResults(now: now) {
+            await store.scanThroughQueue(.cachesAndDevTools, forced: true)
+            await waitForCacheScan()
+        }
+        guard store.hasSessionResults(for: .cachesAndDevTools) else { return .stopped }
+        guard store.safeRecoverableBytes > 0 else { return .nothingToClean }
+        // A clean may have started while this waited on the scan.
         guard !store.isDeleting, !store.isInteractiveSafeCleanupInProgress else { return .busyCleaning }
         guard let clean = store.cleanSafeItemsFromOverview(reduceMotion: reduceMotion) else {
             return .nothingToClean

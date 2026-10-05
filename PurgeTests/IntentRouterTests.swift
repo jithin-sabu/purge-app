@@ -134,6 +134,48 @@ struct IntentRouterTests {
         fake.cleanUp()
     }
 
+    @Test("Results from the last hour are cleaned from without scanning again")
+    func cleanReusesFreshResults() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let router = Self.makeRouter(store: store, reveals: RevealCounter())
+        _ = await router.scanMac()
+        #expect(fake.generalAccesses.count == 1)
+
+        #expect(await router.cleanSafeJunk(reduceMotion: true) == .nothingToClean)
+        #expect(fake.generalAccesses.count == 1)
+        fake.cleanUp()
+    }
+
+    @Test("Results older than an hour are rescanned, App Caches and Dev Tools only")
+    func cleanRescansStaleResults() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let router = Self.makeRouter(store: store, reveals: RevealCounter())
+        store.requestScan(.cachesAndDevTools)
+        #expect(await Self.eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
+        #expect(fake.generalAccesses.count == 1)
+
+        let later = Date().addingTimeInterval(MenuViewModel.stalenessWindow + 60)
+        #expect(await router.cleanSafeJunk(reduceMotion: true, now: later) == .nothingToClean)
+        #expect(fake.generalAccesses.count == 2)
+        // Large Files, apps and leftovers are not part of a clean.
+        #expect(fake.log.isEmpty)
+        fake.cleanUp()
+    }
+
+    @Test("With no results yet it scans once before cleaning")
+    func cleanScansWhenNoResults() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let router = Self.makeRouter(store: store, reveals: RevealCounter())
+
+        #expect(await router.cleanSafeJunk(reduceMotion: true) == .nothingToClean)
+        #expect(fake.generalAccesses.count == 1)
+        fake.cleanUp()
+    }
+
     @Test("Nothing is cleaned while a clean is already running")
     func cleanWhileCleaning() async {
         let fake = FakeScans()
