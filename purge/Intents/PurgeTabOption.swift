@@ -11,6 +11,9 @@ nonisolated enum PurgeTabOption: String, AppEnum {
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Purge Tab"
 
+    /// No synonyms ("Caches", "Big Files"): they need macOS 14, and this list has
+    /// to be a fixed value, so it cannot switch on the macOS version. The phrases
+    /// and search keywords on each action cover other wordings instead.
     static let caseDisplayRepresentations: [PurgeTabOption: DisplayRepresentation] = [
         .overview: DisplayRepresentation(title: "Overview", image: .init(systemName: "square.grid.2x2")),
         .appCaches: DisplayRepresentation(title: "App Caches", image: .init(systemName: "internaldrive")),
