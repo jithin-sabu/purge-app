@@ -4,6 +4,12 @@ import Foundation
 /// Per-item progress emitted by `FileDeleter` while a deletion run executes off the main actor.
 enum DeletionProgressEvent: Sendable {
     case itemStarted(name: String)
+    /// One entry of the current item moved, with that entry's own size. Folders
+    /// emptied one entry at a time send these so the total keeps moving instead of
+    /// waiting for the last file.
+    case itemPartlyDeleted(sizeBytes: Int64)
+    /// The item finished. `sizeBytes` is whatever its partial events did not
+    /// already report: the whole size for a single move, 0 for an emptied folder.
     case itemDeleted(sizeBytes: Int64)
 }
 
@@ -27,6 +33,8 @@ final class DeletionProgressBuffer: @unchecked Sendable {
         switch event {
         case .itemStarted(let name):
             current.currentItemName = name
+        case .itemPartlyDeleted(let sizeBytes):
+            current.bytesMovedToTrash += sizeBytes
         case .itemDeleted(let sizeBytes):
             current.bytesMovedToTrash += sizeBytes
             current.itemsCompleted += 1

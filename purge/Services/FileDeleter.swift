@@ -145,23 +145,35 @@ nonisolated final class FileDeleter: Sendable {
 
                 if DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
                     var didDeleteAnyContent = false
+                    var movedBytes: Int64 = 0
 
                     if let contents = try? FileManager.default.contentsOfDirectory(
                         at: url,
-                        includingPropertiesForKeys: nil,
+                        includingPropertiesForKeys: Self.contentsEntryKeys,
                         options: [.skipsHiddenFiles]
                     ) {
-                        for contentURL in contents {
-                            guard DeletionSafetyPolicy.isOfferedForCleanup(contentURL) else { continue }
+                        // Entries move one at a time, and a Telegram media folder can
+                        // hold tens of thousands. Each one reports its own size as it
+                        // moves, so the progress screen keeps moving, and the total
+                        // leaves out entries the policy refuses, failed moves and
+                        // hidden files instead of claiming the folder's scanned size
+                        // (#59). Measuring here also stops Crash Reports being counted
+                        // twice when it is emptied before Application Logs.
+                        let offered = contents.filter { DeletionSafetyPolicy.isOfferedForCleanup($0) }
+                        let entrySizes = Self.contentsEntrySizes(offered)
+                        for contentURL in offered {
+                            let entryBytes = entrySizes[contentURL] ?? 0
                             do {
                                 try FileManager.default.trashItem(at: contentURL, resultingItemURL: nil)
                                 didDeleteAnyContent = true
+                                movedBytes += entryBytes
+                                onProgress?(.itemPartlyDeleted(sizeBytes: entryBytes))
                             } catch {
                                 recordDeletionFailure(
                                     path: contentURL.path,
                                     error: error,
                                     displayName: contentURL.lastPathComponent,
-                                    sizeBytes: 0,
+                                    sizeBytes: entryBytes,
                                     failedItems: &failedItems
                                 )
                             }
@@ -169,13 +181,13 @@ nonisolated final class FileDeleter: Sendable {
                     }
 
                     if didDeleteAnyContent {
-                        bytesMovedToTrash += size
+                        bytesMovedToTrash += movedBytes
                         deletedItems.append(DeletedItem(
                             path: url.path,
-                            sizeBytes: size,
+                            sizeBytes: movedBytes,
                             displayName: friendlyTitle
                         ))
-                        onProgress?(.itemDeleted(sizeBytes: size))
+                        onProgress?(.itemDeleted(sizeBytes: 0))
                     }
                 } else if let udid = Self.coreSimulatorDeviceUDID(from: url) {
                     switch Self.deleteCoreSimulatorDevice(udid: udid) {
@@ -437,6 +449,33 @@ nonisolated final class FileDeleter: Sendable {
     /// Deleting a large device is real disk work, so this is generous — but still bounded, so a
     /// wedged CoreSimulator cannot leave the delete run hanging forever.
     private static let simctlDeleteTimeout: TimeInterval = 120
+
+    /// Prefetched with a contents-only listing, so sizing a file costs no extra stat.
+    private static let contentsEntryKeys: [URLResourceKey] = [
+        .isDirectoryKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey
+    ]
+
+    /// On-disk size of each entry about to be moved: the allocated size for files and
+    /// links, and one batched `du` pass (the scanner's own measure) for folders.
+    static func contentsEntrySizes(_ entries: [URL]) -> [URL: Int64] {
+        var sizes: [URL: Int64] = [:]
+        var folders: [URL] = []
+        for entry in entries {
+            let values = try? entry.resourceValues(forKeys: Set(contentsEntryKeys))
+            if values?.isDirectory == true, values?.isSymbolicLink != true {
+                folders.append(entry)
+            } else {
+                sizes[entry] = Int64(values?.totalFileAllocatedSize ?? 0)
+            }
+        }
+        if !folders.isEmpty {
+            let measured = FolderSizing.directorySizes(at: folders)
+            for folder in folders {
+                sizes[folder] = measured[folder.standardizedFileURL.path] ?? 0
+            }
+        }
+        return sizes
+    }
 
     private static func deleteCoreSimulatorDevice(udid: String) -> SimctlDeleteResult {
         guard let result = ProcessRunner.run(
