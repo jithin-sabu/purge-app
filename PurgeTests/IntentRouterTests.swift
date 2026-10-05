@@ -59,7 +59,7 @@ struct IntentRouterTests {
         #expect(reveals.count == 1)
     }
 
-    // MARK: Scan my Mac
+    // MARK: Scan for Junk
 
     @Test("Scanning while idle runs the limited scan without Full Disk Access")
     func scanWhileIdleWithoutAccess() async {
@@ -140,7 +140,7 @@ struct IntentRouterTests {
         let size = IntentRouter.ScanOutcome.scanned(safeBytes: 1_576_079_360).safeSize
         #expect(size?.unit == .gigabytes)
         #expect(size?.value == 1.58)
-        #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 0).dialog == "Nothing needs cleaning right now.")
+        #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 0).dialog == "No junk to clean right now.")
         #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 2_000_000).dialog.contains("safe to clean"))
         #expect(IntentRouter.ScanOutcome.busyCleaning.safeSize == nil)
         #expect(IntentRouter.ScanOutcome.stopped.safeSize == nil)

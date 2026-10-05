@@ -17,18 +17,18 @@ nonisolated struct PurgeAppShortcuts: AppShortcutsProvider {
             systemImageName: "macwindow"
         )
         AppShortcut(
-            intent: ScanMacIntent(),
+            intent: ScanForJunkIntent(),
             phrases: [
-                "Scan my Mac with \(.applicationName)",
-                "Scan with \(.applicationName)",
+                "Scan for junk with \(.applicationName)",
+                "Find junk with \(.applicationName)",
                 "\(.applicationName) scan",
                 "Clean up my Mac with \(.applicationName)",
                 "Free up space with \(.applicationName)",
-                "Find junk with \(.applicationName)",
                 "Check my storage with \(.applicationName)",
                 "What can \(.applicationName) clean",
+                "Scan my Mac with \(.applicationName)",
             ],
-            shortTitle: "Scan My Mac",
+            shortTitle: "Scan for Junk",
             systemImageName: "magnifyingglass"
         )
         AppShortcut(
