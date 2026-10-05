@@ -198,6 +198,16 @@ struct PurgeCommands: Commands {
             .disabled(store.isDeleting)
         }
         CommandGroup(replacing: .undoRedo) {}
+        // Our own Quit item instead of SwiftUI's. AppKit finds the stock one by
+        // its identifier the first time the menu opens and slips a hidden ⌥⌘Q
+        // "Quit and Keep Windows" alternate in after it. SwiftUI doesn't know
+        // about that item, so if anything updates the menus while it is open (a
+        // launch scan does, many times a second) SwiftUI resets the menu, the
+        // alternate goes, and the open menu is left with a blank row at the bottom.
+        CommandGroup(replacing: .appTermination) {
+            Button("Quit Purge") { NSApp.terminate(nil) }
+                .keyboardShortcut("q", modifiers: .command)
+        }
     }
 }
 
