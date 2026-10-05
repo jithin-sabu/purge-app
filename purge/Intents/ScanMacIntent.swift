@@ -1,6 +1,5 @@
 import AppIntents
 import Foundation
-import SwiftUI
 
 struct ScanMacIntent: AppIntent {
     static let title: LocalizedStringResource = "Scan My Mac"
@@ -9,21 +8,18 @@ struct ScanMacIntent: AppIntent {
     )
     static let openAppWhenRun = true
 
+    /// Returns the sentence as the value, not a size or a card: Spotlight shows
+    /// a returned value inline in its own panel, while a card opens separately.
+    /// Shortcuts automations that compare sizes use Get Safe-to-Clean Size.
     @MainActor
-    func perform() async throws -> some IntentResult & ReturnsValue<Measurement<UnitInformationStorage>?> & ProvidesDialog & ShowsSnippetView {
+    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let outcome = await IntentRouter.shared.scanMac()
-        // The card is what Spotlight shows; Siri speaks the dialog; Shortcuts
-        // gets the size to compare.
-        return .result(
-            value: outcome.safeSize,
-            dialog: IntentDialog(stringLiteral: outcome.dialog),
-            view: ScanResultSnippet(outcome: outcome)
-        )
+        return .result(value: outcome.dialog, dialog: IntentDialog(stringLiteral: outcome.dialog))
     }
 }
 
 extension IntentRouter.ScanOutcome {
-    /// Returned to Shortcuts as a file size, so a shortcut can compare it.
+    /// The size a Shortcuts automation can compare, for Get Safe-to-Clean Size.
     var safeSize: Measurement<UnitInformationStorage>? {
         guard case .scanned(let bytes) = self else { return nil }
         return IntentFileSize.measurement(bytes)
