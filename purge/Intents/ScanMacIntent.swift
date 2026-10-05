@@ -1,5 +1,6 @@
 import AppIntents
 import Foundation
+import SwiftUI
 
 struct ScanMacIntent: AppIntent {
     static let title: LocalizedStringResource = "Scan My Mac"
@@ -9,9 +10,15 @@ struct ScanMacIntent: AppIntent {
     static let openAppWhenRun = true
 
     @MainActor
-    func perform() async throws -> some IntentResult & ReturnsValue<Measurement<UnitInformationStorage>?> & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ReturnsValue<Measurement<UnitInformationStorage>?> & ProvidesDialog & ShowsSnippetView {
         let outcome = await IntentRouter.shared.scanMac()
-        return .result(value: outcome.safeSize, dialog: IntentDialog(stringLiteral: outcome.dialog))
+        // The card is what Spotlight shows; Siri speaks the dialog; Shortcuts
+        // gets the size to compare.
+        return .result(
+            value: outcome.safeSize,
+            dialog: IntentDialog(stringLiteral: outcome.dialog),
+            view: ScanResultSnippet(outcome: outcome)
+        )
     }
 }
 
