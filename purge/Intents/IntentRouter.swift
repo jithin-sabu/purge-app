@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// What Purge's App Intents do once they reach the app. The intent types stay
@@ -33,6 +34,42 @@ final class IntentRouter {
     static func revealWindow() {
         RemovedAppMonitor.shared.userOpenedWindow()
         AppWindowPresenter.reveal()
+    }
+
+    enum ScanOutcome: Equatable {
+        /// Onboarding is not done, so the window shows that instead of scanning.
+        case needsSetup
+        /// A clean is running. Scanning waits for it, as the Scan Everything menu does.
+        case busyCleaning
+        /// App Caches and Dev Tools have results; this much of them is safe to clean.
+        case scanned(safeBytes: Int64)
+        /// The scan was stopped before App Caches and Dev Tools finished.
+        case stopped
+    }
+
+    /// Scan my Mac: opens the window and scans every category, then answers once
+    /// App Caches and Dev Tools are done. Large Files and apps keep scanning in
+    /// the window. A scan already under way is joined rather than restarted.
+    /// Without Full Disk Access, `scanEverything` runs the limited scan.
+    func scanMac() async -> ScanOutcome {
+        reveal()
+        guard onboardingDone() else { return .needsSetup }
+        guard !store.isDeleting else { return .busyCleaning }
+        if store.scanQueue.isRunning {
+            // Joining: make sure the answer has a cache scan behind it.
+            store.requestScanIfNeeded(.cachesAndDevTools)
+        } else {
+            store.scanEverything()
+        }
+        await store.waitUntilSettled(.cachesAndDevTools)
+        // The queue stops waiting on a slow cache scan after a while and moves on,
+        // and project discovery can run past the step. Neither is done yet.
+        for await busy in store.$isScanningAll.combineLatest(store.$isScanningProjects).values
+        where !busy.0 && !busy.1 {
+            break
+        }
+        guard store.hasSessionResults(for: .cachesAndDevTools) else { return .stopped }
+        return .scanned(safeBytes: store.safeRecoverableBytes)
     }
 
     /// Opens the window on a tab. Before onboarding is done the window shows

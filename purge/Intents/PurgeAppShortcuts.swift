@@ -14,5 +14,15 @@ nonisolated struct PurgeAppShortcuts: AppShortcutsProvider {
             shortTitle: "Open Tab",
             systemImageName: "macwindow"
         )
+        AppShortcut(
+            intent: ScanMacIntent(),
+            phrases: [
+                "Scan my Mac with \(.applicationName)",
+                "Scan with \(.applicationName)",
+                "\(.applicationName) scan",
+            ],
+            shortTitle: "Scan My Mac",
+            systemImageName: "magnifyingglass"
+        )
     }
 }

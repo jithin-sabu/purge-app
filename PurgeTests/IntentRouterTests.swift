@@ -57,4 +57,97 @@ struct IntentRouterTests {
         #expect(store.selectedTab == .overview)
         #expect(reveals.count == 1)
     }
+
+    // MARK: Scan my Mac
+
+    @Test("Scanning while idle runs the limited scan without Full Disk Access")
+    func scanWhileIdleWithoutAccess() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let reveals = RevealCounter()
+        let router = Self.makeRouter(store: store, reveals: reveals)
+
+        let outcome = await router.scanMac()
+
+        #expect(outcome == .scanned(safeBytes: 0))
+        #expect(fake.generalAccesses == [.limited])
+        #expect(fake.log.isEmpty)
+        #expect(reveals.count == 1)
+        fake.cleanUp()
+    }
+
+    @Test("Scanning while idle with Full Disk Access queues every category")
+    func scanWhileIdleWithAccess() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let router = Self.makeRouter(store: store, reveals: RevealCounter())
+
+        _ = await router.scanMac()
+
+        #expect(fake.generalAccesses == [.full])
+        #expect(await Self.eventually { fake.log == ["step largeFiles", "step apps", "step leftovers"] })
+        fake.cleanUp()
+    }
+
+    @Test("A scan already running is joined, not started again")
+    func scanJoinsRunningScan() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let router = Self.makeRouter(store: store, reveals: RevealCounter())
+        fake.holdsGeneral = true
+        store.startLaunchScans()
+        #expect(await Self.eventually { fake.generalAccesses.count == 1 })
+
+        let answer = Task { await router.scanMac() }
+        // Give the intent a chance to queue anything it wrongly would.
+        try? await Task.sleep(for: .milliseconds(50))
+        fake.cleanUp()
+
+        #expect(await answer.value == .scanned(safeBytes: 0))
+        #expect(fake.generalAccesses.count == 1)
+    }
+
+    @Test("Nothing scans while a clean is running")
+    func scanWaitsForClean() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        store.isDeleting = true
+        let reveals = RevealCounter()
+        let router = Self.makeRouter(store: store, reveals: reveals)
+
+        #expect(await router.scanMac() == .busyCleaning)
+        #expect(fake.generalAccesses.isEmpty)
+        #expect(reveals.count == 1)
+        fake.cleanUp()
+    }
+
+    @Test("Before onboarding is done nothing scans")
+    func scanBeforeOnboarding() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let router = Self.makeRouter(store: store, reveals: RevealCounter(), onboardingDone: false)
+
+        #expect(await router.scanMac() == .needsSetup)
+        #expect(fake.generalAccesses.isEmpty)
+        fake.cleanUp()
+    }
+
+    @Test("Only a finished scan returns a size to Shortcuts")
+    func scanAnswerValues() {
+        #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 2_000_000).safeSize?.value == 2_000_000)
+        #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 0).dialog == "Nothing needs cleaning right now.")
+        #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 2_000_000).dialog.contains("safe to clean"))
+        #expect(IntentRouter.ScanOutcome.busyCleaning.safeSize == nil)
+        #expect(IntentRouter.ScanOutcome.stopped.safeSize == nil)
+    }
+
+    private static func eventually(timeout: TimeInterval = 5, _ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return true
+    }
 }
