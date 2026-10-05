@@ -145,17 +145,25 @@ nonisolated final class FileDeleter: Sendable {
 
                 if DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
                     var didDeleteAnyContent = false
+                    var splitter = ContentsProgressSplitter(totalBytes: size, entryCount: 0)
 
                     if let contents = try? FileManager.default.contentsOfDirectory(
                         at: url,
                         includingPropertiesForKeys: nil,
                         options: [.skipsHiddenFiles]
                     ) {
+                        // Entries move one at a time, and a Telegram media folder
+                        // can hold tens of thousands. Report as they go, or the
+                        // progress screen sits at zero until the last one (#59).
+                        splitter = ContentsProgressSplitter(totalBytes: size, entryCount: contents.count)
                         for contentURL in contents {
                             guard DeletionSafetyPolicy.isOfferedForCleanup(contentURL) else { continue }
                             do {
                                 try FileManager.default.trashItem(at: contentURL, resultingItemURL: nil)
                                 didDeleteAnyContent = true
+                                if let share = splitter.shareForMovedEntry() {
+                                    onProgress?(.itemPartlyDeleted(sizeBytes: share))
+                                }
                             } catch {
                                 recordDeletionFailure(
                                     path: contentURL.path,
@@ -175,7 +183,7 @@ nonisolated final class FileDeleter: Sendable {
                             sizeBytes: size,
                             displayName: friendlyTitle
                         ))
-                        onProgress?(.itemDeleted(sizeBytes: size))
+                        onProgress?(.itemDeleted(sizeBytes: splitter.remainingBytes))
                     }
                 } else if let udid = Self.coreSimulatorDeviceUDID(from: url) {
                     switch Self.deleteCoreSimulatorDevice(udid: udid) {

@@ -4,7 +4,37 @@ import Foundation
 /// Per-item progress emitted by `FileDeleter` while a deletion run executes off the main actor.
 enum DeletionProgressEvent: Sendable {
     case itemStarted(name: String)
+    /// Part of the current item moved. Folders emptied one entry at a time send
+    /// these so the total keeps moving instead of waiting for the last file.
+    case itemPartlyDeleted(sizeBytes: Int64)
+    /// The item finished. `sizeBytes` is what is left after any partial events,
+    /// so the events for one item always add up to its size.
     case itemDeleted(sizeBytes: Int64)
+}
+
+/// Spreads a folder's known size over its entries, for folders whose contents are
+/// moved one at a time. Each moved entry reports an even share; whatever is left
+/// goes out with `.itemDeleted`, so rounding never loses or invents bytes.
+nonisolated struct ContentsProgressSplitter: Sendable {
+    private let totalBytes: Int64
+    private let share: Int64
+    private(set) var reportedBytes: Int64 = 0
+
+    init(totalBytes: Int64, entryCount: Int) {
+        self.totalBytes = max(0, totalBytes)
+        share = entryCount > 0 ? self.totalBytes / Int64(entryCount) : 0
+    }
+
+    /// Bytes to report for one more moved entry, or `nil` when there is nothing
+    /// to report. Never lets the running total reach the folder's size.
+    mutating func shareForMovedEntry() -> Int64? {
+        guard share > 0, reportedBytes + share < totalBytes else { return nil }
+        reportedBytes += share
+        return share
+    }
+
+    /// What `.itemDeleted` should carry once the folder is done.
+    var remainingBytes: Int64 { totalBytes - reportedBytes }
 }
 
 /// Lock-protected accumulator between the deletion engine and the UI.
@@ -27,6 +57,8 @@ final class DeletionProgressBuffer: @unchecked Sendable {
         switch event {
         case .itemStarted(let name):
             current.currentItemName = name
+        case .itemPartlyDeleted(let sizeBytes):
+            current.bytesMovedToTrash += sizeBytes
         case .itemDeleted(let sizeBytes):
             current.bytesMovedToTrash += sizeBytes
             current.itemsCompleted += 1
