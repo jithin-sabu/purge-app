@@ -156,6 +156,52 @@ struct IntentRouterTests {
         #expect(String(IntentRouter.ScanOutcome.busyCleaning.styledAnswer.characters) == IntentRouter.ScanOutcome.busyCleaning.dialog)
     }
 
+    // MARK: How much can Purge free
+
+    @Test("With no scan yet it says so instead of 0")
+    func spaceBeforeAnyScan() {
+        let router = Self.makeRouter(store: Self.makeStore(), reveals: RevealCounter())
+        let answer = router.spaceToFree()
+        #expect(answer == .neverScanned)
+        #expect(answer.size == nil)
+        #expect(answer.text() == "Purge hasn't scanned for junk yet. Run Scan for Junk first.")
+    }
+
+    @Test("After a scan it gives the saved figure and its age, without opening Purge")
+    func spaceAfterScan() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let reveals = RevealCounter()
+        let router = Self.makeRouter(store: store, reveals: reveals)
+        _ = await router.scanMac()
+        let revealsBefore = reveals.count
+
+        let answer = router.spaceToFree()
+
+        guard case .known(let bytes, let scannedAt) = answer else {
+            Issue.record("Expected a known figure, got \(answer)")
+            fake.cleanUp()
+            return
+        }
+        #expect(bytes == 0)
+        #expect(abs(scannedAt.timeIntervalSinceNow) < 60)
+        #expect(answer.text() == "No junk to clean, as of just now.")
+        #expect(reveals.count == revealsBefore)
+        fake.cleanUp()
+    }
+
+    @Test("The answer bolds the size and says how old the figure is")
+    func spaceAnswerWording() {
+        let now = Date()
+        let answer = IntentRouter.SpaceAnswer.known(bytes: 1_610_000_000, scannedAt: now.addingTimeInterval(-300))
+        let text = answer.text(now: now)
+        #expect(text.hasPrefix("About \(formatBytes(1_610_000_000)) of junk is safe to clean, as of "))
+        #expect(text.contains("5 minutes ago"))
+        let styled = answer.styledText(now: now)
+        #expect(styled.runs.filter { $0.inlinePresentationIntent == .stronglyEmphasized }.count == 1)
+        #expect(answer.size?.unit == .gigabytes)
+    }
+
     // MARK: Uninstall an app
 
     @Test("Uninstall opens the review for that app alone once the app list has it")

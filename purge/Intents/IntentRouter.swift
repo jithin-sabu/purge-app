@@ -132,6 +132,22 @@ final class IntentRouter {
         return false
     }
 
+    enum SpaceAnswer: Equatable {
+        /// No scan has finished yet, so there is no figure to give.
+        case neverScanned
+        /// What the last App Caches and Dev Tools scan found safe to clean. It
+        /// already drops what has been cleaned since.
+        case known(bytes: Int64, scannedAt: Date)
+    }
+
+    /// How much can Purge free: the last scan's safe-to-clean figure, read
+    /// without scanning and without touching the window.
+    func spaceToFree() -> SpaceAnswer {
+        guard let scannedAt = store.lastScanCompletedAt,
+              let bytes = store.lastScanSafeRecoverableBytes else { return .neverScanned }
+        return .known(bytes: bytes, scannedAt: scannedAt)
+    }
+
     /// Opens the window on a tab. Before onboarding is done the window shows
     /// onboarding instead, so the tab is left alone.
     func open(tab: PurgeStore.Tab) {

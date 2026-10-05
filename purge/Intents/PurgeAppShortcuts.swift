@@ -46,6 +46,17 @@ nonisolated struct PurgeAppShortcuts: AppShortcutsProvider {
             shortTitle: "Uninstall an App",
             systemImageName: "trash"
         )
+        AppShortcut(
+            intent: HowMuchCanPurgeFreeIntent(),
+            phrases: [
+                "How much can \(.applicationName) free",
+                "How much space can \(.applicationName) free up",
+                "How much junk does \(.applicationName) see",
+                "\(.applicationName) junk size",
+            ],
+            shortTitle: "How Much Can Purge Free?",
+            systemImageName: "chart.pie"
+        )
     }
 }
 
