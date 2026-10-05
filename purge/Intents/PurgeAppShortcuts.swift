@@ -1,9 +1,9 @@
 import AppIntents
 
-/// Two actions, on purpose: the jobs people actually reach for from Spotlight
-/// or Siri are freeing space and removing an app. Opening a tab, a separate
-/// "how much" answer and a size for Shortcuts are left out: each adds a choice
-/// without saving a step. Every phrase names the app, since App
+/// Three actions, on purpose: the jobs people reach for from Spotlight or Siri
+/// are checking for junk, cleaning it, and removing an app. Opening a tab, a
+/// separate "how much" answer and a size for Shortcuts are left out: each adds
+/// a choice without saving a step. Every phrase names the app, since App
 /// Shortcuts only match that way; Spotlight also matches the search keywords
 /// on each action, which need no app name.
 nonisolated struct PurgeAppShortcuts: AppShortcutsProvider {
@@ -23,6 +23,19 @@ nonisolated struct PurgeAppShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Scan for Junk",
             systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
+            intent: CleanSafeJunkIntent(),
+            phrases: [
+                "Clean junk with \(.applicationName)",
+                "Clean safe junk with \(.applicationName)",
+                "Clear junk with \(.applicationName)",
+                "Clear caches with \(.applicationName)",
+                "Delete junk with \(.applicationName)",
+                "\(.applicationName) clean",
+            ],
+            shortTitle: "Clean Safe Junk",
+            systemImageName: "trash.fill"
         )
         AppShortcut(
             intent: UninstallAppIntent(),

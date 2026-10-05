@@ -3182,7 +3182,10 @@ final class PurgeStore: ObservableObject {
     /// The Overview's Clean button: moves every safe App Caches and Dev Tools item to
     /// the Trash, the same set the menu bar and the scheduled clean move, with the
     /// cleanup overlay showing progress and the summary.
-    func cleanSafeItemsFromOverview(reduceMotion: Bool) {
+    /// Returns the running clean, so the Clean Safe Junk action can report what
+    /// it moved, or nil when nothing started.
+    @discardableResult
+    func cleanSafeItemsFromOverview(reduceMotion: Bool) -> Task<ScheduledCleaningSummary, Never>? {
         let candidates = manualSafeCleanupCandidates()
         // A pending onboarding celebration owns the post-clean screen; presenting
         // the live session too would stack two summaries on the same run.
@@ -3191,15 +3194,16 @@ final class PurgeStore: ObservableObject {
             candidates: candidates,
             reduceMotion: reduceMotion,
             presentsLiveSession: !pendingCelebration
-        ) else { return }
+        ) else { return nil }
 
-        Task { @MainActor in
+        return Task { @MainActor in
             let summary = await performManualSafeCleanNow(pinnedCandidates: candidates)
             if errorMessage == nil {
                 completeInteractiveSafeCleanup(summary: summary)
             } else {
                 cancelInteractiveSafeCleanup()
             }
+            return summary
         }
     }
 

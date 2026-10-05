@@ -92,6 +92,37 @@ final class IntentRouter {
         return .scanned(safeBytes: store.safeRecoverableBytes)
     }
 
+    enum CleanOutcome: Equatable {
+        case needsSetup
+        case busyCleaning
+        case nothingToClean
+        /// The scan stopped before App Caches and Dev Tools finished, so nothing
+        /// was cleaned.
+        case stopped
+        case cleaned(bytes: Int64, failedCount: Int)
+    }
+
+    /// Clean Safe Junk: what the menu bar's Clean does, run from Spotlight or
+    /// Siri. Opens the Overview, scans, then cleans Safe items only through the
+    /// Overview's Clean Safe Items, which moves them to the Trash and shows the
+    /// usual cleaning screen. It does not ask first, matching the menu bar's
+    /// Clean: only Safe items move, and the Trash keeps them recoverable.
+    func cleanSafeJunk(reduceMotion: Bool) async -> CleanOutcome {
+        switch await scanMac() {
+        case .needsSetup: return .needsSetup
+        case .busyCleaning: return .busyCleaning
+        case .stopped: return .stopped
+        case .scanned(let bytes) where bytes <= 0: return .nothingToClean
+        case .scanned: break
+        }
+        guard !store.isDeleting, !store.isInteractiveSafeCleanupInProgress else { return .busyCleaning }
+        guard let clean = store.cleanSafeItemsFromOverview(reduceMotion: reduceMotion) else {
+            return .nothingToClean
+        }
+        let summary = await clean.value
+        return .cleaned(bytes: summary.bytesMovedToTrash, failedCount: summary.failedCount)
+    }
+
     /// Uninstall an app: opens the uninstaller on that app and then its review
     /// sheet, the same sheet the Uninstall button opens, listing the app and its
     /// leftovers. Nothing is removed until the person confirms there. Without

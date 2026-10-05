@@ -12,7 +12,9 @@ struct ScanForJunkIntent: AppIntent {
     static let description = IntentDescription(
         "Opens Purge on the Overview, scans for junk, and says how much is safe to clean in App Caches and Dev Tools. Nothing is cleaned until you confirm in Purge.",
         searchKeywords: [
-            "junk", "scan", "scan my mac", "clean", "clean up", "cleanup", "clean my mac",
+            // Cleaning words go to Clean Safe Junk; this keeps the ones that
+            // only ask how things stand.
+            "junk", "scan", "scan my mac", "check junk", "find junk",
             "free space", "free up space", "space", "storage", "storage full", "disk full",
             "disk space", "mac is full", "low on space", "how much can i free",
             "what's taking space", "cache", "caches",

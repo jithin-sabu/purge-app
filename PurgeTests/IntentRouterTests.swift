@@ -118,6 +118,57 @@ struct IntentRouterTests {
         #expect(String(IntentRouter.ScanOutcome.busyCleaning.styledAnswer.characters) == IntentRouter.ScanOutcome.busyCleaning.dialog)
     }
 
+    // MARK: Clean Safe Junk
+
+    @Test("With nothing safe found, nothing is cleaned")
+    func cleanWithNothingFound() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let reveals = RevealCounter()
+        let router = Self.makeRouter(store: store, reveals: reveals)
+
+        #expect(await router.cleanSafeJunk(reduceMotion: true) == .nothingToClean)
+        #expect(!store.isDeleting)
+        #expect(store.selectedTab == .overview)
+        #expect(reveals.count == 1)
+        fake.cleanUp()
+    }
+
+    @Test("Nothing is cleaned while a clean is already running")
+    func cleanWhileCleaning() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        store.isDeleting = true
+        let router = Self.makeRouter(store: store, reveals: RevealCounter())
+
+        #expect(await router.cleanSafeJunk(reduceMotion: true) == .busyCleaning)
+        #expect(fake.generalAccesses.isEmpty)
+        fake.cleanUp()
+    }
+
+    @Test("Before onboarding is done nothing is scanned or cleaned")
+    func cleanBeforeOnboarding() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let router = Self.makeRouter(store: store, reveals: RevealCounter(), onboardingDone: false)
+
+        #expect(await router.cleanSafeJunk(reduceMotion: true) == .needsSetup)
+        #expect(fake.generalAccesses.isEmpty)
+        fake.cleanUp()
+    }
+
+    @Test("The clean answer bolds the size and owns up to failures")
+    func cleanAnswerWording() {
+        let size = formatBytes(1_610_000_000)
+        let clean = IntentRouter.CleanOutcome.cleaned(bytes: 1_610_000_000, failedCount: 0)
+        #expect(clean.dialog == "Moved \(size) of junk to the Trash.")
+        #expect(clean.styledAnswer.runs.filter { $0.inlinePresentationIntent == .stronglyEmphasized }.count == 1)
+        #expect(IntentRouter.CleanOutcome.cleaned(bytes: 1_610_000_000, failedCount: 2).dialog
+            == "Moved \(size) of junk to the Trash. 2 items couldn't be moved.")
+        #expect(IntentRouter.CleanOutcome.cleaned(bytes: 0, failedCount: 3).dialog
+            == "Purge couldn't move the junk to the Trash. Open Purge to see why.")
+    }
+
     // MARK: Uninstall an app
 
     @Test("Uninstall opens the review for that app alone once the app list has it")
