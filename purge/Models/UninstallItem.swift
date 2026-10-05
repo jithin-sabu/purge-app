@@ -157,6 +157,13 @@ nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
     }
 }
 
+/// An app the Uninstall an App intent opened the uninstaller on. The id is
+/// `InstalledApp.id`; the name goes in the search box.
+nonisolated struct UninstallerFocus: Equatable {
+    let appID: String
+    let name: String
+}
+
 /// The reviewed orphan-leftover removal awaiting confirmation (issue #26). Unlike
 /// `UninstallPlan`, there is no app: every item is a leftover whose owner is gone,
 /// so it is a flat list. Each item keeps its own `isSelected` so the review sheet

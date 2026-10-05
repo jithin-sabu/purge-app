@@ -282,6 +282,10 @@ final class PurgeStore: ObservableObject {
     /// match the segment the user is on.
     @Published var uninstallSection: UninstallSection = .installedApps
 
+    /// An app the Uninstall an App intent asked to see. `UninstallView` puts its
+    /// name in the search box, then clears this.
+    @Published var uninstallerFocus: UninstallerFocus?
+
     /// Leftovers whose owning app is no longer installed, shown as a section under
     /// the App Uninstaller tab. Always "Check First", never preselected.
     @Published var orphanLeftovers: [UninstallItem] = [] {
@@ -1694,6 +1698,8 @@ final class PurgeStore: ObservableObject {
         guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         installedApps = collected
         hasCompletedInstalledAppsScan = true
+        // The app list just changed under "Uninstall <app> with Purge".
+        PurgeAppShortcuts.refreshAppList()
 
         // Bundle sizes first, then leftover-inclusive totals. Both write in
         // place so alphabetical order never jumps. Kept as a task the scan queue

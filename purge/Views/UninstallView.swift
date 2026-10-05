@@ -163,6 +163,8 @@ struct UninstallView: View {
         .task {
             store.requestScanIfNeeded(.apps, .leftovers)
         }
+        .onAppear(perform: applyUninstallerFocus)
+        .onChange(of: store.uninstallerFocus) { _ in applyUninstallerFocus() }
         // The Leftovers segment can vanish (all removed, or a rescan finds none)
         // while it is the active view; fall back to the apps so the tab never
         // shows a segment that is no longer there.
@@ -265,6 +267,14 @@ struct UninstallView: View {
             ))
         }
         .scanTabSelectAllRowLayout()
+    }
+
+    /// Uninstall an App from Spotlight or Shortcuts: show just that app, already
+    /// ticked by the store. Clearing the search shows every app again.
+    private func applyUninstallerFocus() {
+        guard let focus = store.uninstallerFocus else { return }
+        appSearchQuery = focus.name
+        store.uninstallerFocus = nil
     }
 
     private var filteredApps: [InstalledApp] {

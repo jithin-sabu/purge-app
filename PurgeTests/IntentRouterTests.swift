@@ -142,6 +142,63 @@ struct IntentRouterTests {
         #expect(IntentRouter.ScanOutcome.stopped.safeSize == nil)
     }
 
+    // MARK: Uninstall an app
+
+    @Test("Uninstall opens the uninstaller with only that app ticked")
+    func uninstallFocusesOneApp() {
+        let store = Self.makeStore()
+        store.selectedAppIDs = ["/Applications/Other.app"]
+        store.uninstallSection = .leftovers
+        let reveals = RevealCounter()
+        let router = Self.makeRouter(store: store, reveals: reveals)
+
+        router.showUninstaller(appID: "/Applications/Zoom.app", name: "Zoom")
+
+        #expect(store.selectedTab == .uninstaller)
+        #expect(store.uninstallSection == .installedApps)
+        #expect(store.selectedAppIDs == ["/Applications/Zoom.app"])
+        #expect(store.uninstallerFocus == UninstallerFocus(appID: "/Applications/Zoom.app", name: "Zoom"))
+        #expect(reveals.count == 1)
+    }
+
+    @Test("Before onboarding is done uninstall only opens the window")
+    func uninstallBeforeOnboarding() {
+        let store = Self.makeStore()
+        let reveals = RevealCounter()
+        let router = Self.makeRouter(store: store, reveals: reveals, onboardingDone: false)
+
+        router.showUninstaller(appID: "/Applications/Zoom.app", name: "Zoom")
+
+        #expect(store.selectedTab == .overview)
+        #expect(store.selectedAppIDs.isEmpty)
+        #expect(store.uninstallerFocus == nil)
+        #expect(reveals.count == 1)
+    }
+
+    @Test("The app picker uses the uninstaller's ids and never lists system apps or Purge")
+    func appPickerMatchesUninstaller() {
+        let discovered = AppUninstallScanner.discoverInstalledApps()
+        #expect(discovered.allSatisfy { !$0.bundleURL.path.hasPrefix("/System/") })
+        #expect(discovered.allSatisfy { $0.bundleID != "io.getpurge.app" })
+
+        let url = URL(fileURLWithPath: "/Applications/Zoom.app")
+        let entity = InstalledAppEntity(.init(name: "Zoom", bundleURL: url, bundleID: "us.zoom.xos"))
+        let app = InstalledApp(name: "Zoom", bundleURL: url, bundleID: "us.zoom.xos", bundleSizeBytes: 0, isRunning: false)
+        #expect(entity.id == app.id)
+    }
+
+    @Test("Typing an app name matches name or bundle id, like the search box")
+    func appPickerMatching() {
+        let apps = [
+            InstalledAppEntity(.init(name: "Zoom", bundleURL: URL(fileURLWithPath: "/Applications/Zoom.app"), bundleID: "us.zoom.xos")),
+            InstalledAppEntity(.init(name: "Slack", bundleURL: URL(fileURLWithPath: "/Applications/Slack.app"), bundleID: "com.tinyspeck.slackmacgap")),
+        ]
+        #expect(InstalledAppIndex.matching("zo", in: apps).map(\.name) == ["Zoom"])
+        #expect(InstalledAppIndex.matching("tinyspeck", in: apps).map(\.name) == ["Slack"])
+        #expect(InstalledAppIndex.matching("  ", in: apps).count == 2)
+        #expect(InstalledAppIndex.matching("figma", in: apps).isEmpty)
+    }
+
     private static func eventually(timeout: TimeInterval = 5, _ condition: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition() {

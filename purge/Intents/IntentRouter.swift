@@ -72,6 +72,21 @@ final class IntentRouter {
         return .scanned(safeBytes: store.safeRecoverableBytes)
     }
 
+    /// Uninstall an app: opens the uninstaller with only that app ticked and the
+    /// search box set to its name. Nothing is removed until the person reviews
+    /// and confirms in the window. Without Full Disk Access the tab asks for it
+    /// first, and the tick waits.
+    func showUninstaller(appID: String, name: String) {
+        if onboardingDone() {
+            store.selectedTab = .uninstaller
+            store.uninstallSection = .installedApps
+            // Replaces any earlier ticks, so Uninstall acts on this app alone.
+            store.selectedAppIDs = [appID]
+            store.uninstallerFocus = UninstallerFocus(appID: appID, name: name)
+        }
+        reveal()
+    }
+
     /// Opens the window on a tab. Before onboarding is done the window shows
     /// onboarding instead, so the tab is left alone.
     func open(tab: PurgeStore.Tab) {
