@@ -70,21 +70,6 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
             RemovedAppMonitor.shared.handleOpenURL(url)
         }
     }
-
-    func checkForUpdates() {
-        updater.checkForUpdates()
-    }
-}
-
-private struct PurgeAppDelegateKey: EnvironmentKey {
-    static let defaultValue: PurgeAppDelegate? = nil
-}
-
-extension EnvironmentValues {
-    var purgeAppDelegate: PurgeAppDelegate? {
-        get { self[PurgeAppDelegateKey.self] }
-        set { self[PurgeAppDelegateKey.self] = newValue }
-    }
 }
 
 @main
@@ -155,7 +140,6 @@ struct PurgeApp: App {
                 .environmentObject(diskStore)
                 .environmentObject(trashStore)
                 .environmentObject(appDelegate.updater)
-                .environment(\.purgeAppDelegate, appDelegate)
                 .onAppear {
                     // Model/service wiring lives in `AppBootstrapper` — it has to run
                     // windowless. Only the window-scoped appearance work is left here.
@@ -184,7 +168,7 @@ struct PurgeApp: App {
         }
 
         MenuBarExtra(isInserted: menuBarIconBinding) {
-            MenuBarContentView(model: menuModel, store: store)
+            MenuBarContentView(model: menuModel, store: store, updater: appDelegate.updater)
                 .environmentObject(store)
                 .environmentObject(diskStore)
                 .environmentObject(trashStore)
