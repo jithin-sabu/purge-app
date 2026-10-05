@@ -285,7 +285,10 @@ final class MenuViewModel: ObservableObject {
     /// the current scan so the store does not re-scan, then routes the deletion
     /// through `performManualSafeCleanNow` (allowlist + trash-by-default).
     func clean() {
-        guard let store, case .ready = state, !store.isDeleting else { return }
+        // The Overview's Clean claims its targets before `isDeleting` turns on, so
+        // check both or the two runs race and one reports 0 bytes.
+        guard let store, case .ready = state, !store.isDeleting,
+              !store.isInteractiveSafeCleanupInProgress else { return }
 
         let candidates = store.manualSafeCleanupCandidates()
         let total = candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
