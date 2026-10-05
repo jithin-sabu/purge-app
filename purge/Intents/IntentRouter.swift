@@ -18,15 +18,28 @@ final class IntentRouter {
     private let store: PurgeStore
     private let reveal: @MainActor () -> Void
     private let onboardingDone: @MainActor () -> Bool
+    private let reviewUninstall: (@MainActor () async -> Void)?
 
+    /// `reviewUninstall` stands in for building the uninstall review in tests,
+    /// which would otherwise walk the disk for leftovers.
     init(
         store: PurgeStore,
         reveal: @escaping @MainActor () -> Void,
-        onboardingDone: @escaping @MainActor () -> Bool
+        onboardingDone: @escaping @MainActor () -> Bool,
+        reviewUninstall: (@MainActor () async -> Void)? = nil
     ) {
         self.store = store
         self.reveal = reveal
         self.onboardingDone = onboardingDone
+        self.reviewUninstall = reviewUninstall
+    }
+
+    private func requestUninstallReview() async {
+        if let reviewUninstall {
+            await reviewUninstall()
+        } else {
+            await store.requestUninstallSelectedApps()
+        }
     }
 
     /// The person asked for the window, so it is theirs now: a deleted-app review
@@ -72,19 +85,44 @@ final class IntentRouter {
         return .scanned(safeBytes: store.safeRecoverableBytes)
     }
 
-    /// Uninstall an app: opens the uninstaller with only that app ticked and the
-    /// search box set to its name. Nothing is removed until the person reviews
-    /// and confirms in the window. Without Full Disk Access the tab asks for it
-    /// first, and the tick waits.
-    func showUninstaller(appID: String, name: String) {
-        if onboardingDone() {
-            store.selectedTab = .uninstaller
-            store.uninstallSection = .installedApps
-            // Replaces any earlier ticks, so Uninstall acts on this app alone.
-            store.selectedAppIDs = [appID]
-            store.uninstallerFocus = UninstallerFocus(appID: appID, name: name)
+    /// Uninstall an app: opens the uninstaller on that app and then its review
+    /// sheet, the same sheet the Uninstall button opens, listing the app and its
+    /// leftovers. Nothing is removed until the person confirms there. Without
+    /// Full Disk Access the tab asks for it first, and the review waits for them.
+    func showUninstaller(appID: String, name: String) async {
+        guard onboardingDone() else {
+            reveal()
+            return
         }
+        store.selectedTab = .uninstaller
+        store.uninstallSection = .installedApps
+        // Replaces any earlier ticks, so the review covers this app alone.
+        store.selectedAppIDs = [appID]
+        store.uninstallerFocus = UninstallerFocus(appID: appID, name: name)
         reveal()
+
+        store.refreshPermission()
+        guard store.hasFullDiskAccess else { return }
+        store.requestScanIfNeeded(.apps)
+        guard await appIsListed(appID) else { return }
+        // The person may have moved on while the list loaded.
+        guard store.selectedTab == .uninstaller,
+              store.selectedAppIDs == [appID],
+              store.uninstallPlan == nil else { return }
+        await requestUninstallReview()
+    }
+
+    /// Waits for the app list to include the app. False once the list is done
+    /// loading without it (a protected app, or one removed since).
+    private func appIsListed(_ appID: String) async -> Bool {
+        let updates = store.$installedApps
+            .combineLatest(store.$isScanningInstalledApps, store.$scanQueue)
+            .values
+        for await (apps, isScanning, queue) in updates {
+            if apps.contains(where: { $0.id == appID }) { return true }
+            if !isScanning, queue.active != .apps, !queue.isQueued(.apps) { return false }
+        }
+        return false
     }
 
     /// Opens the window on a tab. Before onboarding is done the window shows

@@ -144,35 +144,99 @@ struct IntentRouterTests {
 
     // MARK: Uninstall an app
 
-    @Test("Uninstall opens the uninstaller with only that app ticked")
-    func uninstallFocusesOneApp() {
-        let store = Self.makeStore()
-        store.selectedAppIDs = ["/Applications/Other.app"]
+    @Test("Uninstall opens the review for that app alone once the app list has it")
+    func uninstallOpensReview() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let zoom = Self.app("Zoom")
+        store.installedApps = [zoom, Self.app("Other")]
+        store.selectedAppIDs = [Self.app("Other").id]
         store.uninstallSection = .leftovers
         let reveals = RevealCounter()
-        let router = Self.makeRouter(store: store, reveals: reveals)
+        var reviews: [Set<String>] = []
+        let router = IntentRouter(
+            store: store,
+            reveal: { reveals.count += 1 },
+            onboardingDone: { true },
+            reviewUninstall: { reviews.append(store.selectedAppIDs) }
+        )
 
-        router.showUninstaller(appID: "/Applications/Zoom.app", name: "Zoom")
+        await router.showUninstaller(appID: zoom.id, name: "Zoom")
 
         #expect(store.selectedTab == .uninstaller)
         #expect(store.uninstallSection == .installedApps)
-        #expect(store.selectedAppIDs == ["/Applications/Zoom.app"])
-        #expect(store.uninstallerFocus == UninstallerFocus(appID: "/Applications/Zoom.app", name: "Zoom"))
+        #expect(store.uninstallerFocus == UninstallerFocus(appID: zoom.id, name: "Zoom"))
+        #expect(reviews == [[zoom.id]])
         #expect(reveals.count == 1)
+        fake.cleanUp()
+    }
+
+    @Test("Without Full Disk Access the tab asks for it and the review waits")
+    func uninstallWithoutAccessSkipsReview() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let zoom = Self.app("Zoom")
+        store.installedApps = [zoom]
+        var reviewed = false
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: { reviewed = true }
+        )
+
+        await router.showUninstaller(appID: zoom.id, name: "Zoom")
+
+        #expect(store.selectedTab == .uninstaller)
+        #expect(store.selectedAppIDs == [zoom.id])
+        #expect(!reviewed)
+        fake.cleanUp()
+    }
+
+    @Test("An app missing from the finished list opens no review")
+    func uninstallMissingAppSkipsReview() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        var reviewed = false
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: { reviewed = true }
+        )
+
+        await router.showUninstaller(appID: "/Applications/Gone.app", name: "Gone")
+
+        #expect(fake.log.contains("step apps"))
+        #expect(!reviewed)
+        fake.cleanUp()
     }
 
     @Test("Before onboarding is done uninstall only opens the window")
-    func uninstallBeforeOnboarding() {
+    func uninstallBeforeOnboarding() async {
         let store = Self.makeStore()
         let reveals = RevealCounter()
-        let router = Self.makeRouter(store: store, reveals: reveals, onboardingDone: false)
+        var reviewed = false
+        let router = IntentRouter(
+            store: store, reveal: { reveals.count += 1 }, onboardingDone: { false },
+            reviewUninstall: { reviewed = true }
+        )
 
-        router.showUninstaller(appID: "/Applications/Zoom.app", name: "Zoom")
+        await router.showUninstaller(appID: "/Applications/Zoom.app", name: "Zoom")
 
         #expect(store.selectedTab == .overview)
         #expect(store.selectedAppIDs.isEmpty)
         #expect(store.uninstallerFocus == nil)
+        #expect(!reviewed)
         #expect(reveals.count == 1)
+    }
+
+    private static func app(_ name: String) -> InstalledApp {
+        InstalledApp(
+            name: name,
+            bundleURL: URL(fileURLWithPath: "/Applications/\(name).app"),
+            bundleID: "test.\(name.lowercased())",
+            bundleSizeBytes: 0,
+            isRunning: false
+        )
     }
 
     @Test("The app picker uses the uninstaller's ids and never lists system apps or Purge")

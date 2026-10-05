@@ -3,7 +3,7 @@ import AppIntents
 struct UninstallAppIntent: AppIntent {
     static let title: LocalizedStringResource = "Uninstall an App"
     static let description = IntentDescription(
-        "Opens Purge's App Uninstaller with this app ticked, so you can review what it leaves behind. Nothing is removed until you confirm in Purge."
+        "Opens Purge's uninstall review for this app, listing the app and everything it leaves behind. Nothing is removed until you confirm in Purge."
     )
     static let openAppWhenRun = true
 
@@ -22,7 +22,10 @@ struct UninstallAppIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        IntentRouter.shared.showUninstaller(appID: app.id, name: app.name)
+        // Not awaited: loading the app list can take a while, and Spotlight
+        // would wait on it. The window shows the progress instead.
+        let app = app
+        Task { await IntentRouter.shared.showUninstaller(appID: app.id, name: app.name) }
         return .result()
     }
 }
