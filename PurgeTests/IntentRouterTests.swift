@@ -329,6 +329,24 @@ struct IntentRouterTests {
         #expect(png.count < 40_000)
     }
 
+    @Test("The filled-in search shows only the chosen installation until it is edited")
+    func focusedSearchShowsOneInstallation() {
+        let xcode = InstalledApp(name: "Xcode", bundleURL: URL(fileURLWithPath: "/Applications/Xcode.app"),
+                                 bundleID: "com.apple.dt.Xcode", bundleSizeBytes: 0, isRunning: false)
+        let beta = InstalledApp(name: "Xcode-beta", bundleURL: URL(fileURLWithPath: "/Applications/Xcode-beta.app"),
+                                bundleID: "com.apple.dt.Xcode", bundleSizeBytes: 0, isRunning: false)
+        let copy = InstalledApp(name: "Xcode", bundleURL: URL(fileURLWithPath: "/Users/me/Applications/Xcode.app"),
+                                bundleID: "com.apple.dt.Xcode", bundleSizeBytes: 0, isRunning: false)
+        let apps = [xcode, beta, copy]
+        let focus = UninstallerFocus(appID: xcode.id, name: "Xcode")
+
+        #expect(UninstallView.matchingApps(apps, query: "Xcode", focus: focus).map(\.id) == [xcode.id])
+        // Edited: back to plain name search.
+        #expect(UninstallView.matchingApps(apps, query: "Xcod", focus: focus).count == 3)
+        #expect(UninstallView.matchingApps(apps, query: "", focus: nil).count == 3)
+        #expect(UninstallView.matchingApps(apps, query: "Xcode", focus: nil).count == 3)
+    }
+
     @Test("Typing an app name matches name or bundle id, like the search box")
     func appPickerMatching() {
         let apps = [

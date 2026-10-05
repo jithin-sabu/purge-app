@@ -5,8 +5,9 @@ import Foundation
 /// thin so the behavior lives here, where tests can drive it with a fake store
 /// and without a window.
 ///
-/// Nothing here deletes anything. Every clean and uninstall still ends at the
-/// confirm sheet in the window.
+/// Uninstall an App still ends at the review sheet in the window, where the
+/// person confirms. Clean Safe Junk does not ask: like the menu bar's Clean, it
+/// moves Safe items to the Trash straight away.
 @MainActor
 final class IntentRouter {
     static let shared = IntentRouter(
