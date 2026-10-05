@@ -282,6 +282,10 @@ final class PurgeStore: ObservableObject {
     /// match the segment the user is on.
     @Published var uninstallSection: UninstallSection = .installedApps
 
+    /// An app the Uninstall an App intent asked to see. `UninstallView` puts its
+    /// name in the search box, then clears this.
+    @Published var uninstallerFocus: UninstallerFocus?
+
     /// Leftovers whose owning app is no longer installed, shown as a section under
     /// the App Uninstaller tab. Always "Check First", never preselected.
     @Published var orphanLeftovers: [UninstallItem] = [] {
@@ -1694,6 +1698,8 @@ final class PurgeStore: ObservableObject {
         guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         installedApps = collected
         hasCompletedInstalledAppsScan = true
+        // The app list just changed under "Uninstall <app> with Purge".
+        PurgeAppShortcuts.refreshAppList()
 
         // Bundle sizes first, then leftover-inclusive totals. Both write in
         // place so alphabetical order never jumps. Kept as a task the scan queue
@@ -3176,7 +3182,10 @@ final class PurgeStore: ObservableObject {
     /// The Overview's Clean button: moves every safe App Caches and Dev Tools item to
     /// the Trash, the same set the menu bar and the scheduled clean move, with the
     /// cleanup overlay showing progress and the summary.
-    func cleanSafeItemsFromOverview(reduceMotion: Bool) {
+    /// Returns the running clean, so the Clean Safe Junk action can report what
+    /// it moved, or nil when nothing started.
+    @discardableResult
+    func cleanSafeItemsFromOverview(reduceMotion: Bool) -> Task<ScheduledCleaningSummary, Never>? {
         let candidates = manualSafeCleanupCandidates()
         // A pending onboarding celebration owns the post-clean screen; presenting
         // the live session too would stack two summaries on the same run.
@@ -3185,15 +3194,16 @@ final class PurgeStore: ObservableObject {
             candidates: candidates,
             reduceMotion: reduceMotion,
             presentsLiveSession: !pendingCelebration
-        ) else { return }
+        ) else { return nil }
 
-        Task { @MainActor in
+        return Task { @MainActor in
             let summary = await performManualSafeCleanNow(pinnedCandidates: candidates)
             if errorMessage == nil {
                 completeInteractiveSafeCleanup(summary: summary)
             } else {
                 cancelInteractiveSafeCleanup()
             }
+            return summary
         }
     }
 

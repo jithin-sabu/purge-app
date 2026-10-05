@@ -113,6 +113,11 @@ struct UninstallView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var appSearchQuery = ""
+    /// The app Uninstall an App filled the search box for. While the box still
+    /// holds that text, only that installation shows, since a name can match
+    /// apps that are not ticked ("Xcode" and "Xcode-beta", or two copies of one
+    /// app). Editing or clearing the search drops it.
+    @State private var focusedSearch: UninstallerFocus?
     /// Session-only: leaving this tab rebuilds the view, and a launch starts
     /// fresh, so size sort never survives a trip away from Uninstall.
     @State private var selectedSort = AppSortOption.nameAZ
@@ -162,6 +167,11 @@ struct UninstallView: View {
         .background(AppColors.surfaceBase)
         .task {
             store.requestScanIfNeeded(.apps, .leftovers)
+        }
+        .onAppear(perform: applyUninstallerFocus)
+        .onChange(of: store.uninstallerFocus) { _ in applyUninstallerFocus() }
+        .onChange(of: appSearchQuery) { query in
+            if let focusedSearch, query != focusedSearch.name { self.focusedSearch = nil }
         }
         // The Leftovers segment can vanish (all removed, or a rescan finds none)
         // while it is the active view; fall back to the apps so the tab never
@@ -267,18 +277,32 @@ struct UninstallView: View {
         .scanTabSelectAllRowLayout()
     }
 
+    /// Uninstall an App from Spotlight or Shortcuts: show just that app, already
+    /// ticked by the store. Clearing the search shows every app again.
+    private func applyUninstallerFocus() {
+        guard let focus = store.uninstallerFocus else { return }
+        focusedSearch = focus
+        appSearchQuery = focus.name
+        store.uninstallerFocus = nil
+    }
+
     private var filteredApps: [InstalledApp] {
-        let query = appSearchQuery.trimmingCharacters(in: .whitespaces).lowercased()
-        let matched: [InstalledApp]
-        if query.isEmpty {
-            matched = store.installedApps
-        } else {
-            matched = store.installedApps.filter {
-                $0.name.lowercased().contains(query)
-                    || ($0.bundleID?.lowercased().contains(query) ?? false)
-            }
+        sortedApps(Self.matchingApps(store.installedApps, query: appSearchQuery, focus: focusedSearch))
+    }
+
+    /// The apps the search shows: the focused installation alone while the box
+    /// still holds the text Uninstall an App filled in, otherwise every app whose
+    /// name or bundle id contains the query.
+    static func matchingApps(_ apps: [InstalledApp], query: String, focus: UninstallerFocus?) -> [InstalledApp] {
+        if let focus, query == focus.name {
+            return apps.filter { $0.id == focus.appID }
         }
-        return sortedApps(matched)
+        let query = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return apps }
+        return apps.filter {
+            $0.name.lowercased().contains(query)
+                || ($0.bundleID?.lowercased().contains(query) ?? false)
+        }
     }
 
     /// Size sorts key on the total shown on each tile (bundle + all leftovers),

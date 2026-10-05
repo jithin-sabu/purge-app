@@ -61,6 +61,11 @@ extension PurgeStore {
         } else {
             requestScanIfNeeded(step)
         }
+        await waitUntilSettled(step)
+    }
+
+    /// Returns once `step` is neither running nor waiting in the queue.
+    func waitUntilSettled(_ step: ScanStep) async {
         for await state in $scanQueue.values where state.active != step && !state.isQueued(step) {
             return
         }

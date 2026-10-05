@@ -25,34 +25,54 @@ nonisolated final class AppUninstallScanner {
     }
 
     private static func runInstalledAppsScan(continuation: AsyncStream<InstalledApp>.Continuation) {
-        let bundleURLs = discoverAppBundleURLs()
+        let apps = discoverInstalledApps()
         let runningIDs = runningBundleIDs()
 
         // Yield as soon as the bundle is identified. Spotlight's indexed size is
         // a cheap first figure so the list can paint without waiting on `du`;
         // `PurgeStore` walks each bundle afterwards and replaces the number.
-        for bundleURL in bundleURLs {
+        for app in apps {
             if Task.isCancelled { break }
-            let bundle = Bundle(url: bundleURL)
-            let bundleID = bundle?.bundleIdentifier
-            guard !AppUninstallScanPolicy.isProtectedApp(bundleURL: bundleURL, bundleID: bundleID) else {
-                continue
-            }
-            let name = displayName(for: bundleURL, bundle: bundle)
-            let size = InstalledAppBundleSizing.spotlightLogicalSize(at: bundleURL) ?? 0
-            let isRunning = bundleID.map { runningIDs.contains($0) } ?? false
+            let size = InstalledAppBundleSizing.spotlightLogicalSize(at: app.bundleURL) ?? 0
+            let isRunning = app.bundleID.map { runningIDs.contains($0) } ?? false
             continuation.yield(
                 InstalledApp(
-                    name: name,
-                    bundleURL: bundleURL,
-                    bundleID: bundleID,
+                    name: app.name,
+                    bundleURL: app.bundleURL,
+                    bundleID: app.bundleID,
                     bundleSizeBytes: size,
                     isRunning: isRunning,
-                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: bundleURL)
+                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: app.bundleURL)
                 )
             )
         }
         continuation.finish()
+    }
+
+    /// An app the uninstaller can act on, found but not yet measured.
+    struct DiscoveredApp: Sendable {
+        let name: String
+        let bundleURL: URL
+        let bundleID: String?
+    }
+
+    /// The uninstaller's app index: every app it can act on, with no sizing.
+    /// Shared with the App Intents app picker, so Spotlight offers exactly the
+    /// apps the uninstaller lists. Reading the app folders needs no Full Disk
+    /// Access.
+    static func discoverInstalledApps() -> [DiscoveredApp] {
+        discoverAppBundleURLs().compactMap { bundleURL in
+            let bundle = Bundle(url: bundleURL)
+            let bundleID = bundle?.bundleIdentifier
+            guard !AppUninstallScanPolicy.isProtectedApp(bundleURL: bundleURL, bundleID: bundleID) else {
+                return nil
+            }
+            return DiscoveredApp(
+                name: displayName(for: bundleURL, bundle: bundle),
+                bundleURL: bundleURL,
+                bundleID: bundleID
+            )
+        }
     }
 
     /// Top-level `.app` bundles in each app root, plus those one folder deep
