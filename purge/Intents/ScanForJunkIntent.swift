@@ -12,28 +12,17 @@ struct ScanForJunkIntent: AppIntent {
 
     /// Opens Purge, and answers with one line of text. That is the form
     /// Spotlight keeps inside its own panel: a card, a follow-up question or a
-    /// background run moves the action into a separate box. Cleaning happens in
-    /// the window, on the Overview's Clean Safe Items.
+    /// background run moves the action into a separate box. Progress is not
+    /// reported: Spotlight shows the action's name while it runs regardless.
+    /// Cleaning happens in the window, on the Overview's Clean Safe Items.
     static let openAppWhenRun = true
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<AttributedString> & ProvidesDialog {
-        if #available(macOS 14.0, *) {
-            progress.totalUnitCount = 1
-            progress.localizedDescription = "Scanning for junk…"
-        }
         let outcome = await IntentRouter.shared.scanMac()
-        if #available(macOS 14.0, *) {
-            progress.completedUnitCount = 1
-        }
         return .result(value: outcome.styledAnswer, dialog: IntentDialog(stringLiteral: outcome.dialog))
     }
 }
-
-/// Lets Spotlight say "Scanning for junk…" while it runs, instead of repeating
-/// the action's name.
-@available(macOS 14.0, *)
-extension ScanForJunkIntent: ProgressReportingIntent {}
 
 extension IntentRouter.ScanOutcome {
     /// The size a Shortcuts automation can compare, for a size-only action.
