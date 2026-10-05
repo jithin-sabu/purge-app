@@ -19,7 +19,7 @@ extension IntentRouter.ScanOutcome {
     /// Returned to Shortcuts as a file size, so a shortcut can compare it.
     var safeSize: Measurement<UnitInformationStorage>? {
         guard case .scanned(let bytes) = self else { return nil }
-        return Measurement(value: Double(bytes), unit: .bytes)
+        return IntentFileSize.measurement(bytes)
     }
 
     var dialog: String {
@@ -35,5 +35,25 @@ extension IntentRouter.ScanOutcome {
         case .stopped:
             return "The scan stopped before it finished."
         }
+    }
+}
+
+/// Sizes handed back to Spotlight and Shortcuts. Spotlight shows a returned
+/// value as it is, so a plain byte count reads "1,576,079,360 B". This picks
+/// the unit `formatBytes` would and rounds to two places: "1.58 GB". Shortcuts
+/// still compares it as a file size, whatever the unit.
+enum IntentFileSize {
+    static func measurement(_ bytes: Int64) -> Measurement<UnitInformationStorage> {
+        let value = Double(max(bytes, 0))
+        let unit: UnitInformationStorage
+        switch value {
+        case 1e12...: unit = .terabytes
+        case 1e9...: unit = .gigabytes
+        case 1e6...: unit = .megabytes
+        case 1e3...: unit = .kilobytes
+        default: unit = .bytes
+        }
+        let converted = Measurement(value: value, unit: UnitInformationStorage.bytes).converted(to: unit)
+        return Measurement(value: (converted.value * 100).rounded() / 100, unit: unit)
     }
 }

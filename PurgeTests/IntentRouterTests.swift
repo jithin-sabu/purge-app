@@ -135,7 +135,9 @@ struct IntentRouterTests {
 
     @Test("Only a finished scan returns a size to Shortcuts")
     func scanAnswerValues() {
-        #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 2_000_000).safeSize?.value == 2_000_000)
+        let size = IntentRouter.ScanOutcome.scanned(safeBytes: 1_576_079_360).safeSize
+        #expect(size?.unit == .gigabytes)
+        #expect(size?.value == 1.58)
         #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 0).dialog == "Nothing needs cleaning right now.")
         #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 2_000_000).dialog.contains("safe to clean"))
         #expect(IntentRouter.ScanOutcome.busyCleaning.safeSize == nil)
@@ -261,6 +263,17 @@ struct IntentRouterTests {
         #expect(InstalledAppIndex.matching("tinyspeck", in: apps).map(\.name) == ["Slack"])
         #expect(InstalledAppIndex.matching("  ", in: apps).count == 2)
         #expect(InstalledAppIndex.matching("figma", in: apps).isEmpty)
+    }
+
+    @Test("Sizes come back in a readable unit, rounded to two places")
+    func fileSizeUnits() {
+        #expect(IntentFileSize.measurement(512).unit == .bytes)
+        #expect(IntentFileSize.measurement(2_500).value == 2.5)
+        #expect(IntentFileSize.measurement(2_500).unit == .kilobytes)
+        #expect(IntentFileSize.measurement(734_003_200).unit == .megabytes)
+        #expect(IntentFileSize.measurement(734_003_200).value == 734)
+        #expect(IntentFileSize.measurement(3_200_000_000_000).unit == .terabytes)
+        #expect(IntentFileSize.measurement(0).value == 0)
     }
 
     private static func eventually(timeout: TimeInterval = 5, _ condition: () -> Bool) async -> Bool {
