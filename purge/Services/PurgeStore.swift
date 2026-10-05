@@ -3038,11 +3038,14 @@ final class PurgeStore: ObservableObject {
 
     /// Immediate safe cleanup from the menu bar (does not require scheduled cleaning to be enabled).
     @discardableResult
+    /// - Parameter progressBuffer: Receives engine progress when no interactive
+    ///   cleanup owns it, so the menu bar can show real bytes moved.
     func performManualSafeCleanNow(
-        pinnedCandidates: [DeletionCandidate]? = nil
+        pinnedCandidates: [DeletionCandidate]? = nil,
+        progressBuffer: DeletionProgressBuffer? = nil
     ) async -> ScheduledCleaningSummary {
         var onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
-        if let buffer = interactiveSafeCleanupProgressBuffer {
+        if let buffer = interactiveSafeCleanupProgressBuffer ?? progressBuffer {
             onProgress = { @Sendable event in buffer.ingest(event) }
         }
         let summary = await performSafeCleanup(

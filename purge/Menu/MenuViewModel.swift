@@ -307,13 +307,21 @@ final class MenuViewModel: ObservableObject {
     private func runClean(candidates: [PurgeStore.DeletionCandidate]) async {
         guard let store else { return }
 
-        // Determinate visual ramp while the (fast) trash operation runs.
-        let ramp = Task { @MainActor [weak self] in
-            await self?.rampCleaningProgress()
+        // The menu says "Moved X of Y to trash", so X must be what the engine has
+        // actually moved. A timed ramp used to fill it before anything moved (#59).
+        let progress = DeletionProgressBuffer()
+        let poller = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                self?.mirrorCleaningProgress(progress.snapshot().bytesMovedToTrash)
+            }
         }
 
-        let summary = await store.performManualSafeCleanNow(pinnedCandidates: candidates)
-        ramp.cancel()
+        let summary = await store.performManualSafeCleanNow(
+            pinnedCandidates: candidates,
+            progressBuffer: progress
+        )
+        poller.cancel()
         guard !Task.isCancelled else { return }
 
         setState(.cleaned(bytes: summary.bytesMovedToTrash))
@@ -331,13 +339,10 @@ final class MenuViewModel: ObservableObject {
         setState(.clear(lastScanned: date))
     }
 
-    private func rampCleaningProgress() async {
-        let steps = 16
-        for step in 1 ..< steps {
-            try? await Task.sleep(nanoseconds: 45_000_000)
-            guard !Task.isCancelled, case .cleaning(_, let total) = state else { return }
-            let moved = Int64(Double(total) * Double(step) / Double(steps))
-            state = .cleaning(cleaned: moved, total: total)
-        }
+    private func mirrorCleaningProgress(_ movedBytes: Int64) {
+        guard case .cleaning(let cleaned, let total) = state else { return }
+        let moved = min(movedBytes, total)
+        guard moved != cleaned else { return }
+        state = .cleaning(cleaned: moved, total: total)
     }
 }
