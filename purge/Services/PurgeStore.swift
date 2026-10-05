@@ -353,10 +353,6 @@ final class PurgeStore: ObservableObject {
     /// Access. Set by the sidebar notice, the locked tabs, and a deleted-app review
     /// that needs access to find leftovers.
     @Published var isLookDeeperPresented = false
-    /// Scan My Mac's "Clean it up in Purge?" was answered yes. The Overview's
-    /// Clean Safe Items button opens its usual confirmation, then clears this.
-    /// Nothing is cleaned until the person confirms there.
-    @Published var isSafeCleanConfirmationRequested = false
     /// Lifetime bytes Purge has moved to the trash. Not a reclaim figure: most of it
     /// only becomes free space once the user empties the trash.
     @Published var totalMovedToTrashBytes: Int64 = 0

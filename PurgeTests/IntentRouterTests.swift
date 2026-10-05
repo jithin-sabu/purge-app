@@ -73,8 +73,8 @@ struct IntentRouterTests {
         #expect(outcome == .scanned(safeBytes: 0))
         #expect(fake.generalAccesses == [.limited])
         #expect(fake.log.isEmpty)
-        // Runs in Spotlight or Siri; the window is left as it is.
-        #expect(reveals.count == 0)
+        #expect(store.selectedTab == .overview)
+        #expect(reveals.count == 1)
         fake.cleanUp()
     }
 
@@ -120,7 +120,7 @@ struct IntentRouterTests {
 
         #expect(await router.scanMac() == .busyCleaning)
         #expect(fake.generalAccesses.isEmpty)
-        #expect(reveals.count == 0)
+        #expect(reveals.count == 1)
         fake.cleanUp()
     }
 
@@ -146,33 +146,6 @@ struct IntentRouterTests {
         #expect(IntentRouter.ScanOutcome.stopped.safeSize == nil)
     }
 
-    @Test("Saying yes opens the Overview, and only asks to clean when there is something safe")
-    func reviewSafeCleanOpensOverview() {
-        let store = Self.makeStore()
-        store.selectedTab = .largeFiles
-        let reveals = RevealCounter()
-        let router = Self.makeRouter(store: store, reveals: reveals)
-
-        router.reviewSafeClean()
-
-        #expect(store.selectedTab == .overview)
-        // Nothing safe was found, so there is no confirmation to open.
-        #expect(!store.isSafeCleanConfirmationRequested)
-        #expect(reveals.count == 1)
-    }
-
-    @Test("Before onboarding is done, yes only opens the window")
-    func reviewSafeCleanBeforeOnboarding() {
-        let store = Self.makeStore()
-        store.selectedTab = .largeFiles
-        let router = Self.makeRouter(store: store, reveals: RevealCounter(), onboardingDone: false)
-
-        router.reviewSafeClean()
-
-        #expect(store.selectedTab == .largeFiles)
-        #expect(!store.isSafeCleanConfirmationRequested)
-    }
-
     @Test("The answer puts the size in bold")
     func styledAnswerBoldsSize() {
         let answer = IntentRouter.ScanOutcome.scanned(safeBytes: 1_576_079_360).styledAnswer
@@ -181,13 +154,6 @@ struct IntentRouterTests {
         #expect(bold.count == 1)
         #expect(String(answer[bold[0].range].characters) == formatBytes(1_576_079_360))
         #expect(String(IntentRouter.ScanOutcome.busyCleaning.styledAnswer.characters) == IntentRouter.ScanOutcome.busyCleaning.dialog)
-    }
-
-    @Test("The clean-up question names the size")
-    func cleanUpQuestionText() {
-        let question = IntentRouter.ScanOutcome.scanned(safeBytes: 1_576_079_360).cleanUpQuestion
-        #expect(question.hasPrefix("Found "))
-        #expect(question.hasSuffix("Clean it up in Purge?"))
     }
 
     // MARK: Uninstall an app
