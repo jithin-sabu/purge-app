@@ -60,13 +60,16 @@ final class IntentRouter {
         case stopped
     }
 
-    /// Scan my Mac: opens the window and scans every category, then answers once
-    /// App Caches and Dev Tools are done. Large Files and apps keep scanning in
-    /// the window. A scan already under way is joined rather than restarted.
+    /// Scan my Mac: scans every category with the window left as it is, then
+    /// answers once App Caches and Dev Tools are done. Large Files and apps keep
+    /// scanning. A scan already under way is joined rather than restarted.
     /// Without Full Disk Access, `scanEverything` runs the limited scan.
     func scanMac() async -> ScanOutcome {
-        reveal()
-        guard onboardingDone() else { return .needsSetup }
+        guard onboardingDone() else {
+            // Setup happens in the window, so that is the one case that opens it.
+            reveal()
+            return .needsSetup
+        }
         guard !store.isDeleting else { return .busyCleaning }
         if store.scanQueue.isRunning {
             // Joining: make sure the answer has a cache scan behind it.

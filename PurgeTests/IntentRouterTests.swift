@@ -73,7 +73,8 @@ struct IntentRouterTests {
         #expect(outcome == .scanned(safeBytes: 0))
         #expect(fake.generalAccesses == [.limited])
         #expect(fake.log.isEmpty)
-        #expect(reveals.count == 1)
+        // Runs in Spotlight or Siri; the window is left as it is.
+        #expect(reveals.count == 0)
         fake.cleanUp()
     }
 
@@ -119,7 +120,7 @@ struct IntentRouterTests {
 
         #expect(await router.scanMac() == .busyCleaning)
         #expect(fake.generalAccesses.isEmpty)
-        #expect(reveals.count == 1)
+        #expect(reveals.count == 0)
         fake.cleanUp()
     }
 
@@ -170,6 +171,16 @@ struct IntentRouterTests {
 
         #expect(store.selectedTab == .largeFiles)
         #expect(!store.isSafeCleanConfirmationRequested)
+    }
+
+    @Test("The answer puts the size in bold")
+    func styledAnswerBoldsSize() {
+        let answer = IntentRouter.ScanOutcome.scanned(safeBytes: 1_576_079_360).styledAnswer
+        #expect(String(answer.characters).hasPrefix("Found "))
+        let bold = answer.runs.filter { $0.inlinePresentationIntent == .stronglyEmphasized }
+        #expect(bold.count == 1)
+        #expect(String(answer[bold[0].range].characters) == formatBytes(1_576_079_360))
+        #expect(String(IntentRouter.ScanOutcome.busyCleaning.styledAnswer.characters) == IntentRouter.ScanOutcome.busyCleaning.dialog)
     }
 
     @Test("The clean-up question names the size")
