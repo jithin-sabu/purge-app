@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Purge
@@ -251,6 +252,15 @@ struct IntentRouterTests {
         let entity = InstalledAppEntity(.init(name: "Zoom", bundleURL: url, bundleID: "us.zoom.xos"))
         let app = InstalledApp(name: "Zoom", bundleURL: url, bundleID: "us.zoom.xos", bundleSizeBytes: 0, isRunning: false)
         #expect(entity.id == app.id)
+    }
+
+    @Test("Each app in the picker carries its own 64 px icon")
+    func appPickerIcons() throws {
+        let png = try #require(InstalledAppIndex.iconPNG(atPath: "/System/Library/CoreServices/Finder.app"))
+        let rep = try #require(NSBitmapImageRep(data: png))
+        #expect(rep.pixelsWide == 64)
+        #expect(rep.pixelsHigh == 64)
+        #expect(png.count < 40_000)
     }
 
     @Test("Typing an app name matches name or bundle id, like the search box")
