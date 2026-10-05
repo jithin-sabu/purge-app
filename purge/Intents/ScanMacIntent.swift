@@ -4,16 +4,36 @@ import Foundation
 struct ScanMacIntent: AppIntent {
     static let title: LocalizedStringResource = "Scan My Mac"
     static let description = IntentDescription(
-        "Opens Purge, scans your Mac, and says how much is safe to clean in App Caches and Dev Tools. Nothing is cleaned."
+        "Opens Purge, scans your Mac, and says how much is safe to clean in App Caches and Dev Tools. Nothing is cleaned without your confirmation in Purge.",
+        searchKeywords: ["scan", "clean", "clean up", "junk", "cache", "caches", "free space", "free up space", "storage", "disk space", "space"]
     )
     static let openAppWhenRun = true
 
     /// Returns the sentence as the value, not a size or a card: Spotlight shows
     /// a returned value inline in its own panel, while a card opens separately.
     /// Shortcuts automations that compare sizes use Get Safe-to-Clean Size.
+    ///
+    /// When there is something to clean, it asks "Clean it up in Purge?" in the
+    /// same panel. Yes opens Purge's own Clean Safe Items confirmation; nothing
+    /// is cleaned from Spotlight or Siri.
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
-        let outcome = await IntentRouter.shared.scanMac()
+        let router = IntentRouter.shared
+        let outcome = await router.scanMac()
+        if #available(macOS 15.0, *), case .scanned(let bytes) = outcome, bytes > 0 {
+            do {
+                try await requestConfirmation(
+                    actionName: .continue,
+                    dialog: IntentDialog(stringLiteral: outcome.cleanUpQuestion)
+                )
+            } catch {
+                // Declined or dismissed: just give the answer.
+                return .result(value: outcome.dialog, dialog: IntentDialog(stringLiteral: outcome.dialog))
+            }
+            router.reviewSafeClean()
+            let answer = "Purge is showing what it will clean. Confirm there to move it to the Trash."
+            return .result(value: answer, dialog: IntentDialog(stringLiteral: answer))
+        }
         return .result(value: outcome.dialog, dialog: IntentDialog(stringLiteral: outcome.dialog))
     }
 }
@@ -23,6 +43,12 @@ extension IntentRouter.ScanOutcome {
     var safeSize: Measurement<UnitInformationStorage>? {
         guard case .scanned(let bytes) = self else { return nil }
         return IntentFileSize.measurement(bytes)
+    }
+
+    /// Asked in the Spotlight or Siri panel when there is something to clean.
+    var cleanUpQuestion: String {
+        guard case .scanned(let bytes) = self else { return dialog }
+        return "Found \(formatBytes(bytes)) that's safe to clean. Clean it up in Purge?"
     }
 
     var dialog: String {

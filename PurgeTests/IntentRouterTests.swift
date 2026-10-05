@@ -145,6 +145,40 @@ struct IntentRouterTests {
         #expect(IntentRouter.ScanOutcome.stopped.safeSize == nil)
     }
 
+    @Test("Saying yes opens the Overview, and only asks to clean when there is something safe")
+    func reviewSafeCleanOpensOverview() {
+        let store = Self.makeStore()
+        store.selectedTab = .largeFiles
+        let reveals = RevealCounter()
+        let router = Self.makeRouter(store: store, reveals: reveals)
+
+        router.reviewSafeClean()
+
+        #expect(store.selectedTab == .overview)
+        // Nothing safe was found, so there is no confirmation to open.
+        #expect(!store.isSafeCleanConfirmationRequested)
+        #expect(reveals.count == 1)
+    }
+
+    @Test("Before onboarding is done, yes only opens the window")
+    func reviewSafeCleanBeforeOnboarding() {
+        let store = Self.makeStore()
+        store.selectedTab = .largeFiles
+        let router = Self.makeRouter(store: store, reveals: RevealCounter(), onboardingDone: false)
+
+        router.reviewSafeClean()
+
+        #expect(store.selectedTab == .largeFiles)
+        #expect(!store.isSafeCleanConfirmationRequested)
+    }
+
+    @Test("The clean-up question names the size")
+    func cleanUpQuestionText() {
+        let question = IntentRouter.ScanOutcome.scanned(safeBytes: 1_576_079_360).cleanUpQuestion
+        #expect(question.hasPrefix("Found "))
+        #expect(question.hasSuffix("Clean it up in Purge?"))
+    }
+
     // MARK: Uninstall an app
 
     @Test("Uninstall opens the review for that app alone once the app list has it")

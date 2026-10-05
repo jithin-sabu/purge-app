@@ -802,6 +802,13 @@ struct OverviewCleanSafeButton: View {
         store.isSettled(.appCaches) && store.isSettled(.devTools)
     }
 
+    /// Scan My Mac asked to clean: open the same confirmation the button opens.
+    private func openRequestedConfirmation() {
+        guard store.isSafeCleanConfirmationRequested else { return }
+        store.isSafeCleanConfirmationRequested = false
+        isConfirming = true
+    }
+
     var body: some View {
         if bytes > 0 || isCleaning {
             Button {
@@ -819,6 +826,8 @@ struct OverviewCleanSafeButton: View {
             .help(isReady
                 ? "Move every Safe item in App Caches and Dev Tools to the Trash"
                 : "Waiting for App Caches and Dev Tools to finish scanning")
+            .onAppear(perform: openRequestedConfirmation)
+            .onChange(of: store.isSafeCleanConfirmationRequested) { _ in openRequestedConfirmation() }
             .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
                 OverviewCleanSafeConfirmation(
                     breakdown: store.overviewBreakdown(

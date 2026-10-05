@@ -125,6 +125,20 @@ final class IntentRouter {
         return false
     }
 
+    /// Yes to "Clean it up in Purge?": shows the Overview with its Clean Safe
+    /// Items confirmation open. The person still confirms there.
+    func reviewSafeClean() {
+        guard onboardingDone() else {
+            reveal()
+            return
+        }
+        store.selectedTab = .overview
+        if store.safeRecoverableBytes > 0, !store.isDeleting {
+            store.isSafeCleanConfirmationRequested = true
+        }
+        reveal()
+    }
+
     /// Opens the window on a tab. Before onboarding is done the window shows
     /// onboarding instead, so the tab is left alone.
     func open(tab: PurgeStore.Tab) {
