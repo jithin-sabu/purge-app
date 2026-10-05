@@ -3,6 +3,26 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.8.0</title>
+      <pubDate>Mon, 05 Oct 2026 23:49:53 +0000</pubDate>
+      <sparkle:version>28</sparkle:version>
+      <sparkle:shortVersionString>1.8.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Spotlight, Shortcuts and Siri actions.</strong> Scan for Junk tells you how much is safe to clean, Clean Safe Junk moves Safe items in App Caches and Dev Tools to the Trash, and Uninstall an App opens the uninstaller on the app you pick. Spotlight actions need macOS 26 or later.</li>
+          <li><strong>Check for Updates in the menus.</strong> It is now in the Purge menu and the menu bar dropdown, so it works with the Dock icon hidden.</li>
+          <li><strong>Settings with Command-Comma.</strong> Settings in the Purge menu now opens the Settings tab, and ⌘, does the same.</li>
+          <li><strong>Real clean progress.</strong> The cleaning screen and the menu bar now move while large folders such as Telegram media are emptied, and the space freed counts only what reached the Trash.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.8.0/Purgev1.8.0.dmg"
+        sparkle:edSignature="jOoq/hC+a/V7wrOWV7GsRQxaLoy/JwpprhUluEVFDAbHCUDEIZVirdC1oszPhDcFUijb3ruLgMDBYXPY6bGtAw=="
+        length="8528919"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.7.1</title>
       <pubDate>Sun, 04 Oct 2026 23:24:43 +0000</pubDate>
       <sparkle:version>27</sparkle:version>
