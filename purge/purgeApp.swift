@@ -180,7 +180,7 @@ struct PurgeApp: App {
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
         .commands {
-            PurgeCommands(store: store)
+            PurgeCommands(store: store, updater: appDelegate.updater)
         }
 
         MenuBarExtra(isInserted: menuBarIconBinding) {
@@ -197,8 +197,12 @@ struct PurgeApp: App {
 
 struct PurgeCommands: Commands {
     let store: PurgeStore
+    let updater: PurgeUpdater
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            CheckForUpdatesMenuItem(updater: updater)
+        }
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {}
                 .keyboardShortcut(",", modifiers: .command)
@@ -212,5 +216,18 @@ struct PurgeCommands: Commands {
             .disabled(store.isDeleting)
         }
         CommandGroup(replacing: .undoRedo) {}
+    }
+}
+
+/// A view rather than a plain button so it observes `canCheckForUpdates`;
+/// `Commands` bodies don't re-render on a published change by themselves.
+private struct CheckForUpdatesMenuItem: View {
+    @ObservedObject var updater: PurgeUpdater
+
+    var body: some View {
+        Button("Check for Updates…") {
+            updater.checkForUpdates()
+        }
+        .disabled(!updater.canCheckForUpdates)
     }
 }
