@@ -62,6 +62,8 @@ struct MenuBarContentView: View {
     /// rasterises the status item's view tree into a bitmap on the main thread.
     /// During a scan that was the single largest main-thread cost in the app.
     let store: PurgeStore
+    /// A plain reference for the same reason; only `CheckForUpdatesRow` observes it.
+    let updater: PurgeUpdater
     /// The panel hierarchy stays alive while the panel is hidden (the `.window`
     /// panel is reused across opens), so every repeating timer in this view
     /// must be gated on this flag or it keeps waking the app while closed.
@@ -189,6 +191,7 @@ struct MenuBarContentView: View {
             MenuTextRow(title: "Open Purge") {
                 openPurge()
             }
+            CheckForUpdatesRow(updater: updater)
             MenuTextRow(title: "Quit") {
                 NSApplication.shared.terminate(nil)
             }
@@ -383,6 +386,17 @@ private struct MenuStorageBar: View {
 
 /// Interactive plain menu row with the native selection highlight. The text and
 /// icon flip to white while highlighted, like a native menu item.
+/// Its own view so only this row redraws when Sparkle's check state changes.
+private struct CheckForUpdatesRow: View {
+    @ObservedObject var updater: PurgeUpdater
+
+    var body: some View {
+        MenuTextRow(title: "Check for Updates…", isEnabled: updater.canCheckForUpdates) {
+            updater.checkForUpdates()
+        }
+    }
+}
+
 private struct MenuTextRow: View {
     let title: String
     var systemImage: String?

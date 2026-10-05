@@ -70,21 +70,6 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
             RemovedAppMonitor.shared.handleOpenURL(url)
         }
     }
-
-    func checkForUpdates() {
-        updater.checkForUpdates()
-    }
-}
-
-private struct PurgeAppDelegateKey: EnvironmentKey {
-    static let defaultValue: PurgeAppDelegate? = nil
-}
-
-extension EnvironmentValues {
-    var purgeAppDelegate: PurgeAppDelegate? {
-        get { self[PurgeAppDelegateKey.self] }
-        set { self[PurgeAppDelegateKey.self] = newValue }
-    }
 }
 
 @main
@@ -155,7 +140,6 @@ struct PurgeApp: App {
                 .environmentObject(diskStore)
                 .environmentObject(trashStore)
                 .environmentObject(appDelegate.updater)
-                .environment(\.purgeAppDelegate, appDelegate)
                 .onAppear {
                     // Model/service wiring lives in `AppBootstrapper` — it has to run
                     // windowless. Only the window-scoped appearance work is left here.
@@ -180,11 +164,11 @@ struct PurgeApp: App {
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
         .commands {
-            PurgeCommands(store: store)
+            PurgeCommands(store: store, updater: appDelegate.updater)
         }
 
         MenuBarExtra(isInserted: menuBarIconBinding) {
-            MenuBarContentView(model: menuModel, store: store)
+            MenuBarContentView(model: menuModel, store: store, updater: appDelegate.updater)
                 .environmentObject(store)
                 .environmentObject(diskStore)
                 .environmentObject(trashStore)
@@ -197,8 +181,12 @@ struct PurgeApp: App {
 
 struct PurgeCommands: Commands {
     let store: PurgeStore
+    let updater: PurgeUpdater
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            CheckForUpdatesMenuItem(updater: updater)
+        }
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {}
                 .keyboardShortcut(",", modifiers: .command)
@@ -212,5 +200,18 @@ struct PurgeCommands: Commands {
             .disabled(store.isDeleting)
         }
         CommandGroup(replacing: .undoRedo) {}
+    }
+}
+
+/// A view rather than a plain button so it observes `canCheckForUpdates`;
+/// `Commands` bodies don't re-render on a published change by themselves.
+private struct CheckForUpdatesMenuItem: View {
+    @ObservedObject var updater: PurgeUpdater
+
+    var body: some View {
+        Button("Check for Updates…") {
+            updater.checkForUpdates()
+        }
+        .disabled(!updater.canCheckForUpdates)
     }
 }

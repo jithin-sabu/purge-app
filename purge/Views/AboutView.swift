@@ -3,7 +3,7 @@ import SwiftUI
 
 struct AboutView: View {
     @EnvironmentObject private var store: PurgeStore
-    @Environment(\.purgeAppDelegate) private var appDelegate
+    @EnvironmentObject private var updater: PurgeUpdater
     @AppStorage(FirstRunGate.onboardingCompletedKey) private var hasCompletedOnboarding = false
     @AppStorage(DeveloperMode.userDefaultsKey) private var developerModeEnabled = false
     /// Counts rapid taps on the app icon; reaching the threshold toggles developer mode.
@@ -82,8 +82,12 @@ struct AboutView: View {
             }
 
             aboutCard {
-                AboutActionRow(icon: "arrow.triangle.2.circlepath", label: "Check for updates") {
-                    appDelegate?.checkForUpdates()
+                AboutActionRow(
+                    icon: "arrow.triangle.2.circlepath",
+                    label: "Check for updates",
+                    isEnabled: updater.canCheckForUpdates
+                ) {
+                    updater.checkForUpdates()
                 }
             }
             .padding(.top, 6)
@@ -395,6 +399,7 @@ private struct AboutAllowlistCategoryRow: View {
 private struct AboutActionRow: View {
     let icon: String
     let label: String
+    var isEnabled = true
     let action: () -> Void
 
     var body: some View {
@@ -418,7 +423,10 @@ private struct AboutActionRow: View {
             .padding(.horizontal, 16)
             .frame(height: AppStyle.Row.compactHeight)
             .contentShape(Rectangle())
+            // The plain style doesn't dim a disabled row on its own.
+            .opacity(isEnabled ? 1 : 0.4)
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
     }
 }

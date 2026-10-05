@@ -19,6 +19,10 @@ final class PurgeUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     /// the Info.plist default.
     @Published private(set) var automaticallyChecksForUpdates = false
 
+    /// False while Sparkle can't start a check, such as when one is already
+    /// running. Drives the enabled state of the Check for Updates menu item.
+    @Published private(set) var canCheckForUpdates = false
+
     override init() {
         super.init()
         controller = SPUStandardUpdaterController(
@@ -27,6 +31,8 @@ final class PurgeUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
             userDriverDelegate: nil
         )
         automaticallyChecksForUpdates = controller.updater.automaticallyChecksForUpdates
+        controller.updater.publisher(for: \.canCheckForUpdates)
+            .assign(to: &$canCheckForUpdates)
     }
 
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
