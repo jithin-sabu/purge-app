@@ -26,39 +26,6 @@ struct IntentRouterTests {
         PurgeStore(defaults: UserDefaults(suiteName: "purge-tests-\(UUID().uuidString)")!)
     }
 
-    @Test("The tab option covers the five scan tabs and nothing else")
-    func tabOptionsMapToScanTabs() {
-        let mapped = PurgeTabOption.allCases.map(\.tab)
-        #expect(mapped == [.overview, .appCaches, .devTools, .largeFiles, .uninstaller])
-        #expect(!mapped.contains(.settings))
-        #expect(!mapped.contains(.about))
-        #expect(PurgeTabOption.caseDisplayRepresentations.count == PurgeTabOption.allCases.count)
-    }
-
-    @Test("Opening a tab selects it and shows the window once")
-    func openSelectsTabAndReveals() {
-        let store = Self.makeStore()
-        let reveals = RevealCounter()
-        let router = Self.makeRouter(store: store, reveals: reveals)
-
-        router.open(tab: .largeFiles)
-
-        #expect(store.selectedTab == .largeFiles)
-        #expect(reveals.count == 1)
-    }
-
-    @Test("Before onboarding is done the window opens but the tab is left alone")
-    func openBeforeOnboardingOnlyReveals() {
-        let store = Self.makeStore()
-        let reveals = RevealCounter()
-        let router = Self.makeRouter(store: store, reveals: reveals, onboardingDone: false)
-
-        router.open(tab: .uninstaller)
-
-        #expect(store.selectedTab == .overview)
-        #expect(reveals.count == 1)
-    }
-
     // MARK: Scan for Junk
 
     @Test("Scanning while idle runs the limited scan without Full Disk Access")
@@ -135,15 +102,10 @@ struct IntentRouterTests {
         fake.cleanUp()
     }
 
-    @Test("Only a finished scan returns a size to Shortcuts")
+    @Test("The answer wording fits each outcome")
     func scanAnswerValues() {
-        let size = IntentRouter.ScanOutcome.scanned(safeBytes: 1_576_079_360).safeSize
-        #expect(size?.unit == .gigabytes)
-        #expect(size?.value == 1.58)
         #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 0).dialog == "No junk to clean right now.")
         #expect(IntentRouter.ScanOutcome.scanned(safeBytes: 2_000_000).dialog.contains("safe to clean"))
-        #expect(IntentRouter.ScanOutcome.busyCleaning.safeSize == nil)
-        #expect(IntentRouter.ScanOutcome.stopped.safeSize == nil)
     }
 
     @Test("The answer puts the size in bold")
@@ -154,52 +116,6 @@ struct IntentRouterTests {
         #expect(bold.count == 1)
         #expect(String(answer[bold[0].range].characters) == formatBytes(1_576_079_360))
         #expect(String(IntentRouter.ScanOutcome.busyCleaning.styledAnswer.characters) == IntentRouter.ScanOutcome.busyCleaning.dialog)
-    }
-
-    // MARK: How much can Purge free
-
-    @Test("With no scan yet it says so instead of 0")
-    func spaceBeforeAnyScan() {
-        let router = Self.makeRouter(store: Self.makeStore(), reveals: RevealCounter())
-        let answer = router.spaceToFree()
-        #expect(answer == .neverScanned)
-        #expect(answer.size == nil)
-        #expect(answer.text() == "Purge hasn't scanned for junk yet. Run Scan for Junk first.")
-    }
-
-    @Test("After a scan it gives the saved figure and its age, without opening Purge")
-    func spaceAfterScan() async {
-        let fake = FakeScans()
-        let store = fake.makeStore()
-        let reveals = RevealCounter()
-        let router = Self.makeRouter(store: store, reveals: reveals)
-        _ = await router.scanMac()
-        let revealsBefore = reveals.count
-
-        let answer = router.spaceToFree()
-
-        guard case .known(let bytes, let scannedAt) = answer else {
-            Issue.record("Expected a known figure, got \(answer)")
-            fake.cleanUp()
-            return
-        }
-        #expect(bytes == 0)
-        #expect(abs(scannedAt.timeIntervalSinceNow) < 60)
-        #expect(answer.text() == "No junk to clean, as of just now.")
-        #expect(reveals.count == revealsBefore)
-        fake.cleanUp()
-    }
-
-    @Test("The answer bolds the size and says how old the figure is")
-    func spaceAnswerWording() {
-        let now = Date()
-        let answer = IntentRouter.SpaceAnswer.known(bytes: 1_610_000_000, scannedAt: now.addingTimeInterval(-300))
-        let text = answer.text(now: now)
-        #expect(text.hasPrefix("About \(formatBytes(1_610_000_000)) of junk is safe to clean, as of "))
-        #expect(text.contains("5 minutes ago"))
-        let styled = answer.styledText(now: now)
-        #expect(styled.runs.filter { $0.inlinePresentationIntent == .stronglyEmphasized }.count == 1)
-        #expect(answer.size?.unit == .gigabytes)
     }
 
     // MARK: Uninstall an app
@@ -330,17 +246,6 @@ struct IntentRouterTests {
         #expect(InstalledAppIndex.matching("tinyspeck", in: apps).map(\.name) == ["Slack"])
         #expect(InstalledAppIndex.matching("  ", in: apps).count == 2)
         #expect(InstalledAppIndex.matching("figma", in: apps).isEmpty)
-    }
-
-    @Test("Sizes come back in a readable unit, rounded to two places")
-    func fileSizeUnits() {
-        #expect(IntentFileSize.measurement(512).unit == .bytes)
-        #expect(IntentFileSize.measurement(2_500).value == 2.5)
-        #expect(IntentFileSize.measurement(2_500).unit == .kilobytes)
-        #expect(IntentFileSize.measurement(734_003_200).unit == .megabytes)
-        #expect(IntentFileSize.measurement(734_003_200).value == 734)
-        #expect(IntentFileSize.measurement(3_200_000_000_000).unit == .terabytes)
-        #expect(IntentFileSize.measurement(0).value == 0)
     }
 
     private static func eventually(timeout: TimeInterval = 5, _ condition: () -> Bool) async -> Bool {

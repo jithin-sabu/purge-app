@@ -4,7 +4,10 @@ struct UninstallAppIntent: AppIntent {
     static let title: LocalizedStringResource = "Uninstall an App"
     static let description = IntentDescription(
         "Opens Purge's uninstall review for this app, listing the app and everything it leaves behind. Nothing is removed until you confirm in Purge.",
-        searchKeywords: ["uninstall", "remove", "delete", "get rid of", "app", "apps", "leftovers"]
+        searchKeywords: [
+            "uninstall", "remove", "delete", "get rid of", "trash", "uninstall app",
+            "remove app", "delete app", "app", "apps", "leftovers",
+        ]
     )
     static let openAppWhenRun = true
 

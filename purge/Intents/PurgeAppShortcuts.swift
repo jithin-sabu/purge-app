@@ -1,32 +1,25 @@
 import AppIntents
 
-/// The actions Spotlight, Siri and the Shortcuts app offer without any setup.
-/// Every phrase names the app; App Shortcuts are only matched that way.
+/// Two actions, on purpose: the jobs people actually reach for from Spotlight
+/// or Siri are freeing space and removing an app. Opening a tab, a separate
+/// "how much" answer and a size for Shortcuts are left out: each adds a choice
+/// without saving a step. Every phrase names the app, since App
+/// Shortcuts only match that way; Spotlight also matches the search keywords
+/// on each action, which need no app name.
 nonisolated struct PurgeAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
-        AppShortcut(
-            intent: OpenPurgeTabIntent(),
-            phrases: [
-                "Open \(\.$tab) in \(.applicationName)",
-                "Show \(\.$tab) in \(.applicationName)",
-                "Open \(.applicationName) to \(\.$tab)",
-                "Go to \(\.$tab) in \(.applicationName)",
-                "Show my \(\.$tab) in \(.applicationName)",
-            ],
-            shortTitle: "Open Tab",
-            systemImageName: "macwindow"
-        )
         AppShortcut(
             intent: ScanForJunkIntent(),
             phrases: [
                 "Scan for junk with \(.applicationName)",
                 "Find junk with \(.applicationName)",
-                "\(.applicationName) scan",
-                "Clean up my Mac with \(.applicationName)",
                 "Free up space with \(.applicationName)",
+                "Clean up my Mac with \(.applicationName)",
+                "How much can \(.applicationName) free",
+                "How much space can \(.applicationName) free up",
                 "Check my storage with \(.applicationName)",
-                "What can \(.applicationName) clean",
                 "Scan my Mac with \(.applicationName)",
+                "\(.applicationName) scan",
             ],
             shortTitle: "Scan for Junk",
             systemImageName: "magnifyingglass"
@@ -45,17 +38,6 @@ nonisolated struct PurgeAppShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Uninstall an App",
             systemImageName: "trash"
-        )
-        AppShortcut(
-            intent: HowMuchCanPurgeFreeIntent(),
-            phrases: [
-                "How much can \(.applicationName) free",
-                "How much space can \(.applicationName) free up",
-                "How much junk does \(.applicationName) see",
-                "\(.applicationName) junk size",
-            ],
-            shortTitle: "How Much Can Purge Free?",
-            systemImageName: "chart.pie"
         )
     }
 }
