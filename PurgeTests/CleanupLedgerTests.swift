@@ -321,6 +321,47 @@ struct CleanupLedgerTests {
         #expect(store.baseline()?.untrackedBytes == 0)
     }
 
+    /// Clearing History promises to remove every cleanup record. The next launch
+    /// must not rebuild the year from the lifetime counter, which is not cleared.
+    @Test
+    func clearingRemovesTheRecordAndTheCounterCannotBringItBack() async {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = Self.makeStore(directory)
+        let history = [Self.historyEntry(Self.date(2026, 10, 2), [("/Users/me/.npm", 400)])]
+        await store.reconcile(with: Self.legacy(history, lifetime: 50_400)).value
+
+        store.clear(now: Self.date(2026, 10, 3))
+        await store.reconcile(with: Self.legacy([], lifetime: 50_400)).value
+        store.record(
+            Self.report([DeletedItem(path: "/Users/me/.npm", sizeBytes: 7)], on: Self.date(2026, 10, 4)),
+            id: UUID(),
+            trigger: .manual,
+            source: .clean
+        )
+
+        let totals = await store.yearTotals(2026)
+        #expect(totals.headlineBytes == 7)
+        #expect(totals.cleanCount == 1)
+        #expect(store.baseline()?.untrackedBytes == 0)
+    }
+
+    /// An import still running when History is cleared works from the History
+    /// that was just cleared, so its cleans must not land afterwards.
+    @Test
+    func importStillRunningWhenClearedWritesNothing() async {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = Self.makeStore(directory)
+        let history = [Self.historyEntry(Self.date(2026, 10, 2), [("/Users/me/.npm", 400)])]
+
+        let running = store.reconcile(with: Self.legacy(history, lifetime: 400))
+        store.clear()
+        await running.value
+
+        #expect(store.sessions(inYear: 2026).isEmpty)
+    }
+
     /// A user who skips every ledger release until a recap in 2027: untracked
     /// bytes span the new year, so they are split by days and marked an estimate.
     @Test

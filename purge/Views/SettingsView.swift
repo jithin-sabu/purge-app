@@ -83,6 +83,7 @@ struct SettingsView: View {
         ) {
             Button("Clear history", role: .destructive) {
                 history.clear()
+                CleanupLedgerStore.shared.clear()
                 isCleaningHistoryExpanded = false
             }
             Button("Cancel", role: .cancel) {}

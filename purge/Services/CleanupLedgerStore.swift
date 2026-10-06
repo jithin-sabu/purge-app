@@ -24,6 +24,9 @@ final class CleanupLedgerStore {
     private let calendar: Calendar
     private let resolveBundleID: @Sendable (String) -> String?
     private var pendingReconcile: Task<Void, Never>?
+    /// Bumped by `clear()`, so an import already running cannot write cleared
+    /// cleans back.
+    private var generation = 0
 
     init(
         directory: URL,
@@ -119,12 +122,14 @@ final class CleanupLedgerStore {
         let homePath = homePath
         let resolve = resolveBundleID
         let previous = pendingReconcile
+        let startGeneration = generation
         let task = Task { [weak self] in
             await previous?.value
             let missing = await Self.sessionsMissing(
                 from: snapshot, directory: directory, calendar: calendar, homePath: homePath, resolve: resolve
             )
-            self?.append(missing)
+            guard let self, self.generation == startGeneration else { return }
+            self.append(missing)
         }
         pendingReconcile = task
         return task
@@ -137,7 +142,7 @@ final class CleanupLedgerStore {
     private func captureBaselineIfNeeded(_ legacy: LegacyRecord) {
         let url = directory.appendingPathComponent(Self.baselineName)
         guard !FileManager.default.fileExists(atPath: url.path), yearFiles().isEmpty else { return }
-        let baseline = CleanupLedgerBaseline(
+        writeBaseline(CleanupLedgerBaseline(
             capturedAt: legacy.now,
             appVersion: legacy.appVersion,
             lifetimeMovedBytes: legacy.lifetimeMovedBytes,
@@ -146,9 +151,37 @@ final class CleanupLedgerStore {
             historyOldestDate: legacy.history.map(\.date).min(),
             firstSeenAt: legacy.firstSeenAt,
             firstSeenVersion: legacy.firstSeenVersion
-        )
+        ))
+    }
+
+    private func writeBaseline(_ baseline: CleanupLedgerBaseline) {
+        let url = directory.appendingPathComponent(Self.baselineName)
         guard ensureDirectory(), let data = try? Self.encoder().encode(baseline) else { return }
         try? data.write(to: url, options: .atomic)
+    }
+
+    /// Clearing History in Settings promises to remove every saved cleanup record,
+    /// so the ledger goes too. An import still running is dropped rather than
+    /// awaited: its snapshot is of the History just cleared.
+    ///
+    /// The baseline is replaced with an empty one, not deleted. With no baseline
+    /// and no ledger files, the next launch would take a new one from the lifetime
+    /// counter and bring every cleared byte back as "before the record".
+    func clear(now: Date = Date()) {
+        generation += 1
+        for file in yearFiles() {
+            try? FileManager.default.removeItem(at: file)
+        }
+        writeBaseline(CleanupLedgerBaseline(
+            capturedAt: now,
+            appVersion: FirstRunGate.currentAppVersion(),
+            lifetimeMovedBytes: 0,
+            historyEntryCount: 0,
+            historyMovedBytes: 0,
+            historyOldestDate: nil,
+            firstSeenAt: nil,
+            firstSeenVersion: nil
+        ))
     }
 
     func baseline() -> CleanupLedgerBaseline? {
