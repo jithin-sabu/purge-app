@@ -257,3 +257,132 @@ struct AllowlistExplanationDataTests {
         #expect(AuditPaths.evaluate("Library/Caches/com.apple.containermanagerd") == .blockedNeverDelete)
     }
 }
+
+// MARK: - Part 4: bugs
+
+@Suite("Allowlist audit: bugs")
+struct AllowlistBugTests {
+    /// Both rows used to resolve to "Not Sure" and were dropped from every scan.
+    @Test(arguments: ["Deno Cache", "Bun Cache"])
+    func denoAndBunRowsResolve(label: String) {
+        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: label, primaryPath: nil)
+        #expect(info.level == .safe)
+    }
+
+    @Test
+    func macOSInstallersAreFoundByBundleIDNotName() throws {
+        let fm = FileManager.default
+        let apps = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: apps) }
+        func makeApp(_ name: String, bundleID: String) throws {
+            let contents = apps.appendingPathComponent("\(name)/Contents", isDirectory: true)
+            try fm.createDirectory(at: contents, withIntermediateDirectories: true)
+            let plist: NSDictionary = ["CFBundleIdentifier": bundleID]
+            try plist.write(to: contents.appendingPathComponent("Info.plist"))
+        }
+        try makeApp("Install macOS Sequoia.app", bundleID: "com.apple.InstallAssistant.macOSSequoia")
+        try makeApp("Install macOS Helper.app", bundleID: "com.example.helper")
+        try makeApp("Xcode.app", bundleID: "com.apple.dt.Xcode")
+
+        let found = CacheDiscoveryPaths.macOSInstallerURLs(applications: apps).map(\.lastPathComponent)
+        #expect(found == ["Install macOS Sequoia.app"])
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: CacheDiscoveryPaths.macOSInstallerKey)?
+            .safetyLevel == .medium)
+        // The old prefix matched nothing real and is gone.
+        #expect(DeletionSafetyPolicy.evaluate(URL(fileURLWithPath: "/Applications/Install macOS")) != .allow)
+    }
+
+    @Test
+    func everyChromiumBrowserFrameworkIsRecognised() throws {
+        let fm = FileManager.default
+        let app = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)/Brave Browser.app")
+        let frameworks = app.appendingPathComponent("Contents/Frameworks", isDirectory: true)
+        try fm.createDirectory(
+            at: frameworks.appendingPathComponent("Brave Browser Framework.framework/Versions"),
+            withIntermediateDirectories: true
+        )
+        try fm.createDirectory(at: frameworks.appendingPathComponent("Sparkle.framework/Versions"), withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: app.deletingLastPathComponent()) }
+        #expect(CacheDiscoveryPaths.chromiumFrameworkVersionsDir(in: app)?.deletingLastPathComponent().lastPathComponent
+            == "Brave Browser Framework.framework")
+
+        for (appName, framework) in [
+            ("Brave Browser.app", "Brave Browser Framework.framework"),
+            ("Microsoft Edge.app", "Microsoft Edge Framework.framework"),
+            ("Chromium.app", "Chromium Framework.framework"),
+        ] {
+            let old = "/Applications/\(appName)/Contents/Frameworks/\(framework)/Versions/120.0.1.2"
+            #expect(DeletionSafetyPolicy.isWhitelistedStaleBrowserFrameworkPath(old), "\(appName)")
+            #expect(!DeletionSafetyPolicy.isWhitelistedStaleBrowserFrameworkPath(
+                "/Applications/\(appName)/Contents/Frameworks/\(framework)/Versions/Current"
+            ))
+        }
+    }
+
+    /// The old rule allowed a version folder of any framework in any app.
+    @Test
+    func otherAppsFrameworkVersionsAreNotOffered() {
+        for path in [
+            "/Applications/Xcode.app/Contents/Frameworks/IDEFoundation.framework/Versions/A",
+            "/Applications/Dia.app/Contents/Frameworks/Sparkle.framework/Versions/B",
+            "/Applications/Google Chrome.app/Contents/Frameworks/Sparkle.framework/Versions/B",
+        ] {
+            #expect(!DeletionSafetyPolicy.isWhitelistedStaleBrowserFrameworkPath(path), "\(path)")
+        }
+    }
+
+    @Test
+    func safariPrefixNoLongerCoversItsSyncAgents() {
+        #expect(SafetyTierList.evaluate(folderName: "com.apple.SafariBookmarksSyncAgent") == nil)
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "com.apple.Safari")?.safetyLevel == .safe)
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "com.apple.Safari.SafeBrowsing")?.safetyLevel == .safe)
+    }
+
+    @Test(arguments: [
+        "com.apple.finder",
+        "com.apple.dock",
+        "com.apple.controlcenter",
+        "com.apple.controlcenter.helper",
+        "com.apple.systemsettings.menucache",
+        "com.apple.Settings",
+        "com.apple.systempreferences.cache",
+        "com.crowdstrike.falcon.Agent",
+        "com.jamfsoftware.selfservice.mac",
+        "com.paloaltonetworks.GlobalProtect.client",
+        "com.cisco.secureclient.gui",
+        "im.rime.inputmethod.Squirrel",
+        "com.sogou.inputmethod.sogou",
+    ])
+    func systemUIAndSecurityAgentCachesAreNeverOffered(folderName: String) {
+        #expect(AuditPaths.evaluate("Library/Caches/\(folderName)") == .blockedNeverDelete)
+        #expect(
+            AuditPaths.evaluate("Library/Containers/\(folderName)/Data/Library/Caches/x") == .blockedNeverDelete
+        )
+    }
+
+    /// Crash Reports has its own row, so Application Logs must not reach it.
+    @Test
+    func applicationLogsAndCrashReportsAreSeparateDefinitions() {
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "Logs") == "applogs")
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "DiagnosticReports") == "crashreports")
+        #expect(CacheScanner.crashReportsFolderName == "DiagnosticReports")
+    }
+}
+
+@Suite("Spotify cache is held back when offline music exists")
+struct SpotifyOfflineMusicTests {
+    @Test
+    func onlySpotifyPathsAreChecked() {
+        let other = AuditPaths.url("Library/Caches/com.tinyspeck.slackmacgap")
+        #expect(!DeletionSafetyPolicy.spotifyOfflineMusicRefusesDeletion(other))
+    }
+
+    @Test
+    func refusalFollowsTheOfflineIndex() {
+        let spotify = AuditPaths.url("Library/Caches/com.spotify.client")
+        #expect(
+            DeletionSafetyPolicy.spotifyOfflineMusicRefusesDeletion(spotify)
+                == DeletionSafetyPolicy.spotifyOfflineIndexShowsDownloads(home: AuditPaths.home)
+        )
+    }
+}

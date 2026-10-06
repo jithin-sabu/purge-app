@@ -49,7 +49,8 @@ enum SafetyTierList {
     /// These are standard app cache folders that apps recreate automatically.
     nonisolated static let definitelySafeBundlePrefixes: [String] = [
         "com.google.Chrome",
-        "com.apple.Safari",
+        // Not "com.apple.Safari": as a prefix it also matched Safari's bookmark and
+        // history sync agents. Safari's own cache is matched by bundle ID instead.
         "org.mozilla.firefox",
         "com.brave.Browser",
         "company.thebrowser.Browser",

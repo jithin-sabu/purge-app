@@ -656,10 +656,12 @@
     "tag": "safe",
     "explanation": "This contains Safari's temporary browsing data, including website previews and recently visited page data. Deleting it is safe but websites may load slightly slower until the data rebuilds.",
     "bundle_ids": [
-      "com.apple.Safari"
+      "com.apple.Safari",
+      "com.apple.Safari.SafeBrowsing"
     ],
     "aliases": [
-      "com.apple.Safari"
+      "com.apple.Safari",
+      "com.apple.Safari.SafeBrowsing"
     ],
     "scope": "app_caches",
     "kind": "browser"
@@ -954,6 +956,18 @@
     ],
     "scope": "app_caches",
     "kind": "updater"
+  },
+  {
+    "key": "macos-installer",
+    "display_name": "macOS Installer",
+    "tag": "medium",
+    "explanation": "A full macOS installer downloaded from the App Store or Software Update, usually 12 to 15 GB. macOS does not need it once it is installed. Keep it if you use it to make a bootable USB installer; otherwise you can download it again from the App Store.",
+    "bundle_ids": [],
+    "aliases": [
+      "macOS Installer"
+    ],
+    "scope": "app_caches",
+    "kind": "system"
   },
   {
     "key": "dart-tool",
@@ -2126,7 +2140,7 @@
     "key": "spotify",
     "display_name": "Spotify",
     "tag": "safe",
-    "explanation": "Temporary music data stored by Spotify including song previews and album art. Safe to delete and Spotify will reload them as you listen.",
+    "explanation": "Songs and artwork Spotify saved while you listened. Only shown when you have nothing downloaded for offline listening, since Spotify keeps those downloads close by. Safe to delete; Spotify streams and saves them again as you listen.",
     "bundle_ids": [
       "com.spotify.client"
     ],

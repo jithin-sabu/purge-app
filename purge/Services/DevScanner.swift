@@ -58,6 +58,8 @@ nonisolated final class DevScanner {
         "Obsolete VS Code Extension": "obsolete-vscode-extension",
         "Cursor Agent Leftovers": "cursor-agent-leftover",
         "Orphaned Git Worktrees": "orphaned-git-worktree",
+        "Deno Cache": "deno-cache",
+        "Bun Cache": "bun-cache",
         "VS Code Old Workspace Data": "orphaned-editor-workspace-storage",
         "Cursor Old Workspace Data": "orphaned-editor-workspace-storage"
     ]

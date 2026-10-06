@@ -109,8 +109,40 @@ enum DeletionSafetyPolicy {
         "dashlane",
         "keepass",
         "authy",
-        "yubico"
+        "yubico",
+        // Input methods keep learned words and user dictionaries next to their caches.
+        "inputmethod"
     ]
+
+    /// Case-insensitive prefixes of `~/Library/Caches` and container folders that must
+    /// never be offered, even though their names look like ordinary app caches.
+    ///
+    /// System UI: deleting Finder, Dock, Control Center or System Settings caches
+    /// while they run can leave Settings panels blank until logout (Mole hit this,
+    /// issue #136 there). Endpoint security and MDM agents: touching a sensor's
+    /// files can trip its tamper detection, which a company reports as an attack.
+    nonisolated static let protectedCacheFolderPrefixes: [String] = [
+        "com.apple.finder",
+        "com.apple.dock",
+        "com.apple.controlcenter",
+        "com.apple.systempreferences",
+        "com.apple.settings",
+        "com.apple.systemsettings",
+        "com.crowdstrike.",
+        "com.sentinelone.",
+        "com.sentinel-labs.",
+        "com.eset.",
+        "com.jamf.",
+        "com.jamfsoftware.",
+        "com.paloaltonetworks.",
+        "com.cisco.anyconnect",
+        "com.cisco.secureclient"
+    ]
+
+    nonisolated static func hasProtectedCacheFolderPrefix(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return protectedCacheFolderPrefixes.contains { lower.hasPrefix($0) }
+    }
 
     /// macOS-managed folders under ~/Library/Logs that the OS refuses to remove even with
     /// Full Disk Access. They surface inside the "Application Logs" scan but must never be offered.
@@ -153,6 +185,9 @@ enum DeletionSafetyPolicy {
     /// match or protected prefix.
     nonisolated static func isProtectedContainerBundleID(_ bundleID: String) -> Bool {
         if protectedContainerBundleIDs.contains(bundleID) { return true }
+        if hasProtectedCacheFolderPrefix(bundleID) { return true }
+        // Input methods are often sandboxed, with the learned-word store in the container.
+        if bundleID.lowercased().contains("inputmethod") { return true }
         return protectedContainerBundleIDPrefixes.contains { bundleID.hasPrefix($0) }
     }
 
@@ -347,8 +382,11 @@ enum DeletionSafetyPolicy {
             // (App Caches scan already excludes com.docker.* bundle IDs; this
             // entry is used by the Dev Tools path.)
             "\(home)/Library/Containers/com.docker.docker",
-            "\(home)/.vagrant.d/boxes",
-            "/Applications/Install macOS"
+            "\(home)/.vagrant.d/boxes"
+            // macOS installers in /Applications are matched by
+            // `isWhitelistedMacOSInstallerPath`, not a prefix. The old prefix here,
+            // "/Applications/Install macOS", never matched a real installer, which is
+            // named "Install macOS Sequoia.app".
         ]
     }
 
@@ -377,6 +415,9 @@ enum DeletionSafetyPolicy {
         // a background update. That answer flips when the user quits, so it stays
         // outside the cache, same as project-artifact refusals.
         if staleBrowserFrameworkRefusesDeletion(url) { return false }
+        // Spotify keeps offline downloads alongside its cache. That answer changes
+        // the moment the user downloads a playlist, so it is never cached either.
+        if spotifyOfflineMusicRefusesDeletion(url) { return false }
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
@@ -490,6 +531,7 @@ enum DeletionSafetyPolicy {
     /// match or by identity/auth/payment fragment.
     nonisolated static func isProtectedSystemCacheFolderName(_ folderName: String) -> Bool {
         if protectedSystemCacheFolderNames.contains(folderName) { return true }
+        if hasProtectedCacheFolderPrefix(folderName) { return true }
         let lower = folderName.lowercased()
         return protectedSystemCacheFolderFragments.contains { lower.contains($0) }
     }
@@ -618,6 +660,51 @@ enum DeletionSafetyPolicy {
         return parts.count == start + 3
     }
 
+    /// Spotify's cache folder and the folder that holds its offline downloads.
+    nonisolated static func spotifyCachePath(home: String) -> String {
+        "\(home)/Library/Caches/com.spotify.client"
+    }
+
+    nonisolated static func spotifyOfflineStoragePath(home: String) -> String {
+        "\(home)/Library/Application Support/Spotify/PersistentCache/Storage"
+    }
+
+    /// `offline.bnk` exists even with nothing downloaded, so only a file over a
+    /// kilobyte counts (the signal Mole uses too). Cheap enough for every call; the
+    /// slower check for downloaded track files runs once per scan, in
+    /// `spotifyHasOfflineTrackFiles`.
+    nonisolated static func spotifyOfflineIndexShowsDownloads(home: String) -> Bool {
+        let index = spotifyOfflineStoragePath(home: home) + "/offline.bnk"
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: index))?[.size] as? NSNumber else {
+            return false
+        }
+        return size.intValue > 1024
+    }
+
+    /// Downloaded tracks are stored as encrypted `*.file` blobs.
+    nonisolated static func spotifyHasOfflineTrackFiles(home: String) -> Bool {
+        let storage = URL(fileURLWithPath: spotifyOfflineStoragePath(home: home), isDirectory: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: storage,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return false }
+        for case let url as URL in enumerator where url.pathExtension == "file" {
+            return true
+        }
+        return false
+    }
+
+    /// The Spotify cache is offered only when the user has nothing downloaded for
+    /// offline listening; Mole learned that clearing it can take offline songs too.
+    nonisolated static func spotifyOfflineMusicRefusesDeletion(_ url: URL) -> Bool {
+        let home = cachedHomePath
+        let cache = spotifyCachePath(home: home)
+        let path = url.standardizedFileURL.path
+        guard path == cache || path.hasPrefix(cache + "/") else { return false }
+        return spotifyOfflineIndexShowsDownloads(home: home)
+    }
+
     /// One running app, reduced to the paths needed to see which framework it loaded.
     nonisolated struct RunningProcessPaths: Equatable, Sendable {
         var bundlePath: String?
@@ -684,13 +771,48 @@ enum DeletionSafetyPolicy {
         return true
     }
 
+    /// `<Name> Framework.framework`, the naming every Chromium browser uses for its
+    /// one big framework (`Google Chrome Framework`, `Brave Browser Framework`, ...).
+    nonisolated static func isChromiumFrameworkName(_ name: String) -> Bool {
+        name.hasSuffix(" Framework.framework") && name.count > " Framework.framework".count
+    }
+
+    /// `/Applications/<known browser>.app/Contents/Frameworks/<Name> Framework.framework/Versions/<version>`
+    /// or something inside it. Only the browsers Purge scans: an old version folder
+    /// in any other app is not Purge's business.
     nonisolated static func isWhitelistedStaleBrowserFrameworkPath(_ path: String) -> Bool {
-        guard path.hasPrefix("/Applications/"), path.contains(".app/Contents/Frameworks/") else {
-            return false
-        }
-        guard path.contains("/Versions/") else { return false }
-        let last = URL(fileURLWithPath: path).lastPathComponent
-        return last != "Current" && last != "Versions"
+        let prefix = "/Applications/"
+        guard path.hasPrefix(prefix) else { return false }
+        let parts = path.dropFirst(prefix.count).split(separator: "/").map(String.init)
+        guard parts.count >= 6,
+              CacheDiscoveryPaths.chromiumBrowserAppNames.contains(parts[0]),
+              parts[1] == "Contents",
+              parts[2] == "Frameworks",
+              isChromiumFrameworkName(parts[3]),
+              parts[4] == "Versions" else { return false }
+        return parts[5] != "Current"
+    }
+
+    nonisolated static func isMacOSInstallerAppName(_ name: String) -> Bool {
+        name.hasPrefix("Install macOS ") && name.hasSuffix(".app")
+    }
+
+    /// Apple's full installers all carry a `com.apple.InstallAssistant` bundle ID.
+    nonisolated static func isMacOSInstallerBundle(at appURL: URL) -> Bool {
+        let plist = appURL.appendingPathComponent("Contents/Info.plist", isDirectory: false)
+        guard let info = NSDictionary(contentsOf: plist),
+              let bundleID = info["CFBundleIdentifier"] as? String else { return false }
+        return bundleID.hasPrefix("com.apple.InstallAssistant")
+    }
+
+    /// `/Applications/Install macOS <Name>.app`, or something inside it, when the
+    /// bundle really is an Apple installer.
+    nonisolated static func isWhitelistedMacOSInstallerPath(_ path: String) -> Bool {
+        let prefix = "/Applications/"
+        guard path.hasPrefix(prefix) else { return false }
+        guard let appName = path.dropFirst(prefix.count).split(separator: "/").first.map(String.init),
+              isMacOSInstallerAppName(appName) else { return false }
+        return isMacOSInstallerBundle(at: URL(fileURLWithPath: prefix + appName, isDirectory: true))
     }
 
     /// True when this version folder is still in use, or might be, because the
@@ -882,6 +1004,9 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedStaleBrowserFrameworkPath(path) {
+            return .allow
+        }
+        if isWhitelistedMacOSInstallerPath(path) {
             return .allow
         }
         if isWhitelistedEditorExtensionPath(path, home: home) {

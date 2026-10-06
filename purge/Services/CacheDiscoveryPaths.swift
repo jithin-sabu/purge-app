@@ -241,28 +241,67 @@ enum CacheDiscoveryPaths {
         return results
     }
 
+    /// Classification key and folder name for full macOS installer apps.
+    nonisolated static let macOSInstallerKey = "macOS Installer"
+
+    /// `/Applications/Install macOS <Name>.app` bundles whose bundle ID is Apple's
+    /// InstallAssistant. The name alone is not enough: any app can be called that.
+    nonisolated static func macOSInstallerURLs(applications: URL = URL(fileURLWithPath: "/Applications")) -> [URL] {
+        let fm = FileManager.default
+        guard let apps = try? fm.contentsOfDirectory(
+            at: applications,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        return apps
+            .filter { DeletionSafetyPolicy.isMacOSInstallerAppName($0.lastPathComponent) }
+            .filter { DeletionSafetyPolicy.isMacOSInstallerBundle(at: $0) }
+            .map(\.standardizedFileURL)
+            .sorted { $0.path < $1.path }
+    }
+
+    /// Chromium browsers whose bundles keep old framework versions after an update.
+    /// The framework is `<Browser> Framework.framework` in each (Chrome, Brave, Edge
+    /// and Chromium each use their own name), found by `chromiumFrameworkVersionsDir`.
+    nonisolated static let chromiumBrowserAppNames: [String] = [
+        "Google Chrome.app",
+        "Google Chrome Beta.app",
+        "Google Chrome Dev.app",
+        "Google Chrome Canary.app",
+        "Chromium.app",
+        "Arc.app",
+        "Brave Browser.app",
+        "Microsoft Edge.app",
+        "Vivaldi.app"
+    ]
+
+    /// `Contents/Frameworks/<Name> Framework.framework/Versions` inside a browser
+    /// bundle: the one Chromium framework, whose versioned folders pile up.
+    nonisolated static func chromiumFrameworkVersionsDir(in appURL: URL) -> URL? {
+        let frameworks = appURL.appendingPathComponent("Contents/Frameworks", isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: frameworks.path) else {
+            return nil
+        }
+        guard let name = entries.sorted().first(where: { DeletionSafetyPolicy.isChromiumFrameworkName($0) }) else {
+            return nil
+        }
+        return frameworks
+            .appendingPathComponent(name, isDirectory: true)
+            .appendingPathComponent("Versions", isDirectory: true)
+    }
+
     /// Stale Chromium framework versions inside `.app` bundles (not the `Current` symlink target).
     /// Versions a running browser is still executing from are dropped later by
     /// `DeletionSafetyPolicy.staleBrowserFrameworkRefusesDeletion`.
     nonisolated static func staleChromiumFrameworkVersionURLs() -> [URL] {
         let fm = FileManager.default
-        let appNames = [
-            "Google Chrome.app",
-            "Google Chrome Canary.app",
-            "Chromium.app",
-            "Arc.app",
-            "Brave Browser.app",
-            "Microsoft Edge.app"
-        ]
 
         var results: [URL] = []
-        for appName in appNames {
+        for appName in chromiumBrowserAppNames {
             let appURL = URL(fileURLWithPath: "/Applications/\(appName)", isDirectory: true)
             guard fm.fileExists(atPath: appURL.path) else { continue }
-            let versionsDir = appURL
-                .appendingPathComponent("Contents/Frameworks", isDirectory: true)
-                .appendingPathComponent("Google Chrome Framework.framework/Versions", isDirectory: true)
-            guard fm.fileExists(atPath: versionsDir.path) else { continue }
+            guard let versionsDir = chromiumFrameworkVersionsDir(in: appURL),
+                  fm.fileExists(atPath: versionsDir.path) else { continue }
 
             let currentLink = versionsDir.appendingPathComponent("Current", isDirectory: false)
             guard let dest = try? fm.destinationOfSymbolicLink(atPath: currentLink.path) else { continue }
