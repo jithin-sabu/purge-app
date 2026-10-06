@@ -889,9 +889,9 @@
   },
   {
     "key": "ms-playwright",
-    "display_name": "Playwright Test Tool",
-    "tag": "safe",
-    "explanation": "This stores temporary browser files used by Playwright, a developer tool for automated website testing. It is safe to delete.",
+    "display_name": "Playwright Browsers",
+    "tag": "medium",
+    "explanation": "Browsers Playwright downloaded for automated website testing. Your tests fail until you run npx playwright install, which downloads them again.",
     "bundle_ids": [],
     "aliases": [
       "ms-playwright-go"
@@ -1221,8 +1221,7 @@
     "aliases": [
       "Code",
       "CachedData",
-      "CachedExtensionVSIXs",
-      "workspaceStorage"
+      "CachedExtensionVSIXs"
     ],
     "scope": "app_caches",
     "kind": "code"
@@ -1243,7 +1242,7 @@
     "key": "jetbrains",
     "display_name": "JetBrains IDE Cache",
     "tag": "safe",
-    "explanation": "Temporary files stored by JetBrains IDEs such as IntelliJ, WebStorm, and PyCharm. Safe to delete and will be recreated when you open the IDE again.",
+    "explanation": "Indexes and caches that JetBrains IDEs such as IntelliJ, WebStorm and PyCharm rebuild on their own. Local History is left alone. The IDE re-indexes your projects the next time you open them, which takes a few minutes.",
     "bundle_ids": [],
     "aliases": [
       "JetBrains",
@@ -1281,8 +1280,8 @@
   {
     "key": "maven",
     "display_name": "Maven Package Cache",
-    "tag": "safe",
-    "explanation": "Cached Java packages downloaded by Maven. Safe to delete and will be re-downloaded when you build your Java projects again.",
+    "tag": "medium",
+    "explanation": "Java libraries downloaded by Maven, plus anything you built and installed locally with mvn install. Downloaded libraries come back on your next build, which can take a long time. Your own installed builds only come back if you build them again.",
     "bundle_ids": [],
     "aliases": [
       "maven",
@@ -1293,13 +1292,12 @@
   },
   {
     "key": "sbt",
-    "display_name": "SBT Cache",
-    "tag": "safe",
-    "explanation": "Cached Scala build files and dependencies. Safe to delete and will be re-downloaded on your next build.",
+    "display_name": "Ivy Dependency Cache",
+    "tag": "medium",
+    "explanation": "Java and Scala libraries downloaded by sbt and Ivy. Nothing is lost, but your next build downloads all of them again, which can take a long time and does not work offline.",
     "bundle_ids": [],
     "aliases": [
       "sbt",
-      ".sbt",
       ".ivy2"
     ],
     "scope": "dev_tools",
@@ -1307,14 +1305,13 @@
   },
   {
     "key": "rubygems",
-    "display_name": "Ruby Gems Cache",
+    "display_name": "Ruby Gem Downloads",
     "tag": "safe",
-    "explanation": "Installed Ruby packages. Safe to delete if you are not actively using Ruby projects. Running bundle install will recreate them.",
+    "explanation": "Downloaded .gem files and the gem spec index that RubyGems keeps after installing. Your installed gems and their commands stay. Safe to delete; RubyGems downloads them again when it needs them.",
     "bundle_ids": [],
     "aliases": [
       "rubygems",
-      ".gem",
-      "gems"
+      ".gem"
     ],
     "scope": "dev_tools",
     "kind": "packages"
@@ -1708,6 +1705,18 @@
     "kind": "build"
   },
   {
+    "key": "gradle-global-cache",
+    "display_name": "Gradle Dependency Cache",
+    "tag": "medium",
+    "explanation": "Libraries and build caches Gradle downloads for Java, Kotlin and Android projects. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline.",
+    "bundle_ids": [],
+    "aliases": [
+      "Gradle Dependency Cache"
+    ],
+    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
     "key": "cocoapods-cache",
     "display_name": "CocoaPods Cache",
     "tag": "safe",
@@ -1718,6 +1727,16 @@
       "Pods",
       "pod-cache"
     ],
+    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
+    "key": "cocoapods-spec-repos",
+    "display_name": "CocoaPods Spec Repos",
+    "tag": "medium",
+    "explanation": "The spec repositories CocoaPods uses to look up libraries. The public one is set up again on your next pod install. Private spec repos you added with pod repo add have to be added again.",
+    "bundle_ids": [],
+    "aliases": [],
     "scope": "dev_tools",
     "kind": "packages"
   },
@@ -2908,6 +2927,16 @@
     "kind": "code"
   },
   {
+    "key": "orphaned-editor-workspace-storage",
+    "display_name": "Old Editor Workspace Data",
+    "tag": "medium",
+    "explanation": "Saved state for projects that VS Code or Cursor opened from folders that no longer exist, including any AI chat history for those projects. If you moved or renamed a project instead of deleting it, its chats are in here.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "code"
+  },
+  {
     "key": "stale-browser-framework",
     "display_name": "Old Browser Framework",
     "tag": "medium",
@@ -3369,8 +3398,8 @@
   {
     "key": "nuget-packages",
     "display_name": "NuGet Package Cache",
-    "tag": "safe",
-    "explanation": "Downloaded .NET packages kept by NuGet so repeat builds do not re-download them. Safe to delete and re-downloaded on your next build.",
+    "tag": "medium",
+    "explanation": "Downloaded .NET packages that NuGet restores your projects from. Nothing is lost, but your next restore downloads them all again, which can take a while and does not work offline.",
     "bundle_ids": [],
     "aliases": [
       "NuGet Packages"
@@ -3395,8 +3424,8 @@
   {
     "key": "cabal-packages",
     "display_name": "Cabal Package Cache",
-    "tag": "safe",
-    "explanation": "Haskell packages downloaded by Cabal. Safe to delete and re-downloaded on your next build.",
+    "tag": "medium",
+    "explanation": "Haskell packages downloaded by Cabal. Nothing is lost, but your next build downloads and rebuilds them, which can take a long time.",
     "bundle_ids": [],
     "aliases": [
       "Cabal Packages"

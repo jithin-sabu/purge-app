@@ -385,10 +385,16 @@ struct WhitelistedAbsolutePrefixesTests {
         #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete)
     }
 
+    /// The folder as a whole holds each IDE's LocalHistory, so only an IDE
+    /// folder's other children are offered.
     @Test
-    func jetBrainsCachesFolderStaysAllowed() {
-        let url = TestPaths.homeURL("Library", "Caches", "JetBrains")
-        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+    func jetBrainsCachesAreAllowedExceptLocalHistory() {
+        let root = TestPaths.homeURL("Library", "Caches", "JetBrains")
+        #expect(DeletionSafetyPolicy.evaluate(root) == .blockedNeverDelete)
+        let index = TestPaths.homeURL("Library", "Caches", "JetBrains", "IntelliJIdea2024.1", "index")
+        #expect(DeletionSafetyPolicy.evaluate(index) == .allow)
+        let history = TestPaths.homeURL("Library", "Caches", "JetBrains", "IntelliJIdea2024.1", "LocalHistory")
+        #expect(DeletionSafetyPolicy.evaluate(history) == .blockedNeverDelete)
     }
 }
 

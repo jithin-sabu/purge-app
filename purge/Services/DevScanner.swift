@@ -25,12 +25,12 @@ nonisolated final class DevScanner {
         "Xcode Archives": "xcode-archives",
         "Xcode Caches": "xcode-app",
         "Homebrew Cache": "homebrew-cache",
-        "Gradle Cache": "gradle-cache",
+        "Gradle Cache": "gradle-global-cache",
         "Docker Desktop": "docker",
         "npm Cache": "npm-cache",
         "pnpm Store": "pnpm-store",
         "Yarn Cache": "yarn-cache",
-        "CocoaPods": "cocoapods-cache",
+        "CocoaPods": "cocoapods-spec-repos",
         "Flutter Cache": "flutter-cache",
         "Android SDK .gradle": "android-sdk",
         "Git Worktrees": "gitworktrees",
@@ -58,7 +58,9 @@ nonisolated final class DevScanner {
         "Obsolete Cursor Extension": "obsolete-cursor-extension",
         "Obsolete VS Code Extension": "obsolete-vscode-extension",
         "Cursor Agent Leftovers": "cursor-agent-leftover",
-        "Orphaned Git Worktrees": "orphaned-git-worktree"
+        "Orphaned Git Worktrees": "orphaned-git-worktree",
+        "VS Code Old Workspace Data": "orphaned-editor-workspace-storage",
+        "Cursor Old Workspace Data": "orphaned-editor-workspace-storage"
     ]
 
     private func safetyInfo(forToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
@@ -392,7 +394,56 @@ nonisolated final class DevScanner {
     /// these up front so they don't surface under App Caches and then get removed
     /// once the dev scan claims them.
     nonisolated static func claimedGlobalCachePaths() -> Set<String> {
-        Set(globalCacheDefinitions().flatMap(\.paths).map { $0.standardizedFileURL.path })
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        // The JetBrains row lists each IDE folder's children rather than the folder
+        // itself, so the folder is claimed by name here to keep App Caches off it.
+        let claimedRoots = [home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)]
+        return Set((globalCacheDefinitions().flatMap(\.paths) + claimedRoots).map { $0.standardizedFileURL.path })
+    }
+
+    /// `~/.gem/specs` plus each `~/.gem/ruby/<version>/cache`. Installed gems in
+    /// `~/.gem/ruby/<version>/gems` are left alone.
+    nonisolated static func gemDownloadCachePaths(home: URL) -> [URL] {
+        let fm = FileManager.default
+        var paths = [home.appendingPathComponent(".gem/specs", isDirectory: true)]
+        let rubyRoot = home.appendingPathComponent(".gem/ruby", isDirectory: true)
+        // Listing follows a link, so a `~/.gem` linked into Documents is skipped.
+        guard ProtectedLocations.isReadable(rubyRoot, access: .limited) else { return paths }
+        let versions = (try? fm.contentsOfDirectory(
+            at: rubyRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        for version in versions.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            paths.append(version.appendingPathComponent("cache", isDirectory: true))
+        }
+        return paths
+    }
+
+    /// Every child of each `~/Library/Caches/JetBrains/<IDE><version>` folder except
+    /// `LocalHistory`, which is the IDE's record of your file edits.
+    nonisolated static func jetBrainsCachePaths(home: URL) -> [URL] {
+        let fm = FileManager.default
+        let root = home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)
+        guard ProtectedLocations.isReadable(root, access: .limited) else { return [] }
+        let ideFolders = (try? fm.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        var paths: [URL] = []
+        for ide in ideFolders.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+        where (try? ide.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            let children = (try? fm.contentsOfDirectory(
+                at: ide,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )) ?? []
+            paths += children
+                .filter { $0.lastPathComponent != DeletionSafetyPolicy.jetBrainsLocalHistoryFolderName }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
+        return paths
     }
 
     private nonisolated static func globalCacheDefinitions() -> [(label: String, paths: [URL])] {
@@ -441,22 +492,19 @@ nonisolated final class DevScanner {
             ("VS Code Cache", [
                 home.appendingPathComponent("Library/Application Support/Code/Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Code/CachedData", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Code/CachedExtensionVSIXs", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Code/User/workspaceStorage", isDirectory: true)
+                home.appendingPathComponent("Library/Application Support/Code/CachedExtensionVSIXs", isDirectory: true)
             ]),
             ("Cursor Cache", [
                 home.appendingPathComponent("Library/Application Support/Cursor/Cache", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Cursor/CachedData", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Cursor/User/workspaceStorage", isDirectory: true)
+                home.appendingPathComponent("Library/Application Support/Cursor/CachedData", isDirectory: true)
             ]),
             // Only ~/Library/Caches/JetBrains is a real cache (indexes, compiler
             // output), rebuilt on next launch. ~/Library/Application Support/JetBrains
             // holds installed plugins and all settings, so it must never be cleaned.
-            ("JetBrains Cache", [
-                home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)
-            ]),
+            // Each IDE folder's LocalHistory is left out; see `jetBrainsCachePaths`.
+            ("JetBrains Cache", jetBrainsCachePaths(home: home)),
+            // `Zed/db` is Zed's workspace state, not a cache, so only the real cache is listed.
             ("Zed Cache", [
-                home.appendingPathComponent("Library/Application Support/Zed/db", isDirectory: true),
                 home.appendingPathComponent("Library/Caches/Zed", isDirectory: true)
             ]),
 
@@ -468,14 +516,12 @@ nonisolated final class DevScanner {
             ("Maven Cache", [
                 home.appendingPathComponent(".m2/repository", isDirectory: true)
             ]),
+            // `~/.sbt` is not listed: it holds the user's own sbt settings.
             ("SBT Cache", [
-                home.appendingPathComponent(".sbt", isDirectory: true),
                 home.appendingPathComponent(".ivy2/cache", isDirectory: true)
             ]),
 
-            ("Ruby Gems", [
-                home.appendingPathComponent(".gem", isDirectory: true)
-            ]),
+            ("Ruby Gems", gemDownloadCachePaths(home: home)),
             ("Bundler Cache", [
                 home.appendingPathComponent(".bundle/cache", isDirectory: true)
             ]),
@@ -527,6 +573,7 @@ nonisolated final class DevScanner {
         let home = FileManager.default.homeDirectoryForCurrentUser
         var staticDefinitions = Self.globalCacheDefinitions()
             + discoverObsoleteEditorExtensionDefinitions(home: home, access: access)
+            + discoverOrphanedEditorWorkspaceDefinitions(home: home, access: access)
         // Agent worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop, and Claude Code's live
         // inside those projects. A limited scan cannot look there without a prompt,
@@ -589,6 +636,23 @@ nonisolated final class DevScanner {
             ))
         ]
         return entries.filter { !$0.paths.isEmpty }
+    }
+
+    /// One row per editor listing the `workspaceStorage` entries whose project
+    /// folder is gone. See `EditorWorkspaceStoragePolicy` for why the folder as a
+    /// whole is never offered.
+    private func discoverOrphanedEditorWorkspaceDefinitions(
+        home: URL,
+        access: ScanAccess
+    ) -> [(label: String, paths: [URL])] {
+        EditorWorkspaceStoragePolicy.relativeRoots.compactMap { root in
+            let entries = EditorWorkspaceStoragePolicy.orphanedEntries(
+                inRoot: home.appendingPathComponent(root.relative, isDirectory: true),
+                access: access,
+                home: home
+            )
+            return entries.isEmpty ? nil : ("\(root.editor) Old Workspace Data", entries)
+        }
     }
 
     private func discoverObsoleteEditorExtensionDefinitions(

@@ -233,13 +233,19 @@ enum DeletionSafetyPolicy {
             // Re-creatable (re-auth devices / re-create AVDs) but not a pure
             // cache — classify as Check First, not Safe.
             "\(home)/.android",
-            "\(home)/.cocoapods",
-            "\(home)/.sbt",
+            // Spec repos only. `pod repo add` registrations live here too, so the
+            // row is Check First; the pod download cache is ~/Library/Caches/CocoaPods.
+            "\(home)/.cocoapods/repos",
+            // `~/.sbt` is deliberately NOT listed: it holds the user's own sbt settings
+            // (`1.0/global.sbt`, `1.0/plugins`) next to the launcher jars.
             "\(home)/.ivy2/cache",
             "\(home)/.cache/act",
             "\(home)/.zcompdump",
             "\(home)/.cargo/registry",
-            "\(home)/.pub-cache",
+            // Downloaded packages only. `~/.pub-cache/bin` and `global_packages` hold
+            // tools installed with `dart pub global activate`, which are not a cache.
+            "\(home)/.pub-cache/hosted",
+            "\(home)/.pub-cache/git",
             // Hex is Elixir/Erlang's package registry; `packages` is a pure download
             // cache, re-fetched by `mix deps.get`. `~/.mix` is deliberately NOT listed:
             // it holds installed Mix archives (tools the user chose to install), not a cache.
@@ -262,7 +268,12 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Logs",
             "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/.m2/repository",
-            "\(home)/.gem",
+            // `~/.gem` as a whole is NOT listed: `gem install --user-install` puts
+            // installed gems and their commands (CocoaPods, fastlane) under
+            // `~/.gem/ruby/<version>`. Only the spec index and the downloaded `.gem`
+            // files in `~/.gem/ruby/<version>/cache` are offered; see
+            // `isWhitelistedGemDownloadCachePath`.
+            "\(home)/.gem/specs",
             "\(home)/.bundle/cache",
             "\(home)/.composer/cache",
             "\(home)/.cargo/git",
@@ -275,18 +286,14 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/Code/Cache",
             "\(home)/Library/Application Support/Code/CachedData",
             "\(home)/Library/Application Support/Code/CachedExtensionVSIXs",
-            "\(home)/Library/Application Support/Code/User/workspaceStorage",
             "\(home)/Library/Application Support/Cursor/Cache",
             "\(home)/Library/Application Support/Cursor/CachedData",
-            "\(home)/Library/Application Support/Cursor/User/workspaceStorage",
             "\(home)/Library/Caches/JetBrains",
             // NOTE: `~/Library/Application Support/JetBrains` is deliberately NOT on
             // the allowlist. It holds installed plugins and all IDE settings (not a
             // cache), so it must never be scanned, sized, or deleted.
-            // AUDIT: `Zed/db` is Zed's local state database (not a pure cache).
-            // Re-created on next launch but may reset local editor state —
-            // Check First, not Safe.
-            "\(home)/Library/Application Support/Zed/db",
+            // NOTE: `~/Library/Application Support/Zed/db` is deliberately NOT listed.
+            // It is Zed's workspace state database, not a cache.
             "\(home)/Library/Caches/Zed",
             "\(home)/Library/Caches/ms-playwright",
             "\(home)/.cache/ms-playwright",
@@ -707,6 +714,40 @@ enum DeletionSafetyPolicy {
         #endif
     }
 
+    /// `~/Library/Caches/JetBrains/<IDE><version>/LocalHistory` is the IDE's own
+    /// history of every file you edited, kept in the caches folder by JetBrains'
+    /// design. Refuse it, and refuse the JetBrains folder and each IDE folder
+    /// whole, so the only thing that can go is an IDE folder's other children
+    /// (indexes, caches, logs, JCEF data), which the IDE rebuilds.
+    nonisolated static let jetBrainsLocalHistoryFolderName = "LocalHistory"
+
+    nonisolated static func isProtectedJetBrainsCachePath(_ path: String, home: String) -> Bool {
+        let root = "\(home)/Library/Caches/JetBrains"
+        guard path == root || path.hasPrefix(root + "/") else { return false }
+        let parts = path.dropFirst(root.count).split(separator: "/").map(String.init)
+        // The JetBrains folder itself, or one IDE folder whole.
+        if parts.count < 2 { return true }
+        return parts[1] == jetBrainsLocalHistoryFolderName
+    }
+
+    /// `~/.gem/ruby/<version>/cache` (or a file in it): the downloaded `.gem`
+    /// files RubyGems keeps after installing. The gems themselves sit next to it
+    /// in `gems/` and are never matched.
+    nonisolated static func isWhitelistedGemDownloadCachePath(_ path: String, home: String) -> Bool {
+        let root = "\(home)/.gem/ruby/"
+        guard path.hasPrefix(root) else { return false }
+        let parts = path.dropFirst(root.count).split(separator: "/").map(String.init)
+        return parts.count >= 2 && !parts[0].isEmpty && parts[1] == "cache"
+    }
+
+    /// One entry directly inside VS Code's or Cursor's `User/workspaceStorage`.
+    /// This only proves the shape. Which entries belong to projects that no longer
+    /// exist is decided by `EditorWorkspaceStoragePolicy` at scan time, and the
+    /// row is Check First, so nothing here is ever cleaned without the user.
+    nonisolated static func isWhitelistedEditorWorkspaceStorageEntry(_ path: String, home: String) -> Bool {
+        EditorWorkspaceStoragePolicy.isEntryPath(path, home: home)
+    }
+
     nonisolated static func isWhitelistedEditorExtensionPath(_ path: String, home: String) -> Bool {
         let prefixes = [
             "\(home)/.cursor/extensions/",
@@ -792,6 +833,9 @@ enum DeletionSafetyPolicy {
         if path == jetBrainsAppSupport || path.hasPrefix(jetBrainsAppSupport + "/") {
             return .blockedNeverDelete
         }
+        if isProtectedJetBrainsCachePath(path, home: home) {
+            return .blockedNeverDelete
+        }
 
         for allowed in whitelistedPrefixes(home: home) {
             if path == allowed || path.hasPrefix(allowed + "/") {
@@ -812,6 +856,12 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedEditorExtensionPath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedGemDownloadCachePath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedEditorWorkspaceStorageEntry(path, home: home) {
             return .allow
         }
         if isWhitelistedCursorAgentLeftoverPath(path, home: home) {
