@@ -73,20 +73,25 @@ final class LocalSnapshotStore: ObservableObject {
         lastThin = (outcome, snapshots?.count ?? 0)
     }
 
-    /// APFS gives the space back a moment after a snapshot goes, so the volume is read
-    /// a few times. Only a gain above the noise floor counts as freed.
+    /// APFS gives the space back over a few seconds after a snapshot goes, so the
+    /// volume is read until the figure stops moving. Only a gain above the noise floor
+    /// counts as freed.
     private static func freedBytes(since before: VolumeCapacity?) async -> Int64? {
         guard let before else { return nil }
-        for attempt in 0..<5 {
+        let noise = VolumeCapacityReader.noiseFloorBytes
+        var previous: Int64?
+        for attempt in 0..<10 {
             if attempt > 0 {
                 try? await Task.sleep(for: .seconds(1))
             }
-            guard let after = VolumeCapacityReader.read() else { return nil }
+            guard let after = VolumeCapacityReader.read() else { break }
             let gained = after.availableBytes - before.availableBytes
-            if gained >= VolumeCapacityReader.noiseFloorBytes {
+            if let previous, gained >= noise, abs(gained - previous) < noise {
                 return gained
             }
+            previous = gained
         }
-        return nil
+        guard let previous, previous >= noise else { return nil }
+        return previous
     }
 }

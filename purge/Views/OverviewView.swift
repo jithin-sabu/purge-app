@@ -634,7 +634,7 @@ private struct OverviewSnapshotConfirmation: View {
             }
         }
         .padding(AppStyle.Spacing.large)
-        .frame(width: 400)
+        .frame(width: 460)
     }
 }
 
