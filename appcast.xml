@@ -3,6 +3,26 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.8.1</title>
+      <pubDate>Tue, 06 Oct 2026 10:30:53 +0000</pubDate>
+      <sparkle:version>29</sparkle:version>
+      <sparkle:shortVersionString>1.8.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Safe items are only caches.</strong> Ruby, Android, Stack, Dart and CocoaPods rows now cover only their caches, and Maven, Gradle, NuGet, Cabal, Playwright and iOS Simulators move to Check First.</li>
+          <li><strong>Things Purge no longer offers.</strong> Password manager and authenticator caches, Screen Time, JetBrains Local History, Zed's workspace database, system app caches, and Spotify's cache while songs are downloaded offline.</li>
+          <li><strong>More caches found.</strong> App update downloads, Electron and Chromium app caches, iPhone and iPad software updates, old Claude Code and Cursor Agent versions, and caches for pnpm, Yarn, Prisma, Expo and more.</li>
+          <li><strong>Smaller fixes.</strong> macOS installers are found again, Crash Reports is no longer counted twice, and one damaged history entry no longer loses the rest of your cleaning history.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.8.1/Purgev1.8.1.dmg"
+        sparkle:edSignature="W/JhBCisqxLMmZUqEPSogWanxawuyStI7n8oS1q1s6ZKxH6TckGpLbbzJstoJABvrz5KtFCS1c4qmeNF2XS6Bw=="
+        length="8632694"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.8.0</title>
       <pubDate>Mon, 05 Oct 2026 23:49:53 +0000</pubDate>
       <sparkle:version>28</sparkle:version>
