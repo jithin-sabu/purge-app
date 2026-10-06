@@ -30,7 +30,8 @@
     "explanation": "photoshop, lightroom and bridge cache raw previews here. safe to clean. rebuilds automatically when you open images.",
     "bundle_ids": [],
     "aliases": [
-      "Adobe Camera Raw"
+      "Adobe Camera Raw",
+      "Adobe Camera Raw 2"
     ],
     "scope": "app_caches",
     "kind": "photos"
@@ -1214,7 +1215,8 @@
     "explanation": "This stores temporary data for RevenueCat, a tool that apps use to manage in-app subscriptions and purchases. It is safe to delete.",
     "bundle_ids": [],
     "aliases": [
-      "RevenueCat"
+      "RevenueCat",
+      "RevenueCatFonts"
     ],
     "scope": "app_caches",
     "kind": "store"
@@ -1800,9 +1802,9 @@
   },
   {
     "key": "pub-cache",
-    "display_name": "Flutter Pub Cache",
+    "display_name": "Dart Pub Cache",
     "tag": "safe",
-    "explanation": "Cached Dart and Flutter packages downloaded by pub, the Flutter package manager. Safe to delete and will be re-downloaded when you next run flutter pub get.",
+    "explanation": "Dart and Flutter packages downloaded by pub. Tools you installed with dart pub global activate are left alone. Safe to delete; packages download again on your next flutter pub get.",
     "bundle_ids": [],
     "aliases": [
       "pub-cache",
@@ -1827,7 +1829,7 @@
     "key": "xcode-device-support",
     "display_name": "Xcode iOS Device Support",
     "tag": "medium",
-    "explanation": "Files Xcode downloads to support debugging on specific devices. Safe to delete — Xcode will re-download them if needed.",
+    "explanation": "Files Xcode copies from your iPhone, Apple Watch, Apple TV or Vision Pro to debug apps on it. Nothing is lost, but Xcode copies them again the next time you connect that device, which takes a few minutes.",
     "bundle_ids": [],
     "aliases": [
       "iOS DeviceSupport",
@@ -3007,6 +3009,18 @@
     "kind": "updater"
   },
   {
+    "key": "electron-updater-downloads",
+    "display_name": "App Update Downloads",
+    "tag": "safe",
+    "explanation": "Update packages that apps built on Electron downloaded to install a new version. Once the update is installed they are left behind. Safe to delete; each app downloads its next update when one comes out.",
+    "bundle_ids": [],
+    "aliases": [
+      "Electron Updater Downloads"
+    ],
+    "scope": "app_caches",
+    "kind": "updater"
+  },
+  {
     "key": "spotlight-profiles-cache",
     "display_name": "Spotlight Profile Cache",
     "tag": "medium",
@@ -3482,6 +3496,282 @@
     ],
     "scope": "dev_tools",
     "staleness_aware": true,
+    "kind": "packages"
+  },
+  {
+    "key": "node-gyp-headers",
+    "display_name": "node-gyp Headers",
+    "tag": "safe",
+    "explanation": "Node.js header files that node-gyp downloads to build native add-ons. Safe to delete; it downloads them again on the next native build.",
+    "bundle_ids": [],
+    "aliases": [
+      "node-gyp"
+    ],
+    "scope": "app_caches",
+    "kind": "packages"
+  },
+  {
+    "key": "typescript-type-cache",
+    "display_name": "TypeScript Type Cache",
+    "tag": "safe",
+    "explanation": "Type definitions your editor downloaded so plain JavaScript files get autocomplete. Safe to delete; the editor downloads them again as needed.",
+    "bundle_ids": [],
+    "aliases": [
+      "typescript"
+    ],
+    "scope": "app_caches",
+    "kind": "code"
+  },
+  {
+    "key": "cursor-compile-cache",
+    "display_name": "Cursor Startup Cache",
+    "tag": "safe",
+    "explanation": "Compiled code that Cursor saves so it starts faster. Safe to delete; Cursor rebuilds it the next time it opens.",
+    "bundle_ids": [],
+    "aliases": [
+      "cursor-compile-cache"
+    ],
+    "scope": "app_caches",
+    "kind": "code"
+  },
+  {
+    "key": "claude-cli-cache",
+    "display_name": "Claude Code Logs",
+    "tag": "safe",
+    "explanation": "Logs that Claude Code writes for its MCP servers, one folder per project. Safe to delete; new logs are written as you use it.",
+    "bundle_ids": [],
+    "aliases": [
+      "claude-cli-nodejs"
+    ],
+    "scope": "app_caches",
+    "kind": "ai"
+  },
+  {
+    "key": "apple-python-cache",
+    "display_name": "Apple Python Cache",
+    "tag": "safe",
+    "explanation": "Compiled files for the Python that comes with the macOS developer tools. Safe to delete; Python recreates them when it next runs.",
+    "bundle_ids": [],
+    "aliases": [
+      "com.apple.python"
+    ],
+    "scope": "app_caches",
+    "kind": "code"
+  },
+  {
+    "key": "jna-libraries",
+    "display_name": "Java Native Libraries",
+    "tag": "safe",
+    "explanation": "Native libraries that Java apps unpack here when they start. Safe to delete; they are unpacked again on the next launch.",
+    "bundle_ids": [],
+    "aliases": [
+      "JNA"
+    ],
+    "scope": "app_caches",
+    "kind": "code"
+  },
+  {
+    "key": "dictionary-services",
+    "display_name": "Dictionary Cache",
+    "tag": "safe",
+    "explanation": "Temporary data for the macOS Dictionary and Look Up. Safe to delete; it is rebuilt the next time you look up a word.",
+    "bundle_ids": [],
+    "aliases": [
+      "com.apple.DictionaryServices"
+    ],
+    "scope": "app_caches",
+    "kind": "documents"
+  },
+  {
+    "key": "promoted-content",
+    "display_name": "App Store Ads Cache",
+    "tag": "safe",
+    "explanation": "Data for the ads Apple shows in the App Store. Safe to delete; it is downloaded again when needed.",
+    "bundle_ids": [],
+    "aliases": [
+      "com.apple.ap.PromotedContentJetService"
+    ],
+    "scope": "app_caches",
+    "kind": "store"
+  },
+  {
+    "key": "device-software-updates",
+    "display_name": "iPhone and iPad Software Updates",
+    "tag": "safe",
+    "explanation": "Full software update files for iPhone, iPad or iPod that Finder downloaded to update or restore a device, often 5 to 8 GB each. Safe to delete; Finder downloads the current one again the next time you update a device.",
+    "bundle_ids": [],
+    "aliases": [
+      "Device Software Updates"
+    ],
+    "scope": "app_caches",
+    "kind": "devices"
+  },
+  {
+    "key": "davinci-cacheclip",
+    "display_name": "DaVinci Resolve Render Cache",
+    "tag": "safe",
+    "explanation": "Render cache and optimized media that DaVinci Resolve keeps in your Movies folder. Safe to delete; Resolve renders it again as you work, which takes time on large projects.",
+    "bundle_ids": [],
+    "aliases": [
+      "CacheClip"
+    ],
+    "scope": "app_caches",
+    "kind": "media"
+  },
+  {
+    "key": "aerial-wallpaper-videos",
+    "display_name": "Aerial Wallpaper Videos",
+    "tag": "medium",
+    "explanation": "Videos for the macOS aerial wallpapers and screen savers, often several GB. Nothing is lost, but the aerial you use downloads again, and macOS may download others again on its own.",
+    "bundle_ids": [],
+    "aliases": [
+      "Aerial Wallpaper Videos"
+    ],
+    "scope": "app_caches",
+    "kind": "media"
+  },
+  {
+    "key": "messages-previews",
+    "display_name": "Messages Previews",
+    "tag": "safe",
+    "explanation": "Thumbnail previews of photos, videos and links in Messages. Your messages and attachments are not touched. Safe to delete; previews are made again when you scroll through a conversation.",
+    "bundle_ids": [],
+    "aliases": [
+      "Messages Previews"
+    ],
+    "scope": "app_caches",
+    "kind": "messaging"
+  },
+  {
+    "key": "mail-downloads",
+    "display_name": "Mail Attachment Copies",
+    "tag": "medium",
+    "explanation": "Copies of attachments you opened from Apple Mail. The originals stay in your mail. If you edited an attachment after opening it and never saved it somewhere else, those edits are only here. Held back while Mail is open.",
+    "bundle_ids": [],
+    "aliases": [
+      "Mail Downloads"
+    ],
+    "scope": "app_caches",
+    "kind": "messaging"
+  },
+  {
+    "key": "unfinished-downloads",
+    "display_name": "Unfinished Downloads",
+    "tag": "medium",
+    "explanation": "Downloads from Safari, Chrome or Firefox that stopped before finishing and have not changed in over a week. A browser can sometimes still resume one, so check before deleting.",
+    "bundle_ids": [],
+    "aliases": [
+      "Unfinished Downloads"
+    ],
+    "scope": "app_caches",
+    "kind": "documents"
+  },
+  {
+    "key": "coresimulator-caches",
+    "display_name": "Simulator Caches",
+    "tag": "safe",
+    "explanation": "Shared system caches the iOS Simulator builds for each runtime. Safe to delete; the Simulator builds them again the next time a device starts, which makes that first launch slower.",
+    "bundle_ids": [],
+    "aliases": [
+      "Simulator Caches"
+    ],
+    "scope": "dev_tools",
+    "kind": "devices"
+  },
+  {
+    "key": "xctest-devices",
+    "display_name": "Xcode Test Devices",
+    "tag": "safe",
+    "explanation": "Temporary copies of simulators that Xcode makes to run tests in parallel. Xcode deletes them itself but sometimes leaves them behind. Safe to delete when no tests are running.",
+    "bundle_ids": [],
+    "aliases": [
+      "Xcode Test Devices"
+    ],
+    "scope": "dev_tools",
+    "kind": "devices"
+  },
+  {
+    "key": "old-cli-versions",
+    "display_name": "Old AI Coding Tool Versions",
+    "tag": "safe",
+    "explanation": "Earlier versions of Claude Code or Cursor Agent that stayed behind after updates. The version you run and the newest one are kept. Safe to delete.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "ai"
+  },
+  {
+    "key": "pre-commit-cache",
+    "display_name": "pre-commit Environments",
+    "tag": "safe",
+    "explanation": "Tool environments that pre-commit sets up to run your git hooks. Safe to delete; they are set up again on your next commit, which makes that commit slow.",
+    "bundle_ids": [],
+    "aliases": [
+      "pre-commit"
+    ],
+    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
+    "key": "expo-cache",
+    "display_name": "Expo Cache",
+    "tag": "safe",
+    "explanation": "App builds, templates and SDK data the Expo tools downloaded. Your Expo login is left alone. Safe to delete; Expo downloads what it needs again.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
+    "key": "version-manager-downloads",
+    "display_name": "pyenv and rbenv Downloads",
+    "tag": "safe",
+    "explanation": "Source downloads pyenv and rbenv keep after installing a Python or Ruby version. Installed versions are left alone. Safe to delete.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
+    "key": "oh-my-zsh-cache",
+    "display_name": "Oh My Zsh Cache",
+    "tag": "safe",
+    "explanation": "Completion and update-check files that Oh My Zsh keeps. Safe to delete; they are recreated when you open a new terminal window.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "terminal"
+  },
+  {
+    "key": "opam-download-cache",
+    "display_name": "opam Download Cache",
+    "tag": "safe",
+    "explanation": "Package downloads opam keeps for OCaml. Installed packages are left alone. Safe to delete; opam downloads them again when needed.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
+    "key": "puppeteer-browsers",
+    "display_name": "Puppeteer Browsers",
+    "tag": "medium",
+    "explanation": "Browsers Puppeteer downloaded for automated testing. Your scripts fail until the browser is installed again, which happens on your next npm install or with npx puppeteer browsers install.",
+    "bundle_ids": [],
+    "aliases": [
+      "puppeteer"
+    ],
+    "scope": "dev_tools",
+    "kind": "packages"
+  },
+  {
+    "key": "conda-packages",
+    "display_name": "Conda Package Cache",
+    "tag": "medium",
+    "explanation": "Packages conda downloaded and unpacked to build your environments. Your environments keep working because they link to these files, which also means deleting frees less space than shown until those environments are removed. Running conda clean --all does this more carefully.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
     "kind": "packages"
   }
 ]

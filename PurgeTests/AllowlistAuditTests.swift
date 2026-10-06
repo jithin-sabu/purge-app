@@ -386,3 +386,163 @@ struct SpotifyOfflineMusicTests {
         )
     }
 }
+
+// MARK: - Part 5: additions
+
+@Suite("Allowlist audit: additions")
+struct AllowlistAdditionTests {
+    @Test(arguments: [
+        "Library/iTunes/iPhone Software Updates",
+        "Library/iTunes/iPad Software Updates",
+        "Movies/CacheClip",
+        "Library/Developer/CoreSimulator/Caches",
+        "Library/Developer/XCTestDevices",
+        "Library/Developer/Xcode/watchOS DeviceSupport",
+        "Library/pnpm/store",
+        ".yarn/berry/cache",
+        ".cache/pre-commit",
+        ".cache/prisma",
+        ".expo/versions-cache",
+        ".pyenv/cache",
+        ".rbenv/cache",
+        ".oh-my-zsh/cache",
+        ".opam/download-cache",
+        ".cache/puppeteer",
+        ".conda/pkgs",
+        "miniforge3/pkgs",
+        "Library/Application Support/com.apple.wallpaper/aerials/videos",
+        "Library/Messages/Caches/Previews",
+        "Library/Containers/com.apple.mail/Data/Library/Mail Downloads",
+        "Downloads/installer.dmg.crdownload",
+        "Downloads/movie.mkv.part",
+        "Downloads/archive.zip.download",
+    ])
+    func newCachesAreOffered(relative: String) {
+        #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
+    }
+
+    /// The neighbours of each addition that hold real data stay out.
+    @Test(arguments: [
+        "Library/Application Support/com.apple.wallpaper/aerials/thumbnails",
+        "Library/Application Support/com.apple.wallpaper/aerials/manifest",
+        ".expo/state.json",
+        ".pyenv/versions",
+        ".rbenv/versions",
+        ".conda/envs",
+        "miniforge3/envs",
+        "Library/Messages/chat.db",
+        "Library/Containers/com.apple.mail/Data/Library/Mail",
+        "Downloads/report.pdf",
+        "Downloads/project/notes.part",
+        ".oh-my-zsh/custom",
+        "Movies/My Film.mov",
+    ])
+    func neighboursStayOut(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+    }
+
+    @Test(arguments: [
+        ("Simulator Caches", SafetyLevel.safe),
+        ("Xcode Test Devices", .safe),
+        ("Xcode Device Support", .medium),
+        ("Old Claude Code Versions", .safe),
+        ("Old Cursor Agent Versions", .safe),
+        ("Dart Pub Cache", .safe),
+        ("pre-commit Environments", .safe),
+        ("Prisma Engines", .safe),
+        ("Expo Cache", .safe),
+        ("pyenv and rbenv Downloads", .safe),
+        ("Oh My Zsh Cache", .safe),
+        ("opam Download Cache", .safe),
+        ("Puppeteer Browsers", .medium),
+        ("Conda Package Cache", .medium),
+    ])
+    func newDevToolRowsResolve(label: String, level: SafetyLevel) {
+        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: label, primaryPath: nil)
+        #expect(info.level == level, "\(label) is \(info.level)")
+    }
+
+    @Test(arguments: [
+        ("Device Software Updates", SafetyLevel.safe),
+        ("CacheClip", .safe),
+        ("Aerial Wallpaper Videos", .medium),
+        ("Messages Previews", .safe),
+        ("Mail Downloads", .medium),
+        ("Unfinished Downloads", .medium),
+        ("Electron Updater Downloads", .safe),
+        ("node-gyp", .safe),
+        ("typescript", .safe),
+        ("claude-cli-nodejs", .safe),
+        ("Adobe Camera Raw 2", .safe),
+    ])
+    func newAppCacheEntriesResolve(name: String, level: SafetyLevel) {
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: name)?.safetyLevel == level, "\(name)")
+    }
+
+    @Test
+    func electronUpdaterNeedsItsPendingFolder() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let real = base.appendingPathComponent("t3code-updater", isDirectory: true)
+        try fm.createDirectory(at: real.appendingPathComponent("pending"), withIntermediateDirectories: true)
+        let lookalike = base.appendingPathComponent("my-updater", isDirectory: true)
+        try fm.createDirectory(at: lookalike, withIntermediateDirectories: true)
+        #expect(CacheDiscoveryPaths.isElectronUpdaterCache(real))
+        #expect(!CacheDiscoveryPaths.isElectronUpdaterCache(lookalike))
+    }
+
+    @Test
+    func electronHTTPCacheIsSafeOnlyWithChromiumLayout() throws {
+        let fm = FileManager.default
+        let support = fm.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
+        defer { try? fm.removeItem(at: support.deletingLastPathComponent().deletingLastPathComponent()) }
+        let chromium = support.appendingPathComponent("Recordly/Cache", isDirectory: true)
+        try fm.createDirectory(at: chromium.appendingPathComponent("Cache_Data"), withIntermediateDirectories: true)
+        let plain = support.appendingPathComponent("SomeApp/Cache", isDirectory: true)
+        try fm.createDirectory(at: plain, withIntermediateDirectories: true)
+        #expect(SafetyTierList.evaluate(folderName: "Recordly", path: chromium) == .safe)
+        #expect(SafetyTierList.evaluate(folderName: "SomeApp", path: plain) == nil)
+    }
+
+    @Test
+    func cliVersionsKeepTheOneInUseAndTheNewest() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let versions = base.appendingPathComponent("versions", isDirectory: true)
+        try fm.createDirectory(at: versions, withIntermediateDirectories: true)
+        for version in ["2.1.9", "2.1.10", "2.1.237"] {
+            try Data().write(to: versions.appendingPathComponent(version))
+        }
+        let command = base.appendingPathComponent("claude")
+        try fm.createSymbolicLink(at: command, withDestinationURL: versions.appendingPathComponent("2.1.10"))
+
+        let kept = DeletionSafetyPolicy.keptCLIVersions(versionsRoot: versions.path, command: command.path)
+        #expect(kept == ["2.1.10", "2.1.237"])
+
+        try fm.removeItem(at: command)
+        #expect(DeletionSafetyPolicy.keptCLIVersions(versionsRoot: versions.path, command: command.path) == nil)
+    }
+
+    @Test
+    func unfinishedDownloadsMustBeAWeekOld() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        try fm.createDirectory(at: downloads, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: home) }
+        let stale = downloads.appendingPathComponent("old.iso.crdownload")
+        let fresh = downloads.appendingPathComponent("now.iso.crdownload")
+        let finished = downloads.appendingPathComponent("done.iso")
+        for url in [stale, fresh, finished] { try Data("x".utf8).write(to: url) }
+        let longAgo = Date().addingTimeInterval(-10 * 24 * 60 * 60)
+        try fm.setAttributes([.modificationDate: longAgo], ofItemAtPath: stale.path)
+        try fm.setAttributes([.modificationDate: longAgo], ofItemAtPath: finished.path)
+
+        let found = CacheDiscoveryPaths.unfinishedDownloadURLs(home: home).map(\.lastPathComponent)
+        #expect(found == ["old.iso.crdownload"])
+    }
+}

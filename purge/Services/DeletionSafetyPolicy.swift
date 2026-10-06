@@ -382,7 +382,53 @@ enum DeletionSafetyPolicy {
             // (App Caches scan already excludes com.docker.* bundle IDs; this
             // entry is used by the Dev Tools path.)
             "\(home)/Library/Containers/com.docker.docker",
-            "\(home)/.vagrant.d/boxes"
+            "\(home)/.vagrant.d/boxes",
+            // Added in the 2026-10 allowlist audit, cross-checked against Mole and
+            // the places people find "System Data" in practice. Each one is a
+            // download, render or build cache its owner recreates or downloads again.
+            "\(home)/Library/iTunes/iPhone Software Updates",
+            "\(home)/Library/iTunes/iPad Software Updates",
+            "\(home)/Library/iTunes/iPod Software Updates",
+            "\(home)/Movies/CacheClip",
+            "\(home)/Library/Developer/CoreSimulator/Caches",
+            "\(home)/Library/Developer/XCTestDevices",
+            "\(home)/Library/Developer/Xcode/watchOS DeviceSupport",
+            "\(home)/Library/Developer/Xcode/tvOS DeviceSupport",
+            "\(home)/Library/Developer/Xcode/visionOS DeviceSupport",
+            "\(home)/Library/Developer/Xcode/xrOS DeviceSupport",
+            "\(home)/Library/pnpm/store",
+            "\(home)/.yarn/berry/cache",
+            "\(home)/.cache/pre-commit",
+            "\(home)/.cache/prisma",
+            // Expo's download caches only; `~/.expo/state.json` holds the login.
+            "\(home)/.expo/android-apk-cache",
+            "\(home)/.expo/ios-simulator-app-cache",
+            "\(home)/.expo/native-modules-cache",
+            "\(home)/.expo/schema-cache",
+            "\(home)/.expo/template-cache",
+            "\(home)/.expo/versions-cache",
+            "\(home)/.expo/expo-go",
+            // Download caches only; installed Python and Ruby versions are elsewhere.
+            "\(home)/.pyenv/cache",
+            "\(home)/.rbenv/cache",
+            "\(home)/.oh-my-zsh/cache",
+            "\(home)/.opam/download-cache",
+            // Check First, by their explanations: browsers come back only when asked
+            // for, and conda environments link into the package folder.
+            "\(home)/.cache/puppeteer",
+            "\(home)/.conda/pkgs",
+            "\(home)/anaconda3/pkgs",
+            "\(home)/miniconda3/pkgs",
+            "\(home)/miniforge3/pkgs",
+            "\(home)/mambaforge/pkgs",
+            "\(home)/opt/anaconda3/pkgs",
+            "\(home)/opt/miniconda3/pkgs",
+            // The videos only. The thumbnails next to them are the covers System
+            // Settings shows; deleting those blanks the wallpaper picker.
+            "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",
+            "\(home)/Library/Messages/Caches/Previews",
+            // Held back while Mail runs; see `mailRunningRefusesDeletion`.
+            "\(home)/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
             // macOS installers in /Applications are matched by
             // `isWhitelistedMacOSInstallerPath`, not a prefix. The old prefix here,
             // "/Applications/Install macOS", never matched a real installer, which is
@@ -418,6 +464,9 @@ enum DeletionSafetyPolicy {
         // Spotify keeps offline downloads alongside its cache. That answer changes
         // the moment the user downloads a playlist, so it is never cached either.
         if spotifyOfflineMusicRefusesDeletion(url) { return false }
+        // Which CLI version is in use changes on every auto-update.
+        if oldCLIVersionRefusesDeletion(url) { return false }
+        if mailRunningRefusesDeletion(url) { return false }
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
@@ -703,6 +752,90 @@ enum DeletionSafetyPolicy {
         let path = url.standardizedFileURL.path
         guard path == cache || path.hasPrefix(cache + "/") else { return false }
         return spotifyOfflineIndexShowsDownloads(home: home)
+    }
+
+    /// AI coding CLIs that install each version side by side: the folder of versions,
+    /// and the command whose symlink points at the version in use.
+    nonisolated static let cliVersionStores: [(versions: String, command: String)] = [
+        (".local/share/claude/versions", ".local/bin/claude"),
+        (".local/share/cursor-agent/versions", ".local/bin/cursor-agent")
+    ]
+
+    /// The version folder or file `path` belongs to, with its store.
+    nonisolated static func cliVersion(
+        containing path: String,
+        home: String
+    ) -> (versionsRoot: String, command: String, version: String)? {
+        for store in cliVersionStores {
+            let root = "\(home)/\(store.versions)"
+            guard path.hasPrefix(root + "/") else { continue }
+            guard let version = path.dropFirst(root.count + 1).split(separator: "/").first.map(String.init),
+                  !version.isEmpty else { return nil }
+            return (root, "\(home)/\(store.command)", version)
+        }
+        return nil
+    }
+
+    /// The versions to keep: the one the command runs, and the newest, in case an
+    /// update has installed it and not yet switched the link. Nil when the command
+    /// cannot be read, and then nothing is offered.
+    nonisolated static func keptCLIVersions(versionsRoot: String, command: String) -> Set<String>? {
+        guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: command) else { return nil }
+        let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: command).deletingLastPathComponent())
+            .standardizedFileURL.path
+        guard resolved.hasPrefix(versionsRoot + "/"),
+              let inUse = resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init) else {
+            return nil
+        }
+        var kept: Set<String> = [inUse]
+        let all = ((try? FileManager.default.contentsOfDirectory(atPath: versionsRoot)) ?? [])
+            .filter { !$0.hasPrefix(".") }
+        if let newest = all.max(by: { $0.compare($1, options: .numeric) == .orderedAscending }) {
+            kept.insert(newest)
+        }
+        return kept
+    }
+
+    nonisolated static func isWhitelistedOldCLIVersionPath(_ path: String, home: String) -> Bool {
+        cliVersion(containing: path, home: home) != nil
+    }
+
+    nonisolated static func oldCLIVersionRefusesDeletion(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        guard let match = cliVersion(containing: path, home: cachedHomePath) else { return false }
+        guard let kept = keptCLIVersions(versionsRoot: match.versionsRoot, command: match.command) else {
+            return true
+        }
+        return kept.contains(match.version)
+    }
+
+    /// Mail can be writing an attachment it just opened.
+    nonisolated static func mailRunningRefusesDeletion(_ url: URL) -> Bool {
+        let downloads = "\(cachedHomePath)/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
+        let path = url.standardizedFileURL.path
+        guard path == downloads || path.hasPrefix(downloads + "/") else { return false }
+        return isAppRunning(bundleID: "com.apple.mail")
+    }
+
+    nonisolated static func isAppRunning(bundleID: String) -> Bool {
+        #if canImport(AppKit)
+        return NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
+        #else
+        return false
+        #endif
+    }
+
+    /// Unfinished browser downloads sitting directly in ~/Downloads: Chrome's
+    /// `.crdownload`, Firefox's `.part`, Safari's `.download` bundle.
+    nonisolated static let unfinishedDownloadExtensions: Set<String> = ["crdownload", "part", "download"]
+
+    nonisolated static func isWhitelistedUnfinishedDownloadPath(_ path: String, home: String) -> Bool {
+        let downloads = "\(home)/Downloads/"
+        guard path.hasPrefix(downloads) else { return false }
+        let rest = path.dropFirst(downloads.count)
+        guard let name = rest.split(separator: "/").first.map(String.init) else { return false }
+        let ext = (name as NSString).pathExtension.lowercased()
+        return unfinishedDownloadExtensions.contains(ext) && name.count > ext.count + 1
     }
 
     /// One running app, reduced to the paths needed to see which framework it loaded.
@@ -1007,6 +1140,12 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedMacOSInstallerPath(path) {
+            return .allow
+        }
+        if isWhitelistedOldCLIVersionPath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedUnfinishedDownloadPath(path, home: home) {
             return .allow
         }
         if isWhitelistedEditorExtensionPath(path, home: home) {

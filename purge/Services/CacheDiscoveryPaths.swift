@@ -139,6 +139,57 @@ enum CacheDiscoveryPaths {
         return results
     }
 
+    /// Fixed-location caches outside `~/Library/Caches` that App Caches lists, each
+    /// classified by `key` against `explanations.json`. `needsFullAccess` marks the
+    /// ones inside folders a limited scan must not open (Messages, Mail's container).
+    nonisolated static let knownCacheEntries: [(relative: String, key: String, needsFullAccess: Bool)] = [
+        ("Library/iTunes/iPhone Software Updates", "Device Software Updates", false),
+        ("Library/iTunes/iPad Software Updates", "Device Software Updates", false),
+        ("Library/iTunes/iPod Software Updates", "Device Software Updates", false),
+        ("Movies/CacheClip", "CacheClip", false),
+        ("Library/Application Support/com.apple.wallpaper/aerials/videos", "Aerial Wallpaper Videos", false),
+        ("Library/Messages/Caches/Previews", "Messages Previews", true),
+        ("Library/Containers/com.apple.mail/Data/Library/Mail Downloads", "Mail Downloads", true)
+    ]
+
+    /// Classification name for every electron-updater download folder. They are
+    /// named after the app (`t3code-updater`, `@opencode-aidesktop-updater`), so
+    /// they share one entry and show as one row.
+    nonisolated static let electronUpdaterKey = "Electron Updater Downloads"
+
+    /// A `~/Library/Caches/<app>-updater` folder with electron-updater's `pending`
+    /// download folder inside. The name alone is not enough to call it one.
+    nonisolated static func isElectronUpdaterCache(_ directory: URL) -> Bool {
+        guard directory.lastPathComponent.lowercased().hasSuffix("-updater") else { return false }
+        var isDir: ObjCBool = false
+        let pending = directory.appendingPathComponent("pending", isDirectory: true)
+        return FileManager.default.fileExists(atPath: pending.path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    /// Unfinished downloads directly in ~/Downloads that have not changed for this
+    /// long. A browser still downloading touches the file far more often.
+    nonisolated static let unfinishedDownloadMinimumAge: TimeInterval = 7 * 24 * 60 * 60
+
+    nonisolated static let unfinishedDownloadsKey = "Unfinished Downloads"
+
+    nonisolated static func unfinishedDownloadURLs(home: URL, now: Date = Date()) -> [URL] {
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: downloads,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        return entries.filter { url in
+            guard DeletionSafetyPolicy.unfinishedDownloadExtensions.contains(url.pathExtension.lowercased()) else {
+                return false
+            }
+            let modified = FolderSizing.contentModificationDate(at: url)
+            return now.timeIntervalSince(modified) >= unfinishedDownloadMinimumAge
+        }
+        .map(\.standardizedFileURL)
+        .sorted { $0.path < $1.path }
+    }
+
     /// Telegram's native macOS app parks auto-downloaded photos, videos, and
     /// files inside its Group Container rather than `~/Library/Caches`, so the
     /// broad Caches sweep never reaches them. Only the `postbox/media` directory

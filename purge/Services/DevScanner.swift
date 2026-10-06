@@ -21,7 +21,7 @@ nonisolated final class DevScanner {
     /// Maps scanner labels to keys in `explanations.json`.
     private static let toolExplanationKeys: [String: String] = [
         "Xcode Derived Data": "DerivedData",
-        "Xcode iOS DeviceSupport": "xcode-device-support",
+        "Xcode Device Support": "xcode-device-support",
         "Xcode Archives": "xcode-archives",
         "Xcode Caches": "xcode-app",
         "Homebrew Cache": "homebrew-cache",
@@ -59,6 +59,19 @@ nonisolated final class DevScanner {
         "Cursor Agent Leftovers": "cursor-agent-leftover",
         "Orphaned Git Worktrees": "orphaned-git-worktree",
         "Deno Cache": "deno-cache",
+        "Simulator Caches": "coresimulator-caches",
+        "Xcode Test Devices": "xctest-devices",
+        "Old Claude Code Versions": "old-cli-versions",
+        "Old Cursor Agent Versions": "old-cli-versions",
+        "Dart Pub Cache": "pub-cache",
+        "pre-commit Environments": "pre-commit-cache",
+        "Prisma Engines": "prisma-nodejs",
+        "Expo Cache": "expo-cache",
+        "pyenv and rbenv Downloads": "version-manager-downloads",
+        "Oh My Zsh Cache": "oh-my-zsh-cache",
+        "opam Download Cache": "opam-download-cache",
+        "Puppeteer Browsers": "puppeteer-browsers",
+        "Conda Package Cache": "conda-packages",
         "Bun Cache": "bun-cache",
         "VS Code Old Workspace Data": "orphaned-editor-workspace-storage",
         "Cursor Old Workspace Data": "orphaned-editor-workspace-storage"
@@ -453,7 +466,19 @@ nonisolated final class DevScanner {
         return [
             ("Xcode Derived Data", [home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true)]),
             ("Xcode Archives", [home.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true)]),
-            ("Xcode iOS DeviceSupport", [home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport", isDirectory: true)]),
+            ("Xcode Device Support", [
+                home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport", isDirectory: true),
+                home.appendingPathComponent("Library/Developer/Xcode/watchOS DeviceSupport", isDirectory: true),
+                home.appendingPathComponent("Library/Developer/Xcode/tvOS DeviceSupport", isDirectory: true),
+                home.appendingPathComponent("Library/Developer/Xcode/visionOS DeviceSupport", isDirectory: true),
+                home.appendingPathComponent("Library/Developer/Xcode/xrOS DeviceSupport", isDirectory: true)
+            ]),
+            ("Simulator Caches", [
+                home.appendingPathComponent("Library/Developer/CoreSimulator/Caches", isDirectory: true)
+            ]),
+            ("Xcode Test Devices", [
+                home.appendingPathComponent("Library/Developer/XCTestDevices", isDirectory: true)
+            ]),
             ("Xcode Caches", [home.appendingPathComponent("Library/Caches/com.apple.dt.Xcode", isDirectory: true)]),
             ("Xcode Documentation Cache", [
                 home.appendingPathComponent("Library/Developer/Xcode/DocumentationCache", isDirectory: true)
@@ -464,8 +489,37 @@ nonisolated final class DevScanner {
             ("npm npx Cache", [home.appendingPathComponent(".npm/_npx", isDirectory: true)]),
             ("npm Logs", [home.appendingPathComponent(".npm/_logs", isDirectory: true)]),
             ("Corepack Cache", [home.appendingPathComponent(".cache/node/corepack", isDirectory: true)]),
-            ("pnpm Store", [home.appendingPathComponent(".pnpm-store", isDirectory: true)]),
-            ("Yarn Cache", [home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true)]),
+            // pnpm's default store on macOS is ~/Library/pnpm/store; ~/.pnpm-store is
+            // the older location and what some setups still use.
+            ("pnpm Store", [
+                home.appendingPathComponent(".pnpm-store", isDirectory: true),
+                home.appendingPathComponent("Library/pnpm/store", isDirectory: true)
+            ]),
+            ("Yarn Cache", [
+                home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true),
+                home.appendingPathComponent(".yarn/berry/cache", isDirectory: true)
+            ]),
+            ("Dart Pub Cache", [
+                home.appendingPathComponent(".pub-cache/hosted", isDirectory: true),
+                home.appendingPathComponent(".pub-cache/git", isDirectory: true)
+            ]),
+            ("pre-commit Environments", [home.appendingPathComponent(".cache/pre-commit", isDirectory: true)]),
+            ("Prisma Engines", [home.appendingPathComponent(".cache/prisma", isDirectory: true)]),
+            ("Expo Cache", [
+                "android-apk-cache", "ios-simulator-app-cache", "native-modules-cache",
+                "schema-cache", "template-cache", "versions-cache", "expo-go"
+            ].map { home.appendingPathComponent(".expo/\($0)", isDirectory: true) }),
+            ("pyenv and rbenv Downloads", [
+                home.appendingPathComponent(".pyenv/cache", isDirectory: true),
+                home.appendingPathComponent(".rbenv/cache", isDirectory: true)
+            ]),
+            ("Oh My Zsh Cache", [home.appendingPathComponent(".oh-my-zsh/cache", isDirectory: true)]),
+            ("opam Download Cache", [home.appendingPathComponent(".opam/download-cache", isDirectory: true)]),
+            ("Puppeteer Browsers", [home.appendingPathComponent(".cache/puppeteer", isDirectory: true)]),
+            ("Conda Package Cache", [
+                ".conda/pkgs", "anaconda3/pkgs", "miniconda3/pkgs", "miniforge3/pkgs",
+                "mambaforge/pkgs", "opt/anaconda3/pkgs", "opt/miniconda3/pkgs"
+            ].map { home.appendingPathComponent($0, isDirectory: true) }),
             ("Gradle Cache", [home.appendingPathComponent(".gradle/caches", isDirectory: true)]),
             ("Hex Package Cache", [home.appendingPathComponent(".hex/packages", isDirectory: true)]),
             ("Rebar3 Cache", [home.appendingPathComponent(".cache/rebar3", isDirectory: true)]),
@@ -580,6 +634,7 @@ nonisolated final class DevScanner {
         var staticDefinitions = Self.globalCacheDefinitions()
             + discoverObsoleteEditorExtensionDefinitions(home: home, access: access)
             + discoverOrphanedEditorWorkspaceDefinitions(home: home, access: access)
+            + Self.oldCLIVersionDefinitions(home: home)
         // Agent worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop, and Claude Code's live
         // inside those projects. A limited scan cannot look there without a prompt,
@@ -642,6 +697,28 @@ nonisolated final class DevScanner {
             ))
         ]
         return entries.filter { !$0.paths.isEmpty }
+    }
+
+    /// Old Claude Code and Cursor Agent versions, keeping the one each command runs
+    /// and the newest. The policy re-checks this before anything is deleted.
+    nonisolated static func oldCLIVersionDefinitions(home: URL) -> [(label: String, paths: [URL])] {
+        let homePath = home.standardizedFileURL.path
+        let labels = ["Old Claude Code Versions", "Old Cursor Agent Versions"]
+        return zip(DeletionSafetyPolicy.cliVersionStores, labels).compactMap { pair in
+            let (store, label) = pair
+            let root = "\(homePath)/\(store.versions)"
+            guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited),
+                  let kept = DeletionSafetyPolicy.keptCLIVersions(
+                    versionsRoot: root,
+                    command: "\(homePath)/\(store.command)"
+                  ),
+                  let names = try? FileManager.default.contentsOfDirectory(atPath: root) else { return nil }
+            let old = names
+                .filter { !$0.hasPrefix(".") && !kept.contains($0) }
+                .sorted { $0.compare($1, options: .numeric) == .orderedAscending }
+                .map { URL(fileURLWithPath: "\(root)/\($0)") }
+            return old.isEmpty ? nil : (label, old)
+        }
     }
 
     /// One row per editor listing the `workspaceStorage` entries whose project

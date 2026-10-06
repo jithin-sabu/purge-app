@@ -111,6 +111,16 @@ enum SafetyTierList {
                 || pathLower.contains("/appinstallationbinarydeltas") {
                 return .safe
             }
+            // An Electron or Chromium app's HTTP cache under Application Support:
+            // `<App>/Cache` with Chromium's `Cache_Data` inside. Only that shape;
+            // a folder merely named Cache could be anything.
+            if pathLower.contains("/library/application support/"),
+               path.lastPathComponent == "Cache",
+               FileManager.default.fileExists(
+                   atPath: path.appendingPathComponent("Cache_Data", isDirectory: true).path
+               ) {
+                return .safe
+            }
             // Spotlight index data regenerates on its own, but search is slow or
             // incomplete until it does — a visible inconvenience, so never part
             // of one-click cleanup.
