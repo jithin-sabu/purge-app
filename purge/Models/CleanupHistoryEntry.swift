@@ -1,6 +1,6 @@
 import Foundation
 
-enum CleanupTrigger: String, Codable, Hashable {
+nonisolated enum CleanupTrigger: String, Codable, Hashable {
     case manual
     case scheduled
 }
@@ -93,6 +93,32 @@ struct CleanupHistoryFile: Codable {
 
     init(entries: [CleanupHistoryEntry] = []) {
         self.entries = entries
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case entries
+    }
+
+    /// Skips an entry it cannot read instead of failing the whole file. A failed
+    /// file loads as empty and the next clean overwrites it, which would lose every
+    /// clean an older version recorded, and those feed the yearly ledger.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var list = try container.nestedUnkeyedContainer(forKey: .entries)
+        var entries: [CleanupHistoryEntry] = []
+        while !list.isAtEnd {
+            if let entry = try? list.decode(CleanupHistoryEntry.self) {
+                entries.append(entry)
+            } else if (try? list.decode(SkippedEntry.self)) == nil {
+                break
+            }
+        }
+        self.entries = entries
+    }
+
+    /// Decodes nothing, which moves the list past an unreadable entry.
+    private struct SkippedEntry: Decodable {
+        init(from decoder: Decoder) throws {}
     }
 
     mutating func append(_ entry: CleanupHistoryEntry, maxEntries: Int) {

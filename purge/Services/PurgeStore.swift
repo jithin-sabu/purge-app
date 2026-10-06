@@ -992,7 +992,7 @@ final class PurgeStore: ObservableObject {
                 failedItems: report.userVisibleFailures,
                 movedToTrashCount: report.movedToTrashCount
             )
-            CleanupHistoryStore.shared.append(trigger: trigger, report: report)
+            recordCleanup(report, trigger: trigger, source: .clean)
         } catch {
             if session != nil {
                 manualDeletionSession = nil
@@ -1042,18 +1042,18 @@ final class PurgeStore: ObservableObject {
             sizeBytes: movedBytes,
             displayName: item.displayName
         )
-        reflectDeletionReportInScanState(
-            DeletionReport(
-                bytesMovedToTrash: movedBytes,
-                bytesRemovedDirectly: 0,
-                deletedItems: [deleted],
-                failedItems: [],
-                skippedItems: [],
-                capacityBefore: nil,
-                capacityAfter: nil,
-                timestamp: Date()
-            )
+        let report = DeletionReport(
+            bytesMovedToTrash: movedBytes,
+            bytesRemovedDirectly: 0,
+            deletedItems: [deleted],
+            failedItems: [],
+            skippedItems: [],
+            capacityBefore: nil,
+            capacityAfter: nil,
+            timestamp: Date()
         )
+        reflectDeletionReportInScanState(report)
+        recordCleanup(report, trigger: .manual, source: .retry, addToHistory: false)
     }
 
     /// Finishes a deferred locked-app uninstall once the helper is set up. Removes the
@@ -1145,18 +1145,18 @@ final class PurgeStore: ObservableObject {
             || !(leftoverReport?.ownershipWarningPaths.isEmpty ?? true) {
             session.noteTrashOwnershipWarning()
         }
-        reflectDeletionReportInScanState(
-            DeletionReport(
-                bytesMovedToTrash: movedBytes,
-                bytesRemovedDirectly: 0,
-                deletedItems: bundleReport.deletedItems + (leftoverReport?.deletedItems ?? []),
-                failedItems: leftoverReport?.failedItems ?? [],
-                skippedItems: [],
-                capacityBefore: nil,
-                capacityAfter: nil,
-                timestamp: Date()
-            )
+        let report = DeletionReport(
+            bytesMovedToTrash: movedBytes,
+            bytesRemovedDirectly: 0,
+            deletedItems: bundleReport.deletedItems + (leftoverReport?.deletedItems ?? []),
+            failedItems: leftoverReport?.failedItems ?? [],
+            skippedItems: [],
+            capacityBefore: nil,
+            capacityAfter: nil,
+            timestamp: Date()
         )
+        reflectDeletionReportInScanState(report)
+        recordCleanup(report, trigger: .manual, source: .uninstall, addToHistory: false)
 
         // The app is gone. Any leftover that still failed becomes its own plain row,
         // no longer described as a locked application.
@@ -1645,7 +1645,7 @@ final class PurgeStore: ObservableObject {
                 movedToTrashCount: report.movedToTrashCount
             )
             if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
-            CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+            recordCleanup(report, trigger: .manual, source: .largeFiles)
         } catch {
             manualDeletionSession = nil
             errorMessage = "Unable to delete the selected files. Please try again."
@@ -2022,7 +2022,7 @@ final class PurgeStore: ObservableObject {
                 movedToTrashCount: report.movedToTrashCount
             )
             if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
-            CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+            recordCleanup(report, trigger: .manual, source: .leftovers)
         } catch {
             manualDeletionSession = nil
             errorMessage = "Unable to remove the selected leftovers. Please try again."
@@ -2425,7 +2425,7 @@ final class PurgeStore: ObservableObject {
             movedToTrashCount: report.movedToTrashCount
         )
         if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
-        CleanupHistoryStore.shared.append(trigger: .manual, report: report)
+        recordCleanup(report, trigger: .manual, source: .uninstall)
 
         // Apps that declined to quit stay installed and selected, so the user can
         // quit them and retry. Surfaced after the success summary.
@@ -3298,7 +3298,7 @@ final class PurgeStore: ObservableObject {
             let movedBytes = report.bytesMovedToTrash
             incrementMovedToTrashTotal(by: movedBytes)
             reflectDeletionReportInScanState(report)
-            CleanupHistoryStore.shared.append(trigger: historyTrigger, report: report)
+            recordCleanup(report, trigger: historyTrigger, source: .clean)
             if clearSelectionsAfterCleanup {
                 clearAllSelections()
             }
@@ -3969,6 +3969,23 @@ final class PurgeStore: ObservableObject {
         let name = url.lastPathComponent.lowercased()
         if name == "deriveddata" { return .notApplicable }
         return ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
+    }
+
+    /// Writes a finished clean to the History screen and to the yearly ledger. The
+    /// two share an id, so importing history into the ledger never counts it twice.
+    /// Retries and finished locked uninstalls skip History, as they always have,
+    /// but still belong in the year's totals.
+    private func recordCleanup(
+        _ report: DeletionReport,
+        trigger: CleanupTrigger,
+        source: CleanupSource,
+        addToHistory: Bool = true
+    ) {
+        let id = UUID()
+        if addToHistory {
+            CleanupHistoryStore.shared.append(id: id, trigger: trigger, report: report)
+        }
+        CleanupLedgerStore.shared.record(report, id: id, trigger: trigger, source: source)
     }
 
     private func incrementMovedToTrashTotal(by bytes: Int64) {

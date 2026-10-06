@@ -41,7 +41,7 @@ final class CleanupHistoryStore: ObservableObject {
         try? data.write(to: url, options: [.atomic])
     }
 
-    func append(trigger: CleanupTrigger, report: DeletionReport) {
+    func append(id: UUID = UUID(), trigger: CleanupTrigger, report: DeletionReport) {
         let items = report.deletedItems.map {
             CleanupHistoryDeletedItemDTO(path: $0.path, sizeBytes: $0.sizeBytes)
         }
@@ -54,6 +54,7 @@ final class CleanupHistoryStore: ObservableObject {
         // trashes files reclaims nothing until the trash is emptied, so this is
         // usually nil, and that is the honest answer.
         let entry = CleanupHistoryEntry(
+            id: id,
             date: report.timestamp,
             trigger: trigger,
             bytesMovedToTrash: report.bytesMovedToTrash,
