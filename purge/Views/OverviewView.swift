@@ -9,6 +9,7 @@ struct OverviewView: View {
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @EnvironmentObject private var trashStore: TrashStore
     @ObservedObject private var schedule = ScheduledCleaningPreferenceStore.shared
+    @StateObject private var snapshotStore = LocalSnapshotStore()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The bar segment under the pointer. Its row lifts and the others fade.
     @State private var highlightedID: String?
@@ -17,6 +18,10 @@ struct OverviewView: View {
         // Relative times ("Scanned 3h ago") move on their own.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             content(now: context.date)
+        }
+        .task { await snapshotStore.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await snapshotStore.refresh() }
         }
     }
 
@@ -133,6 +138,15 @@ struct OverviewView: View {
                 share: breakdown.share(of: breakdown.everythingElseBytes),
                 linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
             )
+            // Part of the used space above, but no tool says how much, so it is a
+            // row of its own with no size and no place in the bar.
+            if let snapshots = snapshotStore.snapshots, snapshots.count > 0 {
+                InsetCardDivider()
+                OverviewSnapshotRow(
+                    snapshots: snapshots,
+                    linkedState: linkedRowState(OverviewSnapshotRow.id)
+                )
+            }
             InsetCardDivider()
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
@@ -478,6 +492,53 @@ private struct OverviewPlainRow: View {
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Time Machine snapshots
+
+/// Local Time Machine snapshots: Finder never shows them and macOS counts them as
+/// System Data. A count and a date, since nothing reports their size.
+private struct OverviewSnapshotRow: View {
+    let snapshots: LocalSnapshots
+    let linkedState: OverviewLinkedRowState
+
+    /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
+    static let id = "timeMachineSnapshots"
+
+    var body: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            OverviewIconTile(symbol: "clock.arrow.circlepath", color: AppColors.Chart.everythingElse)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Time Machine snapshots")
+                    .font(AppStyle.Typography.headline)
+                Text(detail)
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: AppStyle.Spacing.small)
+            Button("Open Disk Utility") { Self.openDiskUtility() }
+                .buttonStyle(.purge(.secondary, size: .small))
+                .help("In Disk Utility, choose View > Show APFS Snapshots to see and delete them.")
+        }
+        .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
+        .padding(.vertical, 11)
+        .overviewLinked(linkedState)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var detail: String {
+        guard let oldest = snapshots.oldest else { return "" }
+        let day = oldest.formatted(.dateTime.month(.abbreviated).day())
+        return snapshots.count == 1
+            ? "1 on this Mac, from \(day)"
+            : "\(snapshots.count) on this Mac, the oldest from \(day)"
+    }
+
+    static func openDiskUtility() {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.DiskUtility") else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 }
 
