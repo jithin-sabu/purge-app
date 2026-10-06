@@ -513,6 +513,12 @@ private struct OverviewSnapshotRow: View {
     /// drives the popover itself: a separate flag would show the popover built from
     /// the value before the click.
     @State private var plan: SnapshotRemovalPlan?
+    @State private var isShowingInfo = false
+
+    /// What the row is about, for the many people who have never heard of snapshots.
+    private static let info = "Time Machine saves a snapshot every hour so you can get files back without "
+        + "your backup disk. Old ones keep deleted files around and count as System Data. Remove keeps "
+        + "the newest and the one from your last backup, which Time Machine may still need."
 
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "timeMachineSnapshots"
@@ -524,8 +530,11 @@ private struct OverviewSnapshotRow: View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: "clock.arrow.circlepath", color: AppColors.Chart.everythingElse)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Time Machine snapshots")
-                    .font(AppStyle.Typography.headline)
+                HStack(spacing: 4) {
+                    Text("Time Machine snapshots")
+                        .font(AppStyle.Typography.headline)
+                    infoButton
+                }
                 Text(detail)
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
@@ -538,6 +547,27 @@ private struct OverviewSnapshotRow: View {
         .padding(.vertical, 11)
         .overviewLinked(linkedState)
         .accessibilityElement(children: .contain)
+    }
+
+    private var infoButton: some View {
+        Button {
+            isShowingInfo = true
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .help("What are Time Machine snapshots?")
+        .accessibilityLabel("About Time Machine snapshots")
+        .popover(isPresented: $isShowingInfo, arrowEdge: .bottom) {
+            Text(Self.info)
+                .font(AppStyle.Typography.callout)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(AppStyle.Spacing.medium)
+                .frame(width: 320)
+        }
     }
 
     /// Remove whenever there is something to remove, including after a removal that
