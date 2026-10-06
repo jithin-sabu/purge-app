@@ -41,9 +41,7 @@
     "tag": "safe",
     "explanation": "Build caches that Android Studio and Gradle keep in ~/.android. Your emulators, the key your phones trust for debugging, and your debug signing key are left alone. Safe to delete; the next build recreates them.",
     "bundle_ids": [],
-    "aliases": [
-      ".gradle"
-    ],
+    "aliases": [],
     "scope": "dev_tools",
     "kind": "devices"
   },
@@ -413,9 +411,9 @@
   },
   {
     "key": "e5bundlecache",
-    "display_name": "Apple Rules Engine",
+    "display_name": "Apple ML Model Cache",
     "tag": "safe",
-    "explanation": "This stores temporary data for an Apple background service that processes system rules and conditions. It is safe to delete.",
+    "explanation": "Compiled copies of the machine learning models that macOS features such as Photos and Live Text use. Safe to delete; macOS compiles them again when they are next needed, which takes some processor time.",
     "bundle_ids": [
       "com.apple.e5rt.e5bundlecache"
     ],
@@ -490,11 +488,22 @@
       "com.apple.geoanalyticsd"
     ],
     "aliases": [
-      "com.apple.geoanalyticsd",
-      "GeoServices"
+      "com.apple.geoanalyticsd"
     ],
     "scope": "app_caches",
     "kind": "logs"
+  },
+  {
+    "key": "maps-tile-cache",
+    "display_name": "Apple Maps Tile Cache",
+    "tag": "medium",
+    "explanation": "Map tiles and place data that Apple Maps has downloaded. Nothing is lost, but Maps downloads them again as you browse, which is slower and uses data.",
+    "bundle_ids": [],
+    "aliases": [
+      "GeoServices"
+    ],
+    "scope": "app_caches",
+    "kind": "system"
   },
   {
     "key": "helpd",
@@ -992,9 +1001,7 @@
     "tag": "medium",
     "explanation": "Archived builds created by development tools. Check contents before deleting — may contain important project archives.",
     "bundle_ids": [],
-    "aliases": [
-      "Archives"
-    ],
+    "aliases": [],
     "scope": "dev_tools",
     "kind": "build"
   },
@@ -1122,9 +1129,9 @@
   },
   {
     "key": "chrono",
-    "display_name": "Apple Chrono Service",
+    "display_name": "Widgets Cache",
     "tag": "safe",
-    "explanation": "This is temporary data used by a background Apple service that manages time-based events and scheduling. It is safe to delete.",
+    "explanation": "Saved snapshots of your desktop and Notification Center widgets. Safe to delete; widgets draw themselves again and may look blank for a moment until they do.",
     "bundle_ids": [
       "com.apple.chrono"
     ],
@@ -1451,11 +1458,10 @@
     "display_name": "iOS Simulators",
     "aliases": [
       "CoreSimulator",
-      "Devices",
       "iossimulators"
     ],
     "tag": "safe",
-    "explanation": "Virtual iPhone and iPad devices used for app testing in Xcode. Safe to delete. Xcode will re-download them if you need them again, which may take a few minutes.",
+    "explanation": "Virtual iPhone and iPad devices that Xcode uses to test apps. Deleting one also deletes the apps and data installed on it. Xcode can create a new one whenever you need it.",
     "scope": "dev_tools",
     "kind": "devices"
   },
@@ -1506,7 +1512,6 @@
     "bundle_ids": [],
     "aliases": [
       "mise",
-      ".mise",
       "rtx"
     ],
     "scope": "dev_tools",
@@ -1518,10 +1523,7 @@
     "tag": "safe",
     "explanation": "Temporary build files created by Next.js. Safe to delete and will be recreated the next time you build or run your Next.js project.",
     "bundle_ids": [],
-    "aliases": [
-      ".next",
-      "next-build"
-    ],
+    "aliases": [],
     "scope": "dev_tools",
     "kind": "build"
   },
@@ -1802,7 +1804,6 @@
     "explanation": "Archived Xcode builds for App Store submission. Cannot be recovered once deleted — only remove if you no longer need them.",
     "bundle_ids": [],
     "aliases": [
-      "Archives",
       "xcarchive"
     ],
     "scope": "dev_tools",
@@ -1832,7 +1833,6 @@
     "aliases": [
       "Homebrew",
       "homebrew",
-      "Cellar",
       "homebrew-cache"
     ],
     "scope": "dev_tools",
@@ -1858,8 +1858,7 @@
     "explanation": "Cached Node.js and package manager versions managed by Volta. Safe to delete and Volta will re-download versions as needed.",
     "bundle_ids": [],
     "aliases": [
-      "volta",
-      ".volta"
+      "volta"
     ],
     "scope": "dev_tools",
     "kind": "packages"
@@ -1900,7 +1899,6 @@
     "bundle_ids": [],
     "aliases": [
       "npm-cache",
-      "_npx",
       "npm"
     ],
     "scope": "dev_tools",
@@ -1913,7 +1911,6 @@
     "explanation": "Temporary files used by Husky to manage Git hooks in your projects. Safe to delete and will be regenerated automatically.",
     "bundle_ids": [],
     "aliases": [
-      ".husky",
       "_husky"
     ],
     "scope": "dev_tools",

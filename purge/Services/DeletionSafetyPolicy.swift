@@ -69,7 +69,10 @@ enum DeletionSafetyPolicy {
         // against the Apple ID and a fresh login-keychain prompt.
         "com.apple.itunescloudd",
         "com.apple.iCloudNotificationAgent",
-        "PassKit"
+        "PassKit",
+        // Container metadata for every sandboxed app. Rebuilt by macOS, but apps
+        // can lose track of their containers until it is, for a few kilobytes.
+        "com.apple.containermanagerd"
     ]
 
     /// Case-insensitive fragments that mark a `~/Library/Caches` top-level
@@ -286,7 +289,8 @@ enum DeletionSafetyPolicy {
             "\(home)/.stack/pantry",
             "\(home)/.stack/snapshots",
             "\(home)/.cache/bazel",
-            "\(home)/.flutter",
+            // `~/.flutter` is NOT listed: it is a small settings file (analytics
+            // consent and client ID), not a cache. Flutter's caches live in the SDK.
             // NOTE: `~/Library/Application Support/MobileSync/Backup` (iPhone/iPad
             // backups) is deliberately NOT on the allowlist. Those backups are
             // non-recoverable, so they must never be scanned, sized, or shown.

@@ -204,3 +204,56 @@ struct AllowlistNarrowedTests {
         )
     }
 }
+
+// MARK: - Part 3: explanations and names
+
+@Suite("Allowlist audit: explanation data")
+struct AllowlistExplanationDataTests {
+    private struct Entry: Decodable {
+        let key: String
+        let aliases: [String]?
+        let bundle_ids: [String]?
+    }
+
+    private func entries() throws -> [Entry] {
+        let url = try #require(Bundle.main.url(forResource: "explanations", withExtension: "json"))
+        return try JSONDecoder().decode([Entry].self, from: Data(contentsOf: url))
+    }
+
+    /// A name claimed by two entries resolves to whichever the loader saw last,
+    /// so a row could silently take another entry's tier.
+    @Test
+    func everyNameBelongsToOneEntry() throws {
+        var owners: [String: Set<String>] = [:]
+        for entry in try entries() {
+            for name in [entry.key] + (entry.aliases ?? []) + (entry.bundle_ids ?? []) {
+                owners[name.lowercased(), default: []].insert(entry.key)
+            }
+        }
+        let shared = owners.filter { $0.value.count > 1 }
+        #expect(shared.isEmpty, "names claimed by more than one entry: \(shared)")
+    }
+
+    /// These names belong to folders that are not caches: installed Homebrew
+    /// packages, committed git hooks, and installed tool versions.
+    @Test(arguments: ["Cellar", ".husky", ".volta", ".mise", "Devices"])
+    func nonCacheFolderNamesHaveNoEntry(name: String) {
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: name) == nil)
+    }
+
+    @Test
+    func mapsTilesAreCheckFirstLikeAppleMaps() {
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "GeoServices")?.safetyLevel == .medium)
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "com.apple.Maps")?.safetyLevel == .medium)
+    }
+
+    @Test
+    func flutterSettingsFileIsNotOffered() {
+        #expect(AuditPaths.evaluate(".flutter") != .allow)
+    }
+
+    @Test
+    func containerManagerCacheIsNeverOffered() {
+        #expect(AuditPaths.evaluate("Library/Caches/com.apple.containermanagerd") == .blockedNeverDelete)
+    }
+}
