@@ -9,6 +9,7 @@ struct OverviewView: View {
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @EnvironmentObject private var trashStore: TrashStore
     @ObservedObject private var schedule = ScheduledCleaningPreferenceStore.shared
+    @ObservedObject private var snapshotStore = LocalSnapshotStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The bar segment under the pointer. Its row lifts and the others fade.
     @State private var highlightedID: String?
@@ -17,6 +18,10 @@ struct OverviewView: View {
         // Relative times ("Scanned 3h ago") move on their own.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             content(now: context.date)
+        }
+        .task { await snapshotStore.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await snapshotStore.refresh() }
         }
     }
 
@@ -41,7 +46,7 @@ struct OverviewView: View {
             categoriesCard(breakdown, now: now)
 
             if breakdown.totalBytes > 0 {
-                restOfDiskCard(breakdown)
+                restOfDiskCard(breakdown, now: now)
             }
 
             footnotes(now: now)
@@ -122,7 +127,7 @@ struct OverviewView: View {
         .overviewCard()
     }
 
-    private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
+    private func restOfDiskCard(_ breakdown: OverviewBreakdown, now: Date) -> some View {
         VStack(spacing: 0) {
             OverviewPlainRow(
                 symbol: "ellipsis",
@@ -132,6 +137,16 @@ struct OverviewView: View {
                 bytes: breakdown.everythingElseBytes,
                 share: breakdown.share(of: breakdown.everythingElseBytes),
                 linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
+            )
+            // Part of the used space above, but no tool says how much, so it is a
+            // row of its own with no size and no place in the bar.
+            // Always shown, even with none, so people learn these exist and where
+            // to find them when they do.
+            InsetCardDivider()
+            OverviewSnapshotRow(
+                snapshotStore: snapshotStore,
+                now: now,
+                linkedState: linkedRowState(OverviewSnapshotRow.id)
             )
             InsetCardDivider()
             OverviewPlainRow(
@@ -478,6 +493,224 @@ private struct OverviewPlainRow: View {
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Time Machine snapshots
+
+/// Local Time Machine snapshots: Finder never shows them and macOS counts them as
+/// System Data. A count and a date, since nothing reports their size. Remove deletes
+/// all but the ones Time Machine may still need, with no password; after that the row
+/// says what went.
+private struct OverviewSnapshotRow: View {
+    @ObservedObject var snapshotStore: LocalSnapshotStore
+    let now: Date
+    let linkedState: OverviewLinkedRowState
+
+    @EnvironmentObject private var diskStore: DiskSummaryStore
+    /// The snapshots the open confirmation names, nil while it's closed. Fixed when it
+    /// opens, so the list changing underneath can't change what the click deletes. It
+    /// drives the popover itself: a separate flag would show the popover built from
+    /// the value before the click.
+    @State private var plan: SnapshotRemovalPlan?
+    @State private var isShowingInfo = false
+
+    /// What the row is about, for the many people who have never heard of snapshots.
+    private static let info = "Time Machine saves a snapshot every hour so you can get files back without "
+        + "your backup disk. Old ones keep deleted files around and count as System Data. Remove keeps "
+        + "the newest and the one from your last backup, which Time Machine may still need."
+
+    /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
+    static let id = "timeMachineSnapshots"
+
+    private var snapshots: LocalSnapshots? { snapshotStore.snapshots }
+    private var removable: [LocalSnapshot] { snapshots?.removable ?? [] }
+
+    var body: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            OverviewIconTile(symbol: "clock.arrow.circlepath", color: AppColors.Chart.everythingElse)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text("Time Machine snapshots")
+                        .font(AppStyle.Typography.headline)
+                    infoButton
+                }
+                Text(detail)
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: AppStyle.Spacing.small)
+            trailing
+        }
+        .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
+        .padding(.vertical, 11)
+        .overviewLinked(linkedState)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var infoButton: some View {
+        Button {
+            isShowingInfo = true
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .help("What are Time Machine snapshots?")
+        .accessibilityLabel("About Time Machine snapshots")
+        .popover(isPresented: $isShowingInfo, arrowEdge: .bottom) {
+            Text(Self.info)
+                .font(AppStyle.Typography.callout)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(AppStyle.Spacing.medium)
+                .frame(width: 320)
+        }
+    }
+
+    /// Remove whenever there is something to remove, including after a removal that
+    /// failed or couldn't be checked, so it can always be tried again. Otherwise Disk
+    /// Utility, when the kept ones may be stuck or a removal left some behind.
+    @ViewBuilder
+    private var trailing: some View {
+        if !removable.isEmpty || snapshotStore.isRemoving {
+            removeButton
+        } else if showsDiskUtility {
+            Button("Open Disk Utility") { Self.openDiskUtility() }
+                .buttonStyle(.purge(.secondary, size: .small))
+                .help("Purge keeps the newest snapshot, which Time Machine may need. If you're sure you don't, "
+                    + "choose View > Show APFS Snapshots in Disk Utility to delete it.")
+        }
+    }
+
+    private var showsDiskUtility: Bool {
+        switch snapshotStore.currentRemovalOutcome {
+        case .someLeft, .noneRemoved: return true
+        case .removed, .unverified, nil: return snapshots?.newestIsOld(now: now) ?? false
+        }
+    }
+
+    private var removeButton: some View {
+        Button {
+            plan = SnapshotRemovalPlan(snapshots: removable)
+        } label: {
+            CleaningButtonLabel(
+                title: snapshotStore.isRemoving ? "Removing..." : "Remove",
+                systemImage: nil,
+                isCleaning: snapshotStore.isRemoving
+            )
+        }
+        .buttonStyle(.purge(.secondary, size: .small))
+        .disabled(snapshotStore.isRemoving)
+        .help("Remove the snapshots Time Machine no longer needs")
+        .popover(item: $plan, arrowEdge: .bottom) { plan in
+            OverviewSnapshotConfirmation(
+                count: plan.snapshots.count,
+                onCancel: { self.plan = nil },
+                onOpenDiskUtility: {
+                    self.plan = nil
+                    Self.openDiskUtility()
+                },
+                onConfirm: {
+                    self.plan = nil
+                    Task {
+                        await snapshotStore.remove(plan.snapshots)
+                        diskStore.refresh()
+                    }
+                }
+            )
+        }
+    }
+
+    private var detail: String {
+        switch snapshotStore.currentRemovalOutcome {
+        case .removed(let removed, let freedBytes):
+            var text = removed == 1 ? "Removed 1" : "Removed \(removed)"
+            if let freedBytes { text += " and freed \(formatBytes(freedBytes))" }
+            return text + ", kept the newest"
+        case .someLeft(let removed, let left):
+            return "Removed \(removed), but \(left) couldn't be removed"
+        case .noneRemoved:
+            return "These couldn't be removed. Try again, or use Disk Utility."
+        case .unverified:
+            return "Couldn't check what was removed. Try again in a moment."
+        case nil:
+            break
+        }
+        guard let snapshots else {
+            return snapshotStore.hasTriedReading ? "Couldn't check right now" : "Checking..."
+        }
+        guard let oldest = snapshots.oldest else {
+            return "None on this Mac right now"
+        }
+        let when = Self.dayText(oldest, now: now)
+        if snapshots.count == 1 {
+            return "1 on this Mac, from \(when), kept for the next backup"
+        }
+        return "\(snapshots.count) on this Mac, the oldest from \(when)"
+    }
+
+    /// "today", "yesterday", or a short date.
+    static func dayText(_ date: Date, now: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDate(date, inSameDayAs: now) { return "today" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "yesterday"
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    static func openDiskUtility() {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.DiskUtility") else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
+}
+
+/// What one open confirmation will delete.
+private struct SnapshotRemovalPlan: Identifiable {
+    let id = UUID()
+    let snapshots: [LocalSnapshot]
+}
+
+/// Snapshots can't be put back, so removing them asks first and says what they hold:
+/// most people have never heard of them.
+private struct OverviewSnapshotConfirmation: View {
+    let count: Int
+    let onCancel: () -> Void
+    let onOpenDiskUtility: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                Text(count == 1 ? "Remove 1 Time Machine snapshot?" : "Remove \(count) Time Machine snapshots?")
+                    .font(AppStyle.Typography.sectionTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                Text("Snapshots may hold the only copy of files you changed or deleted since your last backup. "
+                    + "Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need "
+                    + "for your next backup. Backups on your backup disk aren't touched.")
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: AppStyle.Spacing.xSmall) {
+                Button("Open Disk Utility", action: onOpenDiskUtility)
+                    .buttonStyle(.purge(.quiet, size: .small))
+                    .help("In Disk Utility, choose View > Show APFS Snapshots to pick which ones to delete.")
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.purge(.secondary))
+                    .keyboardShortcut(.cancelAction)
+                Button("Remove Snapshots", action: onConfirm)
+                    .buttonStyle(.purge(.destructive))
+            }
+        }
+        .padding(AppStyle.Spacing.large)
+        .frame(width: 460)
     }
 }
 
