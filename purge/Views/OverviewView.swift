@@ -500,20 +500,25 @@ private struct OverviewPlainRow: View {
 
 /// Local Time Machine snapshots: Finder never shows them and macOS counts them as
 /// System Data. A count and a date, since nothing reports their size. Remove deletes
-/// all but the newest, needing no password; after that the row says what went.
+/// all but the ones Time Machine may still need, with no password; after that the row
+/// says what went.
 private struct OverviewSnapshotRow: View {
     @ObservedObject var snapshotStore: LocalSnapshotStore
     let now: Date
     let linkedState: OverviewLinkedRowState
 
     @EnvironmentObject private var diskStore: DiskSummaryStore
-    @State private var isConfirming = false
+    /// The snapshots the open confirmation names, nil while it's closed. Fixed when it
+    /// opens, so the list changing underneath can't change what the click deletes. It
+    /// drives the popover itself: a separate flag would show the popover built from
+    /// the value before the click.
+    @State private var plan: SnapshotRemovalPlan?
 
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "timeMachineSnapshots"
 
     private var snapshots: LocalSnapshots? { snapshotStore.snapshots }
-    private var removable: [LocalSnapshot] { snapshots?.removable(now: now) ?? [] }
+    private var removable: [LocalSnapshot] { snapshots?.removable ?? [] }
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
@@ -535,26 +540,31 @@ private struct OverviewSnapshotRow: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// Remove whenever there is something to remove, including after a removal that
+    /// failed or couldn't be checked, so it can always be tried again. Otherwise Disk
+    /// Utility, when the kept ones may be stuck or a removal left some behind.
     @ViewBuilder
     private var trailing: some View {
-        switch snapshotStore.currentRemovalOutcome {
-        case .someLeft, .noneRemoved:
-            // tmutil couldn't remove some; Disk Utility can delete them one by one.
+        if !removable.isEmpty || snapshotStore.isRemoving {
+            removeButton
+        } else if showsDiskUtility {
             Button("Open Disk Utility") { Self.openDiskUtility() }
                 .buttonStyle(.purge(.secondary, size: .small))
-                .help("In Disk Utility, choose View > Show APFS Snapshots to see and delete them.")
-        case .removed:
-            EmptyView()
-        case nil:
-            if !removable.isEmpty || snapshotStore.isRemoving {
-                removeButton
-            }
+                .help("Purge keeps the newest snapshot, which Time Machine may need. If you're sure you don't, "
+                    + "choose View > Show APFS Snapshots in Disk Utility to delete it.")
+        }
+    }
+
+    private var showsDiskUtility: Bool {
+        switch snapshotStore.currentRemovalOutcome {
+        case .someLeft, .noneRemoved: return true
+        case .removed, .unverified, nil: return snapshots?.newestIsOld(now: now) ?? false
         }
     }
 
     private var removeButton: some View {
         Button {
-            isConfirming = true
+            plan = SnapshotRemovalPlan(snapshots: removable)
         } label: {
             CleaningButtonLabel(
                 title: snapshotStore.isRemoving ? "Removing..." : "Remove",
@@ -565,21 +575,18 @@ private struct OverviewSnapshotRow: View {
         .buttonStyle(.purge(.secondary, size: .small))
         .disabled(snapshotStore.isRemoving)
         .help("Remove the snapshots Time Machine no longer needs")
-        .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
+        .popover(item: $plan, arrowEdge: .bottom) { plan in
             OverviewSnapshotConfirmation(
-                count: removable.count,
-                keepsNewest: removable.count < (snapshots?.count ?? 0),
-                newest: snapshots?.newest,
-                now: now,
-                onCancel: { isConfirming = false },
+                count: plan.snapshots.count,
+                onCancel: { self.plan = nil },
                 onOpenDiskUtility: {
-                    isConfirming = false
+                    self.plan = nil
                     Self.openDiskUtility()
                 },
                 onConfirm: {
-                    isConfirming = false
+                    self.plan = nil
                     Task {
-                        await snapshotStore.remove(now: now)
+                        await snapshotStore.remove(plan.snapshots)
                         diskStore.refresh()
                     }
                 }
@@ -589,15 +596,16 @@ private struct OverviewSnapshotRow: View {
 
     private var detail: String {
         switch snapshotStore.currentRemovalOutcome {
-        case .removed(let removed, let freedBytes, let keptNewest):
+        case .removed(let removed, let freedBytes):
             var text = removed == 1 ? "Removed 1" : "Removed \(removed)"
             if let freedBytes { text += " and freed \(formatBytes(freedBytes))" }
-            if keptNewest { text += ", kept the newest" }
-            return text
+            return text + ", kept the newest"
         case .someLeft(let removed, let left):
             return "Removed \(removed), but \(left) couldn't be removed"
         case .noneRemoved:
-            return "These couldn't be removed. Disk Utility can."
+            return "These couldn't be removed. Try again, or use Disk Utility."
+        case .unverified:
+            return "Couldn't check what was removed. Try again in a moment."
         case nil:
             break
         }
@@ -609,10 +617,7 @@ private struct OverviewSnapshotRow: View {
         }
         let when = Self.dayText(oldest, now: now)
         if snapshots.count == 1 {
-            // A single recent one is the newest, which Remove always keeps.
-            return removable.isEmpty
-                ? "1 on this Mac, from \(when), kept for the next backup"
-                : "1 on this Mac, from \(when)"
+            return "1 on this Mac, from \(when), kept for the next backup"
         }
         return "\(snapshots.count) on this Mac, the oldest from \(when)"
     }
@@ -634,28 +639,19 @@ private struct OverviewSnapshotRow: View {
     }
 }
 
-/// Snapshots can't be put back, so removing them asks first, and says what they are
-/// for: most people have never heard of them.
+/// What one open confirmation will delete.
+private struct SnapshotRemovalPlan: Identifiable {
+    let id = UUID()
+    let snapshots: [LocalSnapshot]
+}
+
+/// Snapshots can't be put back, so removing them asks first and says what they hold:
+/// most people have never heard of them.
 private struct OverviewSnapshotConfirmation: View {
     let count: Int
-    let keepsNewest: Bool
-    let newest: Date?
-    let now: Date
     let onCancel: () -> Void
     let onOpenDiskUtility: () -> Void
     let onConfirm: () -> Void
-
-    private var explanation: String {
-        let rest = "Backups on your backup disk aren't touched. Removed snapshots can't be put back."
-        if keepsNewest {
-            return "Time Machine keeps these on your Mac between backups. Purge keeps the newest, "
-                + "which Time Machine can use for your next backup. " + rest
-        }
-        // Even the newest is over a day old: Time Machine stopped replacing them.
-        let since = newest.map { " since \(OverviewSnapshotRow.dayText($0, now: now))" } ?? ""
-        return "Time Machine hasn't made a new one\(since), so these are stuck. "
-            + "Your next backup may take longer. " + rest
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
@@ -663,7 +659,9 @@ private struct OverviewSnapshotConfirmation: View {
                 Text(count == 1 ? "Remove 1 Time Machine snapshot?" : "Remove \(count) Time Machine snapshots?")
                     .font(AppStyle.Typography.sectionTitle)
                     .foregroundStyle(AppColors.textPrimary)
-                Text(explanation)
+                Text("Snapshots may hold the only copy of files you changed or deleted since your last backup. "
+                    + "Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need "
+                    + "for your next backup. Backups on your backup disk aren't touched.")
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
