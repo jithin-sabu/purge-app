@@ -32,7 +32,7 @@ nonisolated final class DevScanner {
         "Yarn Cache": "yarn-cache",
         "CocoaPods": "cocoapods-spec-repos",
         "Flutter Cache": "flutter-cache",
-        "Android SDK .gradle": "android-sdk",
+        "Android Build Cache": "android-sdk",
         "Git Worktrees": "gitworktrees",
         "VS Code Cache": "vscode",
         "Cursor Cache": "cursor",
@@ -476,13 +476,19 @@ nonisolated final class DevScanner {
             ("Deno Cache", [home.appendingPathComponent("Library/Caches/deno", isDirectory: true)]),
             ("Bun Cache", [home.appendingPathComponent(".bun/install/cache", isDirectory: true)]),
             ("Cabal Packages", [home.appendingPathComponent(".cabal/packages", isDirectory: true)]),
-            ("Stack Cache", [home.appendingPathComponent(".stack", isDirectory: true)]),
+            ("Stack Cache", [
+                home.appendingPathComponent(".stack/pantry", isDirectory: true),
+                home.appendingPathComponent(".stack/snapshots", isDirectory: true)
+            ]),
             ("Bazel Cache", [home.appendingPathComponent(".cache/bazel", isDirectory: true)]),
             ("Swift Package Cache", [
                 home.appendingPathComponent("Library/Caches/org.swift.swiftpm", isDirectory: true),
                 home.appendingPathComponent(".swiftpm/cache", isDirectory: true)
             ]),
-            ("Android SDK .gradle", [home.appendingPathComponent(".android", isDirectory: true)]),
+            ("Android Build Cache", [
+                home.appendingPathComponent(".android/cache", isDirectory: true),
+                home.appendingPathComponent(".android/build-cache", isDirectory: true)
+            ]),
             ("Docker Desktop", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)]),
 
             ("Git Worktrees", [

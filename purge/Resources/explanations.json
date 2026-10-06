@@ -37,12 +37,11 @@
   },
   {
     "key": "android-sdk",
-    "display_name": "Android SDK Tools",
-    "tag": "medium",
-    "explanation": "These are temporary files created by Android development tools on your Mac. Deleting them is safe but your Android development environment may need to re-download some files the next time it runs.",
+    "display_name": "Android Build Cache",
+    "tag": "safe",
+    "explanation": "Build caches that Android Studio and Gradle keep in ~/.android. Your emulators, the key your phones trust for debugging, and your debug signing key are left alone. Safe to delete; the next build recreates them.",
     "bundle_ids": [],
     "aliases": [
-      ".android",
       ".gradle"
     ],
     "scope": "dev_tools",
@@ -1677,7 +1676,7 @@
   {
     "key": "android-build",
     "display_name": "Android Build Output",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Compiled Android app files. Safe to delete — your project will rebuild automatically next time.",
     "bundle_ids": [],
     "aliases": [
@@ -1757,7 +1756,7 @@
   {
     "key": "rust-target",
     "display_name": "Rust Build Output",
-    "tag": "medium",
+    "tag": "safe",
     "explanation": "Compiled Rust project files. Safe to delete — your project will recompile automatically on the next build.",
     "bundle_ids": [],
     "aliases": [
@@ -3412,7 +3411,7 @@
     "key": "stack-global",
     "display_name": "Stack Global Cache",
     "tag": "medium",
-    "explanation": "Compilers and packages Stack downloads for Haskell projects. Safe to delete, but the next build re-downloads a lot and can be slow.",
+    "explanation": "Package downloads and prebuilt libraries that Stack shares between Haskell projects. Your settings and installed compilers are left alone. Nothing is lost, but the next build downloads and rebuilds a lot and can be slow.",
     "bundle_ids": [],
     "aliases": [
       "Stack Cache"

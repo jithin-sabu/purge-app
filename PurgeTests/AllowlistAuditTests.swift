@@ -158,3 +158,49 @@ struct EditorWorkspaceStoragePolicyTests {
         #expect(!EditorWorkspaceStoragePolicy.isOrphaned(entry: entry, access: .limited))
     }
 }
+
+// MARK: - Part 2: Check First rows that were too broad or never safe to offer
+
+@Suite("Allowlist audit: narrowed or blocked")
+struct AllowlistNarrowedTests {
+    @Test
+    func androidOffersCachesOnly() {
+        #expect(AuditPaths.evaluate(".android") != .allow)
+        #expect(AuditPaths.evaluate(".android/avd") != .allow)
+        #expect(AuditPaths.evaluate(".android/adbkey") != .allow)
+        #expect(AuditPaths.evaluate(".android/debug.keystore") != .allow)
+        #expect(AuditPaths.evaluate(".android/cache") == .allow)
+        #expect(AuditPaths.evaluate(".android/build-cache") == .allow)
+        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: "Android Build Cache", primaryPath: nil)
+        #expect(info.level == .safe)
+    }
+
+    @Test
+    func stackKeepsSettingsAndCompilers() {
+        #expect(AuditPaths.evaluate(".stack") != .allow)
+        #expect(AuditPaths.evaluate(".stack/config.yaml") != .allow)
+        #expect(AuditPaths.evaluate(".stack/global-project") != .allow)
+        #expect(AuditPaths.evaluate(".stack/programs") != .allow)
+        #expect(AuditPaths.evaluate(".stack/pantry") == .allow)
+        #expect(AuditPaths.evaluate(".stack/snapshots") == .allow)
+    }
+
+    @Test(arguments: [
+        "com.apple.ScreenTimeAgent",
+        "com.apple.ScreenTimeSettingsAgent",
+        "com.1password.1password",
+        "com.agilebits.onepassword7",
+        "com.bitwarden.desktop",
+        "com.lastpass.LastPass",
+        "com.dashlane.Dashlane",
+        "org.keepassxc.keepassxc",
+        "com.authy.authy-mac",
+        "com.yubico.yubioath",
+    ])
+    func sensitiveCachesAreNeverOffered(folderName: String) {
+        #expect(AuditPaths.evaluate("Library/Caches/\(folderName)") == .blockedNeverDelete)
+        #expect(
+            AuditPaths.evaluate("Library/Containers/\(folderName)/Data/Library/Caches/x") == .blockedNeverDelete
+        )
+    }
+}

@@ -93,7 +93,20 @@ enum DeletionSafetyPolicy {
         "authorization",
         "identityservice",
         "keychain",
-        "passkit"
+        "passkit",
+        // Screen Time usage data does not come back once deleted, and it backs
+        // parental controls.
+        "screentime",
+        // Password managers and authenticators. Vault and unlock state is not
+        // worth the risk for the few megabytes these caches hold.
+        "1password",
+        "agilebits",
+        "bitwarden",
+        "lastpass",
+        "dashlane",
+        "keepass",
+        "authy",
+        "yubico"
     ]
 
     /// macOS-managed folders under ~/Library/Logs that the OS refuses to remove even with
@@ -121,7 +134,16 @@ enum DeletionSafetyPolicy {
         "com.apple.AppleAccount",
         "com.apple.Accounts",
         "com.apple.PassKit",
-        "com.apple.Internet-Accounts"
+        "com.apple.Internet-Accounts",
+        "com.apple.ScreenTime",
+        "com.1password",
+        "com.agilebits",
+        "com.bitwarden",
+        "com.lastpass",
+        "com.dashlane",
+        "org.keepassxc",
+        "com.authy",
+        "com.yubico"
     ]
 
     /// Whether a container bundle ID belongs to the protected set, by exact
@@ -229,10 +251,11 @@ enum DeletionSafetyPolicy {
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
             "\(home)/.gradle/caches",
-            // AUDIT: `.android` also holds AVD emulator images and the adb key.
-            // Re-creatable (re-auth devices / re-create AVDs) but not a pure
-            // cache — classify as Check First, not Safe.
-            "\(home)/.android",
+            // Caches only. The rest of `~/.android` is emulators (`avd`), the adb key
+            // every paired phone trusts, and `debug.keystore`, whose replacement breaks
+            // Google Sign-In and Maps keys registered against the old one.
+            "\(home)/.android/cache",
+            "\(home)/.android/build-cache",
             // Spec repos only. `pod repo add` registrations live here too, so the
             // row is Check First; the pod download cache is ~/Library/Caches/CocoaPods.
             "\(home)/.cocoapods/repos",
@@ -256,10 +279,12 @@ enum DeletionSafetyPolicy {
             "\(home)/.cabal/packages",
             "\(home)/Library/Caches/org.swift.swiftpm",
             "\(home)/.swiftpm/cache",
-            // AUDIT: `.stack` also holds downloaded GHC compilers, and `~/.cache/bazel`
-            // can be tens of GB. Both re-download rather than being lost, but the next
-            // build is very slow — surfaced as Check First, never Safe.
-            "\(home)/.stack",
+            // AUDIT: Stack's package store, and `~/.cache/bazel`, can be tens of GB.
+            // Both re-download rather than being lost, but the next build is very
+            // slow, so they are Check First. The rest of `~/.stack` is the user's
+            // `config.yaml`, the global project, and installed GHC compilers.
+            "\(home)/.stack/pantry",
+            "\(home)/.stack/snapshots",
             "\(home)/.cache/bazel",
             "\(home)/.flutter",
             // NOTE: `~/Library/Application Support/MobileSync/Backup` (iPhone/iPad
