@@ -114,7 +114,7 @@ extension PurgeStore {
   private static let systemJunkAppNames: Set<String> = [
     "Application Logs",
     "Crash Reports",
-    "macOS Installers",
+    "macOS Installer",
     "Font Cache",
   ]
 

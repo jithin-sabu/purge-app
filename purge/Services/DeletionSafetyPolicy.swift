@@ -69,7 +69,10 @@ enum DeletionSafetyPolicy {
         // against the Apple ID and a fresh login-keychain prompt.
         "com.apple.itunescloudd",
         "com.apple.iCloudNotificationAgent",
-        "PassKit"
+        "PassKit",
+        // Container metadata for every sandboxed app. Rebuilt by macOS, but apps
+        // can lose track of their containers until it is, for a few kilobytes.
+        "com.apple.containermanagerd"
     ]
 
     /// Case-insensitive fragments that mark a `~/Library/Caches` top-level
@@ -93,8 +96,53 @@ enum DeletionSafetyPolicy {
         "authorization",
         "identityservice",
         "keychain",
-        "passkit"
+        "passkit",
+        // Screen Time usage data does not come back once deleted, and it backs
+        // parental controls.
+        "screentime",
+        // Password managers and authenticators. Vault and unlock state is not
+        // worth the risk for the few megabytes these caches hold.
+        "1password",
+        "agilebits",
+        "bitwarden",
+        "lastpass",
+        "dashlane",
+        "keepass",
+        "authy",
+        "yubico",
+        // Input methods keep learned words and user dictionaries next to their caches.
+        "inputmethod"
     ]
+
+    /// Case-insensitive prefixes of `~/Library/Caches` and container folders that must
+    /// never be offered, even though their names look like ordinary app caches.
+    ///
+    /// System UI: deleting Finder, Dock, Control Center or System Settings caches
+    /// while they run can leave Settings panels blank until logout (Mole hit this,
+    /// issue #136 there). Endpoint security and MDM agents: touching a sensor's
+    /// files can trip its tamper detection, which a company reports as an attack.
+    nonisolated static let protectedCacheFolderPrefixes: [String] = [
+        "com.apple.finder",
+        "com.apple.dock",
+        "com.apple.controlcenter",
+        "com.apple.systempreferences",
+        "com.apple.settings",
+        "com.apple.systemsettings",
+        "com.crowdstrike.",
+        "com.sentinelone.",
+        "com.sentinel-labs.",
+        "com.eset.",
+        "com.jamf.",
+        "com.jamfsoftware.",
+        "com.paloaltonetworks.",
+        "com.cisco.anyconnect",
+        "com.cisco.secureclient"
+    ]
+
+    nonisolated static func hasProtectedCacheFolderPrefix(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return protectedCacheFolderPrefixes.contains { lower.hasPrefix($0) }
+    }
 
     /// macOS-managed folders under ~/Library/Logs that the OS refuses to remove even with
     /// Full Disk Access. They surface inside the "Application Logs" scan but must never be offered.
@@ -121,13 +169,25 @@ enum DeletionSafetyPolicy {
         "com.apple.AppleAccount",
         "com.apple.Accounts",
         "com.apple.PassKit",
-        "com.apple.Internet-Accounts"
+        "com.apple.Internet-Accounts",
+        "com.apple.ScreenTime",
+        "com.1password",
+        "com.agilebits",
+        "com.bitwarden",
+        "com.lastpass",
+        "com.dashlane",
+        "org.keepassxc",
+        "com.authy",
+        "com.yubico"
     ]
 
     /// Whether a container bundle ID belongs to the protected set, by exact
     /// match or protected prefix.
     nonisolated static func isProtectedContainerBundleID(_ bundleID: String) -> Bool {
         if protectedContainerBundleIDs.contains(bundleID) { return true }
+        if hasProtectedCacheFolderPrefix(bundleID) { return true }
+        // Input methods are often sandboxed, with the learned-word store in the container.
+        if bundleID.lowercased().contains("inputmethod") { return true }
         return protectedContainerBundleIDPrefixes.contains { bundleID.hasPrefix($0) }
     }
 
@@ -229,17 +289,24 @@ enum DeletionSafetyPolicy {
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
             "\(home)/.gradle/caches",
-            // AUDIT: `.android` also holds AVD emulator images and the adb key.
-            // Re-creatable (re-auth devices / re-create AVDs) but not a pure
-            // cache — classify as Check First, not Safe.
-            "\(home)/.android",
-            "\(home)/.cocoapods",
-            "\(home)/.sbt",
+            // Caches only. The rest of `~/.android` is emulators (`avd`), the adb key
+            // every paired phone trusts, and `debug.keystore`, whose replacement breaks
+            // Google Sign-In and Maps keys registered against the old one.
+            "\(home)/.android/cache",
+            "\(home)/.android/build-cache",
+            // Spec repos only. `pod repo add` registrations live here too, so the
+            // row is Check First; the pod download cache is ~/Library/Caches/CocoaPods.
+            "\(home)/.cocoapods/repos",
+            // `~/.sbt` is deliberately NOT listed: it holds the user's own sbt settings
+            // (`1.0/global.sbt`, `1.0/plugins`) next to the launcher jars.
             "\(home)/.ivy2/cache",
             "\(home)/.cache/act",
             "\(home)/.zcompdump",
             "\(home)/.cargo/registry",
-            "\(home)/.pub-cache",
+            // Downloaded packages only. `~/.pub-cache/bin` and `global_packages` hold
+            // tools installed with `dart pub global activate`, which are not a cache.
+            "\(home)/.pub-cache/hosted",
+            "\(home)/.pub-cache/git",
             // Hex is Elixir/Erlang's package registry; `packages` is a pure download
             // cache, re-fetched by `mix deps.get`. `~/.mix` is deliberately NOT listed:
             // it holds installed Mix archives (tools the user chose to install), not a cache.
@@ -250,19 +317,27 @@ enum DeletionSafetyPolicy {
             "\(home)/.cabal/packages",
             "\(home)/Library/Caches/org.swift.swiftpm",
             "\(home)/.swiftpm/cache",
-            // AUDIT: `.stack` also holds downloaded GHC compilers, and `~/.cache/bazel`
-            // can be tens of GB. Both re-download rather than being lost, but the next
-            // build is very slow — surfaced as Check First, never Safe.
-            "\(home)/.stack",
+            // AUDIT: Stack's package store, and `~/.cache/bazel`, can be tens of GB.
+            // Both re-download rather than being lost, but the next build is very
+            // slow, so they are Check First. The rest of `~/.stack` is the user's
+            // `config.yaml`, the global project, and installed GHC compilers.
+            "\(home)/.stack/pantry",
+            "\(home)/.stack/snapshots",
             "\(home)/.cache/bazel",
-            "\(home)/.flutter",
+            // `~/.flutter` is NOT listed: it is a small settings file (analytics
+            // consent and client ID), not a cache. Flutter's caches live in the SDK.
             // NOTE: `~/Library/Application Support/MobileSync/Backup` (iPhone/iPad
             // backups) is deliberately NOT on the allowlist. Those backups are
             // non-recoverable, so they must never be scanned, sized, or shown.
             "\(home)/Library/Logs",
             "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/.m2/repository",
-            "\(home)/.gem",
+            // `~/.gem` as a whole is NOT listed: `gem install --user-install` puts
+            // installed gems and their commands (CocoaPods, fastlane) under
+            // `~/.gem/ruby/<version>`. Only the spec index and the downloaded `.gem`
+            // files in `~/.gem/ruby/<version>/cache` are offered; see
+            // `isWhitelistedGemDownloadCachePath`.
+            "\(home)/.gem/specs",
             "\(home)/.bundle/cache",
             "\(home)/.composer/cache",
             "\(home)/.cargo/git",
@@ -275,18 +350,14 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support/Code/Cache",
             "\(home)/Library/Application Support/Code/CachedData",
             "\(home)/Library/Application Support/Code/CachedExtensionVSIXs",
-            "\(home)/Library/Application Support/Code/User/workspaceStorage",
             "\(home)/Library/Application Support/Cursor/Cache",
             "\(home)/Library/Application Support/Cursor/CachedData",
-            "\(home)/Library/Application Support/Cursor/User/workspaceStorage",
             "\(home)/Library/Caches/JetBrains",
             // NOTE: `~/Library/Application Support/JetBrains` is deliberately NOT on
             // the allowlist. It holds installed plugins and all IDE settings (not a
             // cache), so it must never be scanned, sized, or deleted.
-            // AUDIT: `Zed/db` is Zed's local state database (not a pure cache).
-            // Re-created on next launch but may reset local editor state —
-            // Check First, not Safe.
-            "\(home)/Library/Application Support/Zed/db",
+            // NOTE: `~/Library/Application Support/Zed/db` is deliberately NOT listed.
+            // It is Zed's workspace state database, not a cache.
             "\(home)/Library/Caches/Zed",
             "\(home)/Library/Caches/ms-playwright",
             "\(home)/.cache/ms-playwright",
@@ -312,7 +383,56 @@ enum DeletionSafetyPolicy {
             // entry is used by the Dev Tools path.)
             "\(home)/Library/Containers/com.docker.docker",
             "\(home)/.vagrant.d/boxes",
-            "/Applications/Install macOS"
+            // Added in the 2026-10 allowlist audit, cross-checked against Mole and
+            // the places people find "System Data" in practice. Each one is a
+            // download, render or build cache its owner recreates or downloads again.
+            "\(home)/Library/iTunes/iPhone Software Updates",
+            "\(home)/Library/iTunes/iPad Software Updates",
+            "\(home)/Library/iTunes/iPod Software Updates",
+            "\(home)/Movies/CacheClip",
+            "\(home)/Library/Developer/CoreSimulator/Caches",
+            "\(home)/Library/Developer/XCTestDevices",
+            "\(home)/Library/Developer/Xcode/watchOS DeviceSupport",
+            "\(home)/Library/Developer/Xcode/tvOS DeviceSupport",
+            "\(home)/Library/Developer/Xcode/visionOS DeviceSupport",
+            "\(home)/Library/Developer/Xcode/xrOS DeviceSupport",
+            "\(home)/Library/pnpm/store",
+            "\(home)/.yarn/berry/cache",
+            "\(home)/.cache/pre-commit",
+            "\(home)/.cache/prisma",
+            // Expo's download caches only; `~/.expo/state.json` holds the login.
+            "\(home)/.expo/android-apk-cache",
+            "\(home)/.expo/ios-simulator-app-cache",
+            "\(home)/.expo/native-modules-cache",
+            "\(home)/.expo/schema-cache",
+            "\(home)/.expo/template-cache",
+            "\(home)/.expo/versions-cache",
+            "\(home)/.expo/expo-go",
+            // Download caches only; installed Python and Ruby versions are elsewhere.
+            "\(home)/.pyenv/cache",
+            "\(home)/.rbenv/cache",
+            "\(home)/.oh-my-zsh/cache",
+            "\(home)/.opam/download-cache",
+            // Check First, by their explanations: browsers come back only when asked
+            // for, and conda environments link into the package folder.
+            "\(home)/.cache/puppeteer",
+            "\(home)/.conda/pkgs",
+            "\(home)/anaconda3/pkgs",
+            "\(home)/miniconda3/pkgs",
+            "\(home)/miniforge3/pkgs",
+            "\(home)/mambaforge/pkgs",
+            "\(home)/opt/anaconda3/pkgs",
+            "\(home)/opt/miniconda3/pkgs",
+            // The videos only. The thumbnails next to them are the covers System
+            // Settings shows; deleting those blanks the wallpaper picker.
+            "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",
+            "\(home)/Library/Messages/Caches/Previews",
+            // Held back while Mail runs; see `mailRunningRefusesDeletion`.
+            "\(home)/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
+            // macOS installers in /Applications are matched by
+            // `isWhitelistedMacOSInstallerPath`, not a prefix. The old prefix here,
+            // "/Applications/Install macOS", never matched a real installer, which is
+            // named "Install macOS Sequoia.app".
         ]
     }
 
@@ -341,6 +461,12 @@ enum DeletionSafetyPolicy {
         // a background update. That answer flips when the user quits, so it stays
         // outside the cache, same as project-artifact refusals.
         if staleBrowserFrameworkRefusesDeletion(url) { return false }
+        // Spotify keeps offline downloads alongside its cache. That answer changes
+        // the moment the user downloads a playlist, so it is never cached either.
+        if spotifyOfflineMusicRefusesDeletion(url) { return false }
+        // Which CLI version is in use changes on every auto-update.
+        if oldCLIVersionRefusesDeletion(url) { return false }
+        if mailRunningRefusesDeletion(url) { return false }
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
@@ -454,6 +580,7 @@ enum DeletionSafetyPolicy {
     /// match or by identity/auth/payment fragment.
     nonisolated static func isProtectedSystemCacheFolderName(_ folderName: String) -> Bool {
         if protectedSystemCacheFolderNames.contains(folderName) { return true }
+        if hasProtectedCacheFolderPrefix(folderName) { return true }
         let lower = folderName.lowercased()
         return protectedSystemCacheFolderFragments.contains { lower.contains($0) }
     }
@@ -582,6 +709,135 @@ enum DeletionSafetyPolicy {
         return parts.count == start + 3
     }
 
+    /// Spotify's cache folder and the folder that holds its offline downloads.
+    nonisolated static func spotifyCachePath(home: String) -> String {
+        "\(home)/Library/Caches/com.spotify.client"
+    }
+
+    nonisolated static func spotifyOfflineStoragePath(home: String) -> String {
+        "\(home)/Library/Application Support/Spotify/PersistentCache/Storage"
+    }
+
+    /// `offline.bnk` exists even with nothing downloaded, so only a file over a
+    /// kilobyte counts (the signal Mole uses too). Cheap enough for every call; the
+    /// slower check for downloaded track files runs once per scan, in
+    /// `spotifyHasOfflineTrackFiles`.
+    nonisolated static func spotifyOfflineIndexShowsDownloads(home: String) -> Bool {
+        let index = spotifyOfflineStoragePath(home: home) + "/offline.bnk"
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: index))?[.size] as? NSNumber else {
+            return false
+        }
+        return size.intValue > 1024
+    }
+
+    /// Downloaded tracks are stored as encrypted `*.file` blobs.
+    nonisolated static func spotifyHasOfflineTrackFiles(home: String) -> Bool {
+        let storage = URL(fileURLWithPath: spotifyOfflineStoragePath(home: home), isDirectory: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: storage,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return false }
+        for case let url as URL in enumerator where url.pathExtension == "file" {
+            return true
+        }
+        return false
+    }
+
+    /// The Spotify cache is offered only when the user has nothing downloaded for
+    /// offline listening; Mole learned that clearing it can take offline songs too.
+    nonisolated static func spotifyOfflineMusicRefusesDeletion(_ url: URL) -> Bool {
+        let home = cachedHomePath
+        let cache = spotifyCachePath(home: home)
+        let path = url.standardizedFileURL.path
+        guard path == cache || path.hasPrefix(cache + "/") else { return false }
+        return spotifyOfflineIndexShowsDownloads(home: home)
+    }
+
+    /// AI coding CLIs that install each version side by side: the folder of versions,
+    /// and the command whose symlink points at the version in use.
+    nonisolated static let cliVersionStores: [(versions: String, command: String)] = [
+        (".local/share/claude/versions", ".local/bin/claude"),
+        (".local/share/cursor-agent/versions", ".local/bin/cursor-agent")
+    ]
+
+    /// The version folder or file `path` belongs to, with its store.
+    nonisolated static func cliVersion(
+        containing path: String,
+        home: String
+    ) -> (versionsRoot: String, command: String, version: String)? {
+        for store in cliVersionStores {
+            let root = "\(home)/\(store.versions)"
+            guard path.hasPrefix(root + "/") else { continue }
+            guard let version = path.dropFirst(root.count + 1).split(separator: "/").first.map(String.init),
+                  !version.isEmpty else { return nil }
+            return (root, "\(home)/\(store.command)", version)
+        }
+        return nil
+    }
+
+    /// The versions to keep: the one the command runs, and the newest, in case an
+    /// update has installed it and not yet switched the link. Nil when the command
+    /// cannot be read, and then nothing is offered.
+    nonisolated static func keptCLIVersions(versionsRoot: String, command: String) -> Set<String>? {
+        guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: command) else { return nil }
+        let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: command).deletingLastPathComponent())
+            .standardizedFileURL.path
+        guard resolved.hasPrefix(versionsRoot + "/"),
+              let inUse = resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init) else {
+            return nil
+        }
+        var kept: Set<String> = [inUse]
+        let all = ((try? FileManager.default.contentsOfDirectory(atPath: versionsRoot)) ?? [])
+            .filter { !$0.hasPrefix(".") }
+        if let newest = all.max(by: { $0.compare($1, options: .numeric) == .orderedAscending }) {
+            kept.insert(newest)
+        }
+        return kept
+    }
+
+    nonisolated static func isWhitelistedOldCLIVersionPath(_ path: String, home: String) -> Bool {
+        cliVersion(containing: path, home: home) != nil
+    }
+
+    nonisolated static func oldCLIVersionRefusesDeletion(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        guard let match = cliVersion(containing: path, home: cachedHomePath) else { return false }
+        guard let kept = keptCLIVersions(versionsRoot: match.versionsRoot, command: match.command) else {
+            return true
+        }
+        return kept.contains(match.version)
+    }
+
+    /// Mail can be writing an attachment it just opened.
+    nonisolated static func mailRunningRefusesDeletion(_ url: URL) -> Bool {
+        let downloads = "\(cachedHomePath)/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
+        let path = url.standardizedFileURL.path
+        guard path == downloads || path.hasPrefix(downloads + "/") else { return false }
+        return isAppRunning(bundleID: "com.apple.mail")
+    }
+
+    nonisolated static func isAppRunning(bundleID: String) -> Bool {
+        #if canImport(AppKit)
+        return NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
+        #else
+        return false
+        #endif
+    }
+
+    /// Unfinished browser downloads sitting directly in ~/Downloads: Chrome's
+    /// `.crdownload`, Firefox's `.part`, Safari's `.download` bundle.
+    nonisolated static let unfinishedDownloadExtensions: Set<String> = ["crdownload", "part", "download"]
+
+    nonisolated static func isWhitelistedUnfinishedDownloadPath(_ path: String, home: String) -> Bool {
+        let downloads = "\(home)/Downloads/"
+        guard path.hasPrefix(downloads) else { return false }
+        let rest = path.dropFirst(downloads.count)
+        guard let name = rest.split(separator: "/").first.map(String.init) else { return false }
+        let ext = (name as NSString).pathExtension.lowercased()
+        return unfinishedDownloadExtensions.contains(ext) && name.count > ext.count + 1
+    }
+
     /// One running app, reduced to the paths needed to see which framework it loaded.
     nonisolated struct RunningProcessPaths: Equatable, Sendable {
         var bundlePath: String?
@@ -648,13 +904,48 @@ enum DeletionSafetyPolicy {
         return true
     }
 
+    /// `<Name> Framework.framework`, the naming every Chromium browser uses for its
+    /// one big framework (`Google Chrome Framework`, `Brave Browser Framework`, ...).
+    nonisolated static func isChromiumFrameworkName(_ name: String) -> Bool {
+        name.hasSuffix(" Framework.framework") && name.count > " Framework.framework".count
+    }
+
+    /// `/Applications/<known browser>.app/Contents/Frameworks/<Name> Framework.framework/Versions/<version>`
+    /// or something inside it. Only the browsers Purge scans: an old version folder
+    /// in any other app is not Purge's business.
     nonisolated static func isWhitelistedStaleBrowserFrameworkPath(_ path: String) -> Bool {
-        guard path.hasPrefix("/Applications/"), path.contains(".app/Contents/Frameworks/") else {
-            return false
-        }
-        guard path.contains("/Versions/") else { return false }
-        let last = URL(fileURLWithPath: path).lastPathComponent
-        return last != "Current" && last != "Versions"
+        let prefix = "/Applications/"
+        guard path.hasPrefix(prefix) else { return false }
+        let parts = path.dropFirst(prefix.count).split(separator: "/").map(String.init)
+        guard parts.count >= 6,
+              CacheDiscoveryPaths.chromiumBrowserAppNames.contains(parts[0]),
+              parts[1] == "Contents",
+              parts[2] == "Frameworks",
+              isChromiumFrameworkName(parts[3]),
+              parts[4] == "Versions" else { return false }
+        return parts[5] != "Current"
+    }
+
+    nonisolated static func isMacOSInstallerAppName(_ name: String) -> Bool {
+        name.hasPrefix("Install macOS ") && name.hasSuffix(".app")
+    }
+
+    /// Apple's full installers all carry a `com.apple.InstallAssistant` bundle ID.
+    nonisolated static func isMacOSInstallerBundle(at appURL: URL) -> Bool {
+        let plist = appURL.appendingPathComponent("Contents/Info.plist", isDirectory: false)
+        guard let info = NSDictionary(contentsOf: plist),
+              let bundleID = info["CFBundleIdentifier"] as? String else { return false }
+        return bundleID.hasPrefix("com.apple.InstallAssistant")
+    }
+
+    /// `/Applications/Install macOS <Name>.app`, or something inside it, when the
+    /// bundle really is an Apple installer.
+    nonisolated static func isWhitelistedMacOSInstallerPath(_ path: String) -> Bool {
+        let prefix = "/Applications/"
+        guard path.hasPrefix(prefix) else { return false }
+        guard let appName = path.dropFirst(prefix.count).split(separator: "/").first.map(String.init),
+              isMacOSInstallerAppName(appName) else { return false }
+        return isMacOSInstallerBundle(at: URL(fileURLWithPath: prefix + appName, isDirectory: true))
     }
 
     /// True when this version folder is still in use, or might be, because the
@@ -705,6 +996,40 @@ enum DeletionSafetyPolicy {
         #else
         return []
         #endif
+    }
+
+    /// `~/Library/Caches/JetBrains/<IDE><version>/LocalHistory` is the IDE's own
+    /// history of every file you edited, kept in the caches folder by JetBrains'
+    /// design. Refuse it, and refuse the JetBrains folder and each IDE folder
+    /// whole, so the only thing that can go is an IDE folder's other children
+    /// (indexes, caches, logs, JCEF data), which the IDE rebuilds.
+    nonisolated static let jetBrainsLocalHistoryFolderName = "LocalHistory"
+
+    nonisolated static func isProtectedJetBrainsCachePath(_ path: String, home: String) -> Bool {
+        let root = "\(home)/Library/Caches/JetBrains"
+        guard path == root || path.hasPrefix(root + "/") else { return false }
+        let parts = path.dropFirst(root.count).split(separator: "/").map(String.init)
+        // The JetBrains folder itself, or one IDE folder whole.
+        if parts.count < 2 { return true }
+        return parts[1] == jetBrainsLocalHistoryFolderName
+    }
+
+    /// `~/.gem/ruby/<version>/cache` (or a file in it): the downloaded `.gem`
+    /// files RubyGems keeps after installing. The gems themselves sit next to it
+    /// in `gems/` and are never matched.
+    nonisolated static func isWhitelistedGemDownloadCachePath(_ path: String, home: String) -> Bool {
+        let root = "\(home)/.gem/ruby/"
+        guard path.hasPrefix(root) else { return false }
+        let parts = path.dropFirst(root.count).split(separator: "/").map(String.init)
+        return parts.count >= 2 && !parts[0].isEmpty && parts[1] == "cache"
+    }
+
+    /// One entry directly inside VS Code's or Cursor's `User/workspaceStorage`.
+    /// This only proves the shape. Which entries belong to projects that no longer
+    /// exist is decided by `EditorWorkspaceStoragePolicy` at scan time, and the
+    /// row is Check First, so nothing here is ever cleaned without the user.
+    nonisolated static func isWhitelistedEditorWorkspaceStorageEntry(_ path: String, home: String) -> Bool {
+        EditorWorkspaceStoragePolicy.isEntryPath(path, home: home)
     }
 
     nonisolated static func isWhitelistedEditorExtensionPath(_ path: String, home: String) -> Bool {
@@ -792,6 +1117,9 @@ enum DeletionSafetyPolicy {
         if path == jetBrainsAppSupport || path.hasPrefix(jetBrainsAppSupport + "/") {
             return .blockedNeverDelete
         }
+        if isProtectedJetBrainsCachePath(path, home: home) {
+            return .blockedNeverDelete
+        }
 
         for allowed in whitelistedPrefixes(home: home) {
             if path == allowed || path.hasPrefix(allowed + "/") {
@@ -811,7 +1139,22 @@ enum DeletionSafetyPolicy {
         if isWhitelistedStaleBrowserFrameworkPath(path) {
             return .allow
         }
+        if isWhitelistedMacOSInstallerPath(path) {
+            return .allow
+        }
+        if isWhitelistedOldCLIVersionPath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedUnfinishedDownloadPath(path, home: home) {
+            return .allow
+        }
         if isWhitelistedEditorExtensionPath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedGemDownloadCachePath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedEditorWorkspaceStorageEntry(path, home: home) {
             return .allow
         }
         if isWhitelistedCursorAgentLeftoverPath(path, home: home) {

@@ -49,7 +49,8 @@ enum SafetyTierList {
     /// These are standard app cache folders that apps recreate automatically.
     nonisolated static let definitelySafeBundlePrefixes: [String] = [
         "com.google.Chrome",
-        "com.apple.Safari",
+        // Not "com.apple.Safari": as a prefix it also matched Safari's bookmark and
+        // history sync agents. Safari's own cache is matched by bundle ID instead.
         "org.mozilla.firefox",
         "com.brave.Browser",
         "company.thebrowser.Browser",
@@ -108,6 +109,16 @@ enum SafetyTierList {
                 || pathLower.contains("/linkthumbnail")
                 || pathLower.contains("/chatmedia")
                 || pathLower.contains("/appinstallationbinarydeltas") {
+                return .safe
+            }
+            // An Electron or Chromium app's HTTP cache under Application Support:
+            // `<App>/Cache` with Chromium's `Cache_Data` inside. Only that shape;
+            // a folder merely named Cache could be anything.
+            if pathLower.contains("/library/application support/"),
+               path.lastPathComponent == "Cache",
+               FileManager.default.fileExists(
+                   atPath: path.appendingPathComponent("Cache_Data", isDirectory: true).path
+               ) {
                 return .safe
             }
             // Spotlight index data regenerates on its own, but search is slow or

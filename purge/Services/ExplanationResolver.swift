@@ -1,16 +1,19 @@
 import Foundation
 
-/// Ordered resolution: user override -> AI disk cache -> bundled DB -> tier list -> unknown.
+/// Ordered resolution: user override -> bundled DB -> tier list -> unknown.
 /// User overrides are keyed by exact path and trump every automatic source.
+///
+/// Guesses left in `ai_cache.json` by the removed AI classifier are deliberately not
+/// read. They outranked the reviewed list, so a guess could mark a folder Safe that
+/// the bundled data never vetted, and only on Macs that ran an early build.
 enum ExplanationResolver {
     nonisolated static let unsureExplanation = "We could not identify this folder. We recommend leaving it alone."
 
     /// Resolution order:
     /// 1. `user_overrides.json` keyed by exact path (when provided)
-    /// 2. `ai_cache.json` keyed by folder name
-    /// 3. Bundled `explanations.json`
-    /// 4. `SafetyTierList`
-    /// 5. Return unknown
+    /// 2. Bundled `explanations.json`
+    /// 3. `SafetyTierList`
+    /// 4. Return unknown
     nonisolated static func initialSafetyForCacheFolder(
         folderName: String,
         friendlyHeadline: String,
@@ -19,9 +22,6 @@ enum ExplanationResolver {
         if let path,
            let override = UserOverridesStore.read(path: path) {
             return UserOverridesStore.safetyInfo(from: override, friendlyHeadline: friendlyHeadline)
-        }
-        if let cached = AICacheStore.read(folderName: folderName) {
-            return AICacheStore.safetyInfo(from: cached)
         }
         if let record = ExplanationDatabase.matchBundledDatabase(folderName: folderName) {
             return ExplanationDatabase.safetyInfo(from: record)

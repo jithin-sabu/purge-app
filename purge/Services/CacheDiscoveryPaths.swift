@@ -139,6 +139,57 @@ enum CacheDiscoveryPaths {
         return results
     }
 
+    /// Fixed-location caches outside `~/Library/Caches` that App Caches lists, each
+    /// classified by `key` against `explanations.json`. `needsFullAccess` marks the
+    /// ones inside folders a limited scan must not open (Messages, Mail's container).
+    nonisolated static let knownCacheEntries: [(relative: String, key: String, needsFullAccess: Bool)] = [
+        ("Library/iTunes/iPhone Software Updates", "Device Software Updates", false),
+        ("Library/iTunes/iPad Software Updates", "Device Software Updates", false),
+        ("Library/iTunes/iPod Software Updates", "Device Software Updates", false),
+        ("Movies/CacheClip", "CacheClip", false),
+        ("Library/Application Support/com.apple.wallpaper/aerials/videos", "Aerial Wallpaper Videos", false),
+        ("Library/Messages/Caches/Previews", "Messages Previews", true),
+        ("Library/Containers/com.apple.mail/Data/Library/Mail Downloads", "Mail Downloads", true)
+    ]
+
+    /// Classification name for every electron-updater download folder. They are
+    /// named after the app (`t3code-updater`, `@opencode-aidesktop-updater`), so
+    /// they share one entry and show as one row.
+    nonisolated static let electronUpdaterKey = "Electron Updater Downloads"
+
+    /// A `~/Library/Caches/<app>-updater` folder with electron-updater's `pending`
+    /// download folder inside. The name alone is not enough to call it one.
+    nonisolated static func isElectronUpdaterCache(_ directory: URL) -> Bool {
+        guard directory.lastPathComponent.lowercased().hasSuffix("-updater") else { return false }
+        var isDir: ObjCBool = false
+        let pending = directory.appendingPathComponent("pending", isDirectory: true)
+        return FileManager.default.fileExists(atPath: pending.path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    /// Unfinished downloads directly in ~/Downloads that have not changed for this
+    /// long. A browser still downloading touches the file far more often.
+    nonisolated static let unfinishedDownloadMinimumAge: TimeInterval = 7 * 24 * 60 * 60
+
+    nonisolated static let unfinishedDownloadsKey = "Unfinished Downloads"
+
+    nonisolated static func unfinishedDownloadURLs(home: URL, now: Date = Date()) -> [URL] {
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: downloads,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        return entries.filter { url in
+            guard DeletionSafetyPolicy.unfinishedDownloadExtensions.contains(url.pathExtension.lowercased()) else {
+                return false
+            }
+            let modified = FolderSizing.contentModificationDate(at: url)
+            return now.timeIntervalSince(modified) >= unfinishedDownloadMinimumAge
+        }
+        .map(\.standardizedFileURL)
+        .sorted { $0.path < $1.path }
+    }
+
     /// Telegram's native macOS app parks auto-downloaded photos, videos, and
     /// files inside its Group Container rather than `~/Library/Caches`, so the
     /// broad Caches sweep never reaches them. Only the `postbox/media` directory
@@ -241,28 +292,67 @@ enum CacheDiscoveryPaths {
         return results
     }
 
+    /// Classification key and folder name for full macOS installer apps.
+    nonisolated static let macOSInstallerKey = "macOS Installer"
+
+    /// `/Applications/Install macOS <Name>.app` bundles whose bundle ID is Apple's
+    /// InstallAssistant. The name alone is not enough: any app can be called that.
+    nonisolated static func macOSInstallerURLs(applications: URL = URL(fileURLWithPath: "/Applications")) -> [URL] {
+        let fm = FileManager.default
+        guard let apps = try? fm.contentsOfDirectory(
+            at: applications,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        return apps
+            .filter { DeletionSafetyPolicy.isMacOSInstallerAppName($0.lastPathComponent) }
+            .filter { DeletionSafetyPolicy.isMacOSInstallerBundle(at: $0) }
+            .map(\.standardizedFileURL)
+            .sorted { $0.path < $1.path }
+    }
+
+    /// Chromium browsers whose bundles keep old framework versions after an update.
+    /// The framework is `<Browser> Framework.framework` in each (Chrome, Brave, Edge
+    /// and Chromium each use their own name), found by `chromiumFrameworkVersionsDir`.
+    nonisolated static let chromiumBrowserAppNames: [String] = [
+        "Google Chrome.app",
+        "Google Chrome Beta.app",
+        "Google Chrome Dev.app",
+        "Google Chrome Canary.app",
+        "Chromium.app",
+        "Arc.app",
+        "Brave Browser.app",
+        "Microsoft Edge.app",
+        "Vivaldi.app"
+    ]
+
+    /// `Contents/Frameworks/<Name> Framework.framework/Versions` inside a browser
+    /// bundle: the one Chromium framework, whose versioned folders pile up.
+    nonisolated static func chromiumFrameworkVersionsDir(in appURL: URL) -> URL? {
+        let frameworks = appURL.appendingPathComponent("Contents/Frameworks", isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: frameworks.path) else {
+            return nil
+        }
+        guard let name = entries.sorted().first(where: { DeletionSafetyPolicy.isChromiumFrameworkName($0) }) else {
+            return nil
+        }
+        return frameworks
+            .appendingPathComponent(name, isDirectory: true)
+            .appendingPathComponent("Versions", isDirectory: true)
+    }
+
     /// Stale Chromium framework versions inside `.app` bundles (not the `Current` symlink target).
     /// Versions a running browser is still executing from are dropped later by
     /// `DeletionSafetyPolicy.staleBrowserFrameworkRefusesDeletion`.
     nonisolated static func staleChromiumFrameworkVersionURLs() -> [URL] {
         let fm = FileManager.default
-        let appNames = [
-            "Google Chrome.app",
-            "Google Chrome Canary.app",
-            "Chromium.app",
-            "Arc.app",
-            "Brave Browser.app",
-            "Microsoft Edge.app"
-        ]
 
         var results: [URL] = []
-        for appName in appNames {
+        for appName in chromiumBrowserAppNames {
             let appURL = URL(fileURLWithPath: "/Applications/\(appName)", isDirectory: true)
             guard fm.fileExists(atPath: appURL.path) else { continue }
-            let versionsDir = appURL
-                .appendingPathComponent("Contents/Frameworks", isDirectory: true)
-                .appendingPathComponent("Google Chrome Framework.framework/Versions", isDirectory: true)
-            guard fm.fileExists(atPath: versionsDir.path) else { continue }
+            guard let versionsDir = chromiumFrameworkVersionsDir(in: appURL),
+                  fm.fileExists(atPath: versionsDir.path) else { continue }
 
             let currentLink = versionsDir.appendingPathComponent("Current", isDirectory: false)
             guard let dest = try? fm.destinationOfSymbolicLink(atPath: currentLink.path) else { continue }

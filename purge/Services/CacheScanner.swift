@@ -96,6 +96,16 @@ nonisolated final class CacheScanner {
             sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
         }
 
+        let knownItems = knownCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
+        for item in knownItems {
+            if Task.isCancelled {
+                continuation.finish()
+                return
+            }
+            continuation.yield(.found(item))
+            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+        }
+
         let adobeItems = adobeMediaCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
         for item in adobeItems {
             if Task.isCancelled {
@@ -109,6 +119,18 @@ nonisolated final class CacheScanner {
         // Everything below lives in other apps' containers. Without Full Disk Access
         // macOS asks the user about each one, so a limited scan leaves them alone.
         if access == .full {
+            for url in CacheDiscoveryPaths.unfinishedDownloadURLs(home: home) {
+                guard let item = cacheItemAtDiscoveredPath(
+                    url,
+                    headline: url.lastPathComponent,
+                    folderName: CacheDiscoveryPaths.unfinishedDownloadsKey,
+                    access: access,
+                    collectedPaths: &collectedPaths
+                ) else { continue }
+                continuation.yield(.found(item))
+                sizeJobs.append(SizeJob(path: url))
+            }
+
             let telegramItems = telegramMediaCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
             for item in telegramItems {
                 if Task.isCancelled {
@@ -143,6 +165,22 @@ nonisolated final class CacheScanner {
         }
 
         continuation.yield(.status("Scanning System Junk..."))
+        for item in applicationLogItems(home: home, access: access, collectedPaths: &collectedPaths) {
+            if Task.isCancelled {
+                continuation.finish()
+                return
+            }
+            continuation.yield(.found(item))
+            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+        }
+        for item in macOSInstallerItems(access: access, collectedPaths: &collectedPaths) {
+            if Task.isCancelled {
+                continuation.finish()
+                return
+            }
+            continuation.yield(.found(item))
+            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+        }
         for location in systemJunkLocations(home: home) {
             if Task.isCancelled {
                 continuation.finish()
@@ -208,6 +246,11 @@ nonisolated final class CacheScanner {
 
             let bundleID = directory.lastPathComponent
             guard !excludedFromGeneralScan.contains(bundleID) else { return nil }
+            // The quick offline check runs in the policy; this is the thorough one.
+            if bundleID == "com.spotify.client",
+               DeletionSafetyPolicy.spotifyHasOfflineTrackFiles(home: DeletionSafetyPolicy.cachedHomePath) {
+                return nil
+            }
 
             let pathKey = directory.standardizedFileURL.path
             guard DeletionSafetyPolicy.isOfferedForCleanup(directory) else { return nil }
@@ -217,14 +260,17 @@ nonisolated final class CacheScanner {
 
             let modified = values.contentModificationDate ?? .distantPast
             let fallbackAppName = appDisplayName(forBundleID: bundleID) ?? bundleID
+            let classificationName = CacheDiscoveryPaths.isElectronUpdaterCache(directory)
+                ? CacheDiscoveryPaths.electronUpdaterKey
+                : bundleID
             let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
-                folderName: bundleID,
+                folderName: classificationName,
                 friendlyHeadline: fallbackAppName,
                 path: directory
             )
 
             return CacheItem(
-                definitionKey: ExplanationDatabase.definitionKey(forFolderName: bundleID),
+                definitionKey: ExplanationDatabase.definitionKey(forFolderName: classificationName),
                 location: CacheLocation(
                     path: directory,
                     sizeBytes: 0,
@@ -272,6 +318,32 @@ nonisolated final class CacheScanner {
                 ) else { continue }
                 items.append(item)
             }
+        }
+        return items
+    }
+
+    private func knownCacheItems(
+        home: URL,
+        access: ScanAccess,
+        collectedPaths: inout Set<String>
+    ) -> [CacheItem] {
+        var items: [CacheItem] = []
+        for entry in CacheDiscoveryPaths.knownCacheEntries where access == .full || !entry.needsFullAccess {
+            let url = home.appendingPathComponent(entry.relative, isDirectory: true)
+            // Before `fileExists`, which follows a link into a locked folder.
+            guard ProtectedLocations.isReadable(url, access: access) else { continue }
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+                continue
+            }
+            guard let item = cacheItemAtDiscoveredPath(
+                url,
+                headline: entry.key,
+                folderName: entry.key,
+                access: access,
+                collectedPaths: &collectedPaths
+            ) else { continue }
+            items.append(item)
         }
         return items
     }
@@ -417,6 +489,53 @@ nonisolated final class CacheScanner {
         )
     }
 
+    /// One row location per item in `~/Library/Logs`, except Crash Reports, which
+    /// has its own row. Offering `~/Library/Logs` as one folder sized and cleaned
+    /// `DiagnosticReports` twice: once here and once as Crash Reports. The items
+    /// share the `Logs` definition, so they still show as one Application Logs row.
+    private func applicationLogItems(
+        home: URL,
+        access: ScanAccess,
+        collectedPaths: inout Set<String>
+    ) -> [CacheItem] {
+        let logs = home.appendingPathComponent("Library/Logs", isDirectory: true)
+        guard ProtectedLocations.isReadable(logs, access: access),
+              let children = try? FileManager.default.contentsOfDirectory(
+                at: logs,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+              ) else { return [] }
+        var items: [CacheItem] = []
+        for child in children.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+        where child.lastPathComponent != Self.crashReportsFolderName {
+            guard let item = cacheItemAtDiscoveredPath(
+                child,
+                headline: "Application Logs",
+                folderName: "Logs",
+                access: access,
+                collectedPaths: &collectedPaths
+            ) else { continue }
+            items.append(item)
+        }
+        return items
+    }
+
+    static let crashReportsFolderName = "DiagnosticReports"
+
+    /// Full macOS installers in /Applications (`Install macOS Sequoia.app` and so on),
+    /// confirmed by bundle ID so an app that merely shares the name is never listed.
+    private func macOSInstallerItems(access: ScanAccess, collectedPaths: inout Set<String>) -> [CacheItem] {
+        CacheDiscoveryPaths.macOSInstallerURLs().compactMap { url in
+            cacheItemAtDiscoveredPath(
+                url,
+                headline: url.deletingPathExtension().lastPathComponent,
+                folderName: CacheDiscoveryPaths.macOSInstallerKey,
+                access: access,
+                collectedPaths: &collectedPaths
+            )
+        }
+    }
+
     private func applicationSupportHeadline(appFolderName: String, cacheURL: URL) -> String {
         let cacheLeaf = cacheURL.lastPathComponent
         let displayApp = appFolderName
@@ -514,21 +633,15 @@ nonisolated final class CacheScanner {
         // iPhone/iPad backups (`MobileSync/Backup`) are intentionally excluded:
         // they are non-recoverable user data and must never be offered for
         // cleanup. They are also absent from the DeletionSafetyPolicy allowlist.
+        // Application Logs is listed child by child in `applicationLogItems`, so that
+        // the Crash Reports folder inside it is never sized or cleaned twice.
         [
-            (
-                "Application Logs",
-                home.appendingPathComponent("Library/Logs", isDirectory: true)
-            ),
             (
                 "Crash Reports",
                 home.appendingPathComponent(
                     "Library/Logs/DiagnosticReports",
                     isDirectory: true
                 )
-            ),
-            (
-                "macOS Installers",
-                URL(fileURLWithPath: "/Applications/Install macOS", isDirectory: true)
             ),
             (
                 "Font Cache",

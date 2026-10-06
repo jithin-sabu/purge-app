@@ -21,18 +21,17 @@ nonisolated final class DevScanner {
     /// Maps scanner labels to keys in `explanations.json`.
     private static let toolExplanationKeys: [String: String] = [
         "Xcode Derived Data": "DerivedData",
-        "Xcode iOS DeviceSupport": "xcode-device-support",
+        "Xcode Device Support": "xcode-device-support",
         "Xcode Archives": "xcode-archives",
         "Xcode Caches": "xcode-app",
         "Homebrew Cache": "homebrew-cache",
-        "Gradle Cache": "gradle-cache",
+        "Gradle Cache": "gradle-global-cache",
         "Docker Desktop": "docker",
         "npm Cache": "npm-cache",
         "pnpm Store": "pnpm-store",
         "Yarn Cache": "yarn-cache",
-        "CocoaPods": "cocoapods-cache",
-        "Flutter Cache": "flutter-cache",
-        "Android SDK .gradle": "android-sdk",
+        "CocoaPods": "cocoapods-spec-repos",
+        "Android Build Cache": "android-sdk",
         "Git Worktrees": "gitworktrees",
         "VS Code Cache": "vscode",
         "Cursor Cache": "cursor",
@@ -58,7 +57,24 @@ nonisolated final class DevScanner {
         "Obsolete Cursor Extension": "obsolete-cursor-extension",
         "Obsolete VS Code Extension": "obsolete-vscode-extension",
         "Cursor Agent Leftovers": "cursor-agent-leftover",
-        "Orphaned Git Worktrees": "orphaned-git-worktree"
+        "Orphaned Git Worktrees": "orphaned-git-worktree",
+        "Deno Cache": "deno-cache",
+        "Simulator Caches": "coresimulator-caches",
+        "Xcode Test Devices": "xctest-devices",
+        "Old Claude Code Versions": "old-cli-versions",
+        "Old Cursor Agent Versions": "old-cli-versions",
+        "Dart Pub Cache": "pub-cache",
+        "pre-commit Environments": "pre-commit-cache",
+        "Prisma Engines": "prisma-nodejs",
+        "Expo Cache": "expo-cache",
+        "pyenv and rbenv Downloads": "version-manager-downloads",
+        "Oh My Zsh Cache": "oh-my-zsh-cache",
+        "opam Download Cache": "opam-download-cache",
+        "Puppeteer Browsers": "puppeteer-browsers",
+        "Conda Package Cache": "conda-packages",
+        "Bun Cache": "bun-cache",
+        "VS Code Old Workspace Data": "orphaned-editor-workspace-storage",
+        "Cursor Old Workspace Data": "orphaned-editor-workspace-storage"
     ]
 
     private func safetyInfo(forToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
@@ -392,7 +408,56 @@ nonisolated final class DevScanner {
     /// these up front so they don't surface under App Caches and then get removed
     /// once the dev scan claims them.
     nonisolated static func claimedGlobalCachePaths() -> Set<String> {
-        Set(globalCacheDefinitions().flatMap(\.paths).map { $0.standardizedFileURL.path })
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        // The JetBrains row lists each IDE folder's children rather than the folder
+        // itself, so the folder is claimed by name here to keep App Caches off it.
+        let claimedRoots = [home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)]
+        return Set((globalCacheDefinitions().flatMap(\.paths) + claimedRoots).map { $0.standardizedFileURL.path })
+    }
+
+    /// `~/.gem/specs` plus each `~/.gem/ruby/<version>/cache`. Installed gems in
+    /// `~/.gem/ruby/<version>/gems` are left alone.
+    nonisolated static func gemDownloadCachePaths(home: URL) -> [URL] {
+        let fm = FileManager.default
+        var paths = [home.appendingPathComponent(".gem/specs", isDirectory: true)]
+        let rubyRoot = home.appendingPathComponent(".gem/ruby", isDirectory: true)
+        // Listing follows a link, so a `~/.gem` linked into Documents is skipped.
+        guard ProtectedLocations.isReadable(rubyRoot, access: .limited) else { return paths }
+        let versions = (try? fm.contentsOfDirectory(
+            at: rubyRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        for version in versions.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            paths.append(version.appendingPathComponent("cache", isDirectory: true))
+        }
+        return paths
+    }
+
+    /// Every child of each `~/Library/Caches/JetBrains/<IDE><version>` folder except
+    /// `LocalHistory`, which is the IDE's record of your file edits.
+    nonisolated static func jetBrainsCachePaths(home: URL) -> [URL] {
+        let fm = FileManager.default
+        let root = home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)
+        guard ProtectedLocations.isReadable(root, access: .limited) else { return [] }
+        let ideFolders = (try? fm.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        var paths: [URL] = []
+        for ide in ideFolders.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+        where (try? ide.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            let children = (try? fm.contentsOfDirectory(
+                at: ide,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )) ?? []
+            paths += children
+                .filter { $0.lastPathComponent != DeletionSafetyPolicy.jetBrainsLocalHistoryFolderName }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
+        return paths
     }
 
     private nonisolated static func globalCacheDefinitions() -> [(label: String, paths: [URL])] {
@@ -401,7 +466,19 @@ nonisolated final class DevScanner {
         return [
             ("Xcode Derived Data", [home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true)]),
             ("Xcode Archives", [home.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true)]),
-            ("Xcode iOS DeviceSupport", [home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport", isDirectory: true)]),
+            ("Xcode Device Support", [
+                home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport", isDirectory: true),
+                home.appendingPathComponent("Library/Developer/Xcode/watchOS DeviceSupport", isDirectory: true),
+                home.appendingPathComponent("Library/Developer/Xcode/tvOS DeviceSupport", isDirectory: true),
+                home.appendingPathComponent("Library/Developer/Xcode/visionOS DeviceSupport", isDirectory: true),
+                home.appendingPathComponent("Library/Developer/Xcode/xrOS DeviceSupport", isDirectory: true)
+            ]),
+            ("Simulator Caches", [
+                home.appendingPathComponent("Library/Developer/CoreSimulator/Caches", isDirectory: true)
+            ]),
+            ("Xcode Test Devices", [
+                home.appendingPathComponent("Library/Developer/XCTestDevices", isDirectory: true)
+            ]),
             ("Xcode Caches", [home.appendingPathComponent("Library/Caches/com.apple.dt.Xcode", isDirectory: true)]),
             ("Xcode Documentation Cache", [
                 home.appendingPathComponent("Library/Developer/Xcode/DocumentationCache", isDirectory: true)
@@ -412,10 +489,38 @@ nonisolated final class DevScanner {
             ("npm npx Cache", [home.appendingPathComponent(".npm/_npx", isDirectory: true)]),
             ("npm Logs", [home.appendingPathComponent(".npm/_logs", isDirectory: true)]),
             ("Corepack Cache", [home.appendingPathComponent(".cache/node/corepack", isDirectory: true)]),
-            ("pnpm Store", [home.appendingPathComponent(".pnpm-store", isDirectory: true)]),
-            ("Yarn Cache", [home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true)]),
+            // pnpm's default store on macOS is ~/Library/pnpm/store; ~/.pnpm-store is
+            // the older location and what some setups still use.
+            ("pnpm Store", [
+                home.appendingPathComponent(".pnpm-store", isDirectory: true),
+                home.appendingPathComponent("Library/pnpm/store", isDirectory: true)
+            ]),
+            ("Yarn Cache", [
+                home.appendingPathComponent("Library/Caches/Yarn", isDirectory: true),
+                home.appendingPathComponent(".yarn/berry/cache", isDirectory: true)
+            ]),
+            ("Dart Pub Cache", [
+                home.appendingPathComponent(".pub-cache/hosted", isDirectory: true),
+                home.appendingPathComponent(".pub-cache/git", isDirectory: true)
+            ]),
+            ("pre-commit Environments", [home.appendingPathComponent(".cache/pre-commit", isDirectory: true)]),
+            ("Prisma Engines", [home.appendingPathComponent(".cache/prisma", isDirectory: true)]),
+            ("Expo Cache", [
+                "android-apk-cache", "ios-simulator-app-cache", "native-modules-cache",
+                "schema-cache", "template-cache", "versions-cache", "expo-go"
+            ].map { home.appendingPathComponent(".expo/\($0)", isDirectory: true) }),
+            ("pyenv and rbenv Downloads", [
+                home.appendingPathComponent(".pyenv/cache", isDirectory: true),
+                home.appendingPathComponent(".rbenv/cache", isDirectory: true)
+            ]),
+            ("Oh My Zsh Cache", [home.appendingPathComponent(".oh-my-zsh/cache", isDirectory: true)]),
+            ("opam Download Cache", [home.appendingPathComponent(".opam/download-cache", isDirectory: true)]),
+            ("Puppeteer Browsers", [home.appendingPathComponent(".cache/puppeteer", isDirectory: true)]),
+            ("Conda Package Cache", [
+                ".conda/pkgs", "anaconda3/pkgs", "miniconda3/pkgs", "miniforge3/pkgs",
+                "mambaforge/pkgs", "opt/anaconda3/pkgs", "opt/miniconda3/pkgs"
+            ].map { home.appendingPathComponent($0, isDirectory: true) }),
             ("Gradle Cache", [home.appendingPathComponent(".gradle/caches", isDirectory: true)]),
-            ("Flutter Cache", [home.appendingPathComponent(".flutter", isDirectory: true)]),
             ("Hex Package Cache", [home.appendingPathComponent(".hex/packages", isDirectory: true)]),
             ("Rebar3 Cache", [home.appendingPathComponent(".cache/rebar3", isDirectory: true)]),
             ("NuGet Packages", [home.appendingPathComponent(".nuget/packages", isDirectory: true)]),
@@ -425,13 +530,19 @@ nonisolated final class DevScanner {
             ("Deno Cache", [home.appendingPathComponent("Library/Caches/deno", isDirectory: true)]),
             ("Bun Cache", [home.appendingPathComponent(".bun/install/cache", isDirectory: true)]),
             ("Cabal Packages", [home.appendingPathComponent(".cabal/packages", isDirectory: true)]),
-            ("Stack Cache", [home.appendingPathComponent(".stack", isDirectory: true)]),
+            ("Stack Cache", [
+                home.appendingPathComponent(".stack/pantry", isDirectory: true),
+                home.appendingPathComponent(".stack/snapshots", isDirectory: true)
+            ]),
             ("Bazel Cache", [home.appendingPathComponent(".cache/bazel", isDirectory: true)]),
             ("Swift Package Cache", [
                 home.appendingPathComponent("Library/Caches/org.swift.swiftpm", isDirectory: true),
                 home.appendingPathComponent(".swiftpm/cache", isDirectory: true)
             ]),
-            ("Android SDK .gradle", [home.appendingPathComponent(".android", isDirectory: true)]),
+            ("Android Build Cache", [
+                home.appendingPathComponent(".android/cache", isDirectory: true),
+                home.appendingPathComponent(".android/build-cache", isDirectory: true)
+            ]),
             ("Docker Desktop", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)]),
 
             ("Git Worktrees", [
@@ -441,22 +552,19 @@ nonisolated final class DevScanner {
             ("VS Code Cache", [
                 home.appendingPathComponent("Library/Application Support/Code/Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Code/CachedData", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Code/CachedExtensionVSIXs", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Code/User/workspaceStorage", isDirectory: true)
+                home.appendingPathComponent("Library/Application Support/Code/CachedExtensionVSIXs", isDirectory: true)
             ]),
             ("Cursor Cache", [
                 home.appendingPathComponent("Library/Application Support/Cursor/Cache", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Cursor/CachedData", isDirectory: true),
-                home.appendingPathComponent("Library/Application Support/Cursor/User/workspaceStorage", isDirectory: true)
+                home.appendingPathComponent("Library/Application Support/Cursor/CachedData", isDirectory: true)
             ]),
             // Only ~/Library/Caches/JetBrains is a real cache (indexes, compiler
             // output), rebuilt on next launch. ~/Library/Application Support/JetBrains
             // holds installed plugins and all settings, so it must never be cleaned.
-            ("JetBrains Cache", [
-                home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)
-            ]),
+            // Each IDE folder's LocalHistory is left out; see `jetBrainsCachePaths`.
+            ("JetBrains Cache", jetBrainsCachePaths(home: home)),
+            // `Zed/db` is Zed's workspace state, not a cache, so only the real cache is listed.
             ("Zed Cache", [
-                home.appendingPathComponent("Library/Application Support/Zed/db", isDirectory: true),
                 home.appendingPathComponent("Library/Caches/Zed", isDirectory: true)
             ]),
 
@@ -468,14 +576,12 @@ nonisolated final class DevScanner {
             ("Maven Cache", [
                 home.appendingPathComponent(".m2/repository", isDirectory: true)
             ]),
+            // `~/.sbt` is not listed: it holds the user's own sbt settings.
             ("SBT Cache", [
-                home.appendingPathComponent(".sbt", isDirectory: true),
                 home.appendingPathComponent(".ivy2/cache", isDirectory: true)
             ]),
 
-            ("Ruby Gems", [
-                home.appendingPathComponent(".gem", isDirectory: true)
-            ]),
+            ("Ruby Gems", gemDownloadCachePaths(home: home)),
             ("Bundler Cache", [
                 home.appendingPathComponent(".bundle/cache", isDirectory: true)
             ]),
@@ -527,6 +633,8 @@ nonisolated final class DevScanner {
         let home = FileManager.default.homeDirectoryForCurrentUser
         var staticDefinitions = Self.globalCacheDefinitions()
             + discoverObsoleteEditorExtensionDefinitions(home: home, access: access)
+            + discoverOrphanedEditorWorkspaceDefinitions(home: home, access: access)
+            + Self.oldCLIVersionDefinitions(home: home)
         // Agent worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop, and Claude Code's live
         // inside those projects. A limited scan cannot look there without a prompt,
@@ -589,6 +697,45 @@ nonisolated final class DevScanner {
             ))
         ]
         return entries.filter { !$0.paths.isEmpty }
+    }
+
+    /// Old Claude Code and Cursor Agent versions, keeping the one each command runs
+    /// and the newest. The policy re-checks this before anything is deleted.
+    nonisolated static func oldCLIVersionDefinitions(home: URL) -> [(label: String, paths: [URL])] {
+        let homePath = home.standardizedFileURL.path
+        let labels = ["Old Claude Code Versions", "Old Cursor Agent Versions"]
+        return zip(DeletionSafetyPolicy.cliVersionStores, labels).compactMap { pair in
+            let (store, label) = pair
+            let root = "\(homePath)/\(store.versions)"
+            guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited),
+                  let kept = DeletionSafetyPolicy.keptCLIVersions(
+                    versionsRoot: root,
+                    command: "\(homePath)/\(store.command)"
+                  ),
+                  let names = try? FileManager.default.contentsOfDirectory(atPath: root) else { return nil }
+            let old = names
+                .filter { !$0.hasPrefix(".") && !kept.contains($0) }
+                .sorted { $0.compare($1, options: .numeric) == .orderedAscending }
+                .map { URL(fileURLWithPath: "\(root)/\($0)") }
+            return old.isEmpty ? nil : (label, old)
+        }
+    }
+
+    /// One row per editor listing the `workspaceStorage` entries whose project
+    /// folder is gone. See `EditorWorkspaceStoragePolicy` for why the folder as a
+    /// whole is never offered.
+    private func discoverOrphanedEditorWorkspaceDefinitions(
+        home: URL,
+        access: ScanAccess
+    ) -> [(label: String, paths: [URL])] {
+        EditorWorkspaceStoragePolicy.relativeRoots.compactMap { root in
+            let entries = EditorWorkspaceStoragePolicy.orphanedEntries(
+                inRoot: home.appendingPathComponent(root.relative, isDirectory: true),
+                access: access,
+                home: home
+            )
+            return entries.isEmpty ? nil : ("\(root.editor) Old Workspace Data", entries)
+        }
     }
 
     private func discoverObsoleteEditorExtensionDefinitions(
