@@ -60,3 +60,34 @@ struct LocalSnapshotReaderTests {
         #expect(LocalSnapshotReader.parse("  com.apple.TimeMachine.2026-10-06-112116.local  \n").count == 1)
     }
 }
+
+@Suite("Removing snapshots is judged by what is left")
+struct SnapshotThinOutcomeTests {
+    @Test func allGoneReportsTheFreedSpace() {
+        #expect(SnapshotThinOutcome.judge(before: 3, after: 0, freedBytes: 5_000_000_000)
+            == .removedAll(count: 3, freedBytes: 5_000_000_000))
+    }
+
+    @Test func allGoneWithNoMeasurableGainClaimsNoAmount() {
+        #expect(SnapshotThinOutcome.judge(before: 2, after: 0, freedBytes: nil)
+            == .removedAll(count: 2, freedBytes: nil))
+    }
+
+    @Test func someKeptBackSaysHowMany() {
+        #expect(SnapshotThinOutcome.judge(before: 3, after: 1, freedBytes: 2_000_000_000)
+            == .someLeft(removed: 2, left: 1))
+    }
+
+    @Test func nothingRemovedIsNoneRemoved() {
+        #expect(SnapshotThinOutcome.judge(before: 3, after: 3, freedBytes: nil) == .noneRemoved)
+    }
+
+    @Test func anUnreadableListClaimsNothing() {
+        #expect(SnapshotThinOutcome.judge(before: 3, after: nil, freedBytes: 5_000_000_000) == .noneRemoved)
+    }
+
+    /// macOS took a new snapshot while the old ones went: still none removed overall.
+    @Test func aNewSnapshotMidwayIsNotNegative() {
+        #expect(SnapshotThinOutcome.judge(before: 1, after: 2, freedBytes: nil) == .noneRemoved)
+    }
+}

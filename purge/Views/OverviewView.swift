@@ -140,10 +140,11 @@ struct OverviewView: View {
             )
             // Part of the used space above, but no tool says how much, so it is a
             // row of its own with no size and no place in the bar.
-            if let snapshots = snapshotStore.snapshots, snapshots.count > 0 {
+            // Stays after a removal to say what went.
+            if (snapshotStore.snapshots?.count ?? 0) > 0 || snapshotStore.currentThinOutcome != nil {
                 InsetCardDivider()
                 OverviewSnapshotRow(
-                    snapshots: snapshots,
+                    snapshotStore: snapshotStore,
                     linkedState: linkedRowState(OverviewSnapshotRow.id)
                 )
             }
@@ -498,13 +499,19 @@ private struct OverviewPlainRow: View {
 // MARK: - Time Machine snapshots
 
 /// Local Time Machine snapshots: Finder never shows them and macOS counts them as
-/// System Data. A count and a date, since nothing reports their size.
+/// System Data. A count and a date, since nothing reports their size. Remove asks
+/// macOS to thin them, which needs no password; after that the row says what went.
 private struct OverviewSnapshotRow: View {
-    let snapshots: LocalSnapshots
+    @ObservedObject var snapshotStore: LocalSnapshotStore
     let linkedState: OverviewLinkedRowState
+
+    @EnvironmentObject private var diskStore: DiskSummaryStore
+    @State private var isConfirming = false
 
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "timeMachineSnapshots"
+
+    private var count: Int { snapshotStore.snapshots?.count ?? 0 }
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
@@ -518,27 +525,116 @@ private struct OverviewSnapshotRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: AppStyle.Spacing.small)
-            Button("Open Disk Utility") { Self.openDiskUtility() }
-                .buttonStyle(.purge(.secondary, size: .small))
-                .help("In Disk Utility, choose View > Show APFS Snapshots to see and delete them.")
+            trailing
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
         .overviewLinked(linkedState)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        switch snapshotStore.currentThinOutcome {
+        case .removedAll:
+            EmptyView()
+        case .someLeft, .noneRemoved:
+            // macOS kept some back; Disk Utility can delete them one by one.
+            Button("Open Disk Utility") { Self.openDiskUtility() }
+                .buttonStyle(.purge(.secondary, size: .small))
+                .help("In Disk Utility, choose View > Show APFS Snapshots to see and delete them.")
+        case nil:
+            Button {
+                isConfirming = true
+            } label: {
+                CleaningButtonLabel(
+                    title: snapshotStore.isThinning ? "Removing..." : "Remove",
+                    systemImage: nil,
+                    isCleaning: snapshotStore.isThinning
+                )
+            }
+            .buttonStyle(.purge(.secondary, size: .small))
+            .disabled(snapshotStore.isThinning)
+            .help("Ask macOS to remove these snapshots")
+            .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
+                OverviewSnapshotConfirmation(
+                    count: count,
+                    onCancel: { isConfirming = false },
+                    onOpenDiskUtility: {
+                        isConfirming = false
+                        Self.openDiskUtility()
+                    },
+                    onConfirm: {
+                        isConfirming = false
+                        Task {
+                            await snapshotStore.thin()
+                            diskStore.refresh()
+                        }
+                    }
+                )
+            }
+        }
     }
 
     private var detail: String {
-        guard let oldest = snapshots.oldest else { return "" }
-        let day = oldest.formatted(.dateTime.month(.abbreviated).day())
-        return snapshots.count == 1
-            ? "1 on this Mac, from \(day)"
-            : "\(snapshots.count) on this Mac, the oldest from \(day)"
+        switch snapshotStore.currentThinOutcome {
+        case .removedAll(let removed, let freedBytes):
+            let what = removed == 1 ? "Removed 1 snapshot" : "Removed \(removed) snapshots"
+            guard let freedBytes else { return what }
+            return "\(what) and freed \(formatBytes(freedBytes))"
+        case .someLeft(let removed, let left):
+            return "Removed \(removed), but macOS kept \(left)"
+        case .noneRemoved:
+            return "macOS didn't remove any. Disk Utility can."
+        case nil:
+            guard let oldest = snapshotStore.snapshots?.oldest else { return "" }
+            let day = oldest.formatted(.dateTime.month(.abbreviated).day())
+            return count == 1
+                ? "1 on this Mac, from \(day)"
+                : "\(count) on this Mac, the oldest from \(day)"
+        }
     }
 
     static func openDiskUtility() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.DiskUtility") else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
+}
+
+/// Snapshots can't be put back, so removing them asks first, and says what they are
+/// for: most people have never heard of them.
+private struct OverviewSnapshotConfirmation: View {
+    let count: Int
+    let onCancel: () -> Void
+    let onOpenDiskUtility: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                Text(count == 1 ? "Remove 1 Time Machine snapshot?" : "Remove \(count) Time Machine snapshots?")
+                    .font(AppStyle.Typography.sectionTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                Text("Time Machine keeps these on your Mac between backups. Backups on your backup disk aren't touched. Removed snapshots can't be put back.")
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: AppStyle.Spacing.xSmall) {
+                Button("Open Disk Utility", action: onOpenDiskUtility)
+                    .buttonStyle(.purge(.quiet, size: .small))
+                    .help("In Disk Utility, choose View > Show APFS Snapshots to pick which ones to delete.")
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.purge(.secondary))
+                    .keyboardShortcut(.cancelAction)
+                Button("Remove Snapshots", action: onConfirm)
+                    .buttonStyle(.purge(.destructive))
+            }
+        }
+        .padding(AppStyle.Spacing.large)
+        .frame(width: 400)
     }
 }
 

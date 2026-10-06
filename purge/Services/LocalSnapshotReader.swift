@@ -33,6 +33,7 @@ nonisolated enum LocalSnapshotReader {
     /// Asks macOS to remove every local Time Machine snapshot it can, the same way it
     /// does by itself when the disk runs low. The amount is far more than any disk
     /// holds, so nothing is kept back to reach it. Returns whether `tmutil` succeeded.
+    @discardableResult
     static func thin() async -> Bool {
         let output = await ProcessRunner.runAsync(
             executablePath: tmutil,
