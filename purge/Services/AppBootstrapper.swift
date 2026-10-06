@@ -37,6 +37,9 @@ enum AppBootstrapper {
             store?.isManualCleaningInProgress ?? false
         }
         WindowCloseQuitter.start()
+        // Copies the History screen's cleans into the permanent yearly ledger, once.
+        // History keeps only the last 100, so this is the most that can be saved.
+        CleanupLedgerStore.shared.importHistoryIfNeeded(CleanupHistoryStore.shared.archive.entries)
         // Lets Siri and Spotlight match "Uninstall <app> with Purge" against the
         // apps installed now.
         PurgeAppShortcuts.refreshAppList()
