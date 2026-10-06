@@ -2,7 +2,7 @@ import Foundation
 
 /// Which part of Purge a clean came from. Stored with every ledger session so a
 /// year's totals can be split by feature later.
-enum CleanupSource: String, Codable, Hashable, CaseIterable {
+nonisolated enum CleanupSource: String, Codable, Hashable, CaseIterable {
     /// Caches, logs and developer rows: Clean Safe Items, a scheduled clean, or a
     /// hand-picked selection on the scan tabs.
     case clean
@@ -17,7 +17,7 @@ enum CleanupSource: String, Codable, Hashable, CaseIterable {
 
 /// One item a clean removed. `path` is home-relative (`~/Library/Caches/Dia`), so
 /// the ledger never stores the account name.
-struct CleanupLedgerItem: Codable, Hashable {
+nonisolated struct CleanupLedgerItem: Codable, Hashable {
     let path: String
     let bytes: Int64
     /// The name Purge showed for the item, or one derived from the path when no
@@ -33,7 +33,7 @@ struct CleanupLedgerItem: Codable, Hashable {
 /// Unlike `cleanup_history.json`, which keeps the last 100 cleans for the History
 /// screen, the ledger is never trimmed. It is the full record a year-end recap
 /// reads from.
-struct CleanupLedgerSession: Codable, Identifiable, Hashable {
+nonisolated struct CleanupLedgerSession: Codable, Identifiable, Hashable {
     /// Matches the `CleanupHistoryEntry` id when the clean also went to history,
     /// which is what makes importing that history safe to repeat.
     let id: UUID
@@ -47,18 +47,86 @@ struct CleanupLedgerSession: Codable, Identifiable, Hashable {
     let bytesReclaimedOnVolume: Int64?
     let skippedForSafetyCount: Int
     let failedCount: Int
-    /// `true` for sessions copied from `cleanup_history.json` when the ledger was
-    /// introduced. Those carry no row names or failure counts, and their source is
-    /// inferred, so a recap can say "since <date>" instead of "this year".
+    /// `true` for sessions copied from `cleanup_history.json`: cleans made before
+    /// the ledger existed, or by an older version after a downgrade. Those carry no
+    /// row names or failure counts, and their source is inferred.
     let importedFromHistory: Bool
     let items: [CleanupLedgerItem]
 
     var bytesCleared: Int64 { bytesMovedToTrash + bytesRemovedDirectly }
 }
 
+// MARK: - Baseline
+
+/// What older versions left behind, captured once, the first time the ledger runs.
+///
+/// Before the ledger, Purge kept two records: History, capped at the last 100
+/// cleans, and an undated lifetime counter of bytes moved (`totalRecoveredBytes`,
+/// there since 1.0). A user who skips every release until the recap one arrives
+/// has only those. The difference between them is what was moved before the
+/// oldest History entry. Its per-item detail is gone, but the bytes still count
+/// toward the year, and this snapshot is the only way to separate them once the
+/// counter keeps growing.
+nonisolated struct CleanupLedgerBaseline: Codable, Equatable {
+    /// 1.0 went out on 2026-05-11. Nothing can have been cleaned before it, which
+    /// bounds how early untracked bytes can be placed.
+    static let firstReleaseDate = Date(timeIntervalSince1970: 1_778_460_575)
+
+    let capturedAt: Date
+    let appVersion: String
+    /// The lifetime counter at capture.
+    let lifetimeMovedBytes: Int64
+    let historyEntryCount: Int
+    /// Sum of `bytesMovedToTrash` over the History entries present at capture.
+    let historyMovedBytes: Int64
+    let historyOldestDate: Date?
+    /// `install.firstSeenAt`, written since 1.2.7. For installs older than that it
+    /// is when 1.2.7 first ran, not when Purge was installed.
+    let firstSeenAt: Date?
+    let firstSeenVersion: String?
+
+    /// Moved before the oldest History entry, plus retries that never reached
+    /// History. Undated, so it is placed in `untrackedWindow`.
+    var untrackedBytes: Int64 { max(0, lifetimeMovedBytes - historyMovedBytes) }
+
+    /// When the untracked bytes were moved: from first use to the oldest History
+    /// entry. The start is the install date when it is plausible, else 1.0.
+    var untrackedWindow: DateInterval {
+        let end = max(historyOldestDate ?? capturedAt, Self.firstReleaseDate)
+        var start = Self.firstReleaseDate
+        if let firstSeenAt, firstSeenAt > start, firstSeenAt <= end {
+            start = firstSeenAt
+        }
+        return DateInterval(start: start, end: end)
+    }
+
+    /// The untracked bytes that belong to `year`. Exact when the window sits in
+    /// one year, which is always true for 2026. A window that crosses a new year
+    /// is split by days and flagged as an estimate.
+    func untrackedBytes(inYear year: Int, calendar: Calendar) -> (bytes: Int64, isEstimate: Bool) {
+        let window = untrackedWindow
+        guard untrackedBytes > 0,
+              let yearInterval = calendar.dateInterval(of: .year, for: calendar.date(
+                  from: DateComponents(year: year, month: 6, day: 1)
+              ) ?? window.end)
+        else { return (0, false) }
+
+        let startYear = calendar.component(.year, from: window.start)
+        let endYear = calendar.component(.year, from: window.end)
+        if startYear == endYear {
+            return (startYear == year ? untrackedBytes : 0, false)
+        }
+        guard let overlap = window.intersection(with: yearInterval), window.duration > 0 else {
+            return (0, true)
+        }
+        let share = Double(untrackedBytes) * overlap.duration / window.duration
+        return (Int64(share.rounded()), true)
+    }
+}
+
 // MARK: - Labels
 
-enum CleanupLedgerLabel {
+nonisolated enum CleanupLedgerLabel {
     /// Library folders whose next path component names the owning app.
     private static let ownerRoots: Set<String> = [
         "Caches", "Application Support", "Containers", "Group Containers", "Logs",
@@ -142,7 +210,7 @@ enum CleanupLedgerLabel {
 
 /// What a year of cleaning adds up to. Computed from the ledger on demand, never
 /// stored, so new questions can be asked of old data.
-struct CleanupYearTotals: Equatable {
+nonisolated struct CleanupYearTotals: Equatable {
     struct LabelTotal: Equatable {
         let label: String
         var bytes: Int64
@@ -188,20 +256,40 @@ struct CleanupYearTotals: Equatable {
     /// Apps removed with the uninstaller, in the order they were removed.
     var uninstalledApps: [String] = []
 
+    /// Moved this year before the itemised record starts: cleans History had
+    /// already dropped when the ledger first ran. Counted in the headline, but
+    /// absent from every breakdown, because no item detail survives for them.
+    var bytesBeforeRecord: Int64 = 0
+    /// `true` when `bytesBeforeRecord` was split across a new year by days.
+    var bytesBeforeRecordIsEstimate = false
+
+    /// Bytes in the itemised record.
     var bytesCleared: Int64 { bytesMovedToTrash + bytesRemovedDirectly }
+
+    /// Everything cleared this year, the number to lead with.
+    var headlineBytes: Int64 { bytesCleared + bytesBeforeRecord }
 
     static func compute(
         year: Int,
         sessions: [CleanupLedgerSession],
+        baseline: CleanupLedgerBaseline? = nil,
         calendar: Calendar = .current
     ) -> CleanupYearTotals {
         var totals = CleanupYearTotals(year: year)
+        if let baseline {
+            let untracked = baseline.untrackedBytes(inYear: year, calendar: calendar)
+            totals.bytesBeforeRecord = untracked.bytes
+            totals.bytesBeforeRecordIsEstimate = untracked.isEstimate
+        }
         var days = Set<DateComponents>()
         var labelIndex: [String: Int] = [:]
         var seenApps = Set<String>()
 
+        // A clean can sit in a neighbouring year's file when the time zone changed
+        // since it was written, so callers pass several files. Ids keep it single.
+        var seenIDs = Set<UUID>()
         let ordered = sessions
-            .filter { calendar.component(.year, from: $0.date) == year }
+            .filter { calendar.component(.year, from: $0.date) == year && seenIDs.insert($0.id).inserted }
             .sorted { $0.date < $1.date }
 
         for session in ordered {

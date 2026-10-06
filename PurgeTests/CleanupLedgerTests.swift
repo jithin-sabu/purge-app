@@ -176,51 +176,196 @@ struct CleanupLedgerTests {
         #expect(store.sessions(inYear: 2026).count == 2)
     }
 
-    // MARK: - Importing history
+    // MARK: - Reconciling with older versions
+
+    private static func legacy(
+        _ history: [CleanupHistoryEntry],
+        lifetime: Int64,
+        firstSeenAt: Date? = nil
+    ) -> CleanupLedgerStore.LegacyRecord {
+        CleanupLedgerStore.LegacyRecord(
+            history: history,
+            lifetimeMovedBytes: lifetime,
+            firstSeenAt: firstSeenAt,
+            firstSeenVersion: firstSeenAt == nil ? nil : "1.2.7",
+            appVersion: "1.9.0",
+            now: date(2026, 12, 2)
+        )
+    }
+
+    private static func historyEntry(
+        id: UUID = UUID(),
+        _ date: Date,
+        _ items: [(String, Int64)],
+        trigger: CleanupTrigger = .manual
+    ) -> CleanupHistoryEntry {
+        CleanupHistoryEntry(
+            id: id,
+            date: date,
+            trigger: trigger,
+            bytesMovedToTrash: items.reduce(0) { $0 + $1.1 },
+            deletedItems: items.map { CleanupHistoryDeletedItemDTO(path: $0.0, sizeBytes: $0.1) }
+        )
+    }
 
     @Test
-    func historyImportRunsOnceAndSkipsCleansAlreadyRecorded() {
+    func reconcileImportsHistoryOnceAndSkipsCleansAlreadyRecorded() async {
         let directory = Self.tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = Self.makeStore(directory)
 
         let sharedID = UUID()
+        let entries = [
+            Self.historyEntry(id: sharedID, Self.date(2026, 5, 20), [("/Users/me/.npm", 10)]),
+            Self.historyEntry(Self.date(2026, 5, 19), [
+                ("/Applications/Slack.app", 400),
+                ("/Users/me/Library/Caches/com.tinyspeck.slackmacgap", 100),
+            ]),
+            CleanupHistoryEntry(date: Self.date(2026, 5, 21), trigger: .scheduled, bytesMovedToTrash: 0, deletedItems: []),
+        ]
+        await store.reconcile(with: Self.legacy(entries, lifetime: 510)).value
         store.record(
-            Self.report([DeletedItem(path: "/Users/me/.npm", sizeBytes: 10)], on: Self.date(2026, 5, 2)),
-            id: sharedID,
+            Self.report([DeletedItem(path: "/Users/me/.npm", sizeBytes: 10)], on: Self.date(2026, 5, 22)),
+            id: UUID(),
+            trigger: .manual,
+            source: .clean
+        )
+        await store.reconcile(with: Self.legacy(entries, lifetime: 520)).value
+
+        let sessions = store.sessions(inYear: 2026)
+        #expect(sessions.count == 3)
+        let imported = sessions.filter(\.importedFromHistory)
+        #expect(imported.count == 2)
+        #expect(imported.first { $0.source == .uninstall }?.items.map(\.label) == ["Slack", "slackmacgap"])
+    }
+
+    /// Someone who rolls back to an older version keeps cleaning into History
+    /// only. Those cleans arrive on the next launch of a ledger version.
+    @Test
+    func cleansFromADowngradeArriveOnTheNextLaunch() async {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = Self.makeStore(directory)
+        let first = Self.historyEntry(Self.date(2026, 8, 1), [("/Users/me/.npm", 100)])
+        await store.reconcile(with: Self.legacy([first], lifetime: 100)).value
+        let baseline = store.baseline()
+
+        let madeByOldVersion = Self.historyEntry(Self.date(2026, 9, 1), [("/Users/me/.gradle", 50)])
+        await store.reconcile(with: Self.legacy([madeByOldVersion, first], lifetime: 150)).value
+
+        #expect(store.sessions(inYear: 2026).map(\.bytesMovedToTrash).sorted() == [50, 100])
+        #expect(store.baseline() == baseline)
+        #expect(await store.yearTotals(2026).headlineBytes == 150)
+    }
+
+    /// The case the recap is for: a user who never ran a ledger version until the
+    /// recap release. History holds only its last 100 cleans; the lifetime
+    /// counter holds the rest, and every byte of it is from 2026.
+    @Test
+    func userComingStraightFromAnOldVersionGetsTheWholeYear() async throws {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = Self.makeStore(directory)
+        let history = [
+            Self.historyEntry(Self.date(2026, 11, 20), [("/Users/me/Library/Caches/company.thebrowser.dia", 600)]),
+            Self.historyEntry(Self.date(2026, 10, 2), [("/Users/me/Library/Developer/Xcode/DerivedData", 400)]),
+        ]
+
+        await store.reconcile(with: Self.legacy(history, lifetime: 51_000, firstSeenAt: Self.date(2026, 7, 13))).value
+        let totals = await store.yearTotals(2026)
+
+        #expect(totals.bytesCleared == 1_000)
+        #expect(totals.bytesBeforeRecord == 50_000)
+        #expect(!totals.bytesBeforeRecordIsEstimate)
+        #expect(totals.headlineBytes == 51_000)
+        #expect(totals.labels.map(\.label) == ["Dia", "Xcode"])
+        #expect(totals.firstRecordedDate == Self.date(2026, 10, 2))
+        #expect(totals.includesImportedHistory)
+        #expect(await store.yearTotals(2025).headlineBytes == 0)
+        let baseline = try #require(store.baseline())
+        #expect(baseline.untrackedWindow.start == Self.date(2026, 7, 13))
+        #expect(baseline.untrackedWindow.end == Self.date(2026, 10, 2))
+    }
+
+    /// Once the ledger holds cleans, the counter and History both include them,
+    /// so a baseline taken then would count them twice. It is never retaken.
+    @Test
+    func baselineIsNotTakenOnceTheLedgerHasCleans() async {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = Self.makeStore(directory)
+        store.record(
+            Self.report([DeletedItem(path: "/Users/me/.npm", sizeBytes: 10)], on: Self.date(2026, 6, 1)),
+            id: UUID(),
             trigger: .manual,
             source: .clean
         )
 
-        let entries = [
-            CleanupHistoryEntry(
-                id: sharedID,
-                date: Self.date(2026, 5, 2),
-                trigger: .manual,
-                bytesMovedToTrash: 10,
-                deletedItems: [CleanupHistoryDeletedItemDTO(path: "/Users/me/.npm", sizeBytes: 10)]
-            ),
-            CleanupHistoryEntry(
-                date: Self.date(2026, 5, 1),
-                trigger: .manual,
-                bytesMovedToTrash: 500,
-                deletedItems: [
-                    CleanupHistoryDeletedItemDTO(path: "/Applications/Slack.app", sizeBytes: 400),
-                    CleanupHistoryDeletedItemDTO(path: "/Users/me/Library/Caches/com.tinyspeck.slackmacgap", sizeBytes: 100),
-                ]
-            ),
-            CleanupHistoryEntry(date: Self.date(2026, 5, 3), trigger: .scheduled, bytesMovedToTrash: 0, deletedItems: []),
-        ]
+        await store.reconcile(with: Self.legacy([], lifetime: 9_999)).value
 
-        store.importHistoryIfNeeded(entries)
-        store.importHistoryIfNeeded(entries)
+        #expect(store.baseline() == nil)
+        #expect(await store.yearTotals(2026).headlineBytes == 10)
+    }
 
-        let sessions = store.sessions(inYear: 2026)
-        #expect(sessions.count == 2)
-        let imported = sessions.filter(\.importedFromHistory)
-        #expect(imported.count == 1)
-        #expect(imported.first?.source == .uninstall)
-        #expect(imported.first?.items.map(\.label) == ["Slack", "slackmacgap"])
+    @Test
+    func freshInstallHasAnEmptyYear() async {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = Self.makeStore(directory)
+
+        await store.reconcile(with: Self.legacy([], lifetime: 0)).value
+        let totals = await store.yearTotals(2026)
+
+        #expect(totals.headlineBytes == 0)
+        #expect(totals.cleanCount == 0)
+        #expect(store.baseline()?.untrackedBytes == 0)
+    }
+
+    /// A user who skips every ledger release until a recap in 2027: untracked
+    /// bytes span the new year, so they are split by days and marked an estimate.
+    @Test
+    func untrackedBytesAcrossANewYearAreSplitByDays() {
+        let baseline = CleanupLedgerBaseline(
+            capturedAt: Self.date(2027, 12, 1),
+            appVersion: "2.0",
+            lifetimeMovedBytes: 1_000_000,
+            historyEntryCount: 100,
+            historyMovedBytes: 0,
+            historyOldestDate: Self.date(2027, 3, 1),
+            firstSeenAt: Self.date(2026, 11, 1),
+            firstSeenVersion: "1.9"
+        )
+
+        let in2026 = baseline.untrackedBytes(inYear: 2026, calendar: Self.utc)
+        let in2027 = baseline.untrackedBytes(inYear: 2027, calendar: Self.utc)
+
+        #expect(in2026.isEstimate && in2027.isEstimate)
+        #expect(abs(in2026.bytes + in2027.bytes - 1_000_000) <= 1)
+        // Nov 1 to Mar 1: 61 days in 2026 and 59 in 2027.
+        #expect(in2026.bytes > in2027.bytes)
+    }
+
+    // MARK: - History file from older versions
+
+    /// 1.0 wrote `totalFreedBytes`. One unreadable entry must not cost the rest,
+    /// since a file that fails to load is overwritten by the next clean.
+    @Test
+    func historyFileSkipsAnUnreadableEntryAndReadsTheOldFormat() throws {
+        let json = """
+        {"entries": [
+          {"id": "4EB0ED77-9878-441E-A66C-2747DD315B74", "date": "2026-05-20T10:00:00Z", "trigger": "manual",
+           "totalFreedBytes": 42, "deletedItems": [{"path": "/Users/me/.npm", "sizeBytes": 42}]},
+          {"id": "not-a-uuid", "date": "yesterday"},
+          {"id": "5EB0ED77-9878-441E-A66C-2747DD315B74", "date": "2026-05-21T10:00:00Z", "trigger": "scheduled",
+           "bytesMovedToTrash": 7, "deletedItems": [], "skippedItems": []}
+        ]}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let file = try decoder.decode(CleanupHistoryFile.self, from: Data(json.utf8))
+
+        #expect(file.entries.map(\.bytesMovedToTrash) == [42, 7])
     }
 
     // MARK: - Totals
