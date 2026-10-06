@@ -55,6 +55,11 @@ land.
 7. **Open a pull request** against `main`. Describe what changed and why, and
    link the issue it addresses if there is one. Screenshots are appreciated
    for UI changes.
+8. **Update the help page** when the change adds, removes, or changes
+   something a person can do in Purge. [docs/help.md](docs/help.md) is the
+   feature list the website renders. Edit the matching section in the same
+   pull request. Leave the per-app allowlist out of that file. It lives in
+   `purge/Resources/explanations.json`, and a hand-copied list goes stale.
 
 ### A note on the deletion logic
 

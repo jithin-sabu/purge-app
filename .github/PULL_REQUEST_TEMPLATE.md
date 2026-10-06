@@ -16,3 +16,6 @@
 - [ ] I built and ran the app locally
 - [ ] I ran the test suite (`xcodebuild ... test`) and it passes
 - [ ] This PR is focused on a single fix/feature
+- [ ] Help page updated?
+
+<!-- If this changes what Purge does, update the matching section in docs/help.md in this PR. Skip the box for a change nobody can see in the app. -->

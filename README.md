@@ -26,6 +26,8 @@
     &nbsp;·&nbsp;
     <a href="#build-from-source">Build from source</a>
     &nbsp;·&nbsp;
+    <a href="docs/help.md">Help</a>
+    &nbsp;·&nbsp;
     <a href="#security">Security</a>
   </p>
 
@@ -38,7 +40,7 @@
 Your Mac quietly fills up with cache and junk you never see and never asked for. Purge finds it, marks what is safe, and clears it in one click.
 
 > [!NOTE]
-> Nothing is ever deleted permanently. Everything moves to the Trash, so anything can come back.
+> Confirmed files move to the Trash, so you can put them back. An iOS Simulator device, and a Time Machine snapshot you remove from Overview, are deleted instead.
 
 You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-English explanation and a safety label, so nothing gets touched that you cannot see and verify first.
 
@@ -46,110 +48,13 @@ You do not need to understand any of it to use it. But if you ever want to check
 
 ## Features
 
-### Overview
+Purge scans your Mac, labels what it recognizes, and moves confirmed files to the Trash.
 
-- **Where your space went**: one bar for the whole disk. Used, free and total come straight from the volume, so they match System Settings. App Caches, Dev Tools, Large Files, installed apps and leftovers from deleted apps each get their own segment, and the rest is shown as everything else
-- A row per category with its size and share of the disk. Click one to open its tab
-- **Scan Everything** (⇧⌘R) scans every category, one at a time so the Mac stays responsive. When you open Purge it does the same on its own. Large Files and the app scans need Full Disk Access; without it only App Caches and Dev Tools scan
-- Each byte is counted once: an app's cache folder counts under App Caches, not again under the app
+Overview shows used, free, and total space from the disk, then App Caches, Dev Tools, Large Files, installed apps, and leftovers. It also lists local Time Machine snapshots and can remove the ones Time Machine is finished with. App Caches and Dev Tools are the safe clean. Large Files and the App Uninstaller wait for you to pick what goes. A menu bar mode can scan and clean the safe items without keeping the window open.
 
-### App Caches
+Safe to Clean is a known cache or a rebuildable folder. Check First may be safe, and a scheduled clean moves only Safe to Clean items. Folders Purge does not recognize stay off the list.
 
-Scans `~/Library/Caches`, sandbox container caches, and common system junk:
-
-- Per-app cache folders with friendly names, brand icons, and a plain-English explanation if you want to read it
-- System Junk like application logs, crash reports, macOS installers, font cache
-- Large media caches from creative apps like Premiere Pro and After Effects
-- Duplicate cache locations for the same app merged into a single row
-- Results stream in as they are found
-
-### Dev Tools
-
-Three sections in one view:
-
-- **Global dev tool caches**: Xcode (Derived Data, Archives, DeviceSupport), Homebrew, npm, pnpm, Yarn, CocoaPods, Gradle, Flutter, Docker Desktop, VS Code, Cursor, JetBrains, Cargo, Terraform, and more
-- **iOS Simulators**: unused simulator runtimes grouped together (booted simulators are skipped)
-- **Developer projects**: `node_modules`, Python virtual environments, Rust `target`, Flutter build output, Xcode `Pods`, Android `.gradle`, and other artifacts grouped by project
-
-In **Settings → Developer Projects**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which projects appear. Age is measured from the last time anything in the project changed, including git activity, not from the date on `node_modules` or `target`. A project in use right now, with a terminal or dev server running inside it or a git command in progress, never appears.
-
-Git worktrees made by AI coding tools (Cursor, Codex, Conductor, T3 Code, and Claude Code) appear under **Orphaned Git Worktrees** only once their repository no longer lists them. A worktree Git still uses never appears however old it is, and neither does one a terminal or agent is working inside.
-
-### Large Files
-
-Find space-hogging personal files without digging through folders:
-
-- Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**
-- Skips managed libraries (Photos, iMovie, Music, and similar), hidden folders, and project folders like `node_modules`, `Pods`, `DerivedData` and build output. Deleting a single file out of a dependency tree only breaks the install, so those belong in Dev Tools, which removes them a folder at a time
-- **Search** filters the list as you type, matching the file name, the folder it sits in, and its source label
-- Filter by **size** (5 MB to 1 GB) and **last used** (any time up to over 1 year ago)
-- Category chips for videos, audio, images, PDFs, archives, documents, AI models, and other files
-- **Duplicates**: a byte-for-byte scan finds identical copies, groups them together, and shows how much you'd reclaim by keeping one. A **Duplicates** chip gathers them in one place. **Keep one of each** clears a whole tab of duplicates in one go. It suggests a copy to keep per set and marks the rest for Trash, and you can move the keeper to a different copy before anything is deleted. Nothing is removed until you review and confirm
-- Sort by size, date, or name; select files and review before deleting
-- **Quick Look** preview and **Reveal in Finder** from each row
-- Deletions move files to **Trash**, so nothing is permanently erased
-
-Large Files is separate from cache cleanup: these are your personal files, not rebuildable caches.
-
-#### Local AI models
-
-Models you downloaded with **Ollama** or **LM Studio** are often the largest files on a Mac and are easy to forget. They appear in Large Files under the **AI Models** category, one row per model, named the way you installed it. Purge understands Ollama's content-addressed storage, so a model's size counts only the bytes that would actually be reclaimed rather than blobs shared with another model.
-
-### App Uninstaller
-
-Dragging an app to the Trash leaves most of it behind: caches, preferences, containers, saved state, logs, and login helpers pile up on disk. The Uninstaller removes the app and those leftovers in one pass.
-
-- Lists the apps you installed in **Applications** and **~/Applications**, skipping system apps and Purge itself. Each tile shows what an uninstall would free: the app bundle plus its removable leftovers
-- Select one or more apps, then review a per-app sheet that lists every item with its path and size and a safety label
-- Matching is strict, so uninstalling one app can't sweep in files shared across a vendor's apps. Exact bundle-id and app-group matches arrive checked; looser name-only matches arrive unchecked for you to confirm
-- A running app is asked to quit first, and only gracefully. If it won't, it's left installed and the rest of the batch still goes through
-- Everything confirmed moves to **Trash** through the same delete engine as the rest of Purge, so it can all come back
-- Optional, off by default: turn on **Review leftovers when an app is deleted** in Settings. A small background watcher then notices when an app leaves **Applications** or **~/Applications** — even if Purge is quit — opens Purge with just that app's leftovers, and gets out of the way after you confirm or dismiss. Nothing moves without that review
-
-### Safety labels
-
-Purge assigns a safety label to every item it recognizes:
-
-| Label | Meaning |
-|-------|---------|
-| ✅ **Safe to Clean** | Known cache or rebuildable artifact, safe to remove |
-| ⚠️ **Check First** | May be safe, but could cause inconvenience |
-
-Filter with **All**, **Safe to Clean**, or **Check First** (⌘1–⌘3). Sort by size, date modified, or name.
-
-Unidentified folders are left out of the list entirely. Purge only shows what it knows about.
-
-The labels and explanations are there to be checked, not read cover to cover. Select the safe items and clean them, or open the reasoning behind any single row first. Either way is fine.
-
-### Cleaning
-
-- **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete. Git and lockfile checks run first
-- **Clean Safe Files**: same safe cleanup from the menu bar
-- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning** and choose **How often** (weekly, monthly, every 3 months, or a **Custom** interval you set in days, weeks, or months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
-- All deletions move items to **Trash**, not permanent removal
-
-### Settings
-
-- **Appearance**: Light, Dark, or System
-- **Cleaning Schedule**: automatic safe cleanup with a frequency, the next-clean date, and a summary of the last clean
-- **Developer Projects**: stale-project threshold for developer artifact scanning
-- **Excluded from scans**: folders you've told Purge to leave alone, each with its current size. Right-click any scan result and choose **Exclude from scans** to add one. Excluding only ever narrows what Purge looks at
-- **Cleaning History**: every automatic and manual clean, with the space freed and the item count. Open one to see what was moved to the Trash and what was skipped
-
-### More
-
-- **First-run onboarding**: welcome, permissions (Full Disk Access and optional login item), first scan, results review, and a safe clean walkthrough
-- **Menu bar companion**: recoverable space at a glance, quick open, and scan/clean actions
-- **Disk summary**: the Overview shows used and free space; the sidebar shows what is already in the Trash, and each scan tab's size
-- **In-app updates**: the About screen checks for, downloads, and installs new versions
-
-### Keyboard shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| ⌘R | Scan the current tab (Scan Everything on the Overview) |
-| ⇧⌘R | Scan Everything, from any tab |
-| ⌘1–⌘3 | Filter by All, Safe to Clean, or Check First |
+The full behavior, including settings, shortcuts, Siri, privacy, and what to do when a scan looks wrong, is in [Help](docs/help.md).
 
 ---
 
