@@ -1,44 +1,56 @@
 import Combine
 import Foundation
 
-/// What asking macOS to remove the snapshots did.
-nonisolated enum SnapshotThinOutcome: Equatable, Sendable {
-    /// All of them went. `freedBytes` is nil when the volume did not move by more than
-    /// the noise floor, so no amount can be claimed.
-    case removedAll(count: Int, freedBytes: Int64?)
+/// What Remove did.
+nonisolated enum SnapshotRemovalOutcome: Equatable, Sendable {
+    /// Every snapshot it meant to remove went. `freedBytes` is nil when the volume did
+    /// not move by more than the noise floor, so no amount can be claimed.
+    case removed(count: Int, freedBytes: Int64?, keptNewest: Bool)
     case someLeft(removed: Int, left: Int)
     /// None went, or `tmutil` could not be read afterwards.
     case noneRemoved
 
-    /// Judged by the snapshots left afterwards, not by `tmutil`'s exit status: only the
-    /// list says what is still on the disk.
-    static func judge(before: Int, after: Int?, freedBytes: Int64?) -> SnapshotThinOutcome {
+    /// Judged by which of the targeted snapshots are still listed, not by `tmutil`'s
+    /// exit status: only the list says what is still on the disk.
+    static func judge(
+        targeted: [LocalSnapshot],
+        after: LocalSnapshots?,
+        keptNewest: Bool,
+        freedBytes: Int64?
+    ) -> SnapshotRemovalOutcome {
         guard let after else { return .noneRemoved }
-        let removed = max(0, before - after)
+        let remaining = Set(after.all.map(\.stamp))
+        let left = targeted.filter { remaining.contains($0.stamp) }.count
+        let removed = targeted.count - left
         if removed == 0 { return .noneRemoved }
-        if after > 0 { return .someLeft(removed: removed, left: after) }
-        return .removedAll(count: removed, freedBytes: freedBytes)
+        if left > 0 { return .someLeft(removed: removed, left: left) }
+        return .removed(count: removed, freedBytes: freedBytes, keptNewest: keptNewest)
     }
 }
 
 /// The local Time Machine snapshots the Overview shows, read again whenever the page
 /// appears or Purge comes back to the front: macOS takes and drops them on its own.
+/// Shared, so what Remove did is still there after visiting another tab.
 @MainActor
 final class LocalSnapshotStore: ObservableObject {
+    static let shared = LocalSnapshotStore()
+
     /// Nil until the first reading lands, or when `tmutil` never answered.
     @Published private(set) var snapshots: LocalSnapshots?
-    @Published private(set) var isThinning = false
-    /// The last removal and how many snapshots it left, so the row can stop showing
-    /// it once macOS takes a new one.
-    @Published private(set) var lastThin: (outcome: SnapshotThinOutcome, countAfter: Int)?
+    /// Whether a reading has been tried, so "checking" and "couldn't check" differ.
+    @Published private(set) var hasTriedReading = false
+    @Published private(set) var isRemoving = false
+    /// The last removal and the snapshots it left, so the row can stop showing it once
+    /// macOS takes a new one or drops another.
+    @Published private(set) var lastRemoval: (outcome: SnapshotRemovalOutcome, left: [String])?
 
     /// Guards against a slow reading overwriting a newer one.
     private var latestPass = 0
 
-    /// The last removal's outcome while the count is still what it left.
-    var currentThinOutcome: SnapshotThinOutcome? {
-        guard let lastThin, lastThin.countAfter == (snapshots?.count ?? 0) else { return nil }
-        return lastThin.outcome
+    /// The last removal's outcome while the snapshots are still the ones it left.
+    var currentRemovalOutcome: SnapshotRemovalOutcome? {
+        guard let lastRemoval, lastRemoval.left == (snapshots?.all.map(\.stamp) ?? []) else { return nil }
+        return lastRemoval.outcome
     }
 
     func refresh() async {
@@ -46,22 +58,25 @@ final class LocalSnapshotStore: ObservableObject {
         let pass = latestPass
         let reading = await LocalSnapshotReader.read()
         guard pass == latestPass else { return }
-        // A failed reading keeps the last good one rather than hiding the row.
+        hasTriedReading = true
+        // A failed reading keeps the last good one.
         if let reading {
             snapshots = reading
         }
     }
 
-    /// Asks macOS to remove every snapshot it can, then says what went and how much
-    /// space came back.
-    func thin() async {
-        guard !isThinning else { return }
-        isThinning = true
-        defer { isThinning = false }
+    /// Deletes the removable snapshots, then says what went and how much space came
+    /// back.
+    func remove(now: Date = .now) async {
+        guard !isRemoving, let current = snapshots else { return }
+        let targeted = current.removable(now: now)
+        guard !targeted.isEmpty else { return }
+        isRemoving = true
+        defer { isRemoving = false }
 
-        let before = snapshots?.count ?? 0
+        let keptNewest = targeted.count < current.count
         let capacityBefore = VolumeCapacityReader.read()
-        await LocalSnapshotReader.thin()
+        await LocalSnapshotReader.delete(targeted, includesNewest: !keptNewest)
 
         latestPass += 1
         let reading = await LocalSnapshotReader.read()
@@ -69,8 +84,13 @@ final class LocalSnapshotStore: ObservableObject {
             snapshots = reading
         }
         let freed = await Self.freedBytes(since: capacityBefore)
-        let outcome = SnapshotThinOutcome.judge(before: before, after: reading?.count, freedBytes: freed)
-        lastThin = (outcome, snapshots?.count ?? 0)
+        let outcome = SnapshotRemovalOutcome.judge(
+            targeted: targeted,
+            after: reading,
+            keptNewest: keptNewest,
+            freedBytes: freed
+        )
+        lastRemoval = (outcome, snapshots?.all.map(\.stamp) ?? [])
     }
 
     /// APFS gives the space back over a few seconds after a snapshot goes, so the

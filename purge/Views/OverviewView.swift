@@ -9,7 +9,7 @@ struct OverviewView: View {
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @EnvironmentObject private var trashStore: TrashStore
     @ObservedObject private var schedule = ScheduledCleaningPreferenceStore.shared
-    @StateObject private var snapshotStore = LocalSnapshotStore()
+    @ObservedObject private var snapshotStore = LocalSnapshotStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The bar segment under the pointer. Its row lifts and the others fade.
     @State private var highlightedID: String?
@@ -46,7 +46,7 @@ struct OverviewView: View {
             categoriesCard(breakdown, now: now)
 
             if breakdown.totalBytes > 0 {
-                restOfDiskCard(breakdown)
+                restOfDiskCard(breakdown, now: now)
             }
 
             footnotes(now: now)
@@ -127,7 +127,7 @@ struct OverviewView: View {
         .overviewCard()
     }
 
-    private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
+    private func restOfDiskCard(_ breakdown: OverviewBreakdown, now: Date) -> some View {
         VStack(spacing: 0) {
             OverviewPlainRow(
                 symbol: "ellipsis",
@@ -140,14 +140,14 @@ struct OverviewView: View {
             )
             // Part of the used space above, but no tool says how much, so it is a
             // row of its own with no size and no place in the bar.
-            // Stays after a removal to say what went.
-            if (snapshotStore.snapshots?.count ?? 0) > 0 || snapshotStore.currentThinOutcome != nil {
-                InsetCardDivider()
-                OverviewSnapshotRow(
-                    snapshotStore: snapshotStore,
-                    linkedState: linkedRowState(OverviewSnapshotRow.id)
-                )
-            }
+            // Always shown, even with none, so people learn these exist and where
+            // to find them when they do.
+            InsetCardDivider()
+            OverviewSnapshotRow(
+                snapshotStore: snapshotStore,
+                now: now,
+                linkedState: linkedRowState(OverviewSnapshotRow.id)
+            )
             InsetCardDivider()
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
@@ -499,10 +499,11 @@ private struct OverviewPlainRow: View {
 // MARK: - Time Machine snapshots
 
 /// Local Time Machine snapshots: Finder never shows them and macOS counts them as
-/// System Data. A count and a date, since nothing reports their size. Remove asks
-/// macOS to thin them, which needs no password; after that the row says what went.
+/// System Data. A count and a date, since nothing reports their size. Remove deletes
+/// all but the newest, needing no password; after that the row says what went.
 private struct OverviewSnapshotRow: View {
     @ObservedObject var snapshotStore: LocalSnapshotStore
+    let now: Date
     let linkedState: OverviewLinkedRowState
 
     @EnvironmentObject private var diskStore: DiskSummaryStore
@@ -511,7 +512,8 @@ private struct OverviewSnapshotRow: View {
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "timeMachineSnapshots"
 
-    private var count: Int { snapshotStore.snapshots?.count ?? 0 }
+    private var snapshots: LocalSnapshots? { snapshotStore.snapshots }
+    private var removable: [LocalSnapshot] { snapshots?.removable(now: now) ?? [] }
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
@@ -535,64 +537,95 @@ private struct OverviewSnapshotRow: View {
 
     @ViewBuilder
     private var trailing: some View {
-        switch snapshotStore.currentThinOutcome {
-        case .removedAll:
-            EmptyView()
+        switch snapshotStore.currentRemovalOutcome {
         case .someLeft, .noneRemoved:
-            // macOS kept some back; Disk Utility can delete them one by one.
+            // tmutil couldn't remove some; Disk Utility can delete them one by one.
             Button("Open Disk Utility") { Self.openDiskUtility() }
                 .buttonStyle(.purge(.secondary, size: .small))
                 .help("In Disk Utility, choose View > Show APFS Snapshots to see and delete them.")
+        case .removed:
+            EmptyView()
         case nil:
-            Button {
-                isConfirming = true
-            } label: {
-                CleaningButtonLabel(
-                    title: snapshotStore.isThinning ? "Removing..." : "Remove",
-                    systemImage: nil,
-                    isCleaning: snapshotStore.isThinning
-                )
-            }
-            .buttonStyle(.purge(.secondary, size: .small))
-            .disabled(snapshotStore.isThinning)
-            .help("Ask macOS to remove these snapshots")
-            .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
-                OverviewSnapshotConfirmation(
-                    count: count,
-                    onCancel: { isConfirming = false },
-                    onOpenDiskUtility: {
-                        isConfirming = false
-                        Self.openDiskUtility()
-                    },
-                    onConfirm: {
-                        isConfirming = false
-                        Task {
-                            await snapshotStore.thin()
-                            diskStore.refresh()
-                        }
-                    }
-                )
+            if !removable.isEmpty || snapshotStore.isRemoving {
+                removeButton
             }
         }
     }
 
-    private var detail: String {
-        switch snapshotStore.currentThinOutcome {
-        case .removedAll(let removed, let freedBytes):
-            let what = removed == 1 ? "Removed 1 snapshot" : "Removed \(removed) snapshots"
-            guard let freedBytes else { return what }
-            return "\(what) and freed \(formatBytes(freedBytes))"
-        case .someLeft(let removed, let left):
-            return "Removed \(removed), but macOS kept \(left)"
-        case .noneRemoved:
-            return "macOS didn't remove any. Disk Utility can."
-        case nil:
-            guard let oldest = snapshotStore.snapshots?.oldest else { return "" }
-            let day = oldest.formatted(.dateTime.month(.abbreviated).day())
-            return count == 1
-                ? "1 on this Mac, from \(day)"
-                : "\(count) on this Mac, the oldest from \(day)"
+    private var removeButton: some View {
+        Button {
+            isConfirming = true
+        } label: {
+            CleaningButtonLabel(
+                title: snapshotStore.isRemoving ? "Removing..." : "Remove",
+                systemImage: nil,
+                isCleaning: snapshotStore.isRemoving
+            )
         }
+        .buttonStyle(.purge(.secondary, size: .small))
+        .disabled(snapshotStore.isRemoving)
+        .help("Remove the snapshots Time Machine no longer needs")
+        .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
+            OverviewSnapshotConfirmation(
+                count: removable.count,
+                keepsNewest: removable.count < (snapshots?.count ?? 0),
+                newest: snapshots?.newest,
+                now: now,
+                onCancel: { isConfirming = false },
+                onOpenDiskUtility: {
+                    isConfirming = false
+                    Self.openDiskUtility()
+                },
+                onConfirm: {
+                    isConfirming = false
+                    Task {
+                        await snapshotStore.remove(now: now)
+                        diskStore.refresh()
+                    }
+                }
+            )
+        }
+    }
+
+    private var detail: String {
+        switch snapshotStore.currentRemovalOutcome {
+        case .removed(let removed, let freedBytes, let keptNewest):
+            var text = removed == 1 ? "Removed 1" : "Removed \(removed)"
+            if let freedBytes { text += " and freed \(formatBytes(freedBytes))" }
+            if keptNewest { text += ", kept the newest" }
+            return text
+        case .someLeft(let removed, let left):
+            return "Removed \(removed), but \(left) couldn't be removed"
+        case .noneRemoved:
+            return "These couldn't be removed. Disk Utility can."
+        case nil:
+            break
+        }
+        guard let snapshots else {
+            return snapshotStore.hasTriedReading ? "Couldn't check right now" : "Checking..."
+        }
+        guard let oldest = snapshots.oldest else {
+            return "None on this Mac right now"
+        }
+        let when = Self.dayText(oldest, now: now)
+        if snapshots.count == 1 {
+            // A single recent one is the newest, which Remove always keeps.
+            return removable.isEmpty
+                ? "1 on this Mac, from \(when), kept for the next backup"
+                : "1 on this Mac, from \(when)"
+        }
+        return "\(snapshots.count) on this Mac, the oldest from \(when)"
+    }
+
+    /// "today", "yesterday", or a short date.
+    static func dayText(_ date: Date, now: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDate(date, inSameDayAs: now) { return "today" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "yesterday"
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day())
     }
 
     static func openDiskUtility() {
@@ -605,9 +638,24 @@ private struct OverviewSnapshotRow: View {
 /// for: most people have never heard of them.
 private struct OverviewSnapshotConfirmation: View {
     let count: Int
+    let keepsNewest: Bool
+    let newest: Date?
+    let now: Date
     let onCancel: () -> Void
     let onOpenDiskUtility: () -> Void
     let onConfirm: () -> Void
+
+    private var explanation: String {
+        let rest = "Backups on your backup disk aren't touched. Removed snapshots can't be put back."
+        if keepsNewest {
+            return "Time Machine keeps these on your Mac between backups. Purge keeps the newest, "
+                + "which Time Machine can use for your next backup. " + rest
+        }
+        // Even the newest is over a day old: Time Machine stopped replacing them.
+        let since = newest.map { " since \(OverviewSnapshotRow.dayText($0, now: now))" } ?? ""
+        return "Time Machine hasn't made a new one\(since), so these are stuck. "
+            + "Your next backup may take longer. " + rest
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
@@ -615,7 +663,7 @@ private struct OverviewSnapshotConfirmation: View {
                 Text(count == 1 ? "Remove 1 Time Machine snapshot?" : "Remove \(count) Time Machine snapshots?")
                     .font(AppStyle.Typography.sectionTitle)
                     .foregroundStyle(AppColors.textPrimary)
-                Text("Time Machine keeps these on your Mac between backups. Backups on your backup disk aren't touched. Removed snapshots can't be put back.")
+                Text(explanation)
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
