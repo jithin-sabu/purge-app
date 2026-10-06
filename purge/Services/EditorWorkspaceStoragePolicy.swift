@@ -63,11 +63,21 @@ nonisolated enum EditorWorkspaceStoragePolicy {
             let volume = "/Volumes/\(parts[1])"
             guard fileManager.fileExists(atPath: volume) else { return false }
         }
-        // Checked before `fileExists`, which follows links and is the access that prompts.
+        // Checked before the lookup below, which is the access that prompts.
         guard ProtectedLocations.isReadable(project, access: access, home: home, fileManager: fileManager) else {
             return false
         }
-        return !fileManager.fileExists(atPath: projectPath)
+        return isConfirmedMissing(projectPath)
+    }
+
+    /// True only when the lookup itself says the path does not exist. `fileExists`
+    /// also returns false when a parent folder cannot be searched, which would
+    /// count a project Purge merely cannot reach as deleted. `lstat` does not
+    /// follow a final symlink, so a project that is a link counts as present.
+    static func isConfirmedMissing(_ path: String) -> Bool {
+        var info = stat()
+        guard lstat(path, &info) != 0 else { return false }
+        return errno == ENOENT || errno == ENOTDIR
     }
 
     /// The orphaned entries under one editor's root.

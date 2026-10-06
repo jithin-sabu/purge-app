@@ -546,3 +546,42 @@ struct AllowlistAdditionTests {
         #expect(found == ["old.iso.crdownload"])
     }
 }
+
+@Suite("Editor workspace storage: unreachable is not missing")
+struct EditorWorkspaceStorageLookupTests {
+    @Test
+    func onlyANoSuchFileAnswerCountsAsMissing() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let locked = base.appendingPathComponent("locked", isDirectory: true)
+        let project = locked.appendingPathComponent("project", isDirectory: true)
+        try fm.createDirectory(at: project, withIntermediateDirectories: true)
+        let file = base.appendingPathComponent("file")
+        try Data().write(to: file)
+        defer {
+            try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+            try? fm.removeItem(at: base)
+        }
+
+        #expect(EditorWorkspaceStoragePolicy.isConfirmedMissing(base.appendingPathComponent("gone").path))
+        // A path through a file is ENOTDIR: it cannot exist either.
+        #expect(EditorWorkspaceStoragePolicy.isConfirmedMissing(file.appendingPathComponent("child").path))
+        #expect(!EditorWorkspaceStoragePolicy.isConfirmedMissing(project.path))
+
+        try fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+        #expect(!fm.fileExists(atPath: project.path), "precondition: fileExists is fooled")
+        #expect(!EditorWorkspaceStoragePolicy.isConfirmedMissing(project.path))
+    }
+
+    @Test
+    func genericSimulatorEntryIsCheckFirst() {
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "CoreSimulator")?.safetyLevel == .medium)
+        let unused = SimulatorDevice.safetyInfo(
+            isAvailable: true,
+            lastBootedAt: Date().addingTimeInterval(-90 * 24 * 60 * 60),
+            deviceName: "iPhone 17",
+            runtimeVersion: "iOS 26.5"
+        )
+        #expect(unused.level == .safe)
+    }
+}

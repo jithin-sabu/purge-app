@@ -1476,7 +1476,7 @@
       "CoreSimulator",
       "iossimulators"
     ],
-    "tag": "safe",
+    "tag": "medium",
     "explanation": "Virtual iPhone and iPad devices that Xcode uses to test apps. Deleting one also deletes the apps and data installed on it. Xcode can create a new one whenever you need it.",
     "scope": "dev_tools",
     "kind": "devices"
