@@ -160,27 +160,30 @@ final class CleanupLedgerStore {
         try? data.write(to: url, options: .atomic)
     }
 
-    /// Clearing History in Settings promises to remove every saved cleanup record,
-    /// so the ledger goes too. An import still running is dropped rather than
-    /// awaited: its snapshot is of the History just cleared.
+    /// Clearing History in Settings removes every saved cleanup record, so the
+    /// ledger's cleans go too: what was removed, from where, and when. The total
+    /// stays, as the lifetime counter always has: the baseline is retaken from it,
+    /// so the year's recap still has its headline, and its breakdowns start from
+    /// the clear. The total is one undated number and says nothing the counter
+    /// does not already show.
     ///
-    /// The baseline is replaced with an empty one, not deleted. With no baseline
-    /// and no ledger files, the next launch would take a new one from the lifetime
-    /// counter and bring every cleared byte back as "before the record".
-    func clear(now: Date = Date()) {
+    /// An import still running is dropped rather than awaited: its snapshot is of
+    /// the History just cleared.
+    func clear(keepingTotal lifetimeMovedBytes: Int64, firstSeenAt: Date?, now: Date = Date()) {
         generation += 1
+        let previous = baseline()
         for file in yearFiles() {
             try? FileManager.default.removeItem(at: file)
         }
         writeBaseline(CleanupLedgerBaseline(
             capturedAt: now,
             appVersion: FirstRunGate.currentAppVersion(),
-            lifetimeMovedBytes: 0,
+            lifetimeMovedBytes: lifetimeMovedBytes,
             historyEntryCount: 0,
             historyMovedBytes: 0,
             historyOldestDate: nil,
-            firstSeenAt: nil,
-            firstSeenVersion: nil
+            firstSeenAt: firstSeenAt ?? previous?.firstSeenAt,
+            firstSeenVersion: previous?.firstSeenVersion
         ))
     }
 

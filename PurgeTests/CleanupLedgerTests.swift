@@ -321,29 +321,32 @@ struct CleanupLedgerTests {
         #expect(store.baseline()?.untrackedBytes == 0)
     }
 
-    /// Clearing History promises to remove every cleanup record. The next launch
-    /// must not rebuild the year from the lifetime counter, which is not cleared.
+    /// Clearing History removes the record of what was cleaned, but the year keeps
+    /// its total, the same way the lifetime counter does. Breakdowns restart.
     @Test
-    func clearingRemovesTheRecordAndTheCounterCannotBringItBack() async {
+    func clearingKeepsTheYearsTotalButNotItsDetail() async {
         let directory = Self.tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = Self.makeStore(directory)
-        let history = [Self.historyEntry(Self.date(2026, 10, 2), [("/Users/me/.npm", 400)])]
-        await store.reconcile(with: Self.legacy(history, lifetime: 50_400)).value
+        let history = [Self.historyEntry(Self.date(2026, 10, 2), [("/Users/me/Library/Caches/Dia", 400)])]
+        await store.reconcile(with: Self.legacy(history, lifetime: 50_400, firstSeenAt: Self.date(2026, 7, 13))).value
 
-        store.clear(now: Self.date(2026, 10, 3))
+        store.clear(keepingTotal: 50_400, firstSeenAt: nil, now: Self.date(2026, 10, 3))
         await store.reconcile(with: Self.legacy([], lifetime: 50_400)).value
         store.record(
-            Self.report([DeletedItem(path: "/Users/me/.npm", sizeBytes: 7)], on: Self.date(2026, 10, 4)),
+            Self.report([DeletedItem(path: "/Users/me/.npm", sizeBytes: 7, displayName: "npm")], on: Self.date(2026, 10, 4)),
             id: UUID(),
             trigger: .manual,
             source: .clean
         )
 
         let totals = await store.yearTotals(2026)
-        #expect(totals.headlineBytes == 7)
+        #expect(totals.headlineBytes == 50_407)
+        #expect(totals.bytesBeforeRecord == 50_400)
         #expect(totals.cleanCount == 1)
-        #expect(store.baseline()?.untrackedBytes == 0)
+        #expect(totals.labels.map(\.label) == ["npm"])
+        #expect(store.sessions(inYear: 2026).count == 1)
+        #expect(store.baseline()?.firstSeenAt == Self.date(2026, 7, 13))
     }
 
     /// An import still running when History is cleared works from the History
@@ -356,7 +359,7 @@ struct CleanupLedgerTests {
         let history = [Self.historyEntry(Self.date(2026, 10, 2), [("/Users/me/.npm", 400)])]
 
         let running = store.reconcile(with: Self.legacy(history, lifetime: 400))
-        store.clear()
+        store.clear(keepingTotal: 400, firstSeenAt: nil)
         await running.value
 
         #expect(store.sessions(inYear: 2026).isEmpty)

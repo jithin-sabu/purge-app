@@ -83,7 +83,10 @@ struct SettingsView: View {
         ) {
             Button("Clear history", role: .destructive) {
                 history.clear()
-                CleanupLedgerStore.shared.clear()
+                CleanupLedgerStore.shared.clear(
+                    keepingTotal: store.totalMovedToTrashBytes,
+                    firstSeenAt: UserDefaults.standard.object(forKey: FirstRunGate.firstSeenAtKey) as? Date
+                )
                 isCleaningHistoryExpanded = false
             }
             Button("Cancel", role: .cancel) {}
