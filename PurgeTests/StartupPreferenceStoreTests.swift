@@ -6,12 +6,7 @@ import Testing
 @Suite("StartupPreferenceStore backs the Startup settings")
 struct StartupPreferenceStoreTests {
 
-    private func makeDefaults() -> (UserDefaults, String) {
-        let name = "io.getpurge.tests.startup.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
-        return (defaults, name)
-    }
+    private let suite = ThrowawayDefaults()
 
     private final class FakeLoginItem: LoginItemControlling {
         var isRegistered = false
@@ -43,8 +38,7 @@ struct StartupPreferenceStoreTests {
     /// not go looking for it.
     @Test("A fresh install keeps the Dock icon")
     func defaultsToShowingTheDockIcon() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
 
         let store = StartupPreferenceStore(
             userDefaults: defaults,
@@ -57,8 +51,7 @@ struct StartupPreferenceStoreTests {
 
     @Test("Hiding the Dock icon persists and applies in one step")
     func hidingPersistsAndApplies() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(true, forKey: "startup.showMenuBarIcon")
         let policy = DockPolicySpy()
 
@@ -76,8 +69,7 @@ struct StartupPreferenceStoreTests {
 
     @Test("The saved preference is read back at launch")
     func storedPreferenceIsRestored() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(true, forKey: "startup.hideDockIcon")
 
         let store = StartupPreferenceStore(
@@ -92,8 +84,7 @@ struct StartupPreferenceStoreTests {
 
     @Test("Login item state comes from the system, not from a stored copy")
     func loginItemMirrorsTheSystem() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         let loginItem = FakeLoginItem()
 
         let store = StartupPreferenceStore(
@@ -113,8 +104,7 @@ struct StartupPreferenceStoreTests {
     /// A toggle that stays on after a failed registration is a lie the user acts on.
     @Test("A registration that fails leaves the toggle off")
     func failedRegistrationSnapsBack() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(true, forKey: "startup.showMenuBarIcon")
         let loginItem = FakeLoginItem()
         loginItem.registerSucceeds = false
@@ -132,8 +122,7 @@ struct StartupPreferenceStoreTests {
 
     @Test("Turning the login item off unregisters and re-reads the system")
     func disablingUnregisters() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         let loginItem = FakeLoginItem()
         loginItem.isRegistered = true
 
@@ -153,13 +142,13 @@ struct StartupPreferenceStoreTests {
 
     @Test("A new install starts on demand, an update keeps the menu bar")
     func firstLaunchPicksTheMode() {
-        let (fresh, freshName) = makeDefaults()
-        defer { fresh.removePersistentDomain(forName: freshName) }
+        let fresh = suite.defaults
         StartupPreferenceStore.resolvePersistedModes(isFreshInstall: true, userDefaults: fresh)
         #expect(fresh.object(forKey: "startup.showMenuBarIcon") as? Bool == false)
 
-        let (updated, updatedName) = makeDefaults()
-        defer { updated.removePersistentDomain(forName: updatedName) }
+        let updatedSuite = ThrowawayDefaults()
+        defer { updatedSuite.remove() }
+        let updated = updatedSuite.defaults
         StartupPreferenceStore.resolvePersistedModes(isFreshInstall: false, userDefaults: updated)
         #expect(updated.object(forKey: "startup.showMenuBarIcon") as? Bool == true)
     }
@@ -167,8 +156,7 @@ struct StartupPreferenceStoreTests {
     /// Runs on every launch, so it must never undo the user's choice.
     @Test("A chosen mode survives later launches")
     func resolutionKeepsTheChoice() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(false, forKey: "startup.showMenuBarIcon")
 
         StartupPreferenceStore.resolvePersistedModes(isFreshInstall: false, userDefaults: defaults)
@@ -178,8 +166,7 @@ struct StartupPreferenceStoreTests {
 
     @Test("A hidden Dock icon without the menu bar icon is repaired at launch")
     func resolutionRepairsAnUnreachableApp() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(false, forKey: "startup.showMenuBarIcon")
         defaults.set(true, forKey: "startup.hideDockIcon")
 
@@ -191,8 +178,7 @@ struct StartupPreferenceStoreTests {
     /// Also the path a ⌘-drag out of the menu bar takes.
     @Test("Leaving the menu bar turns off the login item and brings the Dock icon back")
     func leavingTheMenuBarCleansUp() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(true, forKey: "startup.showMenuBarIcon")
         defaults.set(true, forKey: "startup.hideDockIcon")
         let loginItem = FakeLoginItem()
@@ -217,8 +203,7 @@ struct StartupPreferenceStoreTests {
     /// Picks up a login item added in System Settings since the store last looked.
     @Test("Leaving the menu bar re-reads the login item before deciding")
     func leavingTheMenuBarRereadsTheSystem() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(true, forKey: "startup.showMenuBarIcon")
         let loginItem = FakeLoginItem()
 
@@ -235,8 +220,7 @@ struct StartupPreferenceStoreTests {
 
     @Test("Joining the menu bar leaves the other settings alone")
     func joiningTheMenuBarChangesNothingElse() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         let loginItem = FakeLoginItem()
         let policy = DockPolicySpy()
 
@@ -256,8 +240,7 @@ struct StartupPreferenceStoreTests {
 
     @Test("On demand, the Dock icon cannot be hidden and the login item cannot be turned on")
     func onDemandRefusesUnreachableSettings() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(false, forKey: "startup.showMenuBarIcon")
         let loginItem = FakeLoginItem()
         let policy = DockPolicySpy()
@@ -278,8 +261,7 @@ struct StartupPreferenceStoreTests {
 
     @Test("Leaving the menu bar changes nothing when the login item will not come off")
     func failedUnregisterKeepsTheMenuBar() {
-        let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
+        let defaults = suite.defaults
         defaults.set(true, forKey: "startup.showMenuBarIcon")
         defaults.set(true, forKey: "startup.hideDockIcon")
         let loginItem = FakeLoginItem()

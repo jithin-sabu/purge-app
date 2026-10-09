@@ -31,8 +31,9 @@ struct TimeTaglineQuipTests {
     }
 
     @Test func lineCombinesTimeAndTierQuip() {
-        let defaults = UserDefaults(suiteName: "TimeTaglineTests.line")!
-        defaults.removePersistentDomain(forName: "TimeTaglineTests.line")
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let defaults = suite.defaults
 
         let line = TimeTagline.line(for: 5, defaults: defaults)
         #expect(line.hasPrefix("done in 5 seconds · "))
@@ -41,9 +42,9 @@ struct TimeTaglineQuipTests {
     }
 
     @Test func rerollsOnceWhenMatchingLastShownQuip() {
-        let suite = "TimeTaglineTests.reroll"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let defaults = suite.defaults
 
         var previousQuip: String?
         var immediateRepeatSurvivedRerollOdds = 0

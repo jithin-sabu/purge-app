@@ -5,11 +5,10 @@ import Testing
 @Suite("FirstRunGate install detection")
 struct FirstRunGateTests {
     /// Each test gets its own defaults suite so the persistent domain starts genuinely empty.
+    private let suite = ThrowawayDefaults()
+
     private func makeDefaults() -> (UserDefaults, String) {
-        let name = "io.getpurge.tests.firstrun.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
-        return (defaults, name)
+        (suite.defaults, suite.name)
     }
 
     private func emptySupportDirectory() -> URL {
@@ -20,7 +19,6 @@ struct FirstRunGateTests {
     @Test("A clean install with no traces on disk gets onboarding")
     func freshInstallShowsOnboarding() {
         let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
 
         let decision = FirstRunGate.resolve(
             defaults: defaults,
@@ -42,7 +40,6 @@ struct FirstRunGateTests {
     ])
     func priorDefaultsKeySkipsOnboarding(existingKey: String) {
         let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
         defaults.set("whatever", forKey: existingKey)
 
         let decision = FirstRunGate.resolve(
@@ -59,7 +56,6 @@ struct FirstRunGateTests {
     @Test("Application Support files alone mark the install as existing")
     func supportFilesSkipOnboarding() throws {
         let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
 
         let support = emptySupportDirectory()
         try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
@@ -82,7 +78,6 @@ struct FirstRunGateTests {
     @Test("A decision already on disk is never overwritten", arguments: [true, false])
     func existingFlagIsPreserved(completed: Bool) {
         let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
         defaults.set(completed, forKey: FirstRunGate.onboardingCompletedKey)
 
         let decision = FirstRunGate.resolve(
@@ -102,7 +97,6 @@ struct FirstRunGateTests {
     @Test("Interrupted onboarding resumes on the next launch")
     func interruptedOnboardingResumes() {
         let (defaults, name) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: name) }
 
         #expect(
             FirstRunGate.resolve(

@@ -19,7 +19,7 @@ final class FakeScans {
     private var heldGeneral: [AsyncStream<CacheScanEvent>.Continuation] = []
     private var heldDeveloper: [AsyncStream<DeveloperScanEvent>.Continuation] = []
     private var heldSteps: [CheckedContinuation<Void, Never>] = []
-    private let suiteName = "purge-tests-\(UUID().uuidString)"
+    private let suite = ThrowawayDefaults()
 
     func makeStore() -> PurgeStore {
         let store = PurgeStore(defaults: defaults, scanSources: sources)
@@ -28,7 +28,7 @@ final class FakeScans {
     }
 
     /// The throwaway defaults the store reads and writes, for seeding saved records.
-    var defaults: UserDefaults { UserDefaults(suiteName: suiteName)! }
+    var defaults: UserDefaults { suite.defaults }
 
     func finishHeldSteps() {
         let steps = heldSteps
@@ -45,7 +45,7 @@ final class FakeScans {
         heldGeneral.forEach { $0.finish() }
         heldDeveloper.forEach { $0.finish() }
         finishHeldSteps()
-        UserDefaults.standard.removePersistentDomain(forName: suiteName)
+        suite.remove()
     }
 
     private var sources: ScanSources {

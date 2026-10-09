@@ -6,15 +6,10 @@ import Testing
 @MainActor
 struct CustomCleaningIntervalTests {
     /// Each test gets its own defaults suite so the persistent domain starts genuinely empty.
-    private func makeStore() -> (ScheduledCleaningPreferenceStore, UserDefaults, String) {
-        let name = "io.getpurge.tests.custominterval.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
-        return (ScheduledCleaningPreferenceStore(userDefaults: defaults), defaults, name)
-    }
+    private let suite = ThrowawayDefaults()
 
-    private func cleanup(_ defaults: UserDefaults, name: String) {
-        defaults.removePersistentDomain(forName: name)
+    private func makeStore() -> ScheduledCleaningPreferenceStore {
+        ScheduledCleaningPreferenceStore(userDefaults: suite.defaults)
     }
 
     @Test("Unit seconds", arguments: [
@@ -39,8 +34,7 @@ struct CustomCleaningIntervalTests {
         (ScheduledCleaningFrequency.quarterly, TimeInterval(90 * 86_400)),
     ])
     func presetIntervals(frequency: ScheduledCleaningFrequency, expected: TimeInterval) {
-        let (store, defaults, name) = makeStore()
-        defer { cleanup(defaults, name: name) }
+        let store = makeStore()
 
         store.frequency = frequency
         #expect(store.effectiveRepeatIntervalSeconds == expected)
@@ -48,8 +42,7 @@ struct CustomCleaningIntervalTests {
 
     @Test("Custom interval is amount times unit")
     func customInterval() {
-        let (store, defaults, name) = makeStore()
-        defer { cleanup(defaults, name: name) }
+        let store = makeStore()
 
         store.frequency = .custom
         store.customIntervalAmount = 14
@@ -63,8 +56,7 @@ struct CustomCleaningIntervalTests {
 
     @Test("Custom amount is clamped to 1...365")
     func amountClamping() {
-        let (store, defaults, name) = makeStore()
-        defer { cleanup(defaults, name: name) }
+        let store = makeStore()
 
         store.frequency = .custom
         store.customIntervalUnit = .day
@@ -78,8 +70,8 @@ struct CustomCleaningIntervalTests {
 
     @Test("Custom interval persists to defaults")
     func customIntervalPersists() {
-        let (store, defaults, name) = makeStore()
-        defer { cleanup(defaults, name: name) }
+        let store = makeStore()
+        let defaults = suite.defaults
 
         store.customIntervalAmount = 45
         store.customIntervalUnit = .day
@@ -100,8 +92,7 @@ struct CustomCleaningIntervalTests {
 
     @Test("Unknown legacy frequency falls back to monthly")
     func unknownFrequencyFallsBack() {
-        let (store, defaults, name) = makeStore()
-        defer { cleanup(defaults, name: name) }
+        let defaults = suite.defaults
 
         defaults.set("not-a-frequency", forKey: "scheduledClean.frequency")
         let reloaded = ScheduledCleaningPreferenceStore(userDefaults: defaults)

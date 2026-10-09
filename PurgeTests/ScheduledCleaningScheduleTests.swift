@@ -31,14 +31,13 @@ struct ScheduledCleaningScheduleTests {
         let registrar: ScheduledCleaningRegistrar
         let prefs: ScheduledCleaningPreferenceStore
         let defaults: UserDefaults
-        let name: String
         let clean: FakeScheduledClean
     }
 
+    private let suite = ThrowawayDefaults()
+
     private func makeHarness(enabledAt: Date, enabled: Bool = true) -> Harness {
-        let name = "io.getpurge.tests.schedule.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
+        let defaults = suite.defaults
         defaults.set(enabledAt, forKey: Self.enabledAtKey)
 
         let prefs = ScheduledCleaningPreferenceStore(userDefaults: defaults)
@@ -51,11 +50,7 @@ struct ScheduledCleaningScheduleTests {
             performClean: { clean.run() },
             rearm: {}
         )
-        return Harness(registrar: registrar, prefs: prefs, defaults: defaults, name: name, clean: clean)
-    }
-
-    private func cleanup(_ h: Harness) {
-        h.defaults.removePersistentDomain(forName: h.name)
+        return Harness(registrar: registrar, prefs: prefs, defaults: defaults, clean: clean)
     }
 
     private func anchor(_ h: Harness) -> Date? {
@@ -73,7 +68,6 @@ struct ScheduledCleaningScheduleTests {
     ])
     func dueDateHonorsCustomInterval(amount: Int, unit: CustomCleaningIntervalUnit, seconds: TimeInterval) {
         let h = makeHarness(enabledAt: enabledAt)
-        defer { cleanup(h) }
 
         h.prefs.frequency = .custom
         h.prefs.customIntervalAmount = amount
@@ -86,7 +80,6 @@ struct ScheduledCleaningScheduleTests {
     @Test("Preset frequency still gates the due date")
     func presetGatesDueDate() {
         let h = makeHarness(enabledAt: enabledAt)
-        defer { cleanup(h) }
 
         h.prefs.frequency = .monthly
         #expect(h.registrar.dueDate(referenceDate: enabledAt) == enabledAt.addingTimeInterval(30 * 86_400))
@@ -96,7 +89,6 @@ struct ScheduledCleaningScheduleTests {
     @Test("No clean fires before the interval elapses")
     func noCleanBeforeDue() async {
         let h = makeHarness(enabledAt: enabledAt)
-        defer { cleanup(h) }
 
         h.prefs.frequency = .custom
         h.prefs.customIntervalAmount = 3
@@ -114,7 +106,6 @@ struct ScheduledCleaningScheduleTests {
     @Test("A clean fires once when the interval has elapsed")
     func cleanFiresWhenDue() async {
         let h = makeHarness(enabledAt: enabledAt)
-        defer { cleanup(h) }
 
         h.prefs.frequency = .custom
         h.prefs.customIntervalAmount = 3
@@ -133,7 +124,6 @@ struct ScheduledCleaningScheduleTests {
     @Test("The anchor advances one interval after a clean")
     func anchorAdvancesByOneInterval() async {
         let h = makeHarness(enabledAt: enabledAt)
-        defer { cleanup(h) }
 
         h.prefs.frequency = .custom
         h.prefs.customIntervalAmount = 3
@@ -154,7 +144,6 @@ struct ScheduledCleaningScheduleTests {
     @Test("Next clean date clamps an overdue schedule to now")
     func nextCleanDateClampsOverdue() {
         let h = makeHarness(enabledAt: enabledAt)
-        defer { cleanup(h) }
 
         h.prefs.frequency = .custom
         h.prefs.customIntervalAmount = 1
@@ -168,7 +157,6 @@ struct ScheduledCleaningScheduleTests {
     @Test("Disabled schedule never cleans")
     func disabledNeverCleans() async {
         let h = makeHarness(enabledAt: enabledAt, enabled: false)
-        defer { cleanup(h) }
 
         h.prefs.frequency = .custom
         h.prefs.customIntervalAmount = 1
@@ -185,7 +173,6 @@ struct ScheduledCleaningScheduleTests {
     @Test("Run now cleans immediately and stamps the anchor")
     func runNowIgnoresDueDate() async {
         let h = makeHarness(enabledAt: enabledAt)
-        defer { cleanup(h) }
 
         h.prefs.frequency = .custom
         h.prefs.customIntervalAmount = 3

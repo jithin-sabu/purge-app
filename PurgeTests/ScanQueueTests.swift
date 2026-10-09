@@ -124,15 +124,10 @@ struct LaunchScanPlanTests {
 @Suite("Scan records survive a relaunch")
 struct ScanRecordStoreTests {
 
-    private func makeDefaults() -> UserDefaults {
-        let name = "io.getpurge.tests.scanrecords.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
-        return defaults
-    }
+    private let suite = ThrowawayDefaults()
 
     @Test func aSavedRecordReadsBack() {
-        let store = ScanRecordStore(defaults: makeDefaults())
+        let store = ScanRecordStore(defaults: suite.defaults)
         let record = ScanRecord(completedAt: Date(timeIntervalSince1970: 1_800_000_000), bytes: 38_600_000_000, count: 14)
         store.save(record, for: .largeFiles)
         #expect(store.record(for: .largeFiles) == record)
@@ -140,7 +135,7 @@ struct ScanRecordStoreTests {
     }
 
     @Test func allRecordsReturnsOnlyWhatWasSaved() {
-        let store = ScanRecordStore(defaults: makeDefaults())
+        let store = ScanRecordStore(defaults: suite.defaults)
         let record = ScanRecord(completedAt: Date(), bytes: 5, count: 2)
         store.save(record, for: .leftovers)
         let all = store.allRecords()
@@ -149,7 +144,7 @@ struct ScanRecordStoreTests {
     }
 
     @Test func aRecordSavedBeforeSafeBytesStillReads() {
-        let defaults = makeDefaults()
+        let defaults = suite.defaults
         let old = #"{"completedAt":800000000,"bytes":4000000000,"count":58}"#
         defaults.set(Data(old.utf8), forKey: ScanRecordStore.key(for: .appCaches))
         let record = ScanRecordStore(defaults: defaults).record(for: .appCaches)
@@ -158,14 +153,14 @@ struct ScanRecordStoreTests {
     }
 
     @Test func safeBytesReadBack() {
-        let store = ScanRecordStore(defaults: makeDefaults())
+        let store = ScanRecordStore(defaults: suite.defaults)
         let record = ScanRecord(completedAt: Date(timeIntervalSince1970: 1_800_000_000), bytes: 4, count: 2, safeBytes: 3)
         store.save(record, for: .devTools)
         #expect(store.record(for: .devTools)?.safeBytes == 3)
     }
 
     @Test func aCorruptValueReadsAsNoRecord() {
-        let defaults = makeDefaults()
+        let defaults = suite.defaults
         defaults.set(Data("not json".utf8), forKey: ScanRecordStore.key(for: .apps))
         #expect(ScanRecordStore(defaults: defaults).record(for: .apps) == nil)
     }

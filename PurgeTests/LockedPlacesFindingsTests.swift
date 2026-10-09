@@ -58,10 +58,10 @@ struct LockedPlacesFindingsTests {
     }
 
     @Test
-    func grantCountsOnceAndOnlyAfterRecordedDenial() throws {
-        let suite = "purge-tests-access-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+    func grantCountsOnceAndOnlyAfterRecordedDenial() {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let defaults = suite.defaults
         let store = PurgeStore()
 
         // First launch ever: nothing recorded, so no grant to announce.
@@ -75,10 +75,10 @@ struct LockedPlacesFindingsTests {
     }
 
     @Test
-    func installThatAlwaysHadAccessNeverAnnouncesAGrant() throws {
-        let suite = "purge-tests-access-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+    func installThatAlwaysHadAccessNeverAnnouncesAGrant() {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let defaults = suite.defaults
         let store = PurgeStore()
 
         store.hasFullDiskAccess = true
