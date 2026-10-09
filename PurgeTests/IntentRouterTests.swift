@@ -22,10 +22,6 @@ struct IntentRouterTests {
         IntentRouter(store: store, reveal: { reveals.count += 1 }, onboardingDone: { onboardingDone })
     }
 
-    private static func makeStore() -> PurgeStore {
-        PurgeStore(defaults: UserDefaults(suiteName: "purge-tests-\(UUID().uuidString)")!)
-    }
-
     // MARK: Scan for Junk
 
     @Test("Scanning while idle runs the limited scan without Full Disk Access")
@@ -281,7 +277,9 @@ struct IntentRouterTests {
 
     @Test("Before onboarding is done uninstall only opens the window")
     func uninstallBeforeOnboarding() async {
-        let store = Self.makeStore()
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let store = PurgeStore(defaults: suite.defaults)
         let reveals = RevealCounter()
         var reviewed = false
         let router = IntentRouter(

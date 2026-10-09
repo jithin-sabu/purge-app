@@ -217,8 +217,9 @@ struct OrphanLeftoverScanPolicyTests {
 
     @Test
     func showAllKeepsMinimumSafetyWindow() {
-        let defaults = UserDefaults(suiteName: "orphan.tests.showall")!
-        defaults.removePersistentDomain(forName: "orphan.tests.showall")
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let defaults = suite.defaults
         defaults.set(DevToolsStalenessOption.showAll.rawValue, forKey: DevToolsStalenessOption.userDefaultsKey)
         let days = OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults)
         #expect(days == OrphanLeftoverScanPolicy.minimumStaleDaysFloor)
@@ -226,8 +227,9 @@ struct OrphanLeftoverScanPolicyTests {
 
     @Test
     func configuredWindowIsRespectedAboveFloor() {
-        let defaults = UserDefaults(suiteName: "orphan.tests.window")!
-        defaults.removePersistentDomain(forName: "orphan.tests.window")
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let defaults = suite.defaults
         defaults.set(DevToolsStalenessOption.twelveMonths.rawValue, forKey: DevToolsStalenessOption.userDefaultsKey)
         #expect(OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults) == 365)
     }

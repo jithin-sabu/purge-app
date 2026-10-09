@@ -135,8 +135,9 @@ struct CleanFailureReasonTests {
 @Suite("TimeTagline fact part")
 struct TimeTaglineFactPartTests {
     @Test func selectionExposesFactAndQuip() {
-        let defaults = UserDefaults(suiteName: "TimeTaglineTests.fact")!
-        defaults.removePersistentDomain(forName: "TimeTaglineTests.fact")
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let defaults = suite.defaults
 
         let selection = TimeTagline.select(for: 2, defaults: defaults)
         #expect(selection.factPart == "done in 2 seconds")
