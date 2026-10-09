@@ -2468,7 +2468,7 @@ final class PurgeStore: ObservableObject {
         if names.count == 1 {
             return String(localized: "\(names[0]) is still open, so it was left installed. Quit it and try again.")
         }
-        let list = names.joined(separator: ", ")
+        let list = names.joined(separator: String(localized: ", "))
         return String(localized: "These apps are still open, so they were left installed: \(list). Quit them and try again.")
     }
 

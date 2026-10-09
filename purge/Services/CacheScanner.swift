@@ -637,7 +637,7 @@ nonisolated final class CacheScanner {
         // the Crash Reports folder inside it is never sized or cleaned twice.
         [
             (
-                "Crash Reports",
+                String(localized: "Crash Reports"),
                 home.appendingPathComponent(
                     "Library/Logs/DiagnosticReports",
                     isDirectory: true

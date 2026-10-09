@@ -402,9 +402,9 @@ struct AppCachesView<PageHeader: View>: View {
             Image(systemName: "externaldrive.badge.checkmark")
                 .font(.system(size: 38))
                 .foregroundStyle(AppColors.textSecondary)
-            Text(scanPhase == .completed ? "Your Mac is looking clean." : "No Caches Found")
+            Text(scanPhase == .completed ? LocalizedStringKey("Your Mac is looking clean.") : LocalizedStringKey("No Caches Found"))
                 .font(AppStyle.Typography.sectionTitle.weight(.regular))
-            Text(scanPhase == .completed ? "Check back later." : "Run a scan to inspect recoverable application caches.")
+            Text(scanPhase == .completed ? LocalizedStringKey("Check back later.") : LocalizedStringKey("Run a scan to inspect recoverable application caches."))
                 .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

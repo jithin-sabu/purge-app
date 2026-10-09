@@ -1289,7 +1289,7 @@ struct LargeFileDeletionConfirmSheet: View {
     private func groupLabel(_ group: DuplicateGroup) -> String {
         guard let fileID = group.fileIDs.first,
               let file = files.first(where: { $0.id == fileID }) else {
-            return "these files"
+            return String(localized: "these files")
         }
         return file.displayName
     }
@@ -1530,7 +1530,7 @@ struct DuplicateCleanupSheet: View {
     private func setCard(_ set: DuplicateCopySet) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: AppStyle.Spacing.xSmall) {
-                Text(set.copies.first?.displayName ?? "Duplicate set")
+                Text(set.copies.first?.displayName ?? String(localized: "Duplicate set"))
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
@@ -1593,7 +1593,7 @@ struct DuplicateCleanupSheet: View {
     /// Reuses the app's tag palette: green for the copy that stays, red for the
     /// ones headed to Trash, so the plan reads at a glance.
     private func statusTag(isKeeper: Bool) -> some View {
-        Text(isKeeper ? "Keep" : "Trash")
+        Text(isKeeper ? LocalizedStringKey("Keep") : LocalizedStringKey("Trash"))
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(isKeeper ? AppColors.statusSafeText : AppColors.statusDangerText)
             .padding(.horizontal, AppStyle.Spacing.xSmall)

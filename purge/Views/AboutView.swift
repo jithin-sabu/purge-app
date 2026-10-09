@@ -291,8 +291,12 @@ struct AboutView: View {
 
     private static let buildDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM yyyy"
-        formatter.locale = Locale(identifier: "en_GB")
+        if Locale.current.language.languageCode?.identifier == "en" {
+            formatter.dateFormat = "d MMM yyyy"
+            formatter.locale = Locale(identifier: "en_GB")
+        } else {
+            formatter.dateStyle = .medium
+        }
         return formatter
     }()
 

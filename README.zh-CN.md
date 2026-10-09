@@ -79,7 +79,7 @@
 
 在 **设置 → 开发项目** 中，选择 **超过此时间视为未使用**（1 个月到 2 年，或显示全部），来控制显示哪些项目。时间从项目内任何内容最后一次变动算起，包括 git 活动，而不是看 `node_modules` 或 `target` 的日期。正在使用的项目，例如其中正运行着终端或开发服务器，或正在执行 git 命令，永远不会出现。
 
-由 AI 编程工具（Cursor、Codex、Conductor、T3 Code 和 Claude Code）创建的 Git 工作树，只有在其仓库不再列出它们之后，才会出现在 **Orphaned Git Worktrees** 下。Git 仍在使用的工作树无论多旧都不会出现，终端或智能体正在其中工作的工作树同样不会出现。
+由 AI 编程工具（Cursor、Codex、Conductor、T3 Code 和 Claude Code）创建的 Git 工作树，只有在其仓库不再列出它们之后，才会出现在 **孤立 Git 工作树（Orphaned Git Worktrees）** 下。Git 仍在使用的工作树无论多旧都不会出现，终端或智能体正在其中工作的工作树同样不会出现。
 
 ### 大文件（Large Files）
 

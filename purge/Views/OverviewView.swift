@@ -682,7 +682,7 @@ private struct OverviewSnapshotConfirmation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
-                Text(count == 1 ? "Remove 1 Time Machine snapshot?" : "Remove \(count) Time Machine snapshots?")
+                Text(count == 1 ? LocalizedStringKey("Remove 1 Time Machine snapshot?") : LocalizedStringKey("Remove \(count) Time Machine snapshots?"))
                     .font(AppStyle.Typography.sectionTitle)
                     .foregroundStyle(AppColors.textPrimary)
                 Text("Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need for your next backup. Backups on your backup disk aren't touched.")
@@ -991,7 +991,7 @@ struct OverviewScanButton: View {
         .buttonStyle(.purge(.secondary))
         .keyboardShortcut("r", modifiers: [.command])
         .disabled(isFinishingCacheScan || store.isDeleting)
-        .help(queue.isRunning ? "Stop scanning" : "Scan App Caches, Dev Tools, Large Files and apps, one after another")
+        .help(queue.isRunning ? LocalizedStringKey("Stop scanning") : LocalizedStringKey("Scan App Caches, Dev Tools, Large Files and apps, one after another"))
     }
 
     private var title: String {
@@ -1044,8 +1044,8 @@ struct OverviewCleanSafeButton: View {
             .buttonStyle(.purge(.primary))
             .disabled(!isReady || store.isDeleting || isCleaning)
             .help(isReady
-                ? "Move every Safe item in App Caches and Dev Tools to the Trash"
-                : "Waiting for App Caches and Dev Tools to finish scanning")
+                ? LocalizedStringKey("Move every Safe item in App Caches and Dev Tools to the Trash")
+                : LocalizedStringKey("Waiting for App Caches and Dev Tools to finish scanning"))
             .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
                 OverviewCleanSafeConfirmation(
                     breakdown: store.overviewBreakdown(

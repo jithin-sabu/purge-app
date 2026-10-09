@@ -86,14 +86,14 @@ enum SafetyAllowlistSummary {
 
         let personalLabels = personalFileBoundaryLabels
         if !personalLabels.isEmpty {
-            parts.append(String(localized: "personal files (\(personalLabels.joined(separator: ", ")))") )
+            parts.append(String(localized: "personal files (\(personalLabels.joined(separator: String(localized: ", "))))") )
         }
 
         guard !parts.isEmpty else {
             return String(localized: "What Purge never touches: paths outside the allowlist")
         }
 
-        return String(localized: "What Purge never touches: \(parts.joined(separator: ", "))")
+        return String(localized: "What Purge never touches: \(parts.joined(separator: String(localized: ", ")))")
     }
 
     /// Friendly labels for user-content roots pulled from never-delete policy paths.

@@ -6,7 +6,7 @@ struct UninstallAppIntent: AppIntent {
         "Opens Purge's uninstall review for this app, listing the app and everything it leaves behind. Nothing is removed until you confirm in Purge.",
         searchKeywords: [
             "uninstall", "remove", "delete", "get rid of", "trash", "uninstall app",
-            "remove app", "delete app", "app", "apps", "leftovers",
+            "remove app", "delete app", "application", "applications", "leftovers",
         ]
     )
     static let openAppWhenRun = true

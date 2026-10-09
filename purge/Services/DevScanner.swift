@@ -260,7 +260,7 @@ nonisolated final class DevScanner {
                 let stateString = dict["state"] as? String ?? ""
                 if stateString == "Booted" { continue }
 
-                let name = dict["name"] as? String ?? "Simulator"
+                let name = dict["name"] as? String ?? String(localized: "Simulator")
                 let isAvailable = (dict["isAvailable"] as? Bool) ?? true
 
                 let lastBootedAt: Date?
@@ -343,7 +343,7 @@ nonisolated final class DevScanner {
             if let stateNum = plist["state"] as? Int, stateNum == 3 { continue }
             if let stateStr = plist["state"] as? String, stateStr == "Booted" { continue }
 
-            let name = plist["name"] as? String ?? "Simulator"
+            let name = plist["name"] as? String ?? String(localized: "Simulator")
             let runtimeKey = plist["runtime"] as? String ?? ""
             let runtimeVersion = Self.runtimeVersionLabel(from: runtimeKey)
 
@@ -356,14 +356,14 @@ nonisolated final class DevScanner {
                 isAvailable: isAvailable,
                 lastBootedAt: lastBootedAt,
                 deviceName: name,
-                runtimeVersion: runtimeVersion.isEmpty ? "Unknown runtime" : runtimeVersion
+                runtimeVersion: runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion
             )
 
             built.append(
                 SimulatorDevice(
                     id: id,
                     deviceName: name,
-                    runtimeVersion: runtimeVersion.isEmpty ? "Unknown runtime" : runtimeVersion,
+                    runtimeVersion: runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion,
                     isAvailable: isAvailable,
                     lastBootedAt: lastBootedAt,
                     sizeOnDisk: nil,
@@ -388,7 +388,7 @@ nonisolated final class DevScanner {
     }
 
     private nonisolated static func runtimeVersionLabel(from runtimeKey: String) -> String {
-        guard !runtimeKey.isEmpty else { return "Unknown runtime" }
+        guard !runtimeKey.isEmpty else { return String(localized: "Unknown runtime") }
         guard let range = runtimeKey.range(of: "SimRuntime.") else {
             return runtimeKey.replacingOccurrences(of: "-", with: " ")
         }

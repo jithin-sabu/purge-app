@@ -6,7 +6,7 @@ struct CleanupHistorySummaryRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.trigger == .scheduled ? "Automatic clean" : "Manual clean")
+                Text(entry.trigger == .scheduled ? LocalizedStringKey("Automatic clean") : LocalizedStringKey("Manual clean"))
                     .font(scheduleStatusPrimaryFont)
                     .foregroundStyle(AppColors.textPrimary)
 
