@@ -1,34 +1,36 @@
-name: Rebuild purgemac.com
+name: Site safety page
 
-# purgemac.com builds its changelog, download link and /safety page from this
-# repo's releases, so it has to rebuild whenever a release changes.
-#
-# /safety is generated from DeletionSafetyPolicy.swift, explanations.json and
-# ProjectArtifactCatalog.swift at the release tag. Before the deploy hook fires,
-# the site is built here from that tag, so a rename that the site's parser can't
-# read fails this workflow instead of failing silently inside Cloudflare. After
-# the hook fires, the live page is polled until it shows the new version.
+# purgemac.com/safety is generated from these files. Build it from this
+# branch so a change the site can't read is caught on the pull request,
+# not on release day.
 
 on:
-  release:
-    types: [published, edited, deleted]
+  pull_request:
+    paths:
+      - purge/Services/DeletionSafetyPolicy.swift
+      - purge/Resources/explanations.json
+      - purge/Models/ProjectArtifactCatalog.swift
+      - .github/workflows/site-safety-page.yml
+  push:
+    branches: [main]
+    paths:
+      - purge/Services/DeletionSafetyPolicy.swift
+      - purge/Resources/explanations.json
+      - purge/Models/ProjectArtifactCatalog.swift
+      - .github/workflows/site-safety-page.yml
 
 permissions:
   contents: read
 
 jobs:
-  verify:
-    name: Build the site from this release
-    # The site only lists full releases, and a deleted tag can't be checked out.
-    if: ${{ !github.event.release.prerelease && github.event.action != 'deleted' }}
+  build:
+    name: Build /safety from this branch
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Check out the release
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-          ref: ${{ github.event.release.tag_name }}
           path: app
 
       - name: Check the site token can read purge-landing-page
@@ -84,50 +86,8 @@ jobs:
         working-directory: site
         run: npm ci
 
-      - name: Build /safety from the checked-out source
+      - name: Build
         working-directory: site
         env:
           SAFETY_SOURCE_DIR: ${{ github.workspace }}/app
-          SAFETY_SOURCE_REF: ${{ github.event.release.tag_name }}
         run: npm run build
-
-      - name: Confirm the page carries this version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: grep -Fq -- "As of $RELEASE_TAG" site/out/safety.html
-
-  rebuild:
-    name: Deploy and confirm
-    needs: verify
-    # Run on delete too, where verify is skipped on purpose.
-    if: ${{ always() && !github.event.release.prerelease && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Trigger the Cloudflare Pages deploy hook
-        env:
-          DEPLOY_HOOK: ${{ secrets.LANDING_DEPLOY_HOOK }}
-        run: |
-          if [ -z "$DEPLOY_HOOK" ]; then
-            echo "::error::LANDING_DEPLOY_HOOK is not set, so purgemac.com was not rebuilt."
-            exit 1
-          fi
-          curl --fail-with-body -sS -X POST "$DEPLOY_HOOK"
-
-      - name: Wait for purgemac.com/safety to show the latest release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # After an edit or delete the latest release may not be this event's
-          # tag, so ask the API what the site should now be showing.
-          EXPECTED=$(gh api repos/${{ github.repository }}/releases/latest --jq .tag_name)
-          echo "Expecting purgemac.com/safety to show: As of $EXPECTED"
-          for i in $(seq 1 40); do
-            if curl -fsSL --max-time 20 "https://purgemac.com/safety?t=$(date +%s)" | grep -Fq -- "As of $EXPECTED"; then
-              echo "purgemac.com/safety shows $EXPECTED"
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "::error::purgemac.com/safety still does not show $EXPECTED after 10 minutes. Check the Cloudflare Pages build log."
-          exit 1
