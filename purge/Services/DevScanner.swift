@@ -1404,7 +1404,8 @@ nonisolated final class DevScanner {
         case .command(let template):
             return template.replacingOccurrences(of: "{root}", with: root.path)
         case .guidance(let text):
-            return text
+            // Fixed English sentences from the catalog; looked up for display only.
+            return Bundle.main.localizedString(forKey: text, value: text, table: nil)
         case .nodePackageManager:
             let pm = NodePackageManager.detect(in: root)
             return "cd \"\(root.path)\" && \(pm.installCommand)"

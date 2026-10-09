@@ -69,7 +69,7 @@ enum FinderReveal {
 
         let urls = locations.map(\.url)
         entries.append(
-            .action(title: urls.count == 1 ? "Copy Path" : "Copy Paths") {
+            .action(title: urls.count == 1 ? String(localized: "Copy Path") : String(localized: "Copy Paths")) {
                 copyPaths(urls)
             }
         )

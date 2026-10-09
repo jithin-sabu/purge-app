@@ -147,11 +147,11 @@ enum UserOverridesStore {
         let explanation: String
         switch level {
         case .safe:
-            explanation = "You marked this as Safe to Clean."
+            explanation = String(localized: "You marked this as Safe to Clean.")
         case .medium:
-            explanation = "You marked this as Check First."
+            explanation = String(localized: "You marked this as Check First.")
         case .unknown:
-            explanation = "You marked this as Not Sure."
+            explanation = String(localized: "You marked this as Not Sure.")
         }
 
         return SafetyInfo(

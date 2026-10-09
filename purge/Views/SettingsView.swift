@@ -752,9 +752,9 @@ struct SettingsView: View {
         case .measured(let bytes):
             excludedSizeText(formatBytes(bytes))
         case .missing:
-            excludedSizeText("Not found")
+            excludedSizeText(String(localized: "Not found"))
         case .unmeasurable:
-            excludedSizeText("Can\u{2019}t measure")
+            excludedSizeText(String(localized: "Can\u{2019}t measure"))
                 .help("Purge couldn\u{2019}t read this folder to measure it. It\u{2019}s still excluded.")
         case nil:
             SkeletonBar(width: 56, height: 12)
@@ -780,7 +780,7 @@ struct SettingsView: View {
             let total = ExcludedPathsTotal.compute(paths: entries.map(\.path), sizes: excludedPathSizes)
             if total.isComplete {
                 // A folder `du` couldn't read makes the sum a floor, not a total.
-                Text(total.hasUnmeasured ? "At least \(formatBytes(total.bytes))" : formatBytes(total.bytes))
+                Text(total.hasUnmeasured ? String(localized: "At least \(formatBytes(total.bytes))") : formatBytes(total.bytes))
                     .font(scheduleStatusPrimaryFont)
                     .foregroundStyle(AppColors.textPrimary)
                     .monospacedDigit()
@@ -817,8 +817,8 @@ struct SettingsView: View {
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
-        panel.prompt = "Exclude"
-        panel.message = "Purge won\u{2019}t scan or clean anything inside the folders you choose."
+        panel.prompt = String(localized: "Exclude")
+        panel.message = String(localized: "Purge won\u{2019}t scan or clean anything inside the folders you choose.")
         panel.begin { response in
             guard response == .OK else { return }
             store.excludeFoldersFromScans(panel.urls)

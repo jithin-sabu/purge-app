@@ -29,12 +29,12 @@ enum MenuScanNotifier {
     static func notifyScanResult(readyBytes bytes: Int64) async {
         guard await ScheduledCleanupNotifier.requestAuthorizationIfNeeded() else { return }
         let content = UNMutableNotificationContent()
-        content.title = "Scan complete"
+        content.title = String(localized: "Scan complete")
         if bytes > 0 {
-            content.body = "\(formatBytes(bytes)) ready to clean."
+            content.body = String(localized: "\(formatBytes(bytes)) ready to clean.")
             content.categoryIdentifier = categoryIdentifier
         } else {
-            content.body = "You're all clear."
+            content.body = String(localized: "You're all clear.")
         }
         content.sound = .default
         await deliver(content)
@@ -43,8 +43,8 @@ enum MenuScanNotifier {
     static func notifyCleaned(bytesMovedToTrash bytes: Int64) async {
         guard await ScheduledCleanupNotifier.requestAuthorizationIfNeeded() else { return }
         let content = UNMutableNotificationContent()
-        content.title = "Moved \(formatBytes(bytes)) to Trash"
-        content.body = "Empty the trash to reclaim the space."
+        content.title = String(localized: "Moved \(formatBytes(bytes)) to Trash")
+        content.body = String(localized: "Empty the trash to reclaim the space.")
         content.sound = .default
         await deliver(content)
     }

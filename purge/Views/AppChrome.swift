@@ -682,7 +682,7 @@ struct SafeCleanupCelebrationOverlay: View {
                         .multilineTextAlignment(.center)
                     }
 
-                    Button(doneTitle, action: onDone)
+                    Button(LocalizedStringKey(doneTitle), action: onDone)
                         .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
                     .keyboardShortcut(.defaultAction)
                     .disabled(!footerVisible)
