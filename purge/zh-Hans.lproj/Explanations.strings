@@ -174,7 +174,7 @@
 
 /* parsecd */
 "Siri Knowledge Engine" = "Siri 知识引擎";
-"This is used by a background Apple service that helps Siri and Spotlight understand natural language queries. It is safe to delete and will be rebuilt automatically." = "帮助 Siri 和 聚焦 理解自然语言查询的 Apple 后台服务使用的数据。可以安全删除，会自动重建。";
+"This is used by a background Apple service that helps Siri and Spotlight understand natural language queries. It is safe to delete and will be rebuilt automatically." = "帮助 Siri 和“聚焦”理解自然语言查询的 Apple 后台服务使用的数据。可以安全删除，会自动重建。";
 
 /* passd */
 "Apple Wallet Passes" = "Apple 钱包凭证";
@@ -202,7 +202,7 @@
 
 /* spotlight */
 "Spotlight Search" = "聚焦搜索";
-"This is the data Spotlight uses to search your Mac. Nothing is lost, but search results will be slow or incomplete until macOS finishes rebuilding the index, which can take a while." = "聚焦 用于搜索 Mac 的数据。不会丢失内容，但 macOS 完成索引重建前，搜索结果可能较慢或不完整；重建可能需要一些时间。";
+"This is the data Spotlight uses to search your Mac. Nothing is lost, but search results will be slow or incomplete until macOS finishes rebuilding the index, which can take a while." = "“聚焦”用于搜索 Mac 的数据。不会丢失内容，但 macOS 完成索引重建前，搜索结果可能较慢或不完整；重建可能需要一些时间。";
 
 /* tipsd */
 "macOS Tips App" = "macOS 提示应用";
@@ -630,7 +630,7 @@
 
 /* spotify */
 "Spotify" = "Spotify 应用";
-"Songs and artwork Spotify saved while you listened. Only shown when you have nothing downloaded for offline listening, since Spotify keeps those downloads close by. Safe to delete; Spotify streams and saves them again as you listen." = "Spotify 在你聆听时保存的歌曲与封面。仅在没有离线下载内容时显示，因为 Spotify 将离线下载保存在附近位置。可以安全删除；继续聆听时，Spotify 会重新在线播放并保存。";
+"Songs and artwork Spotify saved while you listened. Only shown when you have nothing downloaded for offline listening, since Spotify keeps those downloads close by. Safe to delete; Spotify streams and saves them again as you listen." = "Spotify 在你聆听时保存的歌曲与封面。仅在没有离线下载内容时显示，因为 Spotify 的离线下载内容也保存在这里。可以安全删除；继续聆听时，Spotify 会重新在线播放并保存。";
 
 /* whatsapp */
 "WhatsApp" = "WhatsApp 应用";
@@ -878,7 +878,7 @@
 
 /* spotlight-profiles-cache */
 "Spotlight Profile Cache" = "聚焦配置缓存";
-"Spotlight index profile data. Nothing is lost, but Spotlight rebuilds it afterwards and search can be slower or incomplete in the meantime." = "聚焦索引配置数据。不会丢失内容，但 聚焦 之后会重建；期间搜索可能较慢或不完整。";
+"Spotlight index profile data. Nothing is lost, but Spotlight rebuilds it afterwards and search can be slower or incomplete in the meantime." = "聚焦索引配置数据。不会丢失内容，但“聚焦”之后会重建；期间搜索可能较慢或不完整。";
 
 /* elixir-build */
 "Elixir Build Output" = "Elixir 构建输出";
@@ -1122,7 +1122,7 @@
 
 /* puppeteer-browsers */
 "Puppeteer Browsers" = "Puppeteer 浏览器";
-"Browsers Puppeteer downloaded for automated testing. Your scripts fail until the browser is installed again, which happens on your next npm install or with npx puppeteer browsers install." = "Puppeteer 为自动化测试下载的浏览器。重新安装浏览器前，脚本会失败；下次 npm install 时，或运行 npx puppeteer browsers install，可重新安装。";
+"Browsers Puppeteer downloaded for automated testing. Your scripts fail until the browser is installed again, which happens on your next npm install or with npx puppeteer browsers install." = "Puppeteer 为自动化测试下载的浏览器。重新安装浏览器前，脚本会失败；下次运行 npm install 时会自动重新安装，也可以运行 npx puppeteer browsers install 手动安装。";
 
 /* conda-packages */
 "Conda Package Cache" = "Conda 软件包缓存";
