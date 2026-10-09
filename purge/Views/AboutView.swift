@@ -306,11 +306,11 @@ struct AboutView: View {
     }()
 
     private var reportBugURL: URL {
-        URL(string: "mailto:design@jithinsabu.com?subject=Purge%20Bug%20Report")!
+        URL(string: "mailto:jithin@purgemac.com?subject=Purge%20Bug%20Report")!
     }
 
     private var featureRequestURL: URL {
-        URL(string: "mailto:design@jithinsabu.com?subject=Purge%20Feature%20Request")!
+        URL(string: "mailto:jithin@purgemac.com?subject=Purge%20Feature%20Request")!
     }
 
     private var xProfileURL: URL {
