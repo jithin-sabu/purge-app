@@ -12,6 +12,8 @@ import UserNotifications
 @MainActor
 final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
     let updater = PurgeUpdater()
+    /// Kept alive here: `NSApp.servicesProvider` is an unretained reference.
+    private let uninstallService = FinderUninstallService()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         LaunchContext.captureLaunchKind()
@@ -26,6 +28,10 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         // Not in the window's `onAppear`: menu-bar-only mode can launch windowless,
         // and the status item still needs live models behind it.
         AppBootstrapper.bootstrapOnce()
+        // Finder's "Uninstall with Purge": a request that launched Purge is
+        // delivered once this returns, so the provider must be set here.
+        NSApp.servicesProvider = uninstallService
+        ServicesMenuRegistration.refreshIfNeeded()
 
         if LaunchContext.shouldSuppressInitialWindow(
             // Read the key directly rather than touching `.shared`: building the
@@ -65,8 +71,14 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    /// `purge://` links from the deleted-apps watcher, and app bundles dropped
+    /// on the Dock icon (`CFBundleDocumentTypes` in Info.plist).
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
+        let dropped = urls.filter(\.isFileURL)
+        if !dropped.isEmpty {
+            ExternalUninstallHandler.handle(urls: dropped)
+        }
+        for url in urls where !url.isFileURL {
             RemovedAppMonitor.shared.handleOpenURL(url)
         }
     }
