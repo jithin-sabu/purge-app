@@ -350,6 +350,7 @@ struct SettingsView: View {
             settingsToggleRow(
                 title: "Uninstall with Purge in Finder's right-click menu",
                 caption: finderServiceCaption,
+                warning: finderService.flushFailed ? finderServiceFlushWarning : nil,
                 isOn: Binding(
                     get: { finderService.isEnabled },
                     set: { enabled in Task { await finderService.setEnabled(enabled) } }
@@ -360,6 +361,12 @@ struct SettingsView: View {
         // The same switch lives in System Settings, so read it again each time
         // this page comes into view.
         .onAppear { finderService.refresh() }
+    }
+
+    /// The setting is saved, but Finder reads it through a cache Purge could
+    /// not clear, so the menu lags until macOS rebuilds it at login.
+    private var finderServiceFlushWarning: String {
+        "Saved, but Finder may keep showing the old state until you log out and back in."
     }
 
     private var finderServiceCaption: String {

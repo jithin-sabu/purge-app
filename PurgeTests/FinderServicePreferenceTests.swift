@@ -13,10 +13,14 @@ struct FinderServicePreferenceTests {
 
     private final class FlushCounter {
         var count = 0
+        var succeeds = true
     }
 
     private func makePreference(flushes: FlushCounter = FlushCounter()) -> FinderServicePreference {
-        FinderServicePreference(defaults: suite.defaults, statusKey: key, flush: { flushes.count += 1 })
+        FinderServicePreference(defaults: suite.defaults, statusKey: key, flush: {
+            flushes.count += 1
+            return flushes.succeeds
+        })
     }
 
     @Test("The entry is keyed the way pbs keys it")
@@ -57,6 +61,7 @@ struct FinderServicePreferenceTests {
 
         #expect(preference.isEnabled)
         #expect(flushes.count == 1)
+        #expect(!preference.flushFailed)
         #expect(!preference.isApplying)
         let entry = suite.defaults.dictionary(forKey: "NSServicesStatus")?[key] as? [String: Any]
         #expect(entry?["enabled_context_menu"] as? Bool == true)
@@ -91,6 +96,26 @@ struct FinderServicePreferenceTests {
         let kept = status?[terminal] as? [String: Any]
         #expect(kept?["enabled_context_menu"] as? Bool == true)
         #expect(kept?["enabled_services_menu"] as? Bool == false)
+    }
+
+    @Test("A failed flush keeps the saved setting but says Finder may lag")
+    func flushFailureIsReported() async {
+        let flushes = FlushCounter()
+        flushes.succeeds = false
+        let preference = makePreference(flushes: flushes)
+
+        await preference.setEnabled(true)
+
+        #expect(preference.flushFailed)
+        #expect(preference.isEnabled)
+        let entry = suite.defaults.dictionary(forKey: "NSServicesStatus")?[key] as? [String: Any]
+        #expect(entry?["enabled_context_menu"] as? Bool == true)
+
+        // The next flush that works clears the warning.
+        flushes.succeeds = true
+        await preference.setEnabled(false)
+        #expect(!preference.flushFailed)
+        #expect(!preference.isEnabled)
     }
 
     @Test("A change made in System Settings shows after a refresh")

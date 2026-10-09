@@ -36,12 +36,16 @@ final class FinderServicePreference: ObservableObject {
     @Published private(set) var isEnabled = false
     /// True while a change is being written and the cache flushed.
     @Published private(set) var isApplying = false
+    /// True when the last write went through but the Services cache could not
+    /// be flushed, so Finder keeps the old state until the next login. The
+    /// preference itself is saved either way.
+    @Published private(set) var flushFailed = false
 
     private let defaults: UserDefaults
     private let statusKey: String
-    private let flush: () async -> Void
+    private let flush: () async -> Bool
 
-    init(defaults: UserDefaults, statusKey: String, flush: @escaping () async -> Void) {
+    init(defaults: UserDefaults, statusKey: String, flush: @escaping () async -> Bool) {
         self.defaults = defaults
         self.statusKey = statusKey
         self.flush = flush
@@ -77,7 +81,7 @@ final class FinderServicePreference: ObservableObject {
         // Both menus, the same as the tick in System Settings. Shown
         // optimistically so the switch does not snap back during the flush.
         isEnabled = enabled
-        await flush()
+        flushFailed = !(await flush())
         refresh()
     }
 
@@ -92,8 +96,10 @@ final class FinderServicePreference: ObservableObject {
     /// `pbs -flush` drops the agent's cache so Finder rebuilds its menu from the
     /// preferences on the next right-click. `NSUpdateDynamicServices()` rescans
     /// providers but leaves that cache alone, so it is not enough here.
-    private static func flushServicesCache() async {
-        guard FileManager.default.isExecutableFile(atPath: flushPath) else { return }
-        _ = await ProcessRunner.runAsync(executablePath: flushPath, arguments: ["-flush"], timeout: 5)
+    /// False when pbs is missing, fails, or overruns its budget.
+    private static func flushServicesCache() async -> Bool {
+        guard FileManager.default.isExecutableFile(atPath: flushPath) else { return false }
+        let output = await ProcessRunner.runAsync(executablePath: flushPath, arguments: ["-flush"], timeout: 5)
+        return output?.succeeded ?? false
     }
 }
