@@ -38,6 +38,12 @@ enum ExternalUninstallHandler {
 @MainActor
 final class FinderUninstallService: NSObject {
 
+    /// The `NSMenuItem` title and `NSMessage` in Info.plist. pbs keys the
+    /// service's on/off entry on both (`FinderServicePreference`), so a change
+    /// here must be made in the plist too; a test checks they agree.
+    nonisolated static let menuTitle = "Uninstall with Purge"
+    nonisolated static let message = "uninstallWithPurge"
+
     @objc func uninstallWithPurge(
         _ pboard: NSPasteboard,
         userData: String,
