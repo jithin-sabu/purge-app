@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated func formatBytes(_ bytes: Int64) -> String {
-    guard bytes > 0 else { return "0 bytes" }
+    guard bytes > 0 else { return String(localized: "0 bytes") }
 
     let formatter = ByteCountFormatter()
     formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB, .useTB]
@@ -13,7 +13,7 @@ nonisolated func formatBytes(_ bytes: Int64) -> String {
 
 /// Formats volume figures for the storage sidebar — one decimal at most (e.g. "313.4 GB").
 func formatStorageBytes(_ bytes: Int64) -> String {
-    guard bytes > 0 else { return "0 bytes" }
+    guard bytes > 0 else { return String(localized: "0 bytes") }
 
     let units: [(threshold: Int64, suffix: String)] = [
         (1_000_000_000_000, "TB"),
@@ -30,7 +30,7 @@ func formatStorageBytes(_ bytes: Int64) -> String {
         return "\(whole).\(fraction) \(unit.suffix)"
     }
 
-    return "\(bytes) bytes"
+    return String(localized: "\(bytes) bytes")
 }
 
 /// Formats a ceiling, rounding **down** so the figure can never overstate.
@@ -39,7 +39,7 @@ func formatStorageBytes(_ bytes: Int64) -> String {
 /// promise more than exists. An "up to" figure has to under-promise by construction: the
 /// measured outcome must always be able to meet or beat it.
 nonisolated func formatBytesRoundedDown(_ bytes: Int64) -> String {
-    guard bytes > 0 else { return "0 bytes" }
+    guard bytes > 0 else { return String(localized: "0 bytes") }
 
     let units: [(threshold: Int64, suffix: String)] = [
         (1_000_000_000_000, "TB"),
@@ -57,5 +57,5 @@ nonisolated func formatBytesRoundedDown(_ bytes: Int64) -> String {
         return "\(whole).\(fraction) \(unit.suffix)"
     }
 
-    return "\(bytes) bytes"
+    return String(localized: "\(bytes) bytes")
 }

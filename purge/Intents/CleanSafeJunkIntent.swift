@@ -32,35 +32,36 @@ struct CleanSafeJunkIntent: AppIntent {
 extension IntentRouter.CleanOutcome {
     /// "Moved 1.61 GB of junk to the Trash." with the size in bold.
     var styledAnswer: AttributedString {
-        guard case .cleaned(let bytes, let failedCount) = self, bytes > 0 else { return AttributedString(dialog) }
-        var size = AttributedString(formatBytes(bytes))
-        size.inlinePresentationIntent = .stronglyEmphasized
-        return AttributedString("Moved ") + size + AttributedString(" of junk to the Trash.")
-            + AttributedString(Self.failureNote(failedCount))
+        guard case .cleaned(let bytes, _) = self, bytes > 0 else { return AttributedString(dialog) }
+        var answer = AttributedString(dialog)
+        if let sizeRange = answer.range(of: formatBytes(bytes)) {
+            answer[sizeRange].inlinePresentationIntent = .stronglyEmphasized
+        }
+        return answer
     }
 
     var dialog: String {
         switch self {
         case .needsSetup:
-            return "Finish setting up Purge first."
+            return String(localized: "Finish setting up Purge first.")
         case .busyCleaning:
-            return "Purge is already cleaning."
+            return String(localized: "Purge is already cleaning.")
         case .nothingToClean:
-            return "No junk to clean right now."
+            return String(localized: "No junk to clean right now.")
         case .stopped:
-            return "The scan stopped before it finished, so nothing was cleaned."
+            return String(localized: "The scan stopped before it finished, so nothing was cleaned.")
         case .cleaned(let bytes, let failedCount) where bytes > 0:
-            return "Moved \(formatBytes(bytes)) of junk to the Trash." + Self.failureNote(failedCount)
+            return String(localized: "Moved \(formatBytes(bytes)) of junk to the Trash.") + Self.failureNote(failedCount)
         case .cleaned:
-            return "Purge couldn't move the junk to the Trash. Open Purge to see why."
+            return String(localized: "Purge couldn't move the junk to the Trash. Open Purge to see why.")
         }
     }
 
     private static func failureNote(_ failedCount: Int) -> String {
         switch failedCount {
         case 0: return ""
-        case 1: return " 1 item couldn't be moved."
-        default: return " \(failedCount) items couldn't be moved."
+        case 1: return String(localized: " 1 item couldn't be moved.")
+        default: return String(localized: " \(failedCount) items couldn't be moved.")
         }
     }
 }

@@ -182,10 +182,8 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
 
         let content = UNMutableNotificationContent()
-        content.title = "Scheduled cleanup due"
-        content.body = """
-        Open Purge when you’re ready — safe items clear automatically soon after launch.
-        """
+        content.title = String(localized: "Scheduled cleanup due")
+        content.body = String(localized: "Open Purge when you’re ready — safe items clear automatically soon after launch.")
         content.sound = .default
 
         // One-shot reminder anchored to the canonical next-clean date. Re-armed by

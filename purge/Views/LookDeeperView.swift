@@ -136,7 +136,7 @@ struct LookDeeperView: View {
 
   private var scanningBody: some View {
     VStack(spacing: AppStyle.Spacing.small) {
-      OnboardingLoadingStepTitle(baseText: "Looking deeper")
+      OnboardingLoadingStepTitle(baseText: String(localized: "Looking deeper"))
       Text("Checking the places that were locked.")
         .font(AppStyle.Typography.sectionTitle.weight(.regular))
         .foregroundStyle(AppColors.textSecondary)

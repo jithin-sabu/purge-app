@@ -1022,8 +1022,8 @@ final class PurgeStore: ObservableObject {
                 manualDeletionSession = nil
             }
             errorMessage = trigger == .scheduled
-                ? "Scheduled cleaning couldn’t finish. Open the app to try manually."
-                : "Unable to clean selected items. Please try again."
+                ? String(localized: "Scheduled cleaning couldn’t finish. Open the app to try manually.")
+                : String(localized: "Unable to clean selected items. Please try again.")
         }
     }
 
@@ -1678,7 +1678,7 @@ final class PurgeStore: ObservableObject {
             recordCleanup(report, trigger: .manual, source: .largeFiles)
         } catch {
             manualDeletionSession = nil
-            errorMessage = "Unable to delete the selected files. Please try again."
+            errorMessage = String(localized: "Unable to delete the selected files. Please try again.")
         }
     }
 
@@ -1955,7 +1955,7 @@ final class PurgeStore: ObservableObject {
         guard removedAppLeftoverPlan?.id == plan.id else { return }
         removedAppLeftoverPlan = nil
         guard let checked else {
-            errorMessage = "\(plan.app.name) is on this Mac again, so its files were kept."
+            errorMessage = String(localized: "\(plan.app.name) is on this Mac again, so its files were kept.")
             return
         }
         await performLeftoverCleanup(items: checked.selectedItems)
@@ -2055,7 +2055,7 @@ final class PurgeStore: ObservableObject {
             recordCleanup(report, trigger: .manual, source: .leftovers)
         } catch {
             manualDeletionSession = nil
-            errorMessage = "Unable to remove the selected leftovers. Please try again."
+            errorMessage = String(localized: "Unable to remove the selected leftovers. Please try again.")
         }
     }
 
@@ -2334,8 +2334,8 @@ final class PurgeStore: ObservableObject {
             } catch {
                 manualDeletionSession = nil
                 let names = bundleRemovingApps.map(\.app.name)
-                let label = names.count == 1 ? names[0] : "the selected apps"
-                errorMessage = "Unable to remove \(label). Please try again."
+                let label = names.count == 1 ? names[0] : String(localized: "the selected apps")
+                errorMessage = String(localized: "Unable to remove \(label). Please try again.")
                 return
             }
         }
@@ -2495,10 +2495,10 @@ final class PurgeStore: ObservableObject {
     private func stillOpenMessage(_ apps: [InstalledApp]) -> String {
         let names = apps.map(\.name)
         if names.count == 1 {
-            return "\(names[0]) is still open, so it was left installed. Quit it and try again."
+            return String(localized: "\(names[0]) is still open, so it was left installed. Quit it and try again.")
         }
         let list = names.joined(separator: ", ")
-        return "These apps are still open, so they were left installed: \(list). Quit them and try again."
+        return String(localized: "These apps are still open, so they were left installed: \(list). Quit them and try again.")
     }
 
     /// Runs the access probe off the main actor.
@@ -3356,7 +3356,7 @@ final class PurgeStore: ObservableObject {
             if scheduledNotifications {
                 await ScheduledCleanupNotifier.notifyScheduledCleanFailed()
             } else {
-                errorMessage = "Unable to clean safe items. Please try again."
+                errorMessage = String(localized: "Unable to clean safe items. Please try again.")
             }
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
@@ -4547,11 +4547,11 @@ final class PurgeStore: ObservableObject {
     private func manualOverrideExplanation(level: SafetyLevel) -> String {
         switch level {
         case .safe:
-            return "You marked this as Safe to Clean."
+            return String(localized: "You marked this as Safe to Clean.")
         case .medium:
-            return "You marked this as Check First."
+            return String(localized: "You marked this as Check First.")
         case .unknown:
-            return "You marked this as Not Sure."
+            return String(localized: "You marked this as Not Sure.")
         }
     }
 }

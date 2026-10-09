@@ -39,23 +39,25 @@ extension IntentRouter.ScanOutcome {
     /// The answer Spotlight shows, with the size in bold.
     var styledAnswer: AttributedString {
         guard case .scanned(let bytes) = self, bytes > 0 else { return AttributedString(dialog) }
-        var size = AttributedString(formatBytes(bytes))
-        size.inlinePresentationIntent = .stronglyEmphasized
-        return AttributedString("Found ") + size + AttributedString(" of junk that's safe to clean.")
+        var answer = AttributedString(dialog)
+        if let sizeRange = answer.range(of: formatBytes(bytes)) {
+            answer[sizeRange].inlinePresentationIntent = .stronglyEmphasized
+        }
+        return answer
     }
 
     var dialog: String {
         switch self {
         case .needsSetup:
-            return "Finish setting up Purge first."
+            return String(localized: "Finish setting up Purge first.")
         case .busyCleaning:
-            return "Purge is cleaning right now. Scan again when it's done."
+            return String(localized: "Purge is cleaning right now. Scan again when it's done.")
         case .scanned(let bytes) where bytes > 0:
-            return "Found \(formatBytes(bytes)) of junk that's safe to clean."
+            return String(localized: "Found \(formatBytes(bytes)) of junk that's safe to clean.")
         case .scanned:
-            return "No junk to clean right now."
+            return String(localized: "No junk to clean right now.")
         case .stopped:
-            return "The scan stopped before it finished."
+            return String(localized: "The scan stopped before it finished.")
         }
     }
 }

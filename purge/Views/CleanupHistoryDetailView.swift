@@ -55,7 +55,7 @@ struct CleanupHistoryDetailView: View {
 
     private var movedToTrashSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel("Moved to Trash")
+            sectionLabel(String(localized: "Moved to Trash"))
 
             historySectionCard {
                 ForEach(Array(entry.deletedItems.enumerated()), id: \.element.id) { index, item in
@@ -72,7 +72,7 @@ struct CleanupHistoryDetailView: View {
 
     private var skippedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel("Skipped")
+            sectionLabel(String(localized: "Skipped"))
 
             historySectionCard {
                 ForEach(Array(entry.skippedItems.enumerated()), id: \.element.id) { index, item in
@@ -130,7 +130,7 @@ struct CleanupHistoryDetailView: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
-                Text(item.reason)
+                Text(Bundle.main.localizedString(forKey: item.reason, value: item.reason, table: nil))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

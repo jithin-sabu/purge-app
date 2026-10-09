@@ -13,7 +13,7 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
     let safetyInfo: SafetyInfo
 
     var formattedSize: String {
-        guard let sizeOnDisk else { return "Calculating…" }
+        guard let sizeOnDisk else { return String(localized: "Calculating…") }
         return formatBytes(sizeOnDisk)
     }
 

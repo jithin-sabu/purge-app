@@ -111,8 +111,8 @@ struct AboutView: View {
         iconTapCount = 0
         developerModeEnabled.toggle()
         devModeFlash = developerModeEnabled
-            ? "Developer mode enabled"
-            : "Developer mode disabled"
+            ? String(localized: "Developer mode enabled")
+            : String(localized: "Developer mode disabled")
         let message = devModeFlash
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             if devModeFlash == message { devModeFlash = nil }
