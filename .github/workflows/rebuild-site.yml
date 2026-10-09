@@ -13,20 +13,25 @@ on:
   release:
     types: [published, edited, deleted]
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: Build the site from this release
     # The site only lists full releases, and a deleted tag can't be checked out.
     if: ${{ !github.event.release.prerelease && github.event.action != 'deleted' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out the release
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           ref: ${{ github.event.release.tag_name }}
           path: app
 
-      - name: Check the site token is set
+      - name: Check the site token can read purge-landing-page
         env:
           LANDING_REPO_TOKEN: ${{ secrets.LANDING_REPO_TOKEN }}
         run: |
@@ -34,15 +39,26 @@ jobs:
             echo "::error::LANDING_REPO_TOKEN is not set. purge-landing-page is private, so this job needs a fine-grained token with read access to its contents."
             exit 1
           fi
+          # Prints who the token belongs to and whether it can see the repo, so
+          # a token scoped to the wrong account or repository fails here with
+          # a reason instead of as "Not Found" inside actions/checkout.
+          LOGIN=$(curl -sS --max-time 20 -H "Authorization: Bearer $LANDING_REPO_TOKEN" https://api.github.com/user | jq -r '.login // "unknown"')
+          STATUS=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $LANDING_REPO_TOKEN" https://api.github.com/repos/jithin-sabu/purge-landing-page)
+          echo "Token belongs to: $LOGIN. GET /repos/jithin-sabu/purge-landing-page -> $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::LANDING_REPO_TOKEN ($LOGIN) cannot read jithin-sabu/purge-landing-page (HTTP $STATUS). Give the token 'Only select repositories' access to purge-landing-page with Contents: Read-only."
+            exit 1
+          fi
 
       - name: Check out purgemac.com
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           repository: jithin-sabu/purge-landing-page
           token: ${{ secrets.LANDING_REPO_TOKEN }}
           path: site
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
           cache: npm
@@ -60,7 +76,9 @@ jobs:
         run: npm run build
 
       - name: Confirm the page carries this version
-        run: grep -q "As of ${{ github.event.release.tag_name }}" site/out/safety.html
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: grep -Fq -- "As of $RELEASE_TAG" site/out/safety.html
 
   rebuild:
     name: Deploy and confirm
@@ -68,6 +86,7 @@ jobs:
     # Run on delete too, where verify is skipped on purpose.
     if: ${{ always() && !github.event.release.prerelease && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Trigger the Cloudflare Pages deploy hook
         env:
@@ -88,7 +107,7 @@ jobs:
           EXPECTED=$(gh api repos/${{ github.repository }}/releases/latest --jq .tag_name)
           echo "Expecting purgemac.com/safety to show: As of $EXPECTED"
           for i in $(seq 1 40); do
-            if curl -fsSL "https://purgemac.com/safety?t=$(date +%s)" | grep -q "As of $EXPECTED"; then
+            if curl -fsSL --max-time 20 "https://purgemac.com/safety?t=$(date +%s)" | grep -Fq -- "As of $EXPECTED"; then
               echo "purgemac.com/safety shows $EXPECTED"
               exit 0
             fi
