@@ -9,6 +9,8 @@ final class FakeScans {
     var holdsGeneral = false
     var holdsDeveloper = false
     var holdsFullAccessSteps = false
+    /// Yielded by a Dev Tools scan that is not held, before it finishes.
+    var developerEvents: [DeveloperScanEvent] = []
     private(set) var generalAccesses: [ScanAccess] = []
     private(set) var developerAccesses: [ScanAccess] = []
     /// Full Disk Access steps as they start, plus anything a test adds.
@@ -68,6 +70,7 @@ final class FakeScans {
                 if self.holdsDeveloper {
                     self.heldDeveloper.append(continuation)
                 } else {
+                    self.developerEvents.forEach { continuation.yield($0) }
                     continuation.finish()
                 }
                 return stream

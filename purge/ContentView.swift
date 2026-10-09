@@ -799,10 +799,11 @@ struct ContentView: View {
     private var devToolsVisibleItemCount: Int {
         let tools = store.devTools.filter(devToolVisible).count
         let sims = store.simulatorDevices.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
+        let runtimes = store.simulatorRuntimes.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
         let artifacts = store.projectGroups.reduce(0) { sum, group in
             sum + group.artifacts.filter(projectArtifactVisible).count
         }
-        return tools + sims + artifacts
+        return tools + sims + runtimes + artifacts
     }
 
     private var devToolsVisibleByteSize: Int64 {
@@ -812,12 +813,15 @@ struct ContentView: View {
         let sims = store.simulatorDevices
             .filter { devToolsSafetyFilter.matches($0.safetyInfo) }
             .reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
+        let runtimes = store.simulatorRuntimes
+            .filter { devToolsSafetyFilter.matches($0.safetyInfo) }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
         let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
             sum + group.artifacts
                 .filter(projectArtifactVisible)
                 .reduce(Int64(0)) { $0 + $1.sizeBytes }
         }
-        return tools + sims + artifacts
+        return tools + sims + runtimes + artifacts
     }
 
     private func devToolVisible(_ tool: DevTool) -> Bool {

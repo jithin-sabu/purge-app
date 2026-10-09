@@ -162,6 +162,9 @@ extension PurgeStore {
             for device in simulatorDevices where device.safetyInfo.level != .unknown {
                 items.append(OverviewSizedItem(path: device.folderURL.path, bytes: device.sizeOnDisk ?? 0))
             }
+            for runtime in simulatorRuntimes where runtime.safetyInfo.level != .unknown {
+                items.append(OverviewSizedItem(path: runtime.locationURL.path, bytes: runtime.sizeBytes))
+            }
             for artifact in projectGroups.flatMap(\.artifacts) where artifact.safetyInfo.level != .unknown {
                 items.append(OverviewSizedItem(path: artifact.path.path, bytes: artifact.sizeBytes))
             }

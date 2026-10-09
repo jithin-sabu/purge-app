@@ -201,6 +201,37 @@ struct DevToolsView<PageHeader: View>: View {
         visibleSimulatorIndices().reduce(Int64(0)) { $0 + (store.simulatorDevices[$1].sizeOnDisk ?? 0) }
     }
 
+    private var runtimeSectionVisible: Bool {
+        store.simulatorRuntimes.contains { artifactVisible($0.safetyInfo) }
+    }
+
+    private func visibleRuntimeIndices() -> [Int] {
+        store.simulatorRuntimes.indices.filter { artifactVisible(store.simulatorRuntimes[$0].safetyInfo) }
+    }
+
+    private func sortedVisibleRuntimeIndices() -> [Int] {
+        let raw = visibleRuntimeIndices()
+        let list = store.simulatorRuntimes
+        switch currentSort {
+        case .sizeDesc:
+            return raw.sorted { list[$0].sizeBytes > list[$1].sizeBytes }
+        case .sizeAsc:
+            return raw.sorted { list[$0].sizeBytes < list[$1].sizeBytes }
+        case .dateNewest:
+            return raw.sorted { (list[$0].lastUsedAt ?? .distantPast) > (list[$1].lastUsedAt ?? .distantPast) }
+        case .dateOldest:
+            return raw.sorted { (list[$0].lastUsedAt ?? .distantPast) < (list[$1].lastUsedAt ?? .distantPast) }
+        case .nameAZ:
+            return raw.sorted {
+                list[$0].safetyInfo.headline.localizedCaseInsensitiveCompare(list[$1].safetyInfo.headline) == .orderedAscending
+            }
+        }
+    }
+
+    private func runtimeSectionByteTotal() -> Int64 {
+        visibleRuntimeIndices().reduce(Int64(0)) { $0 + store.simulatorRuntimes[$1].sizeBytes }
+    }
+
     private func mergedStandardRowEntries() -> [MergedDevStandardRow] {
         let tools = sortedStandardToolIndices()
         var rows: [MergedDevStandardRow] = tools.map { .tool(id: store.devTools[$0].id, index: $0) }
@@ -372,6 +403,7 @@ struct DevToolsView<PageHeader: View>: View {
         case tool(String)
         case artifact(groupID: String, artifactID: String)
         case simulator(UUID)
+        case runtime(String)
     }
 
     /// Every visible row in one list, so Select All treats tools, project artifacts
@@ -407,6 +439,15 @@ struct DevToolsView<PageHeader: View>: View {
                 bytes: device.sizeOnDisk ?? 0
             ))
         }
+        for ri in visibleRuntimeIndices() {
+            let runtime = store.simulatorRuntimes[ri]
+            entries.append(.init(
+                key: .runtime(runtime.id),
+                isSafe: runtime.safetyInfo.level == .safe,
+                isSelected: sel.simulatorRuntimeIDs.contains(runtime.id),
+                bytes: runtime.sizeBytes
+            ))
+        }
         return SafeFirstSelectAll(entries: entries, filter: currentSafetyFilter)
     }
 
@@ -423,6 +464,8 @@ struct DevToolsView<PageHeader: View>: View {
             store.setProjectArtifactSelected(groupID: groupID, artifactID: artifactID, isSelected: isSelected)
         case .simulator(let id):
             store.setSimulatorDeviceSelected(id: id, isSelected: isSelected)
+        case .runtime(let id):
+            store.setSimulatorRuntimeSelected(id: id, isSelected: isSelected)
         }
     }
 
@@ -431,7 +474,8 @@ struct DevToolsView<PageHeader: View>: View {
         let toolIx = eligibleStandardToolIndices().filter { sel.devToolIDs.contains(store.devTools[$0].id) }.count
         let pairSelected = eligibleProjectArtifactPairs().filter { sel.artifactIDs.contains(store.projectGroups[$0.0].artifacts[$0.1].id) }.count
         let simSelected = visibleSimulatorIndices().filter { sel.simulatorIDs.contains(store.simulatorDevices[$0].id) }.count
-        return toolIx + pairSelected + simSelected
+        let runtimeSelected = visibleRuntimeIndices().filter { sel.simulatorRuntimeIDs.contains(store.simulatorRuntimes[$0].id) }.count
+        return toolIx + pairSelected + simSelected + runtimeSelected
     }
 
     private var selectedInScopeBytes: Int64 {
@@ -445,7 +489,10 @@ struct DevToolsView<PageHeader: View>: View {
         let simulatorBytes = visibleSimulatorIndices()
             .filter { sel.simulatorIDs.contains(store.simulatorDevices[$0].id) }
             .reduce(Int64(0)) { sum, index in sum + (store.simulatorDevices[index].sizeOnDisk ?? 0) }
-        return toolBytes + projectBytes + simulatorBytes
+        let runtimeBytes = visibleRuntimeIndices()
+            .filter { sel.simulatorRuntimeIDs.contains(store.simulatorRuntimes[$0].id) }
+            .reduce(Int64(0)) { sum, index in sum + store.simulatorRuntimes[index].sizeBytes }
+        return toolBytes + projectBytes + simulatorBytes + runtimeBytes
     }
 
     private func developerSafetySnapshotsForChipRow() -> [SafetyInfo] {
@@ -457,6 +504,9 @@ struct DevToolsView<PageHeader: View>: View {
         }
         for sim in store.simulatorDevices {
             infos.append(sim.safetyInfo)
+        }
+        for runtime in store.simulatorRuntimes {
+            infos.append(runtime.safetyInfo)
         }
         return infos
     }
@@ -499,6 +549,7 @@ struct DevToolsView<PageHeader: View>: View {
     private var nothingMatchesFilter: Bool {
         mergedStandardRowEntries().isEmpty
             && !simulatorSectionVisible
+            && !runtimeSectionVisible
             && filteredProjectGroupIndices().isEmpty
     }
 
@@ -507,6 +558,7 @@ struct DevToolsView<PageHeader: View>: View {
     private var developerTotalRowCount: Int {
         store.devTools.filter { $0.isDetected && $0.safetyInfo.level != .unknown }.count +
             store.simulatorDevices.filter { $0.safetyInfo.level != .unknown }.count +
+            store.simulatorRuntimes.filter { $0.safetyInfo.level != .unknown }.count +
             store.projectGroups.reduce(0) { sum, group in
                 sum + group.artifacts.filter { $0.safetyInfo.level != .unknown }.count
             }
@@ -515,10 +567,11 @@ struct DevToolsView<PageHeader: View>: View {
     private var developerVisibleItemCount: Int {
         let tools = filteredStandardToolIndices().count
         let sims = visibleSimulatorIndices().count
+        let runtimes = visibleRuntimeIndices().count
         let artifacts = filteredProjectGroupIndices().reduce(0) { sum, gi in
             sum + sortedVisibleArtifactIndices(forGroup: gi).count
         }
-        return tools + sims + artifacts
+        return tools + sims + runtimes + artifacts
     }
 
     private var developerTotalByteSize: Int64 {
@@ -527,11 +580,14 @@ struct DevToolsView<PageHeader: View>: View {
         let sims = store.simulatorDevices
             .filter { $0.safetyInfo.level != .unknown }
             .reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
+        let runtimes = store.simulatorRuntimes
+            .filter { $0.safetyInfo.level != .unknown }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
         let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
             sum + group.artifacts.filter { $0.safetyInfo.level != .unknown }
                 .reduce(Int64(0)) { $0 + $1.sizeBytes }
         }
-        return tools + sims + artifacts
+        return tools + sims + runtimes + artifacts
     }
 
     private var developerVisibleByteSize: Int64 {
@@ -544,6 +600,9 @@ struct DevToolsView<PageHeader: View>: View {
         }
         if simulatorSectionVisible {
             sum += simulatorSectionByteTotal()
+        }
+        if runtimeSectionVisible {
+            sum += runtimeSectionByteTotal()
         }
         for gi in filteredProjectGroupIndices() {
             let g = store.projectGroups[gi]
@@ -833,6 +892,54 @@ struct DevToolsView<PageHeader: View>: View {
                 }
             }
 
+            if runtimeSectionVisible {
+                Section {
+                    simulatorRuntimesSectionHeader
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+
+                    ForEach(sortedVisibleRuntimeIndices().map { store.simulatorRuntimes[$0].id }, id: \.self) { runtimeID in
+                        if let runtime = store.simulatorRuntimes.first(where: { $0.id == runtimeID }) {
+                            ScanSelectionScope(
+                                selection: store.scanSelection,
+                                isSelected: { $0.simulatorRuntimeIDs.contains(runtime.id) }
+                            ) { selected in
+                                ScanResultRow(
+                                    isSelected: selected,
+                                    onToggle: {
+                                        store.setSimulatorRuntimeSelected(
+                                            id: runtime.id,
+                                            isSelected: !store.scanSelection.simulatorRuntimeIDs.contains(runtime.id)
+                                        )
+                                    },
+                                    primaryLabel: runtime.safetyInfo.headline,
+                                    formattedSize: runtime.formattedSize,
+                                    safetyInfo: runtime.safetyInfo,
+                                    brandIcon: .sfSymbol("internaldrive"),
+                                    detailCaption: "Build \(runtime.build)",
+                                    reinstallSafety: .notApplicable,
+                                    showUncommittedRepoChanges: false,
+                                    onResetToAutomatic: nil,
+                                    onExcludeFromScans: { store.excludeFromScans(runtime) },
+                                    revealLocations: {
+                                        [ScanRowLocation(url: runtime.locationURL, sizeBytes: runtime.sizeBytes)]
+                                    },
+                                    isUserOverride: false,
+                                    allowsBulkSelection: true,
+                                    isMetadataPending: false,
+                                    usesCompactExplanation: true
+                                )
+                            }
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(rowInsertionTransition)
+                        }
+                    }
+                }
+            }
+
             if !sortedProjectGroupIndices().isEmpty {
                 Section {
                     developerProjectsSectionHeader
@@ -921,6 +1028,14 @@ struct DevToolsView<PageHeader: View>: View {
     private var iosSimulatorsSectionHeader: some View {
         devToolsSectionHeader {
             Text("iOS Simulators")
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+        }
+    }
+
+    private var simulatorRuntimesSectionHeader: some View {
+        devToolsSectionHeader {
+            Text("Simulator Runtimes")
                 .font(AppStyle.Typography.metadataEmphasis)
                 .foregroundStyle(AppColors.textSecondary)
         }

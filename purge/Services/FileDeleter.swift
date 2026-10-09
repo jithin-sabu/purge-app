@@ -95,17 +95,38 @@ nonisolated struct DeletionReport: Identifiable {
     }
 }
 
+/// Outcome of asking CoreSimulator to remove a runtime image.
+nonisolated enum SimulatorRuntimeRemoval: Sendable, Equatable {
+    case removed
+    case failed(String)
+}
+
 /// Deletion engine. Runs off the main actor (`@concurrent`) so large removals
 /// never block the UI; progress reaches the UI via the `onProgress` buffer.
 nonisolated final class FileDeleter: Sendable {
+    typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) -> SimulatorRuntimeRemoval
+
+    /// How a simulator runtime row is removed. The live one calls `simctl`; tests
+    /// hand in a fake so the dispatch can be checked without CoreSimulator.
+    private let simulatorRuntimeRemover: SimulatorRuntimeRemover
+
+    init(simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = FileDeleter.removeSimulatorRuntime) {
+        self.simulatorRuntimeRemover = simulatorRuntimeRemover
+    }
+
     /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
     /// - Parameter pathToExpectedSizeBytes: Pre-scan sizes from deletion candidates; avoids re-measuring folders at delete time.
+    /// - Parameter simulatorRuntimeIDsByPath: Rows that are simulator runtimes, keyed by
+    ///   standardized path, with the image identifier `simctl runtime delete` takes. These
+    ///   never go near the filesystem policy: the path is a root-owned mount that only
+    ///   CoreSimulator may remove.
     /// - Parameter onProgress: Called on the engine's executor after each item starts / successfully
     ///   deletes. Must be cheap; UI publishing is buffered elsewhere.
     @concurrent func deleteItems(
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],
         pathToExpectedSizeBytes: [String: Int64] = [:],
+        simulatorRuntimeIDsByPath: [String: String] = [:],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
         var bytesMovedToTrash: Int64 = 0
@@ -119,6 +140,33 @@ nonisolated final class FileDeleter: Sendable {
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path
             let friendlyTitle = pathToDisplayName[standardizedPath]
+
+            if let runtimeID = simulatorRuntimeIDsByPath[standardizedPath] {
+                onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
+                // Never measured here: the location is an 8 GB mounted image, and
+                // the scan already carries what `simctl` reported.
+                let size = pathToExpectedSizeBytes[standardizedPath] ?? 0
+                switch simulatorRuntimeRemover(runtimeID) {
+                case .removed:
+                    bytesRemovedDirectly += size
+                    deletedItems.append(DeletedItem(
+                        path: url.path,
+                        sizeBytes: size,
+                        displayName: friendlyTitle,
+                        movedToTrash: false
+                    ))
+                    onProgress?(.itemDeleted(sizeBytes: size))
+                case .failed(let reason):
+                    NSLog("Purge: failed to delete simulator runtime %@ — %@", runtimeID, reason)
+                    failedItems.append(FailedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: .unknown,
+                        sizeBytes: size
+                    ))
+                }
+                continue
+            }
 
             guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { continue }
 
@@ -499,11 +547,55 @@ nonisolated final class FileDeleter: Sendable {
         return .failure("simctl delete failed (exit \(result.status))")
     }
 
+    /// `simctl runtime delete` hands the work to simdiskimaged and returns at once
+    /// with exit 0. The image is unmounted and dropped from the list a few seconds
+    /// later, so success is the identifier vanishing from `runtime list`, not the
+    /// exit code. Measured at 5 s for an 8 GB image; the budget leaves room for a
+    /// slow disk and the unmount retries the daemon makes when the volume is busy.
+    private static let simctlRuntimeDeleteTimeout: TimeInterval = 180
+    private static let simctlRuntimeListTimeout: TimeInterval = 30
+    private static let simctlRuntimePollInterval: TimeInterval = 1
+
+    /// Asks CoreSimulator to remove one runtime image, then waits for it to be gone.
+    static func removeSimulatorRuntime(identifier: String) -> SimulatorRuntimeRemoval {
+        guard let result = Simctl.run(["runtime", "delete", identifier], timeout: simctlRuntimeDeleteTimeout) else {
+            return .failed("Could not launch simctl")
+        }
+        if result.timedOut {
+            return .failed("simctl runtime delete timed out after \(Int(simctlRuntimeDeleteTimeout))s")
+        }
+        if result.status != 0 {
+            let errText = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .failed(errText.isEmpty ? "simctl runtime delete failed (exit \(result.status))" : errText)
+        }
+
+        let deadline = Date().addingTimeInterval(simctlRuntimeDeleteTimeout)
+        while Date() < deadline {
+            switch isSimulatorRuntimeListed(identifier) {
+            case .some(false):
+                return .removed
+            case .some(true), .none:
+                Thread.sleep(forTimeInterval: simctlRuntimePollInterval)
+            }
+        }
+        return .failed("runtime still listed after \(Int(simctlRuntimeDeleteTimeout))s")
+    }
+
+    /// `nil` when the list could not be read.
+    private static func isSimulatorRuntimeListed(_ identifier: String) -> Bool? {
+        guard let listing = Simctl.run(["runtime", "list", "-j"], timeout: simctlRuntimeListTimeout),
+              listing.succeeded,
+              let root = try? JSONSerialization.jsonObject(with: listing.stdout) as? [String: Any]
+        else { return nil }
+        return root[identifier] != nil
+    }
+
     /// Retries deletion for a single previously failed item.
     func retryDeleteItem(
         at url: URL,
         displayName: String?,
-        expectedSizeBytes: Int64
+        expectedSizeBytes: Int64,
+        simulatorRuntimeID: String? = nil
     ) async -> Result<Int64, CleanFailureReason> {
         let report: DeletionReport
         do {
@@ -511,7 +603,8 @@ nonisolated final class FileDeleter: Sendable {
             report = try await deleteItems(
                 at: [url],
                 pathToDisplayName: [key: displayName ?? url.lastPathComponent],
-                pathToExpectedSizeBytes: [key: expectedSizeBytes]
+                pathToExpectedSizeBytes: [key: expectedSizeBytes],
+                simulatorRuntimeIDsByPath: simulatorRuntimeID.map { [key: $0] } ?? [:]
             )
         } catch {
             return .failure(.unknown)
