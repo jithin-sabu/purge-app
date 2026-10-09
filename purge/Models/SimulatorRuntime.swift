@@ -43,11 +43,12 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     /// - Parameter deviceCountsByRuntimeIdentifier: from ``deviceCounts(fromDevicesList:)``;
     ///   `nil` when the device list could not be read, which keeps every row at Check First.
     /// - Parameter xcodeRuntimeBuilds: from ``xcodeRuntimeBuilds(fromMatchList:)``; the
-    ///   builds the selected Xcode creates new simulators on.
+    ///   builds the selected Xcode creates new simulators on. `nil` when that could not
+    ///   be read, which also keeps every row at Check First.
     static func parseRuntimeList(
         _ data: Data,
         deviceCountsByRuntimeIdentifier: [String: Int]?,
-        xcodeRuntimeBuilds: Set<String>,
+        xcodeRuntimeBuilds: Set<String>?,
         now: Date = Date()
     ) -> [SimulatorRuntime] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -92,7 +93,7 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
                 sizeBytes: sizeBytes,
                 lastUsedAt: lastUsedAt,
                 deviceCount: deviceCount,
-                isXcodeDefault: xcodeRuntimeBuilds.contains(build),
+                isXcodeDefault: xcodeRuntimeBuilds.map { $0.contains(build) },
                 isLegacyImage: !kind.hasPrefix("Patchable"),
                 now: now
             )
@@ -167,7 +168,8 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     /// Safe only when nothing uses the runtime: no simulator is built on it, Xcode
     /// does not create new simulators on it, and it has not been started in 30 days.
     /// A missing last-use date counts as unused, the same reading the simulator
-    /// device rows give a missing boot date.
+    /// device rows give a missing boot date. Anything that could not be checked
+    /// (`deviceCount` or `isXcodeDefault` nil) keeps the row at Check First.
     static func safetyInfo(
         platformName: String,
         version: String,
@@ -175,7 +177,7 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         sizeBytes: Int64,
         lastUsedAt: Date?,
         deviceCount: Int?,
-        isXcodeDefault: Bool,
+        isXcodeDefault: Bool?,
         isLegacyImage: Bool,
         now: Date = Date()
     ) -> SafetyInfo {
@@ -196,8 +198,17 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
             )
         }
 
-        if !state.isEmpty, state != "Ready" {
+        // `Unusable` is CoreSimulator's own verdict that the image cannot boot.
+        // Anything else that is not `Ready` is in flight (staging, mounting,
+        // unmounting) and is not offered as Safe on usage alone.
+        if state == "Unusable" {
             return info(.safe, "Xcode can no longer use this runtime.")
+        }
+        if !state.isEmpty, state != "Ready" {
+            return info(.medium, "Xcode lists it as \(state.lowercased()).")
+        }
+        guard let isXcodeDefault else {
+            return info(.medium, "Could not check whether Xcode uses it for new simulators.")
         }
         if isXcodeDefault {
             return info(.medium, "Xcode creates new simulators on this runtime.")

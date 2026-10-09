@@ -95,7 +95,7 @@ struct SimulatorRuntimeTests {
 
     private func parsed(
         deviceCounts: [String: Int]? = SimulatorRuntime.deviceCounts(fromDevicesList: Data(devicesJSON.utf8)),
-        xcodeBuilds: Set<String> = []
+        xcodeBuilds: Set<String>? = []
     ) -> [SimulatorRuntime] {
         SimulatorRuntime.parseRuntimeList(
             Data(Self.runtimeListJSON.utf8),
@@ -228,5 +228,26 @@ struct SimulatorRuntimeTests {
         )
         #expect(info.level == .safe)
         #expect(info.explanation.hasPrefix("Xcode can no longer use this runtime."))
+    }
+
+    /// A runtime still being staged or mounted is neither Ready nor Unusable. It is
+    /// not offered as Safe just because nothing has used it yet.
+    @Test func inFlightRuntimeStateIsCheckFirst() {
+        let info = SimulatorRuntime.safetyInfo(
+            platformName: "iOS", version: "26.6", state: "Mounting", sizeBytes: 8_000_000_000,
+            lastUsedAt: nil, deviceCount: 0, isXcodeDefault: false, isLegacyImage: false, now: Self.now
+        )
+        #expect(info.level == .medium)
+        #expect(info.explanation.hasPrefix("Xcode lists it as mounting."))
+    }
+
+    /// Without the match table "Xcode does not use it" cannot be claimed either.
+    @Test func unknownXcodeDefaultKeepsEveryRowAtCheckFirst() {
+        let list = parsed(xcodeBuilds: nil)
+        #expect(!list.isEmpty)
+        #expect(list.allSatisfy { $0.safetyInfo.level == .medium })
+        #expect(list.allSatisfy {
+            $0.safetyInfo.explanation.hasPrefix("Could not check whether Xcode uses it for new simulators.")
+        })
     }
 }
