@@ -775,7 +775,7 @@ struct SettingsView: View {
     private func excludedPathRow(entry: ExcludedPathEntry) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(Bundle.main.localizedString(forKey: CacheHeadline.localized(entry.displayName), value: nil, table: "Explanations"))
+                Text(Bundle.main.localizedString(forKey: CacheHeadline.localized(entry.displayName, cacheFolder: (entry.path as NSString).lastPathComponent), value: nil, table: "Explanations"))
                     .font(scheduleStatusPrimaryFont)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
