@@ -10,6 +10,7 @@ struct SettingsView: View {
     @ObservedObject private var registrar = ScheduledCleaningRegistrar.shared
     @ObservedObject private var history = CleanupHistoryStore.shared
     @ObservedObject private var removedApps = RemovedAppMonitor.shared
+    @ObservedObject private var finderService = FinderServicePreference.shared
     @AppStorage(DevToolsStalenessOption.userDefaultsKey)
     private var devToolsStalenessThresholdRaw = DevToolsStalenessOption.defaultOption.rawValue
     @AppStorage(AppearanceMode.userDefaultsKey)
@@ -42,6 +43,7 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 18) {
                     startupSection
+                    finderSection
                     deletedAppsSection
                     protectedAppRemovalSection
                     appearanceSection
@@ -341,6 +343,40 @@ struct SettingsView: View {
             get: { startup.hidesDockIcon },
             set: { startup.setHidesDockIcon($0) }
         )
+    }
+
+    private var finderSection: some View {
+        settingsSection("Finder") {
+            settingsToggleRow(
+                title: "Uninstall with Purge in Finder's right-click menu",
+                caption: finderServiceCaption,
+                warning: finderService.flushFailed ? finderServiceFlushWarning : nil,
+                isOn: Binding(
+                    get: { finderService.isEnabled },
+                    set: { enabled in Task { await finderService.setEnabled(enabled) } }
+                )
+            )
+            .disabled(finderService.isApplying)
+        }
+        // The same switch lives in System Settings, so read it again each time
+        // this page comes into view.
+        .onAppear { finderService.refresh() }
+    }
+
+    /// The setting is saved, but Finder reads it through a cache Purge could
+    /// not clear, so the menu lags until macOS rebuilds it at login.
+    private var finderServiceFlushWarning: String {
+        "Saved, but Finder may keep showing the old state until you log out and back in."
+    }
+
+    private var finderServiceCaption: String {
+        """
+        Right-click an app in Finder and choose Uninstall with Purge. Purge opens \
+        with that app and everything it left behind, ready to review. macOS keeps \
+        this off until you turn it on here, or under System Settings > Keyboard > \
+        Keyboard Shortcuts > Services. Dropping an app on Purge's Dock icon does \
+        the same and needs no setup.
+        """
     }
 
     private var deletedAppsSection: some View {
