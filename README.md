@@ -115,7 +115,7 @@ Purge assigns a safety label to every item it recognizes:
 | ✅ **Safe to Clean** | Known cache or rebuildable artifact, safe to remove |
 | ⚠️ **Check First** | May be safe, but could cause inconvenience |
 
-Filter with **All**, **Safe to Clean**, or **Check First** (⌘1–⌘3). Sort by size, date modified, or name.
+Filter with **All**, **Safe to Clean**, or **Check First** (⌥⌘1–⌥⌘3). Sort by size, date modified, or name.
 
 Unidentified folders are left out of the list entirely. Purge only shows what it knows about.
 
@@ -149,7 +149,8 @@ The labels and explanations are there to be checked, not read cover to cover. Se
 |----------|--------|
 | ⌘R | Scan the current tab (Scan Everything on the Overview) |
 | ⇧⌘R | Scan Everything, from any tab |
-| ⌘1–⌘3 | Filter by All, Safe to Clean, or Check First |
+| ⌘1–⌘5 | Go to Overview, App Caches, Dev Tools, Large Files, or App Uninstaller |
+| ⌥⌘1–⌥⌘3 | Filter by All, Safe to Clean, or Check First |
 | ⌘F | Search on Large Files and App Uninstaller |
 
 ---
