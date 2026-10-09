@@ -94,13 +94,13 @@ struct OverviewView: View {
         }
         segments.append(OverviewDiskBar.Segment(
             id: OverviewDiskBar.everythingElseID,
-            label: "Everything else",
+            label: String(localized: "Everything else"),
             bytes: breakdown.everythingElseBytes,
             color: AppColors.Chart.everythingElse
         ))
         segments.append(OverviewDiskBar.Segment(
             id: OverviewDiskBar.freeID,
-            label: "Free",
+            label: String(localized: "Free"),
             bytes: breakdown.freeBytes,
             color: AppColors.Chart.freeSpace
         ))
@@ -132,8 +132,8 @@ struct OverviewView: View {
             OverviewPlainRow(
                 symbol: "ellipsis",
                 color: AppColors.Chart.everythingElse,
-                title: "Everything else",
-                detail: "macOS, your documents and photos, and files Purge doesn't sort",
+                title: String(localized: "Everything else"),
+                detail: String(localized: "macOS, your documents and photos, and files Purge doesn't sort"),
                 bytes: breakdown.everythingElseBytes,
                 share: breakdown.share(of: breakdown.everythingElseBytes),
                 linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
@@ -151,8 +151,8 @@ struct OverviewView: View {
             InsetCardDivider()
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
-                title: "Free",
-                detail: "Available for new files",
+                title: String(localized: "Free"),
+                detail: String(localized: "Available for new files"),
                 bytes: breakdown.freeBytes,
                 share: breakdown.share(of: breakdown.freeBytes),
                 linkedState: linkedRowState(OverviewDiskBar.freeID)
@@ -187,15 +187,14 @@ struct OverviewView: View {
         // emptying it would not change anything the page shows.
         if trashStore.access == .readable, trashStore.trashBytes >= Self.trashNoteThresholdBytes {
             lines.append(
-                "\(formatBytes(trashStore.trashBytes)) of the used space is already in the Trash, "
-                    + "including iCloud Drive. Emptying it in Finder frees it."
+                String(localized: "\(formatBytes(trashStore.trashBytes)) of the used space is already in the Trash, including iCloud Drive. Emptying it in Finder frees it.")
             )
         }
         if schedule.isEnabled {
             let next = ScheduledCleaningRegistrar.shared.nextCleanDate(referenceDate: now)
             let day = relativeDateText(for: next, referenceDate: now)
             let time = next.formatted(date: .omitted, time: .shortened)
-            lines.append("Next scheduled clean: \(day) at \(time)")
+            lines.append(String(localized: "Next scheduled clean: \(day) at \(time)"))
         }
         return lines
     }
@@ -230,7 +229,7 @@ private struct OverviewCategoryRow: View {
                     Text(OverviewCategoryStyle.name(category))
                         .font(AppStyle.Typography.headline)
                     if OverviewCategoryStyle.isReview(category), showsFigure {
-                        AppBadge(text: "Review first", tone: .warning)
+                        AppBadge(text: String(localized: "Review first"), tone: .warning)
                     }
                 }
                 statusLine
@@ -273,7 +272,7 @@ private struct OverviewCategoryRow: View {
 
     private var scanTimeHelp: String {
         guard phase == .ready || phase == .notScanned, let record else { return "" }
-        return "Scanned \(compactAgoText(from: record.completedAt, to: now))"
+        return String(localized: "Scanned \(compactAgoText(from: record.completedAt, to: now))")
     }
 
     private var showsFigure: Bool {
@@ -326,19 +325,19 @@ private struct OverviewCategoryRow: View {
     private var statusText: String {
         switch phase {
         case .needsAccess:
-            return "Needs Full Disk Access"
+            return String(localized: "Needs Full Disk Access")
         case .scanning:
             if category == .apps, !store.isScanningInstalledApps {
-                return "Measuring each app and its files…"
+                return String(localized: "Measuring each app and its files…")
             }
-            return "Scanning…"
+            return String(localized: "Scanning…")
         case .waiting:
-            return "Up next"
+            return String(localized: "Up next")
         case .notScanned:
             if let record, isRecorded {
                 return recordedDetail(record)
             }
-            return "Not scanned yet"
+            return String(localized: "Not scanned yet")
         case .ready:
             return liveDetail
         }
@@ -358,20 +357,20 @@ private struct OverviewCategoryRow: View {
                 return now.timeIntervalSince(opened) > 90 * 24 * 60 * 60
             }.count
             return unused > 0
-                ? "\(unused) not opened in 90 days"
-                : "\(totals.count) \(totals.count == 1 ? "app" : "apps")"
+                ? String(localized: "\(unused) not opened in 90 days")
+                : String(localized: "\(totals.count) \(totals.count == 1 ? String(localized: "app") : String(localized: "apps"))")
         case .leftovers:
-            guard totals.count > 0 else { return "Nothing left behind" }
-            return "\(totals.count) \(totals.count == 1 ? "item" : "items")"
+            guard totals.count > 0 else { return String(localized: "Nothing left behind") }
+            return String(localized: "\(totals.count) \(totals.count == 1 ? String(localized: "item") : String(localized: "items"))")
         }
     }
 
     private func largeFilesDetail(count: Int) -> String {
-        "\(count) \(count == 1 ? "file" : "files") over \(LargeFileSizeThreshold.current().label)"
+        String(localized: "\(count) \(count == 1 ? String(localized: "file") : String(localized: "files")) over \(LargeFileSizeThreshold.current().label)")
     }
 
     private func cacheDetail(safeBytes: Int64) -> String {
-        safeBytes > 0 ? "\(formatBytes(safeBytes)) safe to clean" : "Nothing safe to clean"
+        safeBytes > 0 ? String(localized: "\(formatBytes(safeBytes)) safe to clean") : String(localized: "Nothing safe to clean")
     }
 
     /// The same fact as the live line, where the record holds it.
@@ -381,14 +380,14 @@ private struct OverviewCategoryRow: View {
             if let safeBytes = record.safeBytes {
                 return cacheDetail(safeBytes: safeBytes)
             }
-            return "\(record.count) \(record.count == 1 ? "item" : "items")"
+            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "item") : String(localized: "items"))")
         case .leftovers:
-            guard record.count > 0 else { return "Nothing left behind" }
-            return "\(record.count) \(record.count == 1 ? "item" : "items")"
+            guard record.count > 0 else { return String(localized: "Nothing left behind") }
+            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "item") : String(localized: "items"))")
         case .largeFiles:
             return largeFilesDetail(count: record.count)
         case .apps:
-            return "\(record.count) \(record.count == 1 ? "app" : "apps")"
+            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "app") : String(localized: "apps"))")
         }
     }
 
@@ -471,9 +470,9 @@ private struct OverviewPlainRow: View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: symbol, color: color)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(AppStyle.Typography.headline)
-                Text(detail)
+                Text(LocalizedStringKey(detail))
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -516,9 +515,7 @@ private struct OverviewSnapshotRow: View {
     @State private var isShowingInfo = false
 
     /// What the row is about, for the many people who have never heard of snapshots.
-    private static let info = "Time Machine saves a snapshot every hour so you can get files back without "
-        + "your backup disk. Old ones keep deleted files around and count as System Data. Remove keeps "
-        + "the newest and the one from your last backup, which Time Machine may still need."
+    private static let info = String(localized: "Time Machine saves a snapshot every hour so you can get files back without your backup disk. Old ones keep deleted files around and count as System Data. Remove keeps the newest and the one from your last backup, which Time Machine may still need.")
 
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "timeMachineSnapshots"
@@ -535,7 +532,7 @@ private struct OverviewSnapshotRow: View {
                         .font(AppStyle.Typography.headline)
                     infoButton
                 }
-                Text(detail)
+                Text(LocalizedStringKey(detail))
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -580,8 +577,7 @@ private struct OverviewSnapshotRow: View {
         } else if showsDiskUtility {
             Button("Open Disk Utility") { Self.openDiskUtility() }
                 .buttonStyle(.purge(.secondary, size: .small))
-                .help("Purge keeps the newest snapshot, which Time Machine may need. If you're sure you don't, "
-                    + "choose View > Show APFS Snapshots in Disk Utility to delete it.")
+                .help(String(localized: "Purge keeps the newest snapshot, which Time Machine may need. If you're sure you don't, choose View > Show APFS Snapshots in Disk Utility to delete it."))
         }
     }
 
@@ -627,38 +623,38 @@ private struct OverviewSnapshotRow: View {
     private var detail: String {
         switch snapshotStore.currentRemovalOutcome {
         case .removed(let removed, let freedBytes):
-            var text = removed == 1 ? "Removed 1" : "Removed \(removed)"
-            if let freedBytes { text += " and freed \(formatBytes(freedBytes))" }
-            return text + ", kept the newest"
+            var text = removed == 1 ? String(localized: "Removed 1") : String(localized: "Removed \(removed)")
+            if let freedBytes { text += String(localized: " and freed \(formatBytes(freedBytes))") }
+            return text + String(localized: ", kept the newest")
         case .someLeft(let removed, let left):
-            return "Removed \(removed), but \(left) couldn't be removed"
+            return String(localized: "Removed \(removed), but \(left) couldn't be removed")
         case .noneRemoved:
-            return "These couldn't be removed. Try again, or use Disk Utility."
+            return String(localized: "These couldn't be removed. Try again, or use Disk Utility.")
         case .unverified:
-            return "Couldn't check what was removed. Try again in a moment."
+            return String(localized: "Couldn't check what was removed. Try again in a moment.")
         case nil:
             break
         }
         guard let snapshots else {
-            return snapshotStore.hasTriedReading ? "Couldn't check right now" : "Checking..."
+            return snapshotStore.hasTriedReading ? String(localized: "Couldn't check right now") : String(localized: "Checking...")
         }
         guard let oldest = snapshots.oldest else {
-            return "None on this Mac right now"
+            return String(localized: "None on this Mac right now")
         }
         let when = Self.dayText(oldest, now: now)
         if snapshots.count == 1 {
-            return "1 on this Mac, from \(when), kept for the next backup"
+            return String(localized: "1 on this Mac, from \(when), kept for the next backup")
         }
-        return "\(snapshots.count) on this Mac, the oldest from \(when)"
+        return String(localized: "\(snapshots.count) on this Mac, the oldest from \(when)")
     }
 
     /// "today", "yesterday", or a short date.
     static func dayText(_ date: Date, now: Date) -> String {
         let calendar = Calendar.current
-        if calendar.isDate(date, inSameDayAs: now) { return "today" }
+        if calendar.isDate(date, inSameDayAs: now) { return String(localized: "today") }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
            calendar.isDate(date, inSameDayAs: yesterday) {
-            return "yesterday"
+            return String(localized: "yesterday")
         }
         return date.formatted(.dateTime.month(.abbreviated).day())
     }
@@ -689,9 +685,7 @@ private struct OverviewSnapshotConfirmation: View {
                 Text(count == 1 ? "Remove 1 Time Machine snapshot?" : "Remove \(count) Time Machine snapshots?")
                     .font(AppStyle.Typography.sectionTitle)
                     .foregroundStyle(AppColors.textPrimary)
-                Text("Snapshots may hold the only copy of files you changed or deleted since your last backup. "
-                    + "Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need "
-                    + "for your next backup. Backups on your backup disk aren't touched.")
+                Text("Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need for your next backup. Backups on your backup disk aren't touched.")
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -774,13 +768,13 @@ enum OverviewMotion {
 enum OverviewCategoryStyle {
     static func name(_ category: OverviewCategory) -> String {
         switch category {
-        case .appCaches: return "App Caches"
-        case .devTools: return "Dev Tools"
-        case .largeFiles: return "Large Files"
+        case .appCaches: return String(localized: "App Caches")
+        case .devTools: return String(localized: "Dev Tools")
+        case .largeFiles: return String(localized: "Large Files")
         // "Installed apps", not "Apps": System Settings has an Applications row that
         // counts only the apps themselves, and this total includes their files.
-        case .apps: return "Installed apps"
-        case .leftovers: return "Leftovers from deleted apps"
+        case .apps: return String(localized: "Installed apps")
+        case .leftovers: return String(localized: "Leftovers from deleted apps")
         }
     }
 
@@ -938,7 +932,7 @@ struct OverviewDiskBar: View {
     private var accessibilityText: String {
         segments
             .filter { $0.bytes > 0 }
-            .map { "\($0.label) \(formatStorageBytes($0.bytes))" }
+            .map { String(localized: "\($0.label) \(formatStorageBytes($0.bytes))") }
             .joined(separator: ", ")
     }
 
@@ -966,10 +960,10 @@ struct OverviewScanButton: View {
 
     static func name(for step: ScanStep) -> String {
         switch step {
-        case .cachesAndDevTools: return "App Caches and Dev Tools"
-        case .largeFiles: return "Large Files"
-        case .apps: return "installed apps"
-        case .leftovers: return "leftovers from deleted apps"
+        case .cachesAndDevTools: return String(localized: "App Caches and Dev Tools")
+        case .largeFiles: return String(localized: "Large Files")
+        case .apps: return String(localized: "installed apps")
+        case .leftovers: return String(localized: "leftovers from deleted apps")
         }
     }
 
@@ -1001,8 +995,8 @@ struct OverviewScanButton: View {
     }
 
     private var title: String {
-        if isFinishingCacheScan { return "Scanning..." }
-        return queue.isRunning ? "Stop" : "Scan Everything"
+        if isFinishingCacheScan { return String(localized: "Scanning...") }
+        return queue.isRunning ? String(localized: "Stop") : String(localized: "Scan Everything")
     }
 
     private var systemImage: String? {

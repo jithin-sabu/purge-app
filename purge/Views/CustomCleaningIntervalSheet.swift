@@ -76,7 +76,7 @@ struct CustomCleaningIntervalSheet: View {
                     selection: $unit,
                     options: CustomCleaningIntervalUnit.allCases,
                     optionLabel: { $0.displayName },
-                    accessibilityTitle: "Unit"
+                    accessibilityTitle: String(localized: "Unit")
                 )
 
                 Spacer()

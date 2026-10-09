@@ -34,9 +34,9 @@ nonisolated enum SafetyLevel: String, CaseIterable, Codable, Hashable {
 
     var displayName: String {
         switch self {
-        case .safe: return "Safe to Clean"
-        case .medium: return "Check First"
-        case .unknown: return "Not Sure"
+        case .safe: return String(localized: "Safe to Clean")
+        case .medium: return String(localized: "Check First")
+        case .unknown: return String(localized: "Not Sure")
         }
     }
 

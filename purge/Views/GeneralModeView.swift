@@ -157,7 +157,7 @@ struct AppCachesView<PageHeader: View>: View {
     private func pageSubtitle(plan: ListPlan) -> String {
         let count = currentSafetyFilter == .all ? plan.displayableCount : plan.visibleCount
         let bytes = currentSafetyFilter == .all ? plan.displayableTotalBytes : plan.visibleTotalBytes
-        return "\(count) \(count == 1 ? "item" : "items") · \(formatBytes(bytes)) recoverable"
+        return String(localized: "\(count) \(count == 1 ? String(localized: "item") : String(localized: "items")) · \(formatBytes(bytes)) recoverable")
     }
 
     var body: some View {
@@ -175,7 +175,7 @@ struct AppCachesView<PageHeader: View>: View {
     private func standardBody(plan: ListPlan) -> some View {
         VStack(spacing: 0) {
             if showsPageHeader {
-                AppSectionPageHeader(title: "App Caches", subtitle: pageSubtitle(plan: plan)) {
+                AppSectionPageHeader(title: String(localized: "App Caches"), subtitle: pageSubtitle(plan: plan)) {
                     AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
                 }
             }
@@ -465,8 +465,8 @@ extension AppCachesView where PageHeader == EmptyView {
                 appName: "Safari",
                 safetyInfo: SafetyInfo(
                     level: .safe,
-                    headline: "Safari",
-                    explanation: "Cache rebuilds on launch.",
+                    headline: String(localized: "Safari"),
+                    explanation: String(localized: "Cache rebuilds on launch."),
                     recoverySteps: "",
                     reinstallCommand: nil
                 ),

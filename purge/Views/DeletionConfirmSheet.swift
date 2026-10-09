@@ -204,7 +204,7 @@ struct DeletionConfirmSheet: View {
             }
 
             if showsExplanation, !item.safetyInfo.explanation.isEmpty {
-                Text(item.safetyInfo.explanation)
+                Text(LocalizedStringKey(item.safetyInfo.explanation))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -242,7 +242,7 @@ struct DeletionConfirmSheet: View {
             fg = AppColors.statusDangerText
             bg = AppColors.statusDangerFill
         }
-        return Text(text)
+        return Text(LocalizedStringKey(text))
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(fg)
             .padding(.horizontal, AppStyle.Spacing.xSmall)

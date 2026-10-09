@@ -7,7 +7,7 @@ import Foundation
 /// read. They outranked the reviewed list, so a guess could mark a folder Safe that
 /// the bundled data never vetted, and only on Macs that ran an early build.
 enum ExplanationResolver {
-    nonisolated static let unsureExplanation = "We could not identify this folder. We recommend leaving it alone."
+    nonisolated static let unsureExplanation = String(localized: "We could not identify this folder. We recommend leaving it alone.")
 
     /// Resolution order:
     /// 1. `user_overrides.json` keyed by exact path (when provided)
@@ -42,9 +42,9 @@ enum ExplanationResolver {
         let explanation: String
         switch level {
         case .safe:
-            explanation = "This is a known cache folder that apps or developer tools recreate automatically."
+            explanation = String(localized: "This is a known cache folder that apps or developer tools recreate automatically.")
         case .medium:
-            explanation = "This folder may involve synced or user-facing app data. Deleting it can be safe, but it may cause inconvenience."
+            explanation = String(localized: "This folder may involve synced or user-facing app data. Deleting it can be safe, but it may cause inconvenience.")
         case .unknown:
             explanation = unsureExplanation
         }

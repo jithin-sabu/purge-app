@@ -10,10 +10,10 @@ enum ScheduledCleaningFrequency: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .weekly: return "Weekly"
-        case .monthly: return "Monthly"
-        case .quarterly: return "Every 3 months"
-        case .custom: return "Custom"
+        case .weekly: return String(localized: "Weekly")
+        case .monthly: return String(localized: "Monthly")
+        case .quarterly: return String(localized: "Every 3 months")
+        case .custom: return String(localized: "Custom")
         }
     }
 
@@ -39,17 +39,17 @@ enum CustomCleaningIntervalUnit: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .day: return "Days"
-        case .week: return "Weeks"
-        case .month: return "Months"
+        case .day: return String(localized: "Days")
+        case .week: return String(localized: "Weeks")
+        case .month: return String(localized: "Months")
         }
     }
 
     var singularDisplayName: String {
         switch self {
-        case .day: return "Day"
-        case .week: return "Week"
-        case .month: return "Month"
+        case .day: return String(localized: "Day")
+        case .week: return String(localized: "Week")
+        case .month: return String(localized: "Month")
         }
     }
 
@@ -84,21 +84,21 @@ enum DevToolsStalenessOption: Int, Codable, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .oneMonth: return "1 month"
-        case .threeMonths: return "3 months"
-        case .sixMonths: return "6 months"
-        case .twelveMonths: return "12 months"
-        case .twoYears: return "2 years"
-        case .showAll: return "Show all"
+        case .oneMonth: return String(localized: "1 month")
+        case .threeMonths: return String(localized: "3 months")
+        case .sixMonths: return String(localized: "6 months")
+        case .twelveMonths: return String(localized: "12 months")
+        case .twoYears: return String(localized: "2 years")
+        case .showAll: return String(localized: "Show all")
         }
     }
 
     var description: String {
         switch self {
         case .showAll:
-            return "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now."
+            return String(localized: "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now.")
         case .oneMonth, .threeMonths, .sixMonths, .twelveMonths, .twoYears:
-            return "Projects you have not worked on within this period appear in Developer Projects for cleanup. Editing any file or using git in a project counts as working on it, and a project in use right now never appears. Choose Show all to see every detected project regardless of age."
+            return String(localized: "Projects you have not worked on within this period appear in Developer Projects for cleanup. Editing any file or using git in a project counts as working on it, and a project in use right now never appears. Choose Show all to see every detected project regardless of age.")
         }
     }
 

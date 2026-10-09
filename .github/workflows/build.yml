@@ -18,6 +18,9 @@ jobs:
       - name: Lint design tokens
         run: node scripts/lint-design-tokens.mjs
 
+      - name: Check translations
+        run: python3 scripts/check-localization.py
+
       - name: Build (unsigned)
         run: |
           xcodebuild clean build \

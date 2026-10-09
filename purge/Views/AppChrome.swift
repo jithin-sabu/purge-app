@@ -194,14 +194,14 @@ private struct AnimatedPageTitle: View {
     var body: some View {
         ZStack(alignment: .leading) {
             if let previousTitle {
-                Text(previousTitle)
+                Text(LocalizedStringKey(previousTitle))
                     .font(AppStyle.Typography.pageTitle)
                     .opacity(previousTitleVisible ? 1 : 0)
                     .offset(y: previousTitleVisible ? 0 : -5)
                     .blur(radius: previousTitleVisible ? 0 : 1.5)
             }
 
-            Text(displayedTitle)
+            Text(LocalizedStringKey(displayedTitle))
                 .font(AppStyle.Typography.pageTitle)
                 .opacity(titleVisible || reduceMotion ? 1 : 0)
                 .offset(y: titleVisible || reduceMotion ? 0 : 6)
@@ -260,7 +260,7 @@ private struct AnimatedPageTitle: View {
 
 enum ScanQueueLabels {
     /// A scan button whose scan is waiting behind another one.
-    static let queued = "Up next..."
+    static let queued = String(localized: "Up next...")
 }
 
 /// Scan and Clean Selected — top-trailing actions on App Caches / Dev Tools pages.
@@ -292,11 +292,11 @@ struct AppScanButton: View {
         if isQueued { return ScanQueueLabels.queued }
         switch scanPhase {
         case .cancelling:
-            return "Cancelling..."
+            return String(localized: "Cancelling...")
         case .scanning:
-            return "Scanning..."
+            return String(localized: "Scanning...")
         case .idle, .completed:
-            return "Scan"
+            return String(localized: "Scan")
         }
     }
 
@@ -325,8 +325,8 @@ struct AppCleanSelectedButton: View {
                 store.showDeletionSheet = true
             } label: {
                 AnimatedDeleteActionLabel(
-                    inactiveTitle: "Clean Selected",
-                    activeTitle: "Clean Selected",
+                    inactiveTitle: String(localized: "Clean Selected"),
+                    activeTitle: String(localized: "Clean Selected"),
                     selectedCount: store.selectedCount,
                     selectedBytes: store.selectedTotalBytes
                 )
@@ -360,7 +360,7 @@ struct CleaningButtonLabel: View {
                 Image(systemName: systemImage)
             }
 
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .contentTransition(reduceMotion ? .identity : .numericText())
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: title)
         }
@@ -395,9 +395,9 @@ struct AnimatedDeleteActionLabel: View {
     private var accessibilityTitle: String {
         guard hasSelection else { return inactiveTitle }
         if let selectedBytes {
-            return "\(activeTitle), \(formatBytes(selectedBytes)) selected"
+            return String(localized: "\(activeTitle), \(formatBytes(selectedBytes)) selected")
         }
-        return "\(activeTitle), \(selectedCount) selected"
+        return String(localized: "\(activeTitle), \(selectedCount) selected")
     }
 
     var body: some View {
@@ -435,7 +435,7 @@ struct AnimatedDeleteActionLabel: View {
 
     private var textContent: some View {
         HStack(spacing: 0) {
-            Text(hasSelection ? activeTitle : inactiveTitle)
+            Text(LocalizedStringKey(hasSelection ? activeTitle : inactiveTitle))
                 .contentTransition(reduceMotion ? .identity : .opacity)
 
             if hasSelection, selectedBytes != nil {
@@ -758,11 +758,11 @@ struct SafeCleanupCelebrationOverlay: View {
     /// files are in the trash and still on the volume; nothing is reclaimed until the
     /// trash is emptied, so this must never read as an achievement.
     private var subtitleText: String {
-        subtitleShowsComplete ? "moved to trash, not yet reclaimed" : "of \(formatBytes(session.totalBytes))"
+        subtitleShowsComplete ? String(localized: "moved to trash, not yet reclaimed") : String(localized: "of \(formatBytes(session.totalBytes))")
     }
 
     private var currentItemText: String {
-        session.currentItemName.map { "Cleaning \($0)…" } ?? "Cleaning…"
+        session.currentItemName.map { String(localized: "Cleaning \($0)…") } ?? String(localized: "Cleaning…")
     }
 
     private func retryFailure(_ item: CleanFailureItem) {
@@ -1232,8 +1232,8 @@ private struct CleanFailureDisclosure: View {
 
     private var summaryText: String {
         failures.count == 1
-            ? "1 item couldn't be cleaned"
-            : "\(failures.count) items couldn't be cleaned"
+            ? String(localized: "1 item couldn't be cleaned")
+            : String(localized: "\(failures.count) items couldn't be cleaned")
     }
 
     private var visibleFailures: [CleanFailureItem] {
@@ -1303,7 +1303,7 @@ private struct NeedsAdministratorPanel: View {
     private var isSingle: Bool { items.count == 1 }
 
     private var title: String {
-        "macOS needs your permission"
+        String(localized: "macOS needs your permission")
     }
 
     /// Only when several are held: name them so the count isn't a mystery.
@@ -1311,30 +1311,30 @@ private struct NeedsAdministratorPanel: View {
         guard !isSingle else { return nil }
         let names = items.map(\.displayName)
         switch names.count {
-        case 2: return "\(names[0]) and \(names[1])"
-        case 3: return "\(names[0]), \(names[1]), and \(names[2])"
-        default: return "\(names[0]), \(names[1]), and \(names.count - 2) more"
+        case 2: return String(localized: "\(names[0]) and \(names[1])")
+        case 3: return String(localized: "\(names[0]), \(names[1]), and \(names[2])")
+        default: return String(localized: "\(names[0]), \(names[1]), and \(names.count - 2) more")
         }
     }
 
     private var explanation: String {
         isSingle
-            ? "An administrator installed \(items[0].displayName), so macOS needs your permission before it can move to the Trash."
-            : "An administrator installed them, so macOS needs your permission before they can move to the Trash."
+            ? String(localized: "An administrator installed \(items[0].displayName), so macOS needs your permission before it can move to the Trash.")
+            : String(localized: "An administrator installed them, so macOS needs your permission before they can move to the Trash.")
     }
 
     private var trustLine: String {
         isSingle
-            ? "Moved to the Trash, not deleted. Restore it anytime."
-            : "Moved to the Trash, not deleted. Restore them anytime."
+            ? String(localized: "Moved to the Trash, not deleted. Restore it anytime.")
+            : String(localized: "Moved to the Trash, not deleted. Restore them anytime.")
     }
 
     private var primaryTitle: String {
         // Approval pending: the button's job is to reopen Settings, so say so rather
         // than "Set up," which reads as if setup hasn't started.
-        if needsApproval { return "Open System Settings" }
-        if !isHelperEnabled { return "Set up secure removal" }
-        return isSingle ? "Remove \(items[0].displayName)" : "Remove \(items.count) apps"
+        if needsApproval { return String(localized: "Open System Settings") }
+        if !isHelperEnabled { return String(localized: "Set up secure removal") }
+        return isSingle ? String(localized: "Remove \(items[0].displayName)") : String(localized: "Remove \(items.count) apps")
     }
 
     var body: some View {
@@ -1345,7 +1345,7 @@ private struct NeedsAdministratorPanel: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .accessibilityHidden(true)
 
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(AppStyle.Typography.sectionTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .multilineTextAlignment(.center)
@@ -1357,7 +1357,7 @@ private struct NeedsAdministratorPanel: View {
                         .multilineTextAlignment(.center)
                 }
 
-                Text(explanation)
+                Text(LocalizedStringKey(explanation))
                     .font(AppStyle.Typography.sectionTitle.weight(.regular))
                     .foregroundStyle(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
@@ -1440,7 +1440,7 @@ private struct CleanFailureRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                Text(failure.reason.explanation)
+                Text(LocalizedStringKey(failure.reason.explanation))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1623,7 +1623,7 @@ struct AppBadge: View {
     var tone: Tone = .neutral
 
     var body: some View {
-        Text(text)
+        Text(LocalizedStringKey(text))
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(foregroundColor)
             .padding(.horizontal, 5)
@@ -1752,7 +1752,7 @@ struct AppNavRow: View {
         Button(action: action) {
             HStack(spacing: AppStyle.Spacing.xSmall) {
                 AppNavIcon(systemImage: systemImage, isSelected: isSelected)
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(AppStyle.Typography.body.weight(isSelected ? .semibold : .medium))
                     .lineLimit(1)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
@@ -1775,7 +1775,7 @@ struct AppNavRow: View {
         case .none:
             EmptyView()
         case .value(let text, let isDimmed):
-            Text(text)
+            Text(LocalizedStringKey(text))
                 .font(AppStyle.Typography.metadataEmphasis)
                 .monospacedDigit()
                 .foregroundStyle(isDimmed ? AppColors.textTertiary.opacity(0.5) : AppColors.textTertiary)
@@ -1838,11 +1838,11 @@ enum CleaningQuitGuard {
     /// Returns `true` when the user chooses to interrupt the clean anyway.
     static func confirmInterruption() -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Purge is still cleaning"
-        alert.informativeText = "Purge is still cleaning. Quitting now may leave some items partially removed."
+        alert.messageText = String(localized: "Purge is still cleaning")
+        alert.informativeText = String(localized: "Purge is still cleaning. Quitting now may leave some items partially removed.")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Quit Anyway")
-        alert.addButton(withTitle: "Keep Cleaning")
+        alert.addButton(withTitle: String(localized: "Quit Anyway"))
+        alert.addButton(withTitle: String(localized: "Keep Cleaning"))
         return alert.runModal() == .alertFirstButtonReturn
     }
 

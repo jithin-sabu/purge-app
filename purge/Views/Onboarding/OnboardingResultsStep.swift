@@ -43,10 +43,10 @@ extension PurgeStore {
     }
 
     let categories = [
-      OnboardingResultsCategory(title: "App caches", symbol: "internaldrive", bytes: appCacheBytes),
+      OnboardingResultsCategory(title: String(localized: "App caches"), symbol: "internaldrive", bytes: appCacheBytes),
       OnboardingResultsCategory(title: Self.devArtifactCategoryTitle, symbol: "hammer", bytes: devArtifactBytes),
-      OnboardingResultsCategory(title: "Browser caches", symbol: "globe", bytes: browserBytes),
-      OnboardingResultsCategory(title: "System junk", symbol: "doc.text", bytes: systemJunkBytes),
+      OnboardingResultsCategory(title: String(localized: "Browser caches"), symbol: "globe", bytes: browserBytes),
+      OnboardingResultsCategory(title: String(localized: "System junk"), symbol: "doc.text", bytes: systemJunkBytes),
     ]
 
     return categories

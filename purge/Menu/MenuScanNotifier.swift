@@ -14,7 +14,7 @@ enum MenuScanNotifier {
     static func configure() {
         let clean = UNNotificationAction(
             identifier: cleanActionIdentifier,
-            title: "Clean Safe Files",
+            title: String(localized: "Clean Safe Files"),
             options: []
         )
         let category = UNNotificationCategory(

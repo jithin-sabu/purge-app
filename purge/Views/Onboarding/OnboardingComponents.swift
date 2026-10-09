@@ -58,7 +58,7 @@ struct OnboardingPrimaryButton: View {
             .font(.system(size: 12, weight: .semibold))
         }
 
-        Text(title)
+        Text(LocalizedStringKey(title))
 
         if isLoading {
           if reduceMotion {
@@ -88,7 +88,7 @@ struct OnboardingSecondaryButton: View {
 
   var body: some View {
     Button(action: action) {
-      Text(title)
+      Text(LocalizedStringKey(title))
     }
     .buttonStyle(.purge(.secondary, size: .large, width: .fixed(OnboardingLayout.buttonWidth)))
   }
@@ -162,8 +162,8 @@ struct OnboardingSizeComparisonLine: View {
   }
 
   private var accessibilityLabel: String {
-    let body = items.map(\.label).joined(separator: " or ")
-    return "That's room for \(body)"
+    let body = items.map(\.label).joined(separator: String(localized: " or "))
+    return String(localized: "That's room for \(body)")
   }
 }
 
@@ -209,7 +209,7 @@ struct OnboardingResultsCategoryRow: View {
         .frame(width: 18, alignment: .center)
         .accessibilityHidden(true)
 
-      Text(title)
+      Text(LocalizedStringKey(title))
         .font(AppStyle.Typography.callout)
         .foregroundStyle(AppColors.textSecondary)
 
@@ -231,7 +231,7 @@ struct OnboardingStepTitle: View {
   let text: String
 
   var body: some View {
-    Text(text)
+    Text(LocalizedStringKey(text))
       .font(AppStyle.Typography.title)
       .multilineTextAlignment(.center)
       .frame(maxWidth: .infinity, alignment: .center)
@@ -262,7 +262,7 @@ struct OnboardingLoadingStepTitle: View {
 
   private var displayText: String {
     if reduceMotion {
-      return "\(baseText)."
+      return String(localized: "\(baseText).")
     }
     return baseText + String(repeating: ".", count: dotCount)
   }

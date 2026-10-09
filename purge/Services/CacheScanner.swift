@@ -54,7 +54,7 @@ nonisolated final class CacheScanner {
         // appearing under App Caches and later being pulled out when the dev scan runs.
         var collectedPaths = DevScanner.claimedGlobalCachePaths()
 
-        continuation.yield(.status("Scanning App Caches..."))
+        continuation.yield(.status(String(localized: "Scanning App Caches...")))
         let contents: [URL]
         do {
             contents = try FileManager.default.contentsOfDirectory(
@@ -85,7 +85,7 @@ nonisolated final class CacheScanner {
         // Chromium browsers, Electron apps and Adobe keep their biggest caches, so
         // it belongs in the limited scan. The sensitive roots under it are already
         // skipped by `excludedApplicationSupportRoots`.
-        continuation.yield(.status("Scanning Application Support caches..."))
+        continuation.yield(.status(String(localized: "Scanning Application Support caches...")))
         let appSupportItems = applicationSupportCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
         for item in appSupportItems {
             if Task.isCancelled {
@@ -141,7 +141,7 @@ nonisolated final class CacheScanner {
                 sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
             }
 
-            continuation.yield(.status("Scanning sandboxed app caches..."))
+            continuation.yield(.status(String(localized: "Scanning sandboxed app caches...")))
             let containerItems = allContainerCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
             for item in containerItems {
                 if Task.isCancelled {
@@ -153,7 +153,7 @@ nonisolated final class CacheScanner {
             }
         }
 
-        continuation.yield(.status("Scanning browser app bundles..."))
+        continuation.yield(.status(String(localized: "Scanning browser app bundles...")))
         let staleFrameworkItems = staleChromiumFrameworkItems(access: access, collectedPaths: &collectedPaths)
         for item in staleFrameworkItems {
             if Task.isCancelled {
@@ -164,7 +164,7 @@ nonisolated final class CacheScanner {
             sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
         }
 
-        continuation.yield(.status("Scanning System Junk..."))
+        continuation.yield(.status(String(localized: "Scanning System Junk...")))
         for item in applicationLogItems(home: home, access: access, collectedPaths: &collectedPaths) {
             if Task.isCancelled {
                 continuation.finish()
@@ -221,7 +221,7 @@ nonisolated final class CacheScanner {
             detail: "\(sizeJobs.count) cache locations queued, \(collectedPaths.count) unique paths"
         )
 
-        continuation.yield(.status("Calculating sizes..."))
+        continuation.yield(.status(String(localized: "Calculating sizes...")))
         let sizingStart = Date()
         await runSizeJobs(sizeJobs, access: access, continuation: continuation)
         ScanPhaseTiming.finish(
@@ -433,8 +433,8 @@ nonisolated final class CacheScanner {
             let safety = SafetyInfo(
                 level: .medium,
                 headline: headline,
-                explanation: "A leftover Chromium framework inside \(appName) that no running process is using. Quit and relaunch \(appName) before an older version still loaded by the running browser can be cleaned; those copies stay hidden until then. \(appName) also deletes leftover versions itself on relaunch.",
-                recoverySteps: "Quit and relaunch \(appName). If it still fails to open, reinstall it from the vendor.",
+                explanation: String(localized: "A leftover Chromium framework inside \(appName) that no running process is using. Quit and relaunch \(appName) before an older version still loaded by the running browser can be cleaned; those copies stay hidden until then. \(appName) also deletes leftover versions itself on relaunch."),
+                recoverySteps: String(localized: "Quit and relaunch \(appName). If it still fails to open, reinstall it from the vendor."),
                 reinstallCommand: nil
             )
             items.append(
@@ -510,7 +510,7 @@ nonisolated final class CacheScanner {
         where child.lastPathComponent != Self.crashReportsFolderName {
             guard let item = cacheItemAtDiscoveredPath(
                 child,
-                headline: "Application Logs",
+                headline: String(localized: "Application Logs"),
                 folderName: "Logs",
                 access: access,
                 collectedPaths: &collectedPaths

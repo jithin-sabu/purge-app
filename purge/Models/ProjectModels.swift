@@ -184,7 +184,7 @@ nonisolated enum DeletableArtifactKind: String, Hashable, Sendable, CaseIterable
     }
 
     nonisolated var rowTag: String {
-        Self.metadata[self]?.rowTag ?? rawValue
+        NSLocalizedString(Self.metadata[self]?.rowTag ?? rawValue, comment: "Developer artifact label")
     }
 }
 

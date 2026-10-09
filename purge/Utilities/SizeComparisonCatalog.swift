@@ -105,8 +105,26 @@ enum SizeComparisonCatalog {
 
     return OnboardingSizeComparisonItem(
       symbol: pick.anchor.symbol,
-      label: label(for: pick.anchor, multiplier: pick.multiplier)
+      label: label(for: pick.anchor, multiplier: pick.multiplier),
+      localizedLabel: displayLabel(for: pick.anchor, multiplier: pick.multiplier)
     )
+  }
+
+  private static func displayLabel(for anchor: Anchor, multiplier: Double) -> String {
+    let count = max(1, Int(multiplier.rounded(.down)))
+    switch anchor.phrasing {
+    case let .counted(one, many):
+      let single = NSLocalizedString(one, comment: "Storage size comparison")
+      let plural = NSLocalizedString(many, comment: "Storage size comparison")
+      return count == 1 ? single : String(localized: "\(formatCount(count)) \(plural)")
+    case let .timesOver(one, name):
+      let single = NSLocalizedString(one, comment: "Storage size comparison")
+      let named = NSLocalizedString(name, comment: "Storage size comparison")
+      let repeats = count == 2
+        ? String(localized: "twice over")
+        : String(localized: "\(formatCount(count)) times over")
+      return count == 1 ? single : String(localized: "\(named), \(repeats)")
+    }
   }
 
   private static func label(for anchor: Anchor, multiplier: Double) -> String {

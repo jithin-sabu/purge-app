@@ -34,10 +34,10 @@ struct CleanupHistorySummaryRow: View {
     /// cleans that only trashed files have nothing measured to show, so they stay
     /// described as moved.
     private var detailText: String {
-        let noun = entry.deletedItems.count == 1 ? "item" : "items"
-        let items = "\(entry.deletedItems.count) \(noun) to trash"
+        let noun = entry.deletedItems.count == 1 ? String(localized: "item") : String(localized: "items")
+        let items = String(localized: "\(entry.deletedItems.count) \(noun) to trash")
         guard let reclaimed = entry.bytesReclaimedOnVolume else { return items }
-        return "\(items), \(formatBytes(reclaimed)) reclaimed"
+        return String(localized: "\(items), \(formatBytes(reclaimed)) reclaimed")
     }
 
     static let historyDateFormatter: DateFormatter = {

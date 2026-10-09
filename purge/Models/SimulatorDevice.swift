@@ -27,14 +27,14 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
         // The safety badge already says whether it is safe, so the explanation
         // only covers when it was last used and what deleting costs. `simctl
         // delete` removes the device and its apps and data; the runtime stays.
-        let cost = "Deletes its apps and data."
+        let cost = String(localized: "Deletes its apps and data.")
         if !isAvailable {
             return SafetyInfo(
                 level: .safe,
                 headline: headline,
                 // CoreSimulator marks a device unavailable for more than one reason
                 // (missing runtime, unsupported device type), so don't name one.
-                explanation: "Xcode can no longer run this device. \(cost)",
+                explanation: String(localized: "Xcode can no longer run this device. \(cost)"),
                 recoverySteps: "",
                 reinstallCommand: nil
             )
@@ -47,7 +47,7 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
             return SafetyInfo(
                 level: .safe,
                 headline: headline,
-                explanation: "Last use unknown. \(cost)",
+                explanation: String(localized: "Last use unknown. \(cost)"),
                 recoverySteps: "",
                 reinstallCommand: nil
             )
@@ -57,9 +57,13 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
         let monthsAgo = Calendar.current.dateComponents([.month], from: lastUsed, to: Date()).month ?? 0
         let explanation: String
         if monthsAgo < 1 {
-            explanation = "Used in the last month. \(cost)"
+            explanation = String(localized: "Used in the last month. \(cost)")
         } else {
-            explanation = "Last used \(monthsAgo) month\(monthsAgo == 1 ? "" : "s") ago. \(cost)"
+            if monthsAgo == 1 {
+                explanation = String(localized: "Last used 1 month ago. \(cost)")
+            } else {
+                explanation = String(localized: "Last used \(monthsAgo) months ago. \(cost)")
+            }
         }
 
         return SafetyInfo(

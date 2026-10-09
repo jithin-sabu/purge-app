@@ -623,11 +623,11 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var subtitleItemLabel: String {
-        subtitleItemCount == 1 ? "item" : "items"
+        subtitleItemCount == 1 ? String(localized: "item") : String(localized: "items")
     }
 
     private var pageSubtitle: String {
-        return "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable"
+        return String(localized: "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable")
     }
 
     var body: some View {
@@ -644,7 +644,7 @@ struct DevToolsView<PageHeader: View>: View {
     private var standardBody: some View {
         VStack(spacing: 0) {
             if showsPageHeader {
-                AppSectionPageHeader(title: "Dev Tools", subtitle: pageSubtitle) {
+                AppSectionPageHeader(title: String(localized: "Dev Tools"), subtitle: pageSubtitle) {
                     AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
                 }
             }
@@ -1101,7 +1101,7 @@ struct DevToolsView<PageHeader: View>: View {
             .overlay {
                 ScanRowContextMenu(isMenuActive: .constant(false)) {
                     [
-                        .action(title: "Exclude project from scans") {
+                        .action(title: String(localized: "Exclude project from scans")) {
                             store.excludeProjectGroupFromScans(groupID: group.id)
                         },
                         .separator,
@@ -1228,9 +1228,9 @@ struct DevToolsView<PageHeader: View>: View {
     private func projectGroupIconAccessibilityLabel(for group: ProjectGroup) -> String {
         let types = group.inferredTypes.map(\.displayName).joined(separator: ", ")
         if types.isEmpty {
-            return "Project"
+            return String(localized: "Project")
         }
-        return "Project, \(types)"
+        return String(localized: "Project, \(types)")
     }
 }
 

@@ -115,6 +115,7 @@ final class PurgeStore: ObservableObject {
         case about = "About"
 
         var id: String { rawValue }
+        var displayName: String { NSLocalizedString(rawValue, comment: "Sidebar tab title") }
         var icon: String {
             switch self {
             case .overview: return "square.grid.2x2"

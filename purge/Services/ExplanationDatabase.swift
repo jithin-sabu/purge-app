@@ -219,15 +219,15 @@ enum ExplanationDatabase {
     nonisolated static func safetyInfo(from record: BundledExplanationRecord, reinstallCommand: String? = nil) -> SafetyInfo {
         SafetyInfo(
             level: record.safetyLevel,
-            headline: record.displayName,
-            explanation: record.explanation,
+            headline: Bundle.main.localizedString(forKey: record.displayName, value: record.displayName, table: "Explanations"),
+            explanation: Bundle.main.localizedString(forKey: record.explanation, value: record.explanation, table: "Explanations"),
             recoverySteps: "",
             reinstallCommand: reinstallCommand
         )
     }
 
     /// Unknown bundled keys: conservative copy for dev-tool-only local path.
-    nonisolated static let unsureExplanation = "We are not sure what this is. We recommend leaving it alone."
+    nonisolated static let unsureExplanation = String(localized: "We are not sure what this is. We recommend leaving it alone.")
 
     nonisolated static func safetyInfoForUnknownBundledLookup(friendlyFallback: String) -> SafetyInfo {
         SafetyInfo(

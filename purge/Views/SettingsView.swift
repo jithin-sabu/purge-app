@@ -135,7 +135,7 @@ struct SettingsView: View {
             // between states. Turning it on registers the helper (which then waits on
             // approval in System Settings); turning it off unregisters it.
             settingsToggleRow(
-                title: "Remove admin-locked apps without a password",
+                title: String(localized: "Remove admin-locked apps without a password"),
                 caption: helperCaption,
                 isOn: helperEnabledBinding
             )
@@ -151,11 +151,11 @@ struct SettingsView: View {
     }
 
     private var helperCaption: String {
-        """
+        String(localized: """
         Some apps are installed under an administrator and can't be moved to the Trash on their \
         own. Purge asks you to enable its secure removal helper only when an app needs it. Items \
         still go to the Trash, and you can turn it off here at any time.
-        """
+        """)
     }
 
     /// The switch reads on for both `.on` and `.awaitingApproval`: once the user asks
@@ -185,7 +185,7 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let action = helperStatusAction {
-                Button(action.title, action: action.perform)
+                Button(LocalizedStringKey(action.title), action: action.perform)
                     .buttonStyle(.purge(.secondary, size: .small))
             }
         }
@@ -212,13 +212,13 @@ struct SettingsView: View {
     private var helperStatusMessage: String {
         switch helperPhase {
         case .on:
-            return "On. Admin-locked apps can be moved to the Trash without a password."
+            return String(localized: "On. Admin-locked apps can be moved to the Trash without a password.")
         case .awaitingApproval:
-            return "Approval is still needed in System Settings."
+            return String(localized: "Approval is still needed in System Settings.")
         case .failed:
-            return "Setup didn't complete. Turn it on again to retry."
+            return String(localized: "Setup didn't complete. Turn it on again to retry.")
         case .off:
-            return "Off. Purge will ask for approval the first time an app needs it."
+            return String(localized: "Off. Purge will ask for approval the first time an app needs it.")
         }
     }
 
@@ -237,8 +237,8 @@ struct SettingsView: View {
     private var appearanceSection: some View {
         settingsSection("Appearance") {
             settingsControlRow(
-                title: "Theme",
-                caption: "Choose a light or dark look, or match your system setting."
+                title: String(localized: "Theme"),
+                caption: String(localized: "Choose a light or dark look, or match your system setting.")
             ) {
                 appearanceOptions
             }
@@ -265,7 +265,7 @@ struct SettingsView: View {
     private var startupSection: some View {
         settingsSection("Startup") {
             settingsToggleRow(
-                title: "Keep Purge in the menu bar",
+                title: String(localized: "Keep Purge in the menu bar"),
                 caption: menuBarModeCaption,
                 captionAnimatesTextChanges: true,
                 isOn: Binding(
@@ -285,8 +285,8 @@ struct SettingsView: View {
                     settingsSectionDivider
 
                     settingsToggleRow(
-                        title: "Launch Purge at login",
-                        caption: "Purge starts with your Mac and waits in the menu bar. No window opens until you click the icon.",
+                        title: String(localized: "Launch Purge at login"),
+                        caption: String(localized: "Purge starts with your Mac and waits in the menu bar. No window opens until you click the icon."),
                         warning: loginItemFailure?.message,
                         isOn: launchAtLoginBinding
                     )
@@ -294,12 +294,12 @@ struct SettingsView: View {
                     settingsSectionDivider
 
                     settingsToggleRow(
-                        title: "Hide Dock icon",
-                        caption: """
+                        title: String(localized: "Hide Dock icon"),
+                        caption: String(localized: """
                             Purge runs from the menu bar only. Click the menu bar icon to open \
                             this window again. The app menu is gone while the Dock icon is \
                             hidden, so ⌘Q won't quit. Use Quit in the menu bar dropdown.
-                            """,
+                            """),
                         isOn: hideDockIconBinding
                     )
                 }
@@ -311,8 +311,8 @@ struct SettingsView: View {
 
     private var menuBarModeCaption: String {
         startup.showsMenuBarIcon
-            ? "Purge keeps running after you close the window, so you can scan and clean from the menu bar."
-            : "Purge opens when you need it and quits when you close the window."
+            ? String(localized: "Purge keeps running after you close the window, so you can scan and clean from the menu bar.")
+            : String(localized: "Purge opens when you need it and quits when you close the window.")
     }
 
     private var launchAtLoginBinding: Binding<Bool> {
@@ -382,7 +382,7 @@ struct SettingsView: View {
     private var deletedAppsSection: some View {
         settingsSection("Deleted Apps") {
             settingsToggleRow(
-                title: "Review leftovers when an app is deleted",
+                title: String(localized: "Review leftovers when an app is deleted"),
                 caption: deletedAppsCaption,
                 isOn: Binding(
                     get: { removedApps.isEnabled },
@@ -402,12 +402,12 @@ struct SettingsView: View {
     }
 
     private var deletedAppsCaption: String {
-        """
+        String(localized: """
         When an app leaves Applications, like dragging it to the Trash in Finder, \
         Purge opens with the files it left behind, even if Purge was quit. Nothing \
         moves until you confirm. A small background watcher stays on while this is \
         enabled; you can turn it off here at any time.
-        """
+        """)
     }
 
     private var deletedAppsStatusCard: some View {
@@ -435,7 +435,7 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let fixTitle = health.fixTitle {
-                Button(removedApps.isRestartingWatcher ? "Restarting…" : fixTitle) {
+                Button(LocalizedStringKey(removedApps.isRestartingWatcher ? "Restarting…" : fixTitle)) {
                     removedApps.fixWatcher()
                 }
                 .buttonStyle(.purge(.secondary, size: .small))
@@ -465,16 +465,16 @@ struct SettingsView: View {
     private func deletedAppsStatusMessage(_ health: WatcherHealth) -> String {
         switch health {
         case .off:
-            return "Off. Apps deleted outside Purge are not noticed."
+            return String(localized: "Off. Apps deleted outside Purge are not noticed.")
         case .checking:
-            return "Checking the background watcher."
+            return String(localized: "Checking the background watcher.")
         case .running:
-            return "On. Purge is watching for deleted apps."
+            return String(localized: "On. Purge is watching for deleted apps.")
         case .notRunning:
             // A restart that does not stick means something outside Purge stops
             // the watcher, so point at the switch macOS keeps for it.
             return (health.problemMessage ?? "")
-                + " If it stops again, check that Purge is switched on under Login Items in System Settings."
+                + String(localized: " If it stops again, check that Purge is switched on under Login Items in System Settings.")
         case .needsApproval, .failedToStart:
             return health.problemMessage ?? ""
         }
@@ -483,7 +483,7 @@ struct SettingsView: View {
     private var cleaningScheduleSection: some View {
         settingsSection("Cleaning Schedule") {
             settingsToggleRow(
-                title: "Run automatic cleaning",
+                title: String(localized: "Run automatic cleaning"),
                 caption: scheduleSummary,
                 captionAnimatesTextChanges: true,
                 isOn: autoCleanEnabledBinding
@@ -492,7 +492,7 @@ struct SettingsView: View {
             settingsSectionDivider
 
             settingsPickerRow(
-                title: "How often",
+                title: String(localized: "How often"),
                 selection: frequencySelectionBinding,
                 options: ScheduledCleaningFrequency.allCases,
                 optionLabel: \.displayName
@@ -535,7 +535,7 @@ struct SettingsView: View {
     private var updatesSection: some View {
         settingsSection("Updates") {
             settingsToggleRow(
-                title: "Check for updates automatically",
+                title: String(localized: "Check for updates automatically"),
                 caption: updatesSummary,
                 isOn: automaticUpdateChecksBinding
             )
@@ -552,18 +552,18 @@ struct SettingsView: View {
     }
 
     private var updatesSummary: String {
-        """
+        String(localized: """
         Purge checks once a day. When automatic installs are off, a new version opens the \
         update window. Every download is signature-checked.
-        """
+        """)
     }
 
     private var automaticInstallSummary: String {
-        """
+        String(localized: """
         New versions download in the background and install when Purge quits, or right away \
         with Restart to Update in the Purge menu. When this is off, nothing is installed \
         without your confirmation.
-        """
+        """)
     }
 
     private var automaticUpdateChecksBinding: Binding<Bool> {
@@ -587,11 +587,11 @@ struct SettingsView: View {
     /// interval to confirm automatic cleaning works.
     private var runScheduledCleanNowRow: some View {
         settingsControlRow(
-            title: "Test the schedule",
-            caption: """
+            title: String(localized: "Test the schedule"),
+            caption: String(localized: """
                 Run a scheduled clean right now to confirm it works. It uses the same safe \
                 rules above and counts as this period's clean.
-                """
+                """)
         ) {
             runScheduledCleanNowButton
         }
@@ -625,16 +625,16 @@ struct SettingsView: View {
         for summary: PurgeStore.ScheduledCleaningSummary?
     ) -> String {
         guard let summary else {
-            return "Auto-clean is off, so nothing ran. Turn it on and try again."
+            return String(localized: "Auto-clean is off, so nothing ran. Turn it on and try again.")
         }
         if summary.deletedCount == 0 {
-            return """
+            return String(localized: """
             Nothing matched your safe settings right now — the schedule is working, there just \
             wasn't anything safe to clean yet.
-            """
+            """)
         }
-        let noun = summary.deletedCount == 1 ? "item" : "items"
-        return "Moved \(summary.deletedCount) \(noun) to Trash, about \(formatBytes(summary.bytesMovedToTrash)). Empty the trash to reclaim the space."
+        let noun = summary.deletedCount == 1 ? String(localized: "item") : String(localized: "items")
+        return String(localized: "Moved \(summary.deletedCount) \(noun) to Trash, about \(formatBytes(summary.bytesMovedToTrash)). Empty the trash to reclaim the space.")
     }
 
     /// Recent cleanup activity, so scheduled cleans are visible in the app instead
@@ -722,7 +722,7 @@ struct SettingsView: View {
     private var devToolsSection: some View {
         settingsSection("Developer Projects") {
             settingsPickerRow(
-                title: "Consider stale after",
+                title: String(localized: "Consider stale after"),
                 caption: currentDevToolsStalenessOption.description,
                 selection: devToolsStalenessSelectionBinding,
                 options: DevToolsStalenessOption.allCases,
@@ -736,8 +736,8 @@ struct SettingsView: View {
     private var excludedAppsSection: some View {
         settingsSection("Excluded from scans") {
             settingsControlRow(
-                title: "Excluded paths",
-                caption: "Scans skip these files and folders and everything inside them. Add a folder here, or right-click any scan result and choose Exclude from scans."
+                title: String(localized: "Excluded paths"),
+                caption: String(localized: "Scans skip these files and folders and everything inside them. Add a folder here, or right-click any scan result and choose Exclude from scans.")
             ) {
                 Button(action: chooseFoldersToExclude) {
                     Label("Add folder\u{2026}", systemImage: "folder.badge.plus")
@@ -914,7 +914,7 @@ struct SettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(AppStyle.Typography.headline)
 
                 Spacer(minLength: 12)
@@ -934,17 +934,17 @@ struct SettingsView: View {
         animatesCaptionChanges: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
+            Text(LocalizedStringKey(title))
 
             if let caption {
-                Text(caption)
+                Text(LocalizedStringKey(caption))
                     .settingsCaption()
                     .contentTransition(animatesCaptionChanges ? scheduleTextTransition : .identity)
                     .animation(animatesCaptionChanges ? scheduleTextAnimation : nil, value: caption)
             }
 
             if let warning {
-                Text(warning)
+                Text(LocalizedStringKey(warning))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.statusCheckText)
             }
@@ -1072,18 +1072,18 @@ struct SettingsView: View {
 
     private func lastCleanSummaryText(referenceDate: Date) -> String {
         guard let outcome = registrar.lastOutcome else {
-            return "Last clean: no scheduled clean has run yet."
+            return String(localized: "Last clean: no scheduled clean has run yet.")
         }
         let relative = relativeDateText(for: outcome.date, referenceDate: referenceDate)
         guard outcome.deletedCount > 0 else {
-            return "Last clean: nothing safe to clean, \(relative)."
+            return String(localized: "Last clean: nothing safe to clean, \(relative).")
         }
-        return "Last clean: \(formatBytes(outcome.bytesMovedToTrash)) moved to trash, \(relative)."
+        return String(localized: "Last clean: \(formatBytes(outcome.bytesMovedToTrash)) moved to trash, \(relative).")
     }
 
     private func scheduleStatusLabel(_ title: String, showsDueDot: Bool = false) -> some View {
         HStack(spacing: 5) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(scheduleStatusLabelFont)
                 .foregroundStyle(AppColors.textSecondary)
 
@@ -1150,11 +1150,11 @@ struct SettingsView: View {
     }
 
     private var scheduleSummary: String {
-        """
+        String(localized: """
         Every \(prefs.frequency.summaryPhrase(customAmount: prefs.customIntervalAmount, customUnit: prefs.customIntervalUnit)), we will quietly clean the same safe items as the \
         Clean Safe Items button - safe caches and stale developer artifacts. Your actual work is \
         never deleted.
-        """
+        """)
     }
 
     private var nextScheduledCleanDate: Date {
@@ -1424,11 +1424,11 @@ private extension ScheduledCleaningFrequency {
     func summaryPhrase(customAmount: Int, customUnit: CustomCleaningIntervalUnit) -> String {
         switch self {
         case .weekly:
-            return "week"
+            return String(localized: "week")
         case .monthly:
-            return "month"
+            return String(localized: "month")
         case .quarterly:
-            return "3 months"
+            return String(localized: "3 months")
         case .custom:
             return customUnit.phrase(amount: customAmount)
         }
@@ -1443,8 +1443,8 @@ private enum LoginItemFailure {
 
     var message: String {
         switch self {
-        case .enable: "Couldn't turn this on. Check Login Items in System Settings."
-        case .disable: "Couldn't turn this off. Check Login Items in System Settings."
+        case .enable: String(localized: "Couldn't turn this on. Check Login Items in System Settings.")
+        case .disable: String(localized: "Couldn't turn this off. Check Login Items in System Settings.")
         }
     }
 }

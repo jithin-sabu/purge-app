@@ -10,21 +10,21 @@ enum ScheduledCleanupNotifier {
     }
 
     static func notifyNothingEligible() async {
-        await deliver(title: "Scheduled clean finished", body: "Nothing matched your safe settings yet. We’ll try again later.")
+        await deliver(title: String(localized: "Scheduled clean finished"), body: "Nothing matched your safe settings yet. We’ll try again later.")
     }
 
     static func notifyScheduledCleanFinished(bytesMovedToTrash: Int64, deletedCount: Int) async {
         let space = formatBytes(bytesMovedToTrash)
         let noun = deletedCount == 1 ? "item" : "items"
         await deliver(
-            title: "Scheduled clean finished",
+            title: String(localized: "Scheduled clean finished"),
             body: "Moved \(deletedCount) \(noun) to Trash, about \(space). Empty the trash to reclaim the space."
         )
     }
 
     static func notifyScheduledCleanFailed() async {
         await deliver(
-            title: "Scheduled clean",
+            title: String(localized: "Scheduled clean"),
             body: "Something went wrong during the automated clean. Open Purge when you get a chance to try again."
         )
     }
