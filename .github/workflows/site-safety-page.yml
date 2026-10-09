@@ -1,0 +1,51 @@
+name: Site safety page
+
+# purgemac.com/safety is generated from these files. Build it from this
+# branch so a change the site can't read is caught on the pull request,
+# not on release day.
+
+on:
+  pull_request:
+    paths:
+      - purge/Services/DeletionSafetyPolicy.swift
+      - purge/Resources/explanations.json
+      - purge/Models/ProjectArtifactCatalog.swift
+      - .github/workflows/site-safety-page.yml
+  push:
+    branches: [main]
+    paths:
+      - purge/Services/DeletionSafetyPolicy.swift
+      - purge/Resources/explanations.json
+      - purge/Models/ProjectArtifactCatalog.swift
+      - .github/workflows/site-safety-page.yml
+
+jobs:
+  build:
+    name: Build /safety from this branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Check out purgemac.com
+        uses: actions/checkout@v4
+        with:
+          repository: jithin-sabu/purge-landing-page
+          path: site
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        working-directory: site
+        run: npm ci
+
+      - name: Build
+        working-directory: site
+        env:
+          SAFETY_SOURCE_DIR: ${{ github.workspace }}/app
+        run: npm run build
