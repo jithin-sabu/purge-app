@@ -1,0 +1,1129 @@
+/* Simplified Chinese display text. Matching rules and risk tags stay in explanations.json. */
+
+/* adobe-media-cache-files */
+"Adobe Media Cache Files" = "Adobe 媒体缓存文件";
+"premiere pro and after effects store rendered previews and conformed audio here. safe to clean. the apps rebuild it on next launch, which can take a few minutes for large projects." = "Premiere Pro 和 After Effects 在这里保存已渲染的预览和已适配的音频，可以安全清理。应用下次启动时会重建这些文件，大型项目可能需要几分钟。";
+
+/* adobe-media-cache */
+"Adobe Media Cache Database" = "Adobe 媒体缓存数据库";
+"the index adobe uses to track media cache files. safe to clean. rebuilds alongside the cache." = "Adobe 用于追踪媒体缓存文件的索引，可以安全清理，会与缓存一起重建。";
+
+/* adobe-camera-raw */
+"Adobe Camera Raw Cache" = "Adobe Camera Raw 缓存";
+"photoshop, lightroom and bridge cache raw previews here. safe to clean. rebuilds automatically when you open images." = "Photoshop、Lightroom 和 Bridge 在这里缓存 RAW 预览，可以安全清理。打开图片时会自动重建。";
+
+/* android-sdk */
+"Android Build Cache" = "Android 构建缓存";
+"Build caches that Android Studio and Gradle keep in ~/.android. Your emulators, the key your phones trust for debugging, and your debug signing key are left alone. Safe to delete; the next build recreates them." = "Android Studio 和 Gradle 保存在 ~/.android 中的构建缓存。不会动模拟器、手机信任的调试密钥或调试签名密钥，可以安全删除，下次构建时会重新生成。";
+
+/* perplexity-updater */
+"Perplexity App Updater" = "Perplexity 应用更新器";
+"These are temporary files used to update the Perplexity AI app. They are regenerated automatically whenever Perplexity checks for a new version." = "用于更新 Perplexity AI 应用的临时文件。每次 Perplexity 检查新版本时，都会自动重新生成。";
+
+/* blender */
+"Blender 3D App" = "Blender 3D 应用";
+"These are temporary files saved by Blender, the 3D design application. Deleting them is safe but Blender may take a little longer to start up the next time you open it." = "Blender 这款 3D 设计应用保存的临时文件。可以安全删除，但下次打开 Blender 时，启动可能稍慢。";
+
+/* checkpoint-nodejs */
+"Node.js Dev Tool" = "Node.js 开发工具";
+"This is a temporary storage folder used by a developer tool that runs on your Mac. It is safe to delete and will be recreated automatically." = "Mac 上某个开发工具使用的临时存储文件夹。可以安全删除，会自动重新创建。";
+
+/* cloudkit */
+"iCloud Data Sync" = "iCloud 数据同步";
+"This holds the data your Mac uses to sync with iCloud. Nothing is lost from iCloud, but apps will need to re-sync their data afterwards, which can take time on a slow connection." = "保存 Mac 与 iCloud 同步所需的数据。iCloud 中的数据不会丢失，但应用之后需要重新同步；网络较慢时可能耗时较长。";
+
+/* claude-updater */
+"Claude App Updater" = "Claude 应用更新器";
+"These are temporary files used to update the Claude AI desktop app. They are recreated automatically each time Claude checks for updates." = "用于更新 Claude AI 桌面应用的临时文件。每次 Claude 检查更新时，都会自动重新创建。";
+
+/* accountsd */
+"Apple Accounts Service" = "Apple 账户服务";
+"This supports the system service that manages your Apple ID and connected accounts. Deleting it can sign accounts out and ask you to sign in again." = "支持管理 Apple ID 和已连接账户的系统服务。删除后可能退出账户，并要求你重新登录。";
+
+/* akd */
+"Apple Key Service" = "Apple 密钥服务";
+"This is used by the Apple background service that handles authentication and security keys. Deleting it can prompt you to re-authenticate." = "Apple 负责身份认证和安全密钥的后台服务使用的数据。删除后可能要求重新认证。";
+
+/* amp-library-agent */
+"Apple Music Library" = "Apple Music 资料库";
+"Temporary data for your Apple Music library. Nothing is lost, but Apple Music may take a while to rebuild your library view." = "Apple Music 资料库的临时数据。不会丢失内容，但 Apple Music 重建资料库视图可能需要一些时间。";
+
+/* amsaccountsd */
+"App Store Accounts" = "App Store 账户";
+"This supports the App Store's sign-in and account system. Deleting it can prompt you to sign in to the App Store again." = "支持 App Store 的登录与账户系统。删除后可能要求重新登录 App Store。";
+
+/* amsengagementd */
+"App Store Notifications" = "App Store 通知";
+"This folder stores temporary data related to App Store recommendations and notifications. It is completely safe to delete and will be rebuilt automatically." = "保存 App Store 推荐和通知相关的临时数据。可以完全安全地删除，之后会自动重建。";
+
+/* adprivacyd */
+"Apple Ad Privacy" = "Apple 广告隐私";
+"This is temporary data used by Apple's privacy-focused advertising system. Deleting it is safe and has no effect on your apps or personal data." = "Apple 注重隐私的广告系统使用的临时数据。可以安全删除，不影响应用或个人数据。";
+
+/* appleaccountd */
+"Apple ID Service" = "Apple ID 服务";
+"This is used by the service that manages your Apple ID on your Mac. Deleting it can prompt you to sign in to your Apple ID again." = "Mac 上管理 Apple ID 的服务使用的数据。删除后可能要求重新登录 Apple ID。";
+
+/* apple-media-services */
+"Apple Media Services" = "Apple 媒体服务";
+"This stores temporary data for Apple's media services including the App Store, Apple TV, and Apple Music. Deleting it is safe and these services will rebuild it as needed." = "保存 App Store、Apple TV 和 Apple Music 等 Apple 媒体服务的临时数据。可以安全删除，这些服务会按需重建。";
+
+/* appstoreagent */
+"App Store Agent" = "App Store 后台代理";
+"This contains temporary files used by the App Store to manage downloads and updates in the background. It is safe to delete and will be recreated automatically." = "App Store 用于在后台管理下载和更新的临时文件。可以安全删除，会自动重新创建。";
+
+/* assistantd */
+"Siri Assistant" = "Siri 助理";
+"This folder holds temporary data for Siri on your Mac. Deleting it is completely safe and Siri will rebuild it automatically." = "Mac 上 Siri 的临时数据。可以完全安全地删除，Siri 会自动重建。";
+
+/* authentication-services */
+"Sign In with Apple" = "通过 Apple 登录";
+"This supports the 'Sign in with Apple' feature used by apps and websites. Deleting it can sign you out and require signing in again." = "支持应用和网站中的“通过 Apple 登录”功能。删除后可能退出登录，并要求你重新登录。";
+
+/* beta-enrollment */
+"Apple Beta Program" = "Apple 测试版计划";
+"This is temporary data related to Apple's beta software programme. It is safe to delete and will be recreated if you are enrolled in the beta programme." = "Apple 测试版软件计划相关的临时数据。可以安全删除；如果你已加入测试版计划，之后会重新创建。";
+
+/* bird */
+"iCloud Drive Sync" = "iCloud 云盘同步";
+"This is used by the service that keeps iCloud Drive in sync with your Mac. Nothing is lost from iCloud, but your Mac will re-check and re-download file state afterwards." = "负责让 iCloud 云盘与 Mac 保持同步的服务使用的数据。iCloud 中的数据不会丢失，但 Mac 之后会重新检查并下载文件状态信息。";
+
+/* businessservicesd */
+"Apple Business Services" = "Apple 企业服务";
+"This holds temporary data for Apple's business and organisation account features. It is safe to delete and will be regenerated automatically." = "Apple 企业与组织账户功能的临时数据。可以安全删除，会自动重新生成。";
+
+/* cache-delete */
+"System Cache Manager" = "系统缓存管理器";
+"This is a folder used by macOS itself to manage and clean up other temporary files. It is safe to delete." = "macOS 自身用于管理和清理其他临时文件的文件夹。可以安全删除。";
+
+/* cloudd */
+"iCloud Background Service" = "iCloud 后台服务";
+"This is used by the background service that handles iCloud data on your Mac. Nothing is lost from iCloud, but your Mac will need to re-sync afterwards." = "处理 Mac 上 iCloud 数据的后台服务使用的数据。iCloud 中的数据不会丢失，但 Mac 之后需要重新同步。";
+
+/* cloud-telemetry */
+"Apple Usage Reports" = "Apple 使用情况报告";
+"This stores temporary data that Apple uses for anonymous usage analytics. Deleting it is completely safe and causes no issues." = "Apple 用于匿名使用情况分析的临时数据。可以完全安全地删除，不会造成问题。";
+
+/* ctcategories */
+"Content Type Service" = "内容类型服务";
+"This is a temporary folder used by a macOS service that categorises content for features like Screen Time and parental controls. It is safe to delete." = "macOS 内容分类服务使用的临时文件夹，用于屏幕使用时间和家长控制等功能。可以安全删除。";
+
+/* dataaccessd */
+"Contacts & Calendar Sync" = "通讯录与日历同步";
+"This is used by the service that syncs your contacts and calendars. Nothing is lost from your accounts, but your Mac re-downloads them, and they may be briefly missing while it does." = "同步通讯录和日历的服务使用的数据。账户中的内容不会丢失，但 Mac 会重新下载，期间可能暂时无法显示。";
+
+/* donotdisturbd */
+"Focus Mode Service" = "专注模式服务";
+"This is temporary data for your Mac's Focus and Do Not Disturb settings. It is safe to delete and will be recreated automatically." = "Mac 专注模式与勿扰设置的临时数据。可以安全删除，会自动重新创建。";
+
+/* duetexpertd */
+"Siri Intelligence Engine" = "Siri 智能引擎";
+"Apple's on-device intelligence that powers Siri Suggestions and app predictions. Deleting it resets what it has learned about how you use your Mac." = "Apple 的设备端智能数据，用于 Siri 建议和应用预测。删除后会重置其已学习的 Mac 使用习惯。";
+
+/* e5bundlecache */
+"Apple ML Model Cache" = "Apple 机器学习模型缓存";
+"Compiled copies of the machine learning models that macOS features such as Photos and Live Text use. Safe to delete; macOS compiles them again when they are next needed, which takes some processor time." = "照片、实况文本等 macOS 功能使用的机器学习模型编译副本。可以安全删除；下次需要时 macOS 会重新编译，会占用一些处理器时间。";
+
+/* feature-access-agent */
+"Feature Permissions" = "功能权限";
+"This temporary folder helps macOS manage which features and capabilities apps are allowed to use. It is safe to delete and will be rebuilt automatically." = "帮助 macOS 管理应用可使用功能与能力的临时文件夹。可以安全删除，会自动重建。";
+
+/* feedbacklogger */
+"Apple Feedback Logger" = "Apple 反馈日志";
+"This stores temporary logs that are sent to Apple as diagnostic feedback. Deleting it is completely safe." = "保存发送给 Apple 的诊断反馈临时日志。可以完全安全地删除。";
+
+/* fileprovider-appstore */
+"App Store File Service" = "App Store 文件服务";
+"This is used by a background service that helps the App Store manage files on your Mac. It is safe to delete." = "帮助 App Store 管理 Mac 上文件的后台服务使用的数据。可以安全删除。";
+
+/* findmy */
+"Find My Service" = "查找服务";
+"Temporary data used by Find My to track your Apple devices. Nothing is lost, but device locations may take a while to reappear." = "“查找”用于追踪 Apple 设备的临时数据。不会丢失内容，但设备位置可能需要一些时间才会重新显示。";
+
+/* geoanalyticsd */
+"Location Analytics" = "位置分析";
+"This is temporary data used by Apple's location analytics system. Deleting it is completely safe and has no effect on Maps or other apps." = "Apple 位置分析系统使用的临时数据。可以完全安全地删除，不影响地图或其他应用。";
+
+/* maps-tile-cache */
+"Apple Maps Tile Cache" = "Apple 地图图块缓存";
+"Map tiles and place data that Apple Maps has downloaded. Nothing is lost, but Maps downloads them again as you browse, which is slower and uses data." = "Apple 地图已下载的地图图块和地点数据。不会丢失内容，但浏览时地图会重新下载，加载更慢且消耗流量。";
+
+/* helpd */
+"macOS Help System" = "macOS 帮助系统";
+"This stores temporary data for the built-in macOS Help viewer. It is safe to delete and the Help system will rebuild it when next opened." = "内置 macOS 帮助查看器的临时数据。可以安全删除，下次打开时帮助系统会重建。";
+
+/* homed */
+"Apple Home & HomeKit" = "Apple 家庭与 HomeKit";
+"Temporary data for the Home app and your connected smart home devices. Nothing is unpaired, but the Home app may be slow or incomplete until it re-syncs." = "家庭应用和已连接智能家居设备的临时数据。不会取消设备配对，但重新同步完成前，家庭应用可能较慢或显示不完整。";
+
+/* icloud-notification-agent */
+"iCloud Notifications" = "iCloud 通知";
+"Temporary data for iCloud notifications. It is rebuilt automatically, but iCloud notifications can be delayed until it is." = "iCloud 通知的临时数据，会自动重建，但重建完成前通知可能延迟。";
+
+/* itunes */
+"iTunes & Apple Music" = "iTunes 与 Apple Music";
+"Temporary data from iTunes and Apple Music, including artwork and media previews. Nothing is lost, but artwork is re-downloaded as you browse." = "iTunes 和 Apple Music 的临时数据，包括封面和媒体预览。不会丢失内容，但浏览时会重新下载封面。";
+
+/* managedappdistribution */
+"Managed App Service" = "受管理应用服务";
+"This is used by a background service that helps distribute and manage apps, typically in business or school environments. It is safe to delete." = "帮助分发和管理应用的后台服务使用的数据，通常用于企业或学校环境。可以安全删除。";
+
+/* nsurlsessiond */
+"Background Downloads" = "后台下载";
+"This holds state for apps that download content in the background. Deleting it can interrupt downloads in progress, which then have to start over." = "保存应用后台下载内容的状态。删除可能中断正在进行的下载，之后必须重新开始。";
+
+/* parsecd */
+"Siri Knowledge Engine" = "Siri 知识引擎";
+"This is used by a background Apple service that helps Siri and Spotlight understand natural language queries. It is safe to delete and will be rebuilt automatically." = "帮助 Siri 和 聚焦 理解自然语言查询的 Apple 后台服务使用的数据。可以安全删除，会自动重建。";
+
+/* passd */
+"Apple Wallet Passes" = "Apple 钱包凭证";
+"This stores temporary data for passes in your Apple Wallet, such as boarding passes and loyalty cards. Deleting it is safe but your Wallet may need to re-sync pass data." = "Apple 钱包中登机牌、会员卡等凭证的临时数据。可以安全删除，但钱包可能需要重新同步凭证数据。";
+
+/* proactive-eventtracker */
+"Siri Suggestions Data" = "Siri 建议数据";
+"This is what Siri Suggestions has learned about your habits and routines. Deleting it resets those personalised suggestions until Siri learns them again." = "Siri 建议已学习的习惯和日常规律。删除后会重置这些个性化建议，直到 Siri 重新学习。";
+
+/* remindd */
+"Reminders Service" = "提醒事项服务";
+"This is temporary data used by the Reminders app in the background. Deleting it is safe but the Reminders app may need a moment to reload when next opened." = "提醒事项应用在后台使用的临时数据。可以安全删除，但下次打开时可能需要片刻重新加载。";
+
+/* safari */
+"Safari Browser" = "Safari 浏览器";
+"This contains Safari's temporary browsing data, including website previews and recently visited page data. Deleting it is safe but websites may load slightly slower until the data rebuilds." = "Safari 的临时浏览数据，包括网站预览和最近访问的页面数据。可以安全删除，但数据重建前网站加载可能稍慢。";
+
+/* shazam */
+"Shazam Music ID" = "Shazam 音乐识别";
+"This stores temporary data downloaded by Shazam to help identify music. It is completely safe to delete and Shazam will re-download what it needs." = "Shazam 为识别音乐而下载的临时数据。可以完全安全地删除，Shazam 会重新下载所需内容。";
+
+/* siri-tts */
+"Siri Voice Data" = "Siri 语音数据";
+"This stores temporary voice and speech data used by Siri to speak responses. It is safe to delete and Siri will rebuild it automatically." = "Siri 用于语音回答的临时语音数据。可以安全删除，Siri 会自动重建。";
+
+/* spotlight */
+"Spotlight Search" = "聚焦搜索";
+"This is the data Spotlight uses to search your Mac. Nothing is lost, but search results will be slow or incomplete until macOS finishes rebuilding the index, which can take a while." = "聚焦 用于搜索 Mac 的数据。不会丢失内容，但 macOS 完成索引重建前，搜索结果可能较慢或不完整；重建可能需要一些时间。";
+
+/* tipsd */
+"macOS Tips App" = "macOS 提示应用";
+"This stores temporary data for the Tips app that shows you helpful macOS features. It is completely safe to delete." = "介绍 macOS 实用功能的提示应用保存的临时数据。可以完全安全地删除。";
+
+/* videoconference */
+"FaceTime & Video Calls" = "FaceTime 与视频通话";
+"This is temporary data used by FaceTime and other Apple video calling features. It is safe to delete and will be recreated as needed." = "FaceTime 和其他 Apple 视频通话功能使用的临时数据。可以安全删除，会按需重新创建。";
+
+/* datadog */
+"Datadog Monitoring" = "Datadog 监测";
+"This stores temporary data for Datadog, a developer monitoring and analytics tool. It is safe to delete and will be recreated if Datadog is running." = "开发者监测与分析工具 Datadog 的临时数据。可以安全删除；Datadog 运行时会重新创建。";
+
+/* google-updater */
+"Google App Updater" = "Google 应用更新器";
+"This stores temporary files used by Google's automatic updater to keep Google apps like Chrome up to date. It is safe to delete and will be recreated at the next update check." = "Google 自动更新器用于保持 Chrome 等 Google 应用最新的临时文件。可以安全删除，下次检查更新时会重新创建。";
+
+/* microsoft-autoupdate */
+"Microsoft Auto-Updater" = "Microsoft 自动更新器";
+"This holds temporary files used by Microsoft AutoUpdate to keep apps like Word and Excel up to date. It is safe to delete and will be recreated automatically." = "Microsoft AutoUpdate 用于更新 Word、Excel 等应用的临时文件。可以安全删除，会自动重新创建。";
+
+/* microsoft-edge-updater */
+"Edge Browser Updater" = "Edge 浏览器更新器";
+"These are temporary files used to update the Microsoft Edge browser. They are safe to delete and will be recreated when Edge next checks for updates." = "用于更新 Microsoft Edge 浏览器的临时文件。可以安全删除，Edge 下次检查更新时会重新创建。";
+
+/* nt-ware-smartclient */
+"NT-ware Print Client" = "NT-ware 打印客户端";
+"This is used by NT-ware's SmartClient, a print management tool commonly found in offices and universities. Deleting it is generally safe but the print client may need to re-configure itself." = "NT-ware 的 SmartClient 使用的数据，这是一款常见于办公室和大学的打印管理工具。通常可以安全删除，但打印客户端可能需要重新配置。";
+
+/* openai-codex */
+"OpenAI Codex Tool" = "OpenAI Codex 工具";
+"This stores temporary data for OpenAI's Codex coding assistant tool. It is safe to delete and will be rebuilt automatically." = "OpenAI Codex 编程助理工具的临时数据。可以安全删除，会自动重建。";
+
+/* todesktop-shipit */
+"ToDesktop App Updater" = "ToDesktop 应用更新器";
+"This stores temporary files used by apps built with ToDesktop to deliver updates. It is safe to delete." = "使用 ToDesktop 构建的应用用于提供更新的临时文件。可以安全删除。";
+
+/* arc-browser */
+"Arc / Dia Browser" = "Arc／Dia 浏览器";
+"This stores temporary data for the Arc or Dia web browser. Deleting it is safe but the browser may reload some website data more slowly on next launch." = "Arc 或 Dia 浏览器的临时数据。可以安全删除，但下次启动时，部分网站数据可能加载较慢。";
+
+/* family-circle */
+"Family Sharing Service" = "家人共享服务";
+"Temporary data for Family Sharing. Nothing is lost, but family and sharing settings may take a moment to re-sync." = "家人共享的临时数据。不会丢失内容，但家庭与共享设置可能需要片刻重新同步。";
+
+/* purge-app */
+"Purge App" = "Purge 应用";
+"This is temporary data created by the Purge app itself. It is safe to delete." = "Purge 应用自身创建的临时数据。可以安全删除。";
+
+/* sentry */
+"Sentry Error Reports" = "Sentry 错误报告";
+"This stores temporary error and crash reports collected by Sentry, a tool used by developers to track app issues. It is safe to delete." = "开发者用于追踪应用问题的 Sentry 收集的临时错误和崩溃报告。可以安全删除。";
+
+/* ms-playwright */
+"Playwright Browsers" = "Playwright 浏览器";
+"Browsers Playwright downloaded for automated website testing. Your tests fail until you run npx playwright install, which downloads them again." = "Playwright 为自动化网站测试下载的浏览器。删除后测试会失败，直到你运行 npx playwright install 重新下载。";
+
+/* node-modules */
+"Node.js Packages" = "Node.js 软件包";
+"Code libraries installed for developer projects. Safe to remove for stale projects — run npm install to restore them anytime." = "开发项目安装的代码库。旧项目的代码库可以安全移除，随时运行 npm install 即可恢复。";
+
+/* prisma-nodejs */
+"Prisma Database Tool" = "Prisma 数据库工具";
+"This stores temporary files used by Prisma, a developer database tool. It is safe to delete and will be regenerated when Prisma is next used." = "开发者数据库工具 Prisma 使用的临时文件。可以安全删除，下次使用 Prisma 时会重新生成。";
+
+/* segment */
+"Segment Analytics" = "Segment 分析";
+"This stores temporary data for Segment, a tool developers use to collect usage analytics. It is safe to delete." = "开发者收集使用情况分析的工具 Segment 保存的临时数据。可以安全删除。";
+
+/* ssu */
+"Apple Software Update" = "Apple 软件更新";
+"This is temporary data used by Apple's software update system. It is safe to delete and will be recreated when your Mac next checks for updates." = "Apple 软件更新系统使用的临时数据。可以安全删除，Mac 下次检查更新时会重新创建。";
+
+/* macos-installer */
+"macOS Installer" = "macOS 安装器";
+"A full macOS installer downloaded from the App Store or Software Update, usually 12 to 15 GB. macOS does not need it once it is installed. Keep it if you use it to make a bootable USB installer; otherwise you can download it again from the App Store." = "从 App Store 或软件更新下载的完整 macOS 安装器，通常为 12 至 15 GB。安装完成后 macOS 不再需要它。如果要制作可启动的 USB 安装盘，请保留；否则可从 App Store 再次下载。";
+
+/* dart-tool */
+"Flutter Dev Tool" = "Flutter 开发工具";
+"A temporary folder used by the Dart and Flutter development tools. Safe to delete and will be recreated automatically the next time you run a Flutter project." = "Dart 和 Flutter 开发工具使用的临时文件夹。可以安全删除，下次运行 Flutter 项目时会自动重新创建。";
+
+/* ams-migrator */
+"App Store Migration Tool" = "App Store 迁移工具";
+"This is a temporary folder used by Apple's App Store services to migrate account or media data. It is safe to delete." = "Apple App Store 服务用于迁移账户或媒体数据的临时文件夹。可以安全删除。";
+
+/* spokenly */
+"Spokenly App" = "Spokenly 应用";
+"This stores temporary data for the Spokenly app. It is safe to delete and will be recreated when the app is next used." = "Spokenly 应用的临时数据。可以安全删除，下次使用应用时会重新创建。";
+
+/* archives */
+"App Archives" = "应用归档";
+"Archived builds created by development tools. Check contents before deleting — may contain important project archives." = "开发工具创建的归档构建。删除前请检查内容，可能包含重要的项目归档。";
+
+/* container-managerd */
+"App Sandbox Manager" = "应用沙盒管理器";
+"This is used by the macOS service that manages isolated storage areas for apps. Deleting it is generally safe but some apps may need to re-establish their storage areas." = "macOS 管理应用隔离存储区域的服务使用的数据。通常可以安全删除，但部分应用可能需要重新建立存储区域。";
+
+/* storekitagent */
+"In-App Purchase Service" = "应用内购买服务";
+"Temporary data for in-app purchases and App Store transactions. Nothing is lost, but apps may ask you to restore purchases or sign in again." = "应用内购买与 App Store 交易的临时数据。不会丢失内容，但应用可能要求恢复购买或重新登录。";
+
+/* docker */
+"Docker Containers" = "Docker 容器";
+"This is Docker Desktop's virtual disk. It holds every image, container, and volume you have. Images can be pulled again, but volumes often hold database data that exists nowhere else. To free space and keep your volumes, run docker --context desktop-linux system prune while Docker Desktop is running. Quit Docker Desktop before deleting this folder." = "这是 Docker Desktop 的虚拟磁盘，保存你的所有镜像、容器和卷。镜像可再次拉取，但卷通常包含没有其他副本的数据库数据。若想释放空间并保留卷，请在 Docker Desktop 运行时执行 docker --context desktop-linux system prune。删除此文件夹前，请先退出 Docker Desktop。";
+
+/* raycast */
+"Raycast Launcher" = "Raycast 启动器";
+"This stores temporary data for Raycast, a productivity launcher app. It is safe to delete and Raycast will rebuild it automatically." = "效率启动器应用 Raycast 的临时数据。可以安全删除，Raycast 会自动重建。";
+
+/* DerivedData */
+"Xcode Build Files" = "Xcode 构建文件";
+"Temporary files Xcode creates while building apps. Always safe to delete — your next build will just take a little longer." = "Xcode 构建应用时创建的临时文件，始终可以安全删除，只是下次构建会稍慢。";
+
+/* swiftpm */
+"Swift Package Manager" = "Swift 软件包管理器";
+"This stores downloaded Swift code libraries used by developer projects. Deleting it is safe but your projects will need to re-download their dependencies next time they are built." = "开发项目使用的已下载 Swift 代码库。可以安全删除，但项目下次构建时需重新下载依赖。";
+
+/* zen */
+"Zen Browser" = "Zen 浏览器";
+"This stores temporary data for the Zen web browser. Deleting it is safe but the browser may reload some website data more slowly on next launch." = "Zen 浏览器的临时数据。可以安全删除，但下次启动时，部分网站数据可能加载较慢。";
+
+/* xcode-itunes-service */
+"Xcode Device Support" = "Xcode 设备支持";
+"This stores temporary files used by Xcode when installing or testing apps on connected Apple devices. Deleting it is safe but Xcode may need to re-download device support files." = "Xcode 在连接的 Apple 设备上安装或测试应用时使用的临时文件。可以安全删除，但 Xcode 可能需要重新下载设备支持文件。";
+
+/* gamed */
+"Game Center Service" = "Game Center 服务";
+"This stores temporary data for Apple's Game Center, which manages game scores and achievements. It is safe to delete and will be rebuilt automatically." = "Apple Game Center 的临时数据，该服务管理游戏分数与成就。可以安全删除，会自动重建。";
+
+/* chrono */
+"Widgets Cache" = "小组件缓存";
+"Saved snapshots of your desktop and Notification Center widgets. Safe to delete; widgets draw themselves again and may look blank for a moment until they do." = "桌面与通知中心小组件保存的快照。可以安全删除，小组件会重新绘制，完成前可能短暂显示为空白。";
+
+/* translation */
+"Translation Service" = "翻译服务";
+"This stores temporary data used by macOS's built-in translation feature. It is safe to delete and the translation service will rebuild it as needed." = "macOS 内置翻译功能使用的临时数据。可以安全删除，翻译服务会按需重建。";
+
+/* figma-agent */
+"Figma Desktop Agent" = "Figma 桌面代理";
+"This stores temporary data for Figma's background helper that enables font access and desktop features. It is safe to delete." = "Figma 后台辅助服务的临时数据，用于字体访问与桌面功能。可以安全删除。";
+
+/* gamekit */
+"GameKit Framework" = "GameKit 框架";
+"This stores temporary data for Apple's gaming framework used by game apps. It is safe to delete and will be rebuilt when a game app is next opened." = "Apple 游戏框架供游戏应用使用的临时数据。可以安全删除，下次打开游戏应用时会重建。";
+
+/* image-cache */
+"Image Thumbnail Cache" = "图片缩略图缓存";
+"This stores saved image previews and thumbnails to speed up display in apps. It is safe to delete and the images will simply load a little slower until the previews rebuild." = "保存的图片预览与缩略图，用于加快应用显示。可以安全删除；预览重建完成前，图片加载会稍慢。";
+
+/* revenuecat */
+"RevenueCat Purchases" = "RevenueCat 购买服务";
+"This stores temporary data for RevenueCat, a tool that apps use to manage in-app subscriptions and purchases. It is safe to delete." = "RevenueCat 的临时数据，应用通过此工具管理应用内订阅与购买。可以安全删除。";
+
+/* gitworktrees */
+"Git Worktree Checkouts" = "Git 工作树检出";
+"Forgotten branch checkouts created by Git. Safe to remove if you are no longer working on those branches, but check first that you have no unsaved work." = "Git 创建后遗留的分支检出目录。如果已不再使用这些分支，可以安全移除，但请先检查是否有未保存的工作。";
+
+/* vscode */
+"VS Code Cache" = "VS Code 缓存";
+"Temporary files stored by Visual Studio Code. Safe to delete and will be recreated when you open VS Code again." = "Visual Studio Code 保存的临时文件。可以安全删除，再次打开 VS Code 时会重新创建。";
+
+/* cursor */
+"Cursor Cache" = "Cursor 缓存";
+"Temporary files stored by the Cursor code editor. Safe to delete and will be recreated when you open Cursor again." = "Cursor 代码编辑器保存的临时文件。可以安全删除，再次打开 Cursor 时会重新创建。";
+
+/* jetbrains */
+"JetBrains IDE Cache" = "JetBrains IDE 缓存";
+"Indexes and caches that JetBrains IDEs such as IntelliJ, WebStorm and PyCharm rebuild on their own. Local History is left alone. The IDE re-indexes your projects the next time you open them, which takes a few minutes." = "IntelliJ、WebStorm、PyCharm 等 JetBrains IDE 可自行重建的索引与缓存，不会动本地历史记录。下次打开项目时 IDE 会重新建立索引，需要几分钟。";
+
+/* zed */
+"Zed Editor Cache" = "Zed 编辑器缓存";
+"Temporary files stored by the Zed code editor. Safe to delete and will be recreated when you open Zed again." = "Zed 代码编辑器保存的临时文件。可以安全删除，再次打开 Zed 时会重新创建。";
+
+/* go */
+"Go Module Cache" = "Go 模块缓存";
+"Cached Go packages and build outputs. Safe to delete and will be re-downloaded when you build your Go projects again." = "缓存的 Go 软件包与构建输出。可以安全删除，再次构建 Go 项目时会重新下载。";
+
+/* maven */
+"Maven Package Cache" = "Maven 软件包缓存";
+"Java libraries downloaded by Maven, plus anything you built and installed locally with mvn install. Downloaded libraries come back on your next build, which can take a long time. Your own installed builds only come back if you build them again." = "Maven 下载的 Java 库，以及你通过 mvn install 在本机构建安装的内容。已下载的库会在下次构建时重新下载，可能耗时较长；你自行安装的构建只有重新构建后才能恢复。";
+
+/* sbt */
+"Ivy Dependency Cache" = "Ivy 依赖缓存";
+"Java and Scala libraries downloaded by sbt and Ivy. Nothing is lost, but your next build downloads all of them again, which can take a long time and does not work offline." = "sbt 和 Ivy 下载的 Java 与 Scala 库。不会丢失内容，但下次构建需重新下载全部库，可能耗时较长，且无法离线完成。";
+
+/* rubygems */
+"Ruby Gem Downloads" = "Ruby Gem 下载";
+"Downloaded .gem files and the gem spec index that RubyGems keeps after installing. Your installed gems and their commands stay. Safe to delete; RubyGems downloads them again when it needs them." = "RubyGems 安装后保留的已下载 .gem 文件和 Gem 规格索引。已安装的 Gem 及其命令会保留。可以安全删除，RubyGems 会在需要时重新下载。";
+
+/* bundler */
+"Bundler Cache" = "Bundler 缓存";
+"Cached Ruby gems downloaded by Bundler. Safe to delete and will be re-downloaded when you run bundle install." = "Bundler 下载并缓存的 Ruby Gem。可以安全删除，运行 bundle install 时会重新下载。";
+
+/* composer */
+"Composer Cache" = "Composer 缓存";
+"Cached PHP packages downloaded by Composer. Safe to delete and will be re-downloaded when you run composer install." = "Composer 下载并缓存的 PHP 软件包。可以安全删除，运行 composer install 时会重新下载。";
+
+/* cargo */
+"Rust Package Cache" = "Rust 软件包缓存";
+"Cached Rust packages and compiled dependencies. Safe to delete and will be re-downloaded when you build your Rust projects." = "缓存的 Rust 软件包与已编译依赖。可以安全删除，构建 Rust 项目时会重新下载。";
+
+/* terraform */
+"Terraform Plugin Cache" = "Terraform 插件缓存";
+"Cached Terraform provider plugins. Safe to delete and will be re-downloaded when you run terraform init." = "缓存的 Terraform 提供方插件。可以安全删除，运行 terraform init 时会重新下载。";
+
+/* githubactions */
+"GitHub Actions Cache" = "GitHub Actions 缓存";
+"Cached files used when running GitHub Actions locally. Safe to delete and will be recreated automatically." = "在本机运行 GitHub Actions 时使用的缓存文件。可以安全删除，会自动重新创建。";
+
+/* vagrant */
+"Vagrant Box Cache" = "Vagrant Box 缓存";
+"Virtual machine images used by Vagrant. Safe to delete if unused — re-downloading takes a while." = "Vagrant 使用的虚拟机镜像。不再使用的镜像可以安全删除，但重新下载需要一些时间。";
+
+/* zsh */
+"Zsh Session Cache" = "Zsh 会话缓存";
+"Temporary files created by your terminal shell. Safe to delete and will be recreated automatically when you open a new terminal window." = "终端 Shell 创建的临时文件。可以安全删除，打开新终端窗口时会自动重新创建。";
+
+/* electron */
+"Electron App Cache" = "Electron 应用缓存";
+"Temporary files stored by apps built with Electron like Slack, Discord, and Notion. Safe to delete and will be recreated automatically." = "Slack、Discord、Notion 等 Electron 应用保存的临时文件。可以安全删除，会自动重新创建。";
+
+/* applogs */
+"Application Logs" = "应用日志";
+"Log files created by apps to record what they are doing. Safe to delete. Apps will create new log files automatically." = "应用用于记录自身活动的日志文件。可以安全删除，应用会自动创建新的日志文件。";
+
+/* crashreports */
+"Crash Reports" = "崩溃报告";
+"Records of app crashes saved by macOS. Safe to delete. These are only useful if you are reporting a bug to an app developer." = "macOS 保存的应用崩溃记录。可以安全删除，仅在向应用开发者报告问题时有用。";
+
+/* iossimulators */
+"iOS Simulators" = "iOS 模拟器";
+"Virtual iPhone and iPad devices that Xcode uses to test apps. Deleting one also deletes the apps and data installed on it. Xcode can create a new one whenever you need it." = "Xcode 用于测试应用的虚拟 iPhone 和 iPad 设备。删除模拟器也会删除其中安装的应用与数据。需要时，Xcode 可以创建新的模拟器。";
+
+/* bun-cache */
+"Bun Package Cache" = "Bun 软件包缓存";
+"Cached packages downloaded by Bun, a fast JavaScript runtime and package manager. Safe to delete and will be re-downloaded the next time you run bun install." = "Bun 下载并缓存的软件包。Bun 是快速的 JavaScript 运行时与软件包管理器。可以安全删除，下次运行 bun install 时会重新下载。";
+
+/* deno-cache */
+"Deno Module Cache" = "Deno 模块缓存";
+"Cached modules downloaded by Deno, a JavaScript and TypeScript runtime. Safe to delete and will be re-downloaded when you next run a Deno project." = "JavaScript 和 TypeScript 运行时 Deno 下载并缓存的模块。可以安全删除，下次运行 Deno 项目时会重新下载。";
+
+/* turbo-cache */
+"Turborepo Build Cache" = "Turborepo 构建缓存";
+"Saved build outputs from Turborepo, a build tool for JavaScript monorepos. Safe to delete. Your next build will simply take a little longer as it rebuilds from scratch." = "JavaScript 单仓库构建工具 Turborepo 保存的构建输出。可以安全删除，但下次需从头构建，会稍慢。";
+
+/* mise-cache */
+"Mise Tool Version Cache" = "Mise 工具版本缓存";
+"Cached runtime versions managed by Mise (formerly rtx), a tool version manager. Safe to delete but Mise will need to re-download any tools you use next time." = "工具版本管理器 Mise（原名 rtx）管理的运行时版本缓存。可以安全删除，但下次使用工具时，Mise 需重新下载。";
+
+/* nextjs-cache */
+"Next.js Build Cache" = "Next.js 构建缓存";
+"Temporary build files created by Next.js. Safe to delete and will be recreated the next time you build or run your Next.js project." = "Next.js 创建的临时构建文件。可以安全删除，下次构建或运行 Next.js 项目时会重新创建。";
+
+/* vite-cache */
+"Vite Build Cache" = "Vite 构建缓存";
+"Temporary files created by Vite, a fast frontend build tool. Safe to delete and will be regenerated when you next start your project." = "快速前端构建工具 Vite 创建的临时文件。可以安全删除，下次启动项目时会重新生成。";
+
+/* parcel-cache */
+"Parcel Build Cache" = "Parcel 构建缓存";
+"Saved build outputs from the Parcel bundler. Safe to delete and will be rebuilt next time you run a Parcel build." = "Parcel 打包工具保存的构建输出。可以安全删除，下次运行 Parcel 构建时会重建。";
+
+/* eslint-cache */
+"ESLint Cache" = "ESLint 缓存";
+"Saved results from ESLint, a JavaScript code checker. Safe to delete. ESLint will simply re-check all your files on the next run." = "JavaScript 代码检查工具 ESLint 保存的检查结果。可以安全删除，下次运行时 ESLint 会重新检查所有文件。";
+
+/* jest-cache */
+"Jest Test Cache" = "Jest 测试缓存";
+"Temporary files saved by Jest, a JavaScript testing tool, to make tests run faster. Safe to delete and will be recreated on the next test run." = "JavaScript 测试工具 Jest 为加快测试而保存的临时文件。可以安全删除，下次运行测试时会重新创建。";
+
+/* vitest-cache */
+"Vitest Test Cache" = "Vitest 测试缓存";
+"Temporary files saved by Vitest to speed up test runs. Safe to delete and will be recreated automatically." = "Vitest 为加快测试而保存的临时文件。可以安全删除，会自动重新创建。";
+
+/* cypress-cache */
+"Cypress Test Binaries" = "Cypress 测试程序";
+"Downloaded browser binaries used by Cypress for end-to-end testing. Safe to delete but Cypress will need to re-download them before your next test run, which can take a few minutes." = "Cypress 为端到端测试下载的浏览器程序。可以安全删除，但下次运行测试前，Cypress 需重新下载，可能需要几分钟。";
+
+/* python-cache */
+"Python Bytecode Cache" = "Python 字节码缓存";
+"Compiled Python files that make your code run faster. Safe to delete and Python will recreate them automatically when your code runs again." = "用于加快代码运行的已编译 Python 文件。可以安全删除，再次运行代码时 Python 会自动重新创建。";
+
+/* uv-cache */
+"uv Package Cache" = "uv 软件包缓存";
+"Cached Python packages downloaded by uv, a fast Python package manager. Safe to delete and will be re-downloaded when you next install packages." = "快速 Python 软件包管理器 uv 下载并缓存的软件包。可以安全删除，下次安装软件包时会重新下载。";
+
+/* ruff-cache */
+"Ruff Linter Cache" = "Ruff 检查缓存";
+"Saved results from Ruff, a fast Python code checker. Safe to delete and will be recreated on the next run." = "快速 Python 代码检查工具 Ruff 保存的检查结果。可以安全删除，下次运行时会重新创建。";
+
+/* mypy-cache */
+"Mypy Type Check Cache" = "Mypy 类型检查缓存";
+"Saved results from Mypy, a Python type checker. Safe to delete and will be rebuilt next time Mypy runs." = "Python 类型检查工具 Mypy 保存的结果。可以安全删除，下次运行 Mypy 时会重建。";
+
+/* kotlin-build */
+"Kotlin Build Cache" = "Kotlin 构建缓存";
+"Compiled Kotlin build files. Safe to delete and will be rebuilt the next time you build your Kotlin project." = "已编译的 Kotlin 构建文件。可以安全删除，下次构建 Kotlin 项目时会重建。";
+
+/* android-build */
+"Android Build Output" = "Android 构建输出";
+"Compiled Android app files. Safe to delete — your project will rebuild automatically next time." = "已编译的 Android 应用文件。可以安全删除，项目下次构建时会自动重建。";
+
+/* gradle-cache */
+"Gradle Build Cache" = "Gradle 构建缓存";
+"Cached build files and downloaded dependencies used by Gradle, a build tool for Java and Android projects. Safe to delete and will be re-downloaded on your next build." = "Java 和 Android 构建工具 Gradle 使用的构建缓存与已下载依赖。可以安全删除，下次构建时会重新下载。";
+
+/* gradle-global-cache */
+"Gradle Dependency Cache" = "Gradle 依赖缓存";
+"Libraries and build caches Gradle downloads for Java, Kotlin and Android projects. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline." = "Gradle 为 Java、Kotlin 和 Android 项目下载的代码库与构建缓存。不会丢失内容，但下次构建需重新下载全部内容，可能耗时较长，且无法离线完成。";
+
+/* cocoapods-cache */
+"CocoaPods Cache" = "CocoaPods 缓存";
+"Cached iOS and macOS library files downloaded by CocoaPods. Safe to delete and will be re-downloaded when you run pod install." = "CocoaPods 下载并缓存的 iOS 和 macOS 代码库文件。可以安全删除，运行 pod install 时会重新下载。";
+
+/* cocoapods-spec-repos */
+"CocoaPods Spec Repos" = "CocoaPods 规格仓库";
+"The spec repositories CocoaPods uses to look up libraries. The public one is set up again on your next pod install. Private spec repos you added with pod repo add have to be added again." = "CocoaPods 用于查找代码库的规格仓库。公共仓库会在下次 pod install 时重新设置；通过 pod repo add 添加的私有规格仓库，需要手动重新添加。";
+
+/* swift-build */
+"Swift Build Artifacts" = "Swift 构建产物";
+"Compiled Swift build files. Safe to delete and will be rebuilt the next time you build your Swift project." = "已编译的 Swift 构建文件。可以安全删除，下次构建 Swift 项目时会重建。";
+
+/* rust-target */
+"Rust Build Output" = "Rust 构建输出";
+"Compiled Rust project files. Safe to delete — your project will recompile automatically on the next build." = "已编译的 Rust 项目文件。可以安全删除，下次构建时项目会自动重新编译。";
+
+/* flutter-cache */
+"Flutter Build Cache" = "Flutter 构建缓存";
+"Temporary build files created by Flutter. Safe to delete and will be recreated the next time you build your Flutter app." = "Flutter 创建的临时构建文件。可以安全删除，下次构建 Flutter 应用时会重新创建。";
+
+/* pub-cache */
+"Dart Pub Cache" = "Dart Pub 缓存";
+"Dart and Flutter packages downloaded by pub. Tools you installed with dart pub global activate are left alone. Safe to delete; packages download again on your next flutter pub get." = "pub 下载的 Dart 和 Flutter 软件包。不会动通过 dart pub global activate 安装的工具。可以安全删除，下次 flutter pub get 时会重新下载软件包。";
+
+/* xcode-archives */
+"Xcode App Archives" = "Xcode 应用归档";
+"Archived Xcode builds for App Store submission. Cannot be recovered once deleted — only remove if you no longer need them." = "用于提交至 App Store 的 Xcode 归档构建。删除后无法恢复，仅在不再需要时移除。";
+
+/* xcode-device-support */
+"Xcode iOS Device Support" = "Xcode iOS 设备支持";
+"Files Xcode copies from your iPhone, Apple Watch, Apple TV or Vision Pro to debug apps on it. Nothing is lost, but Xcode copies them again the next time you connect that device, which takes a few minutes." = "Xcode 从 iPhone、Apple Watch、Apple TV 或 Vision Pro 复制的文件，用于在设备上调试应用。不会丢失内容，但下次连接设备时 Xcode 需重新复制，耗时几分钟。";
+
+/* homebrew-cache */
+"Homebrew Package Cache" = "Homebrew 软件包缓存";
+"Downloaded installation files for Homebrew packages. Safe to delete and Homebrew will simply re-download them if you reinstall any packages." = "Homebrew 软件包已下载的安装文件。可以安全删除；重新安装软件包时，Homebrew 会重新下载。";
+
+/* nvm-cache */
+"nvm Node.js Versions" = "nvm Node.js 版本";
+"Node.js versions managed by nvm. Safe to delete unused versions — avoid removing versions your projects depend on." = "nvm 管理的 Node.js 版本。可以安全删除不用的版本，但不要移除项目依赖的版本。";
+
+/* volta-cache */
+"Volta Tool Cache" = "Volta 工具缓存";
+"Cached Node.js and package manager versions managed by Volta. Safe to delete and Volta will re-download versions as needed." = "Volta 管理的 Node.js 和软件包管理器版本缓存。可以安全删除，Volta 会按需重新下载。";
+
+/* pnpm-store */
+"pnpm Package Store" = "pnpm 软件包存储";
+"The central package store used by pnpm to save disk space across projects. Safe to delete and packages will be re-downloaded when you run pnpm install." = "pnpm 用于在项目间节省磁盘空间的集中式软件包存储。可以安全删除，运行 pnpm install 时会重新下载软件包。";
+
+/* yarn-cache */
+"Yarn Package Cache" = "Yarn 软件包缓存";
+"Cached packages downloaded by Yarn. Safe to delete and will be re-downloaded when you run yarn install." = "Yarn 下载并缓存的软件包。可以安全删除，运行 yarn install 时会重新下载。";
+
+/* npm-cache */
+"npm Package Cache" = "npm 软件包缓存";
+"Cached packages downloaded by npm. Safe to delete and will be re-downloaded when you run npm install." = "npm 下载并缓存的软件包。可以安全删除，运行 npm install 时会重新下载。";
+
+/* husky-cache */
+"Husky Git Hooks" = "Husky Git 钩子";
+"Temporary files used by Husky to manage Git hooks in your projects. Safe to delete and will be regenerated automatically." = "Husky 在项目中管理 Git 钩子所用的临时文件。可以安全删除，会自动重新生成。";
+
+/* storybook-cache */
+"Storybook Cache" = "Storybook 缓存";
+"Temporary build files created by Storybook, a UI component development tool. Safe to delete and will be rebuilt the next time you start Storybook." = "UI 组件开发工具 Storybook 创建的临时构建文件。可以安全删除，下次启动 Storybook 时会重建。";
+
+/* nx-cache */
+"Nx Monorepo Cache" = "Nx 单仓库缓存";
+"Saved build and test results from Nx, a monorepo build tool. Safe to delete. Your next build will take a little longer as it rebuilds from scratch." = "单仓库构建工具 Nx 保存的构建与测试结果。可以安全删除，但下次需从头构建，会稍慢。";
+
+/* moon-cache */
+"Moon Build Cache" = "Moon 构建缓存";
+"Saved build outputs from Moon, a build and task runner for monorepos. Safe to delete and will be regenerated on the next run." = "单仓库构建与任务执行工具 Moon 保存的构建输出。可以安全删除，下次运行时会重新生成。";
+
+/* warp-terminal */
+"Warp Terminal" = "Warp 终端";
+"Temporary files stored by the Warp terminal app. Safe to delete and Warp will recreate them automatically." = "Warp 终端应用保存的临时文件。可以安全删除，Warp 会自动重新创建。";
+
+/* iterm2 */
+"iTerm2 Terminal" = "iTerm2 终端";
+"Temporary files stored by the iTerm2 terminal app. Safe to delete and iTerm2 will recreate them automatically." = "iTerm2 终端应用保存的临时文件。可以安全删除，iTerm2 会自动重新创建。";
+
+/* ghostty */
+"Ghostty Terminal" = "Ghostty 终端";
+"Temporary files stored by the Ghostty terminal app. Safe to delete and will be recreated when you next open Ghostty." = "Ghostty 终端应用保存的临时文件。可以安全删除，下次打开 Ghostty 时会重新创建。";
+
+/* chrome */
+"Google Chrome" = "Google Chrome 浏览器";
+"Temporary browsing data stored by Google Chrome including website caches and previews. Deleting it is safe but websites may load a little slower until Chrome rebuilds the cache." = "Google Chrome 保存的临时浏览数据，包括网站缓存与预览。可以安全删除，但 Chrome 重建缓存前，网站加载可能稍慢。";
+
+/* firefox */
+"Firefox Browser" = "Firefox 浏览器";
+"Temporary browsing data stored by Firefox. Deleting it is safe but websites may load a little slower until Firefox rebuilds the cache." = "Firefox 保存的临时浏览数据。可以安全删除，但 Firefox 重建缓存前，网站加载可能稍慢。";
+
+/* brave */
+"Brave Browser" = "Brave 浏览器";
+"Temporary browsing data stored by the Brave browser. Deleting it is safe but websites may load a little slower until Brave rebuilds the cache." = "Brave 浏览器保存的临时浏览数据。可以安全删除，但 Brave 重建缓存前，网站加载可能稍慢。";
+
+/* opera */
+"Opera Browser" = "Opera 浏览器";
+"Temporary browsing data stored by Opera. Deleting it is safe but websites may load a little slower until Opera rebuilds the cache." = "Opera 保存的临时浏览数据。可以安全删除，但 Opera 重建缓存前，网站加载可能稍慢。";
+
+/* slack */
+"Slack" = "Slack 应用";
+"Temporary files stored by Slack including message thumbnails and previews. Safe to delete and Slack will rebuild them automatically." = "Slack 保存的临时文件，包括消息缩略图与预览。可以安全删除，Slack 会自动重建。";
+
+/* discord */
+"Discord" = "Discord 应用";
+"Temporary files stored by Discord. Safe to delete and Discord will rebuild them automatically when you next open it." = "Discord 保存的临时文件。可以安全删除，下次打开时 Discord 会自动重建。";
+
+/* zoom */
+"Zoom" = "Zoom 应用";
+"Temporary files stored by Zoom. Safe to delete and Zoom will recreate them automatically." = "Zoom 保存的临时文件。可以安全删除，Zoom 会自动重新创建。";
+
+/* notion */
+"Notion" = "Notion 应用";
+"Temporary files stored by the Notion app. Safe to delete and Notion will rebuild them when you next open it." = "Notion 应用保存的临时文件。可以安全删除，下次打开时 Notion 会重建。";
+
+/* spotify */
+"Spotify" = "Spotify 应用";
+"Songs and artwork Spotify saved while you listened. Only shown when you have nothing downloaded for offline listening, since Spotify keeps those downloads close by. Safe to delete; Spotify streams and saves them again as you listen." = "Spotify 在你聆听时保存的歌曲与封面。仅在没有离线下载内容时显示，因为 Spotify 将离线下载保存在附近位置。可以安全删除；继续聆听时，Spotify 会重新在线播放并保存。";
+
+/* whatsapp */
+"WhatsApp" = "WhatsApp 应用";
+"Temporary files stored by WhatsApp on your Mac. Safe to delete and WhatsApp will rebuild them automatically." = "WhatsApp 在 Mac 上保存的临时文件。可以安全删除，WhatsApp 会自动重建。";
+
+/* telegram */
+"Telegram" = "Telegram 应用";
+"Temporary files stored by Telegram including media previews. Safe to delete and Telegram will reload them as needed." = "Telegram 保存的临时文件，包括媒体预览。可以安全删除，Telegram 会按需重新加载。";
+
+/* telegram-media-cache */
+"Telegram Media Cache" = "Telegram 媒体缓存";
+"Telegram stores auto-downloaded photos, videos and files here. It re-downloads them from the cloud as needed, but secret-chat media may exist only on this Mac." = "Telegram 在这里保存自动下载的照片、视频和文件。它会按需从云端重新下载，但秘密聊天中的媒体可能仅保存在这台 Mac 上。";
+
+/* linear */
+"Linear" = "Linear 应用";
+"Temporary files stored by the Linear project management app. Safe to delete and Linear will rebuild them when you next open it." = "项目管理应用 Linear 保存的临时文件。可以安全删除，下次打开时 Linear 会重建。";
+
+/* figma */
+"Figma" = "Figma 应用";
+"Temporary files stored by the Figma design app. Safe to delete and Figma will rebuild them when you next open it." = "设计应用 Figma 保存的临时文件。可以安全删除，下次打开时 Figma 会重建。";
+
+/* loom */
+"Loom Screen Recorder" = "Loom 录屏工具";
+"Temporary files stored by Loom. Safe to delete and Loom will recreate them automatically." = "Loom 保存的临时文件。可以安全删除，Loom 会自动重新创建。";
+
+/* grammarly */
+"Grammarly" = "Grammarly 应用";
+"Temporary files stored by the Grammarly writing assistant. Safe to delete and Grammarly will rebuild them automatically." = "写作助理 Grammarly 保存的临时文件。可以安全删除，Grammarly 会自动重建。";
+
+/* alfred */
+"Alfred Launcher" = "Alfred 启动器";
+"Temporary files stored by the Alfred productivity launcher. Safe to delete and Alfred will rebuild them automatically." = "效率启动器 Alfred 保存的临时文件。可以安全删除，Alfred 会自动重建。";
+
+/* 1password */
+"1Password" = "1Password 应用";
+"Temporary data stored by 1Password. Your vaults are safe, but 1Password may need to re-sync and ask you to unlock again." = "1Password 保存的临时数据。密码库会保留，但 1Password 可能需要重新同步，并要求再次解锁。";
+
+/* dropbox */
+"Dropbox" = "Dropbox 应用";
+"Temporary sync data stored by Dropbox. Your files are safe, but Dropbox will re-verify your whole synced folder afterwards, which can take a long time on large accounts." = "Dropbox 保存的临时同步数据。文件会保留，但 Dropbox 之后需重新验证整个同步文件夹；大型账户可能耗时较长。";
+
+/* google-drive */
+"Google Drive" = "Google Drive 云端硬盘";
+"Temporary sync data stored by Google Drive. Your files are safe, but Drive will re-check your synced content afterwards and may re-download parts of it." = "Google Drive 保存的临时同步数据。文件会保留，但之后需重新检查同步内容，并可能重新下载其中部分数据。";
+
+/* onedrive */
+"Microsoft OneDrive" = "Microsoft OneDrive 应用";
+"Temporary sync data stored by OneDrive. Your files are safe, but OneDrive will re-verify your synced folder afterwards, which can take a while." = "OneDrive 保存的临时同步数据。文件会保留，但 OneDrive 之后需重新验证同步文件夹，可能需要一些时间。";
+
+/* microsoft-teams */
+"Microsoft Teams" = "Microsoft Teams 应用";
+"Temporary files stored by Microsoft Teams. Safe to delete and Teams will rebuild them when you next open it." = "Microsoft Teams 保存的临时文件。可以安全删除，下次打开时 Teams 会重建。";
+
+/* microsoft-word */
+"Microsoft Word" = "Microsoft Word 应用";
+"Temporary files stored by Microsoft Word. Safe to delete and Word will recreate them automatically." = "Microsoft Word 保存的临时文件。可以安全删除，Word 会自动重新创建。";
+
+/* microsoft-excel */
+"Microsoft Excel" = "Microsoft Excel 应用";
+"Temporary files stored by Microsoft Excel. Safe to delete and Excel will recreate them automatically." = "Microsoft Excel 保存的临时文件。可以安全删除，Excel 会自动重新创建。";
+
+/* granola */
+"Granola AI Notes" = "Granola AI 笔记";
+"Temporary files stored by the Granola AI meeting notes app. Safe to delete and Granola will rebuild them when you next open it." = "Granola AI 会议笔记应用保存的临时文件。可以安全删除，下次打开时 Granola 会重建。";
+
+/* claude-app */
+"Claude AI App" = "Claude AI 应用";
+"Temporary files stored by the Claude AI desktop app. Safe to delete and Claude will rebuild them automatically." = "Claude AI 桌面应用保存的临时文件。可以安全删除，Claude 会自动重建。";
+
+/* chatgpt-app */
+"ChatGPT App" = "ChatGPT 应用";
+"Temporary files stored by the ChatGPT desktop app. Safe to delete and the app will rebuild them when you next open it." = "ChatGPT 桌面应用保存的临时文件。可以安全删除，下次打开时应用会重建。";
+
+/* ollama */
+"Ollama AI Models" = "Ollama AI 模型";
+"Temporary data stored by Ollama, a tool for running AI models locally. Deleting it is safe but Ollama may need to reload model data next time it runs." = "用于在本机运行 AI 模型的工具 Ollama 保存的临时数据。可以安全删除，但 Ollama 下次运行时可能需要重新加载模型数据。";
+
+/* sketch */
+"Sketch" = "Sketch 应用";
+"Temporary files stored by the Sketch design app. Safe to delete and Sketch will rebuild them automatically." = "设计应用 Sketch 保存的临时文件。可以安全删除，Sketch 会自动重建。";
+
+/* affinity-designer */
+"Affinity Designer" = "Affinity Designer 应用";
+"Temporary files stored by Affinity Designer. Safe to delete and Affinity will rebuild them when you next open it." = "Affinity Designer 保存的临时文件。可以安全删除，下次打开时 Affinity 会重建。";
+
+/* affinity-photo */
+"Affinity Photo" = "Affinity Photo 应用";
+"Temporary files stored by Affinity Photo. Safe to delete and Affinity will rebuild them when you next open it." = "Affinity Photo 保存的临时文件。可以安全删除，下次打开时 Affinity 会重建。";
+
+/* xcode-app */
+"Xcode" = "Xcode 应用";
+"Temporary files stored by Xcode, Apple's developer tool. Safe to delete and Xcode will rebuild them the next time it runs." = "Apple 开发工具 Xcode 保存的临时文件。可以安全删除，Xcode 下次运行时会重建。";
+
+/* simulator-cache */
+"iOS Simulator Cache" = "iOS 模拟器缓存";
+"Temporary files created by the iOS Simulator while testing apps. Safe to delete and the Simulator will recreate them when next launched." = "iOS 模拟器测试应用时创建的临时文件。可以安全删除，下次启动模拟器时会重新创建。";
+
+/* android-studio */
+"Android Studio" = "Android Studio 应用";
+"Temporary files stored by Android Studio. Safe to delete and Android Studio will rebuild them when you next open it." = "Android Studio 保存的临时文件。可以安全删除，下次打开时 Android Studio 会重建。";
+
+/* proxyman */
+"Proxyman Network Tool" = "Proxyman 网络工具";
+"Temporary files stored by Proxyman, a network debugging tool. Safe to delete and Proxyman will rebuild them automatically." = "网络调试工具 Proxyman 保存的临时文件。可以安全删除，Proxyman 会自动重建。";
+
+/* tableplus */
+"TablePlus Database Tool" = "TablePlus 数据库工具";
+"Temporary files stored by TablePlus, a database management app. Safe to delete and TablePlus will rebuild them when you next open it." = "数据库管理应用 TablePlus 保存的临时文件。可以安全删除，下次打开时 TablePlus 会重建。";
+
+/* postico */
+"Postico Database Tool" = "Postico 数据库工具";
+"Temporary files stored by Postico, a PostgreSQL database app. Safe to delete and Postico will rebuild them automatically." = "PostgreSQL 数据库应用 Postico 保存的临时文件。可以安全删除，Postico 会自动重建。";
+
+/* insomnia */
+"Insomnia API Tool" = "Insomnia API 工具";
+"Temporary files stored by Insomnia, an API testing tool. Safe to delete and Insomnia will rebuild them when you next open it." = "API 测试工具 Insomnia 保存的临时文件。可以安全删除，下次打开时 Insomnia 会重建。";
+
+/* paw-rapi */
+"RapidAPI / Paw" = "RapidAPI／Paw 工具";
+"Temporary files stored by Paw or RapidAPI, API development tools. Safe to delete and they will be rebuilt when you next open the app." = "API 开发工具 Paw 或 RapidAPI 保存的临时文件。可以安全删除，下次打开应用时会重建。";
+
+/* fork-git */
+"Fork Git Client" = "Fork Git 客户端";
+"Temporary files stored by Fork, a Git client for Mac. Safe to delete and Fork will rebuild them automatically." = "Mac 上的 Git 客户端 Fork 保存的临时文件。可以安全删除，Fork 会自动重建。";
+
+/* sourcetree */
+"Sourcetree Git Client" = "Sourcetree Git 客户端";
+"Temporary files stored by Sourcetree, a Git client. Safe to delete and Sourcetree will rebuild them when you next open it." = "Git 客户端 Sourcetree 保存的临时文件。可以安全删除，下次打开时 Sourcetree 会重建。";
+
+/* tower-git */
+"Tower Git Client" = "Tower Git 客户端";
+"Temporary files stored by Tower, a Git client for Mac. Safe to delete and Tower will rebuild them automatically." = "Mac 上的 Git 客户端 Tower 保存的临时文件。可以安全删除，Tower 会自动重建。";
+
+/* screenflow */
+"ScreenFlow Screen Recorder" = "ScreenFlow 录屏工具";
+"Temporary files stored by ScreenFlow. Safe to delete and ScreenFlow will rebuild them when you next open it." = "ScreenFlow 保存的临时文件。可以安全删除，下次打开时 ScreenFlow 会重建。";
+
+/* cleanmymac */
+"CleanMyMac" = "CleanMyMac 应用";
+"Temporary files stored by CleanMyMac itself. Safe to delete and CleanMyMac will rebuild them automatically." = "CleanMyMac 自身保存的临时文件。可以安全删除，CleanMyMac 会自动重建。";
+
+/* lungo */
+"Lungo Keep-Awake App" = "Lungo 保持唤醒工具";
+"Temporary files stored by Lungo, an app that keeps your Mac awake. Safe to delete." = "让 Mac 保持唤醒的应用 Lungo 保存的临时文件。可以安全删除。";
+
+/* bartender */
+"Bartender Menu Bar Tool" = "Bartender 菜单栏工具";
+"Temporary files stored by Bartender, a menu bar organiser. Safe to delete and Bartender will rebuild them automatically." = "菜单栏管理工具 Bartender 保存的临时文件。可以安全删除，Bartender 会自动重建。";
+
+/* cleanshot */
+"CleanShot X Screenshot Tool" = "CleanShot X 截图工具";
+"Temporary files stored by CleanShot X. Safe to delete and CleanShot will rebuild them automatically." = "CleanShot X 保存的临时文件。可以安全删除，CleanShot 会自动重建。";
+
+/* screenshot-app */
+"Screenshots" = "屏幕截图";
+"Temporary files created by macOS's built-in screenshot tool. Safe to delete." = "macOS 内置截图工具创建的临时文件。可以安全删除。";
+
+/* xnapper */
+"Xnapper Screenshot Tool" = "Xnapper 截图工具";
+"Temporary files stored by Xnapper, a screenshot tool. Safe to delete and Xnapper will rebuild them automatically." = "截图工具 Xnapper 保存的临时文件。可以安全删除，Xnapper 会自动重建。";
+
+/* apple-maps */
+"Apple Maps" = "Apple 地图";
+"Downloaded map tiles and location data stored by Apple Maps. Nothing is lost, but Maps re-downloads tiles as you use it and any offline maps need downloading again." = "Apple 地图保存的已下载地图图块与位置数据。不会丢失内容，但使用时地图需重新下载图块，离线地图也需要重新下载。";
+
+/* apple-photos */
+"Apple Photos" = "Apple 照片";
+"Thumbnail and preview data stored by Apple Photos. No photos are deleted, but Photos has to regenerate every thumbnail, which can take a long time on a large library." = "Apple 照片保存的缩略图与预览数据。不会删除照片，但照片应用需重新生成全部缩略图；大型图库可能耗时较长。";
+
+/* apple-mail */
+"Apple Mail" = "Apple 邮件";
+"Temporary files and message previews stored by Apple Mail. No mail is deleted, but Mail re-indexes afterwards and search can be incomplete until it finishes." = "Apple 邮件保存的临时文件与邮件预览。不会删除邮件，但邮件应用之后会重新建立索引，完成前搜索结果可能不完整。";
+
+/* apple-music-app */
+"Apple Music App" = "Apple Music 应用";
+"Temporary files stored by the Apple Music app. Nothing is lost, but artwork and library data are rebuilt as you use the app." = "Apple Music 应用保存的临时文件。不会丢失内容，但使用应用时会重建封面和资料库数据。";
+
+/* network-cache */
+"Network Data Cache" = "网络数据缓存";
+"Temporary files used by macOS to cache network responses and speed up connections. Safe to delete and will be rebuilt automatically." = "macOS 缓存网络响应、加快连接时使用的临时文件。可以安全删除，会自动重建。";
+
+/* screen-time */
+"Screen Time" = "屏幕使用时间";
+"The data Screen Time uses to track app usage. Deleting it clears usage history and reports, and they do not come back." = "屏幕使用时间用于追踪应用使用情况的数据。删除会清空使用历史与报告，且无法恢复。";
+
+/* npm-npx-cache */
+"npm npx Cache" = "npm npx 缓存";
+"Temporary packages downloaded when you run npx. Safe to delete; npx will download them again when needed." = "运行 npx 时下载的临时软件包。可以安全删除；需要时 npx 会重新下载。";
+
+/* npm-logs */
+"npm Logs" = "npm 日志";
+"Log files written by npm commands. Safe to delete with no effect on installed packages." = "npm 命令写入的日志文件。可以安全删除，不影响已安装的软件包。";
+
+/* xcode-docs-cache */
+"Xcode Documentation Cache" = "Xcode 文档缓存";
+"Cached Apple developer documentation used by Xcode. Safe to delete; Xcode will re-download docs when you browse them again." = "Xcode 使用的 Apple 开发者文档缓存。可以安全删除，再次浏览时 Xcode 会重新下载文档。";
+
+/* corepack-cache */
+"Corepack Cache" = "Corepack 缓存";
+"Cached Node.js package manager shims managed by Corepack. Safe to delete; Corepack will restore them on the next use." = "Corepack 管理的 Node.js 软件包管理器包装程序缓存。可以安全删除，下次使用时 Corepack 会恢复。";
+
+/* cursor-agent-leftover */
+"Cursor Agent Leftovers" = "Cursor 智能体遗留文件";
+"Folders from Cursor temp workspaces and empty windows that are now closed." = "已经关闭的 Cursor 临时工作区与空窗口留下的文件夹。";
+
+/* orphaned-git-worktree */
+"Orphaned Git Worktrees" = "孤立 Git 工作树";
+"Agent checkouts Git no longer tracks. Look inside first for uncommitted work." = "Git 已不再追踪的智能体检出目录。请先检查其中是否有未提交的工作。";
+
+/* obsolete-cursor-extension */
+"Obsolete Cursor Extension" = "旧版 Cursor 扩展";
+"An older version of a Cursor extension superseded by a newer install. Safe to delete." = "已被新安装版本替代的旧版 Cursor 扩展。可以安全删除。";
+
+/* obsolete-vscode-extension */
+"Obsolete VS Code Extension" = "旧版 VS Code 扩展";
+"An older version of a VS Code extension superseded by a newer install. Safe to delete." = "已被新安装版本替代的旧版 VS Code 扩展。可以安全删除。";
+
+/* orphaned-editor-workspace-storage */
+"Old Editor Workspace Data" = "旧编辑器工作区数据";
+"Saved state for projects that VS Code or Cursor opened from folders that no longer exist, including any AI chat history for those projects. If you moved or renamed a project instead of deleting it, its chats are in here." = "VS Code 或 Cursor 曾从已不存在的文件夹打开的项目所保存的状态，包括这些项目的 AI 聊天历史。如果你只是移动或重命名了项目，而非删除，聊天记录仍保存在这里。";
+
+/* stale-browser-framework */
+"Old Browser Framework" = "旧浏览器框架";
+"A leftover Chromium framework that no running process is using. Quit and relaunch the browser before an older version it is still running from can be cleaned. The browser also deletes leftover versions itself on relaunch." = "没有运行中进程使用的遗留 Chromium 框架。如果浏览器仍从旧版本运行，请先退出并重新启动，才能清理该版本。浏览器重新启动时也会自行删除遗留版本。";
+
+/* link-thumbnail-cache */
+"Link Thumbnail Cache" = "链接缩略图缓存";
+"Cached link preview thumbnails from messaging apps. Regenerated automatically when you open conversations." = "通讯应用保存的链接预览缩略图缓存。打开会话时会自动重新生成。";
+
+/* chat-media-cache */
+"Chat Media Cache" = "聊天媒体缓存";
+"Cached media previews from messaging apps. Not your message history; apps re-fetch media as needed." = "通讯应用保存的媒体预览缓存，并非消息历史。应用会按需重新获取媒体。";
+
+/* app-installation-binary-deltas */
+"App Store Binary Deltas" = "App Store 增量更新";
+"Cached App Store update deltas. macOS re-downloads them on the next app update." = "缓存的 App Store 增量更新数据。下次更新应用时，macOS 会重新下载。";
+
+/* shipit-updater-cache */
+"App Updater Cache" = "应用更新器缓存";
+"Temporary files from Squirrel-based app updaters (ShipIt folders). Recreated when apps check for updates." = "使用 Squirrel 的应用更新器生成的临时文件，即 ShipIt 文件夹。应用检查更新时会重新创建。";
+
+/* electron-updater-downloads */
+"App Update Downloads" = "应用更新下载";
+"Update packages that apps built on Electron downloaded to install a new version. Once the update is installed they are left behind. Safe to delete; each app downloads its next update when one comes out." = "Electron 应用为安装新版本而下载的更新包，安装完成后遗留在此。可以安全删除；下次有新版本时，各应用会下载下一次更新。";
+
+/* spotlight-profiles-cache */
+"Spotlight Profile Cache" = "聚焦配置缓存";
+"Spotlight index profile data. Nothing is lost, but Spotlight rebuilds it afterwards and search can be slower or incomplete in the meantime." = "聚焦索引配置数据。不会丢失内容，但 聚焦 之后会重建；期间搜索可能较慢或不完整。";
+
+/* elixir-build */
+"Elixir Build Output" = "Elixir 构建输出";
+"Compiled output created by Mix, the build tool for Elixir and Erlang projects. Safe to delete and rebuilt from your own source code the next time you compile." = "Elixir 和 Erlang 构建工具 Mix 创建的已编译输出。可以安全删除，下次编译时会根据你自己的源代码重建。";
+
+/* elixir-deps */
+"Elixir Dependencies" = "Elixir 依赖";
+"Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete and re-downloaded on your next build, which needs an internet connection." = "Mix 为 Elixir 或 Erlang 项目下载的依赖源代码。可以安全删除，下次构建时会重新下载，需要互联网连接。";
+
+/* hex-packages */
+"Hex Package Cache" = "Hex 软件包缓存";
+"Downloaded Elixir and Erlang packages kept by Hex so repeat builds do not re-download them. Safe to delete and re-downloaded on your next build." = "Hex 为避免重复构建时再次下载而保存的 Elixir 与 Erlang 软件包。可以安全删除，下次构建时会重新下载。";
+
+/* rebar3-cache */
+"Rebar3 Cache" = "Rebar3 缓存";
+"Downloaded packages and build plugins kept by Rebar3, the Erlang build tool. Safe to delete and re-downloaded on your next build." = "Erlang 构建工具 Rebar3 保存的已下载软件包与构建插件。可以安全删除，下次构建时会重新下载。";
+
+/* next-build */
+"Next.js Build Output" = "Next.js 构建输出";
+"Compiled pages and assets produced by Next.js. Safe to delete and rebuilt the next time you run or build the site." = "Next.js 生成的已编译页面与资源。可以安全删除，下次运行或构建网站时会重建。";
+
+/* nuxt-build */
+"Nuxt Build Cache" = "Nuxt 构建缓存";
+"Temporary build files created by Nuxt. Safe to delete and rebuilt the next time you run or build the site." = "Nuxt 创建的临时构建文件。可以安全删除，下次运行或构建网站时会重建。";
+
+/* nuxt-output */
+"Nuxt Output" = "Nuxt 输出";
+"The built site Nuxt produces for deployment. Safe to delete and rebuilt on your next build." = "Nuxt 为部署生成的网站构建产物。可以安全删除，下次构建时会重建。";
+
+/* sveltekit-build */
+"SvelteKit Build Cache" = "SvelteKit 构建缓存";
+"Generated files SvelteKit keeps between builds. Safe to delete and rebuilt the next time you run the project." = "SvelteKit 在构建之间保留的生成文件。可以安全删除，下次运行项目时会重建。";
+
+/* astro-build */
+"Astro Build Cache" = "Astro 构建缓存";
+"Temporary build files created by Astro. Safe to delete and rebuilt on your next build." = "Astro 创建的临时构建文件。可以安全删除，下次构建时会重建。";
+
+/* angular-cache */
+"Angular Build Cache" = "Angular 构建缓存";
+"Build cache kept by the Angular CLI to make repeat builds faster. Safe to delete and rebuilt automatically." = "Angular CLI 为加快后续构建而保存的缓存。可以安全删除，会自动重建。";
+
+/* pytest-cache */
+"pytest Cache" = "pytest 缓存";
+"Test results and lookup data cached by pytest. Safe to delete and recreated the next time you run your tests." = "pytest 缓存的测试结果与查找数据。可以安全删除，下次运行测试时会重新创建。";
+
+/* tox-environments */
+"tox Environments" = "tox 环境";
+"Throwaway Python environments tox builds to run tests in. Safe to delete and rebuilt on your next tox run, which re-downloads packages." = "tox 为运行测试而创建的临时 Python 环境。可以安全删除，下次运行 tox 时会重建，并重新下载软件包。";
+
+/* swiftpm-build */
+"Swift Package Build" = "Swift 软件包构建";
+"Compiled output from Swift Package Manager. Safe to delete and rebuilt by your next swift build." = "Swift 软件包管理器生成的已编译输出。可以安全删除，下次 swift build 时会重建。";
+
+/* maven-target */
+"Maven Build Output" = "Maven 构建输出";
+"Compiled classes and packaged output produced by Maven. Safe to delete and rebuilt by your next build." = "Maven 生成的已编译类与打包输出。可以安全删除，下次构建时会重建。";
+
+/* gradle-build */
+"Gradle Build Output" = "Gradle 构建输出";
+"Compiled output produced by a Gradle build. Safe to delete and rebuilt by your next build." = "Gradle 构建生成的已编译输出。可以安全删除，下次构建时会重建。";
+
+/* sbt-target */
+"sbt Build Output" = "sbt 构建输出";
+"Compiled output produced by sbt for a Scala project. Safe to delete and rebuilt by your next build." = "sbt 为 Scala 项目生成的已编译输出。可以安全删除，下次构建时会重建。";
+
+/* dotnet-bin */
+"NET Build Output" = ".NET 构建输出";
+"Compiled programs and libraries produced by a .NET build. Safe to delete and rebuilt by your next dotnet build." = ".NET 构建生成的已编译程序与代码库。可以安全删除，下次 dotnet build 时会重建。";
+
+/* dotnet-obj */
+"NET Intermediate Files" = ".NET 中间文件";
+"Temporary files .NET creates while compiling. Safe to delete and recreated on your next build." = ".NET 编译时创建的临时文件。可以安全删除，下次构建时会重新创建。";
+
+/* composer-vendor */
+"PHP Packages" = "PHP 软件包";
+"Third-party PHP packages downloaded by Composer. Safe to delete and re-downloaded by composer install, which needs an internet connection." = "Composer 下载的第三方 PHP 软件包。可以安全删除，通过 composer install 重新下载时，需要互联网连接。";
+
+/* bundler-vendor */
+"Ruby Gems" = "Ruby Gem 软件包";
+"Ruby gems installed into the project by Bundler. Safe to delete and reinstalled by bundle install, which needs an internet connection." = "Bundler 为项目安装的 Ruby Gem。可以安全删除，通过 bundle install 重新安装时，需要互联网连接。";
+
+/* stack-work */
+"Stack Build Output" = "Stack 构建输出";
+"Compiled output and dependencies kept by Stack for a Haskell project. Safe to delete and rebuilt by your next build, which can take a while." = "Stack 为 Haskell 项目保存的已编译输出与依赖。可以安全删除，下次构建时会重建，可能需要一些时间。";
+
+/* cabal-dist */
+"Cabal Build Output" = "Cabal 构建输出";
+"Compiled output produced by Cabal for a Haskell project. Safe to delete and rebuilt by your next build, which can take a while." = "Cabal 为 Haskell 项目生成的已编译输出。可以安全删除，下次构建时会重建，可能需要一些时间。";
+
+/* zig-cache */
+"Zig Build Cache" = "Zig 构建缓存";
+"Compilation cache kept by Zig. Safe to delete and rebuilt on your next build." = "Zig 保存的编译缓存。可以安全删除，下次构建时会重建。";
+
+/* zig-out */
+"Zig Build Output" = "Zig 构建输出";
+"Finished programs and libraries produced by a Zig build. Safe to delete and rebuilt on your next build." = "Zig 构建生成的最终程序与代码库。可以安全删除，下次构建时会重建。";
+
+/* dune-build */
+"Dune Build Output" = "Dune 构建输出";
+"Compiled output produced by Dune for an OCaml project. Safe to delete and rebuilt by your next build." = "Dune 为 OCaml 项目生成的已编译输出。可以安全删除，下次构建时会重建。";
+
+/* cmake-build */
+"CMake Build Output" = "CMake 构建输出";
+"Compiled output and build configuration produced by CMake. Safe to delete, though you will need to configure and build the project again." = "CMake 生成的已编译输出与构建配置。可以安全删除，但之后需重新配置并构建项目。";
+
+/* terraform-plugins */
+"Terraform Plugins" = "Terraform 插件";
+"Provider plugins and modules Terraform downloads for a workspace. Safe to delete and re-downloaded by terraform init." = "Terraform 为工作区下载的提供方插件与模块。可以安全删除，运行 terraform init 时会重新下载。";
+
+/* godot-cache */
+"Godot Project Cache" = "Godot 项目缓存";
+"Imported assets and editor data Godot keeps for a project. Safe to delete and rebuilt the next time you open the project." = "Godot 为项目保留的导入资源与编辑器数据。可以安全删除，下次打开项目时会重建。";
+
+/* unity-library */
+"Unity Library Folder" = "Unity Library 文件夹";
+"Unity's imported-asset database for this project. It rebuilds itself, but reimporting a large project can take a long time, so check before removing it." = "Unity 为此项目保存的导入资源数据库。可自行重建，但重新导入大型项目可能耗时很长，因此移除前请检查。";
+
+/* unity-temp */
+"Unity Temp Folder" = "Unity 临时文件夹";
+"Scratch files Unity writes while the editor is running. Recreated automatically, but do not remove it while the project is open in Unity." = "Unity 编辑器运行期间写入的临时工作文件。会自动重新创建，但项目在 Unity 中打开时请勿移除。";
+
+/* unreal-intermediate */
+"Unreal Intermediate Files" = "Unreal 中间文件";
+"Generated build files Unreal creates while compiling a project. They come back on the next build, which will take longer than usual." = "Unreal 编译项目时生成的构建文件。下次构建时会重新生成，但构建会比平时更慢。";
+
+/* unreal-derived-data */
+"Unreal Derived Data Cache" = "Unreal 派生数据缓存";
+"Cooked assets and compiled shaders Unreal caches for a project. Rebuilt automatically, but the first build afterwards can be very slow." = "Unreal 为项目缓存的烘焙资源与已编译着色器。会自动重建，但清理后的首次构建可能非常慢。";
+
+/* nuget-packages */
+"NuGet Package Cache" = "NuGet 软件包缓存";
+"Downloaded .NET packages that NuGet restores your projects from. Nothing is lost, but your next restore downloads them all again, which can take a while and does not work offline." = "NuGet 用于恢复项目的已下载 .NET 软件包。不会丢失内容，但下次恢复需重新下载全部软件包，可能需要一些时间，且无法离线完成。";
+
+/* stack-global */
+"Stack Global Cache" = "Stack 全局缓存";
+"Package downloads and prebuilt libraries that Stack shares between Haskell projects. Your settings and installed compilers are left alone. Nothing is lost, but the next build downloads and rebuilds a lot and can be slow." = "Stack 在 Haskell 项目之间共享的软件包下载与预编译代码库。不会动设置或已安装的编译器。不会丢失内容，但下次构建需下载并重建大量内容，可能较慢。";
+
+/* cabal-packages */
+"Cabal Package Cache" = "Cabal 软件包缓存";
+"Haskell packages downloaded by Cabal. Nothing is lost, but your next build downloads and rebuilds them, which can take a long time." = "Cabal 下载的 Haskell 软件包。不会丢失内容，但下次构建需重新下载并构建，可能耗时较长。";
+
+/* bazel-cache */
+"Bazel Build Cache" = "Bazel 构建缓存";
+"Build outputs Bazel caches between builds. Safe to delete, though the next build starts from scratch and can be slow." = "Bazel 在构建之间缓存的构建输出。可以安全删除，但下次需从头构建，可能较慢。";
+
+/* swiftpm-cache */
+"Swift Package Cache" = "Swift 软件包缓存";
+"Package checkouts Swift Package Manager shares between projects. Safe to delete and re-downloaded on your next build." = "Swift 软件包管理器在项目间共享的软件包检出。可以安全删除，下次构建时会重新下载。";
+
+/* venv */
+"Python Environment" = "Python 环境";
+"A self-contained Python environment holding packages installed for one project. Safe to delete and recreated by reinstalling from requirements.txt or pyproject.toml, which needs an internet connection." = "为单个项目保存已安装软件包的独立 Python 环境。可以安全删除，但需根据 requirements.txt 或 pyproject.toml 重新安装以重建，并需要互联网连接。";
+
+/* node-gyp-headers */
+"node-gyp Headers" = "node-gyp 头文件";
+"Node.js header files that node-gyp downloads to build native add-ons. Safe to delete; it downloads them again on the next native build." = "node-gyp 为构建原生扩展而下载的 Node.js 头文件。可以安全删除，下次原生构建时会重新下载。";
+
+/* typescript-type-cache */
+"TypeScript Type Cache" = "TypeScript 类型缓存";
+"Type definitions your editor downloaded so plain JavaScript files get autocomplete. Safe to delete; the editor downloads them again as needed." = "编辑器下载的类型定义，为普通 JavaScript 文件提供自动补全。可以安全删除，编辑器会按需重新下载。";
+
+/* cursor-compile-cache */
+"Cursor Startup Cache" = "Cursor 启动缓存";
+"Compiled code that Cursor saves so it starts faster. Safe to delete; Cursor rebuilds it the next time it opens." = "Cursor 为加快启动而保存的已编译代码。可以安全删除，下次打开 Cursor 时会重建。";
+
+/* claude-cli-cache */
+"Claude Code Logs" = "Claude Code 日志";
+"Logs that Claude Code writes for its MCP servers, one folder per project. Safe to delete; new logs are written as you use it." = "Claude Code 为其 MCP 服务器写入的日志，每个项目一个文件夹。可以安全删除，使用时会写入新日志。";
+
+/* apple-python-cache */
+"Apple Python Cache" = "Apple Python 缓存";
+"Compiled files for the Python that comes with the macOS developer tools. Safe to delete; Python recreates them when it next runs." = "macOS 开发工具附带的 Python 使用的已编译文件。可以安全删除，下次运行 Python 时会重新创建。";
+
+/* jna-libraries */
+"Java Native Libraries" = "Java 原生代码库";
+"Native libraries that Java apps unpack here when they start. Safe to delete; they are unpacked again on the next launch." = "Java 应用在启动时解包到这里的原生代码库。可以安全删除，下次启动时会重新解包。";
+
+/* dictionary-services */
+"Dictionary Cache" = "词典缓存";
+"Temporary data for the macOS Dictionary and Look Up. Safe to delete; it is rebuilt the next time you look up a word." = "macOS 词典和查询功能的临时数据。可以安全删除，下次查询单词时会重建。";
+
+/* promoted-content */
+"App Store Ads Cache" = "App Store 广告缓存";
+"Data for the ads Apple shows in the App Store. Safe to delete; it is downloaded again when needed." = "Apple 在 App Store 显示广告所用的数据。可以安全删除，需要时会重新下载。";
+
+/* device-software-updates */
+"iPhone and iPad Software Updates" = "iPhone 与 iPad 软件更新";
+"Full software update files for iPhone, iPad or iPod that Finder downloaded to update or restore a device, often 5 to 8 GB each. Safe to delete; Finder downloads the current one again the next time you update a device." = "访达为更新或恢复设备而下载的 iPhone、iPad 或 iPod 完整软件更新文件，每个通常为 5 至 8 GB。可以安全删除，下次更新设备时，访达会重新下载当前版本。";
+
+/* davinci-cacheclip */
+"DaVinci Resolve Render Cache" = "DaVinci Resolve 渲染缓存";
+"Render cache and optimized media that DaVinci Resolve keeps in your Movies folder. Safe to delete; Resolve renders it again as you work, which takes time on large projects." = "DaVinci Resolve 保存在“影片”文件夹中的渲染缓存与优化媒体。可以安全删除；继续工作时 Resolve 会重新渲染，大型项目需要一些时间。";
+
+/* aerial-wallpaper-videos */
+"Aerial Wallpaper Videos" = "航拍壁纸视频";
+"Videos for the macOS aerial wallpapers and screen savers, often several GB. Nothing is lost, but the aerial you use downloads again, and macOS may download others again on its own." = "macOS 航拍壁纸与屏幕保护程序的视频，通常占用数 GB。不会丢失内容，但正在使用的航拍视频需重新下载，macOS 也可能自行重新下载其他视频。";
+
+/* messages-previews */
+"Messages Previews" = "信息预览";
+"Thumbnail previews of photos, videos and links in Messages. Your messages and attachments are not touched. Safe to delete; previews are made again when you scroll through a conversation." = "信息应用中照片、视频和链接的缩略图预览。不会动消息或附件。可以安全删除，滚动浏览会话时会重新生成预览。";
+
+/* mail-downloads */
+"Mail Attachment Copies" = "邮件附件副本";
+"Copies of attachments you opened from Apple Mail. The originals stay in your mail. If you edited an attachment after opening it and never saved it somewhere else, those edits are only here. Held back while Mail is open." = "从 Apple 邮件打开的附件副本。原件仍保留在邮件中。如果打开后编辑了附件，且从未另存到其他位置，这些修改只保存在这里。邮件应用打开时，暂不纳入清理。";
+
+/* unfinished-downloads */
+"Unfinished Downloads" = "未完成的下载";
+"Downloads from Safari, Chrome or Firefox that stopped before finishing and have not changed in over a week. A browser can sometimes still resume one, so check before deleting." = "Safari、Chrome 或 Firefox 中未完成、且超过一周没有变化的下载。浏览器有时仍可继续下载，因此删除前请检查。";
+
+/* coresimulator-caches */
+"Simulator Caches" = "模拟器缓存";
+"Shared system caches the iOS Simulator builds for each runtime. Safe to delete; the Simulator builds them again the next time a device starts, which makes that first launch slower." = "iOS 模拟器为每个运行时构建的共享系统缓存。可以安全删除，下次设备启动时模拟器会重建，因此首次启动会更慢。";
+
+/* xctest-devices */
+"Xcode Test Devices" = "Xcode 测试设备";
+"Temporary copies of simulators that Xcode makes to run tests in parallel. Xcode deletes them itself but sometimes leaves them behind. Safe to delete when no tests are running." = "Xcode 为并行测试创建的临时模拟器副本。Xcode 会自行删除，但有时会留下。仅在没有测试运行时，才可安全删除。";
+
+/* old-cli-versions */
+"Old AI Coding Tool Versions" = "旧版 AI 编程工具";
+"Earlier versions of Claude Code or Cursor Agent that stayed behind after updates. The version you run and the newest one are kept. Safe to delete." = "Claude Code 或 Cursor Agent 更新后遗留的旧版本。正在运行的版本与最新版本会保留。可以安全删除。";
+
+/* pre-commit-cache */
+"pre-commit Environments" = "pre-commit 环境";
+"Tool environments that pre-commit sets up to run your git hooks. Safe to delete; they are set up again on your next commit, which makes that commit slow." = "pre-commit 为运行 Git 钩子而设置的工具环境。可以安全删除，下次提交时会重新设置，导致该次提交较慢。";
+
+/* expo-cache */
+"Expo Cache" = "Expo 缓存";
+"App builds, templates and SDK data the Expo tools downloaded. Your Expo login is left alone. Safe to delete; Expo downloads what it needs again." = "Expo 工具下载的应用构建、模板和 SDK 数据。不会动 Expo 登录信息。可以安全删除，Expo 会重新下载所需内容。";
+
+/* version-manager-downloads */
+"pyenv and rbenv Downloads" = "pyenv 与 rbenv 下载";
+"Source downloads pyenv and rbenv keep after installing a Python or Ruby version. Installed versions are left alone. Safe to delete." = "pyenv 和 rbenv 安装 Python 或 Ruby 版本后保留的源代码下载。已安装的版本不会被动。可以安全删除。";
+
+/* oh-my-zsh-cache */
+"Oh My Zsh Cache" = "Oh My Zsh 缓存";
+"Completion and update-check files that Oh My Zsh keeps. Safe to delete; they are recreated when you open a new terminal window." = "Oh My Zsh 保留的补全与更新检查文件。可以安全删除，打开新终端窗口时会重新创建。";
+
+/* opam-download-cache */
+"opam Download Cache" = "opam 下载缓存";
+"Package downloads opam keeps for OCaml. Installed packages are left alone. Safe to delete; opam downloads them again when needed." = "opam 为 OCaml 保留的软件包下载。不会动已安装的软件包。可以安全删除，需要时 opam 会重新下载。";
+
+/* puppeteer-browsers */
+"Puppeteer Browsers" = "Puppeteer 浏览器";
+"Browsers Puppeteer downloaded for automated testing. Your scripts fail until the browser is installed again, which happens on your next npm install or with npx puppeteer browsers install." = "Puppeteer 为自动化测试下载的浏览器。重新安装浏览器前，脚本会失败；下次 npm install 时，或运行 npx puppeteer browsers install，可重新安装。";
+
+/* conda-packages */
+"Conda Package Cache" = "Conda 软件包缓存";
+"Packages conda downloaded and unpacked to build your environments. Your environments keep working because they link to these files, which also means deleting frees less space than shown until those environments are removed. Running conda clean --all does this more carefully." = "conda 为构建环境而下载并解包的软件包。环境通过链接使用这些文件，因此仍可继续运行；这也意味着，在移除这些环境前，删除所释放的空间会少于显示值。运行 conda clean --all 会更谨慎地处理清理。";

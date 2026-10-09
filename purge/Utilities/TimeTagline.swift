@@ -27,8 +27,8 @@ enum TimeTagline {
         if pick == lastShown, let reroll = options.randomElement() {
             pick = reroll
         }
-        let fact = "done in \(timeText(for: seconds))"
-        return Selection(line: "\(fact) · \(pick)", factPart: fact, quip: pick)
+        let fact = String(localized: "done in \(timeText(for: seconds))")
+        return Selection(line: "\(fact) · \(NSLocalizedString(pick, comment: "Cleanup encouragement"))", factPart: fact, quip: pick)
     }
 
     static func store(_ selection: Selection, defaults: UserDefaults = .standard) {
@@ -37,13 +37,13 @@ enum TimeTagline {
 
     static func timeText(for seconds: Double) -> String {
         if seconds < 1 {
-            return String(format: "%.1f seconds", max(0.1, seconds))
+            return String(format: NSLocalizedString("%.1f seconds", comment: "Cleanup duration"), max(0.1, seconds))
         }
         let whole = Int(seconds.rounded())
         if whole < 60 {
-            return whole == 1 ? "1 second" : "\(whole) seconds"
+            return whole == 1 ? String(localized: "1 second") : String(localized: "\(whole) seconds")
         }
-        return "\(whole / 60)m \(whole % 60)s"
+        return String(localized: "\(whole / 60)m \(whole % 60)s")
     }
 
     static func quips(for seconds: Double) -> [String] {

@@ -71,15 +71,15 @@ struct LookDeeperView: View {
 
   @ViewBuilder
   private var promises: some View {
-    LookDeeperPromise(symbol: "eye", text: "Only cleans when you say")
-    LookDeeperPromise(symbol: "icloud.slash", text: "Nothing leaves your Mac")
-    LookDeeperPromise(symbol: "trash", text: "Everything goes to the Trash")
+    LookDeeperPromise(symbol: "eye", text: String(localized: "Only cleans when you say"))
+    LookDeeperPromise(symbol: "icloud.slash", text: String(localized: "Nothing leaves your Mac"))
+    LookDeeperPromise(symbol: "trash", text: String(localized: "Everything goes to the Trash"))
   }
 
   private var askingBody: some View {
     VStack(spacing: AppStyle.Spacing.large) {
       VStack(spacing: AppStyle.Spacing.small) {
-        OnboardingStepTitle(text: "Want Purge to look deeper?")
+        OnboardingStepTitle(text: String(localized: "Want Purge to look deeper?"))
           .onboardingBlurIn(index: 0)
 
         Text(leadText)
@@ -94,9 +94,9 @@ struct LookDeeperView: View {
       // Each promise is something Purge does, not a limit on the permission:
       // Full Disk Access itself can read and write, so "can't" would not be true.
       HStack(spacing: AppStyle.Spacing.small) {
-        LookDeeperTile(symbol: "square.stack.3d.up", text: "App Store app caches")
-        LookDeeperTile(symbol: "doc.text.magnifyingglass", text: "Big forgotten files")
-        LookDeeperTile(symbol: "shippingbox", text: "Deleted apps' leftovers")
+        LookDeeperTile(symbol: "square.stack.3d.up", text: String(localized: "App Store app caches"))
+        LookDeeperTile(symbol: "doc.text.magnifyingglass", text: String(localized: "Big forgotten files"))
+        LookDeeperTile(symbol: "shippingbox", text: String(localized: "Deleted apps' leftovers"))
       }
       .onboardingBlurIn(index: 2)
 
@@ -116,8 +116,8 @@ struct LookDeeperView: View {
       .onboardingBlurIn(index: 3)
 
       VStack(spacing: AppStyle.Spacing.small) {
-        OnboardingPrimaryButton(title: "Let Purge in", systemImage: "arrow.up.forward", action: letPurgeIn)
-        OnboardingSecondaryButton(title: "Not now", action: onNotNow)
+        OnboardingPrimaryButton(title: String(localized: "Let Purge in"), systemImage: "arrow.up.forward", action: letPurgeIn)
+        OnboardingSecondaryButton(title: String(localized: "Not now"), action: onNotNow)
           .keyboardShortcut(.cancelAction)
 
         if didOpenSettings {
@@ -177,7 +177,7 @@ struct LookDeeperView: View {
           .foregroundStyle(AppColors.textSecondary)
           .onboardingBlurIn(index: findings.categories.count + 1)
       } else {
-        OnboardingStepTitle(text: "Purge can see everything now")
+        OnboardingStepTitle(text: String(localized: "Purge can see everything now"))
           .onboardingBlurIn(index: 0)
         Text(Self.smallFindingsMessage(findings))
           .font(AppStyle.Typography.sectionTitle.weight(.regular))
@@ -197,19 +197,19 @@ struct LookDeeperView: View {
 
   static func smallFindingsMessage(_ findings: LockedPlacesFindings) -> String {
     if findings.isPartial {
-      return "Large Files and the uninstaller are ready. Purge is still checking your projects, so more may turn up."
+      return String(localized: "Large Files and the uninstaller are ready. Purge is still checking your projects, so more may turn up.")
     }
     return findings.bytes > 0
-      ? "Large Files and the uninstaller are ready, and Purge found a little more to clean too."
-      : "Large Files and the uninstaller are ready. Nothing big was hiding in the locked folders."
+      ? String(localized: "Large Files and the uninstaller are ready, and Purge found a little more to clean too.")
+      : String(localized: "Large Files and the uninstaller are ready. Nothing big was hiding in the locked folders.")
   }
 
   private var leadText: String {
     switch context {
     case .onboarding(didClean: true):
-      return "That was the easy part. More clutter hides in folders macOS keeps locked."
+      return String(localized: "That was the easy part. More clutter hides in folders macOS keeps locked.")
     case .onboarding(didClean: false), .sheet:
-      return "Some clutter hides in folders macOS keeps locked."
+      return String(localized: "Some clutter hides in folders macOS keeps locked.")
     }
   }
 
@@ -287,7 +287,7 @@ private struct LookDeeperTile: View {
         .foregroundStyle(AppColors.textSecondary)
         .frame(height: 24)
         .accessibilityHidden(true)
-      Text(text)
+      Text(LocalizedStringKey(text))
         .font(AppStyle.Typography.callout)
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
@@ -310,7 +310,7 @@ private struct LookDeeperPromise: View {
 
   var body: some View {
     Label {
-      Text(text)
+      Text(LocalizedStringKey(text))
     } icon: {
       Image(systemName: symbol)
         // One width for every icon, so stacked promises start their text in line.

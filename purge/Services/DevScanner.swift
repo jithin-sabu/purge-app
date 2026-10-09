@@ -145,7 +145,7 @@ nonisolated final class DevScanner {
                     continuation.finish()
                     return
                 }
-                continuation.yield(.status("Scanning Developer Projects..."))
+                continuation.yield(.status(String(localized: "Scanning Developer Projects...")))
                 _ = await self.discoverProjects(access: access, continuation: continuation)
                 continuation.finish()
             }
@@ -157,7 +157,7 @@ nonisolated final class DevScanner {
         access: ScanAccess,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation
     ) async {
-        continuation.yield(.status("Scanning Dev Tools..."))
+        continuation.yield(.status(String(localized: "Scanning Dev Tools...")))
         let globalDiscoveryStart = Date()
         let (tools, toolSizeJobs) = scanGlobalCachePlaceholders(access: access)
         ScanPhaseTiming.finish(
@@ -175,7 +175,7 @@ nonisolated final class DevScanner {
 
         await withTaskGroup(of: Void.self) { group in
             group.addTask { [toolSizeJobs] in
-                continuation.yield(.status("Calculating Dev Tool sizes..."))
+                continuation.yield(.status(String(localized: "Calculating Dev Tool sizes...")))
                 let sizingStart = Date()
                 await self.runDevToolSizeJobs(toolSizeJobs, continuation: continuation)
                 let pathCount = toolSizeJobs.reduce(0) { $0 + $1.paths.count }
@@ -188,7 +188,7 @@ nonisolated final class DevScanner {
 
             group.addTask {
                 if Task.isCancelled { return }
-                continuation.yield(.status("Scanning iOS Simulators..."))
+                continuation.yield(.status(String(localized: "Scanning iOS Simulators...")))
                 let simDiscoveryStart = Date()
                 let simulators = await self.discoverShutdownSimulatorsWithoutSizes(access: access)
                 ScanPhaseTiming.finish(

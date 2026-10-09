@@ -20,7 +20,7 @@ struct AboutView: View {
             } else {
                 VStack(spacing: 0) {
                     if showsPageHeader {
-                        AppSectionPageHeader(title: "About")
+                        AppSectionPageHeader(title: String(localized: "About"))
                     }
 
                     ScrollView {
@@ -84,7 +84,7 @@ struct AboutView: View {
             aboutCard {
                 AboutActionRow(
                     icon: "arrow.triangle.2.circlepath",
-                    label: "Check for updates",
+                    label: String(localized: "Check for updates"),
                     isEnabled: updater.canCheckForUpdates
                 ) {
                     updater.checkForUpdates()
@@ -180,32 +180,32 @@ struct AboutView: View {
 
                 AboutActionRow(
                     icon: "chevron.left.forwardslash.chevron.right",
-                    label: "View the full allowlist"
+                    label: String(localized: "View the full allowlist")
                 ) {
                     NSWorkspace.shared.open(Self.allowlistPolicyURL)
                 }
 
                 InsetCardDivider()
 
-                AboutActionRow(icon: "ant.fill", label: "Report a bug") {
+                AboutActionRow(icon: "ant.fill", label: String(localized: "Report a bug")) {
                     NSWorkspace.shared.open(reportBugURL)
                 }
 
                 InsetCardDivider()
 
-                AboutActionRow(icon: "lightbulb.fill", label: "Request a feature") {
+                AboutActionRow(icon: "lightbulb.fill", label: String(localized: "Request a feature")) {
                     NSWorkspace.shared.open(featureRequestURL)
                 }
 
                 InsetCardDivider()
 
-                AboutActionRow(icon: "arrow.counterclockwise", label: "Replay onboarding") {
+                AboutActionRow(icon: "arrow.counterclockwise", label: String(localized: "Replay onboarding")) {
                     hasCompletedOnboarding = false
                 }
 
                 InsetCardDivider()
 
-                AboutActionRow(icon: "cup.and.saucer.fill", label: "Buy me a coffee") {
+                AboutActionRow(icon: "cup.and.saucer.fill", label: String(localized: "Buy me a coffee")) {
                     // Counts as having seen the ask, so cleanups stop mentioning it.
                     SupportNudge.recordLinkOpened()
                     NSWorkspace.shared.open(SupportNudge.url)
@@ -246,9 +246,9 @@ struct AboutView: View {
 
     private var footerVersionText: String {
         guard let buildDate = bundleReleaseDate else {
-            return "Version \(appVersion)"
+            return String(localized: "Version \(appVersion)")
         }
-        return "Version \(appVersion) · \(Self.buildDateFormatter.string(from: buildDate))"
+        return String(localized: "Version \(appVersion) · \(Self.buildDateFormatter.string(from: buildDate))")
     }
 
     private func aboutCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -271,7 +271,7 @@ struct AboutView: View {
 
         switch (version?.isEmpty == false ? version : nil, build?.isEmpty == false ? build : nil) {
         case let (.some(version), .some(build)) where build != version:
-            return "\(version) (\(build))"
+            return String(localized: "\(version) (\(build))")
         case let (.some(version), _):
             return version
         case let (_, .some(build)):
@@ -410,7 +410,7 @@ private struct AboutActionRow: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .frame(width: 16)
 
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)

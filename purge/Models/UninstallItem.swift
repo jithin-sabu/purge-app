@@ -20,17 +20,17 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
 
     var displayName: String {
         switch self {
-        case .bundle: return "Application"
-        case .applicationSupport: return "Application Support"
-        case .caches: return "Caches"
-        case .preferences: return "Preferences"
-        case .containers: return "Containers"
-        case .groupContainers: return "Group Containers"
-        case .savedState: return "Saved State"
-        case .logs: return "Logs"
-        case .launchAgents: return "Launch Agents"
-        case .launchDaemons: return "Launch Daemons"
-        case .other: return "Other"
+        case .bundle: return String(localized: "Application")
+        case .applicationSupport: return String(localized: "Application Support")
+        case .caches: return String(localized: "Caches")
+        case .preferences: return String(localized: "Preferences")
+        case .containers: return String(localized: "Containers")
+        case .groupContainers: return String(localized: "Group Containers")
+        case .savedState: return String(localized: "Saved State")
+        case .logs: return String(localized: "Logs")
+        case .launchAgents: return String(localized: "Launch Agents")
+        case .launchDaemons: return String(localized: "Launch Daemons")
+        case .other: return String(localized: "Other")
         }
     }
 
@@ -96,10 +96,10 @@ nonisolated enum MatchReason: Hashable {
 
     var rowNote: String {
         switch self {
-        case .appBundle: return "The application itself"
-        case .bundleID: return "Matched by bundle identifier"
-        case .groupID: return "Matched by app group"
-        case .appName: return "Matched by name, check this belongs to the app"
+        case .appBundle: return String(localized: "The application itself")
+        case .bundleID: return String(localized: "Matched by bundle identifier")
+        case .groupID: return String(localized: "Matched by app group")
+        case .appName: return String(localized: "Matched by name, check this belongs to the app")
         }
     }
 }
@@ -144,8 +144,8 @@ nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .installedApps: return "Installed Apps"
-        case .leftovers: return "Leftovers"
+        case .installedApps: return String(localized: "Installed Apps")
+        case .leftovers: return String(localized: "Leftovers")
         }
     }
 

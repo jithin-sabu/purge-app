@@ -367,7 +367,7 @@ struct ContentView: View {
 
     private func navRow(_ tab: PurgeStore.Tab) -> some View {
         AppNavRow(
-            title: tab.rawValue,
+            title: tab.displayName,
             systemImage: tab.icon,
             isSelected: store.selectedTab == tab,
             accessory: navAccessory(for: tab),
@@ -377,7 +377,7 @@ struct ContentView: View {
 
     /// Groups the scan tabs by what Purge may do with what they find.
     private func sidebarSectionLabel(_ title: String) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(AppStyle.Typography.metadata.weight(.semibold))
             .foregroundStyle(AppColors.textTertiary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
@@ -477,7 +477,7 @@ struct ContentView: View {
         Group {
             if #available(macOS 26.0, *) {
                 settingsScrollView
-                    .detailPageScrollEdge(title: "Settings")
+                    .detailPageScrollEdge(title: String(localized: "Settings"))
             } else {
                 settingsScrollView
                     .underDetailPageHeader(includesSubtitle: false)
@@ -580,7 +580,7 @@ struct ContentView: View {
         Group {
             if #available(macOS 26.0, *) {
                 overviewScrollView
-                    .detailPageScrollEdge(title: "Overview", includesSubtitle: true)
+                    .detailPageScrollEdge(title: String(localized: "Overview"), includesSubtitle: true)
             } else {
                 overviewScrollView
                     .underDetailPageHeader(includesSubtitle: true)
@@ -602,7 +602,7 @@ struct ContentView: View {
         Group {
             if #available(macOS 26.0, *) {
                 aboutScrollView
-                    .detailPageScrollEdge(title: "About")
+                    .detailPageScrollEdge(title: String(localized: "About"))
             } else {
                 aboutScrollView
                     .underDetailPageHeader(includesSubtitle: false)
@@ -627,7 +627,7 @@ struct ContentView: View {
     }
 
     private func pageHeader(now: Date) -> some View {
-        AppSectionPageHeader(title: store.selectedTab.rawValue, subtitle: selectedPageSubtitle(now: now)) {
+        AppSectionPageHeader(title: store.selectedTab.displayName, subtitle: selectedPageSubtitle(now: now)) {
             if store.selectedTab == .overview {
                 HStack(spacing: AppStyle.Spacing.xSmall) {
                     if !store.hasFullDiskAccess {
@@ -679,18 +679,18 @@ struct ContentView: View {
         if let active = store.scanQueue.active {
             let waiting = store.scanQueue.pending.count
             let name = OverviewScanButton.name(for: active)
-            return waiting > 0 ? "Scanning \(name), then \(waiting) more…" : "Scanning \(name)…"
+            return waiting > 0 ? String(localized: "Scanning \(name), then \(waiting) more…") : String(localized: "Scanning \(name)…")
         }
         if store.isScanningAll {
-            return "Scanning \(OverviewScanButton.name(for: .cachesAndDevTools))…"
+            return String(localized: "Scanning \(OverviewScanButton.name(for: .cachesAndDevTools))…")
         }
         guard let latest = store.scanRecords.values.map(\.completedAt).max() else { return nil }
-        return "Scanned \(compactAgoText(from: latest, to: now))"
+        return String(localized: "Scanned \(compactAgoText(from: latest, to: now))")
     }
 
     private func pageSubtitle(count: Int, bytes: Int64) -> String {
-        let itemLabel = count == 1 ? "item" : "items"
-        return "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable"
+        let itemLabel = count == 1 ? String(localized: "item") : String(localized: "items")
+        return String(localized: "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable")
     }
 
     /// Mirrors the filtering `LargeFilesView` applies to its list, so the subtitle
@@ -711,8 +711,8 @@ struct ContentView: View {
     private var largeFilesPageSubtitle: String {
         let files = largeFilesVisibleForSubtitle
         let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let fileLabel = files.count == 1 ? "file" : "files"
-        return "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review"
+        let fileLabel = files.count == 1 ? String(localized: "file") : String(localized: "files")
+        return String(localized: "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review")
     }
 
     /// Follows the active segment, with one shared shape so the two read the same:
@@ -724,7 +724,7 @@ struct ContentView: View {
             guard !items.isEmpty else { return nil }
             return uninstallSubtitle(
                 count: items.count,
-                unit: ("item", "items"),
+                unit: (String(localized: "item"), String(localized: "items")),
                 totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
                 selectedCount: store.selectedOrphanCount,
                 selectedBytes: store.selectedOrphanBytes,
@@ -735,7 +735,7 @@ struct ContentView: View {
         guard !store.installedApps.isEmpty else { return nil }
         return uninstallSubtitle(
             count: store.installedApps.count,
-            unit: ("app", "apps"),
+            unit: (String(localized: "app"), String(localized: "apps")),
             totalBytes: store.installedApps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) },
             selectedCount: store.selectedAppIDs.count,
             selectedBytes: store.selectedAppsRemovableBytes,
@@ -753,14 +753,14 @@ struct ContentView: View {
         selectedBytes: Int64,
         measuring: Bool
     ) -> String {
-        let base = "\(count) \(count == 1 ? unit.singular : unit.plural)"
+        let base = String(localized: "\(count) \(count == 1 ? unit.singular : unit.plural)")
         if selectedCount > 0 {
-            return "\(base) · \(selectedCount) selected · \(formatBytes(selectedBytes))"
+            return String(localized: "\(base) · \(selectedCount) selected · \(formatBytes(selectedBytes))")
         }
         if measuring {
-            return "\(base) · measuring space…"
+            return String(localized: "\(base) · measuring space…")
         }
-        return "\(base) · \(formatBytes(totalBytes))"
+        return String(localized: "\(base) · \(formatBytes(totalBytes))")
     }
 
     private var appCachesSafetyFilter: SafetyFilter {
@@ -1002,9 +1002,9 @@ private func makePreviewStore() -> PurgeStore {
             appName: "Safari",
             safetyInfo: SafetyInfo(
                 level: .safe,
-                headline: "Application caches are safe to remove",
-                explanation: "Apps recreate cache files automatically after relaunch.",
-                recoverySteps: "Reopen the app and continue using it.",
+                headline: String(localized: "Application caches are safe to remove"),
+                explanation: String(localized: "Apps recreate cache files automatically after relaunch."),
+                recoverySteps: String(localized: "Reopen the app and continue using it."),
                 reinstallCommand: nil
             )
         )

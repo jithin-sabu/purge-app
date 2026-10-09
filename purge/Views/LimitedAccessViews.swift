@@ -12,17 +12,17 @@ struct LockedFeatureView: View {
 
         var title: String {
             switch self {
-            case .largeFiles: return "Large Files needs a look inside your folders"
-            case .uninstaller: return "The uninstaller needs full access"
+            case .largeFiles: return String(localized: "Large Files needs a look inside your folders")
+            case .uninstaller: return String(localized: "The uninstaller needs full access")
             }
         }
 
         var message: String {
             switch self {
             case .largeFiles:
-                return "Big files tend to live in Downloads, Documents and Desktop, and macOS keeps those locked until you say Purge can look. Purge only ever shows them to you. It never cleans them on its own."
+                return String(localized: "Big files tend to live in Downloads, Documents and Desktop, and macOS keeps those locked until you say Purge can look. Purge only ever shows them to you. It never cleans them on its own.")
             case .uninstaller:
-                return "Apps leave settings and caches in folders macOS keeps locked. Without access, Purge would remove the app and leave all of that behind, so it waits until it can do the whole job."
+                return String(localized: "Apps leave settings and caches in folders macOS keeps locked. Without access, Purge would remove the app and leave all of that behind, so it waits until it can do the whole job.")
             }
         }
 

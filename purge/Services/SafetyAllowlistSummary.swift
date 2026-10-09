@@ -41,29 +41,29 @@ enum SafetyAllowlistSummary {
             Category(
                 id: CategoryID.appCaches,
                 icon: "app.badge",
-                title: "App caches",
-                description: "Regenerable cache folders under ~/Library/Caches and Application Support",
+                title: String(localized: "App caches"),
+                description: String(localized: "Regenerable cache folders under ~/Library/Caches and Application Support"),
                 backingCount: appSupportCacheCount + libraryCachesIncluded
             ),
             Category(
                 id: CategoryID.browserCaches,
                 icon: "globe",
-                title: "Browser caches per profile",
-                description: "Chromium profile caches and service worker stores, per browser profile",
+                title: String(localized: "Browser caches per profile"),
+                description: String(localized: "Chromium profile caches and service worker stores, per browser profile"),
                 backingCount: browserCacheCount
             ),
             Category(
                 id: CategoryID.devCaches,
                 icon: "hammer",
-                title: "Common dev caches",
-                description: "Rebuildable project artifacts like node_modules, DerivedData, and build output",
+                title: String(localized: "Common dev caches"),
+                description: String(localized: "Rebuildable project artifacts like node_modules, DerivedData, and build output"),
                 backingCount: devCacheCount
             ),
             Category(
                 id: CategoryID.systemJunk,
                 icon: "doc.text",
-                title: "Logs and crash reports",
-                description: "User logs and diagnostic reports under ~/Library/Logs",
+                title: String(localized: "Logs and crash reports"),
+                description: String(localized: "User logs and diagnostic reports under ~/Library/Logs"),
                 backingCount: systemJunkCount
             )
         ]
@@ -73,7 +73,7 @@ enum SafetyAllowlistSummary {
         var parts: [String] = []
 
         if !DeletionSafetyPolicy.systemCacheDeletionPrefixes.isEmpty {
-            parts.append("anything requiring admin privileges")
+            parts.append(String(localized: "anything requiring admin privileges"))
         }
 
         let protectedContainerCount =
@@ -81,19 +81,19 @@ enum SafetyAllowlistSummary {
             + DeletionSafetyPolicy.protectedSystemCacheFolderNames.count
             + DeletionSafetyPolicy.protectedLogFolderNames.count
         if protectedContainerCount > 0 {
-            parts.append("protected containers")
+            parts.append(String(localized: "protected containers"))
         }
 
         let personalLabels = personalFileBoundaryLabels
         if !personalLabels.isEmpty {
-            parts.append("personal files (\(personalLabels.joined(separator: ", ")))")
+            parts.append(String(localized: "personal files (\(personalLabels.joined(separator: ", ")))") )
         }
 
         guard !parts.isEmpty else {
-            return "What Purge never touches: paths outside the allowlist"
+            return String(localized: "What Purge never touches: paths outside the allowlist")
         }
 
-        return "What Purge never touches: \(parts.joined(separator: ", "))"
+        return String(localized: "What Purge never touches: \(parts.joined(separator: ", "))")
     }
 
     /// Friendly labels for user-content roots pulled from never-delete policy paths.
@@ -105,19 +105,19 @@ enum SafetyAllowlistSummary {
             let relative = String(path.dropFirst(home.count + 1))
             let top = relative.split(separator: "/").first.map(String.init) ?? relative
             switch top {
-            case "Documents": return "documents"
-            case "Desktop": return "desktop"
-            case "Downloads": return "downloads"
-            case "Pictures": return "pictures"
-            case "Music": return "music"
-            case "Movies": return "movies"
+            case "Documents": return String(localized: "documents")
+            case "Desktop": return String(localized: "desktop")
+            case "Downloads": return String(localized: "downloads")
+            case "Pictures": return String(localized: "pictures")
+            case "Music": return String(localized: "music")
+            case "Movies": return String(localized: "movies")
             case "Library":
                 let sub = relative.split(separator: "/").dropFirst().first.map(String.init) ?? ""
                 switch sub {
-                case "Keychains": return "keychains"
-                case "Preferences": return "preferences"
-                case "Mail": return "mail"
-                case "Application Support": return "application support"
+                case "Keychains": return String(localized: "keychains")
+                case "Preferences": return String(localized: "preferences")
+                case "Mail": return String(localized: "mail")
+                case "Application Support": return String(localized: "application support")
                 default: return nil
                 }
             default:

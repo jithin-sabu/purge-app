@@ -13,7 +13,7 @@ struct OnboardingCleaningStep: View {
 
   var body: some View {
     VStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
-      OnboardingStepTitle(text: "Cleaning safe items…")
+      OnboardingStepTitle(text: String(localized: "Cleaning safe items…"))
 
       OnboardingProgressBar(progress: cleaningProgress)
         .padding(.bottom, AppStyle.Spacing.xSmall)

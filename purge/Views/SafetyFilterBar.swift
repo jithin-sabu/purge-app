@@ -12,9 +12,9 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .all: return "All"
-        case .safe: return "Safe to Clean"
-        case .checkFirst: return "Check First"
+        case .all: return String(localized: "All")
+        case .safe: return String(localized: "Safe to Clean")
+        case .checkFirst: return String(localized: "Check First")
         }
     }
 
@@ -39,11 +39,11 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
     }
 
     func tooltipHint(extra: String = "") -> String {
-        let suffix = extra.isEmpty ? "" : " \(extra)"
+        let suffix = extra.isEmpty ? "" : String(localized: " \(extra)")
         switch self {
-        case .all: return "Show all items\(suffix) (Cmd+1)"
-        case .safe: return "Show safe items\(suffix) (Cmd+2)"
-        case .checkFirst: return "Show check-first items\(suffix) (Cmd+3)"
+        case .all: return String(localized: "Show all items\(suffix) (Cmd+1)")
+        case .safe: return String(localized: "Show safe items\(suffix) (Cmd+2)")
+        case .checkFirst: return String(localized: "Show check-first items\(suffix) (Cmd+3)")
         }
     }
 
@@ -67,21 +67,21 @@ enum SortOption: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .sizeDesc: return "Size (largest first)"
-        case .sizeAsc: return "Size (smallest first)"
-        case .dateNewest: return "Date modified (newest first)"
-        case .dateOldest: return "Date modified (oldest first)"
-        case .nameAZ: return "Name (A to Z)"
+        case .sizeDesc: return String(localized: "Size (largest first)")
+        case .sizeAsc: return String(localized: "Size (smallest first)")
+        case .dateNewest: return String(localized: "Date modified (newest first)")
+        case .dateOldest: return String(localized: "Date modified (oldest first)")
+        case .nameAZ: return String(localized: "Name (A to Z)")
         }
     }
 
     var shortDisplayName: String {
         switch self {
-        case .sizeDesc: return "Largest"
-        case .sizeAsc: return "Smallest"
-        case .dateNewest: return "Newest"
-        case .dateOldest: return "Oldest"
-        case .nameAZ: return "Name"
+        case .sizeDesc: return String(localized: "Largest")
+        case .sizeAsc: return String(localized: "Smallest")
+        case .dateNewest: return String(localized: "Newest")
+        case .dateOldest: return String(localized: "Oldest")
+        case .nameAZ: return String(localized: "Name")
         }
     }
 }
@@ -115,7 +115,7 @@ struct TriStateCheckbox: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSButton {
-        let button = NSButton(checkboxWithTitle: title, target: context.coordinator, action: #selector(Coordinator.toggled))
+        let button = NSButton(checkboxWithTitle: NSLocalizedString(title, comment: "Select all checkbox"), target: context.coordinator, action: #selector(Coordinator.toggled))
         button.allowsMixedState = true
         button.contentTintColor = AppColors.controlAccentNSColor
         button.setContentHuggingPriority(.required, for: .vertical)
@@ -126,7 +126,7 @@ struct TriStateCheckbox: NSViewRepresentable {
 
     func updateNSView(_ button: NSButton, context: Context) {
         context.coordinator.action = action
-        button.title = title
+        button.title = NSLocalizedString(title, comment: "Select all checkbox")
         button.isEnabled = isEnabled
         button.contentTintColor = AppColors.controlAccentNSColor
         switch state {
@@ -193,7 +193,7 @@ struct FilterSortToolbar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var bulkTitle: String? {
-        "Clean Selected"
+        String(localized: "Clean Selected")
     }
 
     private var bulkDisabled: Bool {

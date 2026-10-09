@@ -203,33 +203,33 @@ enum AppUninstallScanPolicy {
             if DeletionSafetyPolicy.requiresAdminPrivileges(for: url) {
                 return SafetyInfo(
                     level: .medium,
-                    headline: "\(appName)",
-                    explanation: "Removing this app needs administrator rights. macOS will ask for your password when it moves the app to the Trash.",
-                    recoverySteps: "Reinstall \(appName) from its original source if you need it again.",
+                    headline: String(localized: "\(appName)"),
+                    explanation: String(localized: "Removing this app needs administrator rights. macOS will ask for your password when it moves the app to the Trash."),
+                    recoverySteps: String(localized: "Reinstall \(appName) from its original source if you need it again."),
                     reinstallCommand: nil
                 )
             }
             return SafetyInfo(
                 level: .safe,
-                headline: "\(appName)",
-                explanation: "The application bundle. Moving it to the Trash removes the app itself.",
-                recoverySteps: "Reinstall \(appName) from its original source if you need it again.",
+                headline: String(localized: "\(appName)"),
+                explanation: String(localized: "The application bundle. Moving it to the Trash removes the app itself."),
+                recoverySteps: String(localized: "Reinstall \(appName) from its original source if you need it again."),
                 reinstallCommand: nil
             )
         case .bundleID, .groupID:
             return SafetyInfo(
                 level: .safe,
-                headline: "\(appName) \(category.displayName)",
-                explanation: "A \(category.displayName.lowercased()) file that belongs to \(appName), matched by its identifier. Safe to remove with the app.",
-                recoverySteps: "\(appName) recreates what it needs the next time it runs.",
+                headline: String(localized: "\(appName) \(category.displayName)"),
+                explanation: String(localized: "A \(category.displayName.lowercased()) file that belongs to \(appName), matched by its identifier. Safe to remove with the app."),
+                recoverySteps: String(localized: "\(appName) recreates what it needs the next time it runs."),
                 reinstallCommand: nil
             )
         case .appName:
             return SafetyInfo(
                 level: .medium,
-                headline: "\(appName) \(category.displayName)",
-                explanation: "This \(category.displayName.lowercased()) folder is named after \(appName), but was matched by name rather than identifier. Check it belongs to this app before removing.",
-                recoverySteps: "\(appName) recreates what it needs the next time it runs.",
+                headline: String(localized: "\(appName) \(category.displayName)"),
+                explanation: String(localized: "This \(category.displayName.lowercased()) folder is named after \(appName), but was matched by name rather than identifier. Check it belongs to this app before removing."),
+                recoverySteps: String(localized: "\(appName) recreates what it needs the next time it runs."),
                 reinstallCommand: nil
             )
         }

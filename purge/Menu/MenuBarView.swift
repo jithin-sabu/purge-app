@@ -180,19 +180,19 @@ struct MenuBarContentView: View {
 
     private var menuActionRows: some View {
         VStack(spacing: 0) {
-            MenuTextRow(title: "Clean Safe Files", isEnabled: canClean) {
+            MenuTextRow(title: String(localized: "Clean Safe Files"), isEnabled: canClean) {
                 model.clean()
             }
             // Refreshes the safe-to-clean figure this menu shows. Scan Everything in the
             // window covers Large Files and apps too, so this says what it scans.
-            MenuTextRow(title: "Scan Caches & Dev Tools", isEnabled: canScan) {
+            MenuTextRow(title: String(localized: "Scan Caches & Dev Tools"), isEnabled: canScan) {
                 model.scanNow()
             }
-            MenuTextRow(title: "Open Purge") {
+            MenuTextRow(title: String(localized: "Open Purge")) {
                 openPurge()
             }
             CheckForUpdatesRow(updater: updater)
-            MenuTextRow(title: "Quit") {
+            MenuTextRow(title: String(localized: "Quit")) {
                 NSApplication.shared.terminate(nil)
             }
         }
@@ -332,7 +332,7 @@ private struct CheckingStatusLine: View {
             // ZStack so the outgoing and incoming words overlap while animating
             // instead of sitting side by side in the HStack.
             ZStack(alignment: .leading) {
-                Text(Self.words[index])
+                Text(LocalizedStringKey(Self.words[index]))
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .id(index)
@@ -391,7 +391,7 @@ private struct CheckForUpdatesRow: View {
     @ObservedObject var updater: PurgeUpdater
 
     var body: some View {
-        MenuTextRow(title: "Check for Updates…", isEnabled: updater.canCheckForUpdates) {
+        MenuTextRow(title: String(localized: "Check for Updates…"), isEnabled: updater.canCheckForUpdates) {
             updater.checkForUpdates()
         }
     }
@@ -414,7 +414,7 @@ private struct MenuTextRow: View {
                     Image(systemName: systemImage)
                         .frame(width: 16)
                 }
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .fontWeight(titleWeight)
                 Spacer(minLength: 0)
             }

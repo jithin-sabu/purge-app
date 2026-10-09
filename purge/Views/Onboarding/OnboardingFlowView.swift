@@ -151,7 +151,7 @@ struct OnboardingFlowView: View {
     VStack(spacing: AppStyle.Spacing.small) {
       switch step {
       case .welcome:
-        OnboardingPrimaryButton(title: "Get started", systemImage: "arrow.forward") {
+        OnboardingPrimaryButton(title: String(localized: "Get started"), systemImage: "arrow.forward") {
           advance(to: .firstScan)
         }
       case .results:
@@ -165,7 +165,7 @@ struct OnboardingFlowView: View {
         ) {
           startResultsCleanup()
         }
-        OnboardingSecondaryButton(title: "Review everything first") {
+        OnboardingSecondaryButton(title: String(localized: "Review everything first")) {
           exitToReviewPath()
         }
         .disabled(isResultsCleaning)
@@ -179,10 +179,10 @@ struct OnboardingFlowView: View {
   private var cleanNowTitle: String {
     let bytes = resultsSnapshot?.totalBytes ?? store.safeRecoverableBytes
     if bytes > 0 {
-      return "Move \(formatBytes(bytes)) to Trash"
+      return String(localized: "Move \(formatBytes(bytes)) to Trash")
     }
     // Nothing to move, so the button only moves the flow on.
-    return "Continue"
+    return String(localized: "Continue")
   }
 
   private func exitToReviewPath() {

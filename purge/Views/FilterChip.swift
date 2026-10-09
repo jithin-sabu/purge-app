@@ -98,18 +98,18 @@ struct FilterChip: View {
     private var labelView: some View {
         if style == .tab {
             ZStack(alignment: .leading) {
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(AppStyle.Typography.headline)
                     .opacity(0)
                     .accessibilityHidden(true)
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(AppStyle.Typography.body.weight(isSelected ? .semibold : .regular))
             }
             .animation(nil, value: isSelected)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         } else {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .lineLimit(1)
         }
     }

@@ -47,19 +47,19 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     var explanation: String {
         switch self {
         case .needsFullDiskAccess:
-            "Purge needs Full Disk Access to remove this."
+            String(localized: "Purge needs Full Disk Access to remove this.")
         case .needsAdministrator:
-            "This app was installed by an administrator, so macOS won't let it be moved on its own. Set up secure removal once and Purge can finish it."
+            String(localized: "This app was installed by an administrator, so macOS won't let it be moved on its own. Set up secure removal once and Purge can finish it.")
         case .inUse:
-            "An app is still using this. Quit it and clean again."
+            String(localized: "An app is still using this. Quit it and clean again.")
         case .systemProtected:
-            "macOS protects this one and won't let it be removed."
+            String(localized: "macOS protects this one and won't let it be removed.")
         case .safetySkipped:
-            "Purge left this one alone to stay on the safe side."
+            String(localized: "Purge left this one alone to stay on the safe side.")
         case .keptForOtherApp:
-            "Another app you still have installed uses this too, so Purge kept it."
+            String(localized: "Another app you still have installed uses this too, so Purge kept it.")
         case .unknown:
-            "This one couldn't be removed. Try again."
+            String(localized: "This one couldn't be removed. Try again.")
         }
     }
 
@@ -94,7 +94,7 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     /// summon the password prompt — rather than the bare "Retry" that fits the
     /// transient failures.
     var retryTitle: String {
-        self == .needsAdministrator ? "Set Up Secure Removal" : "Retry"
+        self == .needsAdministrator ? String(localized: "Set Up Secure Removal") : String(localized: "Retry")
     }
 
     /// Returns `nil` for file-not-found / already-gone errors that should be dropped silently.
