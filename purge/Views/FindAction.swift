@@ -11,8 +11,8 @@ struct FindAction {
     func callAsFunction() { perform() }
 
     /// Selects whatever the focused field holds so typing replaces the old search.
-    /// Runs on the next turn of the run loop because the focus change has to reach
-    /// AppKit before the field editor is the first responder.
+    /// Call it once the field is focused; it still hops a turn of the run loop so a
+    /// focus change made in the same pass has reached AppKit's first responder.
     static func selectAllInFieldEditor() {
         DispatchQueue.main.async {
             guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView else { return }

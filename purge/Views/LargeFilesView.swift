@@ -715,6 +715,9 @@ private struct LargeFileSearchField: View {
     /// Local mouse-down monitor installed only while the field is focused; see
     /// `installOutsideClickResign`.
     @State private var outsideClickMonitor: Any?
+    /// Set by Edit > Find when the field was not focused: the selection has to wait
+    /// for `isFocused` to land, or it would run before AppKit has a field editor.
+    @State private var selectsAllOnFocus = false
 
     /// Matches FilterChip's metrics so the row's controls share a baseline.
     private static let horizontalPadding: CGFloat = 10
@@ -786,17 +789,23 @@ private struct LargeFileSearchField: View {
         // of text already typed.
         .onTapGesture { isFocused = true }
         .focusedSceneValue(\.findAction, FindAction {
-            isFocused = true
-            FindAction.selectAllInFieldEditor()
+            if isFocused {
+                FindAction.selectAllInFieldEditor()
+            } else {
+                selectsAllOnFocus = true
+                isFocused = true
+            }
         })
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
         .onChange(of: isFocused) { focused in
             if focused {
                 installOutsideClickResign()
+                if selectsAllOnFocus { FindAction.selectAllInFieldEditor() }
             } else {
                 removeOutsideClickResign()
             }
+            selectsAllOnFocus = false
         }
         .onDisappear { removeOutsideClickResign() }
     }
