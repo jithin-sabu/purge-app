@@ -132,6 +132,9 @@ final class PurgeStore: ObservableObject {
         static let cleanTabs: [Tab] = [.appCaches, .devTools]
         static let reviewTabs: [Tab] = [.largeFiles, .uninstaller]
         static let utilityTabs: [Tab] = [.settings, .about]
+
+        /// The tabs ⌘1 … ⌘5 switch to, in sidebar order. Settings has ⌘, already.
+        static let keyboardTabs: [Tab] = [.overview] + cleanTabs + reviewTabs
     }
 
     enum ScanPhase: Equatable {

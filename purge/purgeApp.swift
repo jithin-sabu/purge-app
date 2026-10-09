@@ -213,6 +213,10 @@ struct PurgeCommands: Commands {
         CommandGroup(after: .pasteboard) {
             FindMenuItem()
         }
+        CommandGroup(before: .sidebar) {
+            TabMenuItems(store: store)
+            Divider()
+        }
         // Our own Quit item instead of SwiftUI's. AppKit finds the stock one by
         // its identifier the first time the menu opens and slips a hidden ⌥⌘Q
         // "Quit and Keep Windows" alternate in after it. SwiftUI doesn't know
@@ -243,6 +247,24 @@ private struct SettingsMenuItem: View {
         }
         .keyboardShortcut(",", modifiers: .command)
         .disabled(!hasCompletedOnboarding)
+    }
+}
+
+/// View > Overview … App Uninstaller on ⌘1 … ⌘5. Brings the window back first
+/// and waits for onboarding, the same as Settings…
+private struct TabMenuItems: View {
+    let store: PurgeStore
+    @AppStorage(FirstRunGate.onboardingCompletedKey) private var hasCompletedOnboarding = false
+
+    var body: some View {
+        ForEach(Array(PurgeStore.Tab.keyboardTabs.enumerated()), id: \.element) { index, tab in
+            Button(tab.rawValue) {
+                IntentRouter.revealWindow()
+                store.selectedTab = tab
+            }
+            .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+            .disabled(!hasCompletedOnboarding)
+        }
     }
 }
 

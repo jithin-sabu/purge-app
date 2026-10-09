@@ -29,7 +29,7 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Cmd+1 … Cmd+3
+    /// ⌥⌘1 … ⌥⌘3. Plain ⌘1 … ⌘5 switch sidebar tabs.
     var shortcutDigit: Character {
         switch self {
         case .all: return "1"
@@ -41,9 +41,9 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
     func tooltipHint(extra: String = "") -> String {
         let suffix = extra.isEmpty ? "" : " \(extra)"
         switch self {
-        case .all: return "Show all items\(suffix) (Cmd+1)"
-        case .safe: return "Show safe items\(suffix) (Cmd+2)"
-        case .checkFirst: return "Show check-first items\(suffix) (Cmd+3)"
+        case .all: return "Show all items\(suffix) (⌥⌘1)"
+        case .safe: return "Show safe items\(suffix) (⌥⌘2)"
+        case .checkFirst: return "Show check-first items\(suffix) (⌥⌘3)"
         }
     }
 
@@ -296,7 +296,7 @@ struct FilterSortToolbar: View {
         .accessibilityLabel("\(filter.displayName), \(count) items")
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .help(filter.tooltipHint())
-        .keyboardShortcut(KeyEquivalent(filter.shortcutDigit), modifiers: .command)
+        .keyboardShortcut(KeyEquivalent(filter.shortcutDigit), modifiers: [.command, .option])
     }
 
     private func select(_ filter: SafetyFilter) {
