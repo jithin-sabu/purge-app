@@ -324,7 +324,7 @@ Purge never reads or sends file contents.
 Purge deletes files, so safety is the point. A few things worth knowing:
 
 - **Trash by default**: Nothing is permanently deleted. Items move to the macOS Trash and can be restored until you empty it.
-- **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched.
+- **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched. The [safety page](https://purgemac.com/safety) lists every allowed location and everything Purge will never touch, generated from the app's source.
 - **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
 - **Open source**: The full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
 - **Notarized by Apple**: The app is signed and notarized, so macOS can verify it hasn't been tampered with since release.

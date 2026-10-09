@@ -39,6 +39,11 @@ patient, but safety reports get priority over everything else.
 - **Open source.** The full deletion logic, including the allowlist, is in this
   repo for you to read or build from source yourself.
 
+The full list of what Purge will never touch, every location it is allowed to
+clean, and the Safe or Check First label on each item are on the
+[safety page](https://purgemac.com/safety). The page is generated from the
+app's source at build time, so it always matches the release it names.
+
 ## What runs as root
 
 Purge has one privileged helper, `io.getpurge.helper`. It is not set up when
