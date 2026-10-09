@@ -44,11 +44,27 @@ jobs:
           # Prints who the token belongs to and whether it can see the repo, so
           # a token scoped to the wrong account or repository fails here with
           # a reason instead of as "Not Found" inside actions/checkout.
-          LOGIN=$(curl -sS --max-time 20 -H "Authorization: Bearer $LANDING_REPO_TOKEN" https://api.github.com/user | jq -r '.login // "unknown"')
-          STATUS=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $LANDING_REPO_TOKEN" https://api.github.com/repos/jithin-sabu/purge-landing-page)
-          echo "Token belongs to: $LOGIN. GET /repos/jithin-sabu/purge-landing-page -> $STATUS"
+          # purge-app is public, so this log is public: print only the token
+          # kind, its login, classic scopes, and a repository count.
+          case "$LANDING_REPO_TOKEN" in
+            github_pat_*) KIND="fine-grained" ;;
+            ghp_*) KIND="classic" ;;
+            *) KIND="unrecognised prefix" ;;
+          esac
+          AUTH="Authorization: Bearer $LANDING_REPO_TOKEN"
+          LOGIN=$(curl -sS --max-time 20 -H "$AUTH" https://api.github.com/user | jq -r '.login // "unknown"')
+          SCOPES=$(curl -sS --max-time 20 -I -H "$AUTH" https://api.github.com/user | grep -i '^x-oauth-scopes:' | cut -d' ' -f2- | tr -d '\r')
+          VISIBLE=$(curl -sS --max-time 20 -H "$AUTH" "https://api.github.com/user/repos?per_page=100&affiliation=owner" | jq 'if type=="array" then length else 0 end')
+          STATUS=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H "$AUTH" https://api.github.com/repos/jithin-sabu/purge-landing-page)
+          echo "Token: $KIND, belongs to $LOGIN, classic scopes: [${SCOPES:-none}], can see $VISIBLE repositories you own."
+          echo "GET /repos/jithin-sabu/purge-landing-page -> $STATUS"
           if [ "$STATUS" != "200" ]; then
-            echo "::error::LANDING_REPO_TOKEN ($LOGIN) cannot read jithin-sabu/purge-landing-page (HTTP $STATUS). Give the token 'Only select repositories' access to purge-landing-page with Contents: Read-only."
+            case "$KIND" in
+              fine-grained) HINT="Under Repository access choose 'Only select repositories' and tick purge-landing-page, with Contents: Read-only." ;;
+              classic) HINT="A classic token needs the full 'repo' scope to read a private repository." ;;
+              *) HINT="Use a fine-grained token scoped to purge-landing-page with Contents: Read-only." ;;
+            esac
+            echo "::error::LANDING_REPO_TOKEN cannot read jithin-sabu/purge-landing-page (HTTP $STATUS). $HINT"
             exit 1
           fi
 
