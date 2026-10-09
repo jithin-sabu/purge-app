@@ -1,0 +1,24 @@
+name: Rebuild purgemac.com
+
+# purgemac.com builds its changelog and download link from this repo's
+# releases, so it has to rebuild whenever a release changes.
+
+on:
+  release:
+    types: [published, edited, deleted]
+
+jobs:
+  rebuild:
+    # The site only lists full releases.
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the Cloudflare Pages deploy hook
+        env:
+          DEPLOY_HOOK: ${{ secrets.LANDING_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::LANDING_DEPLOY_HOOK is not set, so purgemac.com was not rebuilt."
+            exit 1
+          fi
+          curl --fail-with-body -sS -X POST "$DEPLOY_HOOK"
