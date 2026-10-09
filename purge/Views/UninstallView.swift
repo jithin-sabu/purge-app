@@ -1460,6 +1460,9 @@ private struct UninstallSearchField: View {
     /// Local mouse-down monitor installed only while focused; see
     /// `installOutsideClickResign`.
     @State private var outsideClickMonitor: Any?
+    /// Set by Edit > Find when the field was not focused: the selection has to wait
+    /// for `isFocused` to land, or it would run before AppKit has a field editor.
+    @State private var selectsAllOnFocus = false
 
     private var hasText: Bool { !query.isEmpty }
 
@@ -1513,10 +1516,24 @@ private struct UninstallSearchField: View {
         }
         .contentShape(Capsule(style: .continuous))
         .onTapGesture { isFocused = true }
+        .focusedSceneValue(\.findAction, FindAction {
+            if isFocused {
+                FindAction.selectAllInFieldEditor()
+            } else {
+                selectsAllOnFocus = true
+                isFocused = true
+            }
+        })
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
         .onChange(of: isFocused) { focused in
-            if focused { installOutsideClickResign() } else { removeOutsideClickResign() }
+            if focused {
+                installOutsideClickResign()
+                if selectsAllOnFocus { FindAction.selectAllInFieldEditor() }
+            } else {
+                removeOutsideClickResign()
+            }
+            selectsAllOnFocus = false
         }
         .onDisappear { removeOutsideClickResign() }
     }

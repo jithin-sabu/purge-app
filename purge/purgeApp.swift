@@ -210,6 +210,9 @@ struct PurgeCommands: Commands {
             .disabled(store.isDeleting)
         }
         CommandGroup(replacing: .undoRedo) {}
+        CommandGroup(after: .pasteboard) {
+            FindMenuItem()
+        }
         // Our own Quit item instead of SwiftUI's. AppKit finds the stock one by
         // its identifier the first time the menu opens and slips a hidden ⌥⌘Q
         // "Quit and Keep Windows" alternate in after it. SwiftUI doesn't know
@@ -240,6 +243,19 @@ private struct SettingsMenuItem: View {
         }
         .keyboardShortcut(",", modifiers: .command)
         .disabled(!hasCompletedOnboarding)
+    }
+}
+
+/// Puts the cursor in the search field on Large Files and App Uninstaller. The
+/// field on screen publishes `findAction`; see `FindAction` for when there is none.
+/// A view so `@FocusedValue` re-evaluates it as tabs come and go.
+private struct FindMenuItem: View {
+    @FocusedValue(\.findAction) private var findAction
+
+    var body: some View {
+        Button("Find") { findAction?() }
+            .keyboardShortcut("f", modifiers: .command)
+            .disabled(findAction == nil)
     }
 }
 
