@@ -1,5 +1,4 @@
 /* Simplified Chinese interface text. English source remains the fallback. */
-"" = "";
 " (" = " (";
 " If it stops again, check that Purge is switched on under Login Items in System Settings." = " 如果再次停止，请在系统设置的登录项中检查 Purge 是否已开启。";
 " and freed %@" = "，已释放 %@";
@@ -25,12 +24,12 @@
 "%@ ready to clean" = "%@ 可清理";
 "%@ recreates what it needs the next time it runs." = "%@ 下次运行时会重新生成所需内容。";
 "%@ safe to clean" = "%@ 可安全清理";
-"%@ times over" = "%@ 倍";
+"%@ times over" = "共 %@ 份";
 "%@ used" = "已用 %@";
 "%@ was removed from Applications, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it." = "%@ 已从“应用程序”中移除，但这些文件仍在 Mac 上。勾选的项目会移到废纸篓，清空前都可以恢复。";
 "%@ · %lld selected · %@" = "%@ · 已选 %lld 项 · %@";
 "%@ · measuring space…" = "%@ · 正在统计空间…";
-"%@, %@" = "%@, %@";
+"%@, %@" = "%@，%@";
 "%@, %@ reclaimed" = "%@，已释放 %@";
 "%@, %@ selected" = "%@，已选择 %@";
 "%@, %@%@" = "%@, %@%@";
@@ -52,8 +51,8 @@
 "%lld locations will be removed." = "将移除 %lld 个位置。";
 "%lld not opened in 90 days" = "%lld 个应用在 90 天内未打开";
 "%lld on this Mac, the oldest from %@" = "本机有 %lld 个快照，最早创建于 %@";
-"%lld other %@" = "另有 %lld %@";
-"%lld other identical %@ found" = "发现另外 %lld 个相同的%@";
+"%lld other %@" = "另有 %lld 份%@";
+"%lld other identical %@ found" = "发现另外 %lld 份相同的%@";
 "%lld percent" = "百分之 %lld";
 "%lld seconds" = "%lld 秒";
 "%lldd ago" = "%lld 天前";
@@ -149,7 +148,7 @@
 "Clean" = "清理";
 "Clean Safe Files" = "清理安全文件";
 "Clean Safe Items" = "清理安全项目";
-"Clean Safe Junk" = "清理安全项目";
+"Clean Safe Junk" = "清理安全垃圾文件";
 "Clean Selected" = "清理所选项目";
 "Clean anyway" = "仍然清理";
 "Clean junk with ${applicationName}" = "使用 ${applicationName} 清理垃圾文件";
@@ -175,7 +174,7 @@
 "Couldn't check what was removed. Try again in a moment." = "无法检查移除结果。请稍后重试。";
 "Couldn't turn this off. Check Login Items in System Settings." = "无法关闭。请检查系统设置中的登录项。";
 "Couldn't turn this on. Check Login Items in System Settings." = "无法开启。请检查系统设置中的登录项。";
-"Counting crumbs…" = "正在清点…";
+"Counting crumbs…" = "正在数碎屑…";
 "Custom" = "自定义";
 "Custom cleaning schedule" = "自定义清理计划";
 "Custom…" = "自定义…";
@@ -198,14 +197,14 @@
 "Developer" = "开发者";
 "Developer Mode" = "开发者模式";
 "Developer Projects" = "开发项目";
-"Developer mode disabled" = "开发者模式已关闭";
+"Developer mode disabled" = "开发者模式已停用";
 "Developer mode enabled" = "开发者模式已启用";
 "Disabled" = "已停用";
 "Documents" = "文稿";
 "Done" = "完成";
 "Dune build" = "Dune 构建";
 "Duplicates" = "重复文件";
-"Dusting shelves…" = "正在整理…";
+"Dusting shelves…" = "正在掸灰…";
 "Elixir build" = "Elixir 构建";
 "Elixir deps" = "Elixir 依赖";
 "Empty your Trash to reclaim this space." = "清空废纸篓即可释放这部分空间。";
@@ -213,8 +212,8 @@
 "Enable" = "启用";
 "Enabled" = "已启用";
 "Every" = "每隔";
-"Every %@" = "每隔 %@";
-"Every %@, we will quietly clean the same safe items as the Clean Safe Items button - safe caches and stale developer artifacts. Your actual work is never deleted." = "每隔 %@，会在后台清理与“清理安全项目”按钮相同的项目，包括安全缓存和不再使用的开发工具生成文件。不会删除你的工作文件。";
+"Every %@" = "每%@";
+"Every %@, we will quietly clean the same safe items as the Clean Safe Items button - safe caches and stale developer artifacts. Your actual work is never deleted." = "每%@，会在后台清理与“清理安全项目”按钮相同的项目，包括安全缓存和不再使用的开发工具生成文件。不会删除你的工作文件。";
 "Every 3 months" = "每 3 个月";
 "Every copy is identical, so keeping any one is safe. Purge keeps the copy in a real folder over one in Downloads, a cache, or a build folder, and prefers the original name. The rest go to Trash. Tap a copy to keep it instead." = "所有副本内容完全相同，保留任何一份都可以。Purge 优先保留普通文件夹中、使用原始名称的副本，而非下载、缓存或构建文件夹中的副本。其余副本会移到废纸篓。你也可以点选另一份保留。";
 "Every day" = "每天";
@@ -238,7 +237,7 @@
 "Flutter build" = "Flutter 构建";
 "Free" = "可用空间";
 "Freeing %@" = "正在释放 %@";
-"Full Disk Access" = "完全磁盘访问";
+"Full Disk Access" = "完全磁盘访问权限";
 "Get started" = "开始使用";
 "Godot cache" = "Godot 缓存";
 "Gradle build" = "Gradle 构建";
@@ -266,9 +265,9 @@
 "Kept, still used by %@" = "已保留，仍被 %@ 使用";
 "Large Files" = "大文件";
 "Large Files and the uninstaller are open now too." = "现在也可以使用大文件和卸载功能。";
-"Large Files and the uninstaller are ready, and Purge found a little more to clean too." = "大型文件和应用卸载已就绪，Purge 还找到了一些可清理内容。";
-"Large Files and the uninstaller are ready. Nothing big was hiding in the locked folders." = "大型文件和应用卸载已就绪。之前无权访问的文件夹中没有发现大型文件。";
-"Large Files and the uninstaller are ready. Purge is still checking your projects, so more may turn up." = "大型文件和应用卸载已就绪。Purge 仍在检查项目，可能继续发现更多内容。";
+"Large Files and the uninstaller are ready, and Purge found a little more to clean too." = "大文件和应用卸载已就绪，Purge 还找到了一些可清理内容。";
+"Large Files and the uninstaller are ready. Nothing big was hiding in the locked folders." = "大文件和应用卸载已就绪。之前无权访问的文件夹中没有发现大文件。";
+"Large Files and the uninstaller are ready. Purge is still checking your projects, so more may turn up." = "大文件和应用卸载已就绪。Purge 仍在检查项目，可能继续发现更多内容。";
 "Large Files needs a look inside your folders" = "扫描大文件需要查看文件夹内容";
 "Larger than %@" = "大于 %@";
 "Largest" = "最大优先";
@@ -290,7 +289,7 @@
 "Let Purge look deeper" = "让 Purge 深入扫描";
 "Lifetime moved to trash" = "累计移到废纸篓";
 "Lifetime moved to trash, %@" = "累计移到废纸篓：%@";
-"Lifting the rug…" = "正在查找遗留文件…";
+"Lifting the rug…" = "正在掀开地毯看看…";
 "Light" = "浅色";
 "Limited scan" = "扫描范围受限";
 "Limited scan. Let Purge look deeper." = "扫描范围受限。让 Purge 深入扫描。";
@@ -302,7 +301,7 @@
 "Logs and crash reports" = "日志和崩溃报告";
 "Look deeper" = "深入扫描";
 "Looking deeper" = "正在深入查看";
-"Made with" = "制作于";
+"Made with" = "用";
 "Manual category" = "手动分类";
 "Manual clean" = "手动清理";
 "Matched by app group" = "按应用组匹配";
@@ -312,9 +311,9 @@
 "Measuring each app and its files…" = "正在计算各应用及其文件的大小…";
 "Measuring the Trash" = "正在计算废纸篓大小";
 "Missing reinstall instructions" = "缺少重新安装说明";
-"Month" = "月";
+"Month" = "个月";
 "Monthly" = "每月";
-"Months" = "月";
+"Months" = "个月";
 "Move %@ to Trash" = "将 %@ 移到废纸篓";
 "Move %@ to the Trash?" = "将 %@ 移到废纸篓？";
 "Move %lld to Trash" = "将 %lld 项移到废纸篓";
@@ -355,7 +354,7 @@
 "Not opened" = "尚未打开";
 "Not scanned yet" = "尚未扫描";
 "Not selected" = "未选择";
-"Not sure" = "不确定";
+"Not sure" = "无法确定";
 "Nothing cleaned yet" = "尚未清理";
 "Nothing excluded" = "没有排除项";
 "Nothing here." = "这里没有内容。";
@@ -396,10 +395,10 @@
 "PHP packages" = "PHP 软件包";
 "Parcel cache" = "Parcel 缓存";
 "Pause" = "暂停";
-"Peeking in caches…" = "正在查看缓存…";
+"Peeking in caches…" = "正在瞄一眼缓存…";
 "Permanently delete these items?" = "永久删除这些项目？";
 "Pick your own interval. Purge will quietly clean the same safe items on that rhythm." = "选择清理间隔。Purge 会按此周期在后台清理相同的安全项目。";
-"Pondering…" = "正在分析…";
+"Pondering…" = "正在琢磨…";
 "Preferences" = "偏好设置";
 "Preparing..." = "正在准备…";
 "Project" = "项目";
@@ -472,7 +471,7 @@
 "Review first" = "请先检查";
 "Review leftovers when an app is deleted" = "应用删除后检查残留文件";
 "Ruby gems" = "Ruby Gem 软件包";
-"Rummaging…" = "正在翻找…";
+"Rummaging…" = "正在翻箱倒柜…";
 "Run a scan after adding projects or tool-generated folders." = "添加项目或工具生成的文件夹后，请运行一次扫描。";
 "Run a scan to inspect recoverable application caches." = "运行扫描以检查可恢复的应用缓存。";
 "Run a scheduled clean right now to confirm it works. It uses the same safe rules above and counts as this period's clean." = "立即执行一次定时清理以确认计划有效。它使用上述相同的安全规则，并计为本周期的清理。";
@@ -486,7 +485,7 @@
 "Save" = "保存";
 "Saved State" = "已保存状态";
 "Scan" = "扫描";
-"Scan App Caches, Dev Tools, Large Files and apps, one after another" = "依次扫描应用缓存、开发工具、大型文件和应用";
+"Scan App Caches, Dev Tools, Large Files and apps, one after another" = "依次扫描应用缓存、开发工具、大文件和应用";
 "Scan Caches & Dev Tools" = "扫描缓存和开发工具";
 "Scan Everything" = "扫描全部";
 "Scan for Junk" = "扫描垃圾文件";
@@ -536,14 +535,14 @@
 "Show in Finder\n%@" = "在访达中显示\n%@";
 "Show less" = "收起";
 "Show safe items%@ (Cmd+2)" = "显示安全项目%@（Cmd+2）";
-"Sifting…" = "正在筛查…";
+"Sifting…" = "正在筛选…";
 "Size (largest first)" = "大小（从大到小）";
 "Size (smallest first)" = "大小（从小到大）";
 "Size filter" = "按大小筛选";
 "Skipped" = "已跳过";
 "Smallest" = "最小优先";
-"Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need for your next backup. Backups on your backup disk aren't touched." = "快照可能保存着自上次备份以来修改或删除文件的唯一副本。快照移除后无法恢复。Purge 会保留最新快照，时间机器可能需要它来进行下次备份。不会动备份磁盘上的备份。";
-"Snooping around…" = "正在查看…";
+"Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need for your next backup. Backups on your backup disk aren't touched." = "快照可能保存着自上次备份以来修改或删除文件的唯一副本。快照删除后无法恢复。Purge 会保留最新快照，时间机器可能需要它来进行下次备份。备份磁盘上的备份不会受到影响。";
+"Snooping around…" = "正在四处打探…";
 "Some apps are installed under an administrator and can't be moved to the Trash on their own. Purge asks you to enable its secure removal helper only when an app needs it. Items still go to the Trash, and you can turn it off here at any time." = "部分应用由管理员安装，无法直接移到废纸篓。只有在应用需要时，Purge 才会要求启用安全移除助手。项目仍会进入废纸篓，你可以随时在此停用助手。";
 "Some clutter hides in folders macOS keeps locked." = "macOS 限制访问的文件夹中还可能有杂项。";
 "Some of these aren't identified" = "部分项目无法识别";
@@ -565,9 +564,9 @@
 "Thanks, that means a lot." = "感谢你的支持。";
 "That was a big one. If it helped, " = "这次清理了不少内容。如果对你有帮助，";
 "That was the easy part. More clutter hides in folders macOS keeps locked." = "刚才完成了容易扫描的部分。macOS 限制访问的文件夹中还可能有更多杂项。";
-"That's room for" = "可腾出空间用于";
-"That's room for %@" = "可腾出空间用于 %@";
-"That's room for %@." = "可腾出空间用于 %@。";
+"That's room for" = "足以容纳";
+"That's room for %@" = "足以容纳 %@";
+"That's room for %@." = "足以容纳 %@。";
 "The application bundle. Moving it to the Trash removes the app itself." = "应用程序本体。移到废纸篓会移除应用本身。";
 "The application itself" = "应用程序本身";
 "The background watcher couldn't start, so deleted apps go unnoticed." = "后台监测服务无法启动，因此无法检测已删除的应用。";
@@ -587,7 +586,7 @@
 "This one couldn't be removed. Try again." = "无法移除此内容，请重试。";
 "This one may hold something you'd miss. If you're not sure about it, cancel and untick it." = "此项目可能包含你需要的内容。不确定时，请取消并取消勾选它。";
 "This removes all saved cleanup records from this Mac. It cannot be undone." = "这会移除本机保存的所有清理记录，且无法撤销。";
-"Time Machine saves a snapshot every hour so you can get files back without your backup disk. Old ones keep deleted files around and count as System Data. Remove keeps the newest and the one from your last backup, which Time Machine may still need." = "时间机器每小时保存一个快照，让你无需备份磁盘也能找回文件。旧快照会保留已删除的文件，并计入系统数据。移除时会保留最新快照，以及上次备份时的快照，因为时间机器可能仍需要它们。";
+"Time Machine saves a snapshot every hour so you can get files back without your backup disk. Old ones keep deleted files around and count as System Data. Remove keeps the newest and the one from your last backup, which Time Machine may still need." = "时间机器每小时保存一个快照，让你无需备份磁盘也能找回文件。旧快照会保留已删除的文件，并计入系统数据。删除时会保留最新快照，以及上次备份时的快照，因为时间机器可能仍需要它们。";
 "Time Machine snapshots" = "时间机器快照";
 "Today" = "今天";
 "Tomorrow" = "明天";
@@ -596,7 +595,7 @@
 "Trash is empty" = "废纸篓为空";
 "Trash size unavailable" = "无法获取废纸篓大小";
 "Try Again" = "重试";
-"Try a lower size threshold or a shorter last-used window." = "Try a lower size threshold or a shorter last-used window.";
+"Try a lower size threshold or a shorter last-used window." = "请尝试调低大小阈值，或缩短“上次使用”时间范围。";
 "Turborepo cache" = "Turborepo 缓存";
 "Turn Off" = "关闭";
 "Turn on Purge in System Settings, then come back. If macOS offers to reopen Purge, go ahead." = "在系统设置中开启 Purge 的权限，然后返回。若 macOS 提示重新打开 Purge，请允许。";
@@ -651,7 +650,7 @@
 "Zig output" = "Zig 输出";
 "a copy of Chrome" = "一份 Chrome";
 "a fresh copy of Xcode" = "一份新的 Xcode";
-"a full base MacBook Air" = "装满一台基础款 MacBook Air";
+"a full base MacBook Air" = "一台装满的基础款 MacBook Air";
 "all of GTA V" = "完整 GTA V";
 "anything requiring admin privileges" = "需要管理员权限的内容";
 "app" = "个应用";
@@ -660,7 +659,7 @@
 "barely broke a sweat" = "轻松完成";
 "blink and you missed it" = "一眨眼就完成了";
 "buy me a coffee" = "请我喝杯咖啡";
-"by" = "作者";
+"by" = "制作 ·";
 "cache" = "缓存";
 "caches" = "缓存";
 "check junk" = "检查垃圾文件";
@@ -668,10 +667,12 @@
 "clean junk" = "清理垃圾文件";
 "clean my mac" = "清理我的 Mac";
 "clean safe junk" = "清理安全垃圾文件";
+"copy" = "副本";
 "cleanup" = "清理";
 "clear cache" = "清除缓存";
 "clear caches" = "清除缓存";
 "clear junk" = "清除垃圾文件";
+"copies" = "副本";
 "copies of Chrome" = "份 Chrome";
 "copies of Xcode" = "份 Xcode";
 "day" = "天";
@@ -711,7 +712,7 @@
 "leftovers from deleted apps" = "已删除应用的残留";
 "low on space" = "空间不足";
 "mac is full" = "Mac 空间已满";
-"macOS calls this Full Disk Access. Turn it off anytime in System Settings." = "macOS 将此权限称为“完全磁盘访问”。可随时在系统设置中关闭。";
+"macOS calls this Full Disk Access. Turn it off anytime in System Settings." = "macOS 将此权限称为“完全磁盘访问权限”。可随时在系统设置中关闭。";
 "macOS is blocking Purge's background watcher, so deleted apps go unnoticed." = "macOS 阻止了 Purge 的后台监测服务，因此无法检测已删除的应用。";
 "macOS is stopping Purge from running in the background. In System Settings, open Login Items and switch Purge on." = "macOS 阻止了 Purge 在后台运行。请在系统设置中打开登录项，并开启 Purge。";
 "macOS needs your permission" = "macOS 需要你的许可";
@@ -755,7 +756,7 @@
 "tox envs" = "tox 环境";
 "trash" = "废纸篓";
 "trash junk" = "将垃圾文件移到废纸篓";
-"twice over" = "两倍";
+"twice over" = "共两份";
 "uninstall" = "卸载";
 "uninstall app" = "卸载应用";
 "week" = "周";
