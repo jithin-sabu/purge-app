@@ -222,7 +222,9 @@ Purge needs Full Disk Access to scan your cache folders.
 
 Purge updates itself in place. Once a day it checks for a new version, and when one is available the update window appears with the release notes. Choose **Install Update** and Purge downloads it, verifies its signature, installs it, and relaunches. You don't need to visit the release page or drag anything.
 
-Nothing is ever installed without your confirmation. You can also check whenever you like from the **About** screen, and if you'd rather Purge didn't check on its own, turn off **Check for updates automatically** in **Settings → Updates**.
+By default nothing is installed without your confirmation. You can also check whenever you like from the **About** screen, and if you'd rather Purge didn't check on its own, turn off **Check for updates automatically** in **Settings → Updates**.
+
+If you'd rather not be asked, turn on **Download and install updates automatically** in the same place, or tick the matching box in the update window. New versions then download in the background and install the next time Purge quits. Once one is ready, **Restart to Update** in the Purge menu, the menu bar menu or the **About** screen installs it straight away. That helps if you keep Purge in the menu bar and rarely quit it.
 
 Updates are delivered through [Sparkle](https://sparkle-project.org), the standard update framework for Mac apps outside the App Store. Each update is signed with a key that lives only on the developer's machine, and Purge refuses any download that doesn't carry a matching signature.
 
