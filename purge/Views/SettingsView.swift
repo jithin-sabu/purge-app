@@ -539,13 +539,30 @@ struct SettingsView: View {
                 caption: updatesSummary,
                 isOn: automaticUpdateChecksBinding
             )
+
+            settingsSectionDivider
+
+            settingsToggleRow(
+                title: "Download and install updates automatically",
+                caption: automaticInstallSummary,
+                isOn: automaticUpdateDownloadsBinding
+            )
+            .disabled(!updater.allowsAutomaticUpdates)
         }
     }
 
     private var updatesSummary: String {
         """
-        Purge checks once a day and shows the update window when a new version is available. \
-        Nothing is installed without your confirmation, and every download is signature-checked.
+        Purge checks once a day. When automatic installs are off, a new version opens the \
+        update window. Every download is signature-checked.
+        """
+    }
+
+    private var automaticInstallSummary: String {
+        """
+        New versions download in the background and install when Purge quits, or right away \
+        with Restart to Update in the Purge menu. When this is off, nothing is installed \
+        without your confirmation.
         """
     }
 
@@ -553,6 +570,15 @@ struct SettingsView: View {
         Binding(
             get: { updater.automaticallyChecksForUpdates },
             set: { updater.setAutomaticallyChecksForUpdates($0) }
+        )
+    }
+
+    /// Shows off while checks are off, since Sparkle won't download then even
+    /// if the setting underneath is still on.
+    private var automaticUpdateDownloadsBinding: Binding<Bool> {
+        Binding(
+            get: { updater.allowsAutomaticUpdates && updater.automaticallyDownloadsUpdates },
+            set: { updater.setAutomaticallyDownloadsUpdates($0) }
         )
     }
 

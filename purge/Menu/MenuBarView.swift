@@ -387,12 +387,19 @@ private struct MenuStorageBar: View {
 /// Interactive plain menu row with the native selection highlight. The text and
 /// icon flip to white while highlighted, like a native menu item.
 /// Its own view so only this row redraws when Sparkle's check state changes.
+/// Becomes Restart to Update once Sparkle has downloaded an update.
 private struct CheckForUpdatesRow: View {
     @ObservedObject var updater: PurgeUpdater
 
     var body: some View {
-        MenuTextRow(title: "Check for Updates…", isEnabled: updater.canCheckForUpdates) {
-            updater.checkForUpdates()
+        if let version = updater.readyUpdateVersion {
+            MenuTextRow(title: PurgeUpdater.restartTitle(forVersion: version)) {
+                updater.restartToUpdate()
+            }
+        } else {
+            MenuTextRow(title: "Check for Updates…", isEnabled: updater.canCheckForUpdates) {
+                updater.checkForUpdates()
+            }
         }
     }
 }

@@ -82,12 +82,21 @@ struct AboutView: View {
             }
 
             aboutCard {
-                AboutActionRow(
-                    icon: "arrow.triangle.2.circlepath",
-                    label: "Check for updates",
-                    isEnabled: updater.canCheckForUpdates
-                ) {
-                    updater.checkForUpdates()
+                if let version = updater.readyUpdateVersion {
+                    AboutActionRow(
+                        icon: "arrow.clockwise",
+                        label: PurgeUpdater.restartTitle(forVersion: version)
+                    ) {
+                        updater.restartToUpdate()
+                    }
+                } else {
+                    AboutActionRow(
+                        icon: "arrow.triangle.2.circlepath",
+                        label: "Check for updates",
+                        isEnabled: updater.canCheckForUpdates
+                    ) {
+                        updater.checkForUpdates()
+                    }
                 }
             }
             .padding(.top, 6)

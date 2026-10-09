@@ -283,13 +283,20 @@ private struct FindMenuItem: View {
 
 /// A view rather than a plain button so it observes `canCheckForUpdates`;
 /// `Commands` bodies don't re-render on a published change by themselves.
+/// Becomes Restart to Update once Sparkle has downloaded an update.
 private struct CheckForUpdatesMenuItem: View {
     @ObservedObject var updater: PurgeUpdater
 
     var body: some View {
-        Button("Check for Updates…") {
-            updater.checkForUpdates()
+        if let version = updater.readyUpdateVersion {
+            Button(PurgeUpdater.restartTitle(forVersion: version)) {
+                updater.restartToUpdate()
+            }
+        } else {
+            Button("Check for Updates…") {
+                updater.checkForUpdates()
+            }
+            .disabled(!updater.canCheckForUpdates)
         }
-        .disabled(!updater.canCheckForUpdates)
     }
 }
