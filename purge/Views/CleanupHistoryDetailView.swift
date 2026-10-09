@@ -30,7 +30,7 @@ struct CleanupHistoryDetailView: View {
 
     private var sheetHeader: some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(entry.trigger == .scheduled ? "Automatic clean" : "Manual clean")
+            Text(entry.trigger == .scheduled ? LocalizedStringKey("Automatic clean") : LocalizedStringKey("Manual clean"))
                 .font(AppStyle.Typography.headline)
 
             Spacer(minLength: 12)

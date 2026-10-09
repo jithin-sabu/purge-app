@@ -604,7 +604,7 @@ struct SettingsView: View {
                     ProgressView()
                         .controlSize(.small)
                 }
-                Text(isRunningScheduledCleanNow ? "Cleaning…" : "Run now")
+                Text(isRunningScheduledCleanNow ? LocalizedStringKey("Cleaning…") : LocalizedStringKey("Run now"))
             }
         }
         .buttonStyle(.purge(.secondary))
@@ -704,7 +704,7 @@ struct SettingsView: View {
 
     private var cleaningHistoryExpandRow: some View {
         HStack(spacing: 10) {
-            Text(isCleaningHistoryExpanded ? "Show less" : "Show all")
+            Text(isCleaningHistoryExpanded ? LocalizedStringKey("Show less") : LocalizedStringKey("Show all"))
                 .font(AppStyle.Typography.body)
                 .foregroundStyle(AppColors.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -775,7 +775,7 @@ struct SettingsView: View {
     private func excludedPathRow(entry: ExcludedPathEntry) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(entry.displayName)
+                Text(Bundle.main.localizedString(forKey: CacheHeadline.localized(entry.displayName), value: nil, table: "Explanations"))
                     .font(scheduleStatusPrimaryFont)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)

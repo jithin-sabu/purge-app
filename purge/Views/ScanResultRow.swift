@@ -474,7 +474,7 @@ struct ScanRowAccessibilityActions: ViewModifier {
 
         func body(content: Content) -> some View {
             if let handler {
-                content.accessibilityAction(named: Text(name), handler)
+                content.accessibilityAction(named: Text(LocalizedStringKey(name)), handler)
             } else {
                 content
             }

@@ -120,10 +120,10 @@ enum SizeComparisonCatalog {
     case let .timesOver(one, name):
       let single = NSLocalizedString(one, comment: "Storage size comparison")
       let named = NSLocalizedString(name, comment: "Storage size comparison")
-      let repeats = count == 2
-        ? String(localized: "twice over")
-        : String(localized: "\(formatCount(count)) times over")
-      return count == 1 ? single : String(localized: "\(named), \(repeats)")
+      if count == 1 { return single }
+      return count == 2
+        ? String(localized: "\(named), twice over")
+        : String(localized: "\(named), \(formatCount(count)) times over")
     }
   }
 
