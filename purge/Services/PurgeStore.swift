@@ -83,12 +83,14 @@ final class ScanSelection: ObservableObject {
     @Published var cacheIDs: Set<String> = []
     @Published var devToolIDs: Set<String> = []
     @Published var simulatorIDs: Set<UUID> = []
+    @Published var simulatorRuntimeIDs: Set<String> = []
     @Published var artifactIDs: Set<String> = []
 
     func removeAll() {
         cacheIDs.removeAll()
         devToolIDs.removeAll()
         simulatorIDs.removeAll()
+        simulatorRuntimeIDs.removeAll()
         artifactIDs.removeAll()
     }
 }
@@ -209,6 +211,12 @@ final class PurgeStore: ObservableObject {
     }
     @Published private(set) var devToolsRevision = 0
     @Published var simulatorDevices: [SimulatorDevice] = [] {
+        didSet { categoryInputsDidChange() }
+    }
+    /// Runtime images the simulators boot from. Sized by `simctl` on arrival, so
+    /// there is no staged set; removed through `simctl runtime delete`, never
+    /// trashed, so never part of the one-click safe clean or a scheduled clean.
+    @Published var simulatorRuntimes: [SimulatorRuntime] = [] {
         didSet { categoryInputsDidChange() }
     }
     @Published var projectGroups: [ProjectGroup] = [] {
@@ -515,8 +523,9 @@ final class PurgeStore: ObservableObject {
         let selectedCaches = cacheItems.filter { scanSelection.cacheIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let selectedTools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let simSelected = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }.reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
+        let runtimeSelected = simulatorRuntimes.filter { scanSelection.simulatorRuntimeIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let projectSelected = projectGroups.flatMap(\.artifacts).filter { scanSelection.artifactIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        return selectedCaches + selectedTools + simSelected + projectSelected
+        return selectedCaches + selectedTools + simSelected + runtimeSelected + projectSelected
     }
 
     /// Byte totals for one-click safe cleanup, grouped by tab so sidebar and filter totals stay aligned.
@@ -762,8 +771,9 @@ final class PurgeStore: ObservableObject {
         let selectedCaches = cacheItems.filter { scanSelection.cacheIDs.contains($0.id) }.count
         let selectedTools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.count
         let selectedSims = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }.count
+        let selectedRuntimes = simulatorRuntimes.filter { scanSelection.simulatorRuntimeIDs.contains($0.id) }.count
         let selectedProjects = projectGroups.flatMap(\.artifacts).filter { scanSelection.artifactIDs.contains($0.id) }.count
-        return selectedCaches + selectedTools + selectedSims + selectedProjects
+        return selectedCaches + selectedTools + selectedSims + selectedRuntimes + selectedProjects
     }
 
     private func isManualDeletionCandidateEligible(_ safetyInfo: SafetyInfo) -> Bool {
@@ -791,11 +801,13 @@ final class PurgeStore: ObservableObject {
             .map(simulatorDeletionCandidate)
             .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
+        let runtimes = selectedSimulatorRuntimeCandidates()
+
         let artifacts = projectGroups.flatMap(\.artifacts)
             .filter { scanSelection.artifactIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
             .map(artifactDeletionCandidate)
 
-        let merged = tools + sims + artifacts
+        let merged = tools + sims + runtimes + artifacts
         let unique = Dictionary(grouping: merged, by: { $0.path }).compactMap { $0.value.first }
         return unique.sorted { $0.sizeBytes > $1.sizeBytes }
     }
@@ -812,11 +824,13 @@ final class PurgeStore: ObservableObject {
             .map(simulatorDeletionCandidate)
             .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
+        let runtimes = selectedSimulatorRuntimeCandidates()
+
         let artifacts = projectGroups.flatMap(\.artifacts)
             .filter { scanSelection.artifactIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
             .map(artifactDeletionCandidate)
 
-        let unique = Dictionary(grouping: caches + tools + sims + artifacts, by: { $0.path }).compactMap { $0.value.first }
+        let unique = Dictionary(grouping: caches + tools + sims + runtimes + artifacts, by: { $0.path }).compactMap { $0.value.first }
         return unique.sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
@@ -934,6 +948,7 @@ final class PurgeStore: ObservableObject {
             pathToDisplayName[key] = candidate.title
             pathToExpectedSizeBytes[key] = candidate.sizeBytes
         }
+        let simulatorRuntimeIDsByPath = self.simulatorRuntimeIDsByPath()
 
         // Present the cleanup overlay in its cleaning phase for interactive runs.
         // Totals come from the selected items, before the engine starts.
@@ -972,6 +987,7 @@ final class PurgeStore: ObservableObject {
                 at: urls,
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                simulatorRuntimeIDsByPath: simulatorRuntimeIDsByPath,
                 onProgress: onProgress
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
@@ -986,8 +1002,12 @@ final class PurgeStore: ObservableObject {
                 lastDeletionReport = report
             }
             progressPoller?.cancel()
+            // The overlay's figure is what the clean removed. The live count already
+            // included simulators and runtimes, which go outright rather than to the
+            // Trash, so the final figure keeps them in too instead of dropping to 0.
+            // The Trash footer stays keyed to `movedToTrashCount`.
             session?.completeRun(
-                bytesMovedToTrash: movedBytes,
+                bytesMovedToTrash: movedBytes + report.bytesRemovedDirectly,
                 elapsedSeconds: elapsedSeconds,
                 failedItems: report.userVisibleFailures,
                 movedToTrashCount: report.movedToTrashCount
@@ -1021,7 +1041,8 @@ final class PurgeStore: ObservableObject {
         let result = await fileDeleter.retryDeleteItem(
             at: url,
             displayName: item.displayName,
-            expectedSizeBytes: item.sizeBytes
+            expectedSizeBytes: item.sizeBytes,
+            simulatorRuntimeID: simulatorRuntimeIDsByPath()[url.standardizedFileURL.path]
         )
         switch result {
         case .success(let movedBytes):
@@ -1270,6 +1291,7 @@ final class PurgeStore: ObservableObject {
             scanSelection.devToolIDs.formIntersection(detectedToolIDs)
 
             simulatorDevices.removeAll { isRemoved($0.folderURL) }
+            simulatorRuntimes.removeAll { isRemoved($0.locationURL) }
 
             var groups = projectGroups
             for gi in groups.indices {
@@ -1306,6 +1328,10 @@ final class PurgeStore: ObservableObject {
 
         for device in simulatorDevices where skippedPaths.contains(device.folderURL.standardizedFileURL.path) {
             scanSelection.simulatorIDs.remove(device.id)
+        }
+
+        for runtime in simulatorRuntimes where skippedPaths.contains(runtime.locationURL.standardizedFileURL.path) {
+            scanSelection.simulatorRuntimeIDs.remove(runtime.id)
         }
 
         for artifact in projectGroups.flatMap(\.artifacts)
@@ -2732,6 +2758,9 @@ final class PurgeStore: ObservableObject {
                 simulatorSizesResolved += 1
                 coalesce.ingestSimulatorSize(id: id, sizeBytes: sizeBytes)
                 scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
+            case .simulatorRuntimeFound(let runtime):
+                coalesce.ingestSimulatorRuntime(runtime)
+                scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
             }
         }
         coalesce.debounceTask?.cancel()
@@ -2877,6 +2906,10 @@ final class PurgeStore: ObservableObject {
         for device in simulatorDevices where device.safetyInfo.level != .unknown {
             totals.count += 1
             totals.bytes += device.sizeOnDisk ?? 0
+        }
+        for runtime in simulatorRuntimes where runtime.safetyInfo.level != .unknown {
+            totals.count += 1
+            totals.bytes += runtime.sizeBytes
         }
         for artifact in projectGroups.flatMap(\.artifacts) where artifact.safetyInfo.level != .unknown {
             totals.count += 1
@@ -3358,9 +3391,11 @@ final class PurgeStore: ObservableObject {
         stagedDevToolsByID = [:]
         simulatorDevices = []
         stagedSimulatorsByID = [:]
+        simulatorRuntimes = []
         projectGroups = []
         scanSelection.devToolIDs.removeAll()
         scanSelection.simulatorIDs.removeAll()
+        scanSelection.simulatorRuntimeIDs.removeAll()
         scanSelection.artifactIDs.removeAll()
         devToolRepoStatusByPath = [:]
         isEnrichingDeveloper = false
@@ -3410,11 +3445,13 @@ final class PurgeStore: ObservableObject {
         var pendingToolSizes: [String: DevToolSizeUpdate] = [:]
         var pendingSimulators: [UUID: SimulatorDevice] = [:]
         var pendingSimulatorSizes: [UUID: Int64] = [:]
+        var pendingSimulatorRuntimes: [String: SimulatorRuntime] = [:]
         var debounceTask: Task<Void, Never>?
         var lastFlushAt: ContinuousClock.Instant?
 
         var eventCount: Int {
-            pendingTools.count + pendingToolSizes.count + pendingSimulators.count + pendingSimulatorSizes.count
+            pendingTools.count + pendingToolSizes.count + pendingSimulators.count
+                + pendingSimulatorSizes.count + pendingSimulatorRuntimes.count
         }
 
         func ingestDevTool(_ tool: DevTool) {
@@ -3442,17 +3479,25 @@ final class PurgeStore: ObservableObject {
             pendingSimulatorSizes[id] = sizeBytes
         }
 
+        func ingestSimulatorRuntime(_ runtime: SimulatorRuntime) {
+            pendingSimulatorRuntimes[runtime.id] = runtime
+        }
+
         func takeSnapshot() -> (
             tools: [String: DevTool],
             toolSizes: [String: DevToolSizeUpdate],
             simulators: [UUID: SimulatorDevice],
-            simulatorSizes: [UUID: Int64]
+            simulatorSizes: [UUID: Int64],
+            simulatorRuntimes: [String: SimulatorRuntime]
         ) {
-            let snapshot = (pendingTools, pendingToolSizes, pendingSimulators, pendingSimulatorSizes)
+            let snapshot = (
+                pendingTools, pendingToolSizes, pendingSimulators, pendingSimulatorSizes, pendingSimulatorRuntimes
+            )
             pendingTools.removeAll(keepingCapacity: true)
             pendingToolSizes.removeAll(keepingCapacity: true)
             pendingSimulators.removeAll(keepingCapacity: true)
             pendingSimulatorSizes.removeAll(keepingCapacity: true)
+            pendingSimulatorRuntimes.removeAll(keepingCapacity: true)
             return snapshot
         }
     }
@@ -3652,6 +3697,7 @@ final class PurgeStore: ObservableObject {
             toolSizes: snapshot.toolSizes,
             simulators: snapshot.simulators,
             simulatorSizes: snapshot.simulatorSizes,
+            simulatorRuntimes: snapshot.simulatorRuntimes,
             animate: animate
         )
     }
@@ -3661,9 +3707,11 @@ final class PurgeStore: ObservableObject {
         toolSizes: [String: DevToolSizeUpdate],
         simulators: [UUID: SimulatorDevice],
         simulatorSizes: [UUID: Int64],
+        simulatorRuntimes: [String: SimulatorRuntime],
         animate: Bool
     ) {
-        guard !tools.isEmpty || !toolSizes.isEmpty || !simulators.isEmpty || !simulatorSizes.isEmpty else {
+        guard !tools.isEmpty || !toolSizes.isEmpty || !simulators.isEmpty || !simulatorSizes.isEmpty
+            || !simulatorRuntimes.isEmpty else {
             return
         }
 
@@ -3734,6 +3782,18 @@ final class PurgeStore: ObservableObject {
 
             if !simulators.isEmpty || !simulatorSizes.isEmpty {
                 self.simulatorDevices.sort { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
+            }
+
+            for runtime in simulatorRuntimes.values {
+                guard runtime.safetyInfo.level.canSurfaceInScanResults, runtime.sizeBytes > 0 else { continue }
+                if let index = self.simulatorRuntimes.firstIndex(where: { $0.id == runtime.id }) {
+                    self.simulatorRuntimes[index] = runtime
+                } else {
+                    self.simulatorRuntimes.append(runtime)
+                }
+            }
+            if !simulatorRuntimes.isEmpty {
+                self.simulatorRuntimes.sort { $0.sizeBytes > $1.sizeBytes }
             }
 
             self.reconcileCrossTabCacheDuplicates()
@@ -3952,6 +4012,35 @@ final class PurgeStore: ObservableObject {
         )
     }
 
+    private func simulatorRuntimeDeletionCandidate(_ runtime: SimulatorRuntime) -> DeletionCandidate {
+        DeletionCandidate(
+            title: runtime.safetyInfo.headline,
+            path: runtime.locationURL.standardizedFileURL,
+            sizeBytes: runtime.sizeBytes,
+            safetyInfo: runtime.safetyInfo,
+            reinstallCommand: nil,
+            subtitle: "Build \(runtime.build)",
+            reinstallSafety: .notApplicable,
+            gitStatus: .clean
+        )
+    }
+
+    private func selectedSimulatorRuntimeCandidates() -> [DeletionCandidate] {
+        simulatorRuntimes.filter { scanSelection.simulatorRuntimeIDs.contains($0.id) }
+            .map(simulatorRuntimeDeletionCandidate)
+            .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
+    }
+
+    /// The engine's lookup from a runtime row's path to the identifier `simctl`
+    /// deletes by. Keyed the way the engine keys everything else.
+    private func simulatorRuntimeIDsByPath() -> [String: String] {
+        var ids: [String: String] = [:]
+        for runtime in simulatorRuntimes {
+            ids[runtime.locationURL.standardizedFileURL.path] = runtime.id
+        }
+        return ids
+    }
+
     private func artifactDeletionCandidate(_ artifact: ProjectCacheArtifact) -> DeletionCandidate {
         DeletionCandidate(
             title: artifact.safetyInfo.headline,
@@ -4035,6 +4124,10 @@ final class PurgeStore: ObservableObject {
 
     func setSimulatorDeviceSelected(id: UUID, isSelected: Bool) {
         if isSelected { scanSelection.simulatorIDs.insert(id) } else { scanSelection.simulatorIDs.remove(id) }
+    }
+
+    func setSimulatorRuntimeSelected(id: String, isSelected: Bool) {
+        if isSelected { scanSelection.simulatorRuntimeIDs.insert(id) } else { scanSelection.simulatorRuntimeIDs.remove(id) }
     }
 
     func setSimulatorGroupSelection(allSelected: Bool) {
@@ -4132,6 +4225,20 @@ final class PurgeStore: ObservableObject {
         scanSelection.simulatorIDs.remove(deviceID)
         withAnimation {
             simulatorDevices.removeAll { $0.id == deviceID }
+        }
+    }
+
+    func excludeFromScans(_ runtime: SimulatorRuntime) {
+        ExcludedPathsStore.write(
+            path: runtime.locationURL,
+            displayName: runtime.safetyInfo.headline
+        )
+        refreshExcludedPaths()
+
+        let runtimeID = runtime.id
+        scanSelection.simulatorRuntimeIDs.remove(runtimeID)
+        withAnimation {
+            simulatorRuntimes.removeAll { $0.id == runtimeID }
         }
     }
 

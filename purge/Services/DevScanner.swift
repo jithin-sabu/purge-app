@@ -7,6 +7,8 @@ enum DeveloperScanEvent {
     case projectGroupFound(ProjectGroup)
     case simulatorFound(SimulatorDevice)
     case simulatorSizeResolved(id: UUID, sizeBytes: Int64)
+    /// Sized on arrival: `simctl` reports the image size, so there is no sizing pass.
+    case simulatorRuntimeFound(SimulatorRuntime)
 }
 
 /// `nonisolated` for the same reason as `CacheScanner` — a probe confirmed
@@ -208,9 +210,64 @@ nonisolated final class DevScanner {
                     detail: "\(simulators.count) device folders"
                 )
             }
+
+            group.addTask {
+                if Task.isCancelled { return }
+                let runtimeStart = Date()
+                let runtimes = await self.discoverSimulatorRuntimes()
+                ScanPhaseTiming.finish(
+                    "simulator runtime discovery",
+                    since: runtimeStart,
+                    detail: "\(runtimes.count) runtimes"
+                )
+                for runtime in runtimes {
+                    if Task.isCancelled { return }
+                    continuation.yield(.simulatorRuntimeFound(runtime))
+                }
+            }
         }
 
         continuation.finish()
+    }
+
+    // MARK: - Simulator runtimes
+
+    /// Every deletable runtime image `simctl` knows about, sized by `simctl` itself.
+    /// Needs no Full Disk Access: the images live outside the home folder and the
+    /// listing comes from CoreSimulator, not a directory walk. Works without Xcode
+    /// too, through the framework's own `simctl` (see `Simctl`).
+    func discoverSimulatorRuntimes(now: Date = Date()) async -> [SimulatorRuntime] {
+        guard let listing = await Simctl.runAsync(["runtime", "list", "-j"], timeout: Self.simctlListTimeout),
+              listing.succeeded else { return [] }
+
+        // Device counts decide Safe versus Check First, so a failed device listing
+        // is passed on as "unknown" rather than "none".
+        var deviceCounts: [String: Int]?
+        if let devices = await Simctl.runAsync(["list", "devices", "-j"], timeout: Self.simctlListTimeout),
+           devices.succeeded {
+            deviceCounts = SimulatorRuntime.deviceCounts(fromDevicesList: devices.stdout)
+        }
+
+        // Same for the runtime Xcode builds new simulators on: a failed lookup is
+        // "unknown", not "none". The one exception is a Mac without Xcode, reached
+        // through the framework's own simctl: there is no SDK to match, so nothing
+        // can be a default, and the lookup fails for that reason alone.
+        var xcodeBuilds: Set<String>?
+        if let match = await Simctl.runAsync(["runtime", "match", "list", "-j"], timeout: Self.simctlListTimeout),
+           match.succeeded {
+            xcodeBuilds = SimulatorRuntime.xcodeRuntimeBuilds(fromMatchList: match.stdout)
+        } else if Simctl.launcher() == .framework {
+            xcodeBuilds = []
+        }
+
+        return SimulatorRuntime.parseRuntimeList(
+            listing.stdout,
+            deviceCountsByRuntimeIdentifier: deviceCounts,
+            xcodeRuntimeBuilds: xcodeBuilds,
+            now: now
+        )
+        .filter { $0.safetyInfo.level.canSurfaceInScanResults }
+        .filter { !ExcludedPathsStore.isExcluded($0.locationURL) }
     }
 
     // MARK: - iOS Simulators
