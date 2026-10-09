@@ -38,7 +38,7 @@
 Your Mac quietly fills up with cache and junk you never see and never asked for. Purge finds it, marks what is safe, and clears it in one click.
 
 > [!NOTE]
-> Nothing is ever deleted permanently. Everything moves to the Trash, so anything can come back.
+> Files and folders always move to the Trash, so anything Purge removes can come back. The exceptions are iOS simulators and Time Machine snapshots, which the Trash can't hold.
 
 You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-English explanation and a safety label, so nothing gets touched that you cannot see and verify first.
 
@@ -126,7 +126,7 @@ The labels and explanations are there to be checked, not read cover to cover. Se
 - **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete. Git and lockfile checks run first
 - **Clean Safe Files**: same safe cleanup from the menu bar
 - **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning** and choose **How often** (weekly, monthly, every 3 months, or a **Custom** interval you set in days, weeks, or months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
-- All deletions move items to **Trash**, not permanent removal
+- Files and folders move to **Trash**, not permanent removal. iOS simulators and simulator runtimes can't go to the Trash, so they are removed through Xcode's `simctl` instead
 
 ### Settings
 
@@ -323,8 +323,8 @@ Purge never reads or sends file contents.
 
 Purge deletes files, so safety is the point. A few things worth knowing:
 
-- **Trash by default**: Nothing is permanently deleted. Items move to the macOS Trash and can be restored until you empty it.
-- **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched.
+- **Trash by default**: Files and folders move to the macOS Trash and can be restored until you empty it. iOS simulators, simulator runtimes and Time Machine snapshots can't go to the Trash, so those are removed for good.
+- **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched. The [safety page](https://purgemac.com/safety) lists every allowed location and everything Purge will never touch, generated from the app's source.
 - **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
 - **Open source**: The full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.
 - **Notarized by Apple**: The app is signed and notarized, so macOS can verify it hasn't been tampered with since release.
