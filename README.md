@@ -150,6 +150,7 @@ The labels and explanations are there to be checked, not read cover to cover. Se
 | ⌘R | Scan the current tab (Scan Everything on the Overview) |
 | ⇧⌘R | Scan Everything, from any tab |
 | ⌘1–⌘3 | Filter by All, Safe to Clean, or Check First |
+| ⌘F | Search on Large Files and App Uninstaller |
 
 ---
 

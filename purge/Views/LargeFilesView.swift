@@ -785,6 +785,10 @@ private struct LargeFileSearchField: View {
         // Clicking anywhere in the capsule focuses the field, not just the glyph-width
         // of text already typed.
         .onTapGesture { isFocused = true }
+        .focusedSceneValue(\.findAction, FindAction {
+            isFocused = true
+            FindAction.selectAllInFieldEditor()
+        })
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
         .onChange(of: isFocused) { focused in

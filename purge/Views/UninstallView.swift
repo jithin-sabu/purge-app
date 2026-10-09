@@ -1513,6 +1513,10 @@ private struct UninstallSearchField: View {
         }
         .contentShape(Capsule(style: .continuous))
         .onTapGesture { isFocused = true }
+        .focusedSceneValue(\.findAction, FindAction {
+            isFocused = true
+            FindAction.selectAllInFieldEditor()
+        })
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
         .onChange(of: isFocused) { focused in
