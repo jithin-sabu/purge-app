@@ -553,8 +553,8 @@ struct SettingsView: View {
 
     private var updatesSummary: String {
         """
-        Purge checks once a day and shows the update window when a new version is available. \
-        Every download is signature-checked.
+        Purge checks once a day. When automatic installs are off, a new version opens the \
+        update window. Every download is signature-checked.
         """
     }
 

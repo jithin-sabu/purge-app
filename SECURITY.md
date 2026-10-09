@@ -86,14 +86,16 @@ could not push an update Purge would install.
 
 ## Network
 
-The update check is the only connection Purge makes on its own. Once a day it
-fetches a small XML file (the appcast) from this repo to see whether a newer
-version exists. It sends nothing about you, your files, or your Mac, and there
-is no analytics or crash reporting. You can turn the check off in Purge under
-Settings > Updates > Check for updates automatically. If you turn on Download
-and install updates automatically, Purge also downloads a new version from
-GitHub when the check finds one, and checks its signature before installing it. Links in the app, such as
-the GitHub page, open in your browser only when you click them.
+Purge connects on its own only for updates: the daily update check and, if you
+turn on Download and install updates automatically, the update download. Once a
+day it fetches a small XML file (the appcast) from this repo to see whether a
+newer version exists. It sends nothing about you, your files, or your Mac, and
+there is no analytics or crash reporting. With automatic installs on, a new
+version is downloaded from GitHub when the check finds one, and its signature is
+checked before it is installed. You can turn the check off in Purge under
+Settings > Updates > Check for updates automatically, which also stops the
+downloads. Links in the app, such as the GitHub page, open in your browser only
+when you click them.
 
 ## Verifying your download
 
