@@ -210,16 +210,16 @@ struct ContentView: View {
             )
         }
         .alert(
-            "Permanently delete these items?",
+            "Clean items marked Not Sure?",
             isPresented: $store.showHighRiskDeletionSecondConfirm
         ) {
             Button("Cancel", role: .cancel) { store.cancelHighRiskDeletionSecondStep() }
-            Button("Delete permanently", role: .destructive) { store.confirmHighRiskDeletionSecondStep() }
+            Button("Clean anyway", role: .destructive) { store.confirmHighRiskDeletionSecondStep() }
         } message: {
             Text(
                 """
-                This includes folders marked Not Sure. They will be moved to Trash. \
-                Only continue if you understand the risk.
+                Purge doesn't know what these folders are for. They go to the Trash, so you can put \
+                them back, but check that nothing depends on them before you clean.
                 """
             )
         }
