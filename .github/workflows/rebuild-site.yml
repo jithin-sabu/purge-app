@@ -26,10 +26,20 @@ jobs:
           ref: ${{ github.event.release.tag_name }}
           path: app
 
+      - name: Check the site token is set
+        env:
+          LANDING_REPO_TOKEN: ${{ secrets.LANDING_REPO_TOKEN }}
+        run: |
+          if [ -z "$LANDING_REPO_TOKEN" ]; then
+            echo "::error::LANDING_REPO_TOKEN is not set. purge-landing-page is private, so this job needs a fine-grained token with read access to its contents."
+            exit 1
+          fi
+
       - name: Check out purgemac.com
         uses: actions/checkout@v4
         with:
           repository: jithin-sabu/purge-landing-page
+          token: ${{ secrets.LANDING_REPO_TOKEN }}
           path: site
 
       - uses: actions/setup-node@v4
