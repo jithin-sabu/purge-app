@@ -3,6 +3,26 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.9.0</title>
+      <pubDate>Fri, 09 Oct 2026 21:28:52 +0000</pubDate>
+      <sparkle:version>31</sparkle:version>
+      <sparkle:shortVersionString>1.9.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Restart to Update.</strong> Turn on Download and install updates automatically in Settings and new versions download in the background. Restart to Update installs one straight away. It's off by default.</li>
+          <li><strong>Remove unused simulator runtimes.</strong> Dev Tools lists the iOS, watchOS, tvOS and visionOS runtimes Xcode keeps, about 8 GB each, and removes the ones no simulator uses.</li>
+          <li><strong>Uninstall with Purge.</strong> Drop an app on Purge's Dock icon, or turn on the Finder item in Settings and right-click an app, to review it and its leftovers.</li>
+          <li><strong>Keyboard shortcuts.</strong> ⌘1 to ⌘5 switch tabs and ⌘F jumps to search. The safety filters move to ⌥⌘1 to ⌥⌘3.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.9.0/Purgev1.9.0.dmg"
+        sparkle:edSignature="bIjeKDalbTGvcoRC20Se0XXTDCSpewK5d6lNuywB5PXlFeOuq+TznNLcvT2zcSBIWSkq91QwJymwq6MsqywHBQ=="
+        length="8839722"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.8.2</title>
       <pubDate>Tue, 06 Oct 2026 11:31:54 +0000</pubDate>
       <sparkle:version>30</sparkle:version>
