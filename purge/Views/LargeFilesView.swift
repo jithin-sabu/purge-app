@@ -1112,7 +1112,7 @@ private struct LargeFileRow: View {
                         .layoutPriority(-1)
 
                     if let otherCopyCount {
-                        let noun = otherCopyCount == 1 ? "copy" : "copies"
+                        let noun = otherCopyCount == 1 ? String(localized: "copy") : String(localized: "copies")
                         AppBadge(text: String(localized: "\(otherCopyCount) other \(noun)"), tone: .warning)
                             .fixedSize()
                             .help("\(otherCopyCount + 1) files in this scan have identical contents, including this one.")
