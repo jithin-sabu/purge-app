@@ -324,7 +324,7 @@ private struct LifetimeSizeComparisonChip: View {
                 .imageScale(.small)
                 .accessibilityHidden(true)
 
-            Text("That's room for \(item.label)")
+            Text("That's room for \(item.displayLabel)")
                 .lineLimit(1)
         }
         .font(AppStyle.Typography.rowTitle)
@@ -339,7 +339,7 @@ private struct LifetimeSizeComparisonChip: View {
             Capsule(style: .continuous)
                 .stroke(AppColors.borderStrong, lineWidth: 1)
         }
-        .accessibilityLabel("That's room for \(item.label)")
+        .accessibilityLabel("That's room for \(item.displayLabel)")
     }
 }
 

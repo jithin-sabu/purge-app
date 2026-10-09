@@ -162,7 +162,7 @@ struct OnboardingSizeComparisonLine: View {
   }
 
   private var accessibilityLabel: String {
-    let body = items.map(\.label).joined(separator: String(localized: " or "))
+    let body = items.map(\.displayLabel).joined(separator: String(localized: " or "))
     return String(localized: "That's room for \(body)")
   }
 }
@@ -176,7 +176,7 @@ private struct OnboardingSizeComparisonChip: View {
         .imageScale(.small)
         .accessibilityHidden(true)
 
-      Text(item.label)
+      Text(item.displayLabel)
         .lineLimit(1)
     }
     .font(AppStyle.Typography.sectionTitle.weight(.medium))
