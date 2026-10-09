@@ -821,8 +821,14 @@
 "what purge can clean" = "Purge 可以清理什么";
 "what's taking space" = "什么占用了空间";
 "will be quit first" = "将先退出";
-"worth the wait" = "等待值得";
+"worth the wait" = "值得等待";
 "yesterday" = "昨天";
 "your mac says thanks" = "你的 Mac 轻松多了";
 "·" = "·";
 "…and %lld more sets where every copy is selected." = "…另外还有 %lld 组的所有副本均被选中。";
+"%@ Cache" = "%@ 缓存";
+"%@ Code Cache" = "%@ 代码缓存";
+"%@ Service Worker Cache" = "%@ Service Worker 缓存";
+"%@ Service Worker Script Cache" = "%@ Service Worker 脚本缓存";
+"%@ Old Version %@" = "%@ 旧版本 %@";
+"Font Cache" = "字体缓存";

@@ -644,7 +644,7 @@ nonisolated final class CacheScanner {
                 )
             ),
             (
-                "Font Cache",
+                String(localized: "Font Cache"),
                 home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)
             )
         ]

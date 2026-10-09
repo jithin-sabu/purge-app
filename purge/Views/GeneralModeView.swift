@@ -326,7 +326,7 @@ struct AppCachesView<PageHeader: View>: View {
                                 isSelected: !store.scanSelection.cacheIDs.contains(itemID)
                             )
                         },
-                        primaryLabel: item.appName,
+                        primaryLabel: CacheHeadline.localized(item.appName),
                         formattedSize: item.formattedSize,
                         safetyInfo: item.safetyInfo,
                         brandIcon: .cacheItem(item),
