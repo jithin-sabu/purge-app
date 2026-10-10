@@ -44,6 +44,11 @@ clean, and the Safe or Check First label on each item are on the
 [safety page](https://purgemac.com/safety). The page is generated from the
 app's source at build time, so it always matches the release it names.
 
+When Purge has removed something it should not have, or could have, the
+incident, the fix and what would have caught it earlier are written up in
+[docs/safety-notes.md](docs/safety-notes.md). Entries are added only when
+something real happens.
+
 ## What runs as root
 
 Purge has one privileged helper, `io.getpurge.helper`. It is not set up when
