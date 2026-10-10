@@ -156,9 +156,27 @@ struct OverviewView: View {
                 bytes: breakdown.freeBytes,
                 share: breakdown.share(of: breakdown.freeBytes),
                 linkedState: linkedRowState(OverviewDiskBar.freeID)
-            )
+            ) {
+                let purgeable = diskStore.purgeableDiskBytes
+                if Self.mentionsPurgeable(purgeableBytes: purgeable, totalBytes: breakdown.totalBytes) {
+                    OverviewPurgeableInfoButton(freeBytes: breakdown.freeBytes, purgeableBytes: purgeable)
+                }
+            }
         }
         .overviewCard()
+    }
+
+    static let purgeableNoteMinimumBytes: Int64 = 20_000_000_000
+    static let purgeableNoteMinimumShare = 0.05
+
+    /// Whether the Free row explains that part of it is space macOS clears on its own.
+    /// Only when there is enough of it to make Purge visibly disagree with Disk
+    /// Utility: 20 GB, or 5% of a small disk. Below that nobody notices the gap, and a
+    /// note on every Mac would explain something almost no one asked about.
+    static func mentionsPurgeable(purgeableBytes: Int64, totalBytes: Int64) -> Bool {
+        guard purgeableBytes > 0, totalBytes > 0 else { return false }
+        let share = Double(purgeableBytes) / Double(totalBytes)
+        return purgeableBytes >= purgeableNoteMinimumBytes || share >= purgeableNoteMinimumShare
     }
 
     // MARK: Footnotes
@@ -456,7 +474,7 @@ private struct OverviewIconTile: View {
     }
 }
 
-private struct OverviewPlainRow: View {
+private struct OverviewPlainRow<TitleAccessory: View>: View {
     var symbol: String?
     let color: Color
     let title: String
@@ -464,6 +482,8 @@ private struct OverviewPlainRow: View {
     let bytes: Int64
     let share: Double
     let linkedState: OverviewLinkedRowState
+    /// Beside the title, such as an info button.
+    @ViewBuilder var titleAccessory: TitleAccessory
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -471,8 +491,11 @@ private struct OverviewPlainRow: View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: symbol, color: color)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(AppStyle.Typography.headline)
+                HStack(spacing: 4) {
+                    Text(title)
+                        .font(AppStyle.Typography.headline)
+                    titleAccessory
+                }
                 Text(detail)
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
@@ -493,6 +516,80 @@ private struct OverviewPlainRow: View {
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .combine)
+    }
+}
+
+extension OverviewPlainRow where TitleAccessory == EmptyView {
+    init(
+        symbol: String? = nil,
+        color: Color,
+        title: String,
+        detail: String,
+        bytes: Int64,
+        share: Double,
+        linkedState: OverviewLinkedRowState
+    ) {
+        self.init(
+            symbol: symbol,
+            color: color,
+            title: title,
+            detail: detail,
+            bytes: bytes,
+            share: share,
+            linkedState: linkedState,
+            titleAccessory: { EmptyView() }
+        )
+    }
+}
+
+// MARK: - Purgeable space
+
+/// Why Purge's free space is bigger than Disk Utility's. Disk Utility counts what macOS
+/// can clear on its own as used and names it purgeable; Purge, like System Settings,
+/// counts it as free. Only shown when that gap is big enough to notice.
+private struct OverviewPurgeableInfoButton: View {
+    let freeBytes: Int64
+    let purgeableBytes: Int64
+
+    @State private var isShowingInfo = false
+
+    private var emptyBytes: Int64 { max(0, freeBytes - purgeableBytes) }
+
+    var body: some View {
+        Button {
+            isShowingInfo = true
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .help("Why is this more than Disk Utility shows?")
+        .accessibilityLabel("About free space")
+        .popover(isPresented: $isShowingInfo, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+                VStack(alignment: .leading, spacing: 4) {
+                    split(formatStorageBytes(emptyBytes), "empty")
+                    split("About \(formatStorageBytes(purgeableBytes))", "macOS clears on its own when you need room")
+                }
+                Text("That second part is things like iCloud copies, caches and local backups. "
+                    + "Purge counts it as free, like System Settings. Disk Utility calls it purgeable "
+                    + "and counts it as used.")
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(AppStyle.Spacing.medium)
+            .frame(width: 320, alignment: .leading)
+        }
+    }
+
+    private func split(_ amount: String, _ label: String) -> some View {
+        (Text(amount).font(AppStyle.Typography.headline).foregroundColor(AppColors.textPrimary)
+            + Text(" \(label)"))
+            .font(AppStyle.Typography.callout)
+            .foregroundStyle(AppColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

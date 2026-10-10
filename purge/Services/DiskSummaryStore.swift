@@ -7,6 +7,9 @@ final class DiskSummaryStore: ObservableObject {
     @Published private(set) var totalDiskBytes: Int64 = 0
     @Published private(set) var usedDiskBytes: Int64 = 0
     @Published private(set) var freeDiskBytes: Int64 = 0
+    /// The part of `freeDiskBytes` macOS would have to clear first. Counted as free, the
+    /// way System Settings counts it; Disk Utility counts it as used.
+    @Published private(set) var purgeableDiskBytes: Int64 = 0
     /// How much free space the volume gained while the app was in the background. `nil`
     /// unless a real increase was observed.
     ///
@@ -28,6 +31,7 @@ final class DiskSummaryStore: ObservableObject {
         totalDiskBytes = capacity.totalBytes
         freeDiskBytes = capacity.availableBytes
         usedDiskBytes = capacity.usedBytes
+        purgeableDiskBytes = capacity.purgeableBytes
         return true
     }
 
