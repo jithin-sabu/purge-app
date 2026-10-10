@@ -140,9 +140,22 @@ after a restart and a day online.
 - **macOS 27 master switch.** Still from press reports only, though the test
   Mac had Apple Intelligence off in Settings with 57 GB of models still on
   disk, which is the behaviour the reports describe.
-- **Measured versus freed.** 57.54 GB measured, 23.91 GB freed. Compare the
-  latest-version figure with the all-records one, and take a snapshot some
-  minutes after a removal to see whether deletion continues.
+- **Measured versus freed.** 57.54 GB measured, 23.91 GB freed, and deletion
+  did not continue afterwards (190.53 GB free right after, 187.55 GB an hour
+  later with the block still installed). Versions do not explain it: of the
+  229 records only a few models had two or three, the rest one. Two likely
+  causes, both of which decide what the app may show: the free-space reading
+  already counted the 7.27 GB CacheDelete called purgeable, and the 191
+  core-set records (adapters and variants on shared base weights) may be APFS
+  clones that each report their full size. Settle it with
+  `sudo du -sh /System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_GenerativeModels`
+  once the models are back, against the core set's row. If the record sum
+  overstates the footprint, the app must show allocated size or a measured
+  delta, never the record sum.
+- **Download again.** `restore` worked on 27.0: profile removed through
+  System Settings, `Unsubscribe` then `Subscribe` accepted for all five
+  recoveries, and three sets had their first files back within two minutes.
+  Whether the core set completes, and how long it takes, is the next reading.
 - **macOS 15 and 26.** Whether the records and the CacheDelete calls look the
   same there. `measure` and `check` run on every version; only `remove`'s
   release step differs.
