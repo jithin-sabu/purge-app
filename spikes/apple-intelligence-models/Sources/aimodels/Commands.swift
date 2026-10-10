@@ -124,7 +124,7 @@ enum Commands {
                 Log.line("    type: \(record.assetType ?? "?")  specifier: \(record.assetSpecifier ?? "?")  version: \(record.assetVersion ?? "?")")
                 if !record.sizes.isEmpty { Log.line("    sizes: " + Format.json(record.sizes, pretty: false)) }
                 if !record.hints.isEmpty { Log.line("    hints: " + Format.json(record.hints, pretty: false)) }
-                if let raw = record.raw { Log.line(Format.json(raw)) }
+                if let raw = record.raw { Log.line(Format.json(Descriptors.dumpable(raw))) }
             }
             Log.line()
             Log.line("Lock entries (\(reading.lockEntries.count))")

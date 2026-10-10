@@ -82,6 +82,50 @@ enum SelfTest {
             check(false, "descriptor parsing works on fixtures: \(error)")
         }
 
+        // Record file names as seen on a macOS 26 runner, and the archive blob inside
+        let quinn = Descriptors.identity(fromFileName:
+            "AutoAssetDescriptors_Entry_com.apple.MobileAsset.UAF.Siri.TextToSpeech_com.apple.siri.tts.voice.en_US.quinn.neural.premium_1219.0.0.13.202389_0.state")
+        check(quinn?.type == "com.apple.MobileAsset.UAF.Siri.TextToSpeech"
+              && quinn?.specifier == "com.apple.siri.tts.voice.en_US.quinn.neural.premium" && quinn?.version == "1219.0.0.13.202389",
+              "a record name yields type, specifier with underscores, and version")
+        let eligibility = Descriptors.identity(fromFileName:
+            "AutoAssetDescriptors_Entry_com.apple.MobileAsset.OSEligibility_Parameters_0.0.0.0.12_0.state")
+        check(eligibility?.type == "com.apple.MobileAsset.OSEligibility" && eligibility?.specifier == "Parameters"
+              && eligibility?.version == "0.0.0.0.12", "a short record name parses the same way")
+        check(Descriptors.identity(fromFileName: "AutoAssetDescriptors_Config.state") == nil, "the config record has no identity")
+        let lock = Descriptors.identity(fromFileName:
+            "AutoAssetLocker_Entry_com.apple.MobileAsset.UAF.FM.GenerativeModels_com.apple.fm.language.base_1.0_0.state")
+        check(lock?.type == "com.apple.MobileAsset.UAF.FM.GenerativeModels", "a lock entry name yields its type")
+        do {
+            let temp = FileManager.default.temporaryDirectory.appendingPathComponent("aimodels-archive-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: temp) }
+            // The shape of a keyed archive: $objects holds each object's encoded keys.
+            let archive: [String: Any] = [
+                "$version": 100_000, "$archiver": "NSKeyedArchiver", "$top": ["root": 1],
+                "$objects": ["$null", ["_UnarchivedSize": 7_000_000_000, "_CompressedSize": 3, "assetType": "com.apple.MobileAsset.UAF.FM.GenerativeModels", "$class": 2],
+                             ["$classname": "MAAutoAssetDescriptor"]],
+            ]
+            let blob = try PropertyListSerialization.data(fromPropertyList: archive, format: .binary, options: 0)
+            let wrapper: [String: Any] = [
+                "SUCorePersistedStatePolicyFields": ["entryStatus": "LOADED"],
+                "SUCorePersistedStatePolicySecureCodedObjectsFields": ["assetDescriptor": blob],
+            ]
+            let file = temp.appendingPathComponent(
+                "AutoAssetDescriptors_Entry_com.apple.MobileAsset.UAF.FM.GenerativeModels_com.apple.fm.language.base_1.2.3_0.state")
+            try PropertyListSerialization.data(fromPropertyList: wrapper, format: .binary, options: 0).write(to: file)
+            let parsed = Descriptors.parse(path: file.path, fileName: file.lastPathComponent)
+            check(parsed.assetType == "com.apple.MobileAsset.UAF.FM.GenerativeModels" && parsed.assetVersion == "1.2.3",
+                  "a wrapped record takes its identity from the file name")
+            check(parsed.countedSize?.bytes == 7_000_000_000 && parsed.countedSize?.key.contains("assetDescriptor!") == true,
+                  "the size inside the archive blob is found and its key path marks the blob")
+            check(parsed.hints["SUCorePersistedStatePolicyFields.entryStatus"] == "LOADED", "the entry status is a hint")
+            let dumped = parsed.raw.map { Format.json(Descriptors.dumpable($0), pretty: false) } ?? ""
+            check(dumped.contains("assetDescriptor!") && dumped.contains("_UnarchivedSize"), "the dump shows the decoded blob")
+        } catch {
+            check(false, "archive decoding works on fixtures: \(error)")
+        }
+
         // CacheDelete filter verdict
         let service = CacheDeleteCheck.defaultService
         let others = ["com.apple.photolibraryd.cache-delete", service]

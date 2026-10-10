@@ -70,8 +70,10 @@ Run on macOS 27, and if possible 15 and 26. Keep the journal
 (`~/Library/Application Support/Purge/spikes/apple-intelligence-models.json`)
 and paste the table into the issue.
 
-1. `aimodels measure --dump --all > records.txt`: do the records exist, what
-   are the size keys, do installed and released records look different?
+1. `aimodels measure --dump --all > records.txt`: what do the Apple
+   Intelligence sets' records hold, which size keys, and do installed and
+   released records look different? (The record layout itself is known; see
+   the open questions.)
 2. `aimodels check`: does the asset service match the catalog, and is the
    CacheDelete filter honoured? If the purgeable query gives no reply, try
    `--call-style block`. If the service id is not defined, the check lists the
@@ -92,12 +94,19 @@ and paste the table into the issue.
 
 ## Open questions the spike has to settle
 
-- **Record layout.** The descriptor and lock file names are confirmed from a
-  trace (`AutoAssetDescriptors/AutoAssetLocker/AutoAssetLocker_Entry_<type>_<specifier>_<version>_0.state`),
-  but not the record contents. `measure` searches for the likely size keys
-  (`_UnarchivedSize`, `_MeasuredSize`, `_CompressedSize`, …) and falls back to
-  the largest number under any key naming a size, and says which key it used.
-  If the records are not property lists, it says so and `--dump` shows the bytes.
+- **Record layout.** Partly answered by the CI runner (macOS 26.6, Apple
+  silicon, no Apple Intelligence sets installed): the records are binary
+  plists named `AutoAssetDescriptors_Entry_<type>_<specifier>_<version>_0.state`,
+  with `SUCorePersistedStatePolicyFields.entryStatus` (`LOADED`) and the
+  descriptor itself as a keyed-archive blob under
+  `SUCorePersistedStatePolicySecureCodedObjectsFields.assetDescriptor`. The
+  `AutoAssetLocker` folder is absent when nothing holds a lock. `measure`
+  takes the identity from the file name, decodes the blob and searches it for
+  the likely size keys (`_UnarchivedSize`, `_MeasuredSize`, `_CompressedSize`,
+  …), falling back to the largest number under any key naming a size, and says
+  which key it used. What the blob holds for an Apple Intelligence set, and
+  whether it has a per-record installed or released flag, still has to be read
+  on a Mac that has the sets: run `measure --dump` there.
 - **CacheDelete call shape.** Two call styles are implemented because neither
   is documented: synchronous returning a dictionary, or a reply block. The
   default is `sync`; `check` suggests the other when the first gives no reply.

@@ -93,11 +93,16 @@ enum Descriptors {
         } catch {
             errors.append("\(root): \(error.localizedDescription)")
         }
+        // The locker folder only exists while something holds a lock (a macOS 26
+        // runner with no Apple Intelligence sets has none), so a missing one is
+        // no lock entries, not a failure.
         var locks: [String] = []
-        do {
-            locks = try fileManager.contentsOfDirectory(atPath: locker).sorted()
-        } catch {
-            errors.append("\(locker): \(error.localizedDescription)")
+        if fileManager.fileExists(atPath: locker) {
+            do {
+                locks = try fileManager.contentsOfDirectory(atPath: locker).sorted()
+            } catch {
+                errors.append("\(locker): \(error.localizedDescription)")
+            }
         }
         return DescriptorReading(records: records, lockEntries: locks, errors: errors)
     }
@@ -125,6 +130,33 @@ enum Descriptors {
         return record(from: object, path: path, fileName: fileName)
     }
 
+    /// The file name carries the identity: on macOS 26 the records are named
+    /// `AutoAssetDescriptors_Entry_<assetType>_<specifier>_<version>_<n>.state`
+    /// (seen on a CI runner). Asset types are reverse-DNS names with no
+    /// underscore, so the first underscore after the prefix ends the type; the
+    /// version is the second-to-last underscore component and the specifier,
+    /// which can hold underscores itself, is what lies between.
+    static func identity(fromFileName fileName: String) -> (type: String, specifier: String?, version: String?)? {
+        var name = fileName
+        for prefix in ["AutoAssetDescriptors_Entry_", "AutoAssetDescriptor_", "AutoAssetLocker_Entry_"] where name.hasPrefix(prefix) {
+            name = String(name.dropFirst(prefix.count))
+            break
+        }
+        if let dot = name.lastIndex(of: "."), name[dot...] == ".state" || name[dot...] == ".plist" {
+            name = String(name[..<dot])
+        }
+        guard let underscore = name.firstIndex(of: "_") else {
+            return name.hasPrefix("com.") ? (name, nil, nil) : nil
+        }
+        let type = String(name[..<underscore])
+        guard type.hasPrefix("com.") else { return nil }
+        let rest = name[name.index(after: underscore)...].split(separator: "_", omittingEmptySubsequences: false).map(String.init)
+        guard rest.count >= 3 else { return (type, rest.joined(separator: "_"), nil) }
+        let version = rest[rest.count - 2]
+        let specifier = rest[0..<(rest.count - 2)].joined(separator: "_")
+        return (type, specifier, version)
+    }
+
     static func record(from object: Any, path: String, fileName: String) -> DescriptorRecord {
         var strings: [String: String] = [:]
         var sizes: [String: Int64] = [:]
@@ -142,9 +174,10 @@ enum Descriptors {
                 }
             }
         }
-        let type = strings["AssetType"] ?? strings["_AssetType"] ?? strings["assetType"] ?? inferType(fileName)
-        let specifier = strings["AssetSpecifier"] ?? strings["_AssetSpecifier"] ?? strings["assetSpecifier"]
-        let version = strings["AssetVersion"] ?? strings["_AssetVersion"] ?? strings["assetVersion"]
+        let named = identity(fromFileName: fileName)
+        let type = strings["AssetType"] ?? strings["_AssetType"] ?? strings["assetType"] ?? named?.type ?? inferType(fileName)
+        let specifier = strings["AssetSpecifier"] ?? strings["_AssetSpecifier"] ?? strings["assetSpecifier"] ?? named?.specifier
+        let version = strings["AssetVersion"] ?? strings["_AssetVersion"] ?? strings["assetVersion"] ?? named?.version
         return DescriptorRecord(path: path, fileName: fileName, assetType: type, assetSpecifier: specifier,
                                 assetVersion: version, sizes: sizes, hints: hints, raw: object, unreadable: nil)
     }
@@ -154,19 +187,52 @@ enum Descriptors {
             .contains { lowered.contains($0) }
     }
 
-    /// Visits every key/value pair in nested dictionaries and arrays.
-    static func walk(_ value: Any, at keyPath: String, visit: (String, String, Any) -> Void) {
+    /// Visits every key/value pair in nested dictionaries and arrays. A Data
+    /// value that is itself a property list (the records wrap the descriptor in
+    /// a keyed archive under `assetDescriptor`) is decoded and walked too, with
+    /// `!` after the key that held it, so its keys reach the size and state
+    /// heuristics and the dump.
+    static func walk(_ value: Any, at keyPath: String, depth: Int = 0, visit: (String, String, Any) -> Void) {
+        guard depth < 12 else { return }
         if let dictionary = value as? [String: Any] {
             for (key, inner) in dictionary {
                 let path = keyPath.isEmpty ? key : keyPath + "." + key
                 visit(path, key, inner)
-                walk(inner, at: path, visit: visit)
+                walk(inner, at: path, depth: depth + 1, visit: visit)
             }
         } else if let array = value as? [Any] {
             for (index, inner) in array.enumerated() {
-                walk(inner, at: keyPath + "[\(index)]", visit: visit)
+                walk(inner, at: keyPath + "[\(index)]", depth: depth + 1, visit: visit)
             }
+        } else if let data = value as? Data, let embedded = embeddedPropertyList(data) {
+            walk(embedded, at: keyPath + "!", depth: depth + 1, visit: visit)
         }
+    }
+
+    /// A property list hidden in a Data value, or nil. Keyed archives are
+    /// binary plists whose `$objects` hold each encoded object's keys.
+    static func embeddedPropertyList(_ data: Data) -> Any? {
+        guard data.count > 8 else { return nil }
+        let head = data.prefix(6)
+        guard head == Data("bplist".utf8) || head.first == UInt8(ascii: "<") else { return nil }
+        return try? PropertyListSerialization.propertyList(from: data, format: nil)
+    }
+
+    /// The property list a record holds under `assetDescriptor`, decoded, for the dump.
+    static func dumpable(_ object: Any) -> Any {
+        if let dictionary = object as? [String: Any] {
+            var out: [String: Any] = [:]
+            for (key, inner) in dictionary {
+                if let data = inner as? Data, let embedded = embeddedPropertyList(data) {
+                    out[key + "!"] = dumpable(embedded)
+                } else {
+                    out[key] = dumpable(inner)
+                }
+            }
+            return out
+        }
+        if let array = object as? [Any] { return array.map(dumpable) }
+        return object
     }
 
     /// The longest catalog asset type the file name contains, so
