@@ -83,7 +83,7 @@ nonisolated struct LargeFile: Identifiable, Hashable {
 
     /// True when this file is an iCloud item (`isUbiquitousItem`). Trashing it
     /// removes the file from the user's other devices as well. Defaults to false
-    /// so rows that never asked — AI models, and every existing call site — stay
+    /// so rows that never asked (AI models, and every existing call site) stay
     /// unbadged.
     let syncsWithICloud: Bool
 
@@ -160,14 +160,23 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         componentPaths.allSatisfy { deletedPaths.contains($0.path) }
     }
 
-    /// Copy for the trash confirmation when `syncedCount` of the files being
-    /// removed also live on the user's other devices. Nothing to say when none do.
-    static func iCloudDeletionWarning(syncedCount: Int) -> String? {
+    /// Copy for the trash confirmation when `syncedCount` of the `totalCount`
+    /// files being trashed also live on the user's other devices. Nothing to say
+    /// when none do. iCloud items still go to the Trash, so they can be put back.
+    static func iCloudDeletionWarning(syncedCount: Int, totalCount: Int) -> String? {
         guard syncedCount >= 1 else { return nil }
-        if syncedCount == 1 {
-            return "1 of these syncs with iCloud. Trashing it removes it from your other devices too."
+        let one = "so it also disappears from your other devices. You can restore it from the Trash."
+        let many = "so they also disappear from your other devices. You can restore them from the Trash."
+        if totalCount == 1 {
+            return "The file you're trashing syncs with iCloud, \(one)"
         }
-        return "\(syncedCount) of these sync with iCloud. Trashing them removes them from your other devices too."
+        if syncedCount >= totalCount {
+            return "All \(totalCount) files you're trashing sync with iCloud, \(many)"
+        }
+        if syncedCount == 1 {
+            return "1 of the files you're trashing syncs with iCloud, \(one)"
+        }
+        return "\(syncedCount) of the files you're trashing sync with iCloud, \(many)"
     }
 
     var displayName: String { displayNameOverride ?? path.lastPathComponent }

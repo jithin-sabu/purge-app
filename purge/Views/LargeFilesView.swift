@@ -1118,6 +1118,15 @@ private struct LargeFileRow: View {
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction(.default, revealInFinder)
 
+                    // Gray, like Finder's cloud: with Desktop & Documents syncing,
+                    // most rows from those folders carry it, so it stays quiet.
+                    if file.syncsWithICloud {
+                        Image(systemName: "icloud")
+                            .foregroundStyle(AppColors.textSecondary)
+                            .help("Syncs with iCloud. Trashing it also removes it from your other devices.")
+                            .accessibilityLabel("Syncs with iCloud")
+                    }
+
                     Text("·")
                         .foregroundStyle(AppColors.textSecondary)
                     Text("Last used \(dateText)")
@@ -1130,13 +1139,6 @@ private struct LargeFileRow: View {
                             .fixedSize()
                             .help("\(otherCopyCount + 1) files in this scan have identical contents, including this one.")
                             .accessibilityLabel("\(otherCopyCount) other identical \(noun) found")
-                    }
-
-                    if file.syncsWithICloud {
-                        AppBadge(text: "iCloud", tone: .warning)
-                            .fixedSize()
-                            .help("Trashing this file removes it from your other devices too.")
-                            .accessibilityLabel("Syncs with iCloud")
                     }
                 }
                 .font(AppStyle.Typography.metadata)
@@ -1306,7 +1308,10 @@ struct LargeFileDeletionConfirmSheet: View {
     /// Shown whenever the selection contains a synced file, whether or not the
     /// all-copies note is also on screen. A note, not a change to the buttons.
     private var iCloudWarning: String? {
-        LargeFile.iCloudDeletionWarning(syncedCount: files.filter(\.syncsWithICloud).count)
+        LargeFile.iCloudDeletionWarning(
+            syncedCount: files.filter(\.syncsWithICloud).count,
+            totalCount: files.count
+        )
     }
 
     /// Names the copies in a fully-selected group by, well, their name: the row
@@ -1352,7 +1357,7 @@ struct LargeFileDeletionConfirmSheet: View {
             }
 
             if let iCloudWarning {
-                LargeFileCautionNote(message: iCloudWarning)
+                LargeFileCautionNote { Text(iCloudWarning) }
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
@@ -1437,11 +1442,7 @@ struct LargeFileDeletionConfirmSheet: View {
     /// Deliberately a note, not a blocker: deleting every copy is a legitimate
     /// thing to want. It just shouldn't happen by accident after a Select All.
     private var allCopiesWarning: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(AppColors.statusCheckText)
-                .accessibilityHidden(true)
-
+        LargeFileCautionNote {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(namedConsumedGroups) { group in
                     Text("You're deleting all \(group.copyCount) copies of \(groupLabel(group)). No copy will remain.")
@@ -1452,16 +1453,7 @@ struct LargeFileDeletionConfirmSheet: View {
                     Text("…and \(remainingConsumedGroupCount) more sets where every copy is selected.")
                 }
             }
-            .font(AppStyle.Typography.metadata)
-            .foregroundStyle(AppColors.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                .fill(AppColors.statusCheckFill)
-        )
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -1513,11 +1505,14 @@ struct DuplicateCleanupSheet: View {
     /// iCloud. Keeping the synced copy and trashing only local ones says nothing.
     /// Reads the keeper state, so changing which copy stays recomputes it.
     private var iCloudWarning: String? {
-        let syncedTrashCount = request.sets.reduce(0) { total, set in
+        let trashed = request.sets.flatMap { set in
             let keeper = keeperID(for: set)
-            return total + set.copies.filter { $0.id != keeper && $0.syncsWithICloud }.count
+            return set.copies.filter { $0.id != keeper }
         }
-        return LargeFile.iCloudDeletionWarning(syncedCount: syncedTrashCount)
+        return LargeFile.iCloudDeletionWarning(
+            syncedCount: trashed.filter(\.syncsWithICloud).count,
+            totalCount: trashed.count
+        )
     }
 
     var body: some View {
@@ -1544,7 +1539,7 @@ struct DuplicateCleanupSheet: View {
             .frame(minHeight: 280)
 
             if let iCloudWarning {
-                LargeFileCautionNote(message: iCloudWarning)
+                LargeFileCautionNote { Text(iCloudWarning) }
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
@@ -1650,10 +1645,10 @@ struct DuplicateCleanupSheet: View {
     }
 }
 
-/// The caution chrome shared by the large-file trash sheets: the same triangle,
-/// fill, and type as the all-copies note. A warning, not a blocker.
-fileprivate struct LargeFileCautionNote: View {
-    let message: String
+/// The caution box on the large-file trash sheets: the all-copies note and the
+/// iCloud note. A warning, not a blocker.
+fileprivate struct LargeFileCautionNote<Content: View>: View {
+    @ViewBuilder let content: Content
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -1661,7 +1656,7 @@ fileprivate struct LargeFileCautionNote: View {
                 .foregroundStyle(AppColors.statusCheckText)
                 .accessibilityHidden(true)
 
-            Text(message)
+            content
                 .font(AppStyle.Typography.metadata)
                 .foregroundStyle(AppColors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)

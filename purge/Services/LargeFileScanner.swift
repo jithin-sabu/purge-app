@@ -54,7 +54,7 @@ nonisolated final class LargeFileScanner {
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
             .contentAccessDateKey, .contentModificationDateKey, .isPackageKey,
-            .isUserImmutableKey, .isSystemImmutableKey, .isUbiquitousItemKey
+            .isUserImmutableKey, .isSystemImmutableKey
         ]
 
         for root in roots ?? LargeFileScanPolicy.scanRoots(home: home) {
@@ -134,14 +134,21 @@ nonisolated final class LargeFileScanner {
                         // mid-scan never costs the UI a check per file.
                         if isExcluded(fileURL) { continue }
 
+                        // Asked here, not in `resourceKeys`: inside an iCloud-synced folder
+                        // this key costs about 0.15 ms a file, which made a walk of a
+                        // 36,000-file Documents folder 20x slower when every file paid it.
+                        // Nil means the file is not an iCloud item, as for any local file.
+                        let syncsWithICloud = (try? fileURL.resourceValues(
+                            forKeys: [.isUbiquitousItemKey]
+                        ))?.isUbiquitousItem == true
+
                         continuation.yield(
                             LargeFile(
                                 path: fileURL.standardizedFileURL,
                                 sizeBytes: size,
                                 lastUsed: lastUsed,
                                 category: LargeFileCategory.category(forExtension: fileURL.pathExtension),
-                                // Nil means the file is not an iCloud item. A normal local file reports nil.
-                                syncsWithICloud: values?.isUbiquitousItem == true
+                                syncsWithICloud: syncsWithICloud
                             )
                         )
                     }

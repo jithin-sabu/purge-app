@@ -6,14 +6,22 @@ import Testing
 struct LargeFileICloudSyncTests {
     @Test
     func warningCopyFollowsTheSyncedCount() {
-        #expect(LargeFile.iCloudDeletionWarning(syncedCount: 0) == nil)
+        #expect(LargeFile.iCloudDeletionWarning(syncedCount: 0, totalCount: 4) == nil)
         #expect(
-            LargeFile.iCloudDeletionWarning(syncedCount: 1)
-                == "1 of these syncs with iCloud. Trashing it removes it from your other devices too."
+            LargeFile.iCloudDeletionWarning(syncedCount: 1, totalCount: 1)
+                == "The file you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash."
         )
         #expect(
-            LargeFile.iCloudDeletionWarning(syncedCount: 3)
-                == "3 of these sync with iCloud. Trashing them removes them from your other devices too."
+            LargeFile.iCloudDeletionWarning(syncedCount: 3, totalCount: 3)
+                == "All 3 files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash."
+        )
+        #expect(
+            LargeFile.iCloudDeletionWarning(syncedCount: 1, totalCount: 4)
+                == "1 of the files you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash."
+        )
+        #expect(
+            LargeFile.iCloudDeletionWarning(syncedCount: 3, totalCount: 5)
+                == "3 of the files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash."
         )
     }
 
