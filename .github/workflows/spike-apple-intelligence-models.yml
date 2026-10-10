@@ -1,0 +1,40 @@
+name: Spike – Apple Intelligence models
+
+# Builds the standalone spike for #133 and runs its self-test, which touches
+# nothing on the runner. Only runs when the spike changes; Purge.app's own
+# build is in build.yml.
+
+on:
+  push:
+    paths:
+      - "spikes/apple-intelligence-models/**"
+      - ".github/workflows/spike-apple-intelligence-models.yml"
+  pull_request:
+    paths:
+      - "spikes/apple-intelligence-models/**"
+      - ".github/workflows/spike-apple-intelligence-models.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: spikes/apple-intelligence-models
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Self-test (no system access)
+        run: .build/release/aimodels selftest
+
+      - name: Measure (read-only; shows whether the runner has any records)
+        run: .build/release/aimodels measure --all --dump | head -200
