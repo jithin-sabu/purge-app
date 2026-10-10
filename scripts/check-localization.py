@@ -19,7 +19,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 APP = ROOT / "purge"
 EXPLANATIONS = APP / "Resources" / "explanations.json"
-PLACEHOLDER = re.compile(r"%(?:(\d+)\$)?[-+#0 ]*\d*(?:\.\d+)?(?:hh|ll|h|l|z|t|j)?([@diuoxXfFeEgGcsp])")
+PLACEHOLDER = re.compile(r"%(?:(\d+)\$)?[-+#0 ]*\d*(?:\.\d+)?(hh|ll|h|l|q|z|t|j|L)?([@diuoxXfFeEgGcsp])")
 ESCAPES = {'"': '"', "\\": "\\", "n": "\n", "t": "\t", "r": "\r", "'": "'"}
 
 
@@ -88,18 +88,24 @@ def parse_strings(text):
         i += 1
 
 
+# Conversions that read the same kind of argument. A translation may swap %d
+# for %i, but not %d for %f or %lld for %d: those read a different type or
+# size, and the formatted value comes out wrong.
+CONVERSION_CLASS = {c: "d" for c in "di"} | {c: "u" for c in "uoxX"} | {c: "f" for c in "fFeEgG"}
+
+
 def placeholders(s):
-    """Placeholder conversions in argument order, so a translation may reorder
-    them with positional specifiers (%2$@ %1$@) and still compare equal."""
+    """Placeholder types in argument order, so a translation may reorder them
+    with positional specifiers (%2$@ %1$@) and still compare equal."""
     found, auto = [], 0
     for match in PLACEHOLDER.finditer(s.replace("%%", "")):
-        position, conversion = match.group(1), match.group(2)
+        position, length, conversion = match.group(1), match.group(2) or "", match.group(3)
         if position:
             index = int(position)
         else:
             auto += 1
             index = auto
-        found.append((index, "@" if conversion == "@" else "s" if conversion == "s" else "n"))
+        found.append((index, length + CONVERSION_CLASS.get(conversion, conversion)))
     return sorted(found)
 
 

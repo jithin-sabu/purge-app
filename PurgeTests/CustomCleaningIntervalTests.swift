@@ -28,6 +28,20 @@ struct CustomCleaningIntervalTests {
         #expect(CustomCleaningIntervalUnit.month.everyPhrase(amount: 3) == "Every 3 months")
     }
 
+    /// The test host runs in English, so this reads the zh-Hans table directly.
+    /// Beta 1 built the phrase as 每 plus the unit and showed 每 月 (#110).
+    @Test("Chinese interval phrases read as one word")
+    func chineseIntervalPhrase() throws {
+        let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
+        let zh = try #require(Bundle(path: path))
+        func text(_ key: String) -> String { zh.localizedString(forKey: key, value: nil, table: nil) }
+
+        #expect(text("Every day") == "每天")
+        #expect(text("Every week") == "每周")
+        #expect(text("Every month") == "每月")
+        #expect(String(format: text("Every %lld %@"), 2, text("Weeks")) == "每 2 周")
+    }
+
     @Test("Preset intervals are unchanged", arguments: [
         (ScheduledCleaningFrequency.weekly, TimeInterval(7 * 86_400)),
         (ScheduledCleaningFrequency.monthly, TimeInterval(30 * 86_400)),
