@@ -111,6 +111,7 @@ enum SafetyAllowlistSummary {
             case "Pictures": return String(localized: "pictures")
             case "Music": return String(localized: "music")
             case "Movies": return String(localized: "movies")
+            case "System": return String(localized: "system")
             case "Library":
                 let sub = relative.split(separator: "/").dropFirst().first.map(String.init) ?? ""
                 switch sub {

@@ -23,9 +23,9 @@ struct CustomCleaningIntervalTests {
 
     @Test("Interval phrase singular and plural")
     func intervalPhrase() {
-        #expect(CustomCleaningIntervalUnit.day.phrase(amount: 1) == "day")
-        #expect(CustomCleaningIntervalUnit.week.phrase(amount: 2) == "2 weeks")
-        #expect(CustomCleaningIntervalUnit.month.phrase(amount: 3) == "3 months")
+        #expect(CustomCleaningIntervalUnit.day.everyPhrase(amount: 1) == "Every day")
+        #expect(CustomCleaningIntervalUnit.week.everyPhrase(amount: 2) == "Every 2 weeks")
+        #expect(CustomCleaningIntervalUnit.month.everyPhrase(amount: 3) == "Every 3 months")
     }
 
     @Test("Preset intervals are unchanged", arguments: [

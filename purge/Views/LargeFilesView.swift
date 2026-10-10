@@ -1632,7 +1632,7 @@ struct DuplicateCleanupSheet: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             file.path.deletingLastPathComponent().path
-                + (file.syncsWithICloud ? ", syncs with iCloud" : "")
+                + (file.syncsWithICloud ? String(localized: ", syncs with iCloud") : "")
         )
         .accessibilityValue(isKeeper ? "Keeping" : "Moving to Trash")
         .accessibilityAddTraits(isKeeper ? [.isSelected] : [])

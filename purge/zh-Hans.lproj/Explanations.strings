@@ -630,7 +630,7 @@
 
 /* spotify */
 "Spotify" = "Spotify 应用";
-"Songs and artwork Spotify saved while you listened. Only shown when you have nothing downloaded for offline listening, since Spotify keeps those downloads close by. Safe to delete; Spotify streams and saves them again as you listen." = "Spotify 在你聆听时保存的歌曲与封面。仅在没有离线下载内容时显示，因为 Spotify 的离线下载内容也保存在这里。可以安全删除；继续聆听时，Spotify 会重新在线播放并保存。";
+"Songs and artwork Spotify saved while you listened. Only shown when you have nothing downloaded for offline listening, since Spotify keeps those downloads close by. Safe to delete; Spotify streams and saves them again as you listen." = "Spotify 在你聆听时保存的歌曲与封面。仅在没有离线下载内容时显示，因为 Spotify 的离线下载保存在附近位置。可以安全删除；继续聆听时，Spotify 会重新在线播放并保存。";
 
 /* whatsapp */
 "WhatsApp" = "WhatsApp 应用";
@@ -1110,7 +1110,7 @@
 
 /* version-manager-downloads */
 "pyenv and rbenv Downloads" = "pyenv 与 rbenv 下载";
-"Source downloads pyenv and rbenv keep after installing a Python or Ruby version. Installed versions are left alone. Safe to delete." = "pyenv 和 rbenv 安装 Python 或 Ruby 版本后保留的源代码下载。已安装的版本不会被动。可以安全删除。";
+"Source downloads pyenv and rbenv keep after installing a Python or Ruby version. Installed versions are left alone. Safe to delete." = "pyenv 和 rbenv 安装 Python 或 Ruby 版本后保留的源代码下载。已安装的版本不会受到影响。可以安全删除。";
 
 /* oh-my-zsh-cache */
 "Oh My Zsh Cache" = "Oh My Zsh 缓存";

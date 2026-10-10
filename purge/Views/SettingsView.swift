@@ -348,7 +348,7 @@ struct SettingsView: View {
     private var finderSection: some View {
         settingsSection("Finder") {
             settingsToggleRow(
-                title: "Uninstall with Purge in Finder's right-click menu",
+                title: String(localized: "Uninstall with Purge in Finder's right-click menu"),
                 caption: finderServiceCaption,
                 warning: finderService.flushFailed ? finderServiceFlushWarning : nil,
                 isOn: Binding(
@@ -366,17 +366,17 @@ struct SettingsView: View {
     /// The setting is saved, but Finder reads it through a cache Purge could
     /// not clear, so the menu lags until macOS rebuilds it at login.
     private var finderServiceFlushWarning: String {
-        "Saved, but Finder may keep showing the old state until you log out and back in."
+        String(localized: "Saved, but Finder may keep showing the old state until you log out and back in.")
     }
 
     private var finderServiceCaption: String {
-        """
+        String(localized: """
         Right-click an app in Finder and choose Uninstall with Purge. Purge opens \
         with that app and everything it left behind, ready to review. macOS keeps \
         this off until you turn it on here, or under System Settings > Keyboard > \
         Keyboard Shortcuts > Services. Dropping an app on Purge's Dock icon does \
         the same and needs no setup.
-        """
+        """)
     }
 
     private var deletedAppsSection: some View {
@@ -543,7 +543,7 @@ struct SettingsView: View {
             settingsSectionDivider
 
             settingsToggleRow(
-                title: "Download and install updates automatically",
+                title: String(localized: "Download and install updates automatically"),
                 caption: automaticInstallSummary,
                 isOn: automaticUpdateDownloadsBinding
             )
@@ -1151,7 +1151,7 @@ struct SettingsView: View {
 
     private var scheduleSummary: String {
         String(localized: """
-        Every \(prefs.frequency.summaryPhrase(customAmount: prefs.customIntervalAmount, customUnit: prefs.customIntervalUnit)), we will quietly clean the same safe items as the \
+        \(prefs.frequency.everyPhrase(customAmount: prefs.customIntervalAmount, customUnit: prefs.customIntervalUnit)), we will quietly clean the same safe items as the \
         Clean Safe Items button - safe caches and stale developer artifacts. Your actual work is \
         never deleted.
         """)
@@ -1421,16 +1421,16 @@ private struct ScheduleStatusAnimatedHeight<Content: View>: View {
 }
 
 private extension ScheduledCleaningFrequency {
-    func summaryPhrase(customAmount: Int, customUnit: CustomCleaningIntervalUnit) -> String {
+    func everyPhrase(customAmount: Int, customUnit: CustomCleaningIntervalUnit) -> String {
         switch self {
         case .weekly:
-            return String(localized: "week")
+            return String(localized: "Every week")
         case .monthly:
-            return String(localized: "month")
+            return String(localized: "Every month")
         case .quarterly:
-            return String(localized: "3 months")
+            return String(localized: "Every 3 months")
         case .custom:
-            return customUnit.phrase(amount: customAmount)
+            return customUnit.everyPhrase(amount: customAmount)
         }
     }
 

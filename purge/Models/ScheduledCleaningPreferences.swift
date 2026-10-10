@@ -53,11 +53,18 @@ enum CustomCleaningIntervalUnit: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// "every X" phrase for this unit at the given amount, e.g. "day" or "2 weeks".
-    func phrase(amount: Int) -> String {
-        amount == 1
-            ? singularDisplayName.lowercased()
-            : "\(amount) \(displayName.lowercased())"
+    /// The whole "every X" phrase for this unit at the given amount, e.g. "Every day" or
+    /// "Every 2 weeks". It is one string, not "Every" plus a unit, because some languages
+    /// join the two: Chinese writes 每月, and gluing 每 to 月 left a stray space.
+    func everyPhrase(amount: Int) -> String {
+        guard amount != 1 else {
+            switch self {
+            case .day: return String(localized: "Every day")
+            case .week: return String(localized: "Every week")
+            case .month: return String(localized: "Every month")
+            }
+        }
+        return String(localized: "Every \(amount) \(displayName.lowercased())")
     }
 
     var seconds: TimeInterval {

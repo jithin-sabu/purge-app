@@ -917,7 +917,7 @@ struct DevToolsView<PageHeader: View>: View {
                                     formattedSize: runtime.formattedSize,
                                     safetyInfo: runtime.safetyInfo,
                                     brandIcon: .sfSymbol("internaldrive"),
-                                    detailCaption: "Build \(runtime.build)",
+                                    detailCaption: String(localized: "Build \(runtime.build)"),
                                     reinstallSafety: .notApplicable,
                                     showUncommittedRepoChanges: false,
                                     onResetToAutomatic: nil,

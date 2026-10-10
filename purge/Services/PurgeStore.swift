@@ -4023,7 +4023,7 @@ final class PurgeStore: ObservableObject {
             sizeBytes: runtime.sizeBytes,
             safetyInfo: runtime.safetyInfo,
             reinstallCommand: nil,
-            subtitle: "Build \(runtime.build)",
+            subtitle: String(localized: "Build \(runtime.build)"),
             reinstallSafety: .notApplicable,
             gitStatus: .clean
         )

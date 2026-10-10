@@ -165,18 +165,17 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// when none do. iCloud items still go to the Trash, so they can be put back.
     static func iCloudDeletionWarning(syncedCount: Int, totalCount: Int) -> String? {
         guard syncedCount >= 1 else { return nil }
-        let one = "so it also disappears from your other devices. You can restore it from the Trash."
-        let many = "so they also disappear from your other devices. You can restore them from the Trash."
+        // Whole sentences, not a shared tail, so each one translates as a unit.
         if totalCount == 1 {
-            return "The file you're trashing syncs with iCloud, \(one)"
+            return String(localized: "The file you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash.")
         }
         if syncedCount >= totalCount {
-            return "All \(totalCount) files you're trashing sync with iCloud, \(many)"
+            return String(localized: "All \(totalCount) files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash.")
         }
         if syncedCount == 1 {
-            return "1 of the files you're trashing syncs with iCloud, \(one)"
+            return String(localized: "1 of the files you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash.")
         }
-        return "\(syncedCount) of the files you're trashing sync with iCloud, \(many)"
+        return String(localized: "\(syncedCount) of the files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash.")
     }
 
     var displayName: String { displayNameOverride ?? path.lastPathComponent }

@@ -1,0 +1,4 @@
+/* Simplified Chinese interface text. English source remains the fallback. */
+
+/* The Finder Services item declared under NSServices in Info.plist. pbs keys its on/off state on the English default title, so this only changes what the menu shows. */
+"Uninstall with Purge" = "使用 Purge 卸载";
