@@ -142,6 +142,26 @@ enum SelfTest {
             check(false, "archive decoding works on fixtures: \(error)")
         }
 
+        // Versions and latest-only bytes
+        check(Descriptors.versionIsOrdered("600.0.81600.13.202072,0", before: "600.0.81600.13.202073,0")
+              && Descriptors.versionIsOrdered("9.0", before: "10.0") && !Descriptors.versionIsOrdered("10.0", before: "9.0"),
+              "versions compare numerically by component")
+        do {
+            func record(_ specifier: String, _ version: String, _ bytes: Int) -> DescriptorRecord {
+                Descriptors.record(from: [
+                    "SUCorePersistedStatePolicySecureCodedObjectsFields": [
+                        "assetDescriptor!": ["downloadedFilesystemBytes": bytes, "isOnFilesystem": true]] as [String: Any],
+                ] as [String: Any], path: "/x", fileName:
+                    "AutoAssetDescriptors_Entry_com.apple.MobileAsset.UAF.FM.Visual_\(specifier)_\(version)_0.state")
+            }
+            let reading = DescriptorReading(records: [
+                record("model.a", "1.0,0", 100), record("model.a", "2.0,0", 150), record("model.b", "1.0,0", 20),
+            ], lockEntries: [], errors: [])
+            let visual = Descriptors.measure([Catalog.set(named: Catalog.visual)!], reading: reading).first
+            check(visual?.bytes == 270 && visual?.latestBytes == 170 && visual?.specifiers == 2,
+                  "all records are summed separately from the newest version of each model")
+        }
+
         // CacheDelete filter verdict
         let service = CacheDeleteCheck.defaultService
         let others = ["com.apple.photolibraryd.cache-delete", service]

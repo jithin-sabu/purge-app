@@ -6,7 +6,12 @@ enum Commands {
     struct PurgeOptions {
         var service = CacheDeleteCheck.defaultService
         var urgency = CacheDeleteCheck.defaultUrgency
-        var callStyle = "sync"
+        /// `CacheDeleteCopyPurgeableSpaceWithInfo` answers the synchronous call
+        /// (confirmed on macOS 27.0).
+        var queryStyle = "sync"
+        /// `CacheDeletePurgeSpaceWithInfo` takes a reply block: the synchronous
+        /// call crashed the worker on macOS 27.0.
+        var purgeStyle = "block"
         var amount: Int64?
 
         init() {}
@@ -19,7 +24,11 @@ enum Commands {
             }
             if let style = arguments.option("--call-style") {
                 guard style == "sync" || style == "block" else { Log.fail("--call-style is sync or block") }
-                callStyle = style
+                purgeStyle = style
+            }
+            if let style = arguments.option("--query-style") {
+                guard style == "sync" || style == "block" else { Log.fail("--query-style is sync or block") }
+                queryStyle = style
             }
             if let amount = arguments.option("--amount") {
                 guard let value = Int64(amount), value > 0 else { Log.fail("--amount takes a positive byte count") }
@@ -58,17 +67,26 @@ enum Commands {
 
     static func printMeasurements(_ measured: [SetMeasurement], reading: DescriptorReading) {
         Log.line("Models on disk, from \(Descriptors.root)")
-        Log.line("  " + Format.pad("set", 46) + Format.pad("records", 9) + Format.pad("on disk", 9) + Format.pad("size", 12)
-                 + Format.pad("locks", 7) + Format.pad("folder", 12) + "removing")
+        Log.line("  " + Format.pad("set", 46) + Format.pad("records", 9) + Format.pad("on disk", 9) + Format.pad("models", 8)
+                 + Format.pad("latest", 12) + Format.pad("all records", 13) + Format.pad("locks", 7) + Format.pad("folder", 12) + "removing")
         var total: Int64 = 0
+        var latestTotal: Int64 = 0
         var allKnown = true
         for item in measured {
-            if let bytes = item.bytes { total += bytes } else { allKnown = false }
+            if let bytes = item.bytes, let latest = item.latestBytes {
+                total += bytes
+                latestTotal += latest
+            } else {
+                allKnown = false
+            }
             Log.line("  " + Format.pad(item.set.name, 46) + Format.pad("\(item.records.count)", 9) + Format.pad("\(item.onDisk)", 9)
-                     + Format.pad(Format.bytes(item.bytes), 12) + Format.pad("\(item.locks.count)", 7)
+                     + Format.pad("\(item.specifiers)", 8) + Format.pad(Format.bytes(item.latestBytes), 12)
+                     + Format.pad(Format.bytes(item.bytes), 13) + Format.pad("\(item.locks.count)", 7)
                      + Format.pad(item.folder.rawValue, 12) + "\(item.eliminating)")
         }
-        Log.line("  " + Format.pad("total", 46) + Format.pad("", 18) + (allKnown ? Format.bytes(total) : "unknown (a set has no readable record)"))
+        Log.line("  " + Format.pad("total", 46) + Format.pad("", 26)
+                 + (allKnown ? Format.pad(Format.bytes(latestTotal), 12) + Format.bytes(total) : "unknown (a set has no readable record)"))
+        Log.line("  latest: one record per model, the newest version; all records: every version on the filesystem")
         let keys = Set(measured.flatMap { $0.sizeKeys })
         if !keys.isEmpty { Log.line("  size keys used: " + keys.sorted().joined(separator: ", ")) }
         Log.line("  records read: \(reading.records.count), unreadable: \(reading.unreadable.count), lock entries: \(reading.lockEntries.count)")
@@ -239,11 +257,11 @@ enum Commands {
             let timeout: Double = 60
             let unfiltered = Worker.run("cd-purgeable", [
                 "info": CacheDeleteCheck.request(service: nil, urgency: options.urgency, amount: nil),
-                "style": options.callStyle, "timeout": timeout,
+                "style": options.queryStyle, "timeout": timeout,
             ], timeout: timeout)
             let filtered = Worker.run("cd-purgeable", [
                 "info": CacheDeleteCheck.request(service: options.service, urgency: options.urgency, amount: nil),
-                "style": options.callStyle, "timeout": timeout,
+                "style": options.queryStyle, "timeout": timeout,
             ], timeout: timeout)
             result.unfilteredReply = unfiltered.result["reply"] as? [String: Any]
             result.filteredReply = filtered.result["reply"] as? [String: Any]
@@ -254,12 +272,12 @@ enum Commands {
             }
             if let problem = result.cacheDeleteProblem {
                 Log.warn(problem)
-                if unfiltered.timedOut || filtered.timedOut {
-                    Log.line("    the \(options.callStyle) call style gave no reply; try --call-style " + (options.callStyle == "sync" ? "block" : "sync"))
+                if unfiltered.timedOut || filtered.timedOut || unfiltered.crashed || filtered.crashed {
+                    Log.line("    the \(options.queryStyle) query style gave no reply; try --query-style " + (options.queryStyle == "sync" ? "block" : "sync"))
                 }
             }
             if let unfilteredReply = result.unfilteredReply {
-                Log.line("  purgeable, no filter (\(options.callStyle) call, urgency \(options.urgency)):")
+                Log.line("  purgeable, no filter (\(options.queryStyle) call, urgency \(options.urgency)):")
                 Log.line(indent(Format.json(unfilteredReply)))
             }
             if let filteredReply = result.filteredReply {
@@ -288,7 +306,10 @@ enum Commands {
         let selected: [ModelSet]
         do { selected = try Catalog.select(sets) } catch { Log.fail("\(error)") }
         let result = preflight(selected, options: options, checkService: true, checkPurge: true)
-        let chosen: [String: Any] = ["service": options.service, "urgency": options.urgency, "callStyle": options.callStyle]
+        let chosen: [String: Any] = [
+            "service": options.service, "urgency": options.urgency,
+            "queryStyle": options.queryStyle, "purgeStyle": options.purgeStyle,
+        ]
         Journal.record("check", note: nil, fields: ["preflight": result.summary, "options": chosen])
         let serviceOK = !MacOS.releasesThroughService || (result.frameworkLoads && !result.mapped.isEmpty && result.handlerReached == true)
         Log.line(serviceOK ? "Release: ready" : "Release: not ready on this macOS")
@@ -339,7 +360,7 @@ enum Commands {
         if noPurge {
             Log.line("  3. skip the purge (--no-purge)")
         } else if flight.purgeAllowed {
-            Log.line("  3. ask deleted to purge \(options.service) now, urgency \(options.urgency)")
+            Log.line("  3. ask deleted to purge \(options.service) now, urgency \(options.urgency), \(options.purgeStyle) call")
         } else {
             Log.line("  3. the purge is refused: " + (flight.verdict?.reason ?? flight.cacheDeleteProblem ?? "the filter could not be judged"))
         }
@@ -390,12 +411,19 @@ enum Commands {
         // 2. Release.
         var released: [String] = []
         var releaseFailures: [String: String] = [:]
+        /// Sets that answered "current locks": macOS can return that even when
+        /// its forced removal went through (pared saw the same), so they are
+        /// judged by their records and folders afterwards.
+        var lockedReplies: [String] = []
         if viaService {
             for set in releasing {
                 let reset = Worker.run("uaf-reset", ["assetSets": [set.name]], timeout: 130)
                 if reset.ok {
                     released.append(set.name)
                     Log.line("Release: \(set.name) accepted")
+                } else if reset.problem.contains("current locks") {
+                    lockedReplies.append(set.name)
+                    Log.warn("Release: \(set.name) answered \"current locks\"; checking its folder afterwards")
                 } else {
                     releaseFailures[set.name] = reset.problem
                     Log.warn("Release: \(set.name) failed: " + reset.problem)
@@ -421,7 +449,7 @@ enum Commands {
                 if let amount, amount > 0 {
                     let info = CacheDeleteCheck.request(service: options.service, urgency: options.urgency, amount: amount)
                     Log.line("Purge: asking for " + Format.bytes(amount) + " from \(options.service)")
-                    let purge = Worker.run("cd-purge", ["info": info, "style": options.callStyle, "timeout": 300.0], timeout: 300)
+                    let purge = Worker.run("cd-purge", ["info": info, "style": options.purgeStyle, "timeout": 300.0], timeout: 300)
                     if purge.ok {
                         Log.line("Purge: replied")
                         if let reply = purge.result["reply"] as? [String: Any] {
@@ -448,6 +476,17 @@ enum Commands {
         let readingAfter = Descriptors.read()
         let after = Descriptors.measure(selected, reading: readingAfter)
         record["after"] = after.map(\.summary)
+        for name in lockedReplies {
+            if let item = after.first(where: { $0.set.name == name }), item.records.isEmpty, item.folder == .empty || item.folder == .missing {
+                released.append(name)
+                Log.line("Release: \(name) is gone despite the lock reply")
+            } else {
+                releaseFailures[name] = "answered \"current locks\" and its records or folder remain"
+                Log.warn("Release: \(name) still has records or files after the lock reply")
+            }
+        }
+        record["released"] = released
+        record["releaseFailures"] = releaseFailures
         if let last = settled.lastReading { record["freeAfter"] = last }
         if let gained = settled.gained { record["freedBytes"] = gained }
         Journal.record("remove", note: nil, fields: record)

@@ -65,6 +65,30 @@ struct SetMeasurement {
     var onDisk: Int { records.filter { $0.isOnFilesystem ?? true }.count }
     var eliminating: Int { records.filter { $0.isEliminating == true }.count }
 
+    /// Records on the filesystem, grouped by model (the asset specifier).
+    var byModel: [String: [DescriptorRecord]] {
+        Dictionary(grouping: records.filter { $0.isOnFilesystem ?? true }) { $0.assetSpecifier ?? $0.fileName }
+    }
+
+    /// Distinct models with a record on the filesystem.
+    var specifiers: Int { byModel.count }
+
+    /// Bytes of the newest version of each model only. Several versions of one
+    /// model can be on the filesystem at once, and a reading that sums them
+    /// all overstates what a removal frees. Nil when any newest record has no
+    /// readable size.
+    var latestBytes: Int64? {
+        guard !records.isEmpty else { return nil }
+        var total: Int64 = 0
+        for (_, versions) in byModel {
+            guard let newest = versions.max(by: { Descriptors.versionIsOrdered($0.assetVersion ?? "", before: $1.assetVersion ?? "") }),
+                  let size = newest.countedSize
+            else { return nil }
+            total += size.bytes
+        }
+        return total
+    }
+
     var summary: [String: Any] {
         var out: [String: Any] = [
             "assetSet": set.name,
@@ -78,6 +102,8 @@ struct SetMeasurement {
             "collectionBehaviors": Array(Set(records.compactMap(\.collectionBehavior))).sorted(),
         ]
         if let bytes { out["bytes"] = bytes }
+        if let latestBytes { out["latestBytes"] = latestBytes }
+        out["models"] = specifiers
         return out
     }
 }
@@ -259,6 +285,15 @@ enum Descriptors {
         }
         if let array = object as? [Any] { return array.map(dumpable) }
         return object
+    }
+
+    /// Orders versions like `600.0.81600.13.202072,0` numerically, component
+    /// by component, so 10 sorts after 9.
+    static func versionIsOrdered(_ lhs: String, before rhs: String) -> Bool {
+        let left = lhs.split(whereSeparator: { $0 == "." || $0 == "," }).map { Int($0) ?? 0 }
+        let right = rhs.split(whereSeparator: { $0 == "." || $0 == "," }).map { Int($0) ?? 0 }
+        for (a, b) in zip(left, right) where a != b { return a < b }
+        return left.count < right.count
     }
 
     /// The longest catalog asset type the file name contains, so

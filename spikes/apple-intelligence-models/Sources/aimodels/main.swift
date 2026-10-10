@@ -7,11 +7,11 @@ aimodels: spike for removing the Apple Intelligence models and downloading them 
   aimodels status                  what is installed, who uses it, the profile, free space
   aimodels measure [--dump] [--all] [--sets a,b]
                                    read MobileAsset's per-model records; --dump prints them raw
-  aimodels check [--sets a,b] [--service id] [--urgency n] [--call-style sync|block]
+  aimodels check [--sets a,b] [--service id] [--urgency n] [--query-style sync|block]
                                    read-only: does this macOS still match the catalog, and does
                                    CacheDelete honour the service filter? Nothing is removed
   aimodels remove [--sets a,b] [--dry-run] [--yes] [--no-profile] [--no-purge]
-                  [--service id] [--urgency n] [--amount bytes] [--call-style sync|block]
+                  [--service id] [--urgency n] [--amount bytes] [--call-style sync|block] [--query-style sync|block]
                                    block downloads, release, purge, measure the space freed
   aimodels restore [--sets a,b] [--yes]
                                    remove the block and ask macOS to download the models again

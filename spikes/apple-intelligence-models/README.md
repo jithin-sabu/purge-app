@@ -92,6 +92,25 @@ and paste the table into the issue.
 | After a day online | | | |
 | After `restore` | | | |
 
+## Results so far
+
+**macOS 27.0, MacBook Air (Apple silicon), 2026-10-10.** One account, Apple
+Intelligence switched off in Settings, models still on disk.
+
+| Step | Result |
+|---|---|
+| Measure | 548 records, 229 for the five sets, 57.54 GB by `downloadedFilesystemBytes` over all records. Folders present, no lock entries. |
+| Asset service | Every set maps to the catalog's asset type. The reset handler answers. `latestStatusForClients` bytes are useless (118 MB, zero or unknown for 57 GB of models), as RemoveMacAI found. |
+| CacheDelete query | The synchronous call works. Reply keys: `CACHE_DELETE_AMOUNT`, `CACHE_DELETE_FREESPACE`, `CACHE_DELETE_NONPURGEABLE_AMOUNT`, `CACHE_DELETE_VOLUME`. Purgeable 31.56 GB overall, 7.27 GB with `CACHE_DELETE_SERVICES` set to `com.apple.mobileassetd.cache-delete`: the filter is honoured. |
+| Profile | Installed from the Downloads file through System Settings. |
+| Release | Three sets accepted. Visual and CodeLM answered "Could not eliminate as there are current locks" (lock held by `UnifiedAssetFramework`'s own manager), yet all five folders were empty afterwards and all 229 records gone. pared documents the same: the lock error can outlive a successful forced removal. `remove` now judges those sets by their folders. |
+| Purge | `CacheDeletePurgeSpaceWithInfo` with the synchronous style crashed the worker (SIGSEGV), as designed. The purge now defaults to the reply-block style; untested until the next removal. |
+| Space | 166.61 GB free before, 190.53 GB after, 23.91 GB freed within the 30 s settling window, from the release alone. Why that is less than the 57.54 GB measured is open: several versions of one model can be on the filesystem at once (`measure` now shows a latest-version figure beside the all-records one), and deletion may still have been running. |
+
+So on macOS 27.0 the release step frees space by itself and the purge may
+not be needed at all. That changes the shape of the feature if it holds up
+after a restart and a day online.
+
 ## Open questions the spike has to settle
 
 - **Record layout.** Answered by the CI runner (macOS 26.6, Apple silicon,
@@ -111,15 +130,19 @@ and paste the table into the issue.
   read on a Mac that has the sets: what the Apple Intelligence records look
   like before and after a release, and whether `isOnFilesystem` flips or the
   record disappears. Run `measure --dump` there and keep the output.
-- **CacheDelete call shape.** Two call styles are implemented because neither
-  is documented: synchronous returning a dictionary, or a reply block. The
-  default is `sync`; `check` suggests the other when the first gives no reply.
-  Which one `deleted` accepts, and which urgency level reaches the MobileAsset
-  service, are things to record.
-- **Service filter.** Whether `CACHE_DELETE_SERVICES` restricts a purge at all,
-  and what the service's id really is. The purge is refused until the
-  read-only comparison says yes.
-- **macOS 27 master switch.** Still from press reports only.
+- **CacheDelete call shape.** The purgeable query is synchronous (confirmed on
+  27.0). The purge is not: the synchronous style crashed, so the default is now
+  the reply block (`--call-style` overrides it). Whether that answers, and
+  which urgency level reaches the MobileAsset service, are still to record.
+- **Service filter.** `CACHE_DELETE_SERVICES` restricts the purgeable query on
+  27.0 and `com.apple.mobileassetd.cache-delete` is a defined service. Whether
+  it restricts the purge the same way is assumed from that, not seen.
+- **macOS 27 master switch.** Still from press reports only, though the test
+  Mac had Apple Intelligence off in Settings with 57 GB of models still on
+  disk, which is the behaviour the reports describe.
+- **Measured versus freed.** 57.54 GB measured, 23.91 GB freed. Compare the
+  latest-version figure with the all-records one, and take a snapshot some
+  minutes after a removal to see whether deletion continues.
 - **macOS 15 and 26.** Whether the records and the CacheDelete calls look the
   same there. `measure` and `check` run on every version; only `remove`'s
   release step differs.

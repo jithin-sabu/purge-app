@@ -34,7 +34,7 @@ enum Worker {
         if let signal = result.signal {
             let name = String(cString: strsignal(signal))
             return Outcome(ok: false, result: [:],
-                           error: "the private call crashed the worker (signal \(signal), \(name)); the interface has changed",
+                           error: "the private call crashed the worker (signal \(signal), \(name)); the call style or the interface is wrong",
                            crashed: true, timedOut: false)
         }
         if result.timedOut {
