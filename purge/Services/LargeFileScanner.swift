@@ -54,7 +54,7 @@ nonisolated final class LargeFileScanner {
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
             .contentAccessDateKey, .contentModificationDateKey, .isPackageKey,
-            .isUserImmutableKey, .isSystemImmutableKey
+            .isUserImmutableKey, .isSystemImmutableKey, .isUbiquitousItemKey
         ]
 
         for root in roots ?? LargeFileScanPolicy.scanRoots(home: home) {
@@ -104,6 +104,9 @@ nonisolated final class LargeFileScanner {
                         guard values?.isRegularFile == true else { continue }
                         if isUserExcluded { continue }
 
+                        // Zero allocated bytes is a real size, not a missing one. A dataless
+                        // iCloud placeholder reports 0 here and a large logical `fileSize`;
+                        // falling through on 0 would list files that aren't on this Mac.
                         let size = Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
                         guard size >= minBytes else { continue }
 
@@ -136,7 +139,9 @@ nonisolated final class LargeFileScanner {
                                 path: fileURL.standardizedFileURL,
                                 sizeBytes: size,
                                 lastUsed: lastUsed,
-                                category: LargeFileCategory.category(forExtension: fileURL.pathExtension)
+                                category: LargeFileCategory.category(forExtension: fileURL.pathExtension),
+                                // Nil means the file is not an iCloud item. A normal local file reports nil.
+                                syncsWithICloud: values?.isUbiquitousItem == true
                             )
                         )
                     }

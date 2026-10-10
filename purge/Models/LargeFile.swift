@@ -81,6 +81,12 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// references.
     let componentPaths: [URL]
 
+    /// True when this file is an iCloud item (`isUbiquitousItem`). Trashing it
+    /// removes the file from the user's other devices as well. Defaults to false
+    /// so rows that never asked — AI models, and every existing call site — stay
+    /// unbadged.
+    let syncsWithICloud: Bool
+
     /// Stored (not computed) so identity checks in row bindings, sorting, and list
     /// animations don't re-standardize the URL on every access — the repeated cost
     /// made selection feel delayed compared to App Caches.
@@ -109,7 +115,8 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         isSelected: Bool = false,
         displayNameOverride: String? = nil,
         sourceLabel: String? = nil,
-        componentPaths: [URL]? = nil
+        componentPaths: [URL]? = nil,
+        syncsWithICloud: Bool = false
     ) {
         self.path = path
         self.sizeBytes = sizeBytes
@@ -119,6 +126,7 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         self.displayNameOverride = displayNameOverride
         self.sourceLabel = sourceLabel
         self.componentPaths = (componentPaths ?? [path]).map(\.standardizedFileURL)
+        self.syncsWithICloud = syncsWithICloud
         let standardized = path.standardizedFileURL
         self.id = standardized.path
         self.searchHaystack = [
@@ -150,6 +158,16 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// manifest trashed but whose blobs didn't still occupies the disk.
     func isFullyRemoved(byDeleting deletedPaths: Set<String>) -> Bool {
         componentPaths.allSatisfy { deletedPaths.contains($0.path) }
+    }
+
+    /// Copy for the trash confirmation when `syncedCount` of the files being
+    /// removed also live on the user's other devices. Nothing to say when none do.
+    static func iCloudDeletionWarning(syncedCount: Int) -> String? {
+        guard syncedCount >= 1 else { return nil }
+        if syncedCount == 1 {
+            return "1 of these syncs with iCloud. Trashing it removes it from your other devices too."
+        }
+        return "\(syncedCount) of these sync with iCloud. Trashing them removes them from your other devices too."
     }
 
     var displayName: String { displayNameOverride ?? path.lastPathComponent }

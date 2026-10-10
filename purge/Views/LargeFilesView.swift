@@ -1131,6 +1131,13 @@ private struct LargeFileRow: View {
                             .help("\(otherCopyCount + 1) files in this scan have identical contents, including this one.")
                             .accessibilityLabel("\(otherCopyCount) other identical \(noun) found")
                     }
+
+                    if file.syncsWithICloud {
+                        AppBadge(text: "iCloud", tone: .warning)
+                            .fixedSize()
+                            .help("Trashing this file removes it from your other devices too.")
+                            .accessibilityLabel("Syncs with iCloud")
+                    }
                 }
                 .font(AppStyle.Typography.metadata)
                 .lineLimit(1)
@@ -1296,6 +1303,12 @@ struct LargeFileDeletionConfirmSheet: View {
         files.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
+    /// Shown whenever the selection contains a synced file, whether or not the
+    /// all-copies note is also on screen. A note, not a change to the buttons.
+    private var iCloudWarning: String? {
+        LargeFile.iCloudDeletionWarning(syncedCount: files.filter(\.syncsWithICloud).count)
+    }
+
     /// Names the copies in a fully-selected group by, well, their name: the row
     /// label of the first copy, since every copy has identical content and any of
     /// them identifies the thing being lost.
@@ -1336,6 +1349,10 @@ struct LargeFileDeletionConfirmSheet: View {
 
             if !fullyConsumedDuplicateGroups.isEmpty {
                 allCopiesWarning
+            }
+
+            if let iCloudWarning {
+                LargeFileCautionNote(message: iCloudWarning)
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
@@ -1492,6 +1509,17 @@ struct DuplicateCleanupSheet: View {
         }
     }
 
+    /// Copies this keeper selection will actually trash that also sync with
+    /// iCloud. Keeping the synced copy and trashing only local ones says nothing.
+    /// Reads the keeper state, so changing which copy stays recomputes it.
+    private var iCloudWarning: String? {
+        let syncedTrashCount = request.sets.reduce(0) { total, set in
+            let keeper = keeperID(for: set)
+            return total + set.copies.filter { $0.id != keeper && $0.syncsWithICloud }.count
+        }
+        return LargeFile.iCloudDeletionWarning(syncedCount: syncedTrashCount)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
@@ -1514,6 +1542,10 @@ struct DuplicateCleanupSheet: View {
                 .padding(.vertical, 2)
             }
             .frame(minHeight: 280)
+
+            if let iCloudWarning {
+                LargeFileCautionNote(message: iCloudWarning)
+            }
 
             HStack(spacing: AppStyle.Spacing.small) {
                 Text("Keeping \(request.sets.count), freeing \(formatBytes(reclaimedBytes))")
@@ -1615,6 +1647,31 @@ struct DuplicateCleanupSheet: View {
                 Capsule(style: .continuous)
                     .fill(isKeeper ? AppColors.statusSafeFill : AppColors.statusDangerFill)
             )
+    }
+}
+
+/// The caution chrome shared by the large-file trash sheets: the same triangle,
+/// fill, and type as the all-copies note. A warning, not a blocker.
+fileprivate struct LargeFileCautionNote: View {
+    let message: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(AppColors.statusCheckText)
+                .accessibilityHidden(true)
+
+            Text(message)
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                .fill(AppColors.statusCheckFill)
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 
