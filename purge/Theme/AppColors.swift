@@ -107,6 +107,9 @@ enum AppColors {
         static let everythingElse = Color(light: 0x8C8983, dark: 0xA8A49D)
         /// Free space on the storage bars.
         static let freeSpace = Color(light: 0xDAD7D2, dark: 0x4E4B47)
+        /// Stripes over `freeSpace` for the part macOS clears on its own: halfway to
+        /// `everythingElse`, so it reads as free but not empty.
+        static let purgeableStripe = Color(light: 0xB3B0AA, dark: 0x7B7872)
     }
 
     // MARK: - AppKit

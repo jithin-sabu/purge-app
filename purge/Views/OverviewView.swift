@@ -57,9 +57,10 @@ struct OverviewView: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: highlightedID)
     }
 
-    private func linkedRowState(_ id: String) -> OverviewLinkedRowState {
+    /// Emphasized when the hovered segment is any of `ids`.
+    private func linkedRowState(_ ids: String...) -> OverviewLinkedRowState {
         guard let highlightedID else { return .normal }
-        return highlightedID == id ? .emphasized : .dimmed
+        return ids.contains(highlightedID) ? .emphasized : .dimmed
     }
 
     // MARK: Disk summary
@@ -98,13 +99,43 @@ struct OverviewView: View {
             bytes: breakdown.everythingElseBytes,
             color: AppColors.Chart.everythingElse
         ))
+        // Free space macOS has to clear first is still free, so it is drawn in the free
+        // colour, striped, at the start of the free part. Always in the list, at zero
+        // when it isn't worth mentioning, so it grows in instead of popping in.
+        let purgeable = shownPurgeableBytes(breakdown)
+        segments.append(OverviewDiskBar.Segment(
+            id: OverviewDiskBar.purgeableID,
+            label: "Purgeable",
+            bytes: purgeable,
+            color: AppColors.Chart.freeSpace,
+            isStriped: true
+        ))
         segments.append(OverviewDiskBar.Segment(
             id: OverviewDiskBar.freeID,
-            label: "Free",
-            bytes: breakdown.freeBytes,
+            label: purgeable > 0 ? "Empty" : "Free",
+            bytes: breakdown.freeBytes - purgeable,
             color: AppColors.Chart.freeSpace
         ))
         return segments
+    }
+
+    /// The purgeable part of free space when it is big enough to show, else zero.
+    private func shownPurgeableBytes(_ breakdown: OverviewBreakdown) -> Int64 {
+        let purgeable = min(diskStore.purgeableDiskBytes, breakdown.freeBytes)
+        return Self.mentionsPurgeable(purgeableBytes: purgeable, totalBytes: breakdown.totalBytes) ? purgeable : 0
+    }
+
+    static let purgeableNoteMinimumBytes: Int64 = 20_000_000_000
+    static let purgeableNoteMinimumShare = 0.05
+
+    /// Whether the Overview shows that part of free space is space macOS clears on its
+    /// own. Only when there is enough of it to make Purge visibly disagree with Disk
+    /// Utility: 20 GB, or 5% of a small disk. Below that nobody notices the gap, and
+    /// marking it on every Mac would explain something almost no one asked about.
+    static func mentionsPurgeable(purgeableBytes: Int64, totalBytes: Int64) -> Bool {
+        guard purgeableBytes > 0, totalBytes > 0 else { return false }
+        let share = Double(purgeableBytes) / Double(totalBytes)
+        return purgeableBytes >= purgeableNoteMinimumBytes || share >= purgeableNoteMinimumShare
     }
 
     // MARK: Categories
@@ -152,31 +183,21 @@ struct OverviewView: View {
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
                 title: "Free",
-                detail: "Available for new files",
+                detail: freeDetail(breakdown),
                 bytes: breakdown.freeBytes,
                 share: breakdown.share(of: breakdown.freeBytes),
-                linkedState: linkedRowState(OverviewDiskBar.freeID)
-            ) {
-                let purgeable = diskStore.purgeableDiskBytes
-                if Self.mentionsPurgeable(purgeableBytes: purgeable, totalBytes: breakdown.totalBytes) {
-                    OverviewPurgeableInfoButton(freeBytes: breakdown.freeBytes, purgeableBytes: purgeable)
-                }
-            }
+                linkedState: linkedRowState(OverviewDiskBar.freeID, OverviewDiskBar.purgeableID)
+            )
         }
         .overviewCard()
     }
 
-    static let purgeableNoteMinimumBytes: Int64 = 20_000_000_000
-    static let purgeableNoteMinimumShare = 0.05
-
-    /// Whether the Free row explains that part of it is space macOS clears on its own.
-    /// Only when there is enough of it to make Purge visibly disagree with Disk
-    /// Utility: 20 GB, or 5% of a small disk. Below that nobody notices the gap, and a
-    /// note on every Mac would explain something almost no one asked about.
-    static func mentionsPurgeable(purgeableBytes: Int64, totalBytes: Int64) -> Bool {
-        guard purgeableBytes > 0, totalBytes > 0 else { return false }
-        let share = Double(purgeableBytes) / Double(totalBytes)
-        return purgeableBytes >= purgeableNoteMinimumBytes || share >= purgeableNoteMinimumShare
+    /// Names the striped part of the bar when it is there. Disk Utility counts it as
+    /// used and calls it purgeable, so the word is kept for people comparing the two.
+    private func freeDetail(_ breakdown: OverviewBreakdown) -> String {
+        let purgeable = shownPurgeableBytes(breakdown)
+        guard purgeable > 0 else { return "Available for new files" }
+        return "Includes about \(formatStorageBytes(purgeable)) macOS can clear on its own (purgeable)"
     }
 
     // MARK: Footnotes
@@ -474,7 +495,7 @@ private struct OverviewIconTile: View {
     }
 }
 
-private struct OverviewPlainRow<TitleAccessory: View>: View {
+private struct OverviewPlainRow: View {
     var symbol: String?
     let color: Color
     let title: String
@@ -482,8 +503,6 @@ private struct OverviewPlainRow<TitleAccessory: View>: View {
     let bytes: Int64
     let share: Double
     let linkedState: OverviewLinkedRowState
-    /// Beside the title, such as an info button.
-    @ViewBuilder var titleAccessory: TitleAccessory
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -491,11 +510,8 @@ private struct OverviewPlainRow<TitleAccessory: View>: View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: symbol, color: color)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(title)
-                        .font(AppStyle.Typography.headline)
-                    titleAccessory
-                }
+                Text(title)
+                    .font(AppStyle.Typography.headline)
                 Text(detail)
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
@@ -516,80 +532,6 @@ private struct OverviewPlainRow<TitleAccessory: View>: View {
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .combine)
-    }
-}
-
-extension OverviewPlainRow where TitleAccessory == EmptyView {
-    init(
-        symbol: String? = nil,
-        color: Color,
-        title: String,
-        detail: String,
-        bytes: Int64,
-        share: Double,
-        linkedState: OverviewLinkedRowState
-    ) {
-        self.init(
-            symbol: symbol,
-            color: color,
-            title: title,
-            detail: detail,
-            bytes: bytes,
-            share: share,
-            linkedState: linkedState,
-            titleAccessory: { EmptyView() }
-        )
-    }
-}
-
-// MARK: - Purgeable space
-
-/// Why Purge's free space is bigger than Disk Utility's. Disk Utility counts what macOS
-/// can clear on its own as used and names it purgeable; Purge, like System Settings,
-/// counts it as free. Only shown when that gap is big enough to notice.
-private struct OverviewPurgeableInfoButton: View {
-    let freeBytes: Int64
-    let purgeableBytes: Int64
-
-    @State private var isShowingInfo = false
-
-    private var emptyBytes: Int64 { max(0, freeBytes - purgeableBytes) }
-
-    var body: some View {
-        Button {
-            isShowingInfo = true
-        } label: {
-            Image(systemName: "info.circle")
-                .font(.system(size: 12))
-                .foregroundStyle(AppColors.textTertiary)
-        }
-        .buttonStyle(.plain)
-        .help("Why is this more than Disk Utility shows?")
-        .accessibilityLabel("About free space")
-        .popover(isPresented: $isShowingInfo, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-                VStack(alignment: .leading, spacing: 4) {
-                    split(formatStorageBytes(emptyBytes), "empty")
-                    split("About \(formatStorageBytes(purgeableBytes))", "macOS clears on its own when you need room")
-                }
-                Text("That second part is things like iCloud copies, caches and local backups. "
-                    + "Purge counts it as free, like System Settings. Disk Utility calls it purgeable "
-                    + "and counts it as used.")
-                    .font(AppStyle.Typography.callout)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(AppStyle.Spacing.medium)
-            .frame(width: 320, alignment: .leading)
-        }
-    }
-
-    private func split(_ amount: String, _ label: String) -> some View {
-        (Text(amount).font(AppStyle.Typography.headline).foregroundColor(AppColors.textPrimary)
-            + Text(" \(label)"))
-            .font(AppStyle.Typography.callout)
-            .foregroundStyle(AppColors.textSecondary)
-            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -937,6 +879,8 @@ struct OverviewDiskBar: View {
         let label: String
         let bytes: Int64
         let color: Color
+        /// Drawn with diagonal stripes over `color`.
+        var isStriped = false
     }
 
     let segments: [Segment]
@@ -947,6 +891,7 @@ struct OverviewDiskBar: View {
 
     static let everythingElseID = "everythingElse"
     static let freeID = "free"
+    static let purgeableID = "purgeable"
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -966,6 +911,12 @@ struct OverviewDiskBar: View {
                 ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
                     Rectangle()
                         .fill(segment.color)
+                        .overlay {
+                            if segment.isStriped {
+                                OverviewStripes().fill(AppColors.Chart.purgeableStripe)
+                            }
+                        }
+                        .clipped()
                         .opacity(highlightedID == nil || highlightedID == segment.id ? 1 : Self.fadedOpacity)
                         .frame(width: layout[index].width)
                         .offset(x: layout[index].x)
@@ -1050,6 +1001,27 @@ struct OverviewDiskBar: View {
             widths[largest] = max(minimumWidth, widths[largest] - overflow)
         }
         return widths
+    }
+}
+
+/// Diagonal stripes across the whole rect, for the striped bar segment.
+nonisolated private struct OverviewStripes: Shape {
+    private static let spacing: CGFloat = 5
+    private static let lineWidth: CGFloat = 2
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        // Start one bar-height to the left so the first stripe's slant reaches the edge.
+        var x = rect.minX - rect.height
+        while x < rect.maxX {
+            path.move(to: CGPoint(x: x, y: rect.maxY))
+            path.addLine(to: CGPoint(x: x + rect.height, y: rect.minY))
+            path.addLine(to: CGPoint(x: x + rect.height + Self.lineWidth, y: rect.minY))
+            path.addLine(to: CGPoint(x: x + Self.lineWidth, y: rect.maxY))
+            path.closeSubpath()
+            x += Self.spacing
+        }
+        return path
     }
 }
 
