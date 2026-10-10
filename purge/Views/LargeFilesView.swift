@@ -1118,6 +1118,10 @@ private struct LargeFileRow: View {
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction(.default, revealInFinder)
 
+                    if file.syncsWithICloud {
+                        LargeFileICloudMark()
+                    }
+
                     Text("·")
                         .foregroundStyle(AppColors.textSecondary)
                     Text("Last used \(dateText)")
@@ -1296,6 +1300,15 @@ struct LargeFileDeletionConfirmSheet: View {
         files.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
+    /// Shown whenever the selection contains a synced file, whether or not the
+    /// all-copies note is also on screen. A note, not a change to the buttons.
+    private var iCloudWarning: String? {
+        LargeFile.iCloudDeletionWarning(
+            syncedCount: files.filter(\.syncsWithICloud).count,
+            totalCount: files.count
+        )
+    }
+
     /// Names the copies in a fully-selected group by, well, their name: the row
     /// label of the first copy, since every copy has identical content and any of
     /// them identifies the thing being lost.
@@ -1338,6 +1351,10 @@ struct LargeFileDeletionConfirmSheet: View {
                 allCopiesWarning
             }
 
+            if let iCloudWarning {
+                LargeFileCautionNote { Text(iCloudWarning) }
+            }
+
             HStack(spacing: AppStyle.Spacing.small) {
                 Text("Freeing \(formatBytes(totalBytes))")
                     .font(AppStyle.Typography.metadataEmphasis)
@@ -1376,11 +1393,17 @@ struct LargeFileDeletionConfirmSheet: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(file.path.deletingLastPathComponent().path)
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 6) {
+                    Text(file.path.deletingLastPathComponent().path)
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    if file.syncsWithICloud {
+                        LargeFileICloudMark()
+                    }
+                }
             }
 
             Spacer(minLength: AppStyle.Spacing.xSmall)
@@ -1420,11 +1443,7 @@ struct LargeFileDeletionConfirmSheet: View {
     /// Deliberately a note, not a blocker: deleting every copy is a legitimate
     /// thing to want. It just shouldn't happen by accident after a Select All.
     private var allCopiesWarning: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(AppColors.statusCheckText)
-                .accessibilityHidden(true)
-
+        LargeFileCautionNote {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(namedConsumedGroups) { group in
                     Text("You're deleting all \(group.copyCount) copies of \(groupLabel(group)). No copy will remain.")
@@ -1435,16 +1454,7 @@ struct LargeFileDeletionConfirmSheet: View {
                     Text("…and \(remainingConsumedGroupCount) more sets where every copy is selected.")
                 }
             }
-            .font(AppStyle.Typography.metadata)
-            .foregroundStyle(AppColors.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                .fill(AppColors.statusCheckFill)
-        )
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -1492,6 +1502,20 @@ struct DuplicateCleanupSheet: View {
         }
     }
 
+    /// Copies this keeper selection will actually trash that also sync with
+    /// iCloud. Keeping the synced copy and trashing only local ones says nothing.
+    /// Reads the keeper state, so changing which copy stays recomputes it.
+    private var iCloudWarning: String? {
+        let trashed = request.sets.flatMap { set in
+            let keeper = keeperID(for: set)
+            return set.copies.filter { $0.id != keeper }
+        }
+        return LargeFile.iCloudDeletionWarning(
+            syncedCount: trashed.filter(\.syncsWithICloud).count,
+            totalCount: trashed.count
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
@@ -1514,6 +1538,10 @@ struct DuplicateCleanupSheet: View {
                 .padding(.vertical, 2)
             }
             .frame(minHeight: 280)
+
+            if let iCloudWarning {
+                LargeFileCautionNote { Text(iCloudWarning) }
+            }
 
             HStack(spacing: AppStyle.Spacing.small) {
                 Text("Keeping \(request.sets.count), freeing \(formatBytes(reclaimedBytes))")
@@ -1589,6 +1617,10 @@ struct DuplicateCleanupSheet: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
 
+            if file.syncsWithICloud {
+                LargeFileICloudMark()
+            }
+
             Spacer(minLength: AppStyle.Spacing.xSmall)
 
             statusTag(isKeeper: isKeeper)
@@ -1598,7 +1630,10 @@ struct DuplicateCleanupSheet: View {
         .contentShape(Rectangle())
         .onTapGesture { keeperByGroup[set.id] = file.id }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(file.path.deletingLastPathComponent().path)
+        .accessibilityLabel(
+            file.path.deletingLastPathComponent().path
+                + (file.syncsWithICloud ? ", syncs with iCloud" : "")
+        )
         .accessibilityValue(isKeeper ? "Keeping" : "Moving to Trash")
         .accessibilityAddTraits(isKeeper ? [.isSelected] : [])
     }
@@ -1615,6 +1650,44 @@ struct DuplicateCleanupSheet: View {
                 Capsule(style: .continuous)
                     .fill(isKeeper ? AppColors.statusSafeFill : AppColors.statusDangerFill)
             )
+    }
+}
+
+/// The cloud on a synced file, in the scan list and on both trash sheets. Gray,
+/// like Finder's: with Desktop & Documents syncing, most rows from those folders
+/// carry it, so it stays quiet.
+fileprivate struct LargeFileICloudMark: View {
+    var body: some View {
+        Image(systemName: "icloud")
+            .font(AppStyle.Typography.metadata)
+            .foregroundStyle(AppColors.textSecondary)
+            .help("Syncs with iCloud. Trashing it also removes it from your other devices.")
+            .accessibilityLabel("Syncs with iCloud")
+    }
+}
+
+/// The caution box on the large-file trash sheets: the all-copies note and the
+/// iCloud note. A warning, not a blocker.
+fileprivate struct LargeFileCautionNote<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(AppColors.statusCheckText)
+                .accessibilityHidden(true)
+
+            content
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                .fill(AppColors.statusCheckFill)
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -104,6 +104,9 @@ nonisolated final class LargeFileScanner {
                         guard values?.isRegularFile == true else { continue }
                         if isUserExcluded { continue }
 
+                        // Zero allocated bytes is a real size, not a missing one. A dataless
+                        // iCloud placeholder reports 0 here and a large logical `fileSize`;
+                        // falling through on 0 would list files that aren't on this Mac.
                         let size = Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
                         guard size >= minBytes else { continue }
 
@@ -131,12 +134,21 @@ nonisolated final class LargeFileScanner {
                         // mid-scan never costs the UI a check per file.
                         if isExcluded(fileURL) { continue }
 
+                        // Asked here, not in `resourceKeys`: inside an iCloud-synced folder
+                        // this key costs about 0.15 ms a file, which made a walk of a
+                        // 36,000-file Documents folder 20x slower when every file paid it.
+                        // Nil means the file is not an iCloud item, as for any local file.
+                        let syncsWithICloud = (try? fileURL.resourceValues(
+                            forKeys: [.isUbiquitousItemKey]
+                        ))?.isUbiquitousItem == true
+
                         continuation.yield(
                             LargeFile(
                                 path: fileURL.standardizedFileURL,
                                 sizeBytes: size,
                                 lastUsed: lastUsed,
-                                category: LargeFileCategory.category(forExtension: fileURL.pathExtension)
+                                category: LargeFileCategory.category(forExtension: fileURL.pathExtension),
+                                syncsWithICloud: syncsWithICloud
                             )
                         )
                     }
