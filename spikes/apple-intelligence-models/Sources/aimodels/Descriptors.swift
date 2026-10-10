@@ -17,6 +17,21 @@ struct DescriptorRecord {
     let raw: Any?
     let unreadable: String?
 
+    /// `isOnFilesystem` from the descriptor, when the record has it.
+    var isOnFilesystem: Bool? { flag("isOnFilesystem") }
+    /// `secureOperationEliminating`: macOS is removing it right now.
+    var isEliminating: Bool? { flag("secureOperationEliminating") }
+    var neverBeenLocked: Bool? { flag("neverBeenLocked") }
+    /// The metadata's `__AssetDefaultGarbageCollectionBehavior`, such as NeverCollected.
+    var collectionBehavior: String? {
+        hints.first { $0.key.hasSuffix("__AssetDefaultGarbageCollectionBehavior") }?.value
+    }
+
+    private func flag(_ name: String) -> Bool? {
+        guard let value = hints.first(where: { $0.key.hasSuffix(name) })?.value else { return nil }
+        return ["1", "true", "YES"].contains(value)
+    }
+
     /// The size the spike counts, and the key it came from.
     var countedSize: (bytes: Int64, key: String)? {
         for preferred in Descriptors.preferredSizeKeys {
@@ -40,19 +55,27 @@ enum FolderState: String {
 struct SetMeasurement {
     let set: ModelSet
     let records: [DescriptorRecord]
+    /// Bytes of the records that are on the filesystem (every record when the
+    /// layout has no such flag). Nil when a record's size could not be read.
     let bytes: Int64?
     let sizeKeys: Set<String>
     let locks: [String]
     let folder: FolderState
+
+    var onDisk: Int { records.filter { $0.isOnFilesystem ?? true }.count }
+    var eliminating: Int { records.filter { $0.isEliminating == true }.count }
 
     var summary: [String: Any] {
         var out: [String: Any] = [
             "assetSet": set.name,
             "assetType": set.assetType,
             "records": records.count,
+            "onDisk": onDisk,
+            "eliminating": eliminating,
             "locks": locks.count,
             "folder": folder.rawValue,
             "sizeKeys": sizeKeys.sorted(),
+            "collectionBehaviors": Array(Set(records.compactMap(\.collectionBehavior))).sorted(),
         ]
         if let bytes { out["bytes"] = bytes }
         return out
@@ -73,8 +96,11 @@ enum Descriptors {
     static let locker = root + "/AutoAssetLocker"
     static let assetsRoot = "/System/Library/AssetsV2"
 
+    /// `downloadedFilesystemBytes` is the descriptor's own on-disk figure (seen
+    /// on macOS 26); the metadata's `_UnarchivedSize` is the catalog's and the
+    /// rest are fallbacks for a layout that has neither.
     static let preferredSizeKeys = [
-        "_UnarchivedSize", "com.apple.UnifiedAssetFramework.UnarchivedSize", "UnarchivedSize",
+        "downloadedFilesystemBytes", "_UnarchivedSize", "com.apple.UnifiedAssetFramework.UnarchivedSize", "UnarchivedSize",
         "_MeasuredSize", "MeasuredSize", "_CompressedSize", "_DownloadSize",
     ]
 
@@ -183,7 +209,7 @@ enum Descriptors {
     }
 
     private static func stateKey(_ lowered: String) -> Bool {
-        ["state", "status", "present", "installed", "purge", "eliminat", "released", "lock"]
+        ["state", "status", "present", "installed", "purge", "eliminat", "released", "lock", "onfilesystem", "collection"]
             .contains { lowered.contains($0) }
     }
 
@@ -205,7 +231,7 @@ enum Descriptors {
                 walk(inner, at: keyPath + "[\(index)]", depth: depth + 1, visit: visit)
             }
         } else if let data = value as? Data, let embedded = embeddedPropertyList(data) {
-            walk(embedded, at: keyPath + "!", depth: depth + 1, visit: visit)
+            walk(KeyedArchive.resolved(embedded) ?? embedded, at: keyPath + "!", depth: depth + 1, visit: visit)
         }
     }
 
@@ -224,7 +250,7 @@ enum Descriptors {
             var out: [String: Any] = [:]
             for (key, inner) in dictionary {
                 if let data = inner as? Data, let embedded = embeddedPropertyList(data) {
-                    out[key + "!"] = dumpable(embedded)
+                    out[key + "!"] = dumpable(KeyedArchive.resolved(embedded) ?? embedded)
                 } else {
                     out[key] = dumpable(inner)
                 }
@@ -250,15 +276,20 @@ enum Descriptors {
             var total: Int64 = 0
             var keys = Set<String>()
             var counted = false
+            var unreadable = false
             for record in records {
+                guard record.isOnFilesystem ?? true else { continue }
                 if let size = record.countedSize {
                     total += size.bytes
                     keys.insert(size.key)
                     counted = true
+                } else {
+                    unreadable = true
                 }
             }
             let locks = reading.lockEntries.filter { $0.contains(set.assetType) }
-            let bytes: Int64? = records.isEmpty ? nil : (counted ? total : nil)
+            // Nil means not known; zero means known empty (records exist, none on disk).
+            let bytes: Int64? = records.isEmpty || unreadable ? nil : (counted ? total : 0)
             return SetMeasurement(set: set, records: records, bytes: bytes, sizeKeys: keys,
                                   locks: locks, folder: folderState(set.assetType))
         }

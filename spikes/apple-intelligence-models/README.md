@@ -38,7 +38,7 @@ swift build -c release
 
 | Step | How | Source |
 |---|---|---|
-| Measure | Sum the per-asset records under `/System/Library/AssetsV2/persisted/AutoAssetDescriptors`, with lock entries from its `AutoAssetLocker` folder. World-readable; no private API. | The issue. The key names are **not documented anywhere**; `measure --dump` exists to learn them. |
+| Measure | Sum `downloadedFilesystemBytes` of the on-filesystem records under `/System/Library/AssetsV2/persisted/AutoAssetDescriptors`, with lock entries from its `AutoAssetLocker` folder. World-readable; no private API. | The issue; the record fields were read on the CI runner (see open questions). |
 | Release (macOS 27) | `ResetAssetSets` over XPC to `com.apple.siri.uaf.subscription.service`, one set per request. `AssetSets` is checked non-empty in the bridge before a connection is even made. | pared, RemoveMacAI |
 | Release (macOS 15, 26) | Open Apple Intelligence & Siri; the user turns it off. | The issue |
 | Free the space now | `CacheDeletePurgeSpaceWithInfo` with `CACHE_DELETE_SERVICES` set to the MobileAsset service. Sent only after a read-only `CacheDeleteCopyPurgeableSpaceWithInfo` with and without the filter shows the filter at work. | Request keys from DeviceLink's `_DLPurgeDiskSpaceOnComputer` (via BrainLayer and pymobiledevice3). The services key is from a Mail cache-delete plist, not from a purge request: **unverified**. |
@@ -94,19 +94,23 @@ and paste the table into the issue.
 
 ## Open questions the spike has to settle
 
-- **Record layout.** Partly answered by the CI runner (macOS 26.6, Apple
-  silicon, no Apple Intelligence sets installed): the records are binary
-  plists named `AutoAssetDescriptors_Entry_<type>_<specifier>_<version>_0.state`,
-  with `SUCorePersistedStatePolicyFields.entryStatus` (`LOADED`) and the
-  descriptor itself as a keyed-archive blob under
-  `SUCorePersistedStatePolicySecureCodedObjectsFields.assetDescriptor`. The
-  `AutoAssetLocker` folder is absent when nothing holds a lock. `measure`
-  takes the identity from the file name, decodes the blob and searches it for
-  the likely size keys (`_UnarchivedSize`, `_MeasuredSize`, `_CompressedSize`,
-  …), falling back to the largest number under any key naming a size, and says
-  which key it used. What the blob holds for an Apple Intelligence set, and
-  whether it has a per-record installed or released flag, still has to be read
-  on a Mac that has the sets: run `measure --dump` there.
+- **Record layout.** Answered by the CI runner (macOS 26.6, Apple silicon,
+  no Apple Intelligence sets installed): the records are binary plists named
+  `AutoAssetDescriptors_Entry_<type>_<specifier>_<version>_0.state`, with
+  `SUCorePersistedStatePolicyFields.entryStatus` (`LOADED`) and the descriptor
+  as a keyed archive under `SUCorePersistedStatePolicySecureCodedObjectsFields.assetDescriptor`.
+  The descriptor's root holds `assetType`, `AssetSpecifier`, `AssetVersion`,
+  `downloadedFilesystemBytes`, `downloadedNetworkBytes`, `isOnFilesystem`,
+  `neverBeenLocked`, `secureOperationEliminating`, `secureOperationInProgress`,
+  `foundAsPreInstalled`, and a `metadata` dictionary with the catalog's
+  `_UnarchivedSize`, `_DownloadSize`, `_Measurement`, `__RequiredByOS` and
+  `__AssetDefaultGarbageCollectionBehavior` (`NeverCollected` on the sample).
+  The `AutoAssetLocker` folder is absent when nothing holds a lock. `measure`
+  resolves the archive, counts `downloadedFilesystemBytes` for records with
+  `isOnFilesystem`, and shows how many records macOS is eliminating. Still to
+  read on a Mac that has the sets: what the Apple Intelligence records look
+  like before and after a release, and whether `isOnFilesystem` flips or the
+  record disappears. Run `measure --dump` there and keep the output.
 - **CacheDelete call shape.** Two call styles are implemented because neither
   is documented: synchronous returning a dictionary, or a reply block. The
   default is `sync`; `check` suggests the other when the first gives no reply.

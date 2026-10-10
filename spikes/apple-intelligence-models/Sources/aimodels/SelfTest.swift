@@ -78,6 +78,13 @@ enum SelfTest {
             check(measured.first { $0.set.name == Catalog.foundation }?.bytes == nil,
                   "a set whose only record is unreadable has an unknown size, not zero")
             check(measured.first { $0.set.name == Catalog.code }?.bytes == nil, "a set with no record is unknown, not zero")
+            let gone = Descriptors.record(from: [
+                "SUCorePersistedStatePolicySecureCodedObjectsFields": [
+                    "assetDescriptor!": ["downloadedFilesystemBytes": 5, "isOnFilesystem": false]] as [String: Any],
+            ] as [String: Any], path: "/x", fileName: "AutoAssetDescriptors_Entry_com.apple.MobileAsset.UAF.FM.CodeLM_a_1_0.state")
+            let goneOnly = Descriptors.measure([Catalog.set(named: Catalog.code)!],
+                                               reading: DescriptorReading(records: [gone], lockEntries: [], errors: []))
+            check(goneOnly.first?.bytes == 0 && goneOnly.first?.onDisk == 0, "a record that is off the filesystem counts as known zero")
         } catch {
             check(false, "descriptor parsing works on fixtures: \(error)")
         }
@@ -100,13 +107,17 @@ enum SelfTest {
             let temp = FileManager.default.temporaryDirectory.appendingPathComponent("aimodels-archive-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: temp) }
-            // The shape of a keyed archive: $objects holds each object's encoded keys.
-            let archive: [String: Any] = [
-                "$version": 100_000, "$archiver": "NSKeyedArchiver", "$top": ["root": 1],
-                "$objects": ["$null", ["_UnarchivedSize": 7_000_000_000, "_CompressedSize": 3, "assetType": "com.apple.MobileAsset.UAF.FM.GenerativeModels", "$class": 2],
-                             ["$classname": "MAAutoAssetDescriptor"]],
+            // A real keyed archive, shaped like the descriptor the macOS 26 runner
+            // showed: flat fields on the root, the catalog metadata as a dictionary.
+            let descriptor: NSDictionary = [
+                "downloadedFilesystemBytes": 7_000_000_000, "downloadedNetworkBytes": 4_000_000_000,
+                "isOnFilesystem": true, "secureOperationEliminating": false, "neverBeenLocked": false,
+                "metadata": ["_UnarchivedSize": 7_000_000_000, "_DownloadSize": 4_000_000_000,
+                             "__AssetDefaultGarbageCollectionBehavior": "NeverCollected"] as NSDictionary,
             ]
-            let blob = try PropertyListSerialization.data(fromPropertyList: archive, format: .binary, options: 0)
+            let blob = try NSKeyedArchiver.archivedData(withRootObject: descriptor, requiringSecureCoding: false)
+            check(KeyedArchive.isArchive(try PropertyListSerialization.propertyList(from: blob, format: nil)),
+                  "an NSKeyedArchiver blob is recognised")
             let wrapper: [String: Any] = [
                 "SUCorePersistedStatePolicyFields": ["entryStatus": "LOADED"],
                 "SUCorePersistedStatePolicySecureCodedObjectsFields": ["assetDescriptor": blob],
@@ -117,8 +128,13 @@ enum SelfTest {
             let parsed = Descriptors.parse(path: file.path, fileName: file.lastPathComponent)
             check(parsed.assetType == "com.apple.MobileAsset.UAF.FM.GenerativeModels" && parsed.assetVersion == "1.2.3",
                   "a wrapped record takes its identity from the file name")
-            check(parsed.countedSize?.bytes == 7_000_000_000 && parsed.countedSize?.key.contains("assetDescriptor!") == true,
-                  "the size inside the archive blob is found and its key path marks the blob")
+            check(parsed.countedSize?.bytes == 7_000_000_000
+                  && parsed.countedSize?.key == "SUCorePersistedStatePolicySecureCodedObjectsFields.assetDescriptor!.downloadedFilesystemBytes",
+                  "the on-disk bytes inside the archive are found by key path")
+            check(parsed.sizes["SUCorePersistedStatePolicySecureCodedObjectsFields.assetDescriptor!.metadata._UnarchivedSize"] == 7_000_000_000,
+                  "the metadata dictionary's UID references are resolved")
+            check(parsed.isOnFilesystem == true && parsed.isEliminating == false && parsed.neverBeenLocked == false
+                  && parsed.collectionBehavior == "NeverCollected", "the descriptor's flags are read")
             check(parsed.hints["SUCorePersistedStatePolicyFields.entryStatus"] == "LOADED", "the entry status is a hint")
             let dumped = parsed.raw.map { Format.json(Descriptors.dumpable($0), pretty: false) } ?? ""
             check(dumped.contains("assetDescriptor!") && dumped.contains("_UnarchivedSize"), "the dump shows the decoded blob")

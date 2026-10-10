@@ -58,15 +58,17 @@ enum Commands {
 
     static func printMeasurements(_ measured: [SetMeasurement], reading: DescriptorReading) {
         Log.line("Models on disk, from \(Descriptors.root)")
-        Log.line("  " + Format.pad("set", 46) + Format.pad("records", 9) + Format.pad("size", 12) + Format.pad("locks", 7) + "folder")
+        Log.line("  " + Format.pad("set", 46) + Format.pad("records", 9) + Format.pad("on disk", 9) + Format.pad("size", 12)
+                 + Format.pad("locks", 7) + Format.pad("folder", 12) + "removing")
         var total: Int64 = 0
         var allKnown = true
         for item in measured {
             if let bytes = item.bytes { total += bytes } else { allKnown = false }
-            Log.line("  " + Format.pad(item.set.name, 46) + Format.pad("\(item.records.count)", 9)
-                     + Format.pad(Format.bytes(item.bytes), 12) + Format.pad("\(item.locks.count)", 7) + item.folder.rawValue)
+            Log.line("  " + Format.pad(item.set.name, 46) + Format.pad("\(item.records.count)", 9) + Format.pad("\(item.onDisk)", 9)
+                     + Format.pad(Format.bytes(item.bytes), 12) + Format.pad("\(item.locks.count)", 7)
+                     + Format.pad(item.folder.rawValue, 12) + "\(item.eliminating)")
         }
-        Log.line("  " + Format.pad("total", 46) + Format.pad("", 9) + (allKnown ? Format.bytes(total) : "unknown (a set has no readable record)"))
+        Log.line("  " + Format.pad("total", 46) + Format.pad("", 18) + (allKnown ? Format.bytes(total) : "unknown (a set has no readable record)"))
         let keys = Set(measured.flatMap { $0.sizeKeys })
         if !keys.isEmpty { Log.line("  size keys used: " + keys.sorted().joined(separator: ", ")) }
         Log.line("  records read: \(reading.records.count), unreadable: \(reading.unreadable.count), lock entries: \(reading.lockEntries.count)")
