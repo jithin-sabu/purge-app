@@ -6,6 +6,8 @@
 
   <p><b>Free up your Mac. Safely.</b></p>
 
+  <p>English | <a href="README.zh-CN.md">简体中文</a></p>
+
   <p>
     Clear out the cache and junk your Mac collects on its own.<br/>
     Open source, trash-by-default.
@@ -40,7 +42,7 @@ Your Mac quietly fills up with cache and junk you never see and never asked for.
 > [!NOTE]
 > Files and folders always move to the Trash, so anything Purge removes can come back. The exceptions are iOS simulators and Time Machine snapshots, which the Trash can't hold.
 
-You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-English explanation and a safety label, so nothing gets touched that you cannot see and verify first.
+You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-language explanation and a safety label, so nothing gets touched that you cannot see and verify first.
 
 ---
 
@@ -57,7 +59,7 @@ You do not need to understand any of it to use it. But if you ever want to check
 
 Scans `~/Library/Caches`, sandbox container caches, and common system junk:
 
-- Per-app cache folders with friendly names, brand icons, and a plain-English explanation if you want to read it
+- Per-app cache folders with friendly names, brand icons, and a plain-language explanation if you want to read it
 - System Junk like application logs, crash reports, macOS installers, font cache
 - Large media caches from creative apps like Premiere Pro and After Effects
 - Duplicate cache locations for the same app merged into a single row

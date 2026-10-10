@@ -43,10 +43,10 @@ extension PurgeStore {
     }
 
     let categories = [
-      OnboardingResultsCategory(title: "App caches", symbol: "internaldrive", bytes: appCacheBytes),
+      OnboardingResultsCategory(title: String(localized: "App caches"), symbol: "internaldrive", bytes: appCacheBytes),
       OnboardingResultsCategory(title: Self.devArtifactCategoryTitle, symbol: "hammer", bytes: devArtifactBytes),
-      OnboardingResultsCategory(title: "Browser caches", symbol: "globe", bytes: browserBytes),
-      OnboardingResultsCategory(title: "System junk", symbol: "doc.text", bytes: systemJunkBytes),
+      OnboardingResultsCategory(title: String(localized: "Browser caches"), symbol: "globe", bytes: browserBytes),
+      OnboardingResultsCategory(title: String(localized: "System junk"), symbol: "doc.text", bytes: systemJunkBytes),
     ]
 
     return categories
@@ -111,11 +111,16 @@ extension PurgeStore {
     "com.operasoftware.Opera",
   ]
 
-  private static let systemJunkAppNames: Set<String> = [
-    "Application Logs",
-    "Crash Reports",
-    "macOS Installer",
-    "Font Cache",
+  /// Matched by definition key and folder, never by row name: names are translated.
+  private static let systemJunkDefinitionKeys: Set<String> = [
+    "applogs",
+    "crashreports",
+    "macos-installer",
+  ]
+
+  /// The font cache has no bundled definition, so it is matched by its folder.
+  private static let systemJunkFolderNames: Set<String> = [
+    "com.apple.ATS",
   ]
 
   private static func isBrowserCacheItem(_ item: CacheItem) -> Bool {
@@ -133,7 +138,10 @@ extension PurgeStore {
   }
 
   private static func isSystemJunkCacheItem(_ item: CacheItem) -> Bool {
-    systemJunkAppNames.contains(item.appName)
+    if let key = item.definitionKey, systemJunkDefinitionKeys.contains(key) {
+      return true
+    }
+    return systemJunkFolderNames.contains(item.bundleID)
   }
 }
 

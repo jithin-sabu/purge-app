@@ -26,7 +26,7 @@ enum ExternalUninstallHandler {
             alert.messageText = refusal.title
             alert.informativeText = refusal.detail
             alert.alertStyle = .informational
-            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: String(localized: "OK"))
             alert.runModal()
         }
     }

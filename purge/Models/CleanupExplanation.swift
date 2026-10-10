@@ -25,13 +25,7 @@ extension SafetyInfo {
         }
 
         if let record = ExplanationDatabase.matchBundledDatabase(folderName: key) {
-            return SafetyInfo(
-                level: record.safetyLevel,
-                headline: record.displayName,
-                explanation: record.explanation,
-                recoverySteps: "",
-                reinstallCommand: reinstallCommand
-            )
+            return ExplanationDatabase.safetyInfo(from: record, reinstallCommand: reinstallCommand)
         }
         let unknown = ExplanationDatabase.safetyInfoForUnknownBundledLookup(friendlyFallback: fallback)
         return SafetyInfo(

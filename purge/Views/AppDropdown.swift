@@ -103,7 +103,7 @@ private struct AppDropdownRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 6) {
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)

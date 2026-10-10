@@ -82,7 +82,7 @@ struct DeletionConfirmSheet: View {
             }
             .frame(minHeight: 260)
 
-            footer(primaryTitle: "Move \(candidates.count) to Trash")
+            footer(primaryTitle: String(localized: "Move \(candidates.count) to Trash"))
         }
     }
 
@@ -106,7 +106,7 @@ struct DeletionConfirmSheet: View {
                     }
 
                     if !benignCandidates.isEmpty {
-                        sectionHeader("Also in this cleanup")
+                        sectionHeader(String(localized: "Also in this cleanup"))
                         ForEach(benignCandidates) { item in
                             candidateCard(item)
                         }
@@ -116,7 +116,7 @@ struct DeletionConfirmSheet: View {
             }
             .frame(minHeight: 260)
 
-            footer(primaryTitle: "Continue")
+            footer(primaryTitle: String(localized: "Continue"))
         }
     }
 
@@ -204,7 +204,7 @@ struct DeletionConfirmSheet: View {
             }
 
             if showsExplanation, !item.safetyInfo.explanation.isEmpty {
-                Text(item.safetyInfo.explanation)
+                Text(LocalizedStringKey(item.safetyInfo.explanation))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -242,7 +242,7 @@ struct DeletionConfirmSheet: View {
             fg = AppColors.statusDangerText
             bg = AppColors.statusDangerFill
         }
-        return Text(text)
+        return Text(LocalizedStringKey(text))
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(fg)
             .padding(.horizontal, AppStyle.Spacing.xSmall)

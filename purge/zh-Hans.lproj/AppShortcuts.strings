@@ -1,0 +1,22 @@
+/* Siri and Spotlight phrases for the App Shortcuts in PurgeAppShortcuts.swift. */
+"Scan for junk with ${applicationName}" = "使用 ${applicationName} 扫描垃圾文件";
+"Find junk with ${applicationName}" = "使用 ${applicationName} 查找垃圾文件";
+"Free up space with ${applicationName}" = "使用 ${applicationName} 释放空间";
+"Clean up my Mac with ${applicationName}" = "使用 ${applicationName} 清理我的 Mac";
+"How much can ${applicationName} free" = "${applicationName} 能释放多少空间";
+"How much space can ${applicationName} free up" = "${applicationName} 能腾出多少空间";
+"Check my storage with ${applicationName}" = "使用 ${applicationName} 检查我的存储空间";
+"Scan my Mac with ${applicationName}" = "使用 ${applicationName} 扫描我的 Mac";
+"${applicationName} scan" = "${applicationName} 扫描";
+"Clean junk with ${applicationName}" = "使用 ${applicationName} 清理垃圾文件";
+"Clean safe junk with ${applicationName}" = "使用 ${applicationName} 清理安全垃圾文件";
+"Clear junk with ${applicationName}" = "使用 ${applicationName} 清除垃圾文件";
+"Clear caches with ${applicationName}" = "使用 ${applicationName} 清除缓存";
+"Delete junk with ${applicationName}" = "使用 ${applicationName} 删除垃圾文件";
+"${applicationName} clean" = "${applicationName} 清理";
+"Uninstall ${app} with ${applicationName}" = "使用 ${applicationName} 卸载 ${app}";
+"Remove ${app} with ${applicationName}" = "使用 ${applicationName} 移除 ${app}";
+"Uninstall an app with ${applicationName}" = "使用 ${applicationName} 卸载应用";
+"Remove an app with ${applicationName}" = "使用 ${applicationName} 移除应用";
+"Delete an app with ${applicationName}" = "使用 ${applicationName} 删除应用";
+"Get rid of an app with ${applicationName}" = "使用 ${applicationName} 清除应用";

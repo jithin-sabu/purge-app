@@ -3,6 +3,9 @@ import Foundation
 struct OnboardingSizeComparisonItem: Identifiable, Equatable {
   let symbol: String
   let label: String
+  var localizedLabel: String? = nil
+
+  var displayLabel: String { localizedLabel ?? NSLocalizedString(label, comment: "Storage size comparison") }
 
   var id: String { symbol + label }
 }

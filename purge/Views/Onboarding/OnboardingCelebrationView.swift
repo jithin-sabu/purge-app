@@ -51,7 +51,7 @@ struct OnboardingCelebrationView: View {
             .multilineTextAlignment(.center)
         }
 
-        OnboardingPrimaryButton(title: "Continue", action: onContinue)
+        OnboardingPrimaryButton(title: String(localized: "Continue"), action: onContinue)
       }
       .frame(maxWidth: OnboardingLayout.contentMaxWidth)
     }
@@ -70,8 +70,8 @@ struct OnboardingCelebrationView: View {
 
   private var spaceContextLine: String {
     guard let item = SizeComparisonCatalog.item(for: bytesMovedToTrash) else {
-      return "Your Mac has a little more breathing room."
+      return String(localized: "Your Mac has a little more breathing room.")
     }
-    return "That's room for \(item.label)."
+    return String(localized: "That's room for \(item.displayLabel).")
   }
 }

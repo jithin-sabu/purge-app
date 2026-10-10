@@ -196,7 +196,7 @@ struct ScanResultRow: View {
         var entries: [ScanRowMenuEntry] = []
 
         if let onExcludeFromScans {
-            entries.append(.action(title: "Exclude from scans", handler: onExcludeFromScans))
+            entries.append(.action(title: String(localized: "Exclude from scans"), handler: onExcludeFromScans))
         }
 
         let finderEntries = FinderReveal.menuEntries(for: revealLocations?() ?? [])
@@ -290,7 +290,7 @@ struct ScanResultRow: View {
                 .font(AppStyle.Typography.headline)
                 .lineLimit(1)
 
-            Text(safetyInfo.explanation)
+            Text(LocalizedStringKey(safetyInfo.explanation))
                 .lineLimit(explanationLineLimit)
                 .truncationMode(.tail)
                 .font(AppStyle.Typography.metadata)
@@ -402,15 +402,15 @@ struct ScanResultRow: View {
         if let reinstallSafety {
             switch reinstallSafety {
             case .reinstallable:
-                AppBadge(text: "Can be rebuilt", tone: .safe)
+                AppBadge(text: String(localized: "Can be rebuilt"), tone: .safe)
             case .missingLockfile:
-                AppBadge(text: "Check support files", tone: .warning)
+                AppBadge(text: String(localized: "Check support files"), tone: .warning)
             case .notApplicable:
                 EmptyView()
             }
         }
         if showUncommittedRepoChanges {
-            AppBadge(text: "Local changes nearby", tone: .warning)
+            AppBadge(text: String(localized: "Local changes nearby"), tone: .warning)
         }
     }
 
@@ -420,12 +420,12 @@ struct ScanResultRow: View {
             Button {
                 onResetToAutomatic()
             } label: {
-                AppBadge(text: "Manual category", tone: .accent)
+                AppBadge(text: String(localized: "Manual category"), tone: .accent)
             }
             .buttonStyle(.plain)
             .help("Reset to automatic")
         } else {
-            AppBadge(text: "Manual category", tone: .accent)
+            AppBadge(text: String(localized: "Manual category"), tone: .accent)
         }
     }
 }
@@ -474,7 +474,7 @@ struct ScanRowAccessibilityActions: ViewModifier {
 
         func body(content: Content) -> some View {
             if let handler {
-                content.accessibilityAction(named: Text(name), handler)
+                content.accessibilityAction(named: Text(LocalizedStringKey(name)), handler)
             } else {
                 content
             }
@@ -589,7 +589,7 @@ struct ScanRowContextMenu: NSViewRepresentable {
                     let target = ScanRowMenuActionTarget(handler: handler)
                     actionTargets.append(target)
                     let item = NSMenuItem(
-                        title: title,
+                        title: NSLocalizedString(title, comment: "Scan row menu item"),
                         action: #selector(ScanRowMenuActionTarget.fire),
                         keyEquivalent: ""
                     )
@@ -597,8 +597,8 @@ struct ScanRowContextMenu: NSViewRepresentable {
                     menu.addItem(item)
 
                 case .submenu(let title, let subEntries):
-                    let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-                    let subMenu = NSMenu(title: title)
+                    let item = NSMenuItem(title: NSLocalizedString(title, comment: "Scan row menu item"), action: nil, keyEquivalent: "")
+                    let subMenu = NSMenu(title: NSLocalizedString(title, comment: "Scan row submenu"))
                     subMenu.autoenablesItems = false
                     populate(subMenu, with: subEntries)
                     item.submenu = subMenu

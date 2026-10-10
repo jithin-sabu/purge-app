@@ -40,7 +40,7 @@ struct SafeFirstSelectAll<Key: Hashable> {
     }
 
     var title: String {
-        isSafeFirst && state != .all ? "Select All Safe" : "Select All"
+        isSafeFirst && state != .all ? String(localized: "Select All Safe") : String(localized: "Select All")
     }
 
     /// Off when a click could do nothing: an empty list, or a list with only Check
@@ -74,10 +74,10 @@ struct SafeFirstSelectAll<Key: Hashable> {
         let rows = unselectedCheckFirst
         guard !rows.isEmpty else { return nil }
         let bytes = rows.reduce(Int64(0)) { $0 + $1.bytes }
-        let noun = rows.count == 1 ? "item" : "items"
-        let verb = safeEntries.isEmpty ? "Select" : "Also select"
+        let noun = rows.count == 1 ? String(localized: "item") : String(localized: "items")
+        let verb = safeEntries.isEmpty ? String(localized: "Select") : String(localized: "Also select")
         return (
-            "\(verb) \(rows.count) Check First \(noun) (\(formatBytes(bytes)))",
+            String(localized: "\(verb) \(rows.count) Check First \(noun) (\(formatBytes(bytes)))"),
             Change(select: rows.map(\.key))
         )
     }

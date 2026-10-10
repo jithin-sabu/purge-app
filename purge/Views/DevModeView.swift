@@ -164,7 +164,7 @@ struct DevToolsView<PageHeader: View>: View {
             return ix.sorted { devToolModified(tools[$0]) < devToolModified(tools[$1]) }
         case .nameAZ:
             return ix.sorted {
-                tools[$0].toolName.localizedCaseInsensitiveCompare(tools[$1].toolName) == .orderedAscending
+                tools[$0].safetyInfo.headline.localizedCaseInsensitiveCompare(tools[$1].safetyInfo.headline) == .orderedAscending
             }
         }
     }
@@ -250,7 +250,7 @@ struct DevToolsView<PageHeader: View>: View {
 
         func entryName(_ e: MergedDevStandardRow) -> String {
             switch e {
-            case .tool(_, let i): return store.devTools[i].toolName
+            case .tool(_, let i): return store.devTools[i].safetyInfo.headline
             }
         }
 
@@ -623,11 +623,11 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var subtitleItemLabel: String {
-        subtitleItemCount == 1 ? "item" : "items"
+        subtitleItemCount == 1 ? String(localized: "item") : String(localized: "items")
     }
 
     private var pageSubtitle: String {
-        return "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable"
+        return String(localized: "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable")
     }
 
     var body: some View {
@@ -644,7 +644,7 @@ struct DevToolsView<PageHeader: View>: View {
     private var standardBody: some View {
         VStack(spacing: 0) {
             if showsPageHeader {
-                AppSectionPageHeader(title: "Dev Tools", subtitle: pageSubtitle) {
+                AppSectionPageHeader(title: String(localized: "Dev Tools"), subtitle: pageSubtitle) {
                     AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
                 }
             }
@@ -752,7 +752,7 @@ struct DevToolsView<PageHeader: View>: View {
         VStack(spacing: 8) {
             Text("No dev tool folders surfaced yet.")
                 .font(AppStyle.Typography.headline)
-            Text(scanPhase == .completed ? "Your Mac is looking clean. Check back later." : "Run a scan after adding projects or tool-generated folders.")
+            Text(scanPhase == .completed ? LocalizedStringKey("Your Mac is looking clean. Check back later.") : LocalizedStringKey("Run a scan after adding projects or tool-generated folders."))
                 .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -917,7 +917,7 @@ struct DevToolsView<PageHeader: View>: View {
                                     formattedSize: runtime.formattedSize,
                                     safetyInfo: runtime.safetyInfo,
                                     brandIcon: .sfSymbol("internaldrive"),
-                                    detailCaption: "Build \(runtime.build)",
+                                    detailCaption: String(localized: "Build \(runtime.build)"),
                                     reinstallSafety: .notApplicable,
                                     showUncommittedRepoChanges: false,
                                     onResetToAutomatic: nil,
@@ -1091,7 +1091,7 @@ struct DevToolsView<PageHeader: View>: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isExpanded ? "Collapse project" : "Expand project")
+                .accessibilityLabel(isExpanded ? LocalizedStringKey("Collapse project") : LocalizedStringKey("Expand project"))
             }
             .padding(.vertical, 2)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
@@ -1101,7 +1101,7 @@ struct DevToolsView<PageHeader: View>: View {
             .overlay {
                 ScanRowContextMenu(isMenuActive: .constant(false)) {
                     [
-                        .action(title: "Exclude project from scans") {
+                        .action(title: String(localized: "Exclude project from scans")) {
                             store.excludeProjectGroupFromScans(groupID: group.id)
                         },
                         .separator,
@@ -1226,11 +1226,11 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private func projectGroupIconAccessibilityLabel(for group: ProjectGroup) -> String {
-        let types = group.inferredTypes.map(\.displayName).joined(separator: ", ")
+        let types = group.inferredTypes.map(\.displayName).joined(separator: String(localized: ", "))
         if types.isEmpty {
-            return "Project"
+            return String(localized: "Project")
         }
-        return "Project, \(types)"
+        return String(localized: "Project, \(types)")
     }
 }
 

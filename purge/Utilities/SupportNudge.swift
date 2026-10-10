@@ -91,26 +91,26 @@ enum SupportNudge {
 
     static func lines(for facts: CleanFacts) -> [Line] {
         var lines = [
-            Line(id: "free", prefix: "Purge is free. ", linkText: "Buy me a coffee"),
-            Line(id: "noAds", prefix: "No ads, no subscription. ", linkText: "Buy me a coffee"),
+            Line(id: "free", prefix: String(localized: "Purge is free. "), linkText: String(localized: "Buy me a coffee")),
+            Line(id: "noAds", prefix: String(localized: "No ads, no subscription. "), linkText: String(localized: "Buy me a coffee")),
         ]
         if facts.itemCount >= 2 {
             lines.append(Line(
                 id: "items",
-                prefix: "\(facts.itemCount.formatted()) items cleaned up, on the house. ",
-                linkText: "Buy me a coffee"
+                prefix: String(localized: "\(facts.itemCount.formatted()) items cleaned up, on the house. "),
+                linkText: String(localized: "Buy me a coffee")
             ))
         }
         // Only once there is history beyond this clean, or it just repeats the big number.
         if facts.lifetimeBytes > facts.bytes {
             lines.append(Line(
                 id: "lifetime",
-                prefix: "\(formatBytesRoundedDown(facts.lifetimeBytes)) cleaned up with Purge so far. ",
-                linkText: "Buy me a coffee"
+                prefix: String(localized: "\(formatBytesRoundedDown(facts.lifetimeBytes)) cleaned up with Purge so far. "),
+                linkText: String(localized: "Buy me a coffee")
             ))
         }
         if facts.bytes >= bigCleanBytes {
-            lines.append(Line(id: "big", prefix: "That was a big one. If it helped, ", linkText: "buy me a coffee"))
+            lines.append(Line(id: "big", prefix: String(localized: "That was a big one. If it helped, "), linkText: String(localized: "buy me a coffee")))
         }
         return lines
     }

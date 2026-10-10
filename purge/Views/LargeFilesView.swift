@@ -179,7 +179,7 @@ struct LargeFilesView: View {
     private var standardBody: some View {
         VStack(spacing: 0) {
             if showsPageHeader {
-                AppSectionPageHeader(title: "Large Files", subtitle: pageSubtitle) {
+                AppSectionPageHeader(title: String(localized: "Large Files"), subtitle: pageSubtitle) {
                     headerActions
                 }
             }
@@ -234,7 +234,7 @@ struct LargeFilesView: View {
                     // active instead of advertising rows the query already hid.
                     categoryChip(
                         id: LargeFileCategoryFilter.all,
-                        title: "All",
+                        title: String(localized: "All"),
                         systemImage: "square.grid.2x2",
                         count: searchMatches.count
                     )
@@ -245,7 +245,7 @@ struct LargeFilesView: View {
                     if !duplicateIndex.isEmpty {
                         categoryChip(
                             id: Self.duplicatesFilterID,
-                            title: "Duplicates",
+                            title: String(localized: "Duplicates"),
                             systemImage: "square.on.square",
                             // The count of *removable* copies — one keeper per
                             // group excluded — so it answers "what here is
@@ -559,8 +559,8 @@ struct LargeFilesView: View {
     private var pageSubtitle: String {
         let count = visibleFiles.count
         let bytes = visibleFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let itemLabel = count == 1 ? "file" : "files"
-        return "\(count) \(itemLabel) · \(formatBytes(bytes)) to review"
+        let itemLabel = count == 1 ? String(localized: "file") : String(localized: "files")
+        return String(localized: "\(count) \(itemLabel) · \(formatBytes(bytes)) to review")
     }
 
 }
@@ -603,8 +603,8 @@ private struct LargeFileDeleteButton: View {
             store.presentLargeFileDeletionSheet()
         } label: {
             AnimatedDeleteActionLabel(
-                inactiveTitle: "Delete Selected",
-                activeTitle: "Delete Selected",
+                inactiveTitle: String(localized: "Delete Selected"),
+                activeTitle: String(localized: "Delete Selected"),
                 selectedCount: store.selectedLargeFileCount,
                 selectedBytes: store.selectedLargeFileBytes
             )
@@ -669,7 +669,7 @@ private struct LargeFileSelectAllBar: View {
 
     var body: some View {
         HStack(alignment: .bottom) {
-            TriStateCheckbox(title: "Select All", state: state) {
+            TriStateCheckbox(title: String(localized: "Select All"), state: state) {
                 onToggleAll()
             }
             .fixedSize()
@@ -963,9 +963,9 @@ private struct LargeFileRow: View {
 
     /// Built on right-click, not during `body` — see `ScanRowContextMenu.entries`.
     private func contextMenuEntries() -> [ScanRowMenuEntry] {
-        var entries: [ScanRowMenuEntry] = [.action(title: "Exclude from scans", handler: onExclude)]
+        var entries: [ScanRowMenuEntry] = [.action(title: String(localized: "Exclude from scans"), handler: onExclude)]
         if canExcludeFolder {
-            entries.append(.action(title: "Exclude folder \u{201C}\(folderName)\u{201D} from scans", handler: onExcludeFolder))
+            entries.append(.action(title: String(localized: "Exclude folder \u{201C}\(folderName)\u{201D} from scans"), handler: onExcludeFolder))
         }
         entries.append(.separator)
         entries.append(contentsOf: FinderReveal.menuEntries(for: [ScanRowLocation(url: fileURL)]))
@@ -1129,8 +1129,8 @@ private struct LargeFileRow: View {
                         .layoutPriority(-1)
 
                     if let otherCopyCount {
-                        let noun = otherCopyCount == 1 ? "copy" : "copies"
-                        AppBadge(text: "\(otherCopyCount) other \(noun)", tone: .warning)
+                        let noun = otherCopyCount == 1 ? String(localized: "copy") : String(localized: "copies")
+                        AppBadge(text: String(localized: "\(otherCopyCount) other \(noun)"), tone: .warning)
                             .fixedSize()
                             .help("\(otherCopyCount + 1) files in this scan have identical contents, including this one.")
                             .accessibilityLabel("\(otherCopyCount) other identical \(noun) found")
@@ -1263,7 +1263,7 @@ struct LargeFilesHeaderActions: View {
 
     private var scanTitle: String {
         if isQueued { return ScanQueueLabels.queued }
-        return store.isScanningLargeFiles ? "Scanning..." : "Scan"
+        return store.isScanningLargeFiles ? "Scanning..." : String(localized: "Scan")
     }
 
     var body: some View {
@@ -1315,7 +1315,7 @@ struct LargeFileDeletionConfirmSheet: View {
     private func groupLabel(_ group: DuplicateGroup) -> String {
         guard let fileID = group.fileIDs.first,
               let file = files.first(where: { $0.id == fileID }) else {
-            return "these files"
+            return String(localized: "these files")
         }
         return file.displayName
     }
@@ -1571,7 +1571,7 @@ struct DuplicateCleanupSheet: View {
     private func setCard(_ set: DuplicateCopySet) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: AppStyle.Spacing.xSmall) {
-                Text(set.copies.first?.displayName ?? "Duplicate set")
+                Text(set.copies.first?.displayName ?? String(localized: "Duplicate set"))
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
@@ -1632,7 +1632,7 @@ struct DuplicateCleanupSheet: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             file.path.deletingLastPathComponent().path
-                + (file.syncsWithICloud ? ", syncs with iCloud" : "")
+                + (file.syncsWithICloud ? String(localized: ", syncs with iCloud") : "")
         )
         .accessibilityValue(isKeeper ? "Keeping" : "Moving to Trash")
         .accessibilityAddTraits(isKeeper ? [.isSelected] : [])
@@ -1641,7 +1641,7 @@ struct DuplicateCleanupSheet: View {
     /// Reuses the app's tag palette: green for the copy that stays, red for the
     /// ones headed to Trash, so the plan reads at a glance.
     private func statusTag(isKeeper: Bool) -> some View {
-        Text(isKeeper ? "Keep" : "Trash")
+        Text(isKeeper ? LocalizedStringKey("Keep") : LocalizedStringKey("Trash"))
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(isKeeper ? AppColors.statusSafeText : AppColors.statusDangerText)
             .padding(.horizontal, AppStyle.Spacing.xSmall)

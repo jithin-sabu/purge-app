@@ -16,9 +16,9 @@ enum AppearanceMode: String, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .system: return "Auto"
-        case .light: return "Light"
-        case .dark: return "Dark"
+        case .system: return String(localized: "Auto")
+        case .light: return String(localized: "Light")
+        case .dark: return String(localized: "Dark")
         }
     }
 

@@ -644,16 +644,16 @@ nonisolated enum WatcherHealth: Equatable, Sendable {
         }
     }
 
-    static let problemTitle = "Deleted-app reviews paused"
+    static let problemTitle = String(localized: "Deleted-app reviews paused")
 
     var problemMessage: String? {
         switch self {
         case .needsApproval:
-            return "macOS is stopping Purge from running in the background. In System Settings, open Login Items and switch Purge on."
+            return String(localized: "macOS is stopping Purge from running in the background. In System Settings, open Login Items and switch Purge on.")
         case .notRunning:
-            return "Purge's background watcher isn't running, so deleted apps go unnoticed."
+            return String(localized: "Purge's background watcher isn't running, so deleted apps go unnoticed.")
         case .failedToStart:
-            return "Purge couldn't start its background watcher, so deleted apps go unnoticed."
+            return String(localized: "Purge couldn't start its background watcher, so deleted apps go unnoticed.")
         case .off, .checking, .running:
             return nil
         }
@@ -662,18 +662,18 @@ nonisolated enum WatcherHealth: Equatable, Sendable {
     /// The same problem in a line, for the sidebar notice.
     var shortMessage: String? {
         switch self {
-        case .needsApproval: return "macOS is blocking Purge's background watcher, so deleted apps go unnoticed."
-        case .notRunning: return "The background watcher isn't running, so deleted apps go unnoticed."
-        case .failedToStart: return "The background watcher couldn't start, so deleted apps go unnoticed."
+        case .needsApproval: return String(localized: "macOS is blocking Purge's background watcher, so deleted apps go unnoticed.")
+        case .notRunning: return String(localized: "The background watcher isn't running, so deleted apps go unnoticed.")
+        case .failedToStart: return String(localized: "The background watcher couldn't start, so deleted apps go unnoticed.")
         case .off, .checking, .running: return nil
         }
     }
 
     var fixTitle: String? {
         switch self {
-        case .needsApproval: return "Open System Settings"
-        case .notRunning: return "Restart Watcher"
-        case .failedToStart: return "Try Again"
+        case .needsApproval: return String(localized: "Open System Settings")
+        case .notRunning: return String(localized: "Restart Watcher")
+        case .failedToStart: return String(localized: "Try Again")
         case .off, .checking, .running: return nil
         }
     }

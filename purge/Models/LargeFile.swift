@@ -15,14 +15,14 @@ nonisolated enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable
 
     var displayName: String {
         switch self {
-        case .video: return "Videos"
-        case .audio: return "Audio"
-        case .image: return "Images"
-        case .pdf: return "PDFs"
-        case .archive: return "Archives"
-        case .document: return "Documents"
-        case .aiModel: return "AI Models"
-        case .other: return "Other"
+        case .video: return String(localized: "Videos")
+        case .audio: return String(localized: "Audio")
+        case .image: return String(localized: "Images")
+        case .pdf: return String(localized: "PDFs")
+        case .archive: return String(localized: "Archives")
+        case .document: return String(localized: "Documents")
+        case .aiModel: return String(localized: "AI Models")
+        case .other: return String(localized: "Other")
         }
     }
 
@@ -165,18 +165,17 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// when none do. iCloud items still go to the Trash, so they can be put back.
     static func iCloudDeletionWarning(syncedCount: Int, totalCount: Int) -> String? {
         guard syncedCount >= 1 else { return nil }
-        let one = "so it also disappears from your other devices. You can restore it from the Trash."
-        let many = "so they also disappear from your other devices. You can restore them from the Trash."
+        // Whole sentences, not a shared tail, so each one translates as a unit.
         if totalCount == 1 {
-            return "The file you're trashing syncs with iCloud, \(one)"
+            return String(localized: "The file you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash.")
         }
         if syncedCount >= totalCount {
-            return "All \(totalCount) files you're trashing sync with iCloud, \(many)"
+            return String(localized: "All \(totalCount) files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash.")
         }
         if syncedCount == 1 {
-            return "1 of the files you're trashing syncs with iCloud, \(one)"
+            return String(localized: "1 of the files you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash.")
         }
-        return "\(syncedCount) of the files you're trashing sync with iCloud, \(many)"
+        return String(localized: "\(syncedCount) of the files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash.")
     }
 
     var displayName: String { displayNameOverride ?? path.lastPathComponent }
@@ -314,17 +313,17 @@ enum LargeFileSizeThreshold: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .mb5: return "5 MB"
-        case .mb50: return "50 MB"
-        case .mb100: return "100 MB"
-        case .mb250: return "250 MB"
-        case .mb500: return "500 MB"
-        case .gb1: return "1 GB"
+        case .mb5: return String(localized: "5 MB")
+        case .mb50: return String(localized: "50 MB")
+        case .mb100: return String(localized: "100 MB")
+        case .mb250: return String(localized: "250 MB")
+        case .mb500: return String(localized: "500 MB")
+        case .gb1: return String(localized: "1 GB")
         }
     }
 
     var menuButtonLabel: String {
-        "Larger than \(label)"
+        String(localized: "Larger than \(label)")
     }
 
     static func current(userDefaults: UserDefaults = .standard) -> LargeFileSizeThreshold {
@@ -347,16 +346,16 @@ enum LargeFileAgeThreshold: Int, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .anyTime: return "Any time"
-        case .oneMonth: return "Over 1 month ago"
-        case .months3: return "Over 3 months ago"
-        case .months6: return "Over 6 months ago"
-        case .year1: return "Over 1 year ago"
+        case .anyTime: return String(localized: "Any time")
+        case .oneMonth: return String(localized: "Over 1 month ago")
+        case .months3: return String(localized: "Over 3 months ago")
+        case .months6: return String(localized: "Over 6 months ago")
+        case .year1: return String(localized: "Over 1 year ago")
         }
     }
 
     var menuButtonLabel: String {
-        "Last used: \(label)"
+        String(localized: "Last used: \(label)")
     }
 
     static func current(userDefaults: UserDefaults = .standard) -> LargeFileAgeThreshold {

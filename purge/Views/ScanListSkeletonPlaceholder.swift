@@ -146,7 +146,7 @@ struct CleaningOverlay: View {
             VStack(spacing: 10) {
                 ProgressView()
                     .controlSize(.regular)
-                Text(message)
+                Text(LocalizedStringKey(message))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
             }

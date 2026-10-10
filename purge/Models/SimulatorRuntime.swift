@@ -181,18 +181,21 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         isLegacyImage: Bool,
         now: Date = Date()
     ) -> SafetyInfo {
-        let headline = "\(platformName) \(version) Runtime"
+        let headline = String(localized: "\(platformName) \(version) Runtime")
         // Not a trash move: the only way back is Apple's download.
-        var cost = "Xcode downloads it again (\(formatBytes(sizeBytes))) if a simulator needs it."
+        var cost = String(localized: "Xcode downloads it again (\(formatBytes(sizeBytes))) if a simulator needs it.")
         if isLegacyImage {
-            cost += " Older image format, so macOS may keep its original download."
+            cost = String(localized: "\(cost) Older image format, so macOS may keep its original download.")
         }
 
+        // Each explanation is one localized sentence with the cost at the end, the
+        // same shape as the simulator device rows, so translations can drop the
+        // space English puts between sentences.
         func info(_ level: SafetyLevel, _ explanation: String) -> SafetyInfo {
             SafetyInfo(
                 level: level,
                 headline: headline,
-                explanation: "\(explanation) \(cost)",
+                explanation: explanation,
                 recoverySteps: "",
                 reinstallCommand: nil
             )
@@ -202,36 +205,41 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         // Anything else that is not `Ready` is in flight (staging, mounting,
         // unmounting) and is not offered as Safe on usage alone.
         if state == "Unusable" {
-            return info(.safe, "Xcode can no longer use this runtime.")
+            return info(.safe, String(localized: "Xcode can no longer use this runtime. \(cost)"))
         }
         if !state.isEmpty, state != "Ready" {
-            return info(.medium, "Xcode lists it as \(state.lowercased()).")
+            return info(.medium, String(localized: "Xcode lists it as \(state.lowercased()). \(cost)"))
         }
         guard let isXcodeDefault else {
-            return info(.medium, "Could not check whether Xcode uses it for new simulators.")
+            return info(.medium, String(localized: "Could not check whether Xcode uses it for new simulators. \(cost)"))
         }
         if isXcodeDefault {
-            return info(.medium, "Xcode creates new simulators on this runtime.")
+            return info(.medium, String(localized: "Xcode creates new simulators on this runtime. \(cost)"))
         }
         guard let deviceCount else {
-            return info(.medium, "Could not check which simulators use it.")
+            return info(.medium, String(localized: "Could not check which simulators use it. \(cost)"))
         }
-        if deviceCount > 0 {
-            let noun = deviceCount == 1 ? "simulator uses" : "simulators use"
-            return info(.medium, "\(deviceCount) \(noun) it.")
+        if deviceCount == 1 {
+            return info(.medium, String(localized: "1 simulator uses it. \(cost)"))
+        }
+        if deviceCount > 1 {
+            return info(.medium, String(localized: "\(deviceCount) simulators use it. \(cost)"))
         }
 
         let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? .distantPast
         guard let lastUsedAt else {
-            return info(.safe, "No simulator uses it. Last use unknown.")
+            return info(.safe, String(localized: "No simulator uses it. Last use unknown. \(cost)"))
         }
         if lastUsedAt >= thirtyDaysAgo {
-            return info(.medium, "No simulator uses it, but it was used in the last month.")
+            return info(.medium, String(localized: "No simulator uses it, but it was used in the last month. \(cost)"))
         }
         let monthsAgo = Calendar.current.dateComponents([.month], from: lastUsedAt, to: now).month ?? 0
         if monthsAgo < 1 {
-            return info(.safe, "No simulator uses it. Last used over a month ago.")
+            return info(.safe, String(localized: "No simulator uses it. Last used over a month ago. \(cost)"))
         }
-        return info(.safe, "No simulator uses it. Last used \(monthsAgo) month\(monthsAgo == 1 ? "" : "s") ago.")
+        if monthsAgo == 1 {
+            return info(.safe, String(localized: "No simulator uses it. Last used 1 month ago. \(cost)"))
+        }
+        return info(.safe, String(localized: "No simulator uses it. Last used \(monthsAgo) months ago. \(cost)"))
     }
 }

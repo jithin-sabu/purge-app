@@ -63,7 +63,7 @@ nonisolated enum ProjectType: String, Hashable, Sendable, CaseIterable {
         case .python: return "Python"
         case .androidGradle: return "Android"
         case .elixir: return "Elixir"
-        case .swiftPackage: return "Swift Package"
+        case .swiftPackage: return String(localized: "Swift Package")
         case .maven: return "Maven"
         case .gradleJVM: return "Gradle"
         case .sbt: return "sbt"
@@ -184,7 +184,7 @@ nonisolated enum DeletableArtifactKind: String, Hashable, Sendable, CaseIterable
     }
 
     nonisolated var rowTag: String {
-        Self.metadata[self]?.rowTag ?? rawValue
+        NSLocalizedString(Self.metadata[self]?.rowTag ?? rawValue, comment: "Developer artifact label")
     }
 }
 

@@ -23,9 +23,23 @@ struct CustomCleaningIntervalTests {
 
     @Test("Interval phrase singular and plural")
     func intervalPhrase() {
-        #expect(CustomCleaningIntervalUnit.day.phrase(amount: 1) == "day")
-        #expect(CustomCleaningIntervalUnit.week.phrase(amount: 2) == "2 weeks")
-        #expect(CustomCleaningIntervalUnit.month.phrase(amount: 3) == "3 months")
+        #expect(CustomCleaningIntervalUnit.day.everyPhrase(amount: 1) == "Every day")
+        #expect(CustomCleaningIntervalUnit.week.everyPhrase(amount: 2) == "Every 2 weeks")
+        #expect(CustomCleaningIntervalUnit.month.everyPhrase(amount: 3) == "Every 3 months")
+    }
+
+    /// The test host runs in English, so this reads the zh-Hans table directly.
+    /// Beta 1 built the phrase as 每 plus the unit and showed 每 月 (#110).
+    @Test("Chinese interval phrases read as one word")
+    func chineseIntervalPhrase() throws {
+        let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
+        let zh = try #require(Bundle(path: path))
+        func text(_ key: String) -> String { zh.localizedString(forKey: key, value: nil, table: nil) }
+
+        #expect(text("Every day") == "每天")
+        #expect(text("Every week") == "每周")
+        #expect(text("Every month") == "每月")
+        #expect(String(format: text("Every %lld %@"), 2, text("Weeks")) == "每 2 周")
     }
 
     @Test("Preset intervals are unchanged", arguments: [

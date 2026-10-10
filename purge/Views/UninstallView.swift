@@ -18,19 +18,19 @@ enum AppSortOption: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .largest: return "Size (largest first)"
-        case .smallest: return "Size (smallest first)"
-        case .nameAZ: return "Name (A to Z)"
-        case .recentlyUsed: return "Recently used"
+        case .largest: return String(localized: "Size (largest first)")
+        case .smallest: return String(localized: "Size (smallest first)")
+        case .nameAZ: return String(localized: "Name (A to Z)")
+        case .recentlyUsed: return String(localized: "Recently used")
         }
     }
 
     var shortDisplayName: String {
         switch self {
-        case .largest: return "Largest"
-        case .smallest: return "Smallest"
-        case .nameAZ: return "Name"
-        case .recentlyUsed: return "Used"
+        case .largest: return String(localized: "Largest")
+        case .smallest: return String(localized: "Smallest")
+        case .nameAZ: return String(localized: "Name")
+        case .recentlyUsed: return String(localized: "Used")
         }
     }
 
@@ -47,8 +47,8 @@ enum AppSortOption: String, CaseIterable, Identifiable {
     func activityLabel(for app: InstalledApp, now: Date) -> String? {
         switch self {
         case .recentlyUsed:
-            guard let opened = app.lastOpened else { return "Not opened" }
-            return "Opened \(Self.lowercasedLead(relativeDateText(for: opened, referenceDate: now)))"
+            guard let opened = app.lastOpened else { return String(localized: "Not opened") }
+            return String(localized: "Opened \(Self.lowercasedLead(relativeDateText(for: opened, referenceDate: now)))")
         case .largest, .smallest, .nameAZ:
             return nil
         }
@@ -92,8 +92,8 @@ private enum UninstallAppViewMode: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .list: return "List"
-        case .grid: return "Grid"
+        case .list: return String(localized: "List")
+        case .grid: return String(localized: "Grid")
         }
     }
 
@@ -263,7 +263,7 @@ struct UninstallView: View {
 
     private var leftoversToolbar: some View {
         HStack(alignment: .bottom) {
-            TriStateCheckbox(title: "Select All", state: leftoversSelectAllState) {
+            TriStateCheckbox(title: String(localized: "Select All"), state: leftoversSelectAllState) {
                 let ids = store.orphanLeftovers.map(\.id)
                 store.setAllOrphansSelected(leftoversSelectAllState != .all, ids: ids)
             }
@@ -425,8 +425,8 @@ struct UninstallView: View {
         if store.installedApps.isEmpty && !store.isScanningInstalledApps {
             emptyState(
                 symbol: "app.badge",
-                title: "No apps found",
-                detail: "Purge looks in Applications and your home Applications folder."
+                title: String(localized: "No apps found"),
+                detail: String(localized: "Purge looks in Applications and your home Applications folder.")
             )
         } else {
             // Crossfade the skeleton into the real collection instead of swapping view
@@ -447,8 +447,8 @@ struct UninstallView: View {
         } else if filteredApps.isEmpty {
             emptyState(
                 symbol: "magnifyingglass",
-                title: "Nothing matches",
-                detail: "No installed app matches \"\(appSearchQuery)\"."
+                title: String(localized: "Nothing matches"),
+                detail: String(localized: "No installed app matches \"\(appSearchQuery)\".")
             )
         } else {
             switch viewMode {
@@ -623,9 +623,9 @@ struct UninstallView: View {
             Image(systemName: symbol)
                 .font(.system(size: 38))
                 .foregroundStyle(AppColors.textSecondary)
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(AppStyle.Typography.sectionTitle.weight(.regular))
-            Text(detail)
+            Text(LocalizedStringKey(detail))
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -723,7 +723,7 @@ private struct UninstallItemRow: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.safetyInfo.headline)
+                Text(LocalizedStringKey(item.safetyInfo.headline))
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
@@ -862,9 +862,9 @@ private struct AppListRow: View {
         .help(app.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
+            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
         )
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityValue(isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)
         .finderRevealMenu(isMenuActive: $isContextMenuActive) {
@@ -992,9 +992,9 @@ private struct AppTile: View {
         .help(activityLabel.map { "\(app.name), \($0)" } ?? app.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(app.name), \(isSizePending ? "calculating size" : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
+            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
         )
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityValue(isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, onToggle)
         .finderRevealMenu(isMenuActive: $isContextMenuActive) {
@@ -1107,14 +1107,14 @@ struct UninstallHeaderActions: View {
             Group {
                 if store.isBuildingUninstallPlan {
                     CleaningButtonLabel(
-                        title: "Preparing...",
+                        title: String(localized: "Preparing..."),
                         systemImage: nil,
                         isCleaning: true
                     )
                 } else {
                     AnimatedDeleteActionLabel(
-                        inactiveTitle: "Uninstall",
-                        activeTitle: "Uninstall",
+                        inactiveTitle: String(localized: "Uninstall"),
+                        activeTitle: String(localized: "Uninstall"),
                         selectedCount: store.selectedApps.count,
                         selectedBytes: nil
                     )
@@ -1131,8 +1131,8 @@ struct UninstallHeaderActions: View {
             store.requestOrphanCleanup()
         } label: {
             AnimatedDeleteActionLabel(
-                inactiveTitle: "Remove",
-                activeTitle: "Remove",
+                inactiveTitle: String(localized: "Remove"),
+                activeTitle: String(localized: "Remove"),
                 selectedCount: store.selectedOrphanCount,
                 selectedBytes: store.selectedOrphanBytes
             )
@@ -1196,8 +1196,8 @@ struct UninstallReviewSheet: View {
 
     private var titleText: String {
         let count = plan.apps.count
-        if count == 1 { return "Uninstall \(plan.apps[0].app.name)?" }
-        return "Uninstall \(count) apps?"
+        if count == 1 { return String(localized: "Uninstall \(plan.apps[0].app.name)?") }
+        return String(localized: "Uninstall \(count) apps?")
     }
 
     private func appSection(_ appPlan: Binding<UninstallAppPlan>) -> some View {

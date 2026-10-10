@@ -76,7 +76,7 @@ struct CustomCleaningIntervalSheet: View {
                     selection: $unit,
                     options: CustomCleaningIntervalUnit.allCases,
                     optionLabel: { $0.displayName },
-                    accessibilityTitle: "Unit"
+                    accessibilityTitle: String(localized: "Unit")
                 )
 
                 Spacer()
@@ -100,7 +100,7 @@ struct CustomCleaningIntervalSheet: View {
 
     private var footer: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            Text("Every \(intervalPhrase)")
+            Text(intervalPhrase)
                 .font(AppStyle.Typography.metadataEmphasis)
                 .foregroundStyle(AppColors.textSecondary)
 
@@ -122,7 +122,7 @@ struct CustomCleaningIntervalSheet: View {
     }
 
     private var intervalPhrase: String {
-        guard let amount = parsedAmount else { return "…" }
-        return unit.phrase(amount: amount)
+        guard let amount = parsedAmount else { return String(localized: "Every …") }
+        return unit.everyPhrase(amount: amount)
     }
 }

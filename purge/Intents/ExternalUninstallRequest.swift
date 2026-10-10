@@ -32,28 +32,28 @@ nonisolated enum ExternalUninstallRequest {
                 return nil
             case .noApp:
                 return (
-                    "Choose an app to uninstall",
-                    "Purge uninstalls apps. Select an app in Finder and try again."
+                    String(localized: "Choose an app to uninstall"),
+                    String(localized: "Purge uninstalls apps. Select an app in Finder and try again.")
                 )
             case .severalApps:
                 return (
-                    "Choose one app",
-                    "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller."
+                    String(localized: "Choose one app"),
+                    String(localized: "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller.")
                 )
             case .outsideApplications(let name):
                 return (
-                    "\(name) is outside the Applications folder",
-                    "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move \(name) there first, or drag it to the Trash yourself."
+                    String(localized: "\(name) is outside the Applications folder"),
+                    String(localized: "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move \(name) there first, or drag it to the Trash yourself.")
                 )
             case .appleApp(let name):
                 return (
-                    "\(name) is part of macOS",
-                    "Purge never removes Apple's built-in apps."
+                    String(localized: "\(name) is part of macOS"),
+                    String(localized: "Purge never removes Apple's built-in apps.")
                 )
             case .purgeItself:
                 return (
-                    "Purge cannot uninstall itself",
-                    "To remove Purge, drag it from the Applications folder to the Trash."
+                    String(localized: "Purge cannot uninstall itself"),
+                    String(localized: "To remove Purge, drag it from the Applications folder to the Trash.")
                 )
             }
         }
