@@ -1118,13 +1118,8 @@ private struct LargeFileRow: View {
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction(.default, revealInFinder)
 
-                    // Gray, like Finder's cloud: with Desktop & Documents syncing,
-                    // most rows from those folders carry it, so it stays quiet.
                     if file.syncsWithICloud {
-                        Image(systemName: "icloud")
-                            .foregroundStyle(AppColors.textSecondary)
-                            .help("Syncs with iCloud. Trashing it also removes it from your other devices.")
-                            .accessibilityLabel("Syncs with iCloud")
+                        LargeFileICloudMark()
                     }
 
                     Text("·")
@@ -1398,11 +1393,17 @@ struct LargeFileDeletionConfirmSheet: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(file.path.deletingLastPathComponent().path)
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 6) {
+                    Text(file.path.deletingLastPathComponent().path)
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    if file.syncsWithICloud {
+                        LargeFileICloudMark()
+                    }
+                }
             }
 
             Spacer(minLength: AppStyle.Spacing.xSmall)
@@ -1616,6 +1617,10 @@ struct DuplicateCleanupSheet: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
 
+            if file.syncsWithICloud {
+                LargeFileICloudMark()
+            }
+
             Spacer(minLength: AppStyle.Spacing.xSmall)
 
             statusTag(isKeeper: isKeeper)
@@ -1625,7 +1630,10 @@ struct DuplicateCleanupSheet: View {
         .contentShape(Rectangle())
         .onTapGesture { keeperByGroup[set.id] = file.id }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(file.path.deletingLastPathComponent().path)
+        .accessibilityLabel(
+            file.path.deletingLastPathComponent().path
+                + (file.syncsWithICloud ? ", syncs with iCloud" : "")
+        )
         .accessibilityValue(isKeeper ? "Keeping" : "Moving to Trash")
         .accessibilityAddTraits(isKeeper ? [.isSelected] : [])
     }
@@ -1642,6 +1650,19 @@ struct DuplicateCleanupSheet: View {
                 Capsule(style: .continuous)
                     .fill(isKeeper ? AppColors.statusSafeFill : AppColors.statusDangerFill)
             )
+    }
+}
+
+/// The cloud on a synced file, in the scan list and on both trash sheets. Gray,
+/// like Finder's: with Desktop & Documents syncing, most rows from those folders
+/// carry it, so it stays quiet.
+fileprivate struct LargeFileICloudMark: View {
+    var body: some View {
+        Image(systemName: "icloud")
+            .font(AppStyle.Typography.metadata)
+            .foregroundStyle(AppColors.textSecondary)
+            .help("Syncs with iCloud. Trashing it also removes it from your other devices.")
+            .accessibilityLabel("Syncs with iCloud")
     }
 }
 
