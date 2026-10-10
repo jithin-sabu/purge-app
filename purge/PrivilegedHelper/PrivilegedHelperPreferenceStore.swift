@@ -15,9 +15,13 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
     /// Set when a registration attempt could neither enable nor reach approval, so the
     /// UI can offer a clear retry action.
     @Published private(set) var lastRegistrationFailed = false
+    /// Enabled in System Settings but not answering, even after a reload. Mirrors
+    /// `PrivilegedHelperManager.isUnresponsive`, updated each time Purge checks it.
+    @Published private(set) var isUnresponsive = false
 
     private init() {
         status = PrivilegedHelperManager.shared.status
+        manager.$isUnresponsive.assign(to: &$isUnresponsive)
     }
 
     var isEnabled: Bool { status == .enabled }

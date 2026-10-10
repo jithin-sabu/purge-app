@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import ServiceManagement
 
@@ -9,8 +10,14 @@ import ServiceManagement
 /// System Settings and the user enables it there. Once enabled, uninstalls of
 /// locked apps can use the helper without another password prompt.
 @MainActor
-final class PrivilegedHelperManager {
+final class PrivilegedHelperManager: ObservableObject {
     static let shared = PrivilegedHelperManager()
+
+    /// `true` when macOS reports the helper as enabled but it still did not answer
+    /// after Purge reloaded it. Seen after an app update, when launchd keeps a job that
+    /// points at the replaced bundle and fails every launch. The uninstall screen uses
+    /// this to stop claiming "Secure removal is on" when it plainly is not working.
+    @Published private(set) var isUnresponsive = false
 
     // A fresh handle every read. A cached `SMAppService.daemon` reports the status it
     // saw at creation, so after the user flips the switch in System Settings a stored
@@ -97,7 +104,8 @@ final class PrivilegedHelperManager {
         // newly-approved copy is replaced before it receives the current protocol.
         // A definite, un-fixable version mismatch reports "not ready" rather than
         // letting a stale helper serve the request, so we never silently run an old
-        // binary: the caller then offers one-time setup instead.
+        // binary. So does a helper that stays silent after a reload: a move sent to it
+        // would wait out the full `moveTimeout` with the cleaning screen frozen.
         let ready = await reconcileVersion()
         guard ready, !urls.isEmpty else { return nil }
         let connection = vettedConnection()
@@ -166,47 +174,87 @@ final class PrivilegedHelperManager {
         }
     }
 
-    /// If an enabled helper reports a version other than the one this app ships, an
-    /// older copy survived an app update — re-register to install the current binary.
-    /// A definite mismatch replaces the old registration. A missing answer refreshes
-    /// the existing approved registration without removing it or asking again.
     /// Returns `true` when an enabled helper at the current version is ready to serve
-    /// a request. A definite version mismatch that survives re-registration returns
-    /// `false`, so the caller treats the helper as not set up rather than trusting a
-    /// stale binary to behave like the current one.
+    /// a request. Anything else reports "not ready", so the caller offers setup or
+    /// Finder instead of sending a request nobody will answer. See
+    /// `HelperReconciler.reconcile` for the steps.
     @discardableResult
     func reconcileVersion() async -> Bool {
-        guard service.status == .enabled else { return false }
-        guard let installed = await installedHelperVersion() else {
-            // SMAppService can report `.enabled` even though launchd no longer has the
-            // job, most often after replacing Purge.app with a newer build. Registering
-            // again reloads the already-approved daemon without removing the user's
-            // permission or sending them back to System Settings. A flaky version query
-            // is also possible, so let the request proceed — the move has its own
-            // timeout and error handling for a genuinely dead helper.
+        let outcome = await HelperReconciler.reconcile(
+            isEnabled: service.status == .enabled,
+            expectedVersion: PurgeHelperConstants.version,
+            probe: { await self.installedHelperVersion() },
+            reload: { self.register() },
+            reinstall: {
+                if await self.unregister() == false {
+                    // Re-registering on top of a registration that would not go away can
+                    // leave the old binary in place. The reconciler checks the version
+                    // again afterwards rather than assuming the update took.
+                    NSLog("Purge: could not remove the stale helper before reinstalling")
+                }
+                self.register()
+            }
+        )
+        isUnresponsive = outcome == .unresponsive
+        return outcome == .ready
+    }
+}
+
+/// What checking the installed helper found.
+enum HelperReconcileOutcome: Equatable {
+    /// The user has not turned the helper on.
+    case notEnabled
+    /// The helper answered with the version this app ships.
+    case ready
+    /// The helper did not answer, even after a reload.
+    case unresponsive
+    /// The helper answered with an old version that reinstalling did not replace.
+    case staleVersion
+}
+
+enum HelperReconciler {
+    /// Checks an enabled helper before Purge sends it real work.
+    ///
+    /// 1. Ask for its version.
+    /// 2. No answer: register again, which reloads an approved helper whose launch job
+    ///    macOS dropped, then ask once more. Still no answer means the helper is not
+    ///    usable right now. A move request would sit unanswered until its five-minute
+    ///    timeout, so report `.unresponsive` instead of letting it through.
+    /// 3. An old version: reinstall, then confirm the new version answers.
+    ///
+    /// The closures keep this free of XPC and `SMAppService`, so tests can drive it.
+    static func reconcile(
+        isEnabled: Bool,
+        expectedVersion: String,
+        probe: () async -> String?,
+        reload: () -> Void,
+        reinstall: () async -> Void
+    ) async -> HelperReconcileOutcome {
+        guard isEnabled else { return .notEnabled }
+
+        var installed = await probe()
+        if installed == nil {
             NSLog("Purge: enabled helper is unreachable — reloading registration")
-            register()
-            return true
+            reload()
+            installed = await probe()
         }
-        guard installed != PurgeHelperConstants.version else { return true }
-
-        NSLog("Purge: stale helper %@ (want %@) — re-registering", installed, PurgeHelperConstants.version)
-        if await unregister() == false {
-            // Removing the old registration failed. Re-registering on top of it can
-            // leave the old binary in place, so confirm the version afterwards rather
-            // than assuming the update took.
-            NSLog("Purge: could not remove stale helper %@ before reinstalling", installed)
+        guard let installed else {
+            NSLog("Purge: helper still unreachable after reload, not sending the move")
+            return .unresponsive
         }
-        register()
+        guard installed != expectedVersion else { return .ready }
 
-        let afterUpdate = await installedHelperVersion()
-        if afterUpdate == PurgeHelperConstants.version { return true }
+        NSLog("Purge: stale helper %@ (want %@) — re-registering", installed, expectedVersion)
+        await reinstall()
+
+        let afterUpdate = await probe()
+        if afterUpdate == expectedVersion { return .ready }
         NSLog(
             "Purge: helper update did not take (installed %@, want %@) — offering setup instead of using the old helper",
             afterUpdate ?? "unreachable",
-            PurgeHelperConstants.version
+            expectedVersion
         )
-        return false
+        return afterUpdate == nil ? .unresponsive : .staleVersion
     }
 }
 

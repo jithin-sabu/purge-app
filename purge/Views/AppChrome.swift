@@ -828,6 +828,7 @@ struct SafeCleanupCelebrationOverlay: View {
         NeedsAdministratorPanel(
             items: administratorFailures,
             isHelperEnabled: helperPrefs.isEnabled,
+            isHelperUnresponsive: helperPrefs.isUnresponsive,
             needsApproval: helperPrefs.needsApproval,
             isWorking: !retryingFailureIDs.isDisjoint(with: Set(administratorFailures.map(\.id))),
             onPrimaryAction: handleAdministratorAction,
@@ -1295,6 +1296,9 @@ private struct CleanFailureDisclosure: View {
 private struct NeedsAdministratorPanel: View {
     let items: [CleanFailureItem]
     let isHelperEnabled: Bool
+    /// Enabled but silent after a reload, typically until the Mac restarts. Saying
+    /// "Secure removal is on" here would be false, so the panel says what is wrong.
+    let isHelperUnresponsive: Bool
     let needsApproval: Bool
     let isWorking: Bool
     let onPrimaryAction: () -> Void
@@ -1334,6 +1338,7 @@ private struct NeedsAdministratorPanel: View {
         // than "Set up," which reads as if setup hasn't started.
         if needsApproval { return String(localized: "Open System Settings") }
         if !isHelperEnabled { return String(localized: "Set up secure removal") }
+        if isHelperUnresponsive { return String(localized: "Try Again") }
         return isSingle ? String(localized: "Remove \(items[0].displayName)") : String(localized: "Remove \(items.count) apps")
     }
 
@@ -1405,7 +1410,13 @@ private struct NeedsAdministratorPanel: View {
 
     @ViewBuilder
     private var statusLine: some View {
-        if isHelperEnabled {
+        if isHelperEnabled && isHelperUnresponsive {
+            Text("Purge's secure removal helper isn't responding. Restart your Mac, then try again.")
+                .font(AppStyle.Typography.body)
+                .foregroundStyle(AppColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if isHelperEnabled {
             Label("Secure removal is on", systemImage: "checkmark.seal.fill")
                 .font(AppStyle.Typography.rowTitle)
                 .foregroundStyle(AppColors.statusSafeText)
