@@ -6,7 +6,9 @@ DerivedData/
 xcuserdata/
 *.vsix
 *.profraw
-.claude/
+# Local Claude Code state; the shared skills folder is committed
+.claude/*
+!.claude/skills/
 release.sh
 
 # Export / packaging artifacts
