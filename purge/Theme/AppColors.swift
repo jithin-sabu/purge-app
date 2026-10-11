@@ -111,15 +111,16 @@ enum AppColors {
 
     // MARK: - Apple Intelligence
 
-    /// The sweep behind Apple's Apple Intelligence mark, top-left to
-    /// bottom-right: orange, pink, purple, blue, with the white loop on top.
-    /// Only for that tile on the Overview row; the same in both themes, since
-    /// it is Apple's mark rather than a token of ours.
+    /// The four corners of the tile behind Apple's Apple Intelligence mark,
+    /// blended from each corner inwards: orange top-left, pink top-right, sky
+    /// blue bottom-left, lilac bottom-right, with the white loop on top. Only
+    /// for that tile on the Overview row; the same in both themes, since it is
+    /// Apple's mark rather than a token of ours.
     static let appleIntelligenceTile: [Color] = [
-        Color(light: 0xF5A623, dark: 0xF5A623),
-        Color(light: 0xF04E8C, dark: 0xF04E8C),
-        Color(light: 0xB06BE0, dark: 0xB06BE0),
-        Color(light: 0x4FA3F5, dark: 0x4FA3F5),
+        Color(light: 0xF9A23F, dark: 0xF9A23F),
+        Color(light: 0xF0508F, dark: 0xF0508F),
+        Color(light: 0x5DB4F6, dark: 0x5DB4F6),
+        Color(light: 0xC78CF0, dark: 0xC78CF0),
     ]
 
     // MARK: - AppKit

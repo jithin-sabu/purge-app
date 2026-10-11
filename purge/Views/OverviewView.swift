@@ -428,8 +428,9 @@ private struct OverviewCategoryRow: View {
 /// A System Settings style tile: the category color with a soft top-to-bottom
 /// gradient, a hairline rim, and a white filled glyph. Leave `symbol` out for an
 /// empty tile, which is how free space is drawn. `tileGradient` paints the tile
-/// with a diagonal sweep of colours instead of one colour, for Apple's own
-/// `apple.intelligence` mark, whose white loop sits on an orange-to-blue tile.
+/// from its four corners (top-left, top-right, bottom-left, bottom-right)
+/// instead of one colour, for Apple's own `apple.intelligence` mark, whose
+/// white loop sits on an orange, pink, blue and lilac tile.
 struct OverviewIconTile: View {
     var symbol: String?
     let color: Color
@@ -438,9 +439,30 @@ struct OverviewIconTile: View {
     static let size: CGFloat = 28
     private static let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
 
-    private var tileFill: AnyShapeStyle {
-        guard let tileGradient else { return AnyShapeStyle(color) }
-        return AnyShapeStyle(LinearGradient(colors: tileGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+    /// The flat colour with the usual top-light, bottom-dark shading, or the
+    /// corner blend with none: shading would mute the corners.
+    @ViewBuilder
+    private var tileBackground: some View {
+        if let tileGradient, tileGradient.count == 4 {
+            ZStack {
+                Self.shape.fill(tileGradient[1])
+                cornerGlow(tileGradient[0], at: .topLeading)
+                cornerGlow(tileGradient[2], at: .bottomLeading)
+                cornerGlow(tileGradient[3], at: .bottomTrailing)
+            }
+        } else {
+            Self.shape
+                .fill(color)
+                // Lighter at the top, a touch darker at the bottom.
+                .overlay(Self.shape.fill(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0)], startPoint: .top, endPoint: .bottom)))
+                .overlay(Self.shape.fill(LinearGradient(colors: [.black.opacity(0), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom)))
+        }
+    }
+
+    private func cornerGlow(_ tint: Color, at corner: UnitPoint) -> some View {
+        Self.shape.fill(RadialGradient(
+            colors: [tint, tint.opacity(0)], center: corner, startRadius: 0, endRadius: Self.size * 0.95
+        ))
     }
 
     var body: some View {
@@ -451,13 +473,7 @@ struct OverviewIconTile: View {
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.18), radius: 0.5, y: 0.5)
                     .frame(width: Self.size, height: Self.size)
-                    .background {
-                        Self.shape
-                            .fill(tileFill)
-                            // Lighter at the top, a touch darker at the bottom.
-                            .overlay(Self.shape.fill(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0)], startPoint: .top, endPoint: .bottom)))
-                            .overlay(Self.shape.fill(LinearGradient(colors: [.black.opacity(0), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom)))
-                    }
+                    .background { tileBackground }
                     .overlay {
                         Self.shape.strokeBorder(
                             LinearGradient(colors: [.white.opacity(0.35), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom),
