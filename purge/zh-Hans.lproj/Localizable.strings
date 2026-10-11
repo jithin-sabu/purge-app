@@ -960,3 +960,11 @@
 "Hidden in System Data" = "藏在“系统数据”中";
 "Removed: Settings shows %@ more, %@ freed on the disk" = "已移除：“系统设置”多显示 %@ 可用，磁盘实际腾出 %@";
 "Removed, %@ freed on the disk that macOS already counted as available" = "已移除，磁盘腾出 %@，但 macOS 原本已将其计为可用";
+"Install the Purge profile" = "安装 Purge 描述文件";
+"Remove the Purge profile" = "移除 Purge 描述文件";
+"In System Settings, double-click \"Purge: Apple Intelligence models removed\" under Downloaded." = "在“系统设置”中，双击“已下载”下的“Purge: Apple Intelligence models removed”。";
+"Click Install…, then Install again when macOS asks." = "点按“安装…”，当 macOS 询问时再次点按“安装”。";
+"Enter your password if it asks for one." = "如果要求输入密码，请输入。";
+"In System Settings, select \"Purge: Apple Intelligence models removed\"." = "在“系统设置”中，选择“Purge: Apple Intelligence models removed”。";
+"Click the minus button below the list, then Remove." = "点按列表下方的减号按钮，然后点按“移除”。";
+"Purge carries on by itself once that's done." = "完成后 Purge 会自动继续。";

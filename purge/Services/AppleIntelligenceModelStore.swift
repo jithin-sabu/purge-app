@@ -96,6 +96,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     func cancelWaiting() {
         waitCancelled = true
+        SettingsGuidePanel.shared.hide()
     }
 
     // MARK: Remove
@@ -138,10 +139,12 @@ final class AppleIntelligenceModelStore: ObservableObject {
             phase = .waitingForProfileInstall
             try? await Task.sleep(for: .seconds(1))
             openProfilesPane()
+            SettingsGuidePanel.shared.show(.installProfile) { [weak self] in self?.cancelWaiting() }
             let installed = await waitUntil {
                 let now = AppleIntelligenceDownloadBlock.installedBlocks()
                 return blockTypes.allSatisfy { now.contains($0) }
             }
+            SettingsGuidePanel.shared.hide()
             installedBlocks = AppleIntelligenceDownloadBlock.installedBlocks()
             guard installed else {
                 phase = .idle
@@ -218,7 +221,9 @@ final class AppleIntelligenceModelStore: ObservableObject {
         if isProfileInstalled {
             phase = .waitingForProfileRemoval
             openProfilesPane()
+            SettingsGuidePanel.shared.show(.removeProfile) { [weak self] in self?.cancelWaiting() }
             let removed = await waitUntil { AppleIntelligenceDownloadBlock.installedBlocks().isEmpty }
+            SettingsGuidePanel.shared.hide()
             installedBlocks = AppleIntelligenceDownloadBlock.installedBlocks()
             guard removed else {
                 phase = .idle
