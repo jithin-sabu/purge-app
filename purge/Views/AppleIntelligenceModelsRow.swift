@@ -154,8 +154,14 @@ struct OverviewAppleIntelligenceRow: View {
         }
         switch store.lastOutcome {
         case .removed(_, let shown, let raw):
+            // Two honest figures: what System Settings now shows as more available,
+            // and what the disk itself gave back. They differ because macOS already
+            // counted part of the models as available (purgeable) before.
+            if let shown, let raw, raw > shown {
+                return String(localized: "Removed: Settings shows \(formatBytes(shown)) more, \(formatBytes(raw)) freed on the disk")
+            }
             if let shown { return String(localized: "Removed, freed \(formatBytes(shown))") }
-            if let raw { return String(localized: "Removed, \(formatBytes(raw)) that macOS already counted as available") }
+            if let raw { return String(localized: "Removed, \(formatBytes(raw)) freed on the disk that macOS already counted as available") }
             return String(localized: "Removed")
         case .someLeft(let removed, let left, let reason):
             return String(localized: "Removed \(removed), but \(left) stayed: \(reason)")

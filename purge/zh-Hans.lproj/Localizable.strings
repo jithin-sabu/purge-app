@@ -958,3 +958,5 @@
 "Unknown" = "未知";
 "%@ by Apple's count; the disk gains less" = "Apple 计为 %@；磁盘实际腾出的会更少";
 "Hidden in System Data" = "藏在“系统数据”中";
+"Removed: Settings shows %@ more, %@ freed on the disk" = "已移除：“系统设置”多显示 %@ 可用，磁盘实际腾出 %@";
+"Removed, %@ freed on the disk that macOS already counted as available" = "已移除，磁盘腾出 %@，但 macOS 原本已将其计为可用";
