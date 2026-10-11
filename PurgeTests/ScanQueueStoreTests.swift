@@ -353,8 +353,12 @@ struct ScanQueueStoreTests {
             && !store.isScanningProjects
     }
 
+    /// Waits for the store to settle. The deadline only stops a hang: other suites
+    /// (folder sizing, ProcessRunner) fill the cooperative thread pool on purpose
+    /// for several seconds at a time, and a 5-second wait ran out on a 3-core CI
+    /// runner while the scan steps here were starved of a thread.
     private func eventually(
-        timeout: TimeInterval = 5,
+        timeout: TimeInterval = 30,
         _ condition: () -> Bool
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)

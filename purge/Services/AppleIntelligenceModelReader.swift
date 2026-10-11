@@ -230,6 +230,14 @@ nonisolated enum AppleIntelligenceDownloadBlock {
     static let blockedURL = "https://127.0.0.1:9/purge-blocked/"
     static let managedPreferences = "/Library/Managed Preferences/com.apple.MobileAsset.plist"
 
+    /// The types a new profile has to block: the ones already in force plus the
+    /// ones being removed now. The profile keeps one identifier and UUID, so
+    /// installing it replaces the earlier one; a profile that named only the
+    /// sets removed today would silently free the ones removed last time.
+    static func typesToBlock(installed: [String], adding: [String]) -> [String] {
+        Array(Set(installed).union(adding)).sorted()
+    }
+
     static func profileData(blocking types: [String]) throws -> Data {
         var settings: [String: Any] = [:]
         for type in types { settings[keyPrefix + type] = blockedURL }

@@ -145,7 +145,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
         }
 
         // 1. The block first, so nothing comes back between release and the reading.
-        let blockTypes = targets.map(\.assetType)
+        // The profile replaces any earlier one of Purge's, so it carries every
+        // block already installed as well as today's sets.
+        let blockTypes = AppleIntelligenceDownloadBlock.typesToBlock(
+            installed: installedBlocks, adding: targets.map(\.assetType))
         if !blockTypes.allSatisfy({ installedBlocks.contains($0) }) {
             do {
                 let url = AppleIntelligenceDownloadBlock.profileFileURL

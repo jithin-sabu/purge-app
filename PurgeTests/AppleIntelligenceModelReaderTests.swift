@@ -121,6 +121,19 @@ struct AppleIntelligenceDownloadBlockTests {
         #expect(UUID(uuidString: AppleIntelligenceDownloadBlock.stableUUID("io.getpurge")) != nil)
     }
 
+    @Test func aNewProfileKeepsTheBlocksAlreadyInForce() {
+        // Sets removed earlier stay blocked when a later removal rewrites the profile.
+        let kept = AppleIntelligenceDownloadBlock.typesToBlock(
+            installed: ["com.apple.MobileAsset.UAF.FM.Visual", "com.apple.MobileAsset.UAF.FM.GenerativeModels"],
+            adding: ["com.apple.MobileAsset.UAF.Siri.Understanding", "com.apple.MobileAsset.UAF.FM.Visual"])
+        #expect(kept == [
+            "com.apple.MobileAsset.UAF.FM.GenerativeModels",
+            "com.apple.MobileAsset.UAF.FM.Visual",
+            "com.apple.MobileAsset.UAF.Siri.Understanding",
+        ])
+        #expect(AppleIntelligenceDownloadBlock.typesToBlock(installed: [], adding: ["a"]) == ["a"])
+    }
+
     /// Only keys with Purge's URL count; another profile's redirect is not Purge's.
     @Test func installedBlocksComeFromTheManagedPreferences() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("purge-ai-\(UUID().uuidString).plist")

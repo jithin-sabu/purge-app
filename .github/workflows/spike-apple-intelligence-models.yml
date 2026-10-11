@@ -26,6 +26,8 @@ jobs:
         working-directory: spikes/apple-intelligence-models
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Show toolchain
         run: swift --version

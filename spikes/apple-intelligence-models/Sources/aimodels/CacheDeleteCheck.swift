@@ -39,22 +39,21 @@ enum CacheDeleteCheck {
         let unfilteredAmount: Int64?
     }
 
-    /// The first number under a key that names an amount, searching the whole reply.
+    /// The reply's own total: the top-level `CACHE_DELETE_AMOUNT` and nothing
+    /// else. A per-service figure nested under the same key would read as less
+    /// than the unfiltered total whether or not the filter was honoured, so
+    /// nested keys and look-alike names are not consulted.
     static func amount(in reply: [String: Any]) -> Int64? {
-        var found: Int64?
-        var fallback: Int64?
-        Descriptors.walk(reply, at: "") { _, key, value in
-            guard let number = value as? NSNumber, !(value is Bool) else { return }
-            let upper = key.uppercased()
-            if upper == "CACHE_DELETE_AMOUNT", found == nil { found = number.int64Value }
-            if fallback == nil, upper.contains("AMOUNT") || upper.contains("PURGEABLE") { fallback = number.int64Value }
-        }
-        return found ?? fallback
+        guard let raw = reply["CACHE_DELETE_AMOUNT"], let number = raw as? NSNumber, !(raw is Bool)
+        else { return nil }
+        return number.int64Value
     }
 
     /// Conservative: the purge only goes ahead when the filtered reply names no
-    /// other service and reports less than the unfiltered one, or when the
-    /// unfiltered reply itself shows the filter at work. Anything else aborts.
+    /// other service and reports at least the noise floor less than the
+    /// unfiltered one. The two queries run one after the other, and other
+    /// processes move the purgeable figure between them, so a smaller gap says
+    /// nothing about the filter. Anything else aborts.
     static func judge(filtered: [String: Any], unfiltered: [String: Any], service: String,
                       otherServices: [String]) -> Verdict {
         let filteredText = Format.json(filtered, pretty: false)
@@ -74,7 +73,7 @@ enum CacheDeleteCheck {
             return Verdict(honoured: false, reason: "the unfiltered reply has no amount to compare",
                            filteredAmount: filteredAmount, unfilteredAmount: nil)
         }
-        if filteredAmount < unfilteredAmount {
+        if unfilteredAmount - filteredAmount >= Volume.noiseFloorBytes {
             return Verdict(honoured: true,
                            reason: "the filter lowers the purgeable figure from \(Format.bytes(unfilteredAmount)) to \(Format.bytes(filteredAmount))",
                            filteredAmount: filteredAmount, unfilteredAmount: unfilteredAmount)
@@ -84,7 +83,7 @@ enum CacheDeleteCheck {
                            filteredAmount: filteredAmount, unfilteredAmount: unfilteredAmount)
         }
         return Verdict(honoured: false,
-                       reason: "the same figure comes back with and without the filter (\(Format.bytes(filteredAmount))), so macOS may be ignoring it",
+                       reason: "the filter changes the purgeable figure by less than \(Format.bytes(Volume.noiseFloorBytes)) (\(Format.bytes(unfilteredAmount)) against \(Format.bytes(filteredAmount))), so macOS may be ignoring it",
                        filteredAmount: filteredAmount, unfilteredAmount: unfilteredAmount)
     }
 }
