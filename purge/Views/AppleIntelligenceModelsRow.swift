@@ -40,12 +40,6 @@ struct OverviewAppleIntelligenceRow: View {
             }
             Spacer(minLength: AppStyle.Spacing.small)
             trailing
-            // Apple's figure, placed and sized like the other rows' figures.
-            if let bytes = store.reading?.latestBytes, bytes > 0, store.reading?.isAnythingPresent == true {
-                Text(formatStorageBytes(bytes))
-                    .font(AppStyle.Typography.sectionTitle)
-                    .frame(minWidth: 64, alignment: .trailing)
-            }
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .padding(.vertical, 11)
@@ -171,7 +165,10 @@ struct OverviewAppleIntelligenceRow: View {
             return reason
         case .downloadRequested:
             if store.isDownloading {
-                return String(localized: "Downloading in the background, this much so far")
+                if let bytes = store.reading?.latestBytes, bytes > 0 {
+                    return String(localized: "Downloading in the background, \(formatStorageBytes(bytes)) so far")
+                }
+                return String(localized: "Downloading in the background")
             }
             return String(localized: "Download requested")
         case .profileStillInstalled:
@@ -188,8 +185,10 @@ struct OverviewAppleIntelligenceRow: View {
         }
         if reading.isAnythingPresent {
             let blocked = store.isProfileInstalled ? String(localized: ", downloads blocked") : ""
-            if reading.latestBytes != nil {
-                return String(localized: "Apple's figure; the disk gains less when removed") + blocked
+            // Apple's figure goes here rather than at the row's end, so it isn't
+            // read as what removing them gives back.
+            if let bytes = reading.latestBytes {
+                return String(localized: "\(formatStorageBytes(bytes)) by Apple's count; the disk gains less") + blocked
             }
             return String(localized: "On this Mac, size unknown") + blocked
         }

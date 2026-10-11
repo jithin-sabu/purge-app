@@ -49,7 +49,8 @@ struct OverviewView: View {
             categoriesCard(breakdown, now: now)
 
             if breakdown.totalBytes > 0 {
-                restOfDiskCard(breakdown, now: now)
+                restOfDiskCard(breakdown)
+                systemDataCard(now: now)
             }
 
             footnotes(now: now)
@@ -130,7 +131,7 @@ struct OverviewView: View {
         .overviewCard()
     }
 
-    private func restOfDiskCard(_ breakdown: OverviewBreakdown, now: Date) -> some View {
+    private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
         VStack(spacing: 0) {
             OverviewPlainRow(
                 symbol: "ellipsis",
@@ -141,25 +142,6 @@ struct OverviewView: View {
                 share: breakdown.share(of: breakdown.everythingElseBytes),
                 linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
             )
-            // Part of the used space above, but no tool says how much, so it is a
-            // row of its own with no size and no place in the bar.
-            // Always shown, even with none, so people learn these exist and where
-            // to find them when they do.
-            InsetCardDivider()
-            OverviewSnapshotRow(
-                snapshotStore: snapshotStore,
-                now: now,
-                linkedState: linkedRowState(OverviewSnapshotRow.id)
-            )
-            // Apple Intelligence's models, macOS 27 only, and only when there is
-            // something on the Mac, a block in place, or a removal to report (#133).
-            if appleIntelligenceStore.isRelevant {
-                InsetCardDivider()
-                OverviewAppleIntelligenceRow(
-                    store: appleIntelligenceStore,
-                    linkedState: linkedRowState(OverviewAppleIntelligenceRow.id)
-                )
-            }
             InsetCardDivider()
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
@@ -171,6 +153,40 @@ struct OverviewView: View {
             )
         }
         .overviewCard()
+    }
+
+    /// Things inside System Data that Purge can remove. They are part of the used
+    /// space above but have no place in the bar, so they get a card of their own
+    /// where every row ends in its action and any size goes in the line under the
+    /// title, instead of a figure that would read like the bar's.
+    private func systemDataCard(now: Date) -> some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            Text("Hidden in System Data")
+                .font(AppStyle.Typography.headline)
+                .foregroundStyle(AppColors.textSecondary)
+                .padding(.horizontal, AppStyle.Spacing.xxSmall)
+                .accessibilityAddTraits(.isHeader)
+            VStack(spacing: 0) {
+                // No tool says how much these take, so the row has no size.
+                // Always shown, even with none, so people learn these exist and where
+                // to find them when they do.
+                OverviewSnapshotRow(
+                    snapshotStore: snapshotStore,
+                    now: now,
+                    linkedState: linkedRowState(OverviewSnapshotRow.id)
+                )
+                // Apple Intelligence's models, macOS 27 only, and only when there is
+                // something on the Mac, a block in place, or a removal to report (#133).
+                if appleIntelligenceStore.isRelevant {
+                    InsetCardDivider()
+                    OverviewAppleIntelligenceRow(
+                        store: appleIntelligenceStore,
+                        linkedState: linkedRowState(OverviewAppleIntelligenceRow.id)
+                    )
+                }
+            }
+            .overviewCard()
+        }
     }
 
     // MARK: Footnotes

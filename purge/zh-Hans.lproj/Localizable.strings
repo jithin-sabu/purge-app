@@ -956,5 +956,5 @@
 "Models on disk" = "磁盘上的模型";
 "None" = "无";
 "Unknown" = "未知";
-"Downloading in the background, this much so far" = "正在后台下载，目前已下载这些";
-"Apple's figure; the disk gains less when removed" = "Apple 的数字；移除后磁盘实际腾出的会更少";
+"%@ by Apple's count; the disk gains less" = "Apple 计为 %@；磁盘实际腾出的会更少";
+"Hidden in System Data" = "藏在“系统数据”中";
