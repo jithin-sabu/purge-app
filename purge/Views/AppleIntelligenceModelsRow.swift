@@ -24,7 +24,8 @@ struct OverviewAppleIntelligenceRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            OverviewIconTile(symbol: "sparkles", color: AppColors.Chart.everythingElse)
+            // Apple's own glyph for the feature, from SF Symbols, in its own colours.
+            OverviewIconTile(symbol: "apple.intelligence", color: AppColors.Chart.everythingElse, keepsSymbolColors: true)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text("Apple Intelligence models")
