@@ -427,24 +427,28 @@ private struct OverviewCategoryRow: View {
 
 /// A System Settings style tile: the category color with a soft top-to-bottom
 /// gradient, a hairline rim, and a white filled glyph. Leave `symbol` out for an
-/// empty tile, which is how free space is drawn. `keepsSymbolColors` lets a
-/// multicolour symbol such as Apple's own `apple.intelligence` glyph keep its
-/// colours instead of the white fill.
+/// empty tile, which is how free space is drawn. `glyphGradient` paints the
+/// glyph with a sweep of colours instead of white, for Apple's own
+/// `apple.intelligence` mark.
 struct OverviewIconTile: View {
     var symbol: String?
     let color: Color
-    var keepsSymbolColors = false
+    var glyphGradient: [Color]? = nil
 
     static let size: CGFloat = 28
     private static let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+
+    private var glyphStyle: AnyShapeStyle {
+        guard let glyphGradient else { return AnyShapeStyle(.white) }
+        return AnyShapeStyle(LinearGradient(colors: glyphGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+    }
 
     var body: some View {
         Group {
             if let symbol {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .medium))
-                    .symbolRenderingMode(keepsSymbolColors ? .multicolor : .monochrome)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(glyphStyle)
                     .shadow(color: .black.opacity(0.18), radius: 0.5, y: 0.5)
                     .frame(width: Self.size, height: Self.size)
                     .background {

@@ -24,8 +24,10 @@ struct OverviewAppleIntelligenceRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            // Apple's own glyph for the feature, from SF Symbols, in its own colours.
-            OverviewIconTile(symbol: "apple.intelligence", color: AppColors.Chart.everythingElse, keepsSymbolColors: true)
+            // Apple's own glyph for the feature, from SF Symbols, painted with its
+            // sweep of colours on a neutral tile so the sweep is what shows.
+            OverviewIconTile(symbol: "apple.intelligence", color: AppColors.fillSecondary,
+                             glyphGradient: AppColors.appleIntelligenceGlyph)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text("Apple Intelligence models")
@@ -67,12 +69,15 @@ struct OverviewAppleIntelligenceRow: View {
         .help("What are the Apple Intelligence models?")
         .accessibilityLabel("About the Apple Intelligence models")
         .popover(isPresented: $isShowingInfo, arrowEdge: .bottom) {
-            Text(Self.info)
-                .font(AppStyle.Typography.callout)
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(AppStyle.Spacing.medium)
-                .frame(width: 340)
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+                AppleIntelligenceBreakdown(reading: store.reading)
+                Text(Self.info)
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(AppStyle.Spacing.medium)
+            .frame(width: 400)
         }
     }
 
@@ -99,7 +104,8 @@ struct OverviewAppleIntelligenceRow: View {
             plan = AppleIntelligenceRemovalPlan(
                 bytes: store.reading?.latestBytes,
                 sets: store.reading?.present.count ?? 0,
-                otherAccounts: store.otherAccounts
+                otherAccounts: store.otherAccounts,
+                reading: store.reading
             )
         } label: {
             CleaningButtonLabel(title: "Remove", systemImage: nil, isCleaning: false)
@@ -198,6 +204,59 @@ struct AppleIntelligenceRemovalPlan: Identifiable {
     let bytes: Int64?
     let sets: Int
     let otherAccounts: [AppleIntelligenceAccount]
+    let reading: AppleIntelligenceReading?
+}
+
+/// Each set with Apple's figure for it, and the total: what the row's single
+/// number is made of.
+struct AppleIntelligenceBreakdown: View {
+    let reading: AppleIntelligenceReading?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            Text("Models on disk")
+                .font(AppStyle.Typography.headline)
+                .foregroundStyle(AppColors.textPrimary)
+            VStack(spacing: 0) {
+                ForEach(Array(AppleIntelligenceCatalog.sets.enumerated()), id: \.element.id) { index, set in
+                    if index > 0 { InsetCardDivider() }
+                    line(set.title, size(for: set), emphasized: false)
+                }
+                InsetCardDivider()
+                line(String(localized: "Total"), total, emphasized: true)
+            }
+            .background(AppColors.fillSecondary, in: RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous))
+        }
+    }
+
+    private func line(_ title: String, _ value: String, emphasized: Bool) -> some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            Text(title)
+                .font(AppStyle.Typography.callout)
+                .foregroundStyle(AppColors.textPrimary)
+            Spacer(minLength: AppStyle.Spacing.small)
+            Text(value)
+                .font(emphasized ? AppStyle.Typography.callout.weight(.semibold) : AppStyle.Typography.callout)
+                .foregroundStyle(emphasized ? AppColors.textPrimary : AppColors.textSecondary)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, 7)
+    }
+
+    private func size(for set: AppleIntelligenceModelSet) -> String {
+        guard let item = reading?.sets.first(where: { $0.set.name == set.name }) else { return String(localized: "Checking...") }
+        guard item.isPresent else { return String(localized: "None") }
+        guard let bytes = item.latestBytes else { return String(localized: "Unknown") }
+        return formatBytes(bytes)
+    }
+
+    private var total: String {
+        guard let reading else { return String(localized: "Checking...") }
+        guard reading.isAnythingPresent else { return String(localized: "None") }
+        guard let bytes = reading.latestBytes else { return String(localized: "Unknown") }
+        return formatBytes(bytes)
+    }
 }
 
 /// Removing the models switches off features and installs a profile, so the
@@ -218,6 +277,8 @@ struct OverviewAppleIntelligenceConfirmation: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            AppleIntelligenceBreakdown(reading: plan.reading)
 
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text("Until you download them again, these stop working:")

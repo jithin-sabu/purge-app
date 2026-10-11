@@ -636,7 +636,6 @@
 "Time Machine snapshots" = "时间机器快照";
 "Today" = "今天";
 "Tomorrow" = "明天";
-"Total" = "总计";
 "Trash" = "废纸篓";
 "Trash is empty" = "废纸篓为空";
 "Trash size unavailable" = "无法获取废纸篓大小";
@@ -954,3 +953,6 @@
 "%lld model sets" = "%lld 组模型";
 "%@ released, Apple counted %@" = "已释放 %@，Apple 计为 %@";
 "Released" = "已释放";
+"Models on disk" = "磁盘上的模型";
+"None" = "无";
+"Unknown" = "未知";
