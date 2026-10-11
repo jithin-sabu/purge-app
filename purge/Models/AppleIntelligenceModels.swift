@@ -174,5 +174,4 @@ nonisolated enum AppleIntelligenceOutcome: Equatable, Sendable {
     /// The profile is still installed, so downloads stay blocked.
     case profileStillInstalled
     case downloadRequestFailed(String)
-    case cancelled
 }

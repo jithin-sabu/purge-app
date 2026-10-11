@@ -914,7 +914,6 @@
 "Download requested" = "已请求下载";
 "The profile is still installed, so downloads stay blocked" = "描述文件仍已安装，下载仍被阻止";
 "macOS didn't accept the download request: %@" = "macOS 未接受下载请求：%@";
-"Cancelled" = "已取消";
 "%@ on this Mac, Apple's figure" = "这台 Mac 上有 %@（Apple 的数字）";
 ", downloads blocked" = "，下载已阻止";
 "On this Mac, size unknown" = "在这台 Mac 上，大小未知";

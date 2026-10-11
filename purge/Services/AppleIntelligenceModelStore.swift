@@ -145,10 +145,15 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 return blockTypes.allSatisfy { now.contains($0) }
             }
             SettingsGuidePanel.shared.hide()
+            // System Settings keeps its own copy once opened; the file in Downloads
+            // would only linger.
+            try? FileManager.default.removeItem(at: AppleIntelligenceDownloadBlock.profileFileURL)
             installedBlocks = AppleIntelligenceDownloadBlock.installedBlocks()
             guard installed else {
                 phase = .idle
-                lastOutcome = waitCancelled ? .cancelled : .profileNotInstalled
+                // A cancel is the user changing their mind: the row goes back to
+                // how it was, with nothing to report.
+                lastOutcome = waitCancelled ? nil : .profileNotInstalled
                 return
             }
         }
@@ -227,7 +232,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
             installedBlocks = AppleIntelligenceDownloadBlock.installedBlocks()
             guard removed else {
                 phase = .idle
-                lastOutcome = waitCancelled ? .cancelled : .profileStillInstalled
+                lastOutcome = waitCancelled ? nil : .profileStillInstalled
                 return
             }
         }

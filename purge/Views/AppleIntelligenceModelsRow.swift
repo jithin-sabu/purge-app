@@ -181,8 +181,6 @@ struct OverviewAppleIntelligenceRow: View {
             return String(localized: "The profile is still installed, so downloads stay blocked")
         case .downloadRequestFailed(let reason):
             return String(localized: "macOS didn't accept the download request: \(reason)")
-        case .cancelled:
-            return String(localized: "Cancelled")
         case nil:
             break
         }
