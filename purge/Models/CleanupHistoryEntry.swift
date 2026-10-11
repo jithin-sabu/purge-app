@@ -21,11 +21,21 @@ struct CleanupHistorySkippedItemDTO: Codable, Hashable, Identifiable {
     let isUserVisible: Bool
 }
 
+/// What a history entry removed, when it was not an ordinary clean. Absent on
+/// every entry written before this existed, and on ordinary cleans since.
+nonisolated enum CleanupHistoryKind: String, Codable, Hashable {
+    /// The Apple Intelligence models, released through Apple's asset service.
+    /// `deletedItems` holds one item per set with Apple's figure for it;
+    /// `bytesReclaimedOnVolume` is what the volume gave back (#133).
+    case appleIntelligenceModels
+}
+
 /// One persisted cleanup session (manual or scheduled).
 struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
     var id: UUID
     let date: Date
     let trigger: CleanupTrigger
+    let kind: CleanupHistoryKind?
     /// Sum of the sizes of items moved to the trash. Pending, not reclaimed.
     let bytesMovedToTrash: Int64
     /// Measured volume delta, present only when it was actually measured and cleared
@@ -42,11 +52,13 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         bytesMovedToTrash: Int64,
         bytesReclaimedOnVolume: Int64? = nil,
         deletedItems: [CleanupHistoryDeletedItemDTO],
-        skippedItems: [CleanupHistorySkippedItemDTO] = []
+        skippedItems: [CleanupHistorySkippedItemDTO] = [],
+        kind: CleanupHistoryKind? = nil
     ) {
         self.id = id
         self.date = date
         self.trigger = trigger
+        self.kind = kind
         self.bytesMovedToTrash = bytesMovedToTrash
         self.bytesReclaimedOnVolume = bytesReclaimedOnVolume
         self.deletedItems = deletedItems
@@ -54,7 +66,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, date, trigger, bytesMovedToTrash, bytesReclaimedOnVolume, deletedItems, skippedItems
+        case id, date, trigger, bytesMovedToTrash, bytesReclaimedOnVolume, deletedItems, skippedItems, kind
         /// Pre-measurement field. Held a sum of moved sizes that was labelled as freed
         /// space, so it decodes into `bytesMovedToTrash` and never into reclaimed.
         case totalFreedBytes
@@ -65,6 +77,8 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         self.id = try container.decode(UUID.self, forKey: .id)
         self.date = try container.decode(Date.self, forKey: .date)
         self.trigger = try container.decode(CleanupTrigger.self, forKey: .trigger)
+        // An unknown kind from a newer version decodes as nil rather than failing the entry.
+        self.kind = try? container.decodeIfPresent(CleanupHistoryKind.self, forKey: .kind)
         if let moved = try container.decodeIfPresent(Int64.self, forKey: .bytesMovedToTrash) {
             self.bytesMovedToTrash = moved
         } else {
@@ -80,6 +94,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         try container.encode(id, forKey: .id)
         try container.encode(date, forKey: .date)
         try container.encode(trigger, forKey: .trigger)
+        try container.encodeIfPresent(kind, forKey: .kind)
         try container.encode(bytesMovedToTrash, forKey: .bytesMovedToTrash)
         try container.encodeIfPresent(bytesReclaimedOnVolume, forKey: .bytesReclaimedOnVolume)
         try container.encode(deletedItems, forKey: .deletedItems)

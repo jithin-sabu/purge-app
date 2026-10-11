@@ -40,7 +40,7 @@
 Your Mac quietly fills up with cache and junk you never see and never asked for. Purge finds it, marks what is safe, and clears it in one click.
 
 > [!NOTE]
-> Files and folders always move to the Trash, so anything Purge removes can come back. The exceptions are iOS simulators and Time Machine snapshots, which the Trash can't hold.
+> Files and folders always move to the Trash, so anything Purge removes can come back. The exceptions are iOS simulators, Time Machine snapshots and the Apple Intelligence models, which the Trash can't hold. The models can be downloaded again from Purge.
 
 You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-language explanation and a safety label, so nothing gets touched that you cannot see and verify first.
 
@@ -54,6 +54,7 @@ You do not need to understand any of it to use it. But if you ever want to check
 - A row per category with its size and share of the disk. Click one to open its tab
 - **Scan Everything** (⇧⌘R) scans every category, one at a time so the Mac stays responsive. When you open Purge it does the same on its own. Large Files and the app scans need Full Disk Access; without it only App Caches and Dev Tools scan
 - Each byte is counted once: an app's cache folder counts under App Caches, not again under the app
+- **Apple Intelligence models** (macOS 27, Apple silicon): the on-device models macOS files under System Data, with no switch to remove them. Remove releases them through Apple's asset service and installs a profile, which you approve once, so they don't download again. Download Again removes the profile and asks macOS for them back. The size shown is Apple's figure; Purge records what the disk really gave back
 
 ### App Caches
 
@@ -327,7 +328,7 @@ Purge never reads or sends file contents.
 
 Purge deletes files, so safety is the point. A few things worth knowing:
 
-- **Trash by default**: Files and folders move to the macOS Trash and can be restored until you empty it. iOS simulators, simulator runtimes and Time Machine snapshots can't go to the Trash, so those are removed for good.
+- **Trash by default**: Files and folders move to the macOS Trash and can be restored until you empty it. iOS simulators, simulator runtimes and Time Machine snapshots can't go to the Trash, so those are removed for good. The Apple Intelligence models are released through Apple's own asset service and can be downloaded again from Purge.
 - **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched. The [safety page](https://purgemac.com/safety) lists every allowed location and everything Purge will never touch, generated from the app's source.
 - **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
 - **Open source**: The full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.

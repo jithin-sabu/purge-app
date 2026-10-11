@@ -1,0 +1,55 @@
+name: Build (branch)
+
+# The main Build workflow runs on pull requests and pushes to main. This one
+# builds the app and runs its tests on pushes to Claude's working branches, so
+# a change can be checked before a pull request exists. Remove it once the
+# Apple Intelligence work (#133) is merged.
+
+on:
+  push:
+    branches:
+      - "claude/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Lint design tokens
+        run: node scripts/lint-design-tokens.mjs
+
+      - name: Check translations
+        run: python3 scripts/check-localization.py
+
+      - name: Build (unsigned)
+        run: |
+          xcodebuild clean build \
+            -project purge.xcodeproj \
+            -scheme purge \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Test (unsigned)
+        run: |
+          xcodebuild test \
+            -project purge.xcodeproj \
+            -scheme purge \
+            -destination 'platform=macOS' \
+            -only-testing:PurgeTests/AppleIntelligenceModelReaderTests \
+            -only-testing:PurgeTests/AppleIntelligenceDownloadBlockTests \
+            -only-testing:PurgeTests/AppleIntelligenceAccountsTests \
+            -only-testing:PurgeTests/AppleIntelligenceHistoryTests \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO

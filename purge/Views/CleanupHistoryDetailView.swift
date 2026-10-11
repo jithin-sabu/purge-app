@@ -30,7 +30,7 @@ struct CleanupHistoryDetailView: View {
 
     private var sheetHeader: some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(entry.trigger == .scheduled ? LocalizedStringKey("Automatic clean") : LocalizedStringKey("Manual clean"))
+            Text(CleanupHistorySummaryRow.title(for: entry))
                 .font(AppStyle.Typography.headline)
 
             Spacer(minLength: 12)
@@ -55,7 +55,7 @@ struct CleanupHistoryDetailView: View {
 
     private var movedToTrashSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel(String(localized: "Moved to Trash"))
+            sectionLabel(entry.kind == .appleIntelligenceModels ? String(localized: "Released") : String(localized: "Moved to Trash"))
 
             historySectionCard {
                 ForEach(Array(entry.deletedItems.enumerated()), id: \.element.id) { index, item in

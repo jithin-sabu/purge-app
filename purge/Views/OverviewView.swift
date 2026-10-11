@@ -10,6 +10,7 @@ struct OverviewView: View {
     @EnvironmentObject private var trashStore: TrashStore
     @ObservedObject private var schedule = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var snapshotStore = LocalSnapshotStore.shared
+    @ObservedObject private var appleIntelligenceStore = AppleIntelligenceModelStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The bar segment under the pointer. Its row lifts and the others fade.
     @State private var highlightedID: String?
@@ -20,8 +21,10 @@ struct OverviewView: View {
             content(now: context.date)
         }
         .task { await snapshotStore.refresh() }
+        .task { await appleIntelligenceStore.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await snapshotStore.refresh() }
+            Task { await appleIntelligenceStore.refresh() }
         }
     }
 
@@ -148,6 +151,15 @@ struct OverviewView: View {
                 now: now,
                 linkedState: linkedRowState(OverviewSnapshotRow.id)
             )
+            // Apple Intelligence's models, macOS 27 only, and only when there is
+            // something on the Mac, a block in place, or a removal to report (#133).
+            if appleIntelligenceStore.isRelevant {
+                InsetCardDivider()
+                OverviewAppleIntelligenceRow(
+                    store: appleIntelligenceStore,
+                    linkedState: linkedRowState(OverviewAppleIntelligenceRow.id)
+                )
+            }
             InsetCardDivider()
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
@@ -416,7 +428,7 @@ private struct OverviewCategoryRow: View {
 /// A System Settings style tile: the category color with a soft top-to-bottom
 /// gradient, a hairline rim, and a white filled glyph. Leave `symbol` out for an
 /// empty tile, which is how free space is drawn.
-private struct OverviewIconTile: View {
+struct OverviewIconTile: View {
     var symbol: String?
     let color: Color
 
@@ -719,7 +731,7 @@ enum OverviewLinkedRowState: Equatable {
     case dimmed
 }
 
-private extension View {
+extension View {
     func overviewLinked(_ state: OverviewLinkedRowState) -> some View {
         self
             .saturation(state == .dimmed ? 0 : 1)

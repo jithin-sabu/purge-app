@@ -66,6 +66,31 @@ final class CleanupHistoryStore: ObservableObject {
         persist()
     }
 
+    /// A removal of the Apple Intelligence models (#133). Nothing went to the
+    /// Trash: the items carry Apple's figure for each set that went, and
+    /// reclaimed is the measured volume delta, nil unless it cleared the noise
+    /// floor. The raw-block delta is not kept here; the row shows it once.
+    func appendAppleIntelligenceRemoval(
+        sets: [AppleIntelligenceModelSet],
+        bytesBefore: AppleIntelligenceReading,
+        freedShownBytes: Int64?,
+        freedRawBytes: Int64?
+    ) {
+        let items = sets.map { set -> CleanupHistoryDeletedItemDTO in
+            let bytes = bytesBefore.sets.first { $0.set.name == set.name }?.latestBytes ?? 0
+            return CleanupHistoryDeletedItemDTO(path: set.title, sizeBytes: bytes)
+        }
+        let entry = CleanupHistoryEntry(
+            trigger: .manual,
+            bytesMovedToTrash: 0,
+            bytesReclaimedOnVolume: freedShownBytes ?? freedRawBytes,
+            deletedItems: items,
+            kind: .appleIntelligenceModels
+        )
+        archive.append(entry, maxEntries: maxEntries)
+        persist()
+    }
+
     func clear() {
         archive.clear()
         persist()
