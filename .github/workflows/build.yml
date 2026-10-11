@@ -35,6 +35,20 @@ jobs:
       - name: Run unit tests
         timeout-minutes: 20
         run: |
+          # Temporary: record what a stuck test host is doing, then remove.
+          (
+            sleep 600
+            echo "::group::Diagnostics after 10 minutes"
+            ps -axo pid,etime,command | grep -i -E 'Purge|xctest|testmanager|xcodebuild' | grep -v grep
+            for pid in $(pgrep -x Purge); do
+              sudo sample "$pid" 3 -file "$RUNNER_TEMP/purge-$pid.txt" >/dev/null 2>&1
+              head -n 200 "$RUNNER_TEMP/purge-$pid.txt"
+            done
+            log show --last 15m --style compact --predicate 'process == "tccd" OR process == "Purge"' 2>/dev/null | tail -n 80
+            echo "::endgroup::"
+          ) &
+          diag=$!
+          set +e
           xcodebuild test \
             -project purge.xcodeproj \
             -scheme purge \
@@ -42,3 +56,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
+          status=$?
+          pkill -P "$diag" 2>/dev/null
+          kill "$diag" 2>/dev/null
+          exit $status
