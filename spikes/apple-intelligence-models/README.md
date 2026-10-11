@@ -129,6 +129,40 @@ and ends the dependence on macOS purging them when the disk is nearly full,
 but it will not add the headline figure to the number they see. The row has
 to say that honestly, and the size it shows must not be the record sum.
 
+## What RemoveMacAI's users have hit (checked 2026-10-11)
+
+RemoveMacAI's release notes and issue tracker, read against this spike's results:
+
+- **The "current locks" reply is a false negative.** Its issue 15 (macOS
+  27.0.1) saw the same error on the core, image and Spatial Photos sets; a
+  rerun reported everything removed, and the maintainer's advice is to check
+  status afterwards. This spike's `remove` already judges those sets by
+  their folders, which is the same conclusion.
+- **The per-set status API lies.** Its 0.2.3 release moved size readings to
+  the asset service's inventory because `latestStatusForClients` reported 0
+  for installed models on macOS 27.0.1. This spike saw the same (118 MB,
+  zero or unknown for 57 GB of models) and reads the persisted records
+  instead.
+- **Storage in System Settings does not follow the removal.** Its issue 32
+  (open): one user's System Data grew to 61–74 GB after removal and fell
+  back when the models were re-downloaded; another still saw 27 GB under
+  Apple Intelligence after removal and a restart while the asset folders
+  held 7 GB. The maintainer attributes it to Apple's estimate and purgeable
+  accounting but has not located the space. This matches the purgeable
+  behaviour measured here: the figure users see does not move the way the
+  record sum suggests. Purge must not promise it will.
+- **Third-party Core ML features can break.** Its issue 40 (open): Adobe
+  Lightroom's AI Denoise stopped working after the models were removed and
+  came back after revert; a Topaz Gigapixel crash in Core ML's model
+  library is reported in the same thread. Cause unconfirmed, but it means
+  the consumer list from pared's catalog is incomplete, and the app's
+  confirmation has to say that apps using Apple's on-device models may stop
+  working, not only the named Apple features.
+- **No purge step, no re-subscribe.** RemoveMacAI relies on the release
+  alone and on macOS downloading again when a feature is turned on. Both
+  held in this spike's run, which supports dropping the CacheDelete purge
+  from the design unless a later run shows the release leaving files behind.
+
 ## Open questions the spike has to settle
 
 - **Record layout.** Answered by the CI runner (macOS 26.6, Apple silicon,
