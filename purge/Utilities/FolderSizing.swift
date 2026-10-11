@@ -106,7 +106,12 @@ enum FolderSizing {
             }
 
             group.enter()
-            DispatchQueue.global(qos: .utility).async {
+            // A queue of its own, not `DispatchQueue.global`. Callers block a cooperative-pool
+            // thread in `group.wait()` below, and the global queues get no new thread while
+            // that pool is full. Once every pool thread was waiting here, no `du` ever started:
+            // three parallel tests on a 3-core CI runner were enough. A serial queue made here
+            // runs on an overcommit thread, which the system always grants.
+            DispatchQueue(label: "purge.folder-sizing.du", qos: .utility).async {
                 defer {
                     duChunkLimiter.signal()
                     group.leave()
