@@ -59,10 +59,21 @@ enum Commands {
         Log.line()
         printProfile()
         Log.line()
-        Log.line("Free space on /: " + Format.bytes(Volume.freeBytes()))
+        printFreeSpace()
         if let last = Journal.load().last, let date = last["date"] as? String, let command = last["command"] as? String {
             Log.line("Last journal entry: \(command) at \(date)")
         }
+    }
+
+    /// Both free-space figures: with purgeable accounting (what Settings
+    /// shows) and the raw blocks. The gap between them is what macOS would
+    /// purge on demand, models included.
+    static func printFreeSpace() {
+        let shown = Volume.freeBytes()
+        let raw = Volume.rawFreeBytes()
+        Log.line("Free space on /: " + Format.bytes(shown) + " as Settings shows it (purgeable counted as free); "
+                 + Format.bytes(raw) + " raw")
+        if let shown, let raw, shown > raw { Log.line("  purgeable counted as free: " + Format.bytes(shown - raw)) }
     }
 
     static func printMeasurements(_ measured: [SetMeasurement], reading: DescriptorReading) {
@@ -383,8 +394,10 @@ enum Commands {
 
         var record: [String: Any] = ["sets": releasing.map(\.name), "before": before.map(\.summary), "preflight": flight.summary]
         guard let freeBefore = Volume.freeBytes() else { Log.fail("could not read the volume's free space") }
+        let rawBefore = Volume.rawFreeBytes()
         record["freeBefore"] = freeBefore
-        Log.line("Free space before: " + Format.bytes(freeBefore))
+        if let rawBefore { record["freeBeforeRaw"] = rawBefore }
+        Log.line("Free space before: " + Format.bytes(freeBefore) + " as shown, " + Format.bytes(rawBefore) + " raw")
 
         // 1. Block downloads first, so nothing comes back between release and purge.
         if viaService && !noProfile {
@@ -489,11 +502,15 @@ enum Commands {
         record["releaseFailures"] = releaseFailures
         if let last = settled.lastReading { record["freeAfter"] = last }
         if let gained = settled.gained { record["freedBytes"] = gained }
+        let rawAfter = Volume.rawFreeBytes()
+        if let rawAfter { record["freeAfterRaw"] = rawAfter }
+        if let rawBefore, let rawAfter { record["freedBytesRaw"] = rawAfter - rawBefore }
         Journal.record("remove", note: nil, fields: record)
 
         Log.line()
-        Log.line("Free space after:  " + Format.bytes(settled.lastReading))
-        Log.line("Freed (volume delta, settled): " + (settled.gained.map { Format.bytes($0) } ?? "under the noise floor or still moving"))
+        Log.line("Free space after:  " + Format.bytes(settled.lastReading) + " as shown, " + Format.bytes(rawAfter) + " raw")
+        Log.line("Freed as Settings shows it (settled): " + (settled.gained.map { Format.bytes($0) } ?? "under the noise floor or still moving"))
+        if let rawBefore, let rawAfter { Log.line("Freed in raw blocks: " + Format.bytes(rawAfter - rawBefore)) }
         Log.line()
         printMeasurements(after, reading: readingAfter)
         Log.line()
@@ -528,6 +545,7 @@ enum Commands {
         }
         var record: [String: Any] = ["sets": selected.map(\.name)]
         if let free = Volume.freeBytes() { record["freeBefore"] = free }
+        if let raw = Volume.rawFreeBytes() { record["freeBeforeRaw"] = raw }
 
         if !blocks.isEmpty {
             Shell.openSettings(Shell.profilesPane)
@@ -593,7 +611,7 @@ enum Commands {
         printMeasurements(measured, reading: reading)
         Log.line()
         printProfile()
-        Log.line("Free space on /: " + Format.bytes(Volume.freeBytes()))
+        printFreeSpace()
         let entry = Journal.record("snapshot", note: note, fields: [
             "sets": measured.map(\.summary), "blocks": Profile.installedBlocks(), "errors": reading.errors,
         ])

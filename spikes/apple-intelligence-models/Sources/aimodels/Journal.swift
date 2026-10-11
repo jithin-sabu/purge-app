@@ -27,6 +27,7 @@ enum Journal {
         ]
         if let note { entry["note"] = note }
         if let free = Volume.freeBytes() { entry["freeBytes"] = free }
+        if let raw = Volume.rawFreeBytes() { entry["freeBytesRaw"] = raw }
         for (key, value) in fields { entry[key] = Format.jsonSafe(value) }
         var entries = load()
         entries.append(entry)

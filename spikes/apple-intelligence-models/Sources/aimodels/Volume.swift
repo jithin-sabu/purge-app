@@ -5,12 +5,24 @@ import Foundation
 enum Volume {
     static let root = URL(fileURLWithPath: "/")
 
-    /// Nil when the volume could not be read, which stays distinct from zero.
+    /// The figure System Settings and Purge show: free blocks plus what macOS
+    /// would purge on demand. Nil when the volume could not be read, which
+    /// stays distinct from zero.
     static func freeBytes() -> Int64? {
         guard let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
               let free = values.volumeAvailableCapacityForImportantUsage
         else { return nil }
         return free
+    }
+
+    /// Free blocks only, with no purgeable accounting. On macOS 27 freshly
+    /// downloaded models are purgeable, so they vanish from `freeBytes` but not
+    /// from this one; the two together show what a removal really gave back.
+    static func rawFreeBytes() -> Int64? {
+        guard let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
+              let free = values.volumeAvailableCapacity
+        else { return nil }
+        return Int64(free)
     }
 
     /// Below this a delta is indistinguishable from other processes writing

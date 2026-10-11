@@ -108,8 +108,26 @@ Intelligence switched off in Settings, models still on disk.
 | Space | 166.61 GB free before, 190.53 GB after, 23.91 GB freed within the 30 s settling window, from the release alone. Why that is less than the 57.54 GB measured is open: several versions of one model can be on the filesystem at once (`measure` now shows a latest-version figure beside the all-records one), and deletion may still have been running. |
 
 So on macOS 27.0 the release step frees space by itself and the purge may
-not be needed at all. That changes the shape of the feature if it holds up
-after a restart and a day online.
+not be needed at all.
+
+**Next morning, after `restore`.** The download request was honoured: the
+core set was back to 13 GB in 106 records, code generation to 4.93 GB, Photos
+sets complete; image generation stayed at 100 MB (its aliases may need the
+feature on). Free space as Settings shows it *rose* from 181.8 GB to 191.0 GB
+while 16 GB of models arrived: the staging archives were cleaned up, and the
+unpacked models count as purgeable, so the "available for important usage"
+figure does not subtract them. That also explains the removal: of the 57 GB
+of records, about 33 GB was already counted as free before, and only the
+non-purgeable 24 GB showed up as a gain. `sudo du` on a model folder is
+refused ("Operation not permitted"), so the allocated size cannot be
+measured even as root. The tool now records the raw free-block figure beside
+the shown one, so the next removal reports both deltas.
+
+What this means for the app: a user's Storage pane already counts most of
+these models as available. Removing them gives back the non-purgeable part
+and ends the dependence on macOS purging them when the disk is nearly full,
+but it will not add the headline figure to the number they see. The row has
+to say that honestly, and the size it shows must not be the record sum.
 
 ## Open questions the spike has to settle
 
