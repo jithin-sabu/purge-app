@@ -98,6 +98,37 @@ struct FolderSizingConcurrencyTests {
         }
     }
 
+    /// `directorySizes` blocks its caller in `group.wait()` while `du` runs on another thread.
+    /// With more callers than cores, every cooperative-pool thread is one of them, so that
+    /// other thread must come from somewhere the full pool cannot starve. The six callers
+    /// above only fill the pool on a machine with six cores or fewer. This one fills it on any.
+    @Test("directorySizes finishes when every pool thread is waiting in it", .timeLimit(.minutes(1)))
+    func finishesWhenEveryPoolThreadIsACaller() async throws {
+        let callers = ProcessInfo.processInfo.activeProcessorCount + 2
+        var trees: [(root: URL, paths: [URL])] = []
+        for _ in 0..<callers {
+            trees.append(try makeTree(directories: 3, bytesEach: 4 * 1024))
+        }
+        defer {
+            for tree in trees { try? FileManager.default.removeItem(at: tree.root) }
+        }
+
+        let results = await withTaskGroup(
+            of: (Int, [String: Int64]).self,
+            returning: [(Int, [String: Int64])].self
+        ) { group in
+            for (index, tree) in trees.enumerated() {
+                group.addTask { (index, FolderSizing.directorySizes(at: tree.paths)) }
+            }
+            return await group.reduce(into: []) { $0.append($1) }
+        }
+
+        #expect(results.count == callers)
+        for (index, sizes) in results {
+            #expect(sizes.count == 3, "caller \(index) measured \(sizes.count) of 3")
+        }
+    }
+
     /// The `du` limiter is process-wide, so a permit abandoned by a cancelled call is lost for
     /// the lifetime of the process — enough cancellations and sizing would wedge permanently.
     /// `directorySizes` bails out on cancellation at two points, one of which happens while
