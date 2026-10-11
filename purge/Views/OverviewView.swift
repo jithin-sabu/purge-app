@@ -10,6 +10,7 @@ struct OverviewView: View {
     @EnvironmentObject private var trashStore: TrashStore
     @ObservedObject private var schedule = ScheduledCleaningPreferenceStore.shared
     @ObservedObject private var snapshotStore = LocalSnapshotStore.shared
+    @ObservedObject private var appleIntelligenceStore = AppleIntelligenceModelStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The bar segment under the pointer. Its row lifts and the others fade.
     @State private var highlightedID: String?
@@ -20,8 +21,10 @@ struct OverviewView: View {
             content(now: context.date)
         }
         .task { await snapshotStore.refresh() }
+        .task { await appleIntelligenceStore.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await snapshotStore.refresh() }
+            Task { await appleIntelligenceStore.refresh() }
         }
     }
 
@@ -46,7 +49,8 @@ struct OverviewView: View {
             categoriesCard(breakdown, now: now)
 
             if breakdown.totalBytes > 0 {
-                restOfDiskCard(breakdown, now: now)
+                restOfDiskCard(breakdown)
+                systemDataCard(now: now)
             }
 
             footnotes(now: now)
@@ -127,7 +131,7 @@ struct OverviewView: View {
         .overviewCard()
     }
 
-    private func restOfDiskCard(_ breakdown: OverviewBreakdown, now: Date) -> some View {
+    private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
         VStack(spacing: 0) {
             OverviewPlainRow(
                 symbol: "ellipsis",
@@ -137,16 +141,6 @@ struct OverviewView: View {
                 bytes: breakdown.everythingElseBytes,
                 share: breakdown.share(of: breakdown.everythingElseBytes),
                 linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
-            )
-            // Part of the used space above, but no tool says how much, so it is a
-            // row of its own with no size and no place in the bar.
-            // Always shown, even with none, so people learn these exist and where
-            // to find them when they do.
-            InsetCardDivider()
-            OverviewSnapshotRow(
-                snapshotStore: snapshotStore,
-                now: now,
-                linkedState: linkedRowState(OverviewSnapshotRow.id)
             )
             InsetCardDivider()
             OverviewPlainRow(
@@ -159,6 +153,40 @@ struct OverviewView: View {
             )
         }
         .overviewCard()
+    }
+
+    /// Things inside System Data that Purge can remove. They are part of the used
+    /// space above but have no place in the bar, so they get a card of their own
+    /// where every row ends in its action and any size goes in the line under the
+    /// title, instead of a figure that would read like the bar's.
+    private func systemDataCard(now: Date) -> some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            Text("Hidden in System Data")
+                .font(AppStyle.Typography.headline)
+                .foregroundStyle(AppColors.textSecondary)
+                .padding(.horizontal, AppStyle.Spacing.xxSmall)
+                .accessibilityAddTraits(.isHeader)
+            VStack(spacing: 0) {
+                // No tool says how much these take, so the row has no size.
+                // Always shown, even with none, so people learn these exist and where
+                // to find them when they do.
+                OverviewSnapshotRow(
+                    snapshotStore: snapshotStore,
+                    now: now,
+                    linkedState: linkedRowState(OverviewSnapshotRow.id)
+                )
+                // Apple Intelligence's models, macOS 27 only, and only when there is
+                // something on the Mac, a block in place, or a removal to report (#133).
+                if appleIntelligenceStore.isRelevant {
+                    InsetCardDivider()
+                    OverviewAppleIntelligenceRow(
+                        store: appleIntelligenceStore,
+                        linkedState: linkedRowState(OverviewAppleIntelligenceRow.id)
+                    )
+                }
+            }
+            .overviewCard()
+        }
     }
 
     // MARK: Footnotes
@@ -415,35 +443,49 @@ private struct OverviewCategoryRow: View {
 
 /// A System Settings style tile: the category color with a soft top-to-bottom
 /// gradient, a hairline rim, and a white filled glyph. Leave `symbol` out for an
-/// empty tile, which is how free space is drawn.
-private struct OverviewIconTile: View {
+/// empty tile, which is how free space is drawn. `imageName` shows an icon
+/// from the asset catalog as the whole tile instead, for Apple's own Apple
+/// Intelligence mark. The icon brings its own rounded corners, so it is drawn
+/// as it is, with no clip and no rim.
+struct OverviewIconTile: View {
     var symbol: String?
     let color: Color
+    var imageName: String? = nil
 
     static let size: CGFloat = 28
     private static let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
 
+    private var tileBackground: some View {
+        Self.shape
+            .fill(color)
+            // Lighter at the top, a touch darker at the bottom.
+            .overlay(Self.shape.fill(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0)], startPoint: .top, endPoint: .bottom)))
+            .overlay(Self.shape.fill(LinearGradient(colors: [.black.opacity(0), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom)))
+    }
+
+    private var rim: some View {
+        Self.shape.strokeBorder(
+            LinearGradient(colors: [.white.opacity(0.35), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom),
+            lineWidth: 0.5
+        )
+    }
+
     var body: some View {
         Group {
-            if let symbol {
+            if let imageName {
+                Image(imageName)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: Self.size, height: Self.size)
+            } else if let symbol {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.18), radius: 0.5, y: 0.5)
                     .frame(width: Self.size, height: Self.size)
-                    .background {
-                        Self.shape
-                            .fill(color)
-                            // Lighter at the top, a touch darker at the bottom.
-                            .overlay(Self.shape.fill(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0)], startPoint: .top, endPoint: .bottom)))
-                            .overlay(Self.shape.fill(LinearGradient(colors: [.black.opacity(0), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom)))
-                    }
-                    .overlay {
-                        Self.shape.strokeBorder(
-                            LinearGradient(colors: [.white.opacity(0.35), .black.opacity(0.12)], startPoint: .top, endPoint: .bottom),
-                            lineWidth: 0.5
-                        )
-                    }
+                    .background { tileBackground }
+                    .overlay { rim }
             } else {
                 // Free space: an empty tile, outlined in the bar's free color.
                 Self.shape
@@ -719,7 +761,7 @@ enum OverviewLinkedRowState: Equatable {
     case dimmed
 }
 
-private extension View {
+extension View {
     func overviewLinked(_ state: OverviewLinkedRowState) -> some View {
         self
             .saturation(state == .dimmed ? 0 : 1)

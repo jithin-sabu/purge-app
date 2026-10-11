@@ -107,20 +107,8 @@ final class LocalSnapshotStore: ObservableObject {
     /// everything else written meanwhile, so it is only claimed once it has settled and
     /// clears the noise floor; a figure still moving is not claimed at all.
     private static func freedBytes(since before: VolumeCapacity?) async -> Int64? {
-        guard let before else { return nil }
-        let noise = VolumeCapacityReader.noiseFloorBytes
-        var previous: Int64?
-        for attempt in 0..<10 {
-            if attempt > 0 {
-                try? await Task.sleep(for: .seconds(1))
-            }
-            guard let after = VolumeCapacityReader.read() else { return nil }
-            let gained = after.availableBytes - before.availableBytes
-            if let previous, abs(gained - previous) < noise {
-                return gained >= noise ? gained : nil
-            }
-            previous = gained
+        await VolumeCapacityReader.settledGain(since: before?.availableBytes) {
+            VolumeCapacityReader.read()?.availableBytes
         }
-        return nil
     }
 }

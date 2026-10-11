@@ -357,7 +357,10 @@ struct IntentRouterTests {
         #expect(InstalledAppIndex.matching("figma", in: apps).isEmpty)
     }
 
-    private static func eventually(timeout: TimeInterval = 5, _ condition: () -> Bool) async -> Bool {
+    /// Waits for the store to settle. The deadline only stops a hang: other suites
+    /// fill the cooperative thread pool on purpose for several seconds at a time,
+    /// and a 5-second wait ran out on a 3-core CI runner while the scan was starved.
+    private static func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition() {
             guard Date() < deadline else { return false }

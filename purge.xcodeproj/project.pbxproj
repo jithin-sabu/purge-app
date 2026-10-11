@@ -25,6 +25,9 @@
 		82ABE8E4B27CCE67F4AF5EA2 /* PurgeHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C4796D7FF373363BCFFB9D /* PurgeHelperProtocol.swift */; };
 		D4437D8BF273B9C7C9FC5A96 /* io.getpurge.helper in Embed Privileged Helper */ = {isa = PBXBuildFile; fileRef = 23866D74E1EC150691D3E969 /* io.getpurge.helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ED195DD5938B9599AB353C08 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 49C4D8E8868801EE41EAE019 /* Cocoa.framework */; };
+		AA10C0DE0001000000000005 /* PurgeAssetWorkerMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10C0DE0001000000000002 /* PurgeAssetWorkerMain.swift */; };
+		AA10C0DE0001000000000006 /* UnifiedAssetCalls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10C0DE0001000000000003 /* UnifiedAssetCalls.swift */; };
+		AA10C0DE0001000000000007 /* io.getpurge.assetworker in Embed Asset Worker */ = {isa = PBXBuildFile; fileRef = AA10C0DE0001000000000001 /* io.getpurge.assetworker */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +51,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = B2C3D4E5F60718293A4B5C6D;
 			remoteInfo = PurgeWatch;
+		};
+		AA10C0DE000100000000000D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5AF3803D2FAA15E4001693A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA10C0DE000100000000000B;
+			remoteInfo = PurgeAssetWorker;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -96,6 +106,17 @@
 			name = "Copy LaunchDaemon plist";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA10C0DE000100000000000C /* Embed Asset Worker */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (
+				AA10C0DE0001000000000007 /* io.getpurge.assetworker in Embed Asset Worker */,
+			);
+			name = "Embed Asset Worker";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -119,6 +140,10 @@
 		D7C4796D7FF373363BCFFB9D /* PurgeHelperProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PurgeHelperProtocol.swift; path = purge/PrivilegedHelper/PurgeHelperProtocol.swift; sourceTree = "<group>"; };
 		E01F2031425364758697A8B9 /* RemovedAppHandoff.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemovedAppHandoff.swift; path = purge/Services/RemovedAppHandoff.swift; sourceTree = SOURCE_ROOT; };
 		F0102132435465768798A9BA /* InstalledApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstalledApp.swift; path = purge/Models/InstalledApp.swift; sourceTree = SOURCE_ROOT; };
+		AA10C0DE0001000000000001 /* io.getpurge.assetworker */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = file; path = io.getpurge.assetworker; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA10C0DE0001000000000002 /* PurgeAssetWorkerMain.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PurgeAssetWorkerMain.swift; sourceTree = "<group>"; };
+		AA10C0DE0001000000000003 /* UnifiedAssetCalls.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UnifiedAssetCalls.swift; sourceTree = "<group>"; };
+		AA10C0DE0001000000000004 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -179,6 +204,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA10C0DE000100000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -212,6 +244,7 @@
 				FCDE845D5AB0CCC41298A1BD /* Frameworks */,
 				31C51A0B3A08A69657620BB4 /* PurgeHelper */,
 				8F901A2B3C4D5E6F708192A3 /* PurgeWatch */,
+				AA10C0DE0001000000000008 /* PurgeAssetWorker */,
 				11FB4F1F6508447C0DBD5A1C /* SharedWithHelper */,
 			);
 			sourceTree = "<group>";
@@ -223,6 +256,7 @@
 				5AF381002FAA15E4001693A0 /* PurgeTests.xctest */,
 				23866D74E1EC150691D3E969 /* io.getpurge.helper */,
 				A1B2C3D4E5F60718293A4B5C /* io.getpurge.watch */,
+				AA10C0DE0001000000000001 /* io.getpurge.assetworker */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -258,6 +292,16 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		AA10C0DE0001000000000008 /* PurgeAssetWorker */ = {
+			isa = PBXGroup;
+			children = (
+				AA10C0DE0001000000000002 /* PurgeAssetWorkerMain.swift */,
+				AA10C0DE0001000000000003 /* UnifiedAssetCalls.swift */,
+				AA10C0DE0001000000000004 /* Info.plist */,
+			);
+			path = PurgeAssetWorker;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -273,12 +317,14 @@
 				883FF41E2091C49DC0E8A5F3 /* Copy LaunchDaemon plist */,
 				0718293A4B5C6D7E8F901A2B /* Embed Watch Agent */,
 				18293A4B5C6D7E8F901A2B3C /* Copy Watch LaunchAgent plist */,
+				AA10C0DE000100000000000C /* Embed Asset Worker */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				983EE170A01ED85E13C896A9 /* PBXTargetDependency */,
 				F60718293A4B5C6D7E8F901A /* PBXTargetDependency */,
+				AA10C0DE000100000000000E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				5AF380472FAA15E4001693A0 /* purge */,
@@ -343,6 +389,22 @@
 			productReference = A1B2C3D4E5F60718293A4B5C /* io.getpurge.watch */;
 			productType = "com.apple.product-type.tool";
 		};
+		AA10C0DE000100000000000B /* PurgeAssetWorker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA10C0DE0001000000000011 /* Build configuration list for PBXNativeTarget "PurgeAssetWorker" */;
+			buildPhases = (
+				AA10C0DE0001000000000009 /* Sources */,
+				AA10C0DE000100000000000A /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PurgeAssetWorker;
+			productName = io.getpurge.assetworker;
+			productReference = AA10C0DE0001000000000001 /* io.getpurge.assetworker */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -384,6 +446,7 @@
 				5AF381022FAA15E4001693A0 /* PurgeTests */,
 				6647C3899C82D58912C86622 /* PurgeHelper */,
 				B2C3D4E5F60718293A4B5C6D /* PurgeWatch */,
+				AA10C0DE000100000000000B /* PurgeAssetWorker */,
 			);
 		};
 /* End PBXProject section */
@@ -459,6 +522,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA10C0DE0001000000000009 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA10C0DE0001000000000005 /* PurgeAssetWorkerMain.swift in Sources */,
+				AA10C0DE0001000000000006 /* UnifiedAssetCalls.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -478,6 +550,12 @@
 			name = PurgeWatch;
 			target = B2C3D4E5F60718293A4B5C6D /* PurgeWatch */;
 			targetProxy = E5F60718293A4B5C6D7E8F90 /* PBXContainerItemProxy */;
+		};
+		AA10C0DE000100000000000E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PurgeAssetWorker;
+			target = AA10C0DE000100000000000B /* PurgeAssetWorker */;
+			targetProxy = AA10C0DE000100000000000D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -846,6 +924,50 @@
 			};
 			name = Release;
 		};
+		AA10C0DE000100000000000F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PurgeAssetWorker/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited)";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.assetworker;
+				PRODUCT_NAME = io.getpurge.assetworker;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA10C0DE0001000000000010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PurgeAssetWorker/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited)";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.assetworker;
+				PRODUCT_NAME = io.getpurge.assetworker;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -890,6 +1012,15 @@
 			buildConfigurations = (
 				A01B2C3D4E5F60718293A4B5 /* Release */,
 				901A2B3C4D5E6F708192A3B4 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA10C0DE0001000000000011 /* Build configuration list for PBXNativeTarget "PurgeAssetWorker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA10C0DE000100000000000F /* Debug */,
+				AA10C0DE0001000000000010 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

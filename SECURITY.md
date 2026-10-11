@@ -26,7 +26,9 @@ patient, but safety reports get priority over everything else.
   cannot go to the Trash: iOS simulators and simulator runtimes, which Purge
   removes through Xcode's `simctl`, and Time Machine local snapshots, which it
   removes through `tmutil`. Purge warns you before removing snapshots and never
-  removes the newest one.
+  removes the newest one. A third is the Apple Intelligence models on macOS 27,
+  which Purge releases through Apple's own asset service and can download
+  again; see below.
 - **Allowlist-based deletion.** Only paths that match an explicit safety
   allowlist are ever eligible for cleanup. Anything not on the list is never
   touched.
@@ -79,6 +81,26 @@ it checks every request four ways:
 - **No symlink tricks.** Paths are opened one component at a time without
   following symlinks, and the move is a single atomic rename, so another
   process cannot swap a checked path for a different one mid-move.
+
+## Apple Intelligence models
+
+On macOS 27, Purge can remove the Apple Intelligence models and download them
+again (issue #133). This is the one place Purge uses private Apple interfaces
+and the one change it makes that outlasts the app:
+
+- **Two private calls**, both to Apple's asset subscription service: one asks
+  it to release the model sets, the other asks for them back. They run in a
+  separate helper, `io.getpurge.assetworker`, started once per call and gone
+  after it, so a change in a future macOS crashes that helper and not Purge.
+  Purge checks that macOS still names each set as expected before sending
+  anything, and never sends a release with an empty list, which macOS would
+  read as every asset on the Mac.
+- **One configuration profile**, which you install yourself in System
+  Settings. It only points the model downloads at a dead local address so
+  macOS does not fetch them again. It stays in Device Management until you
+  choose Download Again or remove it there; either brings the models back.
+- **Nothing automatic.** Neither scheduled cleaning nor Clean Safe Items ever
+  touches the models.
 
 ## Updates
 

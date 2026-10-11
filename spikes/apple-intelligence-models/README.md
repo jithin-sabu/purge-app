@@ -1,0 +1,226 @@
+# Spike: remove the Apple Intelligence models, and download them again later
+
+Standalone command-line tool for [purge-app#133](https://github.com/jithin-sabu/purge-app/issues/133).
+It is **not part of Purge** and nothing in it ships. Its job is to find out, on
+real Macs, whether the approach in the issue holds up before any of it is built
+into the app. The issue is explicit that this needs a yes before it lands:
+these would be Purge's first private Apple APIs and its first persistent change
+to the system.
+
+## What it does
+
+| Command | What happens |
+|---|---|
+| `aimodels status` | Which model sets are on disk and how big, which accounts use Apple Intelligence, whether the download block is installed, free space. Public file reads only. |
+| `aimodels measure --dump` | Reads MobileAsset's per-model records and prints them raw, so the record layout and the size keys can be confirmed on each macOS. |
+| `aimodels check` | Read-only preflight: does this macOS still map each asset set to the asset type the catalog expects, is the asset service reachable, and does CacheDelete honour the service filter. Nothing is removed. |
+| `aimodels remove` | Shows the plan and asks. Then: install the download-block profile (macOS 27), release the models, purge through CacheDelete limited to the MobileAsset service, measure the volume's free space before and after. |
+| `aimodels restore` | Remove the profile, then ask the asset service to download the sets again (macOS 27) or open Apple's switch (macOS 15 and 26). |
+| `aimodels snapshot --note "…"` | Record free space and the records to the journal, for the readings after a restart and after a day online. |
+| `aimodels selftest` | Checks on the logic that must not go wrong, touching nothing. CI runs this. |
+
+Every private call runs in a throwaway child process (`aimodels __worker <op>`),
+so a changed signature crashes that child and is reported as a crash, not a
+hang or a crash of the tool.
+
+## Build
+
+Xcode 16 or later, on macOS 14 or later.
+
+```sh
+cd spikes/apple-intelligence-models
+swift build -c release
+.build/release/aimodels selftest
+.build/release/aimodels status
+```
+
+## The three steps, and where each one comes from
+
+| Step | How | Source |
+|---|---|---|
+| Measure | Sum `downloadedFilesystemBytes` of the on-filesystem records under `/System/Library/AssetsV2/persisted/AutoAssetDescriptors`, with lock entries from its `AutoAssetLocker` folder. World-readable; no private API. | The issue; the record fields were read on the CI runner (see open questions). |
+| Release (macOS 27) | `ResetAssetSets` over XPC to `com.apple.siri.uaf.subscription.service`, one set per request. `AssetSets` is checked non-empty in the bridge before a connection is even made. | pared, RemoveMacAI |
+| Release (macOS 15, 26) | Open Apple Intelligence & Siri; the user turns it off. | The issue |
+| Free the space now | `CacheDeletePurgeSpaceWithInfo` with `CACHE_DELETE_SERVICES` set to the MobileAsset service. Sent only after a read-only `CacheDeleteCopyPurgeableSpaceWithInfo` with and without the filter shows the filter at work. | Request keys from DeviceLink's `_DLPurgeDiskSpaceOnComputer` (via BrainLayer and pymobiledevice3). The services key is from a Mail cache-delete plist, not from a purge request: **unverified**. |
+| Keep them gone (macOS 27) | A profile forcing `com.apple.MobileAsset` `DownloadServerBaseURLOverride-<assetType>` to `https://127.0.0.1:9/purge-blocked/`, approved once by the user. | pared, RemoveMacAI |
+| Download again | Remove the profile, then `Unsubscribe` and `Subscribe` the sets with the usage aliases from pared's catalog. On 15 and 26, the user turns the switch on. | pared |
+
+The order in `remove` is block first, then release, then purge: the block has
+to be in place before the models are released, or macOS can start downloading
+them again in the gap.
+
+## Safety rules the tool enforces
+
+- `AssetSets` is never empty. Refused in the Objective-C bridge and again in the worker.
+- The purge never runs unfiltered. The worker refuses a purge request without
+  `CACHE_DELETE_SERVICES`, and `remove` sends one only when the filtered
+  purgeable figure is lower than the unfiltered one and the filtered reply
+  names no other service. Any other outcome prints both raw replies and skips
+  the purge.
+- Private calls run in a child process.
+- Other accounts that use Apple Intelligence are named before anything is removed.
+- Space freed is the volume's free space before versus after, settled over
+  consecutive readings, with Purge's 64 MB noise floor. Apple's figures are
+  shown as what they are: the records' sizes.
+- Nothing here is scheduled or automatic; every change asks first.
+
+## Test plan (from the issue)
+
+Run on macOS 27, and if possible 15 and 26. Keep the journal
+(`~/Library/Application Support/Purge/spikes/apple-intelligence-models.json`)
+and paste the table into the issue.
+
+1. `aimodels measure --dump --all > records.txt`: what do the Apple
+   Intelligence sets' records hold, which size keys, and do installed and
+   released records look different? (The record layout itself is known; see
+   the open questions.)
+2. `aimodels check`: does the asset service match the catalog, and is the
+   CacheDelete filter honoured? If the purgeable query gives no reply, try
+   `--call-style block`. If the service id is not defined, the check lists the
+   ones that mention MobileAsset; pass the right one with `--service`.
+3. `aimodels remove`: record free space before and after.
+4. Restart, then `aimodels snapshot --note "after restart"`.
+5. After a day online: `aimodels snapshot --note "after a day"`. Did anything come back?
+6. `aimodels restore`, wait for the downloads, then `aimodels snapshot --note "after download again"`.
+
+| Reading | macOS 27 | macOS 26 | macOS 15 |
+|---|---|---|---|
+| Records found, size key | | | |
+| Service filter honoured | | | |
+| Free before → after `remove` | | | |
+| After restart | | | |
+| After a day online | | | |
+| After `restore` | | | |
+
+## Results so far
+
+**macOS 27.0, MacBook Air (Apple silicon), 2026-10-10.** One account, Apple
+Intelligence switched off in Settings, models still on disk.
+
+| Step | Result |
+|---|---|
+| Measure | 548 records, 229 for the five sets, 57.54 GB by `downloadedFilesystemBytes` over all records. Folders present, no lock entries. |
+| Asset service | Every set maps to the catalog's asset type. The reset handler answers. `latestStatusForClients` bytes are useless (118 MB, zero or unknown for 57 GB of models), as RemoveMacAI found. |
+| CacheDelete query | The synchronous call works. Reply keys: `CACHE_DELETE_AMOUNT`, `CACHE_DELETE_FREESPACE`, `CACHE_DELETE_NONPURGEABLE_AMOUNT`, `CACHE_DELETE_VOLUME`. Purgeable 31.56 GB overall, 7.27 GB with `CACHE_DELETE_SERVICES` set to `com.apple.mobileassetd.cache-delete`: the filter is honoured. |
+| Profile | Installed from the Downloads file through System Settings. |
+| Release | Three sets accepted. Visual and CodeLM answered "Could not eliminate as there are current locks" (lock held by `UnifiedAssetFramework`'s own manager), yet all five folders were empty afterwards and all 229 records gone. pared documents the same: the lock error can outlive a successful forced removal. `remove` now judges those sets by their folders. |
+| Purge | `CacheDeletePurgeSpaceWithInfo` with the synchronous style crashed the worker (SIGSEGV), as designed. The purge now defaults to the reply-block style; untested until the next removal. |
+| Space | 166.61 GB free before, 190.53 GB after, 23.91 GB freed within the 30 s settling window, from the release alone. Why that is less than the 57.54 GB measured is open: several versions of one model can be on the filesystem at once (`measure` now shows a latest-version figure beside the all-records one), and deletion may still have been running. |
+
+So on macOS 27.0 the release step frees space by itself and the purge may
+not be needed at all.
+
+**Next morning, after `restore`.** The download request was honoured: the
+core set was back to 13 GB in 106 records, code generation to 4.93 GB, Photos
+sets complete; image generation stayed at 100 MB (its aliases may need the
+feature on). Free space as Settings shows it *rose* from 181.8 GB to 191.0 GB
+while 16 GB of models arrived: the staging archives were cleaned up, and the
+unpacked models count as purgeable, so the "available for important usage"
+figure does not subtract them. That also explains the removal: of the 57 GB
+of records, about 33 GB was already counted as free before, and only the
+non-purgeable 24 GB showed up as a gain. `sudo du` on a model folder is
+refused ("Operation not permitted"), so the allocated size cannot be
+measured even as root. The tool now records the raw free-block figure beside
+the shown one, so the next removal reports both deltas.
+
+What this means for the app: a user's Storage pane already counts most of
+these models as available. Removing them gives back the non-purgeable part
+and ends the dependence on macOS purging them when the disk is nearly full,
+but it will not add the headline figure to the number they see. The row has
+to say that honestly, and the size it shows must not be the record sum.
+
+## What RemoveMacAI's users have hit (checked 2026-10-11)
+
+RemoveMacAI's release notes and issue tracker, read against this spike's results:
+
+- **The "current locks" reply is a false negative.** Its issue 15 (macOS
+  27.0.1) saw the same error on the core, image and Spatial Photos sets; a
+  rerun reported everything removed, and the maintainer's advice is to check
+  status afterwards. This spike's `remove` already judges those sets by
+  their folders, which is the same conclusion.
+- **The per-set status API lies.** Its 0.2.3 release moved size readings to
+  the asset service's inventory because `latestStatusForClients` reported 0
+  for installed models on macOS 27.0.1. This spike saw the same (118 MB,
+  zero or unknown for 57 GB of models) and reads the persisted records
+  instead.
+- **Storage in System Settings does not follow the removal.** Its issue 32
+  (open): one user's System Data grew to 61–74 GB after removal and fell
+  back when the models were re-downloaded; another still saw 27 GB under
+  Apple Intelligence after removal and a restart while the asset folders
+  held 7 GB. The maintainer attributes it to Apple's estimate and purgeable
+  accounting but has not located the space. This matches the purgeable
+  behaviour measured here: the figure users see does not move the way the
+  record sum suggests. Purge must not promise it will.
+- **Third-party Core ML features can break.** Its issue 40 (open): Adobe
+  Lightroom's AI Denoise stopped working after the models were removed and
+  came back after revert; a Topaz Gigapixel crash in Core ML's model
+  library is reported in the same thread. Cause unconfirmed, but it means
+  the consumer list from pared's catalog is incomplete, and the app's
+  confirmation has to say that apps using Apple's on-device models may stop
+  working, not only the named Apple features.
+- **No purge step, no re-subscribe.** RemoveMacAI relies on the release
+  alone and on macOS downloading again when a feature is turned on. Both
+  held in this spike's run, which supports dropping the CacheDelete purge
+  from the design unless a later run shows the release leaving files behind.
+
+## Open questions the spike has to settle
+
+- **Record layout.** Answered by the CI runner (macOS 26.6, Apple silicon,
+  no Apple Intelligence sets installed): the records are binary plists named
+  `AutoAssetDescriptors_Entry_<type>_<specifier>_<version>_0.state`, with
+  `SUCorePersistedStatePolicyFields.entryStatus` (`LOADED`) and the descriptor
+  as a keyed archive under `SUCorePersistedStatePolicySecureCodedObjectsFields.assetDescriptor`.
+  The descriptor's root holds `assetType`, `AssetSpecifier`, `AssetVersion`,
+  `downloadedFilesystemBytes`, `downloadedNetworkBytes`, `isOnFilesystem`,
+  `neverBeenLocked`, `secureOperationEliminating`, `secureOperationInProgress`,
+  `foundAsPreInstalled`, and a `metadata` dictionary with the catalog's
+  `_UnarchivedSize`, `_DownloadSize`, `_Measurement`, `__RequiredByOS` and
+  `__AssetDefaultGarbageCollectionBehavior` (`NeverCollected` on the sample).
+  The `AutoAssetLocker` folder is absent when nothing holds a lock. `measure`
+  resolves the archive, counts `downloadedFilesystemBytes` for records with
+  `isOnFilesystem`, and shows how many records macOS is eliminating. Still to
+  read on a Mac that has the sets: what the Apple Intelligence records look
+  like before and after a release, and whether `isOnFilesystem` flips or the
+  record disappears. Run `measure --dump` there and keep the output.
+- **CacheDelete call shape.** The purgeable query is synchronous (confirmed on
+  27.0). The purge is not: the synchronous style crashed, so the default is now
+  the reply block (`--call-style` overrides it). Whether that answers, and
+  which urgency level reaches the MobileAsset service, are still to record.
+- **Service filter.** `CACHE_DELETE_SERVICES` restricts the purgeable query on
+  27.0 and `com.apple.mobileassetd.cache-delete` is a defined service. Whether
+  it restricts the purge the same way is assumed from that, not seen.
+- **macOS 27 master switch.** Still from press reports only, though the test
+  Mac had Apple Intelligence off in Settings with 57 GB of models still on
+  disk, which is the behaviour the reports describe.
+- **Measured versus freed.** 57.54 GB measured, 23.91 GB freed, and deletion
+  did not continue afterwards (190.53 GB free right after, 187.55 GB an hour
+  later with the block still installed). Versions do not explain it: of the
+  229 records only a few models had two or three, the rest one. Two likely
+  causes, both of which decide what the app may show: the free-space reading
+  already counted the 7.27 GB CacheDelete called purgeable, and the 191
+  core-set records (adapters and variants on shared base weights) may be APFS
+  clones that each report their full size. Settle it with
+  `sudo du -sh /System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_GenerativeModels`
+  once the models are back, against the core set's row. If the record sum
+  overstates the footprint, the app must show allocated size or a measured
+  delta, never the record sum.
+- **Download again.** `restore` worked on 27.0: profile removed through
+  System Settings, `Unsubscribe` then `Subscribe` accepted for all five
+  recoveries, and three sets had their first files back within two minutes.
+  Whether the core set completes, and how long it takes, is the next reading.
+- **macOS 15 and 26.** Whether the records and the CacheDelete calls look the
+  same there. `measure` and `check` run on every version; only `remove`'s
+  release step differs.
+- **Profile across updates.** Whether the download block survives a macOS update.
+- **Which sets.** The catalog removes five sets. `status` and the `remove` plan
+  list what each one switches off, from pared's consumer map.
+
+## References
+
+- pared: [how-it-works.md](https://github.com/4evy/pared/blob/master/docs/how-it-works.md),
+  [catalog.json](https://github.com/4evy/pared/blob/master/Sources/Pared/Resources/catalog.json),
+  `Sources/AssetBridge` (MIT)
+- RemoveMacAI: [README](https://github.com/omlahore/RemoveMacAI),
+  [UAF.m](https://github.com/omlahore/RemoveMacAI/blob/main/Sources/UAF/UAF.m),
+  [Profile.swift](https://github.com/omlahore/RemoveMacAI/blob/main/Sources/removemacai/Profile.swift) (MIT)
+- BrainLayer's CacheDelete helper: [cachedelete_purge.swift](https://github.com/EtanHey/brainlayer/blob/main/src/brainlayer/cachedelete_purge.swift)
