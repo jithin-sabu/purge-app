@@ -6,6 +6,14 @@
 
 <!-- Link the issue this addresses, if any: Fixes #123 -->
 
+## Blast radius
+
+<!-- What could this change affect outside the diff? If it changes what Purge can delete, say why that is safe and which test proves it. Delete this section for docs-only changes. -->
+
+## Verification
+
+<!-- What you ran and what you saw: tests, the app, before and after numbers. Say what you could not run. -->
+
 ## Screenshots
 
 <!-- For UI changes, before/after screenshots or a screen recording. Delete this section if not applicable. -->
