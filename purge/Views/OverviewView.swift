@@ -427,9 +427,10 @@ private struct OverviewCategoryRow: View {
 
 /// A System Settings style tile: the category color with a soft top-to-bottom
 /// gradient, a hairline rim, and a white filled glyph. Leave `symbol` out for an
-/// empty tile, which is how free space is drawn. `imageName` shows an image
+/// empty tile, which is how free space is drawn. `imageName` shows an icon
 /// from the asset catalog as the whole tile instead, for Apple's own Apple
-/// Intelligence mark, whose gradient no drawn blend matched.
+/// Intelligence mark. The icon brings its own rounded corners, so it is drawn
+/// as it is, with no clip and no rim.
 struct OverviewIconTile: View {
     var symbol: String?
     let color: Color
@@ -459,10 +460,8 @@ struct OverviewIconTile: View {
                 Image(imageName)
                     .resizable()
                     .interpolation(.high)
-                    .scaledToFill()
+                    .scaledToFit()
                     .frame(width: Self.size, height: Self.size)
-                    .clipShape(Self.shape)
-                    .overlay { rim }
             } else if let symbol {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .medium))

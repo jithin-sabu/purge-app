@@ -24,8 +24,8 @@ struct OverviewAppleIntelligenceRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            // Apple's own mark for the feature, as an image: the white loop on its
-            // orange, pink, blue and lilac tile. The drawn blends never matched it.
+            // Apple's own mark for the feature, as an icon image with its own
+            // corners: the loop in blue and gold on a white tile.
             OverviewIconTile(symbol: nil, color: AppColors.Chart.everythingElse, imageName: "AppleIntelligenceMark")
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
