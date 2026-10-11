@@ -95,19 +95,23 @@ struct CleanupHistoryDetailView: View {
     }
 
     private func deletedItemRow(_ item: CleanupHistoryDeletedItemDTO) -> some View {
+        // An Apple Intelligence entry's items are model sets by name, not files.
+        let isModelSet = entry.kind == .appleIntelligenceModels
         let fileURL = URL(fileURLWithPath: item.path).standardizedFileURL
 
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(fileURL.lastPathComponent)
+                Text(isModelSet ? item.path : fileURL.lastPathComponent)
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
-                Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textTertiary)
-                    .lineLimit(1)
+                if !isModelSet {
+                    Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textTertiary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 12)

@@ -39,7 +39,7 @@ final class SettingsGuidePanel {
         panel.orderFrontRegardless()
 
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.place() }
         }
     }
@@ -75,15 +75,19 @@ final class SettingsGuidePanel {
         return panel
     }
 
-    /// Beside the System Settings window: to its right when there is room, else
-    /// to its left, else just below it. With no System Settings window on screen,
-    /// the top-right corner of the main screen, where the user will look for it.
+    /// Beside the System Settings window, on whichever display holds it: to its
+    /// right when there is room, else to its left, else just below it. With no
+    /// System Settings window on screen, the top-right corner of the main screen,
+    /// where the user will look for it.
     private func place() {
-        guard let panel, let screen = NSScreen.main else { return }
+        guard let panel else { return }
         let size = panel.frame.size
+        let window = Self.systemSettingsFrame()
+        let screen = window.flatMap { frame in NSScreen.screens.first { $0.frame.intersects(frame) } } ?? NSScreen.main
+        guard let screen else { return }
         let visible = screen.visibleFrame
         var origin = NSPoint(x: visible.maxX - size.width - Self.gap, y: visible.maxY - size.height - Self.gap)
-        if let window = Self.systemSettingsFrame() {
+        if let window {
             let right = NSPoint(x: window.maxX + Self.gap, y: window.maxY - size.height)
             let left = NSPoint(x: window.minX - size.width - Self.gap, y: window.maxY - size.height)
             let below = NSPoint(x: window.minX, y: window.minY - size.height - Self.gap)

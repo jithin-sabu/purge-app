@@ -40,6 +40,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     private var latestPass = 0
     private var waitCancelled = false
+    /// The sets as last read, and how many readings in a row have matched them,
+    /// so a download request is considered done once nothing more arrives.
+    private var previousSets: [AppleIntelligenceSetReading]?
+    private var unchangedReadings = 0
 
     /// How long the user gets to act in System Settings before Purge gives up.
     static let settingsWait: TimeInterval = 10 * 60
@@ -86,8 +90,24 @@ final class AppleIntelligenceModelStore: ObservableObject {
         if pass == latestPass {
             reading = fresh
             installedBlocks = blocks
+            noteArrivals(fresh)
         }
         return fresh
+    }
+
+    /// Download again is over once two readings in a row show nothing new
+    /// arriving and something is on the Mac: the row stops saying "downloading"
+    /// and stops re-reading every 20 seconds.
+    private func noteArrivals(_ fresh: AppleIntelligenceReading) {
+        if let previousSets, previousSets == fresh.sets {
+            unchangedReadings += 1
+        } else {
+            unchangedReadings = 0
+        }
+        previousSets = fresh.sets
+        if case .downloadRequested = lastOutcome, fresh.isAnythingPresent, unchangedReadings >= 2 {
+            lastOutcome = nil
+        }
     }
 
     func refreshAccounts() async {
@@ -179,7 +199,9 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
         // 3. What is left, and what the volume gave back once it settled.
         phase = .measuring
-        let freedShown = await Self.settledGain(since: shownBefore, read: { VolumeCapacityReader.read()?.availableBytes })
+        let freedShown = await VolumeCapacityReader.settledGain(since: shownBefore, attempts: 15) {
+            VolumeCapacityReader.read()?.availableBytes
+        }
         let after = await readLatest()
         let rawAfter = VolumeRawCapacityReader.readAvailableBytes()
         let freedRaw: Int64? = {
@@ -202,15 +224,18 @@ final class AppleIntelligenceModelStore: ObservableObject {
         if left == 0 {
             lastOutcome = .removed(sets: removed, freedShownBytes: freedShown, freedRawBytes: freedRaw)
         } else {
-            let reason = failures.values.first ?? String(localized: "macOS hasn't finished removing them")
+            // The service's own words over Purge's generic one, and a stable
+            // pick when several sets stayed.
+            let generic = String(localized: "macOS says these are still in use")
+            let reasons = failures.sorted { $0.key < $1.key }.map(\.value)
+            let reason = reasons.first { $0 != generic } ?? reasons.first ?? String(localized: "macOS hasn't finished removing them")
             lastOutcome = .someLeft(removed: removed, left: left, reason: reason)
         }
         if removed > 0 {
             CleanupHistoryStore.shared.appendAppleIntelligenceRemoval(
                 sets: targets.filter { set in !(after.sets.first { $0.set.name == set.name }?.isPresent ?? true) },
                 bytesBefore: before,
-                freedShownBytes: freedShown,
-                freedRawBytes: freedRaw
+                freedShownBytes: freedShown
             )
         }
     }
@@ -257,6 +282,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         ], timeout: 60)
         phase = .idle
         lastOutcome = subscribe.ok ? .downloadRequested : .downloadRequestFailed(subscribe.problem)
+        unchangedReadings = 0
         _ = await readLatest()
     }
 
@@ -278,24 +304,5 @@ final class AppleIntelligenceModelStore: ObservableObject {
             try? await Task.sleep(for: .seconds(1))
         }
         return false
-    }
-
-    /// Free space gained since `before`, once two readings a second apart agree,
-    /// as `LocalSnapshotStore` does it. Nil when the figure never settles or
-    /// stays under the noise floor.
-    nonisolated static func settledGain(since before: Int64?, read: @Sendable () -> Int64?) async -> Int64? {
-        guard let before else { return nil }
-        let noise = VolumeCapacityReader.noiseFloorBytes
-        var previous: Int64?
-        for attempt in 0..<15 {
-            if attempt > 0 { try? await Task.sleep(for: .seconds(1)) }
-            guard let after = read() else { return nil }
-            let gained = after - before
-            if let previous, abs(gained - previous) < noise {
-                return gained >= noise ? gained : nil
-            }
-            previous = gained
-        }
-        return nil
     }
 }

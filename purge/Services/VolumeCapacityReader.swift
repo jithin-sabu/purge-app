@@ -33,4 +33,30 @@ nonisolated enum VolumeCapacityReader {
     /// to the volume while we measured, so they cannot support a reclaim claim.
     /// Spotlight indexing alone moves the number by megabytes between two reads.
     static let noiseFloorBytes: Int64 = 64 * 1024 * 1024
+
+    /// Space gained since `before`, once two readings a second apart agree.
+    /// APFS gives space back over a few seconds after something goes, so the
+    /// figure is read until it stops moving. It still covers everything else
+    /// written meanwhile, so it is only claimed once it has settled and clears
+    /// the noise floor; a figure still moving, or no reading, claims nothing.
+    static func settledGain(
+        since before: Int64?,
+        attempts: Int = 10,
+        read: @Sendable () -> Int64?
+    ) async -> Int64? {
+        guard let before else { return nil }
+        var previous: Int64?
+        for attempt in 0..<attempts {
+            if attempt > 0 {
+                try? await Task.sleep(for: .seconds(1))
+            }
+            guard let after = read() else { return nil }
+            let gained = after - before
+            if let previous, abs(gained - previous) < noiseFloorBytes {
+                return gained >= noiseFloorBytes ? gained : nil
+            }
+            previous = gained
+        }
+        return nil
+    }
 }

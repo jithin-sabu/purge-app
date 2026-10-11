@@ -63,12 +63,20 @@ nonisolated enum AppleIntelligenceModelReader {
         for record in latest.values {
             if let bytes = record.bytes { total += bytes } else { allKnown = false }
         }
+        let folder = folderState(set.assetType, fileManager: fileManager)
+        // No readable record but files in the folder: a size nobody knows, not zero.
+        let bytes: Int64?
+        if onDisk.isEmpty {
+            bytes = folder == .holdsFiles ? nil : 0
+        } else {
+            bytes = allKnown ? total : nil
+        }
         return AppleIntelligenceSetReading(
             set: set,
             recordsOnDisk: onDisk.count,
             eliminating: records.filter(\.isEliminating).count,
-            latestBytes: onDisk.isEmpty ? 0 : (allKnown ? total : nil),
-            folder: folderState(set.assetType, fileManager: fileManager)
+            latestBytes: bytes,
+            folder: folder
         )
     }
 

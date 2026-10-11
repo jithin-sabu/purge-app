@@ -91,7 +91,7 @@ struct OverviewAppleIntelligenceRow: View {
             }
             .buttonStyle(.purge(.secondary, size: .small))
             .disabled(true)
-        } else if store.reading?.isAnythingPresent == true, !store.isDownloading {
+        } else if store.reading?.isAnythingPresent == true {
             removeButton
         } else if store.isProfileInstalled || store.reading?.isAnythingPresent == false {
             downloadButton
