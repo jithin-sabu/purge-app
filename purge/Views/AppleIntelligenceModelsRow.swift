@@ -24,10 +24,10 @@ struct OverviewAppleIntelligenceRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            // Apple's own glyph for the feature, from SF Symbols, painted with its
-            // sweep of colours on a neutral tile so the sweep is what shows.
-            OverviewIconTile(symbol: "apple.intelligence", color: AppColors.fillSecondary,
-                             glyphGradient: AppColors.appleIntelligenceGlyph)
+            // Apple's own mark for the feature, from SF Symbols: the white loop on
+            // its orange-to-blue tile.
+            OverviewIconTile(symbol: "apple.intelligence", color: AppColors.Chart.everythingElse,
+                             tileGradient: AppColors.appleIntelligenceTile)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text("Apple Intelligence models")

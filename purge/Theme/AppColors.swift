@@ -111,14 +111,15 @@ enum AppColors {
 
     // MARK: - Apple Intelligence
 
-    /// The sweep Apple paints its Apple Intelligence glyph with: blue, purple,
-    /// pink, orange. Only for that glyph on the Overview row; the same in both
-    /// themes, since it is Apple's mark rather than a token of ours.
-    static let appleIntelligenceGlyph: [Color] = [
-        Color(light: 0x3B82F6, dark: 0x3B82F6),
-        Color(light: 0x8B5CF6, dark: 0x8B5CF6),
-        Color(light: 0xEC4899, dark: 0xEC4899),
-        Color(light: 0xF97316, dark: 0xF97316),
+    /// The sweep behind Apple's Apple Intelligence mark, top-left to
+    /// bottom-right: orange, pink, purple, blue, with the white loop on top.
+    /// Only for that tile on the Overview row; the same in both themes, since
+    /// it is Apple's mark rather than a token of ours.
+    static let appleIntelligenceTile: [Color] = [
+        Color(light: 0xF5A623, dark: 0xF5A623),
+        Color(light: 0xF04E8C, dark: 0xF04E8C),
+        Color(light: 0xB06BE0, dark: 0xB06BE0),
+        Color(light: 0x4FA3F5, dark: 0x4FA3F5),
     ]
 
     // MARK: - AppKit
