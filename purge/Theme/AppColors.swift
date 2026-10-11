@@ -109,20 +109,6 @@ enum AppColors {
         static let freeSpace = Color(light: 0xDAD7D2, dark: 0x4E4B47)
     }
 
-    // MARK: - Apple Intelligence
-
-    /// The four corners of the tile behind Apple's Apple Intelligence mark,
-    /// blended from each corner inwards: orange top-left, pink top-right, sky
-    /// blue bottom-left, lilac bottom-right, with the white loop on top. Only
-    /// for that tile on the Overview row; the same in both themes, since it is
-    /// Apple's mark rather than a token of ours.
-    static let appleIntelligenceTile: [Color] = [
-        Color(light: 0xF9A23F, dark: 0xF9A23F),
-        Color(light: 0xF0508F, dark: 0xF0508F),
-        Color(light: 0x5DB4F6, dark: 0x5DB4F6),
-        Color(light: 0xC78CF0, dark: 0xC78CF0),
-    ]
-
     // MARK: - AppKit
 
     /// AppKit checkbox / control accent, the same colour as `actionPrimary`.

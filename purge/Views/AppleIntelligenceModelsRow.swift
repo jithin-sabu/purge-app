@@ -24,10 +24,9 @@ struct OverviewAppleIntelligenceRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            // Apple's own mark for the feature, from SF Symbols: the white loop on
-            // its orange-to-blue tile.
-            OverviewIconTile(symbol: "apple.intelligence", color: AppColors.Chart.everythingElse,
-                             tileGradient: AppColors.appleIntelligenceTile)
+            // Apple's own mark for the feature, as an image: the white loop on its
+            // orange, pink, blue and lilac tile. The drawn blends never matched it.
+            OverviewIconTile(symbol: nil, color: AppColors.Chart.everythingElse, imageName: "AppleIntelligenceMark")
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text("Apple Intelligence models")
