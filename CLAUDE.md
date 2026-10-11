@@ -42,7 +42,7 @@ Cloud sessions run on Linux, so they can build no Swift code. Run the two Linux 
 - `SafetyLevel` in `purge/Models/SafetyInfo.swift` has three cases.
   - `.safe` is "Safe to Clean". Clean Safe Items and scheduled cleans take these items without asking.
   - `.medium` is "Check First".
-  - `.unknown` is "Not Sure" and is never shown.
+  - `.unknown` is "Not Sure". It never appears in scan results, but the delete confirmation sheets can still list it.
 - Mark a path `.safe` only when it holds nothing but data its app rebuilds by itself. If it can hold settings, installed tools, keys, history, databases, projects, or offline downloads, it is `.medium` or not offered at all.
 - Every removal goes through `DeletionSafetyPolicy.evaluate(_:)`. Never add a delete path that skips it.
 - Files go to the Trash. Simulators, simulator runtimes, and Time Machine snapshots are removed for good, and the UI and docs must say so.

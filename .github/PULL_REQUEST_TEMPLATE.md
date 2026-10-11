@@ -12,7 +12,7 @@
 
 ## Verification
 
-<!-- What you ran and what you saw: tests, the app, before and after numbers. Say what you could not run. -->
+<!-- What you ran and what you saw: tests, the app, before and after numbers. If you could not run something, such as the unit tests, say so and give the command. -->
 
 ## Screenshots
 
