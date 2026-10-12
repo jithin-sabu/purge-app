@@ -1,21 +1,31 @@
 name: Claude Review
 
-# Reviews each pull request once with Anthropic's code-review plugin and
-# posts comments. It never pushes: it runs on this job's GITHUB_TOKEN, not
-# the Claude GitHub App, so the read-only contents permission binds it (#145).
+# Reviews each pull request once with Purge's own review command,
+# .claude/commands/review-pr.md, and posts comments (#147). It never pushes:
+# it runs on this job's GITHUB_TOKEN, not the Claude GitHub App, so the
+# read-only contents permission binds it (#145).
 
 on:
   pull_request:
     types: [opened, ready_for_review, reopened]
+  # Re-review a pull request from the Actions tab without closing it.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number
+        required: true
+        type: number
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number }}
+  group: claude-review-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
   review:
     # Forks get no secrets, and drafts are reviewed once they are ready.
-    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -23,17 +33,27 @@ jobs:
       pull-requests: write
       issues: read
     steps:
+      # The base branch sits at the root, so the review rules in CLAUDE.md
+      # and .claude/ come from main. The pull request's code goes in pr-head/.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
+
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number || inputs.pr_number }}/head
+          path: pr-head
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Review with Claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          plugin_marketplaces: https://github.com/anthropics/claude-code.git
-          plugins: code-review@claude-code-plugins
-          prompt: /code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+          prompt: /review-pr ${{ github.event.pull_request.number || inputs.pr_number }}
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*)"
+            --model claude-opus-5-5
+            --add-dir pr-head
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Read,Grep,Glob,Write,Agent,mcp__github_inline_comment__create_inline_comment"
