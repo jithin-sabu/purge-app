@@ -182,6 +182,11 @@ final class AppleIntelligenceModelStore: ObservableObject {
         let pending = pendingOutcome(requestedAt: request.requestedAt, now: now)
         switch current ?? pending {
         case .downloadRequested:
+            // Not read for a week, as in menu bar mode with the Overview never
+            // opened: drop it now rather than say "nothing yet" first.
+            if !arrived, now.timeIntervalSince(request.requestedAt) >= downloadRequestExpiry {
+                return (nil, true)
+            }
             // Settling counts from the last change; giving up counts from the request,
             // so a change to a set that was already there doesn't push it back.
             switch downloadWatch(

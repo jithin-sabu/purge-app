@@ -168,6 +168,18 @@ struct AppleIntelligenceModelStoreTests {
         #expect(watching.outcome == nil)
         #expect(watching.requestDone)
 
+        // Still "downloading" because nothing read it all week: dropped at once.
+        let unread = Store.arrivalOutcome(
+            current: .downloadRequested, request: request(), now: nothing, lastArrivalChange: week, at: week)
+        #expect(unread.outcome == nil)
+        #expect(unread.requestDone)
+
+        // A clock stepped back a little right after the request keeps it.
+        let stepBack = Store.arrivalOutcome(
+            current: .downloadRequested, request: request(), now: nothing, lastArrivalChange: after(-5), at: after(-5))
+        #expect(stepBack.outcome == .downloadRequested)
+        #expect(!stepBack.requestDone)
+
         let dayBefore = after(Store.downloadRequestExpiry - 24 * 60 * 60)
         let stillWaiting = Store.arrivalOutcome(
             current: .downloadNotStarted, request: request(), now: nothing, lastArrivalChange: dayBefore, at: dayBefore)
