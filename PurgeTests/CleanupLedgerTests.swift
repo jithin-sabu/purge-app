@@ -239,6 +239,32 @@ struct CleanupLedgerTests {
         #expect(imported.first { $0.source == .uninstall }?.items.map(\.label) == ["Slack", "slackmacgap"])
     }
 
+    /// An Apple Intelligence removal (#133) lists model sets by name with Apple's
+    /// record sums. Nothing went to the Trash, so it must not become a clean in
+    /// the ledger, where those sums would lead the recap's labels and biggest item.
+    @Test
+    func appleIntelligenceRemovalsStayOutOfTheLedger() async {
+        let directory = Self.tempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = Self.makeStore(directory)
+        let removal = CleanupHistoryEntry(
+            date: Self.date(2026, 10, 11),
+            trigger: .manual,
+            bytesMovedToTrash: 0,
+            bytesReclaimedOnVolume: 24_000_000_000,
+            deletedItems: [CleanupHistoryDeletedItemDTO(path: "Core Apple Intelligence models", sizeBytes: 57_000_000_000)],
+            kind: .appleIntelligenceModels
+        )
+        let clean = Self.historyEntry(Self.date(2026, 10, 12), [("/Users/me/.npm", 10)])
+
+        await store.reconcile(with: Self.legacy([removal, clean], lifetime: 10)).value
+
+        #expect(store.sessions(inYear: 2026).map(\.bytesMovedToTrash) == [10])
+        let totals = await store.yearTotals(2026)
+        #expect(totals.labels.map(\.label) == ["npm"])
+        #expect(totals.biggestItem?.bytes == 10)
+    }
+
     /// Someone who rolls back to an older version keeps cleaning into History
     /// only. Those cleans arrive on the next launch of a ledger version.
     @Test

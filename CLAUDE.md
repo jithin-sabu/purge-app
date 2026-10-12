@@ -45,11 +45,13 @@ Cloud sessions run on Linux, so they can build no Swift code. Run the two Linux 
   - `.unknown` is "Not Sure". It never appears in scan results, but the delete confirmation sheets can still list it.
 - Mark a path `.safe` only when it holds nothing but data its app rebuilds by itself. If it can hold settings, installed tools, keys, history, databases, projects, or offline downloads, it is `.medium` or not offered at all.
 - Every removal goes through `DeletionSafetyPolicy.evaluate(_:)`. Never add a delete path that skips it.
-- Files go to the Trash. Simulators, simulator runtimes, and Time Machine snapshots are removed for good, and the UI and docs must say so.
+  - The one exception is the Apple Intelligence models (#133). Purge deletes no files there: Apple's asset service releases each set, one name per request, from the fixed list in `purge/Models/AppleIntelligenceModels.swift`. A release with an empty list means every asset on the Mac, so `PurgeAssetWorker/` refuses one and the app never builds one. Don't use this exception as a pattern for anything else.
+- Files go to the Trash. Simulators, simulator runtimes, Time Machine snapshots, and the Apple Intelligence models are removed for good, and the UI and docs must say so.
 - Run the `deletion-safety-check` skill before you open a PR that touches any of these:
   - `purge/Services/DeletionSafetyPolicy.swift`, `SafetyTierList.swift`, `SafetyAllowlistSummary.swift`, `FileDeleter.swift`
   - any `purge/Services/*ScanPolicy.swift` or `*Scanner.swift`
   - `purge/Resources/explanations.json` or `purge/Models/ProjectArtifactCatalog.swift`
   - scheduled cleaning (`purge/Services/ScheduledCleaning*.swift`)
   - the root helper (`purge/PrivilegedHelper/`, `PurgeHelper/`)
+  - the Apple Intelligence models (`purge/Services/AppleIntelligenceModel*.swift`, `purge/Models/AppleIntelligenceModels.swift`, `PurgeAssetWorker/`)
 - After a real incident, add an entry to `docs/safety-notes.md`. Its "What would have caught it earlier" section must name a test or check that exists in the repo, like `PurgeTests/AllowlistAuditTests.swift`. A safety lesson that is only written down is not done.

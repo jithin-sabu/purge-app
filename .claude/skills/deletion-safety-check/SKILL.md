@@ -1,6 +1,6 @@
 ---
 name: deletion-safety-check
-description: Safety review for any Purge change that can affect what gets deleted, such as the allowlist, safety levels, scan policies, explanations.json, FileDeleter, scheduled cleaning, or the root helper. Use before you open or merge such a PR, and when asked whether a deletion change is safe.
+description: Safety review for any Purge change that can affect what gets deleted, such as the allowlist, safety levels, scan policies, explanations.json, FileDeleter, scheduled cleaning, the root helper, or the Apple Intelligence models removal. Use before you open or merge such a PR, and when asked whether a deletion change is safe.
 ---
 
 # Deletion safety check

@@ -51,7 +51,7 @@ nonisolated enum AppleIntelligenceModelReader {
 
     /// Sums only records on the filesystem, newest version of each model.
     static func measure(_ set: AppleIntelligenceModelSet, records: [Record],
-                        fileManager: FileManager = .default) -> AppleIntelligenceSetReading {
+                        fileManager: FileManager = .default, root: String = assetsRoot) -> AppleIntelligenceSetReading {
         let onDisk = records.filter(\.isOnFilesystem)
         var latest: [String: Record] = [:]
         for record in onDisk {
@@ -63,7 +63,7 @@ nonisolated enum AppleIntelligenceModelReader {
         for record in latest.values {
             if let bytes = record.bytes { total += bytes } else { allKnown = false }
         }
-        let folder = folderState(set.assetType, fileManager: fileManager)
+        let folder = folderState(set.assetType, root: root, fileManager: fileManager)
         // No readable record but files in the folder: a size nobody knows, not zero.
         let bytes: Int64?
         if onDisk.isEmpty {

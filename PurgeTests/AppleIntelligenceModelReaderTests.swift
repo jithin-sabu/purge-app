@@ -21,6 +21,18 @@ struct AppleIntelligenceModelReaderTests {
         #expect(AppleIntelligenceModelReader.identity(fromFileName: "AutoAssetLocker_Entry_x_y_1_0.state") == nil)
     }
 
+    /// The app's half of the rule that a release is never sent with an empty
+    /// list, which macOS reads as every asset on the Mac: each request names one
+    /// catalog set, so every name has to be a real, distinct one. Types carry no
+    /// underscore, or record names would split in the wrong place.
+    @Test func everyCatalogSetHasADistinctNameAndAUAFType() {
+        let sets = AppleIntelligenceCatalog.sets
+        #expect(sets.count == 5)
+        #expect(sets.allSatisfy { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty })
+        #expect(Set(sets.map(\.name)).count == sets.count)
+        #expect(sets.allSatisfy { $0.assetType.hasPrefix("com.apple.MobileAsset.UAF.") && !$0.assetType.contains("_") })
+    }
+
     @Test func versionsCompareNumerically() {
         #expect(AppleIntelligenceModelReader.versionIsOrdered("600.0.81600.13.202072,0", before: "600.0.81600.13.202073,0"))
         #expect(AppleIntelligenceModelReader.versionIsOrdered("9.0", before: "10.0"))
@@ -67,23 +79,27 @@ struct AppleIntelligenceModelReaderTests {
         AppleIntelligenceCatalog.sets.first { $0.name == "com.apple.MobileAsset.UAF.FM.Visual" }!
     }
 
+    /// A root with no asset folders, so a Mac with the models installed reads
+    /// the same as CI.
+    private let noAssets = FileManager.default.temporaryDirectory.appendingPathComponent("purge-assets-\(UUID().uuidString)").path
+
     /// Several versions of one model can be on the filesystem at once; only the
     /// newest counts, or a removal is promised more than it frees.
     @Test func onlyTheNewestVersionOfEachModelIsCounted() {
         let reading = AppleIntelligenceModelReader.measure(visual, records: [
             record("model.a", "1.0,0", 100), record("model.a", "2.0,0", 150), record("model.b", "1.0,0", 20),
             record("model.c", "1.0,0", 999, onDisk: false), record("model.d", "1.0,0", 5, eliminating: true),
-        ])
+        ], root: noAssets)
         #expect(reading.latestBytes == 175)
         #expect(reading.recordsOnDisk == 4)
         #expect(reading.eliminating == 1)
     }
 
     @Test func aRecordWithoutASizeMakesTheSetUnknownNotZero() {
-        let reading = AppleIntelligenceModelReader.measure(visual, records: [record("model.a", "1.0,0", nil)])
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [record("model.a", "1.0,0", nil)], root: noAssets)
         #expect(reading.latestBytes == nil)
         #expect(reading.recordsOnDisk == 1)
-        let empty = AppleIntelligenceModelReader.measure(visual, records: [])
+        let empty = AppleIntelligenceModelReader.measure(visual, records: [], root: noAssets)
         #expect(empty.latestBytes == 0)
     }
 

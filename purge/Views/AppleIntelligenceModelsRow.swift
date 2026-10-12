@@ -304,6 +304,12 @@ struct OverviewAppleIntelligenceConfirmation: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // Removed for good, like simulators and snapshots, so it says so (CLAUDE.md).
+            Text("The models don't go to the Trash. macOS deletes them for good, and Download Again fetches them from Apple.")
+                .font(AppStyle.Typography.callout)
+                .foregroundStyle(AppColors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Text("macOS will ask you to install a profile that stops the models downloading again. It stays in Device Management until you choose Download Again, which also brings the models back.")
                 .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
