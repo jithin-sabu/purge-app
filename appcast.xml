@@ -3,6 +3,26 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.10.0</title>
+      <pubDate>Mon, 12 Oct 2026 16:13:53 +0000</pubDate>
+      <sparkle:version>32</sparkle:version>
+      <sparkle:shortVersionString>1.10.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Remove the Apple Intelligence models.</strong> On macOS 27 with Apple silicon, Overview can release the on-device models through Apple's own service and keep them from downloading again. Download Again brings them back.</li>
+          <li><strong>Simplified Chinese.</strong> Purge is now available in Simplified Chinese.</li>
+          <li><strong>iCloud warning in Large Files.</strong> Files that sync with iCloud Drive get a cloud badge, and the confirmation says trashing them removes them from your other devices too.</li>
+          <li><strong>Fixes.</strong> Uninstalling admin-installed apps works again instead of waiting five minutes, and a rare stuck scan is gone.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.10.0/Purgev1.10.0.dmg"
+        sparkle:edSignature="yPuYenEDcApVBmXTXANmJx6sXetDgFRFixOlDIi3GdsgF/elK9OMlOUvdGMB03DXvldUfX3wx8JN5Dkzdwq1Cg=="
+        length="9224280"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.9.0</title>
       <pubDate>Fri, 09 Oct 2026 21:28:52 +0000</pubDate>
       <sparkle:version>31</sparkle:version>
