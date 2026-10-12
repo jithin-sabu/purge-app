@@ -21,6 +21,18 @@ struct AppleIntelligenceModelReaderTests {
         #expect(AppleIntelligenceModelReader.identity(fromFileName: "AutoAssetLocker_Entry_x_y_1_0.state") == nil)
     }
 
+    /// The app's half of the rule that a release is never sent with an empty
+    /// list, which macOS reads as every asset on the Mac: each request names one
+    /// catalog set, so every name has to be a real, distinct one. Types carry no
+    /// underscore, or record names would split in the wrong place.
+    @Test func everyCatalogSetHasADistinctNameAndAUAFType() {
+        let sets = AppleIntelligenceCatalog.sets
+        #expect(sets.count == 5)
+        #expect(sets.allSatisfy { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty })
+        #expect(Set(sets.map(\.name)).count == sets.count)
+        #expect(sets.allSatisfy { $0.assetType.hasPrefix("com.apple.MobileAsset.UAF.") && !$0.assetType.contains("_") })
+    }
+
     @Test func versionsCompareNumerically() {
         #expect(AppleIntelligenceModelReader.versionIsOrdered("600.0.81600.13.202072,0", before: "600.0.81600.13.202073,0"))
         #expect(AppleIntelligenceModelReader.versionIsOrdered("9.0", before: "10.0"))

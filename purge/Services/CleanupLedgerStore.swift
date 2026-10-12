@@ -203,6 +203,9 @@ final class CleanupLedgerStore {
         let bytesReclaimedOnVolume: Int64?
         let skippedForSafetyCount: Int
         let items: [(path: String, bytes: Int64)]
+        /// False for entries whose items are not files moved to the Trash, so the
+        /// import never files them as a clean.
+        let belongsInLedger: Bool
 
         init(_ entry: CleanupHistoryEntry) {
             id = entry.id
@@ -212,6 +215,20 @@ final class CleanupLedgerStore {
             bytesReclaimedOnVolume = entry.bytesReclaimedOnVolume
             skippedForSafetyCount = entry.skippedItems.filter(\.isUserVisible).count
             items = entry.deletedItems.map { ($0.path, $0.sizeBytes) }
+            belongsInLedger = Self.importsIntoLedger(entry.kind)
+        }
+
+        /// An Apple Intelligence removal lists model sets by name, each with
+        /// Apple's record sum, which overstates what went (#133). Imported as a
+        /// clean, those names and sums would lead the recap's labels and biggest
+        /// item as if they had been moved to the Trash, so they stay in History only.
+        static func importsIntoLedger(_ kind: CleanupHistoryKind?) -> Bool {
+            switch kind {
+            case nil:
+                return true
+            case .appleIntelligenceModels?:
+                return false
+            }
         }
     }
 
@@ -223,7 +240,7 @@ final class CleanupLedgerStore {
         homePath: String,
         resolve: @escaping @Sendable (String) -> String?
     ) async -> [CleanupLedgerSession] {
-        let candidates = snapshot.filter { !$0.items.isEmpty }
+        let candidates = snapshot.filter { $0.belongsInLedger && !$0.items.isEmpty }
         guard !candidates.isEmpty else { return [] }
 
         let years = Set(candidates.flatMap { entry -> [Int] in
