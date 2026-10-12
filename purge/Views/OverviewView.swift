@@ -176,7 +176,7 @@ struct OverviewView: View {
                     linkedState: linkedRowState(OverviewSnapshotRow.id)
                 )
                 // Apple Intelligence's models, macOS 27 only, and only when there is
-                // something on the Mac, a block in place, or a removal to report (#133).
+                // something on the Mac, a block in place, a download to offer, or an outcome to report (#133).
                 if appleIntelligenceStore.isRelevant {
                     InsetCardDivider()
                     OverviewAppleIntelligenceRow(
