@@ -202,8 +202,21 @@ struct AppleIntelligenceModelStoreTests {
         #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(Store.downloadStartWait - 1)) == .downloadRequested)
         #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(Store.downloadStartWait)) == .downloadNotStarted)
         #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(Store.downloadRequestExpiry)) == nil)
-        // A clock moved back can't leave a request that never ages out.
-        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(-60)) == nil)
+        // A small clock adjustment keeps the request; a clock moved well back
+        // can't leave one that never ages out.
+        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(-60)) == .downloadRequested)
+        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(-Store.clockStepAllowance - 1)) == nil)
+    }
+
+    /// The clock moved back a day while the row said "downloading": without a
+    /// limit it would keep saying so, re-reading every 20 seconds, for a day.
+    @Test func aClockMovedWellBackDropsAnActiveRequest() {
+        let dayBack = after(-24 * 60 * 60)
+        let next = Store.arrivalOutcome(
+            current: .downloadRequested, request: request(), now: reading(present: 0).sets,
+            lastArrivalChange: dayBack, at: dayBack)
+        #expect(next.outcome == nil)
+        #expect(next.requestDone)
     }
 
     /// The row shows for a pending request, but a Mac that never had the

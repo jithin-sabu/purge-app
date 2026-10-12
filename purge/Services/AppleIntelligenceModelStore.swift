@@ -183,8 +183,9 @@ final class AppleIntelligenceModelStore: ObservableObject {
         switch current ?? pending {
         case .downloadRequested:
             // Not read for a week, as in menu bar mode with the Overview never
-            // opened: drop it now rather than say "nothing yet" first.
-            if !arrived, now.timeIntervalSince(request.requestedAt) >= downloadRequestExpiry {
+            // opened, or the clock moved well back: drop it now rather than say
+            // "nothing yet" first, or say "downloading" until the clock catches up.
+            if !arrived, isStale(requestedAt: request.requestedAt, now: now) {
                 return (nil, true)
             }
             // Settling counts from the last change; giving up counts from the request,
@@ -215,12 +216,20 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     /// What a request of this age says on its own: still watching for the first
     /// fifteen minutes, then "nothing has arrived yet" until it expires. Nil once
-    /// it expires, or when it is dated in the future because the clock moved back.
+    /// it is stale.
     nonisolated static func pendingOutcome(requestedAt: Date, now: Date) -> AppleIntelligenceOutcome? {
-        let age = now.timeIntervalSince(requestedAt)
-        guard age >= 0, age < downloadRequestExpiry else { return nil }
-        return age < downloadStartWait ? .downloadRequested : .downloadNotStarted
+        guard !isStale(requestedAt: requestedAt, now: now) else { return nil }
+        return now.timeIntervalSince(requestedAt) < downloadStartWait ? .downloadRequested : .downloadNotStarted
     }
+
+    /// A week old, or dated well in the future because the clock moved back.
+    /// A few minutes ahead is a clock adjustment, and the request stands.
+    nonisolated static func isStale(requestedAt: Date, now: Date) -> Bool {
+        let age = now.timeIntervalSince(requestedAt)
+        return age >= downloadRequestExpiry || age < -clockStepAllowance
+    }
+
+    nonisolated static let clockStepAllowance: TimeInterval = 5 * 60
 
     /// A week covers a Mac that waits for power, Wi-Fi or a quiet moment before
     /// macOS downloads. Past that, turning Apple Intelligence on in System
