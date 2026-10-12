@@ -55,6 +55,9 @@ final class AppleIntelligenceModelStore: ObservableObject {
     /// are already on the Mac, so arrivals are judged against this, not against
     /// whether anything is present.
     private var setsAtRequest: [AppleIntelligenceSetReading] = []
+    /// When Download Again was accepted. The "nothing arrived" deadline counts
+    /// from here, so a change to a set that was already there doesn't push it back.
+    private var downloadRequestedAt = Date()
 
     /// How long the user gets to act in System Settings before Purge gives up.
     static let settingsWait: TimeInterval = 10 * 60
@@ -136,17 +139,19 @@ final class AppleIntelligenceModelStore: ObservableObject {
         let arrived = Self.hasArrivals(since: setsAtRequest, now: fresh.sets)
         switch lastOutcome {
         case .downloadRequested:
+            // Settling counts from the last change; giving up counts from the request.
             switch Self.downloadWatch(
                 anythingArrived: arrived,
-                quietFor: Date().timeIntervalSince(lastArrivalChange)
+                quietFor: Date().timeIntervalSince(arrived ? lastArrivalChange : downloadRequestedAt)
             ) {
             case .keepWatching: break
             case .settled: lastOutcome = nil
             case .nothingArrived: lastOutcome = .downloadNotStarted
             }
         case .downloadNotStarted where arrived:
-            // macOS got to it later; the row goes back to showing the size.
-            lastOutcome = nil
+            // macOS got to it later: watch again until the rest settle, then the
+            // row goes back to showing the size.
+            lastOutcome = .downloadRequested
         case .none, .removed, .someLeft, .profileNotInstalled, .notReady,
              .downloadNotStarted, .profileStillInstalled, .downloadRequestFailed:
             break
@@ -410,6 +415,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         phase = .idle
         lastOutcome = subscribe.ok ? .downloadRequested : .downloadRequestFailed(subscribe.problem)
         lastArrivalChange = Date()
+        downloadRequestedAt = Date()
         _ = await readLatest()
     }
 
