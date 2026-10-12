@@ -179,6 +179,26 @@ struct HelperSupportTests {
         #expect(exits.count == 1)
     }
 
+    @Test("Once it commits to quitting, the helper turns new work away")
+    func refusesWorkAfterCommittingToQuit() {
+        let scheduler = ManualScheduler()
+        let exits = ExitCounter()
+        let tracker = HelperIdleTracker(idleInterval: 30, schedule: scheduler.schedule) { exits.count += 1 }
+        tracker.start()
+        scheduler.fireAll()
+        #expect(exits.count == 1)
+        // A connection that arrives between the decision and the exit is refused, so
+        // the process never quits in the middle of a move.
+        #expect(tracker.acquire() == false)
+    }
+
+    @Test("A held helper accepts more work")
+    func acceptsWorkWhileRunning() {
+        let tracker = HelperIdleTracker(idleInterval: 30, schedule: { _, _ in }) {}
+        #expect(tracker.acquire())
+        #expect(tracker.acquire())
+    }
+
     @Test("An extra release never goes below zero or quits early")
     func extraReleaseIsHarmless() {
         let scheduler = ManualScheduler()

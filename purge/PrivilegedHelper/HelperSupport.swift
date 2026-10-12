@@ -59,6 +59,10 @@ nonisolated final class HelperIdleTracker: @unchecked Sendable {
     private var holds = 0
     /// Bumped on every change, so a timer armed before the latest change does nothing.
     private var generation = 0
+    /// Set, under the lock, the moment the helper commits to quitting. From then on
+    /// `acquire()` refuses, so no connection or move can start in the gap before the
+    /// process exits.
+    private var exiting = false
     private let idleInterval: TimeInterval
     private let schedule: Scheduler
     private let onIdle: @Sendable () -> Void
@@ -84,11 +88,17 @@ nonisolated final class HelperIdleTracker: @unchecked Sendable {
         armed()
     }
 
-    func acquire() {
+    /// Adds a hold. Returns `false` once the helper has committed to quitting: the
+    /// caller must then turn the connection away, and the app's next request starts a
+    /// fresh helper.
+    @discardableResult
+    func acquire() -> Bool {
         lock.lock()
+        defer { lock.unlock() }
+        guard !exiting else { return false }
         holds += 1
         generation += 1
-        lock.unlock()
+        return true
     }
 
     func release() {
@@ -108,9 +118,10 @@ nonisolated final class HelperIdleTracker: @unchecked Sendable {
         return { [self] in
             schedule(idleInterval) { [self] in
                 lock.lock()
-                let stillIdle = holds == 0 && generation == armedGeneration
+                let commit = !exiting && holds == 0 && generation == armedGeneration
+                if commit { exiting = true }
                 lock.unlock()
-                if stillIdle { onIdle() }
+                if commit { onIdle() }
             }
         }
     }

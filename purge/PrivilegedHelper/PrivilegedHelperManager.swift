@@ -185,13 +185,12 @@ final class PrivilegedHelperManager: ObservableObject {
         // points macOS back at this copy of Purge if its record named another one. In
         // testing on macOS 27 the user's approval survived this every time, so no
         // prompt appeared.
-        let reload: (() async -> Void)? = Self.mayRepairRegistration() ? {
-            if await self.unregister() == false {
-                NSLog("Purge: could not remove the helper registration before reloading it")
-            }
-            try? await Task.sleep(for: .milliseconds(500))
-            self.register()
-        } : nil
+        let reload: (() async -> Void)?
+        if Self.mayRepairRegistration() {
+            reload = { await self.reloadRegistration() }
+        } else {
+            reload = nil
+        }
 
         let outcome = await HelperReconciler.reconcile(
             isEnabled: { self.service.status == .enabled },
@@ -201,6 +200,14 @@ final class PrivilegedHelperManager: ObservableObject {
         )
         isUnresponsive = outcome == .unresponsive
         return outcome == .ready
+    }
+
+    private func reloadRegistration() async {
+        if await unregister() == false {
+            NSLog("Purge: could not remove the helper registration before reloading it")
+        }
+        try? await Task.sleep(for: .milliseconds(500))
+        register()
     }
 
     /// Whether this copy of Purge may reload the helper's registration on its own.
@@ -218,8 +225,11 @@ final class PrivilegedHelperManager: ObservableObject {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
         guard !TestHost.isActive(environment: environment) else { return false }
-        let path = bundleURL.path
-        let userApplications = homeDirectory.appendingPathComponent("Applications").path + "/"
+        // Standardized, so a path like /Applications/../Users/x/Downloads cannot pass
+        // the prefix check.
+        let path = bundleURL.standardizedFileURL.path
+        let userApplications = homeDirectory.standardizedFileURL
+            .appendingPathComponent("Applications").path + "/"
         return path.hasPrefix("/Applications/") || path.hasPrefix(userApplications)
     }
 }

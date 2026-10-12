@@ -31,10 +31,12 @@ final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
         newConnection.setCodeSigningRequirement(PurgeHelperConstants.clientRequirement)
 
         newConnection.exportedInterface = NSXPCInterface(with: PurgeHelperProtocol.self)
-        newConnection.exportedObject = HelperService(idleTracker: idleTracker)
         // Every accepted connection holds the helper open until it ends, including one
-        // that the signing requirement later refuses.
-        idleTracker.acquire()
+        // that the signing requirement later refuses. Once the helper has committed to
+        // quitting it takes no new work; the app sees the refusal and its next request
+        // starts a fresh helper.
+        guard idleTracker.acquire() else { return false }
+        newConnection.exportedObject = HelperService(idleTracker: idleTracker)
         newConnection.invalidationHandler = { [idleTracker] in idleTracker.release() }
         newConnection.resume()
         return true

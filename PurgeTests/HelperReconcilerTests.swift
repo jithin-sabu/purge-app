@@ -32,11 +32,17 @@ struct HelperReconcilerTests {
     }
 
     private func reconcile(_ helper: FakeHelper, mayReload: Bool = true) async -> HelperReconcileOutcome {
-        await HelperReconciler.reconcile(
+        let reload: (() async -> Void)?
+        if mayReload {
+            reload = { helper.reloads += 1 }
+        } else {
+            reload = nil
+        }
+        return await HelperReconciler.reconcile(
             isEnabled: { helper.isEnabled },
             expectedVersion: "7",
             probe: { helper.probe() },
-            reload: mayReload ? { helper.reloads += 1 } : nil
+            reload: reload
         )
     }
 
@@ -142,6 +148,7 @@ struct HelperReconcilerTests {
         #expect(!mayRepair("/private/var/folders/xy/T/AppTranslocation/1234/d/Purge.app"))
         #expect(!mayRepair("/Users/example/Downloads/Purge.app"))
         #expect(!mayRepair("/ApplicationsBackup/Purge.app"))
+        #expect(!mayRepair("/Applications/../Users/example/Downloads/Purge.app"))
     }
 
     @Test("The unit-test host never re-registers the helper")
