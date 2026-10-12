@@ -197,6 +197,29 @@ struct AppleIntelligenceModelStoreTests {
         #expect(!next.requestDone)
     }
 
+    /// Arrivals win over expiry: models that start landing after a week, or
+    /// with the clock moved back, are watched until they settle, which ends the
+    /// request. Settling counts from the last change, so it can't run on.
+    @Test func arrivalsAfterExpiryAreWatchedUntilTheySettle() {
+        let landing = reading(present: 2).sets
+        for start in [after(Store.downloadRequestExpiry + 60), after(-24 * 60 * 60)] {
+            let late = Store.arrivalOutcome(
+                current: .downloadNotStarted, request: request(), now: landing, lastArrivalChange: start, at: start)
+            #expect(late.outcome == .downloadRequested)
+            #expect(!late.requestDone)
+
+            let watching = Store.arrivalOutcome(
+                current: .downloadRequested, request: request(), now: landing, lastArrivalChange: start, at: start)
+            #expect(watching.outcome == .downloadRequested)
+
+            let quiet = start.addingTimeInterval(Store.downloadSettleTime)
+            let settled = Store.arrivalOutcome(
+                current: .downloadRequested, request: request(), now: landing, lastArrivalChange: start, at: quiet)
+            #expect(settled.outcome == nil)
+            #expect(settled.requestDone)
+        }
+    }
+
     @Test func aPendingRequestReadsByAge() {
         #expect(Store.pendingOutcome(requestedAt: requestedAt, now: requestedAt) == .downloadRequested)
         #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(Store.downloadStartWait - 1)) == .downloadRequested)
