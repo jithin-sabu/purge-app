@@ -23,6 +23,7 @@
 		788899AABBCCDDEEFF001122 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 49C4D8E8868801EE41EAE019 /* Cocoa.framework */; };
 		7F6476365B8C1DBD1473E899 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818D84C8D5D21B95ABA44BDA /* main.swift */; };
 		82ABE8E4B27CCE67F4AF5EA2 /* PurgeHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C4796D7FF373363BCFFB9D /* PurgeHelperProtocol.swift */; };
+		957945A658563B63C6ADC1D7 /* HelperSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A21D7856EC3D4A4B450ABCB /* HelperSupport.swift */; };
 		D4437D8BF273B9C7C9FC5A96 /* io.getpurge.helper in Embed Privileged Helper */ = {isa = PBXBuildFile; fileRef = 23866D74E1EC150691D3E969 /* io.getpurge.helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ED195DD5938B9599AB353C08 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 49C4D8E8868801EE41EAE019 /* Cocoa.framework */; };
 /* End PBXBuildFile section */
@@ -117,6 +118,7 @@
 		D01E2F30415263748596A7B8 /* RemovedAppWatchPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemovedAppWatchPolicy.swift; path = purge/Services/RemovedAppWatchPolicy.swift; sourceTree = SOURCE_ROOT; };
 		D4EC98BBF7E30D5C32FFB67D /* io.getpurge.helper.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = io.getpurge.helper.plist; sourceTree = "<group>"; };
 		D7C4796D7FF373363BCFFB9D /* PurgeHelperProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PurgeHelperProtocol.swift; path = purge/PrivilegedHelper/PurgeHelperProtocol.swift; sourceTree = "<group>"; };
+		8A21D7856EC3D4A4B450ABCB /* HelperSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HelperSupport.swift; path = purge/PrivilegedHelper/HelperSupport.swift; sourceTree = "<group>"; };
 		E01F2031425364758697A8B9 /* RemovedAppHandoff.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemovedAppHandoff.swift; path = purge/Services/RemovedAppHandoff.swift; sourceTree = SOURCE_ROOT; };
 		F0102132435465768798A9BA /* InstalledApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstalledApp.swift; path = purge/Models/InstalledApp.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -186,6 +188,7 @@
 			isa = PBXGroup;
 			children = (
 				D7C4796D7FF373363BCFFB9D /* PurgeHelperProtocol.swift */,
+				8A21D7856EC3D4A4B450ABCB /* HelperSupport.swift */,
 			);
 			name = SharedWithHelper;
 			sourceTree = "<group>";
@@ -443,6 +446,7 @@
 				2D0A09B2DECC5CEE05BE564A /* HelperListenerDelegate.swift in Sources */,
 				50A1F20DF87D12D3DF8F7DF5 /* HelperService.swift in Sources */,
 				82ABE8E4B27CCE67F4AF5EA2 /* PurgeHelperProtocol.swift in Sources */,
+				957945A658563B63C6ADC1D7 /* HelperSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

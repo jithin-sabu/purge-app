@@ -6,6 +6,12 @@ import Foundation
 /// ownership back. Both the source and destination are opened without following
 /// symlinks, so another process cannot redirect a checked path while the move runs.
 final class HelperService: NSObject, PurgeHelperProtocol {
+    private let idleTracker: HelperIdleTracker
+
+    init(idleTracker: HelperIdleTracker) {
+        self.idleTracker = idleTracker
+    }
+
     func helperVersion(withReply reply: @escaping (String) -> Void) {
         reply(PurgeHelperConstants.version)
     }
@@ -38,6 +44,11 @@ final class HelperService: NSObject, PurgeHelperProtocol {
     /// determines both ownership and destination. Nothing in a root operation should
     /// trust a uid, gid, or Trash path supplied by the app.
     private func performMove(paths: [String]) -> MoveOutcome {
+        // Keep the helper alive until this move and its ownership hand-back finish,
+        // even if the app stops waiting and closes the connection first.
+        idleTracker.acquire()
+        defer { idleTracker.release() }
+
         guard let connection = NSXPCConnection.current() else {
             NSLog("PurgeHelper: refusing request without a current XPC connection")
             return MoveOutcome()
@@ -60,7 +71,7 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         }
 
         let trashDirectory = homeDirectory.appendingPathComponent(".Trash", isDirectory: true)
-        guard let trashFD = openDirectoryWithoutFollowingSymlinks(trashDirectory),
+        guard let trashFD = HelperDirectory.openWithoutFollowingSymlinks(trashDirectory),
               validatedTrashDirectory(fileDescriptor: trashFD, ownerUID: ownerUID) else {
             NSLog("PurgeHelper: refusing invalid Trash directory %@", trashDirectory.path)
             return MoveOutcome()
@@ -155,24 +166,6 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         return (info.st_mode & S_IFMT) == S_IFDIR && info.st_uid == ownerUID
     }
 
-    /// Opens an absolute directory from `/` one component at a time. Holding each
-    /// descriptor until the next is open closes the usual check-then-use symlink race.
-    private func openDirectoryWithoutFollowingSymlinks(_ url: URL) -> Int32? {
-        let components = url.standardizedFileURL.pathComponents.dropFirst()
-        var currentFD = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
-        guard currentFD >= 0 else { return nil }
-
-        for component in components {
-            let nextFD = component.withCString {
-                openat(currentFD, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-            }
-            close(currentFD)
-            guard nextFD >= 0 else { return nil }
-            currentFD = nextFD
-        }
-        return currentFD
-    }
-
     /// Whether a move happened and, if so, whether every moved file's ownership was
     /// handed back. `moved == false` means nothing left the source; when `moved` is
     /// true, `ownershipComplete == false` means the item is in the Trash but still
@@ -186,7 +179,7 @@ final class HelperService: NSObject, PurgeHelperProtocol {
     /// directories. This means path components cannot be swapped after validation.
     private func secureMoveToTrash(_ source: URL, trashFD: Int32, uid: uid_t, gid: gid_t) -> SecureMoveResult {
         let notMoved = SecureMoveResult(moved: false, ownershipComplete: false)
-        guard let sourceParentFD = openDirectoryWithoutFollowingSymlinks(source.deletingLastPathComponent()) else {
+        guard let sourceParentFD = HelperDirectory.openWithoutFollowingSymlinks(source.deletingLastPathComponent()) else {
             return notMoved
         }
         defer { close(sourceParentFD) }

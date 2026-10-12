@@ -78,7 +78,14 @@ it checks every request four ways:
   [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift).
 - **No symlink tricks.** Paths are opened one component at a time without
   following symlinks, and the move is a single atomic rename, so another
-  process cannot swap a checked path for a different one mid-move.
+  process cannot swap a checked path for a different one mid-move. A path with
+  a `.` or `..` part is refused, not resolved. Folders on the way are opened
+  only to pass through, never to list, so the helper does not read your Trash
+  ([`purge/PrivilegedHelper/HelperSupport.swift`](purge/PrivilegedHelper/HelperSupport.swift)).
+
+The helper also runs only while it is needed. It quits after 30 idle seconds,
+and macOS starts it again for the next request, so an update never leaves an
+older copy running as root.
 
 ## Updates
 

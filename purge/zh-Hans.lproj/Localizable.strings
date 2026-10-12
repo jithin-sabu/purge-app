@@ -878,6 +878,7 @@
 "Purge uninstalls apps. Select an app in Finder and try again." = "Purge 只能卸载应用。请在访达中选择一个应用后重试。";
 "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller." = "从访达一次只能卸载一个应用。如需一次移除多个应用，请在 Purge 的卸载工具中勾选。";
 "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move %@ there first, or drag it to the Trash yourself." = "Purge 的卸载工具只列出 /Applications 和个人主文件夹中“应用程序”文件夹里的应用。请先将 %@ 移到那里，或自行将它拖到废纸篓。";
+"Purge's secure removal helper isn't responding. Move the app to the Trash in Finder instead." = "Purge 的安全移除助手没有响应。请改用访达将应用移到废纸篓。";
 "Restart to Update to Purge %@" = "重新启动以更新到 Purge %@";
 "Right-click an app in Finder and choose Uninstall with Purge. Purge opens with that app and everything it left behind, ready to review. macOS keeps this off until you turn it on here, or under System Settings > Keyboard > Keyboard Shortcuts > Services. Dropping an app on Purge's Dock icon does the same and needs no setup." = "在访达中右键点按一个应用，然后选择“使用 Purge 卸载”。Purge 会打开并列出该应用及其留下的所有内容，供你检查。macOS 默认关闭此项，你可以在这里开启，也可以前往“系统设置 > 键盘 > 键盘快捷键 > 服务”开启。将应用拖到 Purge 的程序坞图标上效果相同，无需任何设置。";
 "Saved, but Finder may keep showing the old state until you log out and back in." = "已保存，但在你退出登录并重新登录之前，访达可能仍显示旧状态。";

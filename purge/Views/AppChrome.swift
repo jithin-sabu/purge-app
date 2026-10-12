@@ -1296,8 +1296,9 @@ private struct CleanFailureDisclosure: View {
 private struct NeedsAdministratorPanel: View {
     let items: [CleanFailureItem]
     let isHelperEnabled: Bool
-    /// Enabled but silent after a reload, typically until the Mac restarts. Saying
-    /// "Secure removal is on" here would be false, so the panel says what is wrong.
+    /// Enabled but silent even after Purge reloaded it. A restart does not fix the
+    /// known cause, a macOS record left pointing at a deleted copy of Purge, so the
+    /// panel points to Finder. Saying "Secure removal is on" here would be false.
     let isHelperUnresponsive: Bool
     let needsApproval: Bool
     let isWorking: Bool
@@ -1411,7 +1412,7 @@ private struct NeedsAdministratorPanel: View {
     @ViewBuilder
     private var statusLine: some View {
         if isHelperEnabled && isHelperUnresponsive {
-            Text("Purge's secure removal helper isn't responding. Restart your Mac, then try again.")
+            Text("Purge's secure removal helper isn't responding. Move the app to the Trash in Finder instead.")
                 .font(AppStyle.Typography.body)
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)

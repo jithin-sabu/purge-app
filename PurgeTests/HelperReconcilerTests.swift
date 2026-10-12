@@ -11,11 +11,19 @@ struct HelperReconcilerTests {
     /// Scripted helper: each probe returns the next answer, `nil` for silence.
     final class FakeHelper {
         var answers: [String?]
+        /// Whether macOS reports the helper as enabled, before and after a reload.
+        var enabledBeforeReload: Bool
+        var enabledAfterReload: Bool
         var probes = 0
         var reloads = 0
-        var reinstalls = 0
 
-        init(answers: [String?]) { self.answers = answers }
+        init(answers: [String?], enabledBeforeReload: Bool = true, enabledAfterReload: Bool = true) {
+            self.answers = answers
+            self.enabledBeforeReload = enabledBeforeReload
+            self.enabledAfterReload = enabledAfterReload
+        }
+
+        var isEnabled: Bool { reloads == 0 ? enabledBeforeReload : enabledAfterReload }
 
         func probe() -> String? {
             probes += 1
@@ -23,13 +31,12 @@ struct HelperReconcilerTests {
         }
     }
 
-    private func reconcile(_ helper: FakeHelper, isEnabled: Bool = true) async -> HelperReconcileOutcome {
+    private func reconcile(_ helper: FakeHelper, mayReload: Bool = true) async -> HelperReconcileOutcome {
         await HelperReconciler.reconcile(
-            isEnabled: isEnabled,
+            isEnabled: { helper.isEnabled },
             expectedVersion: "7",
             probe: { helper.probe() },
-            reload: { helper.reloads += 1 },
-            reinstall: { helper.reinstalls += 1 }
+            reload: mayReload ? { helper.reloads += 1 } : nil
         )
     }
 
@@ -39,7 +46,6 @@ struct HelperReconcilerTests {
         #expect(await reconcile(helper) == .unresponsive)
         #expect(helper.reloads == 1)
         #expect(helper.probes == 2)
-        #expect(helper.reinstalls == 0)
     }
 
     @Test("A helper that answers after a reload is ready")
@@ -59,35 +65,88 @@ struct HelperReconcilerTests {
 
     @Test("A disabled helper is never probed")
     func disabledHelperIsNotProbed() async {
-        let helper = FakeHelper(answers: ["7"])
-        #expect(await reconcile(helper, isEnabled: false) == .notEnabled)
+        let helper = FakeHelper(answers: ["7"], enabledBeforeReload: false)
+        #expect(await reconcile(helper) == .notEnabled)
         #expect(helper.probes == 0)
     }
 
-    @Test("An old helper is reinstalled and confirmed")
-    func staleHelperIsReinstalled() async {
+    @Test("An old helper is reloaded and confirmed")
+    func staleHelperIsReloaded() async {
         let helper = FakeHelper(answers: ["6", "7"])
         #expect(await reconcile(helper) == .ready)
-        #expect(helper.reinstalls == 1)
+        #expect(helper.reloads == 1)
     }
 
-    @Test("An old helper that survives reinstalling is not ready")
+    @Test("An old helper that survives the reload is not ready")
     func staleHelperThatStaysIsNotReady() async {
         let helper = FakeHelper(answers: ["6", "6"])
         #expect(await reconcile(helper) == .staleVersion)
     }
 
-    @Test("A helper that goes silent after reinstalling is unresponsive")
-    func silentAfterReinstallIsUnresponsive() async {
+    @Test("A helper that goes silent after reloading an old version is unresponsive")
+    func silentAfterStaleReloadIsUnresponsive() async {
         let helper = FakeHelper(answers: ["6", nil])
         #expect(await reconcile(helper) == .unresponsive)
     }
 
-    @Test("An old helper found after a reload is still reinstalled")
-    func staleAfterReloadIsReinstalled() async {
-        let helper = FakeHelper(answers: [nil, "6", "7"])
-        #expect(await reconcile(helper) == .ready)
+    @Test("A reload that loses the approval asks for setup, not a retry")
+    func reloadThatLosesApprovalIsNotEnabled() async {
+        let helper = FakeHelper(answers: [nil, "7"], enabledAfterReload: false)
+        #expect(await reconcile(helper) == .notEnabled)
         #expect(helper.reloads == 1)
-        #expect(helper.reinstalls == 1)
+        // The setup screen takes over, so there is no point asking again.
+        #expect(helper.probes == 1)
+    }
+
+    @Test("Only one reload per check, so a dead helper costs two probes at most")
+    func atMostOneReload() async {
+        let helper = FakeHelper(answers: [nil, nil, nil, nil])
+        _ = await reconcile(helper)
+        #expect(helper.reloads == 1)
+        #expect(helper.probes == 2)
+    }
+
+    @Test("A copy that may not reload reports the problem and leaves the helper alone")
+    func noReloadWhenNotAllowed() async {
+        let silent = FakeHelper(answers: [nil, "7"])
+        #expect(await reconcile(silent, mayReload: false) == .unresponsive)
+        #expect(silent.reloads == 0)
+        #expect(silent.probes == 1)
+
+        let stale = FakeHelper(answers: ["6", "7"])
+        #expect(await reconcile(stale, mayReload: false) == .staleVersion)
+        #expect(stale.reloads == 0)
+    }
+
+    // MARK: Which copy may repair the registration
+
+    private let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+
+    private func mayRepair(_ path: String, environment: [String: String] = [:]) -> Bool {
+        PrivilegedHelperManager.mayRepairRegistration(
+            bundleURL: URL(fileURLWithPath: path, isDirectory: true),
+            homeDirectory: home,
+            environment: environment
+        )
+    }
+
+    @Test("Only an installed copy may re-register the helper by itself")
+    func onlyInstalledCopyRepairs() {
+        #expect(mayRepair("/Applications/Purge.app"))
+        #expect(mayRepair("/Applications/Utilities/Purge.app"))
+        #expect(mayRepair("/Users/example/Applications/Purge.app"))
+
+        // Each of these would tie the root helper to a copy that later disappears.
+        #expect(!mayRepair("/Users/example/Library/Developer/Xcode/DerivedData/purge-abc/Build/Products/Debug/Purge.app"))
+        #expect(!mayRepair("/Volumes/Purge/Purge.app"))
+        #expect(!mayRepair("/private/var/folders/xy/T/AppTranslocation/1234/d/Purge.app"))
+        #expect(!mayRepair("/Users/example/Downloads/Purge.app"))
+        #expect(!mayRepair("/ApplicationsBackup/Purge.app"))
+    }
+
+    @Test("The unit-test host never re-registers the helper")
+    func testHostNeverRepairs() {
+        #expect(!mayRepair("/Applications/Purge.app", environment: ["XCTestConfigurationFilePath": "/tmp/x"]))
     }
 }
+
