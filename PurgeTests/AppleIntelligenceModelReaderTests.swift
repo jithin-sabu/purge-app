@@ -79,23 +79,27 @@ struct AppleIntelligenceModelReaderTests {
         AppleIntelligenceCatalog.sets.first { $0.name == "com.apple.MobileAsset.UAF.FM.Visual" }!
     }
 
+    /// A root with no asset folders, so a Mac with the models installed reads
+    /// the same as CI.
+    private let noAssets = FileManager.default.temporaryDirectory.appendingPathComponent("purge-assets-\(UUID().uuidString)").path
+
     /// Several versions of one model can be on the filesystem at once; only the
     /// newest counts, or a removal is promised more than it frees.
     @Test func onlyTheNewestVersionOfEachModelIsCounted() {
         let reading = AppleIntelligenceModelReader.measure(visual, records: [
             record("model.a", "1.0,0", 100), record("model.a", "2.0,0", 150), record("model.b", "1.0,0", 20),
             record("model.c", "1.0,0", 999, onDisk: false), record("model.d", "1.0,0", 5, eliminating: true),
-        ])
+        ], root: noAssets)
         #expect(reading.latestBytes == 175)
         #expect(reading.recordsOnDisk == 4)
         #expect(reading.eliminating == 1)
     }
 
     @Test func aRecordWithoutASizeMakesTheSetUnknownNotZero() {
-        let reading = AppleIntelligenceModelReader.measure(visual, records: [record("model.a", "1.0,0", nil)])
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [record("model.a", "1.0,0", nil)], root: noAssets)
         #expect(reading.latestBytes == nil)
         #expect(reading.recordsOnDisk == 1)
-        let empty = AppleIntelligenceModelReader.measure(visual, records: [])
+        let empty = AppleIntelligenceModelReader.measure(visual, records: [], root: noAssets)
         #expect(empty.latestBytes == 0)
     }
 
