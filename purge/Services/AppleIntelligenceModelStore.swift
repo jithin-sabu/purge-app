@@ -91,10 +91,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
         return (present == true, isProfileInstalled || present == false)
     }
 
-    /// Whether the row has anything to say: models on disk, a block in place,
-    /// a download to offer, or an outcome this session.
+    /// Whether the row has anything to say: models on disk, a block in place, or
+    /// a removal this session. A Mac with none of those shows no row at all.
     var isRelevant: Bool {
-        Self.isSupported && ((reading?.isAnythingPresent ?? false) || isProfileInstalled || offersDownloadAgain || lastOutcome != nil)
+        Self.isSupported && ((reading?.isAnythingPresent ?? false) || isProfileInstalled || lastOutcome != nil)
     }
 
     /// Models arriving after Download Again: the block is gone and files are landing.
