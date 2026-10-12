@@ -33,11 +33,13 @@ jobs:
       pull-requests: write
       issues: read
     steps:
-      # The base branch sits at the root, so the review rules in CLAUDE.md
-      # and .claude/ come from main. The pull request's code goes in pr-head/.
+      # The review rules in CLAUDE.md and .claude/ sit at the root and come
+      # from main. A manual run takes them from the branch it was started on,
+      # so changes to the review can be tried before they merge. The pull
+      # request's code goes in pr-head/.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
           fetch-depth: 1
 
       - uses: actions/checkout@v4
@@ -46,6 +48,11 @@ jobs:
           path: pr-head
           fetch-depth: 1
           persist-credentials: false
+
+      # --add-dir loads skills and commands from pr-head/.claude, which would
+      # let a pull request add instructions to its own review.
+      - name: Drop the pull request's Claude config
+        run: rm -rf pr-head/.claude
 
       - name: Review with Claude
         uses: anthropics/claude-code-action@v1
@@ -57,3 +64,17 @@ jobs:
             --model claude-opus-5-5
             --add-dir pr-head
             --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Read,Grep,Glob,Write,Agent,mcp__github_inline_comment__create_inline_comment"
+
+      # Claude's output is hidden in the log. This prints only the commands it
+      # ran, the files it read, its errors, and its last message, so a review
+      # that posts nothing can still be explained.
+      - name: Trace
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/claude-execution-output.json"
+          [ -f "$f" ] || exit 0
+          jq -r '.[] |
+            if .type == "assistant" then (.message.content[] | select(.type == "tool_use") | "CALL \(.name) \(.input.command // .input.file_path // .input.pattern // .input.description // "" | tostring | .[0:200])")
+            elif .type == "user" then (.message.content[]? | select(type == "object" and .type == "tool_result" and .is_error == true) | "ERROR \(.content | tostring | .[0:300])")
+            elif .type == "result" then "RESULT \(.result // "" | tostring | .[0:1500])"
+            else empty end' "$f"
