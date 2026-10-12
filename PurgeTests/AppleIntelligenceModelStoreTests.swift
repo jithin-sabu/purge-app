@@ -72,10 +72,195 @@ struct AppleIntelligenceModelStoreTests {
     /// so those must not count as arrivals, or the watch would call a download
     /// that never started finished.
     @Test func setsAlreadyThereAtTheRequestAreNotArrivals() {
-        let leftovers = reading(present: 2).sets
-        #expect(!AppleIntelligenceModelStore.hasArrivals(since: leftovers, now: leftovers))
+        let leftovers = atRequest(present: 2)
+        #expect(!AppleIntelligenceModelStore.hasArrivals(since: leftovers, now: reading(present: 2).sets))
         #expect(AppleIntelligenceModelStore.hasArrivals(since: leftovers, now: reading(present: 3).sets))
-        #expect(AppleIntelligenceModelStore.hasArrivals(since: reading(present: 0).sets, now: reading(present: 1).sets))
-        #expect(!AppleIntelligenceModelStore.hasArrivals(since: reading(present: 0).sets, now: reading(present: 0).sets))
+        #expect(AppleIntelligenceModelStore.hasArrivals(since: atRequest(present: 0), now: reading(present: 1).sets))
+        #expect(!AppleIntelligenceModelStore.hasArrivals(since: atRequest(present: 0), now: reading(present: 0).sets))
+    }
+
+    // MARK: A pending Download Again across launches
+
+    private typealias Store = AppleIntelligenceModelStore
+    private let defaults = ThrowawayDefaults()
+    private let requestedAt = Date(timeIntervalSinceReferenceDate: 800_000_000)
+
+    private func atRequest(present: Int) -> [Store.DownloadRequest.SetAtRequest] {
+        reading(present: present).sets.map(Store.DownloadRequest.SetAtRequest.init)
+    }
+
+    private func request(present: Int = 0) -> Store.DownloadRequest {
+        Store.DownloadRequest(requestedAt: requestedAt, sets: reading(present: present).sets)
+    }
+
+    private func after(_ seconds: TimeInterval) -> Date {
+        requestedAt.addingTimeInterval(seconds)
+    }
+
+    /// Closing the window quits Purge in on-demand mode, so the request has to
+    /// outlive the app, with the sets it is judged against.
+    @Test func aRequestSurvivesARelaunchAndClearsCleanly() {
+        let saved = request(present: 2)
+        Store.saveDownloadRequest(saved, to: defaults.defaults)
+        #expect(Store.loadDownloadRequest(from: defaults.defaults) == saved)
+        #expect(Store.loadDownloadRequest(from: defaults.defaults)?.sets.filter(\.isPresent).count == 2)
+
+        Store.saveDownloadRequest(nil, to: defaults.defaults)
+        #expect(Store.loadDownloadRequest(from: defaults.defaults) == nil)
+        #expect(defaults.defaults.object(forKey: Store.downloadRequestKey) == nil)
+    }
+
+    /// The bug from 1.10.0: Download Again, then a relaunch before anything
+    /// arrived, and the row was gone. After a relaunch the row picks up where
+    /// it was.
+    @Test func aRelaunchPicksUpThePendingRequest() {
+        let nothing = reading(present: 0).sets
+        let soon = Store.arrivalOutcome(
+            current: nil, request: request(), now: nothing, lastArrivalChange: after(90), at: after(90))
+        #expect(soon.outcome == .downloadRequested)
+        #expect(!soon.requestDone)
+
+        let later = Store.arrivalOutcome(
+            current: nil, request: request(), now: nothing,
+            lastArrivalChange: after(Store.downloadStartWait), at: after(Store.downloadStartWait))
+        #expect(later.outcome == .downloadNotStarted)
+        #expect(!later.requestDone)
+    }
+
+    /// Models that landed while Purge was closed count as arrivals, so the row
+    /// watches them settle, then goes back to showing the size.
+    @Test func modelsThatArrivedWhilePurgeWasClosedSettle() {
+        let some = reading(present: 3).sets
+        let relaunch = after(Store.downloadStartWait + 60)
+        let first = Store.arrivalOutcome(
+            current: nil, request: request(), now: some, lastArrivalChange: relaunch, at: relaunch)
+        #expect(first.outcome == .downloadRequested)
+        #expect(!first.requestDone)
+
+        let quiet = relaunch.addingTimeInterval(Store.downloadSettleTime)
+        let settled = Store.arrivalOutcome(
+            current: first.outcome, request: request(), now: some, lastArrivalChange: relaunch, at: quiet)
+        #expect(settled.outcome == nil)
+        #expect(settled.requestDone)
+    }
+
+    /// After a partial removal the sets that stayed are not arrivals, after a
+    /// relaunch as much as before it.
+    @Test func leftoversAreNotArrivalsAfterARelaunch() {
+        let next = Store.arrivalOutcome(
+            current: nil, request: request(present: 2), now: reading(present: 2).sets,
+            lastArrivalChange: after(Store.downloadStartWait), at: after(Store.downloadStartWait))
+        #expect(next.outcome == .downloadNotStarted)
+    }
+
+    /// A Mac that never downloads doesn't keep the row for good: after a week
+    /// with nothing arrived the request is dropped, at launch and while watching.
+    @Test func aRequestWithNothingArrivedExpiresAfterAWeek() {
+        let nothing = reading(present: 0).sets
+        let week = after(Store.downloadRequestExpiry)
+        let atLaunch = Store.arrivalOutcome(
+            current: nil, request: request(), now: nothing, lastArrivalChange: week, at: week)
+        #expect(atLaunch.outcome == nil)
+        #expect(atLaunch.requestDone)
+
+        let watching = Store.arrivalOutcome(
+            current: .downloadNotStarted, request: request(), now: nothing, lastArrivalChange: week, at: week)
+        #expect(watching.outcome == nil)
+        #expect(watching.requestDone)
+
+        // Still "downloading" because nothing read it all week: dropped at once.
+        let unread = Store.arrivalOutcome(
+            current: .downloadRequested, request: request(), now: nothing, lastArrivalChange: week, at: week)
+        #expect(unread.outcome == nil)
+        #expect(unread.requestDone)
+
+        // A clock stepped back a little right after the request keeps it.
+        let stepBack = Store.arrivalOutcome(
+            current: .downloadRequested, request: request(), now: nothing, lastArrivalChange: after(-5), at: after(-5))
+        #expect(stepBack.outcome == .downloadRequested)
+        #expect(!stepBack.requestDone)
+
+        let dayBefore = after(Store.downloadRequestExpiry - 24 * 60 * 60)
+        let stillWaiting = Store.arrivalOutcome(
+            current: .downloadNotStarted, request: request(), now: nothing, lastArrivalChange: dayBefore, at: dayBefore)
+        #expect(stillWaiting.outcome == .downloadNotStarted)
+        #expect(!stillWaiting.requestDone)
+    }
+
+    /// A late download still counts, even after "nothing has arrived yet".
+    @Test func aLateArrivalWatchesAgain() {
+        let late = after(2 * 24 * 60 * 60)
+        let next = Store.arrivalOutcome(
+            current: .downloadNotStarted, request: request(), now: reading(present: 1).sets,
+            lastArrivalChange: late, at: late)
+        #expect(next.outcome == .downloadRequested)
+        #expect(!next.requestDone)
+    }
+
+    /// Arrivals win over expiry: models that start landing after a week, or
+    /// with the clock moved back, are watched until they settle, which ends the
+    /// request. Settling counts from the last change, so it can't run on.
+    @Test func arrivalsAfterExpiryAreWatchedUntilTheySettle() {
+        let landing = reading(present: 2).sets
+        for start in [after(Store.downloadRequestExpiry + 60), after(-24 * 60 * 60)] {
+            let late = Store.arrivalOutcome(
+                current: .downloadNotStarted, request: request(), now: landing, lastArrivalChange: start, at: start)
+            #expect(late.outcome == .downloadRequested)
+            #expect(!late.requestDone)
+
+            let watching = Store.arrivalOutcome(
+                current: .downloadRequested, request: request(), now: landing, lastArrivalChange: start, at: start)
+            #expect(watching.outcome == .downloadRequested)
+
+            let quiet = start.addingTimeInterval(Store.downloadSettleTime)
+            let settled = Store.arrivalOutcome(
+                current: .downloadRequested, request: request(), now: landing, lastArrivalChange: start, at: quiet)
+            #expect(settled.outcome == nil)
+            #expect(settled.requestDone)
+        }
+    }
+
+    @Test func aPendingRequestReadsByAge() {
+        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: requestedAt) == .downloadRequested)
+        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(Store.downloadStartWait - 1)) == .downloadRequested)
+        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(Store.downloadStartWait)) == .downloadNotStarted)
+        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(Store.downloadRequestExpiry)) == nil)
+        // A small clock adjustment keeps the request; a clock moved well back
+        // can't leave one that never ages out.
+        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(-60)) == .downloadRequested)
+        #expect(Store.pendingOutcome(requestedAt: requestedAt, now: after(-Store.clockStepAllowance - 1)) == nil)
+    }
+
+    /// The clock moved back a day while the row said "downloading": without a
+    /// limit it would keep saying so, re-reading every 20 seconds, for a day.
+    @Test func aClockMovedWellBackDropsAnActiveRequest() {
+        let dayBack = after(-24 * 60 * 60)
+        let next = Store.arrivalOutcome(
+            current: .downloadRequested, request: request(), now: reading(present: 0).sets,
+            lastArrivalChange: dayBack, at: dayBack)
+        #expect(next.outcome == nil)
+        #expect(next.requestDone)
+    }
+
+    /// The row shows for a pending request, but a Mac that never had the
+    /// models and asked for nothing still shows none: Download Again asks for
+    /// all five sets, so it is not offered there unasked.
+    @Test func onlyAPendingRequestKeepsTheRowOnAMacWithoutModels() {
+        let none = reading(present: 0)
+        #expect(!Store.isRelevant(reading: none, isProfileInstalled: false, lastOutcome: nil))
+        #expect(Store.isRelevant(reading: none, isProfileInstalled: false, lastOutcome: .downloadRequested))
+        #expect(Store.isRelevant(reading: none, isProfileInstalled: false, lastOutcome: .downloadNotStarted))
+        #expect(Store.isRelevant(reading: reading(present: 1), isProfileInstalled: false, lastOutcome: nil))
+        #expect(Store.isRelevant(reading: none, isProfileInstalled: true, lastOutcome: nil))
+    }
+
+    /// Remove and a failed request own the row; a request left over from before
+    /// them is forgotten rather than brought back.
+    @Test func anotherOutcomeReplacesTheRequest() {
+        let next = Store.arrivalOutcome(
+            current: .profileStillInstalled, request: request(), now: reading(present: 0).sets,
+            lastArrivalChange: after(60), at: after(60))
+        #expect(next.outcome == .profileStillInstalled)
+        #expect(next.requestDone)
     }
 }

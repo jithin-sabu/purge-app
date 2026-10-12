@@ -51,13 +51,19 @@ final class AppleIntelligenceModelStore: ObservableObject {
     /// is considered over once nothing more arrives.
     private var previousSets: [AppleIntelligenceSetReading]?
     private var lastArrivalChange = Date()
-    /// The sets when Download Again was asked for. After a partial removal some
-    /// are already on the Mac, so arrivals are judged against this, not against
-    /// whether anything is present.
-    private var setsAtRequest: [AppleIntelligenceSetReading] = []
-    /// When Download Again was accepted. The "nothing arrived" deadline counts
-    /// from here, so a change to a set that was already there doesn't push it back.
-    private var downloadRequestedAt = Date()
+    /// The Download Again request macOS accepted, until its models settle. It
+    /// is kept in defaults because closing the window quits Purge in on-demand
+    /// mode: without it a relaunch before the models arrive forgets the request,
+    /// and the row, its progress and its retry go with it.
+    private var downloadRequest: DownloadRequest? {
+        didSet { Self.saveDownloadRequest(downloadRequest, to: defaults) }
+    }
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        downloadRequest = Self.loadDownloadRequest(from: defaults)
+    }
 
     /// How long the user gets to act in System Settings before Purge gives up.
     static let settingsWait: TimeInterval = 10 * 60
@@ -99,9 +105,19 @@ final class AppleIntelligenceModelStore: ObservableObject {
     }
 
     /// Whether the row has anything to say: models on disk, a block in place, or
-    /// a removal this session. A Mac with none of those shows no row at all.
+    /// a removal this session or a download still pending. A Mac with none of
+    /// those shows no row at all, even though Download Again would work there:
+    /// it asks for all five sets, so it is not offered to a Mac that never had them.
     var isRelevant: Bool {
-        Self.isSupported && ((reading?.isAnythingPresent ?? false) || isProfileInstalled || lastOutcome != nil)
+        Self.isSupported && Self.isRelevant(reading: reading, isProfileInstalled: isProfileInstalled, lastOutcome: lastOutcome)
+    }
+
+    nonisolated static func isRelevant(
+        reading: AppleIntelligenceReading?,
+        isProfileInstalled: Bool,
+        lastOutcome: AppleIntelligenceOutcome?
+    ) -> Bool {
+        (reading?.isAnythingPresent ?? false) || isProfileInstalled || lastOutcome != nil
     }
 
     /// Models arriving after Download Again: the block is gone and files are landing.
@@ -136,27 +152,89 @@ final class AppleIntelligenceModelStore: ObservableObject {
             lastArrivalChange = Date()
         }
         previousSets = fresh.sets
-        let arrived = Self.hasArrivals(since: setsAtRequest, now: fresh.sets)
-        switch lastOutcome {
+        guard let request = downloadRequest else { return }
+        let next = Self.arrivalOutcome(
+            current: lastOutcome,
+            request: request,
+            now: fresh.sets,
+            lastArrivalChange: lastArrivalChange,
+            at: Date()
+        )
+        lastOutcome = next.outcome
+        if next.requestDone { downloadRequest = nil }
+    }
+
+    /// What the row says after a reading while a request is pending, and
+    /// whether the request is over and can be forgotten.
+    ///
+    /// No outcome means Purge relaunched since the request, so it picks up
+    /// where it was: still watching, or "nothing has arrived yet" with Download
+    /// Again there to retry. A request with nothing arrived for a week is
+    /// dropped, so a Mac that never downloads doesn't keep the row for good.
+    nonisolated static func arrivalOutcome(
+        current: AppleIntelligenceOutcome?,
+        request: DownloadRequest,
+        now sets: [AppleIntelligenceSetReading],
+        lastArrivalChange: Date,
+        at now: Date
+    ) -> (outcome: AppleIntelligenceOutcome?, requestDone: Bool) {
+        let arrived = hasArrivals(since: request.sets, now: sets)
+        let pending = pendingOutcome(requestedAt: request.requestedAt, now: now)
+        switch current ?? pending {
         case .downloadRequested:
-            // Settling counts from the last change; giving up counts from the request.
-            switch Self.downloadWatch(
-                anythingArrived: arrived,
-                quietFor: Date().timeIntervalSince(arrived ? lastArrivalChange : downloadRequestedAt)
-            ) {
-            case .keepWatching: break
-            case .settled: lastOutcome = nil
-            case .nothingArrived: lastOutcome = .downloadNotStarted
+            // Not read for a week, as in menu bar mode with the Overview never
+            // opened, or the clock moved well back: drop it now rather than say
+            // "nothing yet" first, or say "downloading" until the clock catches up.
+            if !arrived, isStale(requestedAt: request.requestedAt, now: now) {
+                return (nil, true)
             }
-        case .downloadNotStarted where arrived:
+            // Settling counts from the last change; giving up counts from the request,
+            // so a change to a set that was already there doesn't push it back.
+            switch downloadWatch(
+                anythingArrived: arrived,
+                quietFor: now.timeIntervalSince(arrived ? lastArrivalChange : request.requestedAt)
+            ) {
+            case .keepWatching: return (.downloadRequested, false)
+            case .settled: return (nil, true)
+            case .nothingArrived: return (.downloadNotStarted, false)
+            }
+        case .downloadNotStarted:
             // macOS got to it later: watch again until the rest settle, then the
             // row goes back to showing the size.
-            lastOutcome = .downloadRequested
-        case .none, .removed, .someLeft, .profileNotInstalled, .notReady,
-             .downloadNotStarted, .profileStillInstalled, .downloadRequestFailed:
-            break
+            if arrived { return (.downloadRequested, false) }
+            if pending == nil { return (nil, true) }
+            return (.downloadNotStarted, false)
+        case .none:
+            // Too old to pick up again.
+            return (nil, true)
+        case .removed, .someLeft, .profileNotInstalled, .notReady,
+             .profileStillInstalled, .downloadRequestFailed:
+            // Another action has taken over from the request.
+            return (current, true)
         }
     }
+
+    /// What a request of this age says on its own: still watching for the first
+    /// fifteen minutes, then "nothing has arrived yet" until it expires. Nil once
+    /// it is stale.
+    nonisolated static func pendingOutcome(requestedAt: Date, now: Date) -> AppleIntelligenceOutcome? {
+        guard !isStale(requestedAt: requestedAt, now: now) else { return nil }
+        return now.timeIntervalSince(requestedAt) < downloadStartWait ? .downloadRequested : .downloadNotStarted
+    }
+
+    /// A week old, or dated well in the future because the clock moved back.
+    /// A few minutes ahead is a clock adjustment, and the request stands.
+    nonisolated static func isStale(requestedAt: Date, now: Date) -> Bool {
+        let age = now.timeIntervalSince(requestedAt)
+        return age >= downloadRequestExpiry || age < -clockStepAllowance
+    }
+
+    nonisolated static let clockStepAllowance: TimeInterval = 5 * 60
+
+    /// A week covers a Mac that waits for power, Wi-Fi or a quiet moment before
+    /// macOS downloads. Past that, turning Apple Intelligence on in System
+    /// Settings asks for the models the usual way.
+    nonisolated static let downloadRequestExpiry: TimeInterval = 7 * 24 * 60 * 60
 
     /// How often the row re-reads while it waits for models: every 20 seconds
     /// while they arrive, and once a minute after Purge has said nothing came,
@@ -169,11 +247,11 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     /// Whether any set gained records or bytes, or appeared, since `before`.
     nonisolated static func hasArrivals(
-        since before: [AppleIntelligenceSetReading],
+        since before: [DownloadRequest.SetAtRequest],
         now: [AppleIntelligenceSetReading]
     ) -> Bool {
         now.contains { item in
-            guard let old = before.first(where: { $0.set.name == item.set.name }) else { return item.isPresent }
+            guard let old = before.first(where: { $0.name == item.set.name }) else { return item.isPresent }
             return item.recordsOnDisk > old.recordsOnDisk
                 || (item.latestBytes ?? 0) > (old.latestBytes ?? 0)
                 || (item.isPresent && !old.isPresent)
@@ -227,6 +305,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         phase = .checking
         isStopping = false
         lastOutcome = nil
+        downloadRequest = nil
         let before = await readLatest()
         let targets = before.present.map(\.set)
         guard !targets.isEmpty else {
@@ -379,7 +458,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
         // Busy before the first await, so a second click can't start another run.
         phase = .measuring
         lastOutcome = nil
-        setsAtRequest = await readLatest().sets
+        downloadRequest = nil
+        let setsAtRequest = await readLatest().sets
         if isProfileInstalled {
             phase = .waitingForProfileRemoval
             openProfilesPane()
@@ -413,10 +493,60 @@ final class AppleIntelligenceModelStore: ObservableObject {
             "subscriber": AppleIntelligenceCatalog.subscriber, "subscriptions": subscriptions,
         ], timeout: 60)
         phase = .idle
-        lastOutcome = subscribe.ok ? .downloadRequested : .downloadRequestFailed(subscribe.problem)
+        if subscribe.ok {
+            downloadRequest = DownloadRequest(requestedAt: Date(), sets: setsAtRequest)
+            lastOutcome = .downloadRequested
+        } else {
+            lastOutcome = .downloadRequestFailed(subscribe.problem)
+        }
         lastArrivalChange = Date()
-        downloadRequestedAt = Date()
         _ = await readLatest()
+    }
+
+    // MARK: Pending request
+
+    /// A Download Again request as it is kept between launches.
+    nonisolated struct DownloadRequest: Codable, Equatable, Sendable {
+        /// One set when Download Again was asked for. After a partial removal
+        /// some are already on the Mac, so arrivals are judged against these,
+        /// not against whether anything is present.
+        nonisolated struct SetAtRequest: Codable, Equatable, Sendable {
+            let name: String
+            let recordsOnDisk: Int
+            let latestBytes: Int64?
+            let isPresent: Bool
+
+            init(_ reading: AppleIntelligenceSetReading) {
+                name = reading.set.name
+                recordsOnDisk = reading.recordsOnDisk
+                latestBytes = reading.latestBytes
+                isPresent = reading.isPresent
+            }
+        }
+
+        /// When macOS accepted the request.
+        let requestedAt: Date
+        let sets: [SetAtRequest]
+
+        init(requestedAt: Date, sets: [AppleIntelligenceSetReading]) {
+            self.requestedAt = requestedAt
+            self.sets = sets.map(SetAtRequest.init)
+        }
+    }
+
+    nonisolated static let downloadRequestKey = "appleIntelligence.downloadRequest"
+
+    nonisolated static func loadDownloadRequest(from defaults: UserDefaults) -> DownloadRequest? {
+        guard let data = defaults.data(forKey: downloadRequestKey) else { return nil }
+        return try? JSONDecoder().decode(DownloadRequest.self, from: data)
+    }
+
+    nonisolated static func saveDownloadRequest(_ request: DownloadRequest?, to defaults: UserDefaults) {
+        if let request, let data = try? JSONEncoder().encode(request) {
+            defaults.set(data, forKey: downloadRequestKey)
+        } else {
+            defaults.removeObject(forKey: downloadRequestKey)
+        }
     }
 
     // MARK: Helpers

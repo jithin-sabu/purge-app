@@ -561,10 +561,14 @@ struct ApplicationsFolderWatcherTests {
         #expect(after.fileNumbers[bundle.standardizedFileURL.path] != before.fileNumbers[bundle.standardizedFileURL.path])
     }
 
-    /// End to end through FSEvents: a bundle that leaves is reported at once, well
+    /// End to end through FSEvents: a bundle that leaves is reported at once,
     /// inside the three seconds the old settle delay waited, and carries the file
     /// number its Trash copy can be found by. A bundle that comes back shows up in
     /// the next index, which is what withdraws a review opened during an update.
+    ///
+    /// The stream only reports changes made after fseventsd has it running, so
+    /// the test proves that with a probe bundle before it moves anything. A fixed
+    /// pause was too short on a busy CI runner, and the move was never reported.
     @Test(.timeLimit(.minutes(1)))
     func reportsADepartureAtOnceAndSeesTheAppComeBack() async throws {
         let root = try makeRoot()
@@ -588,17 +592,28 @@ struct ApplicationsFolderWatcherTests {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         #expect(watcher.installedApps.count == 1)
-        // FSEvents needs a moment after the stream starts before it reports.
-        try await Task.sleep(nanoseconds: 500_000_000)
+        // A new probe each try, since one made before the stream was running is
+        // never reported. Only an event brings it into an index.
+        var isLive = false
+        for attempt in 0..<20 where !isLive {
+            let probeID = "com.test.probe\(attempt)"
+            _ = try makeBundle(in: root, name: "Probe\(attempt)", bundleID: probeID)
+            for _ in 0..<25 where !isLive {
+                try await Task.sleep(nanoseconds: 20_000_000)
+                isLive = indexes.contains { $0.bundleIDs.contains(probeID) }
+            }
+        }
+        try #require(isLive)
 
         let movedAt = Date()
         let moved = elsewhere.appendingPathComponent("Leaving.app")
         try fm.moveItem(at: leaving, to: moved)
-        for _ in 0..<100 where departures.isEmpty {
+        for _ in 0..<250 where departures.isEmpty {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         let departure = try #require(departures.first)
-        #expect(Date().timeIntervalSince(movedAt) < 1.5)
+        // Under the old three-second settle delay, with room for a busy runner.
+        #expect(Date().timeIntervalSince(movedAt) < 2.5)
         #expect(departure.app.bundleID == "com.test.leaving")
         // The id must not drift once the bundle is gone, or the ignore list and the
         // record path stop matching it.
@@ -615,7 +630,7 @@ struct ApplicationsFolderWatcherTests {
 
         let seen = indexes.count
         try fm.moveItem(at: moved, to: leaving)
-        for _ in 0..<100 where !indexes.dropFirst(seen).contains(where: { $0.bundleIDs.contains("com.test.leaving") }) {
+        for _ in 0..<250 where !indexes.dropFirst(seen).contains(where: { $0.bundleIDs.contains("com.test.leaving") }) {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         #expect(indexes.dropFirst(seen).contains { $0.bundleIDs.contains("com.test.leaving") })

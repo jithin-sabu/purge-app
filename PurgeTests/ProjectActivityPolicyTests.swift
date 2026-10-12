@@ -12,7 +12,7 @@ private struct ActivityFixture {
 
     init(files: [String] = [], folders: [String] = []) throws {
         root = Self.container.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Self.makeRoot(root)
         for folder in folders {
             try FileManager.default.createDirectory(at: url(folder), withIntermediateDirectories: true)
         }
@@ -51,11 +51,26 @@ private struct ActivityFixture {
         try fm.setAttributes([.modificationDate: date], ofItemAtPath: root.path)
     }
 
+    /// Another suite's `cleanUp` can remove the empty container between the
+    /// container being made and `root` being made inside it, so that is tried again.
+    private static func makeRoot(_ root: URL) throws {
+        for attempt in 1...5 {
+            do {
+                try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                return
+            } catch where attempt < 5 {
+                continue
+            }
+        }
+    }
+
     func cleanUp() {
         try? FileManager.default.removeItem(at: root)
         // Shared with other suites running in parallel, so only removed when empty.
-        let remaining = (try? FileManager.default.contentsOfDirectory(at: Self.container, includingPropertiesForKeys: nil)) ?? []
-        if remaining.isEmpty { try? FileManager.default.removeItem(at: Self.container) }
+        // rmdir checks and removes in one step. Listing it first and then removing
+        // it whole took a fixture another suite made between the two, and failed
+        // that suite's test on CI.
+        rmdir(Self.container.path)
     }
 }
 
