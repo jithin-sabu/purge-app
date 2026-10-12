@@ -171,6 +171,8 @@ nonisolated enum AppleIntelligenceOutcome: Equatable, Sendable {
     case profileNotInstalled
     case notReady(String)
     case downloadRequested
+    /// Download Again was accepted, but nothing arrived while Purge watched.
+    case downloadNotStarted
     /// The profile is still installed, so downloads stay blocked.
     case profileStillInstalled
     case downloadRequestFailed(String)

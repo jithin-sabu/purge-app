@@ -47,10 +47,10 @@ struct OverviewAppleIntelligenceRow: View {
         .accessibilityElement(children: .contain)
         .task { await store.refreshAccounts() }
         // Models arriving after Download Again: re-read so the row shows them landing.
-        .task(id: store.isDownloading) {
-            guard store.isDownloading else { return }
-            while !Task.isCancelled, store.isDownloading {
-                try? await Task.sleep(for: .seconds(20))
+        .task(id: store.arrivalPollInterval) {
+            guard let interval = store.arrivalPollInterval else { return }
+            while !Task.isCancelled, store.arrivalPollInterval == interval {
+                try? await Task.sleep(for: .seconds(interval))
                 await store.refresh()
             }
         }
@@ -85,16 +85,26 @@ struct OverviewAppleIntelligenceRow: View {
         if store.isWaitingInSettings {
             Button("Cancel") { store.cancelWaiting() }
                 .buttonStyle(.purge(.quiet, size: .small))
+        } else if store.canStop {
+            Button(store.isStopping ? "Stopping..." : "Stop") { store.stop() }
+                .buttonStyle(.purge(.quiet, size: .small))
+                .disabled(store.isStopping)
+                .help("Stop before Purge asks macOS to release the next set")
         } else if store.isBusy {
             Button {} label: {
                 CleaningButtonLabel(title: "Working...", systemImage: nil, isCleaning: true)
             }
             .buttonStyle(.purge(.secondary, size: .small))
             .disabled(true)
-        } else if store.reading?.isAnythingPresent == true {
-            removeButton
-        } else if store.isProfileInstalled || store.reading?.isAnythingPresent == false {
-            downloadButton
+        } else {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
+                if store.offersDownloadAgain {
+                    downloadButton
+                }
+                if store.offersRemove {
+                    removeButton
+                }
+            }
         }
     }
 
@@ -139,12 +149,16 @@ struct OverviewAppleIntelligenceRow: View {
 
     private var detail: String {
         switch store.phase {
+        case .checking:
+            return store.isStopping ? String(localized: "Stopping...") : String(localized: "Checking...")
         case .waitingForProfileInstall:
             return String(localized: "Install the profile in System Settings to continue")
         case .waitingForProfileRemoval:
             return String(localized: "Remove the Purge profile in System Settings to continue")
         case .releasing:
-            return String(localized: "Asking macOS to release the models...")
+            return store.isStopping
+                ? String(localized: "Stopping after this set...")
+                : String(localized: "Asking macOS to release the models...")
         case .measuring:
             return String(localized: "Checking...")
         case .requestingDownload:
@@ -177,6 +191,8 @@ struct OverviewAppleIntelligenceRow: View {
                 return String(localized: "Downloading in the background")
             }
             return String(localized: "Download requested")
+        case .downloadNotStarted:
+            return String(localized: "Download requested, but nothing has arrived yet")
         case .profileStillInstalled:
             return String(localized: "The profile is still installed, so downloads stay blocked")
         case .downloadRequestFailed(let reason):

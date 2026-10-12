@@ -13,13 +13,17 @@ import Foundation
 /// not part of Clean Safe Items.
 ///
 /// macOS 27 only: on 15 and 26 Apple's own switch releases the models, and the
-/// records there have not been measured.
+/// records there have not been measured. Not 28 either until it is checked: a
+/// renamed request key there could make the service read a release as naming
+/// no sets, which it takes as every asset on the Mac.
 @MainActor
 final class AppleIntelligenceModelStore: ObservableObject {
     static let shared = AppleIntelligenceModelStore()
 
     enum Phase: Equatable {
         case idle
+        /// Checking that every set still maps to its asset type before removing.
+        case checking
         /// The profile is open in System Settings; waiting for the user to install it.
         case waitingForProfileInstall
         case releasing
@@ -37,32 +41,62 @@ final class AppleIntelligenceModelStore: ObservableObject {
     @Published private(set) var otherAccounts: [AppleIntelligenceAccount] = []
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var lastOutcome: AppleIntelligenceOutcome?
+    /// The user asked a removal to stop. It takes effect between sets, because a
+    /// request already sent to the service can't be taken back.
+    @Published private(set) var isStopping = false
 
     private var latestPass = 0
     private var waitCancelled = false
-    /// The sets as last read, and how many readings in a row have matched them,
-    /// so a download request is considered done once nothing more arrives.
+    /// The sets as last read, and when they last changed, so a download request
+    /// is considered over once nothing more arrives.
     private var previousSets: [AppleIntelligenceSetReading]?
-    private var unchangedReadings = 0
+    private var lastArrivalChange = Date()
+    /// The sets when Download Again was asked for. After a partial removal some
+    /// are already on the Mac, so arrivals are judged against this, not against
+    /// whether anything is present.
+    private var setsAtRequest: [AppleIntelligenceSetReading] = []
+    /// When Download Again was accepted. The "nothing arrived" deadline counts
+    /// from here, so a change to a set that was already there doesn't push it back.
+    private var downloadRequestedAt = Date()
 
     /// How long the user gets to act in System Settings before Purge gives up.
     static let settingsWait: TimeInterval = 10 * 60
 
     /// macOS 27 on Apple silicon, where the spike was run.
     nonisolated static let isSupported: Bool = {
-        let version = OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0)
-        guard ProcessInfo.processInfo.isOperatingSystemAtLeast(version) else { return false }
         var info = utsname()
         uname(&info)
         let machine = withUnsafePointer(to: &info.machine) { pointer in
             pointer.withMemoryRebound(to: CChar.self, capacity: 256) { String(cString: $0) }
         }
-        return machine == "arm64"
+        return isSupported(os: ProcessInfo.processInfo.operatingSystemVersion, machine: machine)
     }()
+
+    /// Every 27.x, and nothing before or after it. Point releases keep the
+    /// service's keys; a new major version needs the spike run again first.
+    nonisolated static func isSupported(os: OperatingSystemVersion, machine: String) -> Bool {
+        os.majorVersion == 27 && machine == "arm64"
+    }
 
     var isBusy: Bool { phase != .idle }
     var isWaitingInSettings: Bool { phase == .waitingForProfileInstall || phase == .waitingForProfileRemoval }
     var isProfileInstalled: Bool { !installedBlocks.isEmpty }
+    /// A removal can stop while it checks the sets or between releases.
+    var canStop: Bool { phase == .checking || phase == .releasing }
+
+    /// Remove while any set is still on the Mac. Download Again whenever the
+    /// block is installed, even beside Remove after a partial removal, since it
+    /// is the only way back in the app; and when nothing is on the Mac.
+    var offersRemove: Bool { Self.offers(reading: reading, isProfileInstalled: isProfileInstalled).remove }
+    var offersDownloadAgain: Bool { Self.offers(reading: reading, isProfileInstalled: isProfileInstalled).downloadAgain }
+
+    nonisolated static func offers(
+        reading: AppleIntelligenceReading?,
+        isProfileInstalled: Bool
+    ) -> (remove: Bool, downloadAgain: Bool) {
+        let present = reading?.isAnythingPresent
+        return (present == true, isProfileInstalled || present == false)
+    }
 
     /// Whether the row has anything to say: models on disk, a block in place, or
     /// a removal this session. A Mac with none of those shows no row at all.
@@ -95,19 +129,77 @@ final class AppleIntelligenceModelStore: ObservableObject {
         return fresh
     }
 
-    /// Download again is over once two readings in a row show nothing new
-    /// arriving and something is on the Mac: the row stops saying "downloading"
-    /// and stops re-reading every 20 seconds.
+    /// After Download Again, the row says "downloading" and re-reads every 20
+    /// seconds until the sets stop changing. See `downloadWatch`.
     private func noteArrivals(_ fresh: AppleIntelligenceReading) {
-        if let previousSets, previousSets == fresh.sets {
-            unchangedReadings += 1
-        } else {
-            unchangedReadings = 0
+        if previousSets != fresh.sets {
+            lastArrivalChange = Date()
         }
         previousSets = fresh.sets
-        if case .downloadRequested = lastOutcome, fresh.isAnythingPresent, unchangedReadings >= 2 {
-            lastOutcome = nil
+        let arrived = Self.hasArrivals(since: setsAtRequest, now: fresh.sets)
+        switch lastOutcome {
+        case .downloadRequested:
+            // Settling counts from the last change; giving up counts from the request.
+            switch Self.downloadWatch(
+                anythingArrived: arrived,
+                quietFor: Date().timeIntervalSince(arrived ? lastArrivalChange : downloadRequestedAt)
+            ) {
+            case .keepWatching: break
+            case .settled: lastOutcome = nil
+            case .nothingArrived: lastOutcome = .downloadNotStarted
+            }
+        case .downloadNotStarted where arrived:
+            // macOS got to it later: watch again until the rest settle, then the
+            // row goes back to showing the size.
+            lastOutcome = .downloadRequested
+        case .none, .removed, .someLeft, .profileNotInstalled, .notReady,
+             .downloadNotStarted, .profileStillInstalled, .downloadRequestFailed:
+            break
         }
+    }
+
+    /// How often the row re-reads while it waits for models: every 20 seconds
+    /// while they arrive, and once a minute after Purge has said nothing came,
+    /// so a late download still shows without leaving the Overview.
+    var arrivalPollInterval: TimeInterval? {
+        if isDownloading { return 20 }
+        if case .downloadNotStarted = lastOutcome { return 60 }
+        return nil
+    }
+
+    /// Whether any set gained records or bytes, or appeared, since `before`.
+    nonisolated static func hasArrivals(
+        since before: [AppleIntelligenceSetReading],
+        now: [AppleIntelligenceSetReading]
+    ) -> Bool {
+        now.contains { item in
+            guard let old = before.first(where: { $0.set.name == item.set.name }) else { return item.isPresent }
+            return item.recordsOnDisk > old.recordsOnDisk
+                || (item.latestBytes ?? 0) > (old.latestBytes ?? 0)
+                || (item.isPresent && !old.isPresent)
+        }
+    }
+
+    enum DownloadWatch: Equatable {
+        case keepWatching
+        /// Models arrived and nothing changed for a while: done.
+        case settled
+        /// Nothing at all arrived: stop saying "downloading".
+        case nothingArrived
+    }
+
+    /// A set can take minutes to start after the one before it, so arrivals
+    /// count as over only after five quiet minutes. With nothing arrived, the
+    /// watch gives up after fifteen, for a Mac that is offline or that macOS
+    /// decided not to download to.
+    nonisolated static let downloadSettleTime: TimeInterval = 5 * 60
+    nonisolated static let downloadStartWait: TimeInterval = 15 * 60
+
+    nonisolated static func downloadWatch(anythingArrived: Bool, quietFor: TimeInterval) -> DownloadWatch {
+        if anythingArrived {
+            return quietFor >= downloadSettleTime ? .settled : .keepWatching
+        }
+        return quietFor >= downloadStartWait ? .nothingArrived : .keepWatching
     }
 
     func refreshAccounts() async {
@@ -119,21 +211,38 @@ final class AppleIntelligenceModelStore: ObservableObject {
         SettingsGuidePanel.shared.hide()
     }
 
+    /// Stops a removal before its next request to the service.
+    func stop() {
+        guard canStop else { return }
+        isStopping = true
+    }
+
     // MARK: Remove
 
     /// Blocks the downloads, releases every set still present, and records what
     /// the volume gave back. Stops at the first step the Mac does not pass.
     func remove() async {
         guard !isBusy, Self.isSupported else { return }
+        // Busy before the first await, so a second click can't start another run.
+        phase = .checking
+        isStopping = false
         lastOutcome = nil
         let before = await readLatest()
         let targets = before.present.map(\.set)
-        guard !targets.isEmpty else { return }
+        guard !targets.isEmpty else {
+            phase = .idle
+            return
+        }
 
         // Every set has to map to the catalog's asset type on this macOS, or a
         // renamed set would be sent to the service under a stale name.
-        phase = .measuring
         for set in targets {
+            // Nothing has been changed yet, so a stop here leaves no trace.
+            guard !isStopping else {
+                phase = .idle
+                isStopping = false
+                return
+            }
             let mapping = await AppleIntelligenceWorker.run("asset-type", ["assetSet": set.name], timeout: 30)
             guard mapping.ok, mapping.result["assetType"] as? String == set.assetType else {
                 phase = .idle
@@ -142,6 +251,11 @@ final class AppleIntelligenceModelStore: ObservableObject {
                     : mapping.problem)
                 return
             }
+        }
+        guard !isStopping else {
+            phase = .idle
+            isStopping = false
+            return
         }
 
         // 1. The block first, so nothing comes back between release and the reading.
@@ -187,7 +301,12 @@ final class AppleIntelligenceModelStore: ObservableObject {
         let rawBefore = VolumeRawCapacityReader.readAvailableBytes()
         var failures: [String: String] = [:]
         var lockReplies: [AppleIntelligenceModelSet] = []
+        var stopped = false
         for set in targets {
+            if isStopping {
+                stopped = true
+                break
+            }
             let reset = await AppleIntelligenceWorker.run("reset", ["assetSets": [set.name]], timeout: 120)
             if reset.ok { continue }
             // macOS can answer "current locks" and still have removed the set
@@ -202,6 +321,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
         // 3. What is left, and what the volume gave back once it settled.
         phase = .measuring
+        isStopping = false
         let freedShown = await VolumeCapacityReader.settledGain(since: shownBefore, attempts: 15) {
             VolumeCapacityReader.read()?.availableBytes
         }
@@ -231,7 +351,14 @@ final class AppleIntelligenceModelStore: ObservableObject {
             // pick when several sets stayed.
             let generic = String(localized: "macOS says these are still in use")
             let reasons = failures.sorted { $0.key < $1.key }.map(\.value)
-            let reason = reasons.first { $0 != generic } ?? reasons.first ?? String(localized: "macOS hasn't finished removing them")
+            // if/else rather than a ternary around the closure: Xcode 26.6 on CI
+            // crashed on that shape before.
+            let reason: String
+            if stopped {
+                reason = String(localized: "you stopped the removal")
+            } else {
+                reason = reasons.first { $0 != generic } ?? reasons.first ?? String(localized: "macOS hasn't finished removing them")
+            }
             lastOutcome = .someLeft(removed: removed, left: left, reason: reason)
         }
         if removed > 0 {
@@ -249,8 +376,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
     /// downloads them in the background; the row shows them arriving.
     func downloadAgain() async {
         guard !isBusy, Self.isSupported else { return }
+        // Busy before the first await, so a second click can't start another run.
+        phase = .measuring
         lastOutcome = nil
-        _ = await readLatest()
+        setsAtRequest = await readLatest().sets
         if isProfileInstalled {
             phase = .waitingForProfileRemoval
             openProfilesPane()
@@ -285,7 +414,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
         ], timeout: 60)
         phase = .idle
         lastOutcome = subscribe.ok ? .downloadRequested : .downloadRequestFailed(subscribe.problem)
-        unchangedReadings = 0
+        lastArrivalChange = Date()
+        downloadRequestedAt = Date()
         _ = await readLatest()
     }
 

@@ -943,6 +943,11 @@
 "Purge couldn't write the profile: %@" = "Purge 无法写入描述文件：%@";
 "macOS says these are still in use" = "macOS 表示这些模型仍在使用中";
 "macOS hasn't finished removing them" = "macOS 尚未完成移除";
+"you stopped the removal" = "你停止了移除";
+"Stopping..." = "正在停止…";
+"Stopping after this set..." = "完成这一组后停止…";
+"Stop before Purge asks macOS to release the next set" = "在 Purge 请 macOS 释放下一组之前停止";
+"Download requested, but nothing has arrived yet" = "已请求下载，但尚未收到任何模型";
 "Purge's asset worker is missing from the app" = "App 中缺少 Purge 的资源辅助程序";
 "Purge's asset worker could not be started" = "无法启动 Purge 的资源辅助程序";
 "No answer in %lld seconds" = "%lld 秒内没有回应";
