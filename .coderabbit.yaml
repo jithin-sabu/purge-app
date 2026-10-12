@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Keep the settings from the CodeRabbit dashboard and change only what is below.
+inheritance: true
+
+reviews:
+  finishing_touches:
+    # CodeRabbit comments but never pushes. Its Autofix pushed a change we had
+    # already rejected to #144 (9463054). Purge deletes files, so every change
+    # to a PR is made by a person (#145).
+    autofix:
+      enabled: false
