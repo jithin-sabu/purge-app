@@ -1,0 +1,39 @@
+name: Claude Review
+
+# Reviews each pull request once with Anthropic's code-review plugin and
+# posts comments. It never pushes: it runs on this job's GITHUB_TOKEN, not
+# the Claude GitHub App, so the read-only contents permission binds it (#145).
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Forks get no secrets, and drafts are reviewed once they are ready.
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Review with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          plugin_marketplaces: https://github.com/anthropics/claude-code.git
+          plugins: code-review@claude-code-plugins
+          prompt: /code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*)"
