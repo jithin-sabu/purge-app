@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import ServiceManagement
 
@@ -9,8 +10,14 @@ import ServiceManagement
 /// System Settings and the user enables it there. Once enabled, uninstalls of
 /// locked apps can use the helper without another password prompt.
 @MainActor
-final class PrivilegedHelperManager {
+final class PrivilegedHelperManager: ObservableObject {
     static let shared = PrivilegedHelperManager()
+
+    /// `true` when macOS reports the helper as enabled but it still did not answer
+    /// after Purge reloaded it. Seen after an app update, when launchd keeps a job that
+    /// points at the replaced bundle and fails every launch. The uninstall screen uses
+    /// this to stop claiming "Secure removal is on" when it plainly is not working.
+    @Published private(set) var isUnresponsive = false
 
     // A fresh handle every read. A cached `SMAppService.daemon` reports the status it
     // saw at creation, so after the user flips the switch in System Settings a stored
@@ -97,7 +104,8 @@ final class PrivilegedHelperManager {
         // newly-approved copy is replaced before it receives the current protocol.
         // A definite, un-fixable version mismatch reports "not ready" rather than
         // letting a stale helper serve the request, so we never silently run an old
-        // binary: the caller then offers one-time setup instead.
+        // binary. So does a helper that stays silent after a reload: a move sent to it
+        // would wait out the full `moveTimeout` with the cleaning screen frozen.
         let ready = await reconcileVersion()
         guard ready, !urls.isEmpty else { return nil }
         let connection = vettedConnection()
@@ -166,47 +174,128 @@ final class PrivilegedHelperManager {
         }
     }
 
-    /// If an enabled helper reports a version other than the one this app ships, an
-    /// older copy survived an app update — re-register to install the current binary.
-    /// A definite mismatch replaces the old registration. A missing answer refreshes
-    /// the existing approved registration without removing it or asking again.
     /// Returns `true` when an enabled helper at the current version is ready to serve
-    /// a request. A definite version mismatch that survives re-registration returns
-    /// `false`, so the caller treats the helper as not set up rather than trusting a
-    /// stale binary to behave like the current one.
+    /// a request. Anything else reports "not ready", so the caller offers setup or
+    /// Finder instead of sending a request nobody will answer. See
+    /// `HelperReconciler.reconcile` for the steps.
     @discardableResult
     func reconcileVersion() async -> Bool {
-        guard service.status == .enabled else { return false }
-        guard let installed = await installedHelperVersion() else {
-            // SMAppService can report `.enabled` even though launchd no longer has the
-            // job, most often after replacing Purge.app with a newer build. Registering
-            // again reloads the already-approved daemon without removing the user's
-            // permission or sending them back to System Settings. A flaky version query
-            // is also possible, so let the request proceed — the move has its own
-            // timeout and error handling for a genuinely dead helper.
-            NSLog("Purge: enabled helper is unreachable — reloading registration")
-            register()
-            return true
+        // Unregistering stops the running helper, including an old copy whose file an
+        // update replaced, and registering starts the one in this bundle. It also
+        // points macOS back at this copy of Purge if its record named another one. In
+        // testing on macOS 27 the user's approval survived this every time, so no
+        // prompt appeared.
+        let reload: (() async -> Void)?
+        if Self.mayRepairRegistration() {
+            reload = { await self.reloadRegistration() }
+        } else {
+            reload = nil
         }
-        guard installed != PurgeHelperConstants.version else { return true }
 
-        NSLog("Purge: stale helper %@ (want %@) — re-registering", installed, PurgeHelperConstants.version)
-        if await unregister() == false {
-            // Removing the old registration failed. Re-registering on top of it can
-            // leave the old binary in place, so confirm the version afterwards rather
-            // than assuming the update took.
-            NSLog("Purge: could not remove stale helper %@ before reinstalling", installed)
-        }
-        register()
-
-        let afterUpdate = await installedHelperVersion()
-        if afterUpdate == PurgeHelperConstants.version { return true }
-        NSLog(
-            "Purge: helper update did not take (installed %@, want %@) — offering setup instead of using the old helper",
-            afterUpdate ?? "unreachable",
-            PurgeHelperConstants.version
+        let outcome = await HelperReconciler.reconcile(
+            isEnabled: { self.service.status == .enabled },
+            expectedVersion: PurgeHelperConstants.version,
+            probe: { await self.installedHelperVersion() },
+            reload: reload
         )
-        return false
+        isUnresponsive = outcome == .unresponsive
+        return outcome == .ready
+    }
+
+    private func reloadRegistration() async {
+        if await unregister() == false {
+            NSLog("Purge: could not remove the helper registration before reloading it")
+        }
+        try? await Task.sleep(for: .milliseconds(500))
+        register()
+    }
+
+    /// Whether this copy of Purge may reload the helper's registration on its own.
+    ///
+    /// Registering ties the helper to the copy of Purge that registers it: launchd then
+    /// starts the helper from inside that copy. A dev build, the unit-test host, or a
+    /// copy run straight from the disk image would take the helper with it, and
+    /// deleting or ejecting that copy leaves the helper with nowhere to start from.
+    /// That is how this Mac's helper broke. So only an installed copy repairs the
+    /// registration by itself. Turning the switch on in Settings still works from
+    /// anywhere, because the user chose it.
+    nonisolated static func mayRepairRegistration(
+        bundleURL: URL = Bundle.main.bundleURL,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        guard !TestHost.isActive(environment: environment) else { return false }
+        // Standardized, so a path like /Applications/../Users/x/Downloads cannot pass
+        // the prefix check.
+        let path = bundleURL.standardizedFileURL.path
+        let userApplications = homeDirectory.standardizedFileURL
+            .appendingPathComponent("Applications").path + "/"
+        return path.hasPrefix("/Applications/") || path.hasPrefix(userApplications)
+    }
+}
+
+/// What checking the installed helper found.
+enum HelperReconcileOutcome: Equatable {
+    /// The user has not turned the helper on.
+    case notEnabled
+    /// The helper answered with the version this app ships.
+    case ready
+    /// The helper did not answer, even after a reload.
+    case unresponsive
+    /// The helper answered with an old version that reloading did not replace.
+    case staleVersion
+}
+
+enum HelperReconciler {
+    /// Checks an enabled helper before Purge sends it real work.
+    ///
+    /// 1. Ask for its version. The current version means it is ready.
+    /// 2. No answer, or an old version: reload the helper, then ask once more. No
+    ///    answer covers a launch job macOS dropped and an old process the app can no
+    ///    longer verify because an update replaced its file.
+    /// 3. Still no answer means the helper is not usable right now. A move request
+    ///    would sit unanswered until its five-minute timeout, so report
+    ///    `.unresponsive` instead of letting it through.
+    ///
+    /// A `nil` `reload` skips steps 2 and 3, for a copy of Purge that must not
+    /// re-register the helper.
+    ///
+    /// The closures keep this free of XPC and `SMAppService`, so tests can drive it.
+    static func reconcile(
+        isEnabled: () -> Bool,
+        expectedVersion: String,
+        probe: () async -> String?,
+        reload: (() async -> Void)?
+    ) async -> HelperReconcileOutcome {
+        guard isEnabled() else { return .notEnabled }
+
+        let installed = await probe()
+        if installed == expectedVersion { return .ready }
+        guard let reload else {
+            // This copy may not repair the registration (see `mayRepairRegistration`),
+            // so report what it found without touching the helper.
+            NSLog("Purge: helper not ready and this copy of Purge may not reload it")
+            return installed == nil ? .unresponsive : .staleVersion
+        }
+        if let installed {
+            NSLog("Purge: stale helper %@ (want %@), reloading", installed, expectedVersion)
+        } else {
+            NSLog("Purge: enabled helper is unreachable, reloading")
+        }
+        await reload()
+
+        // If the reload cost the approval, the user needs setup, not a note that the
+        // helper is not responding.
+        guard isEnabled() else { return .notEnabled }
+
+        let afterReload = await probe()
+        if afterReload == expectedVersion { return .ready }
+        NSLog(
+            "Purge: helper not ready after reload (installed %@, want %@), not sending the move",
+            afterReload ?? "unreachable",
+            expectedVersion
+        )
+        return afterReload == nil ? .unresponsive : .staleVersion
     }
 }
 

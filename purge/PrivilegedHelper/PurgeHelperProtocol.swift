@@ -15,7 +15,9 @@ enum PurgeHelperConstants {
     ///
     /// v3 adds the administrator-only caller gate and the ownership-reporting move, so
     /// an app that talks the v3 protocol re-registers any surviving v2 helper first.
-    static let version = "3"
+    /// v4 opens the Trash search-only, so privacy protection no longer blocks it, and
+    /// quits when idle, so an update never leaves an old copy running.
+    static let version = "4"
 
     /// The daemon property list bundled at `Contents/Library/LaunchDaemons/`, named
     /// to `SMAppService.daemon(plistName:)`.

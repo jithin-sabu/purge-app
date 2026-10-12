@@ -64,7 +64,7 @@ struct PrivilegedHelperPathPolicyTests {
 
     @Test("Helper behavior version is current")
     func helperVersionIsCurrent() {
-        #expect(PurgeHelperConstants.version == "3")
+        #expect(PurgeHelperConstants.version == "4")
     }
 }
 
