@@ -47,10 +47,10 @@ struct OverviewAppleIntelligenceRow: View {
         .accessibilityElement(children: .contain)
         .task { await store.refreshAccounts() }
         // Models arriving after Download Again: re-read so the row shows them landing.
-        .task(id: store.isDownloading) {
-            guard store.isDownloading else { return }
-            while !Task.isCancelled, store.isDownloading {
-                try? await Task.sleep(for: .seconds(20))
+        .task(id: store.arrivalPollInterval) {
+            guard let interval = store.arrivalPollInterval else { return }
+            while !Task.isCancelled, store.arrivalPollInterval == interval {
+                try? await Task.sleep(for: .seconds(interval))
                 await store.refresh()
             }
         }

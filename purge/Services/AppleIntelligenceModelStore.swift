@@ -51,6 +51,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
     /// is considered over once nothing more arrives.
     private var previousSets: [AppleIntelligenceSetReading]?
     private var lastArrivalChange = Date()
+    /// The sets when Download Again was asked for. After a partial removal some
+    /// are already on the Mac, so arrivals are judged against this, not against
+    /// whether anything is present.
+    private var setsAtRequest: [AppleIntelligenceSetReading] = []
 
     /// How long the user gets to act in System Settings before Purge gives up.
     static let settingsWait: TimeInterval = 10 * 60
@@ -129,41 +133,65 @@ final class AppleIntelligenceModelStore: ObservableObject {
             lastArrivalChange = Date()
         }
         previousSets = fresh.sets
+        let arrived = Self.hasArrivals(since: setsAtRequest, now: fresh.sets)
         switch lastOutcome {
         case .downloadRequested:
             switch Self.downloadWatch(
-                isAnythingPresent: fresh.isAnythingPresent,
+                anythingArrived: arrived,
                 quietFor: Date().timeIntervalSince(lastArrivalChange)
             ) {
             case .keepWatching: break
             case .settled: lastOutcome = nil
             case .nothingArrived: lastOutcome = .downloadNotStarted
             }
-        case .downloadNotStarted where fresh.isAnythingPresent:
+        case .downloadNotStarted where arrived:
             // macOS got to it later; the row goes back to showing the size.
             lastOutcome = nil
-        default:
+        case .none, .removed, .someLeft, .profileNotInstalled, .notReady,
+             .downloadNotStarted, .profileStillInstalled, .downloadRequestFailed:
             break
+        }
+    }
+
+    /// How often the row re-reads while it waits for models: every 20 seconds
+    /// while they arrive, and once a minute after Purge has said nothing came,
+    /// so a late download still shows without leaving the Overview.
+    var arrivalPollInterval: TimeInterval? {
+        if isDownloading { return 20 }
+        if case .downloadNotStarted = lastOutcome { return 60 }
+        return nil
+    }
+
+    /// Whether any set gained records or bytes, or appeared, since `before`.
+    nonisolated static func hasArrivals(
+        since before: [AppleIntelligenceSetReading],
+        now: [AppleIntelligenceSetReading]
+    ) -> Bool {
+        now.contains { item in
+            guard let old = before.first(where: { $0.set.name == item.set.name }) else { return item.isPresent }
+            return item.recordsOnDisk > old.recordsOnDisk
+                || (item.latestBytes ?? 0) > (old.latestBytes ?? 0)
+                || (item.isPresent && !old.isPresent)
         }
     }
 
     enum DownloadWatch: Equatable {
         case keepWatching
-        /// Models are on the Mac and nothing changed for a while: done.
+        /// Models arrived and nothing changed for a while: done.
         case settled
         /// Nothing at all arrived: stop saying "downloading".
         case nothingArrived
     }
 
     /// A set can take minutes to start after the one before it, so arrivals
-    /// count as over only after five quiet minutes. With nothing on the Mac,
-    /// the watch gives up after fifteen, for a Mac that is offline or that
-    /// macOS decided not to download to.
+    /// count as over only after five quiet minutes. With nothing arrived, the
+    /// watch gives up after fifteen, for a Mac that is offline or that macOS
+    /// decided not to download to.
     nonisolated static let downloadSettleTime: TimeInterval = 5 * 60
     nonisolated static let downloadStartWait: TimeInterval = 15 * 60
 
-    nonisolated static func downloadWatch(isAnythingPresent: Bool, quietFor: TimeInterval) -> DownloadWatch {
-        if isAnythingPresent {
+    nonisolated static func downloadWatch(anythingArrived: Bool, quietFor: TimeInterval) -> DownloadWatch {
+        if anythingArrived {
             return quietFor >= downloadSettleTime ? .settled : .keepWatching
         }
         return quietFor >= downloadStartWait ? .nothingArrived : .keepWatching
@@ -346,7 +374,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         // Busy before the first await, so a second click can't start another run.
         phase = .measuring
         lastOutcome = nil
-        _ = await readLatest()
+        setsAtRequest = await readLatest().sets
         if isProfileInstalled {
             phase = .waitingForProfileRemoval
             openProfilesPane()

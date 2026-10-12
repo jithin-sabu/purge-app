@@ -62,9 +62,20 @@ struct AppleIntelligenceModelStoreTests {
     @Test func downloadWatchWaitsForAQuietSpellAndGivesUpWhenNothingComes() {
         let settle = AppleIntelligenceModelStore.downloadSettleTime
         let start = AppleIntelligenceModelStore.downloadStartWait
-        #expect(AppleIntelligenceModelStore.downloadWatch(isAnythingPresent: true, quietFor: 60) == .keepWatching)
-        #expect(AppleIntelligenceModelStore.downloadWatch(isAnythingPresent: true, quietFor: settle) == .settled)
-        #expect(AppleIntelligenceModelStore.downloadWatch(isAnythingPresent: false, quietFor: settle) == .keepWatching)
-        #expect(AppleIntelligenceModelStore.downloadWatch(isAnythingPresent: false, quietFor: start) == .nothingArrived)
+        #expect(AppleIntelligenceModelStore.downloadWatch(anythingArrived: true, quietFor: 60) == .keepWatching)
+        #expect(AppleIntelligenceModelStore.downloadWatch(anythingArrived: true, quietFor: settle) == .settled)
+        #expect(AppleIntelligenceModelStore.downloadWatch(anythingArrived: false, quietFor: settle) == .keepWatching)
+        #expect(AppleIntelligenceModelStore.downloadWatch(anythingArrived: false, quietFor: start) == .nothingArrived)
+    }
+
+    /// After a partial removal some sets are on the Mac before Download Again,
+    /// so those must not count as arrivals, or the watch would call a download
+    /// that never started finished.
+    @Test func setsAlreadyThereAtTheRequestAreNotArrivals() {
+        let leftovers = reading(present: 2).sets
+        #expect(!AppleIntelligenceModelStore.hasArrivals(since: leftovers, now: leftovers))
+        #expect(AppleIntelligenceModelStore.hasArrivals(since: leftovers, now: reading(present: 3).sets))
+        #expect(AppleIntelligenceModelStore.hasArrivals(since: reading(present: 0).sets, now: reading(present: 1).sets))
+        #expect(!AppleIntelligenceModelStore.hasArrivals(since: reading(present: 0).sets, now: reading(present: 0).sets))
     }
 }
