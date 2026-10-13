@@ -181,6 +181,14 @@ nonisolated final class CacheScanner {
             continuation.yield(.found(item))
             sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
         }
+        for item in macOSInstallLeftoverItems(access: access, collectedPaths: &collectedPaths) {
+            if Task.isCancelled {
+                continuation.finish()
+                return
+            }
+            continuation.yield(.found(item))
+            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
+        }
         for location in systemJunkLocations(home: home) {
             if Task.isCancelled {
                 continuation.finish()
@@ -530,6 +538,23 @@ nonisolated final class CacheScanner {
                 url,
                 headline: url.deletingPathExtension().lastPathComponent,
                 folderName: CacheDiscoveryPaths.macOSInstallerKey,
+                access: access,
+                collectedPaths: &collectedPaths
+            )
+        }
+    }
+
+    /// What a finished macOS update left in `macOS Install Data` (#127), one location
+    /// per entry, shown as one row. Nothing is listed unless the folder and every
+    /// entry are older than the installed system, so a waiting update never shows.
+    /// Cleaning goes through the root helper; see `FileDeleter.deleteItems`.
+    private func macOSInstallLeftoverItems(access: ScanAccess, collectedPaths: inout Set<String>) -> [CacheItem] {
+        guard MacOSInstallLeftovers.isLeftover() else { return [] }
+        return MacOSInstallLeftovers.entries().compactMap { url in
+            cacheItemAtDiscoveredPath(
+                url,
+                headline: String(localized: "Leftover macOS update files"),
+                folderName: CacheDiscoveryPaths.macOSInstallDataKey,
                 access: access,
                 collectedPaths: &collectedPaths
             )
