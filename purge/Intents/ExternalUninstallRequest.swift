@@ -5,8 +5,8 @@ import Foundation
 /// uninstaller can take it, and if not, what to tell the person.
 ///
 /// The checks mirror what the App Uninstaller lists: app bundles in
-/// `/Applications` or `~/Applications`, at most one folder down, never Apple's
-/// apps under `/System` and never Purge itself. An app that passes here is one
+/// `/Applications` or `~/Applications` at any depth but never inside another
+/// app or package, never Apple's apps under `/System`, and never Purge itself. An app that passes here is one
 /// the uninstaller's list will contain once it loads, so `IntentRouter` can
 /// open the review on it.
 nonisolated enum ExternalUninstallRequest {
@@ -20,6 +20,9 @@ nonisolated enum ExternalUninstallRequest {
         case severalApps(count: Int)
         /// Outside the folders the uninstaller lists.
         case outsideApplications(name: String)
+        /// Inside an app folder, but within another app or package, so the
+        /// uninstaller does not list it on its own.
+        case insideAnotherApp(name: String)
         /// An Apple app under `/System`.
         case appleApp(name: String)
         /// Purge itself.
@@ -44,6 +47,11 @@ nonisolated enum ExternalUninstallRequest {
                 return (
                     String(localized: "\(name) is outside the Applications folder"),
                     String(localized: "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move \(name) there first, or drag it to the Trash yourself.")
+                )
+            case .insideAnotherApp(let name):
+                return (
+                    String(localized: "\(name) is part of another app"),
+                    String(localized: "\(name) is inside another app or package, so Purge does not list it on its own. To remove it, uninstall the app it belongs to.")
                 )
             case .appleApp(let name):
                 return (
@@ -86,28 +94,20 @@ nonisolated enum ExternalUninstallRequest {
             || AppUninstallScanPolicy.isProtectedApp(bundleURL: resolved, bundleID: bundleID) {
             return .appleApp(name: name)
         }
-        guard isInsideRoots(path: path, roots: roots) else { return .outsideApplications(name: name) }
+        let rootPaths = roots.map { $0.standardizedFileURL.path }
+        guard rootPaths.contains(where: { path.hasPrefix($0 + "/") }) else {
+            return .outsideApplications(name: name)
+        }
+        // The same reach the uninstaller's list uses (`AppBundleReach`).
+        guard AppBundleReach.folderDepth(ofAppAtPath: path, roots: rootPaths) != nil else {
+            return .insideAnotherApp(name: name)
+        }
         return .uninstall(appID: path, name: name)
     }
 
-    /// True when the bundle sits directly in a root or one folder down, the
-    /// same depth `AppUninstallScanner` walks (`/Applications/Utilities/X.app`
-    /// is listed, `/Applications/A/B/X.app` is not).
-    static func isInsideRoots(path: String, roots: [URL]) -> Bool {
-        let parent = (path as NSString).deletingLastPathComponent
-        let grandparent = (parent as NSString).deletingLastPathComponent
-        return roots.contains { root in
-            let rootPath = root.standardizedFileURL.path
-            return parent == rootPath || grandparent == rootPath
-        }
-    }
-
-    /// Reads `Info.plist` directly rather than through `Bundle(url:)`, which
-    /// caches per path for the life of the process (`ApplicationsFolderWatcher`
-    /// does the same, for the same reason).
+    /// The same uncached read `ApplicationsFolderWatcher` uses.
     static func readInfoPlist(at bundleURL: URL) -> [String: Any] {
-        let plistURL = bundleURL.appendingPathComponent("Contents/Info.plist")
-        return NSDictionary(contentsOf: plistURL) as? [String: Any] ?? [:]
+        AppBundleReach.readInfoPlist(at: bundleURL)
     }
 
     private static func displayName(for bundleURL: URL, info: [String: Any]) -> String {

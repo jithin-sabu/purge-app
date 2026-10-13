@@ -404,11 +404,11 @@ final class ApplicationsFolderWatcher {
         index(roots: roots, reusing: Index(apps: previous)).apps
     }
 
-    /// Every `.app` directly inside each root or one folder down, the same reach as
-    /// the uninstaller's picker. An entry is reused from `previous` only while its
-    /// file number is unchanged and it has an identifier, so a bundle an updater
-    /// swapped in place, or one first read mid-copy, is read again rather than
-    /// described by what was there before. A root that exists but cannot be
+    /// Every `.app` the uninstaller's picker lists in each root
+    /// (`AppBundleReach.appBundleURLs(in:)`). An entry is reused from `previous`
+    /// only while its file number is unchanged and it has an identifier, so a
+    /// bundle an updater swapped in place, or one first read mid-copy, is read
+    /// again rather than described by what was there before. A root that exists but cannot be
     /// listed keeps its previous entries: a failed read must not look like every
     /// app in it was deleted.
     nonisolated static func index(roots: [URL], reusing previous: Index) -> Index {
@@ -437,29 +437,14 @@ final class ApplicationsFolderWatcher {
         for root in roots {
             let rootPath = root.standardizedFileURL.path
             guard fm.fileExists(atPath: rootPath) else { continue }
-            guard let entries = try? fm.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ) else {
+            guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
                 for (key, app) in previous.apps where key.hasPrefix(rootPath + "/") {
                     result.apps[key] = app
                     result.fileNumbers[key] = previous.fileNumbers[key]
                 }
                 continue
             }
-            for entry in entries {
-                if entry.pathExtension == "app" {
-                    consider(entry)
-                } else if (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                    let nested = (try? fm.contentsOfDirectory(
-                        at: entry,
-                        includingPropertiesForKeys: nil,
-                        options: [.skipsHiddenFiles]
-                    )) ?? []
-                    nested.forEach(consider)
-                }
-            }
+            bundles.forEach(consider)
         }
         return result
     }

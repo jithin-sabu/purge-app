@@ -110,49 +110,31 @@ enum OrphanLeftoverScanPolicy {
     /// `looksComplete`.
     nonisolated static let minimumPlausibleAppCount = 5
 
-    /// Enumerates `.app` bundle identifiers in the user-facing app roots, one
-    /// level deep (vendors group their apps, e.g. `/Applications/Utilities/…`).
-    /// System apps are not walked: `owns` reaches them through LaunchServices,
-    /// and counting them would inflate `looksComplete` past the point where it
-    /// can catch an empty world.
+    /// Enumerates `.app` bundle identifiers in the user-facing app roots, as deep
+    /// as the uninstaller looks (vendors group their apps, e.g.
+    /// `/Applications/Utilities/…`). System apps are not walked: `owns` reaches them through LaunchServices, and counting them
+    /// would inflate `looksComplete` past the point where it can catch an empty
+    /// world.
     nonisolated static func makeInstalledAppIndex() -> InstalledAppIndex {
         let fm = FileManager.default
         var ids = Set<String>()
         // A root that is absent (e.g. no `~/Applications`) is fine and reads as
         // empty. A root that exists but fails to enumerate means our view of what
         // is installed is degraded, not just sparse, so the scan must not run.
+        // A single unreadable subfolder is not treated as a degraded view: it
+        // only hides vendor-grouped apps, and suppressing the whole scan for one
+        // odd folder would be worse.
         var rootsReadable = true
-
-        func collect(_ url: URL) {
-            guard url.pathExtension == "app" else { return }
-            if let id = Bundle(url: url)?.bundleIdentifier, !id.isEmpty {
-                ids.insert(id.lowercased())
-            }
-        }
 
         for root in AppUninstallScanPolicy.installedAppRoots() {
             guard fm.fileExists(atPath: root.path) else { continue }
-            guard let entries = try? fm.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ) else {
+            guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
                 rootsReadable = false
                 continue
             }
-            for entry in entries {
-                if entry.pathExtension == "app" {
-                    collect(entry)
-                } else if (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                    // A single unreadable subfolder is not treated as a degraded
-                    // view: it only hides vendor-grouped apps one level down, and
-                    // suppressing the whole scan for one odd folder would be worse.
-                    let nested = (try? fm.contentsOfDirectory(
-                        at: entry,
-                        includingPropertiesForKeys: nil,
-                        options: [.skipsHiddenFiles]
-                    )) ?? []
-                    for child in nested { collect(child) }
+            for url in bundles {
+                if let id = Bundle(url: url)?.bundleIdentifier, !id.isEmpty {
+                    ids.insert(id.lowercased())
                 }
             }
         }

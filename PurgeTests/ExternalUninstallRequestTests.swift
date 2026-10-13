@@ -56,10 +56,34 @@ struct ExternalUninstallRequestTests {
         #expect(resolve([app], info: info(name: "Thing")) == .uninstall(appID: app.path, name: "Thing"))
     }
 
-    @Test("Two folders down is outside what the uninstaller lists")
+    /// Autodesk's layout (#143): a vendor folder, then a product folder.
+    @Test("Two folders down is listed, as the uninstaller walks it")
     func appTwoFoldersDown() {
-        let app = applications.appendingPathComponent("A/B/Thing.app")
-        #expect(resolve([app], info: info(name: "Thing")) == .outsideApplications(name: "Thing"))
+        let app = applications.appendingPathComponent("Autodesk/AutoCAD 2026/AutoCAD 2026.app")
+        let outcome = resolve([app], info: info(name: "AutoCAD 2026"))
+        #expect(outcome == .uninstall(appID: app.path, name: "AutoCAD 2026"))
+    }
+
+    @Test("Any depth is listed, as the uninstaller walks it")
+    func appThreeFoldersDown() {
+        let app = applications.appendingPathComponent("Utilities/Adobe Sync/CoreSync/Core Sync.app")
+        #expect(resolve([app], info: info(name: "Core Sync")) == .uninstall(appID: app.path, name: "Core Sync"))
+    }
+
+    /// Background apps are listed like any other, so a request for one opens
+    /// the review the list would.
+    @Test("A background app deep in a vendor folder is listed")
+    func backgroundAppDeepDown() {
+        let app = applications.appendingPathComponent("Vendor/Suite/Helper.app")
+        var helper = info(name: "Helper")
+        helper["LSUIElement"] = true
+        #expect(resolve([app], info: helper) == .uninstall(appID: app.path, name: "Helper"))
+    }
+
+    @Test("An app inside another app's bundle is turned down")
+    func appInsideAnotherBundle() {
+        let app = applications.appendingPathComponent("Host.app/Contents/Inner.app")
+        #expect(resolve([app], info: info(name: "Inner")) == .insideAnotherApp(name: "Inner"))
     }
 
     @Test("An app on the Desktop is turned down by name")
@@ -140,7 +164,7 @@ struct ExternalUninstallRequestTests {
     @Test("Every refusal has an alert; the uninstall outcome has none")
     func refusals() {
         let outcomes: [ExternalUninstallRequest.Outcome] = [
-            .noApp, .severalApps(count: 2), .outsideApplications(name: "X"), .appleApp(name: "X"), .purgeItself,
+            .noApp, .severalApps(count: 2), .outsideApplications(name: "X"), .insideAnotherApp(name: "X"), .appleApp(name: "X"), .purgeItself,
         ]
         for outcome in outcomes {
             #expect(outcome.refusal != nil)

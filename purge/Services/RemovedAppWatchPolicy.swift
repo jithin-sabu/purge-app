@@ -106,15 +106,20 @@ nonisolated enum RemovedAppWatchPolicy {
     }
 
     /// Whether a change reported at `path` can add or remove a watched bundle: the
-    /// root itself, or a folder directly inside it (a vendor folder, or a bundle being
-    /// swapped). Anything deeper is a bundle's own internals churning during an update
-    /// or a launch, which is most of the traffic under `/Applications`.
+    /// root itself, a folder directly inside it (a vendor folder, or a bundle being
+    /// swapped), or any folder further down that the uninstaller walks
+    /// (`/Applications/Autodesk/AutoCAD 2026`). Anything through a bundle is that
+    /// bundle's own internals churning during an update or a launch, which is most
+    /// of the traffic under `/Applications`.
     static func isRelevantChange(atPath path: String, roots: [String]) -> Bool {
         let normalized = normalizedPath(path)
         for root in roots {
             if normalized == root { return true }
             guard normalized.hasPrefix(root + "/") else { continue }
-            return !normalized.dropFirst(root.count + 1).contains("/")
+            let folders = normalized.dropFirst(root.count + 1).split(separator: "/")
+            if folders.count == 1 { return true }
+            return folders.count <= AppBundleReach.maxFolderDepth
+                && !folders.contains { $0.hasPrefix(".") || AppBundleReach.isBundleFolderName($0) }
         }
         return false
     }
@@ -266,9 +271,7 @@ nonisolated enum RemovedAppWatchPolicy {
         guard normalized.hasSuffix(".app"), !normalized.contains("/../"), !normalized.contains("/./") else {
             return false
         }
-        let parent = (normalized as NSString).deletingLastPathComponent
-        let grandparent = (parent as NSString).deletingLastPathComponent
-        guard roots.contains(parent) || roots.contains(grandparent) else { return false }
+        guard AppBundleReach.folderDepth(ofAppAtPath: normalized, roots: roots) != nil else { return false }
 
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_")
         guard (1...255).contains(bundleID.count),

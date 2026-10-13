@@ -251,12 +251,162 @@ struct AppUninstallScanPolicyTests {
         #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
     }
 
-    /// One level only: two folders deep is beyond what the scanner offers and must
-    /// stay out of the gate.
+    /// Autodesk installs into a vendor folder, then a product folder (#143). The
+    /// scanner lists that, so the gate must take it.
     @Test
-    func appBundleTwoLevelsInsideAppRootIsNotEligible() {
-        let url = URL(fileURLWithPath: "/Applications/A/B/Foo.app", isDirectory: true)
-        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
+    func appBundleTwoLevelsInsideAppRootIsEligible() {
+        let url = URL(fileURLWithPath: "/Applications/Autodesk/AutoCAD 2026/AutoCAD 2026.app", isDirectory: true)
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
+    }
+
+    /// The scanner walks every folder inside an app root, so the gate takes an
+    /// app at any depth that is not inside another bundle.
+    @Test
+    func appBundleDeepInsideAppRootIsEligible() {
+        let url = URL(fileURLWithPath: "/Applications/A/B/C/Foo.app", isDirectory: true)
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
+    }
+
+    /// An app nested in another bundle or package is that bundle's internals, at
+    /// any depth. A hidden folder is one the walk never enters.
+    @Test
+    func appBundleInsideAnotherBundleIsNotEligible() {
+        for path in [
+            "/Applications/Host.app/Inner.app",
+            "/Applications/Host.app/Contents/Inner.app",
+            "/Applications/Vendor/Kit.framework/Inner.app",
+            "/Applications/Vendor/Pane.prefPane/Contents/Inner.app",
+            "/Applications/.Hidden/Inner.app",
+        ] {
+            #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(URL(fileURLWithPath: path, isDirectory: true)))
+        }
+    }
+
+    @Test
+    func folderDepthCountsFoldersBelowTheRoot() {
+        let roots = ["/Applications", "/Users/x/Applications"]
+        #expect(AppBundleReach.folderDepth(ofAppAtPath: "/Applications/A.app", roots: roots) == 0)
+        #expect(AppBundleReach.folderDepth(ofAppAtPath: "/Applications/Utilities/A.app", roots: roots) == 1)
+        #expect(AppBundleReach.folderDepth(ofAppAtPath: "/Users/x/Applications/V/P/A.app", roots: roots) == 2)
+        #expect(AppBundleReach.folderDepth(ofAppAtPath: "/Applications/V/P/Q/A.app", roots: roots) == 3)
+        // A version number in a folder name is not a bundle extension.
+        #expect(AppBundleReach.folderDepth(ofAppAtPath: "/Applications/Tool 1.2/A.app", roots: roots) == 1)
+        #expect(AppBundleReach.folderDepth(ofAppAtPath: "/Applications Old/A.app", roots: roots) == nil)
+        #expect(AppBundleReach.folderDepth(ofAppAtPath: "/Applications/Notes.txt", roots: roots) == nil)
+        // The runaway guard.
+        let deep = "/Applications/" + String(repeating: "f/", count: AppBundleReach.maxFolderDepth + 1) + "A.app"
+        #expect(AppBundleReach.folderDepth(ofAppAtPath: deep, roots: roots) == nil)
+    }
+
+    // MARK: App bundle walk
+
+    /// Builds a throwaway app root shaped like the layouts seen on real Macs, and
+    /// checks the walk lists exactly the apps the uninstaller should offer, and
+    /// that the delete gate's rule agrees with the walk in both directions.
+    @Test
+    func walkListsAppsAtAnyDepthAndNothingInsidePackages() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
+            .appendingPathComponent("purge-walk-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+
+        func makeBundle(_ relative: String, info: [String: Any] = [:]) throws {
+            let contents = root.appendingPathComponent(relative, isDirectory: true)
+                .appendingPathComponent("Contents", isDirectory: true)
+            try fm.createDirectory(at: contents, withIntermediateDirectories: true)
+            try (info as NSDictionary).write(to: contents.appendingPathComponent("Info.plist"))
+        }
+
+        try makeBundle("Top.app")
+        try makeBundle("Top.app/Contents/Library/LoginItems/Login.app")
+        try makeBundle("Utilities/Tool.app")
+        try makeBundle("Autodesk/AutoCAD 2026/AutoCAD 2026.app")
+        // Background parts of a suite are listed too, so the shared-leftover
+        // checks can see them.
+        try makeBundle("Vendor/Suite/Helper.app", info: ["LSUIElement": true])
+        try makeBundle("Utilities/Adobe Sync/CoreSync/Core Sync.app", info: ["LSUIElement": true])
+        // Packages, hidden folders, and symlinks are never entered.
+        try makeBundle("Vendor/Kit.framework/Inner.app")
+        try makeBundle("Docs/Notes.rtfd/Inner.app")
+        try makeBundle(".Hidden/Secret.app")
+        try fm.createSymbolicLink(
+            at: root.appendingPathComponent("Linked", isDirectory: true),
+            withDestinationURL: root.appendingPathComponent("Autodesk", isDirectory: true)
+        )
+
+        let rootPath = root.standardizedFileURL.path
+        func relative(_ path: String) -> String { String(path.dropFirst(rootPath.count + 1)) }
+
+        let listed = Set((AppBundleReach.appBundleURLs(in: root) ?? []).map { relative($0.standardizedFileURL.path) })
+        #expect(listed == [
+            "Top.app",
+            "Utilities/Tool.app",
+            "Autodesk/AutoCAD 2026/AutoCAD 2026.app",
+            "Vendor/Suite/Helper.app",
+            "Utilities/Adobe Sync/CoreSync/Core Sync.app",
+        ])
+
+        // Every `.app` on disk, found without the walk's rules: the gate's rule
+        // must accept exactly the listed ones.
+        let everyApp = [
+            "Top.app", "Top.app/Contents/Library/LoginItems/Login.app", "Utilities/Tool.app",
+            "Autodesk/AutoCAD 2026/AutoCAD 2026.app", "Vendor/Suite/Helper.app",
+            "Utilities/Adobe Sync/CoreSync/Core Sync.app", "Vendor/Kit.framework/Inner.app",
+            "Docs/Notes.rtfd/Inner.app", ".Hidden/Secret.app", "Linked/AutoCAD 2026/AutoCAD 2026.app",
+        ]
+        for path in everyApp {
+            let accepted = AppBundleReach.folderDepth(ofAppAtPath: rootPath + "/" + path, roots: [rootPath]) != nil
+            #expect(accepted == listed.contains(path), "\(path)")
+        }
+    }
+
+    /// The review on #154: a suite's background part must stay in the installed
+    /// list, because that list is also who still claims a leftover. Uninstalling
+    /// `Main` must not take the launch agent of the `Helper` sitting next to it,
+    /// even though the agent's name starts with Main's bundle id.
+    @Test
+    func backgroundPartKeepsItsLaunchAgentWhenItsSiblingIsUninstalled() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
+            .appendingPathComponent("purge-survivor-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        for (name, info) in [
+            ("Main", ["CFBundleIdentifier": "com.v.app"]),
+            ("Helper", ["CFBundleIdentifier": "com.v.app.helper", "LSUIElement": true] as [String: Any]),
+        ] {
+            let contents = root.appendingPathComponent("V/P/\(name).app/Contents", isDirectory: true)
+            try fm.createDirectory(at: contents, withIntermediateDirectories: true)
+            try (info as NSDictionary).write(to: contents.appendingPathComponent("Info.plist"))
+        }
+
+        let installed = (AppBundleReach.appBundleURLs(in: root) ?? []).map { url in
+            makeApp(
+                name: url.deletingPathExtension().lastPathComponent,
+                bundlePath: url.path,
+                bundleID: AppBundleReach.readInfoPlist(at: url)["CFBundleIdentifier"] as? String
+            )
+        }
+        let main = try #require(installed.first { $0.bundleID == "com.v.app" })
+        let helper = try #require(installed.first { $0.bundleID == "com.v.app.helper" })
+
+        let agent = "com.v.app.helper.plist"
+        // Main's prefix rule matches the agent, so only a survivor claim keeps it.
+        #expect(AppUninstallScanPolicy.matchReason(forLeftoverName: agent, category: .launchAgents, app: main) == .bundleID)
+        let claimant = AppUninstallScanPolicy.claimant(
+            forLeftoverName: agent,
+            category: .launchAgents,
+            ownerID: main.id,
+            among: installed.filter { $0.id != main.id }
+        )
+        #expect(claimant?.id == helper.id)
+    }
+
+    @Test
+    func walkOfAMissingRootIsNil() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-missing-\(UUID().uuidString)", isDirectory: true)
+        #expect(AppBundleReach.appBundleURLs(in: root) == nil)
     }
 
     // MARK: Shared-leftover detection

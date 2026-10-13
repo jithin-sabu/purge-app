@@ -19,6 +19,7 @@ struct PrivilegedHelperPathPolicyTests {
     func allowsApplicationBundles() {
         #expect(isAllowed("/Applications/Teams.app"))
         #expect(isAllowed("/Applications/Utilities/Widget.app"))
+        #expect(isAllowed("/Applications/Autodesk/AutoCAD 2026/AutoCAD 2026.app"))
         #expect(isAllowed("/Users/example/Applications/Personal.app"))
     }
 
@@ -41,7 +42,11 @@ struct PrivilegedHelperPathPolicyTests {
         #expect(!isAllowed("/private/etc/passwd"))
         #expect(!isAllowed("/Users/other/Library/Caches/com.vendor.app"))
         #expect(!isAllowed("/Applications/not-an-app"))
-        #expect(!isAllowed("/Applications/Group/TooDeep/App.app"))
+        #expect(isAllowed("/Applications/Group/Product/Deeper/App.app"))
+        #expect(!isAllowed("/Applications/Host.app/Contents/Inner.app"))
+        #expect(!isAllowed("/Applications/Vendor/Host.app/Inner.app"))
+        #expect(!isAllowed("/Applications/Vendor/Pane.prefPane/Contents/Inner.app"))
+        #expect(!isAllowed("/Applications/.Hidden/Inner.app"))
     }
 
     @Test("Refuses paths redirected through a symlink")
@@ -64,7 +69,35 @@ struct PrivilegedHelperPathPolicyTests {
 
     @Test("Helper behavior version is current")
     func helperVersionIsCurrent() {
-        #expect(PurgeHelperConstants.version == "4")
+        #expect(PurgeHelperConstants.version == "5")
+    }
+
+    /// If the helper and the picker disagree, an app the picker lists is refused
+    /// at the root move, or the helper accepts more than the app offers.
+    @Test("Helper app reach matches the uninstaller's")
+    func helperReachMatchesUninstaller() {
+        let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+        let roots = ["/Applications", "/Users/example/Applications"]
+        for path in [
+            "/Applications/A.app",
+            "/Applications/V/A.app",
+            "/Applications/V/P/A.app",
+            "/Applications/V/P/Q/A.app",
+            "/Applications/V/P/Q/R/S/A.app",
+            "/Applications/V/Kit.framework/A.app",
+            "/Applications/V/Pane.prefPane/Contents/A.app",
+            "/Applications/.Hidden/A.app",
+            "/Applications/Host.app/Contents/A.app",
+            "/Users/example/Applications/V/P/A.app",
+            "/Users/example/Applications/V/P/Q/A.app",
+        ] {
+            let helper = PurgeHelperConstants.isAllowedUninstallLocation(
+                URL(fileURLWithPath: path, isDirectory: true),
+                homeDirectory: home
+            )
+            let app = AppBundleReach.folderDepth(ofAppAtPath: path, roots: roots) != nil
+            #expect(helper == app, "\(path)")
+        }
     }
 }
 

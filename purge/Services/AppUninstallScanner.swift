@@ -75,42 +75,20 @@ nonisolated final class AppUninstallScanner {
         }
     }
 
-    /// Top-level `.app` bundles in each app root, plus those one folder deep
-    /// (vendors that group their apps, e.g. `/Applications/Utilities/…`). Deeper
-    /// nesting is not followed: it is rare for real apps and risks descending into
-    /// bundle internals.
+    /// `.app` bundles in each app root at any depth (vendors that group their
+    /// apps, e.g. `/Applications/Utilities/…` or
+    /// `/Applications/Autodesk/AutoCAD 2026/…`). `AppBundleReach` owns the
+    /// reach, so the delete gate accepts exactly what is listed here.
     private static func discoverAppBundleURLs() -> [URL] {
-        let fm = FileManager.default
         var seen = Set<String>()
         var result: [URL] = []
 
-        func consider(_ url: URL) {
-            guard url.pathExtension == "app" else { return }
-            let key = url.standardizedFileURL.path
-            guard !seen.contains(key) else { return }
-            seen.insert(key)
-            result.append(url)
-        }
-
         for root in AppUninstallScanPolicy.installedAppRoots() {
-            guard let entries = try? fm.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ) else { continue }
-
-            for entry in entries {
-                if entry.pathExtension == "app" {
-                    consider(entry)
-                } else if (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-                    // One level down only.
-                    let nested = (try? fm.contentsOfDirectory(
-                        at: entry,
-                        includingPropertiesForKeys: nil,
-                        options: [.skipsHiddenFiles]
-                    )) ?? []
-                    for child in nested { consider(child) }
-                }
+            for url in AppBundleReach.appBundleURLs(in: root) ?? [] {
+                let key = url.standardizedFileURL.path
+                guard !seen.contains(key) else { continue }
+                seen.insert(key)
+                result.append(url)
             }
         }
         return result

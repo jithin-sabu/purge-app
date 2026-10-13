@@ -849,6 +849,8 @@
 "%@ Older image format, so macOS may keep its original download." = "%@这是旧版镜像格式，macOS 可能会保留原始下载文件。";
 "%@ is outside the Applications folder" = "%@ 不在“应用程序”文件夹中";
 "%@ is part of macOS" = "%@ 是 macOS 的一部分";
+"%@ is part of another app" = "%@ 是另一个应用的一部分";
+"%@ is inside another app or package, so Purge does not list it on its own. To remove it, uninstall the app it belongs to." = "%@ 位于另一个应用或软件包内，因此 Purge 不会单独列出它。要移除它，请卸载它所属的应用。";
 "%lld of the files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash." = "要移到废纸篓的文件中有 %lld 个与 iCloud 同步，因此它们也会从你的其他设备上消失。你可以从废纸篓中恢复它们。";
 "%lld simulators use it. %@" = "有 %lld 个模拟器在使用它。%@";
 ", syncs with iCloud" = "，与 iCloud 同步";
