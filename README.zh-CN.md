@@ -21,6 +21,10 @@
   <a href="https://github.com/jithin-sabu/purge-app/stargazers"><img src="https://img.shields.io/github/stars/jithin-sabu/purge-app?color=yellow" alt="GitHub Star 数" /></a>
 </p>
 
+<p>
+  <a href="https://trendshift.io/repositories/64435" target="_blank"><picture><source media="(prefers-color-scheme: dark)" srcset="https://trendshift.io/api/badge/repositories/64435?theme=dark"><img src="https://trendshift.io/api/badge/repositories/64435?theme=light" alt="jithin-sabu/purge-app | Trendshift" width="250" height="55"/></picture></a>
+</p>
+
   <p>
     <a href="https://github.com/jithin-sabu/purge-app/releases/latest"><b>下载</b></a>
     &nbsp;·&nbsp;
