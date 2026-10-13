@@ -1128,6 +1128,15 @@ private struct LargeFileRow: View {
                         .foregroundStyle(AppColors.textSecondary)
                         .layoutPriority(-1)
 
+                    // A label, not a safety tier, so the plain grey tone. The
+                    // full explanation is the tooltip; the row keeps its height.
+                    if let kind = file.kind {
+                        AppBadge(text: kind.badgeText, tone: .accent)
+                            .fixedSize()
+                            .help(kind.explanation)
+                            .accessibilityLabel(Text(kind.badgeText + ". " + kind.explanation))
+                    }
+
                     if let otherCopyCount {
                         let noun = otherCopyCount == 1 ? String(localized: "copy") : String(localized: "copies")
                         AppBadge(text: String(localized: "\(otherCopyCount) other \(noun)"), tone: .warning)
@@ -1403,6 +1412,13 @@ struct LargeFileDeletionConfirmSheet: View {
                     if file.syncsWithICloud {
                         LargeFileICloudMark()
                     }
+                }
+
+                if let kind = file.kind {
+                    Text(kind.explanation)
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
