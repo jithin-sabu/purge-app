@@ -55,8 +55,41 @@ struct MacOSInstallLeftoversTests {
             try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
         }
 
+        /// No install history here, so the system file's date is the reference.
+        var installHistoryFile: URL { base.appendingPathComponent("InstallHistory.plist") }
+
         func isLeftover() -> Bool {
-            MacOSInstallLeftovers.isLeftover(root: root, systemVersionFile: systemVersionFile)
+            MacOSInstallLeftovers.isLeftover(
+                root: root,
+                systemVersionFile: systemVersionFile,
+                installHistoryFile: installHistoryFile
+            )
+        }
+
+        /// Turns the system file into a real one naming `version`, keeping its date.
+        func writeSystemVersion(_ version: String) throws {
+            let data = try PropertyListSerialization.data(
+                fromPropertyList: ["ProductVersion": version], format: .xml, options: 0
+            )
+            try data.write(to: systemVersionFile)
+            try setDate(systemDate, at: systemVersionFile)
+        }
+
+        func writeInstallHistory(_ entries: [(name: String, version: String, date: Date)]) throws {
+            let list = entries.map {
+                ["displayName": $0.name, "displayVersion": $0.version, "date": $0.date, "processName": "softwareupdated"]
+                    as [String: Any]
+            }
+            let data = try PropertyListSerialization.data(fromPropertyList: list, format: .xml, options: 0)
+            try data.write(to: installHistoryFile)
+        }
+
+        func installedDate(now: Date = Date()) -> Date? {
+            MacOSInstallLeftovers.systemInstalledDate(
+                systemVersionFile: systemVersionFile,
+                installHistoryFile: installHistoryFile,
+                now: now
+            )
         }
     }
 
@@ -156,9 +189,9 @@ struct MacOSInstallLeftoversTests {
         try fixture.makeEntry("UpdateBundle")
         try fixture.setRootDate(fixture.older)
         let missing = fixture.base.appendingPathComponent("nope.plist")
-        #expect(!MacOSInstallLeftovers.isLeftover(root: fixture.root, systemVersionFile: missing))
+        #expect(!MacOSInstallLeftovers.isLeftover(root: fixture.root, systemVersionFile: missing, installHistoryFile: fixture.installHistoryFile))
         let noFolder = fixture.base.appendingPathComponent("no folder", isDirectory: true)
-        #expect(!MacOSInstallLeftovers.isLeftover(root: noFolder, systemVersionFile: fixture.systemVersionFile))
+        #expect(!MacOSInstallLeftovers.isLeftover(root: noFolder, systemVersionFile: fixture.systemVersionFile, installHistoryFile: fixture.installHistoryFile))
     }
 
     @Test
@@ -168,7 +201,67 @@ struct MacOSInstallLeftoversTests {
         try fixture.setRootDate(fixture.older)
         let link = fixture.base.appendingPathComponent("linked", isDirectory: true)
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: fixture.root)
-        #expect(!MacOSInstallLeftovers.isLeftover(root: link, systemVersionFile: fixture.systemVersionFile))
+        #expect(!MacOSInstallLeftovers.isLeftover(root: link, systemVersionFile: fixture.systemVersionFile, installHistoryFile: fixture.installHistoryFile))
+    }
+
+    // MARK: When the running macOS was installed
+
+    /// The build date is weeks before the install. Betas share a version, so the
+    /// latest matching entry wins, and other versions don't count.
+    @Test
+    func installDateIsTheLatestEntryForTheRunningVersion() throws {
+        let built = Date().addingTimeInterval(-40 * 24 * 3600)
+        let fixture = try Fixture(systemDate: built)
+        try fixture.writeSystemVersion("27.0")
+        let latest = built.addingTimeInterval(12 * 24 * 3600)
+        try fixture.writeInstallHistory([
+            ("macOS 26.5.1", "26.5.1", built.addingTimeInterval(-60 * 24 * 3600)),
+            ("macOS 27.0", "27.0", built.addingTimeInterval(4 * 24 * 3600)),
+            ("macOS 27.0", "27.0", latest),
+            ("Xcode", "27.0", built.addingTimeInterval(20 * 24 * 3600))
+        ])
+        let installed = try #require(fixture.installedDate())
+        #expect(abs(installed.timeIntervalSince(latest)) < 1)
+    }
+
+    /// Each of these leaves the earlier build date, so the rule only gets stricter.
+    @Test(arguments: ["noHistory", "otherVersion", "future", "beforeBuild", "noVersion"])
+    func fallsBackToTheBuildDate(_ situation: String) throws {
+        let built = Date().addingTimeInterval(-40 * 24 * 3600)
+        let fixture = try Fixture(systemDate: built)
+        if situation != "noVersion" { try fixture.writeSystemVersion("27.0") }
+        switch situation {
+        case "otherVersion": try fixture.writeInstallHistory([("macOS 27.1", "27.1", built.addingTimeInterval(86_400))])
+        case "future": try fixture.writeInstallHistory([("macOS 27.0", "27.0", Date().addingTimeInterval(3600))])
+        case "beforeBuild": try fixture.writeInstallHistory([("macOS 27.0", "27.0", built.addingTimeInterval(-86_400))])
+        case "noVersion": try fixture.writeInstallHistory([("macOS 27.0", "27.0", built.addingTimeInterval(86_400))])
+        default: break
+        }
+        let installed = try #require(fixture.installedDate())
+        #expect(abs(installed.timeIntervalSince(built)) < 1)
+    }
+
+    /// Files the latest update left: newer than Apple's build, older than the install.
+    @Test
+    func leftoversFromTheLatestUpdateShowOnceItIsInstalled() throws {
+        let built = Date().addingTimeInterval(-40 * 24 * 3600)
+        let fixture = try Fixture(systemDate: built)
+        try fixture.writeSystemVersion("27.0")
+        try fixture.makeEntry("UpdateBundle", date: built.addingTimeInterval(86_400))
+        try fixture.setRootDate(built.addingTimeInterval(86_400))
+        // Without a history entry the build date decides, and these are newer.
+        #expect(!fixture.isLeftover())
+
+        // Installed an hour from now, judged two hours from now: change times of
+        // files made during the test are older than that install.
+        let now = Date().addingTimeInterval(2 * 3600)
+        try fixture.writeInstallHistory([("macOS 27.0", "27.0", Date().addingTimeInterval(3600))])
+        #expect(MacOSInstallLeftovers.isLeftover(
+            root: fixture.root,
+            systemVersionFile: fixture.systemVersionFile,
+            installHistoryFile: fixture.installHistoryFile,
+            now: now
+        ))
     }
 
     @Test

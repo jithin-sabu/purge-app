@@ -14,10 +14,16 @@ nonisolated enum MacOSInstallLeftovers {
     /// Only reachable through the Data volume: `/macOS Install Data` is not a firmlink.
     static let root = URL(fileURLWithPath: "/System/Volumes/Data/macOS Install Data", isDirectory: true)
 
-    /// Written when the installed system was built, so anything an update downloads
-    /// later is newer than it.
+    /// Names the running macOS version. Its date is when Apple built that system,
+    /// not when it was installed: every file on the sealed system volume carries it.
     static let systemVersionFile = URL(
         fileURLWithPath: "/System/Library/CoreServices/SystemVersion.plist",
+        isDirectory: false
+    )
+
+    /// Software Update adds a `macOS <version>` entry here each time it installs one.
+    static let installHistoryFile = URL(
+        fileURLWithPath: "/Library/Receipts/InstallHistory.plist",
         isDirectory: false
     )
 
@@ -44,9 +50,44 @@ nonisolated enum MacOSInstallLeftovers {
             .sorted { $0.path < $1.path }
     }
 
+    /// When the running macOS was installed: the latest `macOS <version>` entry in
+    /// the install history for the version in `SystemVersion.plist`. Anything an
+    /// update downloads after that, including one waiting to install, is newer.
+    ///
+    /// Falls back to the system's build date, which is earlier, so the rule only
+    /// gets stricter: when the version or history can't be read, when no entry
+    /// matches, when the entry is older than the build, or when it is dated after
+    /// `now`. Several betas can share one version; the latest entry is the one
+    /// running, since an entry is written when its install finishes.
+    static func systemInstalledDate(
+        systemVersionFile: URL = systemVersionFile,
+        installHistoryFile: URL = installHistoryFile,
+        now: Date = Date()
+    ) -> Date? {
+        guard let builtDate = itemDates(atPath: systemVersionFile.path)?.modified else { return nil }
+        guard let version = readPropertyList(systemVersionFile)
+                .flatMap({ $0 as? [String: Any] })?["ProductVersion"] as? String,
+              let history = readPropertyList(installHistoryFile) as? [[String: Any]]
+        else { return builtDate }
+        let installed = history
+            .filter {
+                ($0["displayName"] as? String)?.hasPrefix("macOS ") == true
+                    && $0["displayVersion"] as? String == version
+            }
+            .compactMap { $0["date"] as? Date }
+            .max()
+        guard let installed, installed > builtDate, installed <= now else { return builtDate }
+        return installed
+    }
+
+    private static func readPropertyList(_ url: URL) -> Any? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? PropertyListSerialization.propertyList(from: data, format: nil)
+    }
+
     /// True only when the folder and everything in it, at every depth, are older than
-    /// the installed system. An update that is downloaded and waiting to install was
-    /// written after the system it replaces, so it fails this and is left alone.
+    /// when the running macOS was installed. An update that is downloaded and waiting
+    /// to install was written after that, so it fails this and is left alone.
     ///
     /// This checks more than what is offered: hidden items and `Locked Files` count
     /// too, and so does every file inside an entry, since writing deep inside a folder
@@ -59,11 +100,20 @@ nonisolated enum MacOSInstallLeftovers {
     /// longer offered; that is the safe side of the rule.
     ///
     /// Anything it can't read, a missing file, or a symlinked folder answers `false`.
-    static func isLeftover(root: URL = root, systemVersionFile: URL = systemVersionFile) -> Bool {
-        guard let systemDate = itemDates(atPath: systemVersionFile.path)?.modified,
+    static func isLeftover(
+        root: URL = root,
+        systemVersionFile: URL = systemVersionFile,
+        installHistoryFile: URL = installHistoryFile,
+        now: Date = Date()
+    ) -> Bool {
+        guard let installedDate = systemInstalledDate(
+                systemVersionFile: systemVersionFile,
+                installHistoryFile: installHistoryFile,
+                now: now
+              ),
               let rootDates = itemDates(atPath: root.path),
               rootDates.isDirectory,
-              rootDates.newest < systemDate,
+              rootDates.newest < installedDate,
               !entries(root: root).isEmpty
         else { return false }
 
@@ -78,7 +128,7 @@ nonisolated enum MacOSInstallLeftovers {
             }
         ) else { return false }
         for case let item as URL in walk {
-            guard let dates = itemDates(atPath: item.path), dates.newest < systemDate else { return false }
+            guard let dates = itemDates(atPath: item.path), dates.newest < installedDate else { return false }
         }
         return !unreadable
     }

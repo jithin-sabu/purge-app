@@ -80,9 +80,10 @@ it checks every request four ways:
   `~/Library/Application Support` or `/Library/LaunchDaemons`. The full list is in
   [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift).
   It also accepts a direct child of `macOS Install Data`, never `Locked Files`,
-  and only while that folder and everything in it are older than the installed
-  macOS. The helper reads those dates itself, so it never moves an update that
-  is downloaded and waiting
+  and only while that folder and everything in it are older than the moment the
+  running macOS was installed, from `/Library/Receipts/InstallHistory.plist`.
+  The helper reads those dates itself, so it never moves an update that is
+  downloaded and waiting
   ([`purge/PrivilegedHelper/MacOSInstallLeftovers.swift`](purge/PrivilegedHelper/MacOSInstallLeftovers.swift)).
 - **No symlink tricks.** Paths are opened one component at a time without
   following symlinks, and the move is a single atomic rename, so another
