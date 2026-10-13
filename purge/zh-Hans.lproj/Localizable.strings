@@ -93,6 +93,7 @@
 "Also in this cleanup" = "此次清理中的其他项目";
 "Also select" = "同时选择";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ 由管理员安装，因此 macOS 需要获得许可才能将其移到废纸篓。";
+"An administrator or macOS owns them, so macOS needs your permission before they can move to the Trash." = "这些项目归管理员或 macOS 所有，因此 macOS 需要获得许可才能将其移到废纸篓。";
 "An administrator installed them, so macOS needs your permission before they can move to the Trash." = "这些应用由管理员安装，因此 macOS 需要获得许可才能将其移到废纸篓。";
 "An app is still using this. Quit it and clean again." = "某个应用仍在使用此内容。请退出该应用后重新清理。";
 "Angular cache" = "Angular 缓存";
@@ -315,7 +316,8 @@
 "Local changes nearby" = "附近有本地修改";
 "Logic Pro and every sound pack" = "Logic Pro 及全部音色包";
 "Logs" = "日志";
-"Logs and crash reports" = "日志和崩溃报告";
+"Leftover macOS update files" = "残留的 macOS 更新文件";
+"Logs, crash reports, and update leftovers" = "日志、崩溃报告和更新残留";
 "Look deeper" = "深入扫描";
 "Looking deeper" = "正在深入查看";
 "Made with" = "用";
@@ -351,6 +353,7 @@
 "Name" = "名称";
 "Name (A to Z)" = "名称（A–Z）";
 "Needs Full Disk Access" = "需要完全磁盘访问权限";
+"Needs secure removal" = "需要安全移除";
 "Never" = "从不";
 "Newest" = "最新优先";
 "Next clean" = "下次清理";
@@ -478,6 +481,7 @@
 "Remove %@" = "移除 %@";
 "Remove %lld Time Machine snapshots?" = "移除 %lld 个时间机器快照？";
 "Remove %lld apps" = "移除 %lld 个应用";
+"Remove %lld items" = "移除 %lld 项";
 "Remove 1 Time Machine snapshot?" = "移除 1 个时间机器快照？";
 "Remove Snapshots" = "移除快照";
 "Remove admin-locked apps without a password" = "移除管理员锁定的应用，无需重复输入密码";
@@ -584,7 +588,7 @@
 "Smallest" = "最小优先";
 "Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need for your next backup. Backups on your backup disk aren't touched." = "快照可能保存着自上次备份以来修改或删除文件的唯一副本。快照删除后无法恢复。Purge 会保留最新快照，时间机器可能需要它来进行下次备份。备份磁盘上的备份不会受到影响。";
 "Snooping around…" = "正在四处打探…";
-"Some apps are installed under an administrator and can't be moved to the Trash on their own. Purge asks you to enable its secure removal helper only when an app needs it. Items still go to the Trash, and you can turn it off here at any time." = "部分应用由管理员安装，无法直接移到废纸篓。只有在应用需要时，Purge 才会要求启用安全移除助手。项目仍会进入废纸篓，你可以随时在此停用助手。";
+"Some apps are installed under an administrator and can't be moved to the Trash on their own, and neither can the files a finished macOS update leaves behind. Purge asks you to enable its secure removal helper only when something needs it. Items still go to the Trash, and you can turn it off here at any time." = "部分应用由管理员安装，无法直接移到废纸篓，macOS 更新完成后留下的文件也是如此。只有在需要时，Purge 才会要求启用安全移除助手。项目仍会进入废纸篓，你可以随时在此停用助手。";
 "Some clutter hides in folders macOS keeps locked." = "macOS 限制访问的文件夹中还可能有杂项。";
 "Some of these aren't identified" = "部分项目无法识别";
 "Some places are still locked. Let Purge look deeper." = "部分位置仍无法访问。让 Purge 深入扫描。";
@@ -620,6 +624,7 @@
 "These apps are still open, so they were left installed: %@. Quit them and try again." = "这些应用仍处于打开状态，因此未卸载：%@。请先退出这些应用，然后重试。";
 "These are your own files. Purge moves only the ones you picked to Trash, and you can put them back if you change your mind." = "这些是你的个人文件。Purge 只会将你选择的文件移到废纸篓，改变主意时可以恢复。";
 "These couldn't be removed. Try again, or use Disk Utility." = "这些项目无法移除。请重试，或使用磁盘工具。";
+"These files belong to macOS, so moving them to the Trash needs secure removal." = "这些文件属于 macOS，因此需要安全移除才能将其移到废纸篓。";
 "These folders belong to apps you no longer have installed. This is app data, not a rebuildable cache, so it will not come back on its own. Everything moves to the Trash, so you can put it back until you empty it." = "这些文件夹属于已卸载的应用，包含应用数据，而非可重建的缓存，因此不会自动恢复。所有项目会移到废纸篓，清空之前都可恢复。";
 "These may hold something you'd miss. If you're not sure about one, cancel and untick it." = "这些项目可能包含你需要的内容。不确定时，请取消并取消勾选对应项目。";
 "This %@ folder belongs to an app that is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app." = "此%@文件夹属于已卸载的应用。它包含应用数据，而非可重建的缓存，不会自动恢复。请仅在确定不会重新安装此应用时移除。";
@@ -668,7 +673,7 @@
 "Use your usual steps to recreate the Python environment for this folder." = "请按你常用的步骤为此文件夹重新创建 Python 环境。";
 "Used" = "最近使用";
 "Used in the last month. %@" = "最近一个月内使用过。%@";
-"User logs and diagnostic reports under ~/Library/Logs" = "~/Library/Logs 下的用户日志和诊断报告";
+"User logs and diagnostic reports under ~/Library/Logs, and files a finished macOS update left behind" = "~/Library/Logs 下的用户日志和诊断报告，以及 macOS 更新完成后留下的文件";
 "Version %@" = "版本 %@";
 "Version %@ · %@" = "版本 %@ · %@";
 "Videos" = "视频";
@@ -708,7 +713,7 @@
 "a fresh copy of Xcode" = "一份新的 Xcode";
 "a full base MacBook Air" = "一台装满的基础款 MacBook Air";
 "all of GTA V" = "完整 GTA V";
-"anything requiring admin privileges" = "需要管理员权限的内容";
+"anything requiring admin privileges, except leftover macOS update files" = "需要管理员权限的内容（残留的 macOS 更新文件除外）";
 "app" = "个应用";
 "application support" = "应用支持文件";
 "apps" = "个应用";
@@ -880,6 +885,7 @@
 "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller." = "从访达一次只能卸载一个应用。如需一次移除多个应用，请在 Purge 的卸载工具中勾选。";
 "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move %@ there first, or drag it to the Trash yourself." = "Purge 的卸载工具只列出 /Applications 和个人主文件夹中“应用程序”文件夹里的应用。请先将 %@ 移到那里，或自行将它拖到废纸篓。";
 "Purge's secure removal helper isn't responding. Move the app to the Trash in Finder instead." = "Purge 的安全移除助手没有响应。请改用访达将应用移到废纸篓。";
+"Purge's secure removal helper isn't responding. Try again later." = "Purge 的安全移除助手没有响应。请稍后再试。";
 "Restart to Update to Purge %@" = "重新启动以更新到 Purge %@";
 "Right-click an app in Finder and choose Uninstall with Purge. Purge opens with that app and everything it left behind, ready to review. macOS keeps this off until you turn it on here, or under System Settings > Keyboard > Keyboard Shortcuts > Services. Dropping an app on Purge's Dock icon does the same and needs no setup." = "在访达中右键点按一个应用，然后选择“使用 Purge 卸载”。Purge 会打开并列出该应用及其留下的所有内容，供你检查。macOS 默认关闭此项，你可以在这里开启，也可以前往“系统设置 > 键盘 > 键盘快捷键 > 服务”开启。将应用拖到 Purge 的程序坞图标上效果相同，无需任何设置。";
 "Saved, but Finder may keep showing the old state until you log out and back in." = "已保存，但在你退出登录并重新登录之前，访达可能仍显示旧状态。";

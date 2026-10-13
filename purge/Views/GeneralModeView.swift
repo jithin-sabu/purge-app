@@ -4,6 +4,9 @@ import SwiftUI
 struct AppCachesView<PageHeader: View>: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Only the leftover macOS update files row reads this. It changes when the user
+    /// turns secure removal on, which is rare, so observing it here costs nothing.
+    @ObservedObject private var helperPrefs = PrivilegedHelperPreferenceStore.shared
     @Binding var items: [CacheItem]
     let isLoading: Bool
     let scanPhase: PurgeStore.ScanPhase
@@ -278,6 +281,13 @@ struct AppCachesView<PageHeader: View>: View {
         }
     }
 
+    /// Leftover macOS update files move only through the helper (#127). While it is
+    /// off, say so on the row; cleaning it then offers the one-time setup.
+    private func secureRemovalCaption(for item: CacheItem) -> String? {
+        guard item.bundleID == CacheDiscoveryPaths.macOSInstallDataKey, !helperPrefs.isEnabled else { return nil }
+        return String(localized: "Needs secure removal")
+    }
+
     private func reinstallDisplay(for item: CacheItem) -> ReinstallSafetyStatus? {
         guard item.reinstallSafety != .notApplicable else { return nil }
         return item.reinstallSafety
@@ -330,7 +340,7 @@ struct AppCachesView<PageHeader: View>: View {
                         formattedSize: item.formattedSize,
                         safetyInfo: item.safetyInfo,
                         brandIcon: .cacheItem(item),
-                        detailCaption: nil,
+                        detailCaption: secureRemovalCaption(for: item),
                         reinstallSafety: reinstallDisplay(for: item),
                         showUncommittedRepoChanges: item.gitStatus == .dirty,
                         onResetToAutomatic: { store.resetCacheItemToAutomatic(id: itemID) },

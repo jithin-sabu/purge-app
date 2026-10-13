@@ -153,8 +153,9 @@ struct SettingsView: View {
     private var helperCaption: String {
         String(localized: """
         Some apps are installed under an administrator and can't be moved to the Trash on their \
-        own. Purge asks you to enable its secure removal helper only when an app needs it. Items \
-        still go to the Trash, and you can turn it off here at any time.
+        own, and neither can the files a finished macOS update leaves behind. Purge asks you to \
+        enable its secure removal helper only when something needs it. Items still go to the \
+        Trash, and you can turn it off here at any time.
         """)
     }
 

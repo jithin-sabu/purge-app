@@ -33,9 +33,10 @@ enum SafetyAllowlistSummary {
         let devCacheCount = DeletionSafetyPolicy.whitelistedFolderNames.count
 
         let logsPrefix = "\(home)/Library/Logs"
+        // Plus the one rule for leftover macOS update files (#127).
         let systemJunkCount = whitelistedPrefixes.filter {
             $0 == logsPrefix || $0.hasPrefix(logsPrefix + "/")
-        }.count
+        }.count + 1
 
         return [
             Category(
@@ -62,8 +63,8 @@ enum SafetyAllowlistSummary {
             Category(
                 id: CategoryID.systemJunk,
                 icon: "doc.text",
-                title: String(localized: "Logs and crash reports"),
-                description: String(localized: "User logs and diagnostic reports under ~/Library/Logs"),
+                title: String(localized: "Logs, crash reports, and update leftovers"),
+                description: String(localized: "User logs and diagnostic reports under ~/Library/Logs, and files a finished macOS update left behind"),
                 backingCount: systemJunkCount
             )
         ]
@@ -73,7 +74,9 @@ enum SafetyAllowlistSummary {
         var parts: [String] = []
 
         if !DeletionSafetyPolicy.systemCacheDeletionPrefixes.isEmpty {
-            parts.append(String(localized: "anything requiring admin privileges"))
+            // Leftover macOS update files are the one exception, moved by the helper
+            // only after the user turns secure removal on (#127).
+            parts.append(String(localized: "anything requiring admin privileges, except leftover macOS update files"))
         }
 
         let protectedContainerCount =
