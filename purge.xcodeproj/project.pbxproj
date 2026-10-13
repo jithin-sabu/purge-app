@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AB143A00000000000000B001 /* AppBundleReach.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB143A00000000000000F001 /* AppBundleReach.swift */; };
+		AB143A00000000000000B002 /* AppBundleReach.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB143A00000000000000F001 /* AppBundleReach.swift */; };
 		122233445566778899AABBCC /* PurgeWatchMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6D7E8F901A2B3C4D5E6F70 /* PurgeWatchMain.swift */; };
 		2333445566778899AABBCCDD /* ApplicationsFolderWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01D2E3F405162738495A6B7 /* ApplicationsFolderWatcher.swift */; };
 		293A4B5C6D7E8F901A2B3C4D /* io.getpurge.watch in Embed Watch Agent */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* io.getpurge.watch */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -121,6 +123,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AB143A00000000000000F001 /* AppBundleReach.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppBundleReach.swift; path = purge/Services/AppBundleReach.swift; sourceTree = SOURCE_ROOT; };
 		012132435465768798A9BACB /* ByteFormatter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ByteFormatter.swift; path = purge/Utilities/ByteFormatter.swift; sourceTree = SOURCE_ROOT; };
 		23866D74E1EC150691D3E969 /* io.getpurge.helper */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = file; path = io.getpurge.helper; sourceTree = BUILT_PRODUCTS_DIR; };
 		49C4D8E8868801EE41EAE019 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
@@ -272,6 +275,7 @@
 				7E8F901A2B3C4D5E6F708192 /* io.getpurge.watch.plist */,
 				C01D2E3F405162738495A6B7 /* ApplicationsFolderWatcher.swift */,
 				D01E2F30415263748596A7B8 /* RemovedAppWatchPolicy.swift */,
+				AB143A00000000000000F001 /* AppBundleReach.swift */,
 				E01F2031425364758697A8B9 /* RemovedAppHandoff.swift */,
 				F0102132435465768798A9BA /* InstalledApp.swift */,
 				012132435465768798A9BACB /* ByteFormatter.swift */,
@@ -510,6 +514,7 @@
 				50A1F20DF87D12D3DF8F7DF5 /* HelperService.swift in Sources */,
 				82ABE8E4B27CCE67F4AF5EA2 /* PurgeHelperProtocol.swift in Sources */,
 				957945A658563B63C6ADC1D7 /* HelperSupport.swift in Sources */,
+				AB143A00000000000000B002 /* AppBundleReach.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -520,6 +525,7 @@
 				122233445566778899AABBCC /* PurgeWatchMain.swift in Sources */,
 				2333445566778899AABBCCDD /* ApplicationsFolderWatcher.swift in Sources */,
 				34445566778899AABBCCDDEE /* RemovedAppWatchPolicy.swift in Sources */,
+				AB143A00000000000000B001 /* AppBundleReach.swift in Sources */,
 				455566778899AABBCCDDEEFF /* RemovedAppHandoff.swift in Sources */,
 				5666778899AABBCCDDEEFF00 /* InstalledApp.swift in Sources */,
 				67778899AABBCCDDEEFF0011 /* ByteFormatter.swift in Sources */,

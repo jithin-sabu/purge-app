@@ -92,18 +92,13 @@ enum AppUninstallScanPolicy {
         // Never through this gate: system locations.
         if path.hasPrefix("/System/") { return false }
 
-        // An app bundle sitting inside an app root, or one folder deeper (vendors
-        // that group their apps, e.g. `/Applications/Utilities/…`). This mirrors
-        // the one-level nesting `AppUninstallScanner.discoverAppBundleURLs` walks,
-        // so every bundle the picker offers can actually be trashed. Deeper paths
-        // stay out, so the gate never descends into bundle internals.
+        // An app bundle inside an app root, up to `AppBundleReach.maxFolderDepth`
+        // folders down. This is the same reach the picker walks, so every bundle
+        // it offers can actually be trashed. Deeper paths, and any path through
+        // another bundle, stay out, so the gate never reaches bundle internals.
         if std.pathExtension == "app" {
             let appRoots = installedAppRoots().map { $0.standardizedFileURL.path }
-            let parent = std.deletingLastPathComponent()
-            if appRoots.contains(parent.path) { return true }
-            let grandparent = parent.deletingLastPathComponent().path
-            if appRoots.contains(grandparent) { return true }
-            return false
+            return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil
         }
 
         // A leftover: must live strictly inside one of the leftover roots, and

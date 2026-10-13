@@ -17,7 +17,8 @@ enum PurgeHelperConstants {
     /// an app that talks the v3 protocol re-registers any surviving v2 helper first.
     /// v4 opens the Trash search-only, so privacy protection no longer blocks it, and
     /// quits when idle, so an update never leaves an old copy running.
-    static let version = "4"
+    /// v5 accepts app bundles two folders inside an Applications folder (#143).
+    static let version = "5"
 
     /// The daemon property list bundled at `Contents/Library/LaunchDaemons/`, named
     /// to `SMAppService.daemon(plistName:)`.
@@ -62,8 +63,9 @@ enum PurgeHelperConstants {
     ]
 
     /// Returns true only for locations the app-uninstall scanner can produce:
-    /// an app bundle in an Applications folder, or one direct child of a known
-    /// leftover directory. Symlinks are rejected so an allowed-looking path cannot
+    /// an app bundle in an Applications folder (up to two folders down, never
+    /// through another bundle), or one direct child of a known leftover
+    /// directory. Symlinks are rejected so an allowed-looking path cannot
     /// redirect the root helper somewhere else between path components.
     static func isAllowedUninstallLocation(_ url: URL, homeDirectory: URL) -> Bool {
         let standardized = url.standardizedFileURL
@@ -87,11 +89,12 @@ enum PurgeHelperConstants {
             home.appendingPathComponent("Applications", isDirectory: true)
         ]
         guard standardized.pathExtension.lowercased() == "app" else { return false }
-        let appParent = standardized.deletingLastPathComponent()
-        if appRoots.contains(where: { appParent.path == $0.path }) { return true }
-
-        let grandparent = appParent.deletingLastPathComponent()
-        return appRoots.contains { grandparent.path == $0.path }
+        // The same reach the uninstaller's picker walks; the helper target
+        // compiles `AppBundleReach` too.
+        return AppBundleReach.folderDepth(
+            ofAppAtPath: standardized.path,
+            roots: appRoots.map { $0.standardizedFileURL.path }
+        ) != nil
     }
 }
 
