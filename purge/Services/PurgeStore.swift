@@ -580,6 +580,9 @@ final class PurgeStore: ObservableObject {
         item.safetyInfo.level == .safe
             && item.reinstallSafety != .missingLockfile
             && item.gitStatus == .clean
+            // Never counted or pre-selected as safe, even when overridden to Safe:
+            // the helper moves these as root, so only when the user picks them (#127).
+            && !item.standardizedPaths.contains { MacOSInstallLeftovers.isEntryPath($0) }
     }
 
     private func countsAsSafeCleanup(_ tool: DevTool) -> Bool {
@@ -1040,12 +1043,14 @@ final class PurgeStore: ObservableObject {
     func retryCleanFailure(_ item: CleanFailureItem, session: DeletionSession) async -> Int64? {
         let url = URL(fileURLWithPath: item.path)
 
+        // Leftover macOS update files, whatever the reason, go back through the clean
+        // route together; see `retryInstallLeftoverFailures`.
+        if MacOSInstallLeftovers.isEntryPath(url.standardizedFileURL.path) {
+            return await retryInstallLeftoverFailures([item], session: session)
+        }
+
         if item.reason == .needsAdministrator {
-            // Leftover macOS update files go back through the clean route together.
-            if MacOSInstallLeftovers.isEntryPath(url.standardizedFileURL.path) {
-                return await retryInstallLeftoverFailures([item], session: session)
-            }
-            // Otherwise it is a whole app held back because its bundle is locked.
+            // A whole app held back because its bundle is locked.
             // Removing it goes through the helper and takes the bundle *and* the
             // leftovers we deferred with it, so nothing is stripped until the app can go.
             return await completeLockedUninstall(for: item, session: session)
@@ -1098,6 +1103,25 @@ final class PurgeStore: ObservableObject {
             guard let item = itemsByPath[key] else { continue }
             resolveRetriedFailure(item: item, movedBytes: deleted.sizeBytes, session: session)
             movedBytes += deleted.sizeBytes
+        }
+        // What didn't move gets its new reason, so the screen never keeps offering a
+        // button that would only do the same thing again. A skip means the folder no
+        // longer passes the date rule, which no retry can change.
+        var newReasons: [String: CleanFailureReason] = [:]
+        for failed in report.failedItems {
+            newReasons[URL(fileURLWithPath: failed.path).standardizedFileURL.path] = failed.reason
+        }
+        for skipped in report.skippedItems {
+            newReasons[URL(fileURLWithPath: skipped.path).standardizedFileURL.path] = .safetySkipped
+        }
+        for (key, reason) in newReasons {
+            guard let item = itemsByPath[key], item.reason != reason else { continue }
+            session.replaceFailure(id: item.id, with: [CleanFailureItem(
+                path: item.path,
+                displayName: item.displayName,
+                reason: reason,
+                sizeBytes: item.sizeBytes
+            )])
         }
         if !report.ownershipWarningPaths.isEmpty { session.noteTrashOwnershipWarning() }
         return movedBytes > 0 ? movedBytes : nil

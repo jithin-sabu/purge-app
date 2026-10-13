@@ -766,6 +766,11 @@ struct SafeCleanupCelebrationOverlay: View {
     }
 
     private func retryFailure(_ item: CleanFailureItem) {
+        // A leftover macOS update file never retries alone: all of them go together.
+        if item.isMacOSInstallLeftover {
+            retryInstallLeftovers(session.failedItems.filter { $0.isMacOSInstallLeftover && $0.reason.showsRetry })
+            return
+        }
         guard !retryingFailureIDs.contains(item.id) else { return }
         retryingFailureIDs.insert(item.id)
         Task {

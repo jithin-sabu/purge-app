@@ -10,9 +10,13 @@ struct MacOSInstallLeftoversTests {
         let base: URL
         let root: URL
         let systemVersionFile: URL
-        let systemDate = Date(timeIntervalSince1970: 1_780_000_000)
+        let systemDate: Date
 
-        init() throws {
+        /// The rule also reads change times, which can't be set back, and a file made
+        /// now has a change time of now. So the system file is dated a day ahead,
+        /// unless a test needs it in the past.
+        init(systemDate: Date = Date().addingTimeInterval(24 * 3600)) throws {
+            self.systemDate = systemDate
             let fm = FileManager.default
             base = fm.temporaryDirectory
                 .appendingPathComponent("MacOSInstallLeftoversTests-\(UUID().uuidString)", isDirectory: true)
@@ -84,14 +88,57 @@ struct MacOSInstallLeftoversTests {
         #expect(!fixture.isLeftover())
     }
 
-    /// `Locked Files` can't be moved, so its date is not what decides.
-    @Test
-    func lockedFilesDateIsIgnored() throws {
+    /// `Locked Files` is never offered, but an update could be staged into it, so its
+    /// date still counts. So do hidden items.
+    @Test(arguments: [MacOSInstallLeftovers.lockedFilesName, ".staged"])
+    func unofferedItemsStillCountForTheDate(name: String) throws {
         let fixture = try Fixture()
         try fixture.makeEntry("UpdateBundle")
-        try fixture.makeEntry(MacOSInstallLeftovers.lockedFilesName, date: fixture.newer)
+        try fixture.makeEntry(name, date: fixture.newer)
+        try fixture.setRootDate(fixture.older)
+        #expect(!fixture.isLeftover())
+    }
+
+    /// Writing deep inside an entry leaves the folders above it with old dates.
+    @Test
+    func aNewerFileDeepInsideCounts() throws {
+        let fixture = try Fixture()
+        let bundle = try fixture.makeEntry("UpdateBundle")
+        let nested = bundle.appendingPathComponent("Payload/Deeper", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let file = nested.appendingPathComponent("chunk.pkg")
+        FileManager.default.createFile(atPath: file.path, contents: Data("x".utf8))
+        try fixture.setDate(fixture.newer, at: file)
+        for folder in [nested, nested.deletingLastPathComponent(), bundle] {
+            try fixture.setDate(fixture.older, at: folder)
+        }
+        try fixture.setRootDate(fixture.older)
+        #expect(!fixture.isLeftover())
+    }
+
+    /// Old modification dates are not enough: a file copied or unpacked with its
+    /// original dates still has a fresh change time, newer than this system file.
+    @Test
+    func aFreshChangeTimeCountsEvenWithOldDates() throws {
+        let fixture = try Fixture(systemDate: Date().addingTimeInterval(-3600))
+        try fixture.makeEntry("UpdateBundle", date: Date().addingTimeInterval(-90 * 24 * 3600))
+        try fixture.setRootDate(Date().addingTimeInterval(-90 * 24 * 3600))
+        #expect(!fixture.isLeftover())
+    }
+
+    @Test
+    func unreadableFolderInsideIsNot() throws {
+        let fixture = try Fixture()
+        let bundle = try fixture.makeEntry("UpdateBundle")
+        let sealed = bundle.appendingPathComponent("Sealed", isDirectory: true)
+        try FileManager.default.createDirectory(at: sealed, withIntermediateDirectories: true)
+        try fixture.setDate(fixture.older, at: sealed)
+        try fixture.setDate(fixture.older, at: bundle)
         try fixture.setRootDate(fixture.older)
         #expect(fixture.isLeftover())
+        chmod(sealed.path, 0)
+        defer { chmod(sealed.path, 0o755) }
+        #expect(!fixture.isLeftover())
     }
 
     @Test

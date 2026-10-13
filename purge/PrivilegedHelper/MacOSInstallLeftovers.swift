@@ -44,33 +44,54 @@ nonisolated enum MacOSInstallLeftovers {
             .sorted { $0.path < $1.path }
     }
 
-    /// True only when the folder and every entry in it are older than the installed
-    /// system. An update that is downloaded and waiting to install was written after
-    /// the system it replaces, so it fails this and is left alone.
+    /// True only when the folder and everything in it, at every depth, are older than
+    /// the installed system. An update that is downloaded and waiting to install was
+    /// written after the system it replaces, so it fails this and is left alone.
+    ///
+    /// This checks more than what is offered: hidden items and `Locked Files` count
+    /// too, and so does every file inside an entry, since writing deep inside a folder
+    /// leaves the folders above it with their old dates. Each item's change time
+    /// counts as well as its modification time, because a file copied or unpacked
+    /// with its original dates still gets a fresh change time.
     ///
     /// Moving an entry out bumps the folder's date, so the helper works this out once
     /// per request, before it moves anything. After a partial move the rest are no
     /// longer offered; that is the safe side of the rule.
     ///
-    /// A missing file, a symlinked folder, or an unreadable date answers `false`.
+    /// Anything it can't read, a missing file, or a symlinked folder answers `false`.
     static func isLeftover(root: URL = root, systemVersionFile: URL = systemVersionFile) -> Bool {
-        guard let systemDate = modificationDate(atPath: systemVersionFile.path),
-              let rootAttributes = try? FileManager.default.attributesOfItem(atPath: root.path),
-              rootAttributes[.type] as? FileAttributeType == .typeDirectory,
-              let rootDate = rootAttributes[.modificationDate] as? Date,
-              rootDate < systemDate
+        guard let systemDate = itemDates(atPath: systemVersionFile.path)?.modified,
+              let rootDates = itemDates(atPath: root.path),
+              rootDates.isDirectory,
+              rootDates.newest < systemDate,
+              !entries(root: root).isEmpty
         else { return false }
 
-        let listed = entries(root: root)
-        guard !listed.isEmpty else { return false }
-        return listed.allSatisfy { entry in
-            guard let date = modificationDate(atPath: entry.path) else { return false }
-            return date < systemDate
+        var unreadable = false
+        guard let walk = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: nil,
+            options: [],
+            errorHandler: { _, _ in
+                unreadable = true
+                return false
+            }
+        ) else { return false }
+        for case let item as URL in walk {
+            guard let dates = itemDates(atPath: item.path), dates.newest < systemDate else { return false }
         }
+        return !unreadable
     }
 
-    /// Never follows a symlink: `attributesOfItem` reports the link itself.
-    private static func modificationDate(atPath path: String) -> Date? {
-        (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+    /// `lstat`, so a symlink is judged by itself and never followed.
+    private static func itemDates(atPath path: String) -> (modified: Date, newest: Date, isDirectory: Bool)? {
+        var info = stat()
+        guard lstat(path, &info) == 0 else { return nil }
+        func date(_ time: timespec) -> Date {
+            Date(timeIntervalSince1970: TimeInterval(time.tv_sec) + TimeInterval(time.tv_nsec) / 1_000_000_000)
+        }
+        let modified = date(info.st_mtimespec)
+        let changed = date(info.st_ctimespec)
+        return (modified, max(modified, changed), (info.st_mode & S_IFMT) == S_IFDIR)
     }
 }
