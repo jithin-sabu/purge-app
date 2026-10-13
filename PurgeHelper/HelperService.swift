@@ -2,9 +2,10 @@ import Darwin
 import Foundation
 
 /// The root-side implementation of the one privileged operation Purge performs:
-/// moving an approved uninstall path into the connecting user's Trash and handing
-/// ownership back. Both the source and destination are opened without following
-/// symlinks, so another process cannot redirect a checked path while the move runs.
+/// moving an approved uninstall path, or a leftover macOS update file, into the
+/// connecting user's Trash and handing ownership back. Both the source and
+/// destination are opened without following symlinks, so another process cannot
+/// redirect a checked path while the move runs.
 final class HelperService: NSObject, PurgeHelperProtocol {
     private let idleTracker: HelperIdleTracker
 
@@ -78,14 +79,21 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         }
         defer { close(trashFD) }
 
+        // Decided once, before anything moves: moving an entry out changes the
+        // folder's date, which would refuse the rest of the same request.
+        let installLeftoverRuleHolds = paths.contains {
+            PurgeHelperConstants.isAllowedInstallLeftoverLocation(URL(fileURLWithPath: $0))
+        } && MacOSInstallLeftovers.isLeftover()
+
         var outcome = MoveOutcome()
         for path in paths {
             let source = URL(fileURLWithPath: path)
-            guard PurgeHelperConstants.isAllowedUninstallLocation(
+            guard PurgeHelperConstants.isAllowedMoveSource(
                 source,
-                homeDirectory: homeDirectory
+                homeDirectory: homeDirectory,
+                installLeftoverRuleHolds: installLeftoverRuleHolds
             ) else {
-                NSLog("PurgeHelper: refusing source outside uninstall locations %@", source.path)
+                NSLog("PurgeHelper: refusing source outside allowed locations %@", source.path)
                 continue
             }
 
