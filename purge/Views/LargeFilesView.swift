@@ -1221,10 +1221,17 @@ private struct LargeFileThumbnailIcon: View {
             }
     }
 
+    /// The label sits over the icon at its natural width, so a long extension
+    /// (`.prlupd-part`, `.crdownload`) would spill onto the checkbox. Five
+    /// characters fit; anything longer is cut short.
+    private var extensionLabel: String {
+        fileExtension.count > 5 ? ".\(fileExtension.prefix(4))…" : ".\(fileExtension)"
+    }
+
     @ViewBuilder
     private var extensionBadge: some View {
         if !fileExtension.isEmpty {
-            Text(".\(fileExtension)")
+            Text(verbatim: extensionLabel)
                 .font(AppStyle.Typography.micro)
                 .lineLimit(1)
                 .foregroundStyle(AppColors.textSecondary)
