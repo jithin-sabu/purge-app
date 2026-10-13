@@ -14,6 +14,16 @@ enum LargeFileScanPolicy {
         ]
     }
 
+    /// Where Parallels Desktop and VMware Fusion keep VMs by default. These are
+    /// walked for VM bundles only, never for loose files. UTM keeps its VMs in
+    /// its container under `~/Library`, which Large Files stays out of.
+    nonisolated static func virtualMachineRoots(home: URL) -> [URL] {
+        [
+            home.appendingPathComponent("Parallels", isDirectory: true),
+            home.appendingPathComponent("Virtual Machines.localized", isDirectory: true)
+        ]
+    }
+
     /// Managed libraries and bundles we never descend into or offer for deletion.
     nonisolated static let excludedFolderNames: Set<String> = [
         "Photos Library.photoslibrary",
@@ -77,25 +87,43 @@ enum LargeFileScanPolicy {
             if ["app", "photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater", "bundle"].contains(ext) {
                 return true
             }
+            // A file inside a VM is part of its disk. Only the whole bundle goes.
+            if LargeFileKind.wholeBundleExtensions.contains(ext) { return true }
         }
         return false
     }
 
     /// A file may be deleted only if it is a regular file under one of the scan
     /// roots and nowhere near Library or system locations.
-    nonisolated static func isEligibleForDeletion(_ url: URL) -> Bool {
+    ///
+    /// The one kind of folder allowed is a whole bundle Large Files lists as one
+    /// item: a VM (`.pvm`, `.utm`, `.vmwarevm`) or an unfinished download
+    /// bundle. It may sit under a scan root, and a VM also under a VM root. A
+    /// loose file in a VM root is never eligible; that walk lists bundles only.
+    nonisolated static func isEligibleForDeletion(
+        _ url: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Bool {
         let fm = FileManager.default
         let std = url.standardizedFileURL
         let path = std.path
 
         var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue else { return false }
+        guard fm.fileExists(atPath: path, isDirectory: &isDir) else { return false }
         if path.contains("/Library/") { return false }
         if isInsideExcludedDirectory(std) { return false }
 
-        let home = fm.homeDirectoryForCurrentUser
-        return scanRoots(home: home).contains { root in
-            path.hasPrefix(root.standardizedFileURL.path + "/")
+        func isUnder(_ roots: [URL]) -> Bool {
+            roots.contains { root in
+                path.hasPrefix(root.standardizedFileURL.path + "/")
+            }
         }
+
+        guard isDir.boolValue else { return isUnder(scanRoots(home: home)) }
+
+        let ext = std.pathExtension.lowercased()
+        guard LargeFileKind.wholeBundleExtensions.contains(ext) else { return false }
+        if isUnder(scanRoots(home: home)) { return true }
+        return VirtualMachineApp(bundleExtension: ext) != nil && isUnder(virtualMachineRoots(home: home))
     }
 }
