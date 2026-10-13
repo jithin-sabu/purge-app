@@ -9,8 +9,8 @@
   <p>English | <a href="README.zh-CN.md">简体中文</a></p>
 
   <p>
-    Clear out the cache and junk your Mac collects on its own.<br/>
-    Open source, trash-by-default.
+    A free, open-source native Mac app that clears the cache and junk your Mac piles up on its own.<br/>
+    Files go to the Trash by default, so you can put them back.
   </p>
 
 <p>
@@ -325,6 +325,8 @@ Purge runs entirely on your Mac. Scans, explanations, manual overrides, and clea
 The one time Purge talks to the network is the update check: once a day it fetches a small XML file from GitHub to see whether a newer version is available. It sends nothing about you or your Mac, and you can turn it off in **Settings → Updates**.
 
 Purge never reads or sends file contents.
+
+Purge does not use AI. Nothing you scan or clean is sent to an AI service.
 
 ---
 
