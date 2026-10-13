@@ -282,7 +282,7 @@
 
 /* macos-install-data */
 "Leftover macOS update files" = "残留的 macOS 更新文件";
-"Install files a macOS update left in the macOS Install Data folder after it finished. macOS does not use them again, and Settings counts them as System Data. Purge lists them only when they are older than the macOS you have installed, so an update that is downloaded and waiting is never shown. They move to the Trash through secure removal." = "macOS 更新完成后留在 macOS Install Data 文件夹中的安装文件。macOS 不会再使用它们，“设置”会把它们算作系统数据。只有当它们早于当前安装的 macOS 时，Purge 才会列出，因此已下载、等待安装的更新绝不会显示。它们会通过安全移除移到废纸篓。";
+"Install files a finished macOS update left behind. macOS does not use them again, and Settings counts them as System Data. Listed only when they are older than the installed macOS, so a waiting update is never shown." = "macOS 更新完成后留下的安装文件。macOS 不会再使用它们，“设置”会把它们算作系统数据。只有当它们早于当前安装的 macOS 时才会列出，因此等待安装的更新绝不会显示。";
 
 /* dart-tool */
 "Flutter Dev Tool" = "Flutter 开发工具";
