@@ -19,7 +19,9 @@ enum PurgeHelperConstants {
     /// quits when idle, so an update never leaves an old copy running.
     /// v5 accepts app bundles at any depth inside an Applications folder, never
     /// through a package, symlink, or hidden folder (#143).
-    static let version = "5"
+    /// v6 also accepts the entries a finished macOS update left in `macOS Install
+    /// Data`, and only while they are older than the installed system (#127).
+    static let version = "6"
 
     /// The daemon property list bundled at `Contents/Library/LaunchDaemons/`, named
     /// to `SMAppService.daemon(plistName:)`.
@@ -96,6 +98,32 @@ enum PurgeHelperConstants {
             ofAppAtPath: standardized.path,
             roots: appRoots.map { $0.standardizedFileURL.path }
         ) != nil
+    }
+
+    /// One entry directly inside `macOS Install Data`, never `Locked Files`, and
+    /// never reached through a symlink. Where the path is, not whether the folder
+    /// is a leftover: that date rule is `installLeftoverRuleHolds` below.
+    static func isAllowedInstallLeftoverLocation(
+        _ url: URL,
+        root: URL = MacOSInstallLeftovers.root
+    ) -> Bool {
+        let standardized = url.standardizedFileURL
+        let resolved = standardized.resolvingSymlinksInPath().standardizedFileURL
+        guard standardized.path == resolved.path else { return false }
+        return MacOSInstallLeftovers.isEntryPath(standardized.path, root: root)
+    }
+
+    /// Everything the helper will move: an uninstall location, or a macOS install
+    /// leftover while `installLeftoverRuleHolds`. The helper works that rule out
+    /// itself, once per request and before it moves anything, because each move
+    /// changes the folder's date. It never takes the app's word for it.
+    static func isAllowedMoveSource(
+        _ url: URL,
+        homeDirectory: URL,
+        installLeftoverRuleHolds: Bool
+    ) -> Bool {
+        if isAllowedUninstallLocation(url, homeDirectory: homeDirectory) { return true }
+        return installLeftoverRuleHolds && isAllowedInstallLeftoverLocation(url)
     }
 }
 

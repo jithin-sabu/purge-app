@@ -54,14 +54,15 @@ something real happens.
 ## What runs as root
 
 Purge has one privileged helper, `io.getpurge.helper`. It is not set up when
-you install the app. Purge asks you to enable it only when an uninstall hits an
-app you cannot move yourself, usually one an administrator installed. macOS
+you install the app. Purge asks you to enable it only when something you chose
+to remove can't be moved without it: an app an administrator installed, or the
+files a finished macOS update left in `/System/Volumes/Data/macOS Install Data`. macOS
 then asks you to approve it under Login Items in System Settings. You can turn
 it off at any time in Purge under Settings > Protected App Removal, or in Login
 Items.
 
-The helper does one thing: it moves an approved uninstall path into your Trash
-and hands ownership of it back to you. It never deletes anything. The code is
+The helper does one thing: it moves an approved path into your Trash and hands
+ownership of it back to you. It never deletes anything. The code is
 in [`PurgeHelper/HelperService.swift`](PurgeHelper/HelperService.swift), and
 it checks every request four ways:
 
@@ -72,12 +73,18 @@ it checks every request four ways:
   The app runs the same check in reverse before it trusts the helper.
 - **Only administrators.** A standard account is refused, even through a
   genuine copy of Purge.
-- **Only uninstall locations.** The helper checks every path itself instead of
+- **Only known locations.** The helper checks every path itself instead of
   trusting the app. It accepts an app bundle in `/Applications` or
   `~/Applications` at any depth, never inside another bundle or package, or a
   direct child of a folder the uninstaller scans for leftovers, such as
   `~/Library/Application Support` or `/Library/LaunchDaemons`. The full list is in
   [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift).
+  It also accepts a direct child of `macOS Install Data`, never `Locked Files`,
+  and only while that folder and everything in it are older than the moment the
+  running macOS was installed, from `/Library/Receipts/InstallHistory.plist`.
+  The helper reads those dates itself, so it never moves an update that is
+  downloaded and waiting
+  ([`purge/PrivilegedHelper/MacOSInstallLeftovers.swift`](purge/PrivilegedHelper/MacOSInstallLeftovers.swift)).
 - **No symlink tricks.** Paths are opened one component at a time without
   following symlinks, and the move is a single atomic rename, so another
   process cannot swap a checked path for a different one mid-move. A path with

@@ -971,6 +971,18 @@
     "kind": "system"
   },
   {
+    "key": "macos-install-data",
+    "display_name": "Leftover macOS update files",
+    "tag": "medium",
+    "explanation": "Install files a finished macOS update left behind. macOS does not use them again, and Settings counts them as System Data. Listed only when they are older than the installed macOS, so a waiting update is never shown.",
+    "bundle_ids": [],
+    "aliases": [
+      "macOS Install Data"
+    ],
+    "scope": "app_caches",
+    "kind": "system"
+  },
+  {
     "key": "dart-tool",
     "display_name": "Flutter Dev Tool",
     "tag": "safe",

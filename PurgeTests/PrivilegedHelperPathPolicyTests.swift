@@ -69,7 +69,50 @@ struct PrivilegedHelperPathPolicyTests {
 
     @Test("Helper behavior version is current")
     func helperVersionIsCurrent() {
-        #expect(PurgeHelperConstants.version == "5")
+        #expect(PurgeHelperConstants.version == "6")
+    }
+
+    private func isAllowedMove(_ path: String, ruleHolds: Bool) -> Bool {
+        PurgeHelperConstants.isAllowedMoveSource(
+            URL(fileURLWithPath: path),
+            homeDirectory: home,
+            installLeftoverRuleHolds: ruleHolds
+        )
+    }
+
+    @Test("Moves macOS install leftovers only while the date rule holds")
+    func installLeftoversNeedTheRule() {
+        let root = MacOSInstallLeftovers.root.path
+        #expect(isAllowedMove("\(root)/UpdateBundle", ruleHolds: true))
+        #expect(!isAllowedMove("\(root)/UpdateBundle", ruleHolds: false))
+        #expect(!isAllowedMove(root, ruleHolds: true))
+        #expect(!isAllowedMove("\(root)/Locked Files", ruleHolds: true))
+        #expect(!isAllowedMove("\(root)/UpdateBundle/Payload", ruleHolds: true))
+        #expect(!isAllowedMove("\(root)/.hidden", ruleHolds: true))
+        #expect(!isAllowedMove("/macOS Install Data/UpdateBundle", ruleHolds: true))
+        // The rule never widens the uninstall reach, and never narrows it.
+        #expect(!isAllowedMove("/Library/Keychains/System.keychain", ruleHolds: true))
+        #expect(isAllowedMove("/Applications/Teams.app", ruleHolds: false))
+    }
+
+    @Test("Refuses a macOS install leftover reached through a symlink")
+    func refusesSymlinkedInstallLeftover() throws {
+        let fileManager = FileManager.default
+        let folder = fileManager.temporaryDirectory
+            .appendingPathComponent("PurgeHelperLeftover-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: folder) }
+        let root = folder.appendingPathComponent("macOS Install Data", isDirectory: true)
+        let outside = folder.appendingPathComponent("outside", isDirectory: true)
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: outside, withIntermediateDirectories: true)
+        let link = root.appendingPathComponent("Linked")
+        try fileManager.createSymbolicLink(at: link, withDestinationURL: outside)
+
+        // Only the refusal can be checked here: Foundation drops /private from a
+        // temporary path when it resolves links, so no temporary path passes. The
+        // live folder has no links on the way, and the test above covers it.
+        #expect(!PurgeHelperConstants.isAllowedInstallLeftoverLocation(link, root: root))
     }
 
     /// If the helper and the picker disagree, an app the picker lists is refused

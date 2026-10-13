@@ -948,6 +948,15 @@ enum DeletionSafetyPolicy {
         return isMacOSInstallerBundle(at: URL(fileURLWithPath: prefix + appName, isDirectory: true))
     }
 
+    /// One entry directly inside `/System/Volumes/Data/macOS Install Data`, never the
+    /// folder itself and never `Locked Files` (#127). This only proves where the path
+    /// is. Whether the folder is a leftover is a date rule that changes on disk, so
+    /// the scanner, `FileDeleter` and the root helper each check
+    /// `MacOSInstallLeftovers.isLeftover` instead of this memoised policy.
+    nonisolated static func isWhitelistedMacOSInstallLeftoverPath(_ path: String) -> Bool {
+        MacOSInstallLeftovers.isEntryPath(path)
+    }
+
     /// True when this version folder is still in use, or might be, because the
     /// owning browser is running and the loaded version could not be read.
     nonisolated static func staleBrowserFrameworkRefusesDeletion(_ url: URL) -> Bool {
@@ -1140,6 +1149,9 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedMacOSInstallerPath(path) {
+            return .allow
+        }
+        if isWhitelistedMacOSInstallLeftoverPath(path) {
             return .allow
         }
         if isWhitelistedOldCLIVersionPath(path, home: home) {

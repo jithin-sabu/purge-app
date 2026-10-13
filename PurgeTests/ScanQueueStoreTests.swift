@@ -280,6 +280,37 @@ struct ScanQueueStoreTests {
         fake.cleanUp()
     }
 
+    /// #127: leftover macOS update files are moved as root, so even a row the user
+    /// overrode to Safe is never counted as safe or picked from the Overview.
+    @Test
+    func theOverviewNeverPicksLeftoverMacOSUpdateFiles() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        store.requestScan(.cachesAndDevTools)
+        #expect(await eventually { isIdle(store) })
+        let safe = cacheItem("com.safe.app", bytes: 1_000_000_000, level: .safe, git: .clean)
+        let key = CacheDiscoveryPaths.macOSInstallDataKey
+        let leftover = CacheItem(
+            definitionKey: key,
+            location: CacheLocation(
+                path: MacOSInstallLeftovers.root.appendingPathComponent("UpdateBundle"),
+                sizeBytes: 2_000_000_000,
+                lastModified: .distantPast,
+                folderName: key
+            ),
+            appName: key,
+            safetyInfo: SafetyInfo(level: .safe, headline: key, explanation: "", recoverySteps: "", reinstallCommand: nil),
+            gitStatus: .clean
+        )
+        store.cacheItems = [safe, leftover]
+
+        #expect(store.safeCleanupBytes(for: .appCaches) == 1_000_000_000)
+        store.openFromOverview(.appCaches)
+        #expect(store.scanSelection.cacheIDs == [safe.id])
+        fake.cleanUp()
+    }
+
     @Test
     func pickingAFilterEndsTheVisit() async {
         let fake = FakeScans()

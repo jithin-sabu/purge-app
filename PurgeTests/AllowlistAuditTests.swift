@@ -391,6 +391,27 @@ struct SpotifyOfflineMusicTests {
 
 @Suite("Allowlist audit: additions")
 struct AllowlistAdditionTests {
+    /// #127: only an entry directly inside the folder is allowed, never the folder,
+    /// `Locked Files`, or the `/macOS Install Data` spelling, which isn't a firmlink.
+    @Test
+    func macOSInstallLeftoversAreDirectChildrenOnly() {
+        let root = MacOSInstallLeftovers.root.path
+        func evaluate(_ path: String) -> DeletionSafetyDecision {
+            DeletionSafetyPolicy.evaluate(URL(fileURLWithPath: path))
+        }
+        #expect(evaluate("\(root)/UpdateBundle") == .allow)
+        #expect(evaluate("\(root)/InstallInfo.plist") == .allow)
+        #expect(evaluate(root) != .allow)
+        #expect(evaluate("\(root)/Locked Files") != .allow)
+        #expect(evaluate("\(root)/Locked Files/x") != .allow)
+        #expect(evaluate("\(root)/UpdateBundle/Payload") != .allow)
+        #expect(evaluate("\(root)/.hidden") != .allow)
+        #expect(evaluate("/macOS Install Data/UpdateBundle") != .allow)
+        #expect(evaluate("/System/Volumes/Data/Library/UpdateBundle") != .allow)
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: CacheDiscoveryPaths.macOSInstallDataKey)?
+            .safetyLevel == .medium)
+    }
+
     @Test(arguments: [
         "Library/iTunes/iPhone Software Updates",
         "Library/iTunes/iPad Software Updates",
