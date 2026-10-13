@@ -295,6 +295,10 @@ enum CacheDiscoveryPaths {
     /// Classification key and folder name for full macOS installer apps.
     nonisolated static let macOSInstallerKey = "macOS Installer"
 
+    /// Classification key and folder name for the entries a finished macOS update
+    /// left in `macOS Install Data` (#127). Found by `MacOSInstallLeftovers`.
+    nonisolated static let macOSInstallDataKey = "macOS Install Data"
+
     /// `/Applications/Install macOS <Name>.app` bundles whose bundle ID is Apple's
     /// InstallAssistant. The name alone is not enough: any app can be called that.
     nonisolated static func macOSInstallerURLs(applications: URL = URL(fileURLWithPath: "/Applications")) -> [URL] {
