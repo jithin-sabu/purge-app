@@ -437,6 +437,7 @@ struct AllowlistAdditionTests {
         "Downloads/installer.dmg.crdownload",
         "Downloads/movie.mkv.part",
         "Downloads/archive.zip.download",
+        "Downloads/ParallelsDesktop.dmg.prlupd-part",
     ])
     func newCachesAreOffered(relative: String) {
         #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
@@ -455,6 +456,7 @@ struct AllowlistAdditionTests {
         "Library/Containers/com.apple.mail/Data/Library/Mail",
         "Downloads/report.pdf",
         "Downloads/project/notes.part",
+        "Downloads/project/setup.prlupd-part",
         ".oh-my-zsh/custom",
         "Movies/My Film.mov",
     ])

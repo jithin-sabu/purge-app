@@ -825,9 +825,10 @@ enum DeletionSafetyPolicy {
         #endif
     }
 
-    /// Unfinished browser downloads sitting directly in ~/Downloads: Chrome's
-    /// `.crdownload`, Firefox's `.part`, Safari's `.download` bundle.
-    nonisolated static let unfinishedDownloadExtensions: Set<String> = ["crdownload", "part", "download"]
+    /// Unfinished downloads sitting directly in ~/Downloads: Chrome's
+    /// `.crdownload`, Firefox's `.part`, Safari's `.download` bundle, and
+    /// Parallels' `.prlupd-part`. Large Files labels the same set.
+    nonisolated static let unfinishedDownloadExtensions: Set<String> = ["crdownload", "part", "download", "prlupd-part"]
 
     nonisolated static func isWhitelistedUnfinishedDownloadPath(_ path: String, home: String) -> Bool {
         let downloads = "\(home)/Downloads/"

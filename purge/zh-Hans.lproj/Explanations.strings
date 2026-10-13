@@ -1090,7 +1090,7 @@
 
 /* unfinished-downloads */
 "Unfinished Downloads" = "未完成的下载";
-"Downloads from Safari, Chrome or Firefox that stopped before finishing and have not changed in over a week. A browser can sometimes still resume one, so check before deleting." = "Safari、Chrome 或 Firefox 中未完成、且超过一周没有变化的下载。浏览器有时仍可继续下载，因此删除前请检查。";
+"Downloads from Safari, Chrome, Firefox or Parallels that stopped before finishing and have not changed in over a week. The app that started one can sometimes still resume it, so check before deleting." = "Safari、Chrome、Firefox 或 Parallels 中未完成、且超过一周没有变化的下载。发起下载的应用有时仍可继续，因此删除前请检查。";
 
 /* coresimulator-caches */
 "Simulator Caches" = "模拟器缓存";
