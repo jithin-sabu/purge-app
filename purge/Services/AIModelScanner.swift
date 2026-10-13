@@ -178,7 +178,7 @@ nonisolated final class AIModelScanner {
                 for repo in repos {
                     guard (try? repo.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
                     else { continue }
-                    let measured = directorySize(at: repo)
+                    let measured = FolderSizing.walkedSize(at: repo, skipsPackages: true)
                     guard measured.bytes > 0 else { continue }
 
                     models.append(LargeFile(
@@ -195,33 +195,5 @@ nonisolated final class AIModelScanner {
         }
 
         return models
-    }
-
-    private static func directorySize(at url: URL) -> (bytes: Int64, lastUsed: Date) {
-        let keys: Set<URLResourceKey> = [
-            .isRegularFileKey, .totalFileAllocatedSizeKey, .fileSizeKey,
-            .contentAccessDateKey, .contentModificationDateKey
-        ]
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: Array(keys),
-            options: [.skipsPackageDescendants]
-        ) else { return (0, .distantPast) }
-
-        var bytes: Int64 = 0
-        var lastUsed = Date.distantPast
-        while let next = enumerator.nextObject() {
-            if Task.isCancelled { break }
-            guard let fileURL = next as? URL,
-                  let values = try? fileURL.resourceValues(forKeys: keys),
-                  values.isRegularFile == true
-            else { continue }
-            bytes += Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
-            lastUsed = max(lastUsed, max(
-                values.contentAccessDate ?? .distantPast,
-                values.contentModificationDate ?? .distantPast
-            ))
-        }
-        return (bytes, lastUsed)
     }
 }
