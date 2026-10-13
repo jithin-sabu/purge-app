@@ -179,10 +179,10 @@ There are two ways to install Purge: with Homebrew if you live in the terminal, 
 ### Install with Homebrew
 
 ```bash
-brew install --cask jithin-sabu/tap/purge
+brew install --cask purge
 ```
 
-This taps the repo and installs Purge in one step, and Homebrew verifies the download's checksum for you automatically.
+This installs Purge from the official Homebrew cask, and Homebrew verifies the download's checksum for you automatically.
 
 ### Install manually
 

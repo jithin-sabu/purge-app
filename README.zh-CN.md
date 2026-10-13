@@ -182,10 +182,10 @@ Purge 会为它识别的每个项目分配一个安全标签：
 ### 使用 Homebrew 安装
 
 ```bash
-brew install --cask jithin-sabu/tap/purge
+brew install --cask purge
 ```
 
-这条命令会一步完成 tap 仓库和安装 Purge，Homebrew 还会自动为你校验下载文件的校验和。
+这条命令会从官方 Homebrew cask 安装 Purge，Homebrew 还会自动为你校验下载文件的校验和。
 
 ### 手动安装
 
