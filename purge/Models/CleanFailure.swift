@@ -188,6 +188,13 @@ struct CleanFailureItem: Identifiable, Equatable {
         self.sizeBytes = sizeBytes
     }
 
+    /// An entry a finished macOS update left in `macOS Install Data` (#127). These go
+    /// through the helper together, never one by one. Read in view bodies, so it
+    /// checks the string only: the clean already standardized every path.
+    var isMacOSInstallLeftover: Bool {
+        MacOSInstallLeftovers.isEntryPath(path)
+    }
+
     init(failed: FailedDeletionItem) {
         self.init(
             id: failed.id,

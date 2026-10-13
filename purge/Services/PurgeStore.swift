@@ -745,6 +745,9 @@ final class PurgeStore: ObservableObject {
             for location in item.locations where isReachable(location.path) {
                 let path = location.path.standardizedFileURL
                 guard DeletionSafetyPolicy.isOfferedForCleanup(path) else { continue }
+                // Moved as root by the helper, so only ever when the user picks the
+                // row, even if they overrode it to Safe (#127).
+                guard !MacOSInstallLeftovers.isEntryPath(path.path) else { continue }
                 candidates.append(
                     DeletionCandidate(
                         title: CacheHeadline.localized(item.appName, cacheFolder: item.path.lastPathComponent),
@@ -1016,6 +1019,8 @@ final class PurgeStore: ObservableObject {
                 failedItems: report.userVisibleFailures,
                 movedToTrashCount: report.movedToTrashCount
             )
+            // Only the helper's moves can leave root-owned files in the Trash.
+            if !report.ownershipWarningPaths.isEmpty { session?.noteTrashOwnershipWarning() }
             recordCleanup(report, trigger: trigger, source: .clean)
         } catch {
             if session != nil {
@@ -1035,10 +1040,14 @@ final class PurgeStore: ObservableObject {
     func retryCleanFailure(_ item: CleanFailureItem, session: DeletionSession) async -> Int64? {
         let url = URL(fileURLWithPath: item.path)
 
-        // A `.needsAdministrator` item is a whole app held back because its bundle is
-        // locked. Removing it goes through the helper and takes the bundle *and* the
-        // leftovers we deferred with it, so nothing is stripped until the app can go.
         if item.reason == .needsAdministrator {
+            // Leftover macOS update files go back through the clean route together.
+            if MacOSInstallLeftovers.isEntryPath(url.standardizedFileURL.path) {
+                return await retryInstallLeftoverFailures([item], session: session)
+            }
+            // Otherwise it is a whole app held back because its bundle is locked.
+            // Removing it goes through the helper and takes the bundle *and* the
+            // leftovers we deferred with it, so nothing is stripped until the app can go.
             return await completeLockedUninstall(for: item, session: session)
         }
 
@@ -1055,6 +1064,43 @@ final class PurgeStore: ObservableObject {
         case .failure:
             return nil
         }
+    }
+
+    /// Retries leftover macOS update files in one helper request (#127). Retrying them
+    /// one by one would fail after the first: every move changes the folder's date,
+    /// and the helper refuses the rest of the folder after that. If the helper is not
+    /// on yet, this tap is the setup step, as it is for a locked app.
+    func retryInstallLeftoverFailures(_ items: [CleanFailureItem], session: DeletionSession) async -> Int64? {
+        guard !items.isEmpty else { return nil }
+        guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
+            PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+            return nil
+        }
+
+        var pathToDisplayName: [String: String] = [:]
+        var pathToExpectedSizeBytes: [String: Int64] = [:]
+        var itemsByPath: [String: CleanFailureItem] = [:]
+        for item in items {
+            let key = URL(fileURLWithPath: item.path).standardizedFileURL.path
+            pathToDisplayName[key] = item.displayName
+            pathToExpectedSizeBytes[key] = item.sizeBytes
+            itemsByPath[key] = item
+        }
+        guard let report = try? await fileDeleter.deleteItems(
+            at: items.map { URL(fileURLWithPath: $0.path) },
+            pathToDisplayName: pathToDisplayName,
+            pathToExpectedSizeBytes: pathToExpectedSizeBytes
+        ) else { return nil }
+
+        var movedBytes: Int64 = 0
+        for deleted in report.deletedItems {
+            let key = URL(fileURLWithPath: deleted.path).standardizedFileURL.path
+            guard let item = itemsByPath[key] else { continue }
+            resolveRetriedFailure(item: item, movedBytes: deleted.sizeBytes, session: session)
+            movedBytes += deleted.sizeBytes
+        }
+        if !report.ownershipWarningPaths.isEmpty { session.noteTrashOwnershipWarning() }
+        return movedBytes > 0 ? movedBytes : nil
     }
 
     /// Shared bookkeeping once a retried failure finally lands in the Trash: clear it

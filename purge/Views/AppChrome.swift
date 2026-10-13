@@ -805,7 +805,29 @@ struct SafeCleanupCelebrationOverlay: View {
     }
 
     private func retryAdministratorFailures() {
-        for item in administratorFailures { retryFailure(item) }
+        let leftovers = administratorFailures.filter(\.isMacOSInstallLeftover)
+        for item in administratorFailures where !item.isMacOSInstallLeftover { retryFailure(item) }
+        retryInstallLeftovers(leftovers)
+    }
+
+    /// Leftover macOS update files go in one request. One at a time, every one after
+    /// the first would be refused, because each move changes the folder's date.
+    private func retryInstallLeftovers(_ items: [CleanFailureItem]) {
+        let ids = Set(items.map(\.id))
+        guard !ids.isEmpty, retryingFailureIDs.isDisjoint(with: ids) else { return }
+        retryingFailureIDs.formUnion(ids)
+        Task {
+            let movedBytes = await store.retryInstallLeftoverFailures(items, session: session)
+            retryingFailureIDs.subtract(ids)
+            guard let movedBytes else { return }
+            if reduceMotion {
+                displayedBytes += movedBytes
+            } else {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    displayedBytes += movedBytes
+                }
+            }
+        }
     }
 
     private func revealAdministratorItemInFinder() {
@@ -1305,7 +1327,21 @@ private struct NeedsAdministratorPanel: View {
     let onPrimaryAction: () -> Void
     let onRevealInFinder: () -> Void
 
-    private var isSingle: Bool { items.count == 1 }
+    /// Locked apps, each its own unit.
+    private var apps: [CleanFailureItem] { items.filter { !$0.isMacOSInstallLeftover } }
+
+    /// Leftover macOS update files arrive one item per entry but are one row to the
+    /// user, so they count and read as a single unit (#127).
+    private var hasInstallLeftovers: Bool { items.contains(where: \.isMacOSInstallLeftover) }
+
+    private var unitNames: [String] {
+        apps.map(\.displayName) + (hasInstallLeftovers ? [String(localized: "Leftover macOS update files")] : [])
+    }
+
+    private var isSingle: Bool { unitNames.count == 1 }
+
+    /// The one unit is a single app, which can also be dragged to the Trash in Finder.
+    private var isSingleApp: Bool { isSingle && !hasInstallLeftovers }
 
     private var title: String {
         String(localized: "macOS needs your permission")
@@ -1314,7 +1350,7 @@ private struct NeedsAdministratorPanel: View {
     /// Only when several are held: name them so the count isn't a mystery.
     private var namesLine: String? {
         guard !isSingle else { return nil }
-        let names = items.map(\.displayName)
+        let names = unitNames
         switch names.count {
         case 2: return String(localized: "\(names[0]) and \(names[1])")
         case 3: return String(localized: "\(names[0]), \(names[1]), and \(names[2])")
@@ -1323,13 +1359,19 @@ private struct NeedsAdministratorPanel: View {
     }
 
     private var explanation: String {
-        isSingle
-            ? String(localized: "An administrator installed \(items[0].displayName), so macOS needs your permission before it can move to the Trash.")
+        if apps.isEmpty {
+            return String(localized: "These files belong to macOS, so moving them to the Trash needs secure removal.")
+        }
+        if hasInstallLeftovers {
+            return String(localized: "An administrator or macOS owns them, so macOS needs your permission before they can move to the Trash.")
+        }
+        return isSingle
+            ? String(localized: "An administrator installed \(apps[0].displayName), so macOS needs your permission before it can move to the Trash.")
             : String(localized: "An administrator installed them, so macOS needs your permission before they can move to the Trash.")
     }
 
     private var trustLine: String {
-        isSingle
+        isSingleApp
             ? String(localized: "Moved to the Trash, not deleted. Restore it anytime.")
             : String(localized: "Moved to the Trash, not deleted. Restore them anytime.")
     }
@@ -1340,7 +1382,11 @@ private struct NeedsAdministratorPanel: View {
         if needsApproval { return String(localized: "Open System Settings") }
         if !isHelperEnabled { return String(localized: "Set up secure removal") }
         if isHelperUnresponsive { return String(localized: "Try Again") }
-        return isSingle ? String(localized: "Remove \(items[0].displayName)") : String(localized: "Remove \(items.count) apps")
+        if isSingleApp { return String(localized: "Remove \(apps[0].displayName)") }
+        if apps.isEmpty { return String(localized: "Move to Trash") }
+        return hasInstallLeftovers
+            ? String(localized: "Remove \(unitNames.count) items")
+            : String(localized: "Remove \(apps.count) apps")
     }
 
     var body: some View {
@@ -1385,7 +1431,9 @@ private struct NeedsAdministratorPanel: View {
                 .buttonStyle(.purge(.primary, size: .large, width: .fill))
                 .disabled(isWorking)
 
-                if isSingle {
+                // Not for macOS's own files: Finder would only ask for a password,
+                // and the issue rules out any route but the helper.
+                if isSingleApp {
                     Button("Remove in Finder instead", action: onRevealInFinder)
                         .buttonStyle(.purge(.secondary, size: .large, width: .fill))
                 }
@@ -1411,7 +1459,13 @@ private struct NeedsAdministratorPanel: View {
 
     @ViewBuilder
     private var statusLine: some View {
-        if isHelperEnabled && isHelperUnresponsive {
+        if isHelperEnabled && isHelperUnresponsive && apps.isEmpty {
+            Text("Purge's secure removal helper isn't responding. Try again later.")
+                .font(AppStyle.Typography.body)
+                .foregroundStyle(AppColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if isHelperEnabled && isHelperUnresponsive {
             Text("Purge's secure removal helper isn't responding. Move the app to the Trash in Finder instead.")
                 .font(AppStyle.Typography.body)
                 .foregroundStyle(AppColors.textSecondary)

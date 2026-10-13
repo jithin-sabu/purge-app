@@ -105,13 +105,27 @@ nonisolated enum SimulatorRuntimeRemoval: Sendable, Equatable {
 /// never block the UI; progress reaches the UI via the `onProgress` buffer.
 nonisolated final class FileDeleter: Sendable {
     typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) -> SimulatorRuntimeRemoval
+    typealias PrivilegedMover = @Sendable (_ urls: [URL]) async -> PrivilegedMoveResult
 
     /// How a simulator runtime row is removed. The live one calls `simctl`; tests
     /// hand in a fake so the dispatch can be checked without CoreSimulator.
     private let simulatorRuntimeRemover: SimulatorRuntimeRemover
 
-    init(simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = FileDeleter.removeSimulatorRuntime) {
+    /// Moves root-owned paths to the Trash through the helper. Tests hand in a fake
+    /// so the routing can be checked without a registered helper.
+    private let privilegedMover: PrivilegedMover
+
+    /// Whether `macOS Install Data` still holds only leftovers from a finished update.
+    private let installLeftoverRule: @Sendable () -> Bool
+
+    init(
+        simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = FileDeleter.removeSimulatorRuntime,
+        privilegedMover: @escaping PrivilegedMover = { await PrivilegedUninstall.moveToTrash($0) },
+        installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() }
+    ) {
         self.simulatorRuntimeRemover = simulatorRuntimeRemover
+        self.privilegedMover = privilegedMover
+        self.installLeftoverRule = installLeftoverRule
     }
 
     /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
@@ -134,12 +148,24 @@ nonisolated final class FileDeleter: Sendable {
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
         var skippedItems: [SkippedDeletionItem] = []
+        var ownershipWarningPaths: [String] = []
+        var installLeftovers: [URL] = []
         let volumeURL = FileManager.default.homeDirectoryForCurrentUser
         let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
 
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path
             let friendlyTitle = pathToDisplayName[standardizedPath]
+
+            // Root-owned, so a plain Trash move can only fail. The helper moves them
+            // after this loop, all in one request (#127).
+            if MacOSInstallLeftovers.isEntryPath(standardizedPath) {
+                if DeletionSafetyPolicy.isOfferedForCleanup(url),
+                   DeletionSafetyPolicy.evaluate(url) == .allow {
+                    installLeftovers.append(url)
+                }
+                continue
+            }
 
             if let runtimeID = simulatorRuntimeIDsByPath[standardizedPath] {
                 onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
@@ -298,6 +324,20 @@ nonisolated final class FileDeleter: Sendable {
             }
         }
 
+        if !installLeftovers.isEmpty {
+            await moveInstallLeftovers(
+                installLeftovers,
+                pathToDisplayName: pathToDisplayName,
+                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                bytesMovedToTrash: &bytesMovedToTrash,
+                deletedItems: &deletedItems,
+                failedItems: &failedItems,
+                skippedItems: &skippedItems,
+                ownershipWarningPaths: &ownershipWarningPaths,
+                onProgress: onProgress
+            )
+        }
+
         let capacityAfter = VolumeCapacityReader.read(for: volumeURL)
         let report = DeletionReport(
             bytesMovedToTrash: bytesMovedToTrash,
@@ -307,9 +347,65 @@ nonisolated final class FileDeleter: Sendable {
             skippedItems: skippedItems,
             capacityBefore: capacityBefore,
             capacityAfter: capacityAfter,
-            timestamp: Date()
+            timestamp: Date(),
+            ownershipWarningPaths: ownershipWarningPaths
         )
         return report
+    }
+
+    /// Hands the selected `macOS Install Data` entries to the helper in one request.
+    /// One request matters: every move changes the folder's date, so the helper
+    /// decides the date rule once, before the first move. The rule is checked here
+    /// too, so a waiting update is never even sent. There is no other route: with
+    /// the helper off, the entries come back as one-time setup.
+    private func moveInstallLeftovers(
+        _ urls: [URL],
+        pathToDisplayName: [String: String],
+        pathToExpectedSizeBytes: [String: Int64],
+        bytesMovedToTrash: inout Int64,
+        deletedItems: inout [DeletedItem],
+        failedItems: inout [FailedDeletionItem],
+        skippedItems: inout [SkippedDeletionItem],
+        ownershipWarningPaths: inout [String],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+    ) async {
+        guard installLeftoverRule() else {
+            for url in urls {
+                skippedItems.append(SkippedDeletionItem(
+                    path: url.path,
+                    displayName: pathToDisplayName[url.standardizedFileURL.path],
+                    reason: "This file was skipped for safety",
+                    isUserVisible: true
+                ))
+            }
+            return
+        }
+
+        let first = urls[0].standardizedFileURL.path
+        onProgress?(.itemStarted(name: pathToDisplayName[first] ?? urls[0].lastPathComponent))
+        // Each starts as a failure, so the shared folding below credits only what the
+        // helper reports moved.
+        let pending = urls.map { url in
+            let key = url.standardizedFileURL.path
+            return FailedDeletionItem(
+                path: url.path,
+                displayName: pathToDisplayName[key],
+                reason: .unknown,
+                sizeBytes: pathToExpectedSizeBytes[key] ?? FolderSizing.directoryByteSize(at: url)
+            )
+        }
+        failedItems.append(contentsOf: pending)
+        let result = await privilegedMover(urls)
+        foldPrivilegedResult(
+            result,
+            candidateIDs: Set(pending.map(\.id)),
+            bytesMovedToTrash: &bytesMovedToTrash,
+            deletedItems: &deletedItems,
+            failedItems: &failedItems,
+            ownershipWarningPaths: &ownershipWarningPaths,
+            pathToDisplayName: pathToDisplayName,
+            onProgress: onProgress
+        )
     }
 
     /// Dedicated route for the Large & Old Files feature. It only handles
@@ -420,9 +516,33 @@ nonisolated final class FileDeleter: Sendable {
         }
         guard !candidates.isEmpty else { return }
 
-        let result = await PrivilegedUninstall.moveToTrash(
-            candidates.map { URL(fileURLWithPath: $0.path) }
+        let result = await privilegedMover(candidates.map { URL(fileURLWithPath: $0.path) })
+        foldPrivilegedResult(
+            result,
+            candidateIDs: Set(candidates.map(\.id)),
+            bytesMovedToTrash: &bytesMovedToTrash,
+            deletedItems: &deletedItems,
+            failedItems: &failedItems,
+            ownershipWarningPaths: &ownershipWarningPaths,
+            pathToDisplayName: pathToDisplayName,
+            onProgress: onProgress
         )
+    }
+
+    /// Folds a helper result back into the run. Moved items are credited; an item
+    /// the helper may still be finishing counts only if it is gone from disk. A
+    /// candidate still present is a real failure when the helper tried, and one-time
+    /// setup (`.needsAdministrator`) when it isn't on. Other failures pass through.
+    private func foldPrivilegedResult(
+        _ result: PrivilegedMoveResult,
+        candidateIDs: Set<UUID>,
+        bytesMovedToTrash: inout Int64,
+        deletedItems: inout [DeletedItem],
+        failedItems: inout [FailedDeletionItem],
+        ownershipWarningPaths: inout [String],
+        pathToDisplayName: [String: String],
+        onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
+    ) {
         let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
         let indeterminatePaths = Set(result.indeterminate.map { $0.standardizedFileURL.path })
         let ownershipIncompletePaths = Set(result.ownershipIncomplete.map { $0.standardizedFileURL.path })
@@ -457,7 +577,7 @@ nonisolated final class FileDeleter: Sendable {
                 } else {
                     recordMoved(item, standardized: standardized)
                 }
-            } else if candidates.contains(where: { $0.id == item.id }) {
+            } else if candidateIDs.contains(item.id) {
                 if result.helperAvailable {
                     // An enabled helper attempted the move and the item is still here:
                     // that is a real failure, not a missing permission. Keep the honest
