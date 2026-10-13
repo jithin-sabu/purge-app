@@ -92,10 +92,10 @@ enum AppUninstallScanPolicy {
         // Never through this gate: system locations.
         if path.hasPrefix("/System/") { return false }
 
-        // An app bundle inside an app root, up to `AppBundleReach.maxFolderDepth`
-        // folders down. This is the same reach the picker walks, so every bundle
-        // it offers can actually be trashed. Deeper paths, and any path through
-        // another bundle, stay out, so the gate never reaches bundle internals.
+        // An app bundle inside an app root, at any depth the picker walks
+        // (`AppBundleReach`), so every bundle it offers can actually be trashed.
+        // A path through another bundle or package, a symlink, or a hidden
+        // folder stays out, so the gate never reaches bundle internals.
         if std.pathExtension == "app" {
             let appRoots = installedAppRoots().map { $0.standardizedFileURL.path }
             return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil

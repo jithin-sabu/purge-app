@@ -5,8 +5,8 @@ import Foundation
 /// uninstaller can take it, and if not, what to tell the person.
 ///
 /// The checks mirror what the App Uninstaller lists: app bundles in
-/// `/Applications` or `~/Applications`, at most two folders down, never Apple's
-/// apps under `/System` and never Purge itself. An app that passes here is one
+/// `/Applications` or `~/Applications` at any depth but never inside another
+/// app or package, never Apple's apps under `/System`, and never Purge itself. An app that passes here is one
 /// the uninstaller's list will contain once it loads, so `IntentRouter` can
 /// open the review on it.
 nonisolated enum ExternalUninstallRequest {
@@ -20,9 +20,9 @@ nonisolated enum ExternalUninstallRequest {
         case severalApps(count: Int)
         /// Outside the folders the uninstaller lists.
         case outsideApplications(name: String)
-        /// Inside an app folder but left off the list: deeper than the
-        /// uninstaller looks, or a background part of another app.
-        case notListed(name: String)
+        /// Inside an app folder, but within another app or package, so the
+        /// uninstaller does not list it on its own.
+        case insideAnotherApp(name: String)
         /// An Apple app under `/System`.
         case appleApp(name: String)
         /// Purge itself.
@@ -48,10 +48,10 @@ nonisolated enum ExternalUninstallRequest {
                     String(localized: "\(name) is outside the Applications folder"),
                     String(localized: "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move \(name) there first, or drag it to the Trash yourself.")
                 )
-            case .notListed(let name):
+            case .insideAnotherApp(let name):
                 return (
-                    String(localized: "\(name) is not in Purge's app list"),
-                    String(localized: "Purge lists apps up to two folders inside Applications, and leaves out background parts of other apps. To remove \(name), uninstall the app it belongs to, or drag it to the Trash yourself.")
+                    String(localized: "\(name) is part of another app"),
+                    String(localized: "\(name) is inside another app or package, so Purge does not list it on its own. To remove it, uninstall the app it belongs to.")
                 )
             case .appleApp(let name):
                 return (
@@ -98,11 +98,9 @@ nonisolated enum ExternalUninstallRequest {
         guard rootPaths.contains(where: { path.hasPrefix($0 + "/") }) else {
             return .outsideApplications(name: name)
         }
-        // The same reach and helper rule the uninstaller's list uses
-        // (`AppBundleReach.appBundleURLs(in:)`).
-        guard let depth = AppBundleReach.folderDepth(ofAppAtPath: path, roots: rootPaths),
-              AppBundleReach.isListedApp(depth: depth, info: info) else {
-            return .notListed(name: name)
+        // The same reach the uninstaller's list uses (`AppBundleReach`).
+        guard AppBundleReach.folderDepth(ofAppAtPath: path, roots: rootPaths) != nil else {
+            return .insideAnotherApp(name: name)
         }
         return .uninstall(appID: path, name: name)
     }

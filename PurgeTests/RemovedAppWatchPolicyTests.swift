@@ -54,7 +54,7 @@ struct RemovedAppWatchPolicyTests {
     }
 
     @Test
-    func onlyTopLevelChangesAreRelevant() {
+    func onlyChangesOutsideBundlesAreRelevant() {
         let roots = ["/Applications", "/Users/x/Applications"]
         #expect(RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications/", roots: roots))
         #expect(RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications/Utilities/", roots: roots))
@@ -66,8 +66,10 @@ struct RemovedAppWatchPolicyTests {
         #expect(!RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications/Foo.app/Contents/", roots: roots))
         #expect(!RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications/Vendor/Foo.app/", roots: roots))
         #expect(!RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications/Vendor/Foo.app/Contents/", roots: roots))
-        // Deeper than the uninstaller lists.
-        #expect(!RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications/A/B/C/", roots: roots))
+        // Any folder further down that the uninstaller walks.
+        #expect(RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications/A/B/C/", roots: roots))
+        // A hidden folder the walk never enters.
+        #expect(!RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications/A/.cache/", roots: roots))
         // A sibling folder that only shares the root's prefix.
         #expect(!RemovedAppWatchPolicy.isRelevantChange(atPath: "/Applications Old/", roots: roots))
         #expect(!RemovedAppWatchPolicy.isRelevantChange(atPath: "/Library/", roots: roots))
@@ -428,7 +430,10 @@ struct RemovedAppWatchPolicyTests {
         #expect(valid("/Applications/Vendor/Rectangle.app"))
         #expect(valid("/Users/x/Applications/Rectangle.app"))
 
-        #expect(!valid("/Applications/A/B/Rectangle.app"))
+        // Any depth the watcher indexes, as with AutoCAD (#143).
+        #expect(valid("/Applications/Autodesk/AutoCAD 2026/AutoCAD 2026.app"))
+        #expect(valid("/Applications/A/B/C/Rectangle.app"))
+        #expect(!valid("/Applications/Host.app/Contents/Rectangle.app"))
         #expect(!valid("/Library/LaunchDaemons/Rectangle.app"))
         #expect(!valid("/Applications/../Library/Rectangle.app"))
         #expect(!valid("/Applications/Rectangle"))
@@ -529,10 +534,13 @@ struct ApplicationsFolderWatcherTests {
         let product = vendor.appendingPathComponent("Product", isDirectory: true)
         try fm.createDirectory(at: product, withIntermediateDirectories: true)
         try makeBundle(in: product, name: "Gamma", bundleID: "com.test.gamma")
+        let deeper = product.appendingPathComponent("Tools", isDirectory: true)
+        try fm.createDirectory(at: deeper, withIntermediateDirectories: true)
+        try makeBundle(in: deeper, name: "Delta", bundleID: "com.test.delta")
 
         let snapshot = ApplicationsFolderWatcher.snapshot(roots: [root], reusing: [:])
-        #expect(Set(snapshot.values.compactMap(\.bundleID)) == ["com.test.alpha", "com.test.beta", "com.test.gamma"])
-        #expect(Set(snapshot.values.map(\.name)) == ["Alpha", "Beta", "Gamma"])
+        #expect(Set(snapshot.values.compactMap(\.bundleID)) == ["com.test.alpha", "com.test.beta", "com.test.gamma", "com.test.delta"])
+        #expect(Set(snapshot.values.map(\.name)) == ["Alpha", "Beta", "Gamma", "Delta"])
     }
 
     /// A root that exists but cannot be listed must not read as "every app deleted".

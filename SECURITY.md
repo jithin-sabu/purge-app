@@ -74,8 +74,8 @@ it checks every request four ways:
   genuine copy of Purge.
 - **Only uninstall locations.** The helper checks every path itself instead of
   trusting the app. It accepts an app bundle in `/Applications` or
-  `~/Applications`, up to two folders down and never inside another bundle,
-  or a direct child of a folder the uninstaller scans for leftovers, such as
+  `~/Applications` at any depth, never inside another bundle or package, or a
+  direct child of a folder the uninstaller scans for leftovers, such as
   `~/Library/Application Support` or `/Library/LaunchDaemons`. The full list is in
   [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift).
 - **No symlink tricks.** Paths are opened one component at a time without

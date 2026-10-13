@@ -112,9 +112,7 @@ enum OrphanLeftoverScanPolicy {
 
     /// Enumerates `.app` bundle identifiers in the user-facing app roots, as deep
     /// as the uninstaller looks (vendors group their apps, e.g.
-    /// `/Applications/Utilities/…`). Background helpers are counted too, since
-    /// knowing about more apps only means keeping more. System apps are not
-    /// walked: `owns` reaches them through LaunchServices, and counting them
+    /// `/Applications/Utilities/…`). System apps are not walked: `owns` reaches them through LaunchServices, and counting them
     /// would inflate `looksComplete` past the point where it can catch an empty
     /// world.
     nonisolated static func makeInstalledAppIndex() -> InstalledAppIndex {
@@ -130,7 +128,7 @@ enum OrphanLeftoverScanPolicy {
 
         for root in AppUninstallScanPolicy.installedAppRoots() {
             guard fm.fileExists(atPath: root.path) else { continue }
-            guard let bundles = AppBundleReach.appBundleURLs(in: root, includingHelpers: true) else {
+            guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
                 rootsReadable = false
                 continue
             }

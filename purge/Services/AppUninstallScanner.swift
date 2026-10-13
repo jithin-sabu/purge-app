@@ -75,8 +75,8 @@ nonisolated final class AppUninstallScanner {
         }
     }
 
-    /// `.app` bundles in each app root, up to two folders down (vendors that
-    /// group their apps, e.g. `/Applications/Utilities/…` or
+    /// `.app` bundles in each app root at any depth (vendors that group their
+    /// apps, e.g. `/Applications/Utilities/…` or
     /// `/Applications/Autodesk/AutoCAD 2026/…`). `AppBundleReach` owns the
     /// reach, so the delete gate accepts exactly what is listed here.
     private static func discoverAppBundleURLs() -> [URL] {

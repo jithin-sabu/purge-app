@@ -42,9 +42,11 @@ struct PrivilegedHelperPathPolicyTests {
         #expect(!isAllowed("/private/etc/passwd"))
         #expect(!isAllowed("/Users/other/Library/Caches/com.vendor.app"))
         #expect(!isAllowed("/Applications/not-an-app"))
-        #expect(!isAllowed("/Applications/Group/Product/TooDeep/App.app"))
+        #expect(isAllowed("/Applications/Group/Product/Deeper/App.app"))
         #expect(!isAllowed("/Applications/Host.app/Contents/Inner.app"))
         #expect(!isAllowed("/Applications/Vendor/Host.app/Inner.app"))
+        #expect(!isAllowed("/Applications/Vendor/Pane.prefPane/Contents/Inner.app"))
+        #expect(!isAllowed("/Applications/.Hidden/Inner.app"))
     }
 
     @Test("Refuses paths redirected through a symlink")
@@ -81,7 +83,10 @@ struct PrivilegedHelperPathPolicyTests {
             "/Applications/V/A.app",
             "/Applications/V/P/A.app",
             "/Applications/V/P/Q/A.app",
+            "/Applications/V/P/Q/R/S/A.app",
             "/Applications/V/Kit.framework/A.app",
+            "/Applications/V/Pane.prefPane/Contents/A.app",
+            "/Applications/.Hidden/A.app",
             "/Applications/Host.app/Contents/A.app",
             "/Users/example/Applications/V/P/A.app",
             "/Users/example/Applications/V/P/Q/A.app",

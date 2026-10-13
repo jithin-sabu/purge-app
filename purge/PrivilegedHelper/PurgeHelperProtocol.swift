@@ -17,7 +17,8 @@ enum PurgeHelperConstants {
     /// an app that talks the v3 protocol re-registers any surviving v2 helper first.
     /// v4 opens the Trash search-only, so privacy protection no longer blocks it, and
     /// quits when idle, so an update never leaves an old copy running.
-    /// v5 accepts app bundles two folders inside an Applications folder (#143).
+    /// v5 accepts app bundles at any depth inside an Applications folder, never
+    /// through a package, symlink, or hidden folder (#143).
     static let version = "5"
 
     /// The daemon property list bundled at `Contents/Library/LaunchDaemons/`, named
@@ -63,8 +64,8 @@ enum PurgeHelperConstants {
     ]
 
     /// Returns true only for locations the app-uninstall scanner can produce:
-    /// an app bundle in an Applications folder (up to two folders down, never
-    /// through another bundle), or one direct child of a known leftover
+    /// an app bundle in an Applications folder (at any depth, never through
+    /// another bundle or package), or one direct child of a known leftover
     /// directory. Symlinks are rejected so an allowed-looking path cannot
     /// redirect the root helper somewhere else between path components.
     static func isAllowedUninstallLocation(_ url: URL, homeDirectory: URL) -> Bool {
