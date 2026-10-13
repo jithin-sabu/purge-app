@@ -9,6 +9,7 @@ nonisolated enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable
     case archive
     case document
     case aiModel
+    case virtualMachine
     case other
 
     var id: String { rawValue }
@@ -22,6 +23,7 @@ nonisolated enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable
         case .archive: return String(localized: "Archives")
         case .document: return String(localized: "Documents")
         case .aiModel: return String(localized: "AI Models")
+        case .virtualMachine: return String(localized: "Virtual Machines")
         case .other: return String(localized: "Other")
         }
     }
@@ -35,6 +37,7 @@ nonisolated enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable
         case .archive: return "archivebox"
         case .document: return "doc.text"
         case .aiModel: return "cpu"
+        case .virtualMachine: return "desktopcomputer"
         case .other: return "doc"
         }
     }
@@ -49,12 +52,111 @@ nonisolated enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable
             return .image
         case "pdf":
             return .pdf
-        case "zip", "rar", "7z", "tar", "gz", "bz2", "dmg", "pkg", "iso", "xip":
+        case "zip", "rar", "7z", "tar", "gz", "bz2", "dmg", "pkg", "iso", "xip", "ipsw":
             return .archive
         case "doc", "docx", "pages", "xls", "xlsx", "numbers", "ppt", "pptx", "key", "txt", "rtf", "csv", "epub":
             return .document
         default:
-            return .other
+            return VirtualMachineApp(bundleExtension: ext) == nil ? .other : .virtualMachine
+        }
+    }
+}
+
+/// The app that owns a virtual machine bundle. The app keeps its own list of
+/// VMs, so a VM trashed behind its back stays listed there as missing.
+nonisolated enum VirtualMachineApp: String, CaseIterable, Hashable, Sendable {
+    case parallels
+    case utm
+    case vmwareFusion
+
+    init?(bundleExtension ext: String) {
+        let ext = ext.lowercased()
+        guard let app = Self.allCases.first(where: { $0.bundleExtension == ext }) else { return nil }
+        self = app
+    }
+
+    var bundleExtension: String {
+        switch self {
+        case .parallels: return "pvm"
+        case .utm: return "utm"
+        case .vmwareFusion: return "vmwarevm"
+        }
+    }
+
+    /// Product names, not translated.
+    var displayName: String {
+        switch self {
+        case .parallels: return "Parallels Desktop"
+        case .utm: return "UTM"
+        case .vmwareFusion: return "VMware Fusion"
+        }
+    }
+
+    var bundleID: String {
+        switch self {
+        case .parallels: return "com.parallels.desktop.console"
+        case .utm: return "com.utmapp.UTM"
+        case .vmwareFusion: return "com.vmware.fusion"
+        }
+    }
+}
+
+/// What a Large Files row is, when its size alone doesn't say. A 25 GB `.ipsw`
+/// reads as an unknown blob without a label, and people hesitate to act on it.
+nonisolated enum LargeFileKind: Hashable, Sendable {
+    case restoreImage
+    /// `appInstalled` is looked up once per scan, never while drawing a row.
+    case virtualMachine(VirtualMachineApp, appInstalled: Bool)
+    case unfinishedDownload
+
+    /// Folders that are one item: listed and trashed whole, never walked. A
+    /// file inside a VM is part of a disk, and trashing it alone breaks the VM.
+    /// Of the unfinished downloads only Safari's `.download` is a folder; the
+    /// others are files, and a user folder named `Chapter.part` is not a download.
+    static let wholeBundleExtensions: Set<String> = Set(VirtualMachineApp.allCases.map(\.bundleExtension))
+        .union(["download"])
+
+    /// VM kinds come back with `appInstalled: false`. The scanner fills it in.
+    static func kind(forExtension ext: String) -> LargeFileKind? {
+        let ext = ext.lowercased()
+        if ext == "ipsw" { return .restoreImage }
+        if let app = VirtualMachineApp(bundleExtension: ext) {
+            return .virtualMachine(app, appInstalled: false)
+        }
+        if DeletionSafetyPolicy.unfinishedDownloadExtensions.contains(ext) { return .unfinishedDownload }
+        return nil
+    }
+
+    var badgeText: String {
+        switch self {
+        case .restoreImage:
+            return String(localized: "Restore image")
+        case .virtualMachine(let app, _):
+            return String(localized: "Virtual machine · \(app.displayName)")
+        case .unfinishedDownload:
+            return String(localized: "Unfinished download")
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .restoreImage:
+            return String(localized: "macOS restore image. Only needed to set up a Mac, device or virtual machine. Safe to remove once setup is done.")
+        case .virtualMachine(let app, let appInstalled):
+            guard appInstalled else {
+                return String(localized: "Virtual machine. Everything inside it goes with it.")
+            }
+            // Whole sentences per app, so each one translates as a unit.
+            switch app {
+            case .parallels:
+                return String(localized: "Virtual machine. Everything inside it goes with it. Remove it in Parallels Desktop so the app's list of virtual machines stays right.")
+            case .utm:
+                return String(localized: "Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right.")
+            case .vmwareFusion:
+                return String(localized: "Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right.")
+            }
+        case .unfinishedDownload:
+            return String(localized: "Unfinished download. It can't be opened as it is. Remove it unless the download is still running.")
         }
     }
 }
@@ -87,6 +189,10 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// unbadged.
     let syncsWithICloud: Bool
 
+    /// What the row is when its size alone doesn't say: a restore image, a
+    /// virtual machine, an unfinished download. Nil for everything else.
+    let kind: LargeFileKind?
+
     /// Stored (not computed) so identity checks in row bindings, sorting, and list
     /// animations don't re-standardize the URL on every access — the repeated cost
     /// made selection feel delayed compared to App Caches.
@@ -96,9 +202,10 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// same reason `id` is stored: it's read for every row on every keystroke, so
     /// rebuilding it per access would re-walk the URL hundreds of times a character.
     ///
-    /// Holds the display name, the raw parent path, and the `sourceLabel` when there
-    /// is one — so a query finds a row by what it's called *or* where it lives. The
-    /// last two differ for labelled rows: an Ollama model shows "Ollama" but sits in
+    /// Holds the display name, the raw parent path, the `sourceLabel` when there
+    /// is one, and the kind's badge ("Virtual machine") when there is one — so a
+    /// query finds a row by what it's called, what it is, *or* where it lives. The
+    /// path and label differ for labelled rows: an Ollama model shows "Ollama" but sits in
     /// `~/.ollama/models`, and both should be findable. Deliberately uses the raw
     /// path rather than `locationLabel`/`displayDirectoryPath`: that helper resolves
     /// the home directory through FileManager and is MainActor-isolated under this
@@ -116,7 +223,8 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         displayNameOverride: String? = nil,
         sourceLabel: String? = nil,
         componentPaths: [URL]? = nil,
-        syncsWithICloud: Bool = false
+        syncsWithICloud: Bool = false,
+        kind: LargeFileKind? = nil
     ) {
         self.path = path
         self.sizeBytes = sizeBytes
@@ -127,12 +235,15 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         self.sourceLabel = sourceLabel
         self.componentPaths = (componentPaths ?? [path]).map(\.standardizedFileURL)
         self.syncsWithICloud = syncsWithICloud
+        let kind = kind ?? LargeFileKind.kind(forExtension: path.pathExtension)
+        self.kind = kind
         let standardized = path.standardizedFileURL
         self.id = standardized.path
         self.searchHaystack = [
             displayNameOverride ?? path.lastPathComponent,
             standardized.deletingLastPathComponent().path,
             sourceLabel,
+            kind?.badgeText,
         ]
         .compactMap { $0 }
         .joined(separator: "\n")
