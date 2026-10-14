@@ -140,6 +140,90 @@ struct SimulatorDeviceRemovalTests {
         #expect(!Simctl.xcrunRefused(Self.output(0, stderr: "xcrun: error: x", timedOut: true)))
     }
 
+    // MARK: - Which simctl a call reaches
+
+    /// Records each launch and answers xcrun and the framework copy separately.
+    private final class FakeLaunches: @unchecked Sendable {
+        var launched: [(path: String, arguments: [String])] = []
+        let xcrunOutput: ProcessRunner.Output?
+        let frameworkOutput: ProcessRunner.Output?
+
+        init(xcrun: ProcessRunner.Output?, framework: ProcessRunner.Output?) {
+            xcrunOutput = xcrun
+            frameworkOutput = framework
+        }
+
+        func launch(_ path: String, _ arguments: [String], _ timeout: TimeInterval) -> ProcessRunner.Output? {
+            launched.append((path, arguments))
+            return path == Simctl.xcrunPath ? xcrunOutput : frameworkOutput
+        }
+    }
+
+    private func dispatch(
+        _ fake: FakeLaunches,
+        launcher: Simctl.Launcher? = .xcrun,
+        frameworkExists: Bool = true
+    ) -> ProcessRunner.Output? {
+        Simctl.dispatch(
+            ["delete", udid],
+            timeout: 1,
+            launcher: launcher,
+            launch: { fake.launch($0, $1, $2) },
+            isExecutable: { $0 == Simctl.frameworkPath && frameworkExists }
+        )
+    }
+
+    @Test func xcrunRefusalAsksTheFrameworkCopyOnce() {
+        let fake = FakeLaunches(xcrun: Self.output(69, stderr: Self.licenseText), framework: Self.output(0))
+        #expect(dispatch(fake)?.status == 0)
+        #expect(fake.launched.map(\.path) == [Simctl.xcrunPath, Simctl.frameworkPath])
+        #expect(fake.launched.last?.arguments == ["delete", udid])
+    }
+
+    /// simctl ran and said no. Asking a second simctl would run the delete twice.
+    @Test(arguments: [
+        "Invalid device: 0C6F3F7E-6B0E-4E59-9E57-5D1C8F1A2B3C",
+        SimulatorDeviceRemovalTests.outOfDateText,
+    ])
+    func simctlsOwnErrorIsNotRetried(stderr: String) {
+        let fake = FakeLaunches(xcrun: Self.output(148, stderr: stderr), framework: Self.output(0))
+        #expect(dispatch(fake)?.status == 148)
+        #expect(fake.launched.map(\.path) == [Simctl.xcrunPath])
+    }
+
+    @Test func successIsNotRetried() {
+        let fake = FakeLaunches(xcrun: Self.output(0), framework: Self.output(0))
+        _ = dispatch(fake)
+        #expect(fake.launched.count == 1)
+    }
+
+    /// The license text names the fix; "could not launch" would not.
+    @Test func xcrunsAnswerIsKeptWhenTheFrameworkCopyCannotLaunch() {
+        let fake = FakeLaunches(xcrun: Self.output(69, stderr: Self.licenseText), framework: nil)
+        let output = dispatch(fake)
+        #expect(output?.status == 69)
+        #expect(CleanFailureReason.fromSimctl(output) == .xcodeLicenseNotAccepted)
+    }
+
+    @Test func xcrunsAnswerIsKeptWhenThereIsNoFrameworkCopy() {
+        let fake = FakeLaunches(xcrun: Self.output(72, stderr: Self.missingToolText), framework: Self.output(0))
+        #expect(dispatch(fake, frameworkExists: false)?.status == 72)
+        #expect(fake.launched.map(\.path) == [Simctl.xcrunPath])
+    }
+
+    @Test func frameworkLauncherNeverGoesThroughXcrun() {
+        let fake = FakeLaunches(xcrun: Self.output(0), framework: Self.output(0))
+        _ = dispatch(fake, launcher: .framework)
+        #expect(fake.launched.map(\.path) == [Simctl.frameworkPath])
+        #expect(fake.launched.first?.arguments == ["delete", udid])
+    }
+
+    @Test func noLauncherRunsNothing() {
+        let fake = FakeLaunches(xcrun: Self.output(0), framework: Self.output(0))
+        #expect(dispatch(fake, launcher: nil) == nil)
+        #expect(fake.launched.isEmpty)
+    }
+
     @Test func timeoutStaysUnknown() {
         #expect(CleanFailureReason.fromSimctl(Self.output(0, timedOut: true)) == .unknown)
     }

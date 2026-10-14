@@ -151,6 +151,13 @@ struct SimulatorRuntimeTests {
         #expect(builds == ["24A5390e", "24R5325e"])
     }
 
+    /// An answer that names no build is unknown, so Xcode's own runtime can't
+    /// pass as unused and be marked Safe to Clean.
+    @Test(arguments: ["not json", "{}", #"{"iphoneos26.0": {"sdkBuild": "24A5390e"}}"#])
+    func matchAnswerWithNoBuildIsUnknown(answer: String) {
+        #expect(SimulatorRuntime.xcodeRuntimeBuilds(fromMatchList: Data(answer.utf8)) == nil)
+    }
+
     @Test func platformNamesFallBackToTheRuntimeIdentifier() {
         #expect(SimulatorRuntime.platformName(
             runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.xrOS-2-4", platformIdentifier: nil

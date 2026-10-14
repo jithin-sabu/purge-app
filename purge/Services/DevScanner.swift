@@ -248,15 +248,18 @@ nonisolated final class DevScanner {
             deviceCounts = SimulatorRuntime.deviceCounts(fromDevicesList: devices.stdout)
         }
 
-        // Same for the runtime Xcode builds new simulators on: a failed lookup is
-        // "unknown", not "none". The one exception is a Mac without Xcode, reached
-        // through the framework's own simctl: there is no SDK to match, so nothing
-        // can be a default, and the lookup fails for that reason alone.
+        // Same for the runtime Xcode builds new simulators on: a failed or empty
+        // lookup is "unknown", not "none". The one exception is a Mac without Xcode,
+        // reached through the framework's own simctl: there is no SDK to match, so
+        // nothing can be a default, and the lookup comes back empty for that reason
+        // alone. A refused xcrun leaves the launcher at `.xcrun`, so a Mac whose
+        // Xcode license is pending stays "unknown".
         var xcodeBuilds: Set<String>?
         if let match = await Simctl.runAsync(["runtime", "match", "list", "-j"], timeout: Self.simctlListTimeout),
            match.succeeded {
             xcodeBuilds = SimulatorRuntime.xcodeRuntimeBuilds(fromMatchList: match.stdout)
-        } else if Simctl.launcher() == .framework {
+        }
+        if xcodeBuilds == nil, Simctl.launcher() == .framework {
             xcodeBuilds = []
         }
 

@@ -71,32 +71,38 @@ nonisolated enum Simctl {
     /// Runs `simctl <arguments>` and returns its output, or `nil` when no `simctl`
     /// could be launched. Blocks the calling thread like `ProcessRunner.run`.
     static func run(_ arguments: [String], timeout: TimeInterval) -> ProcessRunner.Output? {
-        switch launcher() {
+        dispatch(
+            arguments,
+            timeout: timeout,
+            launcher: launcher(),
+            launch: { ProcessRunner.run(executablePath: $0, arguments: $1, timeout: $2) },
+            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) }
+        )
+    }
+
+    /// `run` with the launcher, the process launch and the executable check handed
+    /// in, so tests can check which binary each call reaches.
+    static func dispatch(
+        _ arguments: [String],
+        timeout: TimeInterval,
+        launcher: Launcher?,
+        launch: (_ executablePath: String, _ arguments: [String], _ timeout: TimeInterval) -> ProcessRunner.Output?,
+        isExecutable: (_ path: String) -> Bool
+    ) -> ProcessRunner.Output? {
+        switch launcher {
         case .xcrun:
-            let output = ProcessRunner.run(
-                executablePath: xcrunPath,
-                arguments: ["simctl"] + arguments,
-                timeout: timeout
-            )
+            let output = launch(xcrunPath, ["simctl"] + arguments, timeout)
             // `xcrun --find` passing does not mean xcrun will run the tool. An Xcode
             // update waiting on its license, for one, stops xcrun before simctl
             // starts. simctl never ran, so asking the framework copy is not a
-            // second attempt at the same work.
-            if let output, xcrunRefused(output),
-               FileManager.default.isExecutableFile(atPath: frameworkPath) {
-                return ProcessRunner.run(
-                    executablePath: frameworkPath,
-                    arguments: arguments,
-                    timeout: timeout
-                )
+            // second attempt at the same work. When that copy can't launch either,
+            // xcrun's own answer is kept: it names the cause.
+            if let output, xcrunRefused(output), isExecutable(frameworkPath) {
+                return launch(frameworkPath, arguments, timeout) ?? output
             }
             return output
         case .framework:
-            return ProcessRunner.run(
-                executablePath: frameworkPath,
-                arguments: arguments,
-                timeout: timeout
-            )
+            return launch(frameworkPath, arguments, timeout)
         case nil:
             return nil
         }

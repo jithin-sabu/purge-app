@@ -135,9 +135,13 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     /// Runtime builds the selected Xcode picks for each SDK, from
     /// `simctl runtime match list -j`. Deleting one of these only makes Xcode
     /// download it again the next time a simulator is created.
-    static func xcodeRuntimeBuilds(fromMatchList data: Data) -> Set<String> {
+    ///
+    /// `nil` when the answer names no build at all, unreadable or empty. That is
+    /// "unknown", never "Xcode uses none of them": an empty set would let Xcode's
+    /// own runtime be marked Safe to Clean.
+    static func xcodeRuntimeBuilds(fromMatchList data: Data) -> Set<String>? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return []
+            return nil
         }
         var builds: Set<String> = []
         for rawEntry in root.values {
@@ -146,7 +150,7 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
                 builds.insert(chosen)
             }
         }
-        return builds
+        return builds.isEmpty ? nil : builds
     }
 
     static func platformName(runtimeIdentifier: String, platformIdentifier: String?) -> String {
