@@ -176,11 +176,18 @@ enum CacheDiscoveryPaths {
         let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: downloads,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else { return [] }
         return entries.filter { url in
-            guard DeletionSafetyPolicy.unfinishedDownloadExtensions.contains(url.pathExtension.lowercased()) else {
+            let ext = url.pathExtension.lowercased()
+            guard DeletionSafetyPolicy.unfinishedDownloadExtensions.contains(ext) else {
+                return false
+            }
+            // A folder's own date doesn't change when a file inside it does, and
+            // only Safari writes a download as a folder.
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+            if isDirectory, !DeletionSafetyPolicy.unfinishedDownloadFolderExtensions.contains(ext) {
                 return false
             }
             let modified = FolderSizing.contentModificationDate(at: url)

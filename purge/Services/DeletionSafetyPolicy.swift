@@ -830,13 +830,19 @@ enum DeletionSafetyPolicy {
     /// Parallels' `.prlupd-part`. Large Files labels the same set.
     nonisolated static let unfinishedDownloadExtensions: Set<String> = ["crdownload", "part", "download", "prlupd-part"]
 
+    /// Only Safari's `.download` is a folder. The others are single files, so
+    /// for them only the entry itself is allowed, never a path below it: a
+    /// folder named `Notes.part` holds the user's files, not a download.
+    nonisolated static let unfinishedDownloadFolderExtensions: Set<String> = ["download"]
+
     nonisolated static func isWhitelistedUnfinishedDownloadPath(_ path: String, home: String) -> Bool {
         let downloads = "\(home)/Downloads/"
         guard path.hasPrefix(downloads) else { return false }
-        let rest = path.dropFirst(downloads.count)
-        guard let name = rest.split(separator: "/").first.map(String.init) else { return false }
+        let parts = path.dropFirst(downloads.count).split(separator: "/")
+        guard let name = parts.first.map(String.init) else { return false }
         let ext = (name as NSString).pathExtension.lowercased()
-        return unfinishedDownloadExtensions.contains(ext) && name.count > ext.count + 1
+        guard unfinishedDownloadExtensions.contains(ext), name.count > ext.count + 1 else { return false }
+        return parts.count == 1 || unfinishedDownloadFolderExtensions.contains(ext)
     }
 
     /// One running app, reduced to the paths needed to see which framework it loaded.
