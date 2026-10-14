@@ -65,16 +65,32 @@ nonisolated enum Simctl {
         return nil
     }
 
+    /// The shape of `run`, so tests can hand in a fake `simctl`.
+    typealias Runner = @Sendable (_ arguments: [String], _ timeout: TimeInterval) -> ProcessRunner.Output?
+
     /// Runs `simctl <arguments>` and returns its output, or `nil` when no `simctl`
     /// could be launched. Blocks the calling thread like `ProcessRunner.run`.
     static func run(_ arguments: [String], timeout: TimeInterval) -> ProcessRunner.Output? {
         switch launcher() {
         case .xcrun:
-            return ProcessRunner.run(
+            let output = ProcessRunner.run(
                 executablePath: xcrunPath,
                 arguments: ["simctl"] + arguments,
                 timeout: timeout
             )
+            // `xcrun --find` passing does not mean xcrun will run the tool. An Xcode
+            // update waiting on its license, for one, stops xcrun before simctl
+            // starts. simctl never ran, so asking the framework copy is not a
+            // second attempt at the same work.
+            if let output, xcrunRefused(output),
+               FileManager.default.isExecutableFile(atPath: frameworkPath) {
+                return ProcessRunner.run(
+                    executablePath: frameworkPath,
+                    arguments: arguments,
+                    timeout: timeout
+                )
+            }
+            return output
         case .framework:
             return ProcessRunner.run(
                 executablePath: frameworkPath,
@@ -84,6 +100,21 @@ nonisolated enum Simctl {
         case nil:
             return nil
         }
+    }
+
+    /// `true` when xcrun itself failed and simctl never started. xcrun prefixes its
+    /// own errors with "xcrun: error:", and the license check speaks for itself.
+    static func xcrunRefused(_ output: ProcessRunner.Output) -> Bool {
+        guard !output.timedOut, output.status != 0 else { return false }
+        let text = output.stderrText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return text.hasPrefix("xcrun: error:") || mentionsXcodeLicense(text)
+    }
+
+    /// Matches both texts Xcode prints when its license waits to be accepted:
+    /// "You have not agreed to the Xcode license agreements" and "please run
+    /// 'sudo xcodebuild -license'". xcrun exits 69 for either.
+    static func mentionsXcodeLicense(_ lowercasedText: String) -> Bool {
+        lowercasedText.contains("xcode license") || lowercasedText.contains("xcodebuild -license")
     }
 
     /// Same as `ProcessRunner.runAsync`: keeps the blocking drain off the caller's thread.

@@ -993,3 +993,8 @@
 "Click the minus button below the list, then Remove." = "点按列表下方的减号按钮，然后点按“移除”。";
 "Purge carries on by itself once that's done." = "完成后 Purge 会自动继续。";
 "Total" = "总计";
+
+/* Simulator delete failures (#161) */
+"Open Xcode once to accept its license, then try again." = "请先打开一次 Xcode 并接受其许可协议，然后重试。";
+"Apple's simulator service is out of date. Restart your Mac, then clean again." = "Apple 的模拟器服务版本过旧。请重新启动 Mac，然后再次清理。";
+"Apple's simulator tools aren't working on this Mac, so Purge can't remove simulators. Reinstalling Xcode fixes this." = "这台 Mac 上的 Apple 模拟器工具无法正常工作，因此 Purge 无法移除模拟器。重新安装 Xcode 即可解决。";
