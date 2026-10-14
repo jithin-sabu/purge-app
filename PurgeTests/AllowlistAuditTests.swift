@@ -628,6 +628,7 @@ struct EditorWorkspaceStorageLookupTests {
             deviceName: "iPhone 17",
             runtimeVersion: "iOS 26.5"
         )
-        #expect(unused.level == .safe)
+        // Simulators are removed for good, so even an unused device is Check First (#136).
+        #expect(unused.level == .medium)
     }
 }

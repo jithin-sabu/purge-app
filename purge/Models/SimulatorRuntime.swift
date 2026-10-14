@@ -169,12 +169,10 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
 
     // MARK: - Safety
 
-    /// Safe only when nothing uses the runtime: no simulator is built on it, Xcode
-    /// does not create new simulators on it, and it has not been started in 30 days.
-    /// A missing last-use date counts as unused. Simulator device rows read a
-    /// missing boot date the other way, because a device holds apps and data and a
-    /// runtime holds nothing Xcode can't download again. Anything that could not be checked
-    /// (`deviceCount` or `isXcodeDefault` nil) keeps the row at Check First.
+    /// Always Check First. Safe means Clean Safe Items and scheduled cleans take the
+    /// item without asking, and they only move things to the Trash, while a runtime
+    /// is removed for good (#136). The explanation says whether anything uses it, so
+    /// the user can still tell an orphan from one in use.
     static func safetyInfo(
         platformName: String,
         version: String,
@@ -196,9 +194,9 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         // Each explanation is one localized sentence with the cost at the end, the
         // same shape as the simulator device rows, so translations can drop the
         // space English puts between sentences.
-        func info(_ level: SafetyLevel, _ explanation: String) -> SafetyInfo {
+        func info(_ explanation: String) -> SafetyInfo {
             SafetyInfo(
-                level: level,
+                level: .medium,
                 headline: headline,
                 explanation: explanation,
                 recoverySteps: "",
@@ -208,43 +206,43 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
 
         // `Unusable` is CoreSimulator's own verdict that the image cannot boot.
         // Anything else that is not `Ready` is in flight (staging, mounting,
-        // unmounting) and is not offered as Safe on usage alone.
+        // unmounting).
         if state == "Unusable" {
-            return info(.safe, String(localized: "Xcode can no longer use this runtime. \(cost)"))
+            return info(String(localized: "Xcode can no longer use this runtime. \(cost)"))
         }
         if !state.isEmpty, state != "Ready" {
-            return info(.medium, String(localized: "Xcode lists it as \(state.lowercased()). \(cost)"))
+            return info(String(localized: "Xcode lists it as \(state.lowercased()). \(cost)"))
         }
         guard let isXcodeDefault else {
-            return info(.medium, String(localized: "Could not check whether Xcode uses it for new simulators. \(cost)"))
+            return info(String(localized: "Could not check whether Xcode uses it for new simulators. \(cost)"))
         }
         if isXcodeDefault {
-            return info(.medium, String(localized: "Xcode creates new simulators on this runtime. \(cost)"))
+            return info(String(localized: "Xcode creates new simulators on this runtime. \(cost)"))
         }
         guard let deviceCount else {
-            return info(.medium, String(localized: "Could not check which simulators use it. \(cost)"))
+            return info(String(localized: "Could not check which simulators use it. \(cost)"))
         }
         if deviceCount == 1 {
-            return info(.medium, String(localized: "1 simulator uses it. \(cost)"))
+            return info(String(localized: "1 simulator uses it. \(cost)"))
         }
         if deviceCount > 1 {
-            return info(.medium, String(localized: "\(deviceCount) simulators use it. \(cost)"))
+            return info(String(localized: "\(deviceCount) simulators use it. \(cost)"))
         }
 
         let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: now) ?? .distantPast
         guard let lastUsedAt else {
-            return info(.safe, String(localized: "No simulator uses it. Last use unknown. \(cost)"))
+            return info(String(localized: "No simulator uses it. Last use unknown. \(cost)"))
         }
         if lastUsedAt >= thirtyDaysAgo {
-            return info(.medium, String(localized: "No simulator uses it, but it was used in the last month. \(cost)"))
+            return info(String(localized: "No simulator uses it, but it was used in the last month. \(cost)"))
         }
         let monthsAgo = Calendar.current.dateComponents([.month], from: lastUsedAt, to: now).month ?? 0
         if monthsAgo < 1 {
-            return info(.safe, String(localized: "No simulator uses it. Last used over a month ago. \(cost)"))
+            return info(String(localized: "No simulator uses it. Last used over a month ago. \(cost)"))
         }
         if monthsAgo == 1 {
-            return info(.safe, String(localized: "No simulator uses it. Last used 1 month ago. \(cost)"))
+            return info(String(localized: "No simulator uses it. Last used 1 month ago. \(cost)"))
         }
-        return info(.safe, String(localized: "No simulator uses it. Last used \(monthsAgo) months ago. \(cost)"))
+        return info(String(localized: "No simulator uses it. Last used \(monthsAgo) months ago. \(cost)"))
     }
 }

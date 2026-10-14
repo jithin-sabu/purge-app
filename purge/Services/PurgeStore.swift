@@ -533,9 +533,9 @@ final class PurgeStore: ObservableObject {
     }
 
     /// Byte totals for one-click safe cleanup, grouped by tab so sidebar and filter totals stay aligned.
-    /// Simulator devices and runtimes are left out on purpose, even when their Dev Tools
-    /// badge says Safe: removing one is not a Trash move, and one-click cleans only move
-    /// things to the Trash (#136).
+    /// Simulator devices and runtimes are left out on purpose: removing one is not a
+    /// Trash move, and one-click cleans only move things to the Trash. They are never
+    /// Safe either, so Dev Tools and the Overview agree (#136).
     struct SafeCleanupSummary {
         var appCacheBytes: Int64 = 0
         var devToolBytes: Int64 = 0

@@ -178,20 +178,20 @@ struct SimulatorRuntimeTests {
 
     // MARK: - Safety
 
-    /// No simulator, not used in 30 days: the whole point of the feature.
-    @Test func unusedOldRuntimeIsSafe() throws {
+    /// No simulator, not used in 30 days: the best candidate there is. It is still
+    /// Check First, because it is removed for good and Safe rows go to the one-click
+    /// clean (#136). The explanation carries the orphan signal instead.
+    @Test func unusedOldRuntimeIsCheckFirstAndSaysWhy() throws {
         let old = try #require(runtime("26.3.1", in: parsed()))
-        #expect(old.safetyInfo.level == .safe)
+        #expect(old.safetyInfo.level == .medium)
         #expect(old.safetyInfo.explanation.hasPrefix("No simulator uses it. Last used 2 months ago."))
         #expect(old.safetyInfo.explanation.contains("Xcode downloads it again"))
     }
 
-    /// `simctl` omits `lastUsedAt` for a runtime that was never started. That is
-    /// the strongest orphan signal there is, so it stays Safe. Device rows keep a
-    /// missing boot date at Check First, because a device holds apps and data.
-    @Test func neverUsedRuntimeWithNoDevicesIsSafe() throws {
+    /// `simctl` omits `lastUsedAt` for a runtime that was never started.
+    @Test func neverUsedRuntimeWithNoDevicesIsCheckFirst() throws {
         let never = try #require(runtime("18.4", in: parsed()))
-        #expect(never.safetyInfo.level == .safe)
+        #expect(never.safetyInfo.level == .medium)
         #expect(never.safetyInfo.explanation.hasPrefix("No simulator uses it. Last use unknown."))
     }
 
@@ -228,17 +228,17 @@ struct SimulatorRuntimeTests {
         #expect(list.allSatisfy { $0.safetyInfo.explanation.hasPrefix("Could not check which simulators use it.") })
     }
 
-    @Test func unusableRuntimeIsSafeWhateverElseIsTrue() {
+    @Test func unusableRuntimeIsCheckFirst() {
         let info = SimulatorRuntime.safetyInfo(
             platformName: "iOS", version: "17.0", state: "Unusable", sizeBytes: 8_000_000_000,
             lastUsedAt: Self.now, deviceCount: 3, isXcodeDefault: true, isLegacyImage: true, now: Self.now
         )
-        #expect(info.level == .safe)
+        #expect(info.level == .medium)
         #expect(info.explanation.hasPrefix("Xcode can no longer use this runtime."))
     }
 
-    /// A runtime still being staged or mounted is neither Ready nor Unusable. It is
-    /// not offered as Safe just because nothing has used it yet.
+    /// A runtime still being staged or mounted is neither Ready nor Unusable, so the
+    /// row says so rather than reporting its usage.
     @Test func inFlightRuntimeStateIsCheckFirst() {
         let info = SimulatorRuntime.safetyInfo(
             platformName: "iOS", version: "26.6", state: "Mounting", sizeBytes: 8_000_000_000,
