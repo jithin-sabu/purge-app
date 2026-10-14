@@ -11,7 +11,7 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
-## 2026-10-14: Simulators with an unknown last use were Safe to Clean
+## 2026-10-14: Simulators with an unknown last use, or that Xcode can't run, were Safe to Clean
 
 **Reported** by @zihua-zhang while testing the 1.9.0 Chinese beta ([#110](https://github.com/jithin-sabu/purge-app/issues/110)). **Fixed:** [#166](https://github.com/jithin-sabu/purge-app/pull/166), not yet shipped. **Affected:** v1.1.0 to v1.10.0.
 
@@ -25,6 +25,12 @@ in Dev Tools ticks Safe rows first, so one click could select such a device.
 The report came from a mismatch: the row said Safe, but the Overview counted
 nothing safe under Dev Tools.
 
+Review of the fix found a second case. Devices Xcode can't run were Safe
+whatever their last use. Removing a simulator runtime, which Purge can do,
+makes its devices unavailable while their apps and data stay on disk and come
+back when the runtime is downloaded again. On the next scan those devices
+showed as Safe.
+
 ### Who was affected
 
 Nobody reported a loss. Clean Safe Items, scheduled cleans, the menu bar and
@@ -34,8 +40,9 @@ directly or through Select All, and confirming the delete.
 
 ### What changed
 
-A device with no last-use date is Check First. Unavailable devices and devices
-last used more than 30 days ago stay Safe. A code comment on
+A device with no last-use date is Check First, and so is a device Xcode can't
+run. Only a device Xcode can run and that was last used more than 30 days ago
+stays Safe. A code comment on
 `SafeCleanupSummary` now says why simulators stay out of one-click cleans, and
 a test pins it.
 

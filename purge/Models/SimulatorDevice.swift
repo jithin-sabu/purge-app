@@ -30,7 +30,10 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
         let cost = String(localized: "Deletes its apps and data.")
         if !isAvailable {
             return SafetyInfo(
-                level: .safe,
+                // Removing a runtime makes its devices unavailable, and their apps
+                // and data come back when the runtime is downloaded again. Purge
+                // removes runtimes itself, so these stay Check First (#136).
+                level: .medium,
                 headline: headline,
                 // CoreSimulator marks a device unavailable for more than one reason
                 // (missing runtime, unsupported device type), so don't name one.

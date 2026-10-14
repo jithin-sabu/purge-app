@@ -3,7 +3,7 @@ import Testing
 @testable import Purge
 
 /// Deleting a simulator device removes its apps and data with no Trash copy, so a
-/// device is Safe only when it is known to be unused (#136).
+/// device is Safe only when Xcode can run it and it is known to be unused (#136).
 @MainActor
 @Suite("Simulator device safety")
 struct SimulatorDeviceSafetyTests {
@@ -32,9 +32,12 @@ struct SimulatorDeviceSafetyTests {
         #expect(level(lastBootedAt: Date().addingTimeInterval(-90 * Self.day)) == .safe)
     }
 
-    @Test func unavailableDeviceIsSafe() {
-        #expect(level(isAvailable: false, lastBootedAt: nil) == .safe)
-        #expect(level(isAvailable: false, lastBootedAt: Date().addingTimeInterval(-5 * Self.day)) == .safe)
+    /// Removing a runtime, which Purge can do, makes its devices unavailable. Their
+    /// data comes back with the runtime, so the delete is not a free one.
+    @Test func unavailableDeviceIsCheckFirst() {
+        #expect(level(isAvailable: false, lastBootedAt: nil) == .medium)
+        #expect(level(isAvailable: false, lastBootedAt: Date().addingTimeInterval(-5 * Self.day)) == .medium)
+        #expect(level(isAvailable: false, lastBootedAt: Date().addingTimeInterval(-90 * Self.day)) == .medium)
     }
 
     /// Same rule as simulator runtimes: the safe clean and the scheduled clean only
