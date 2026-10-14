@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-10-14: Simulators with an unknown last use were Safe to Clean
 
-**Reported** by @zihua-zhang while testing the 1.9.0 Chinese beta ([#110](https://github.com/jithin-sabu/purge-app/issues/110)). **Fixed:** [#136](https://github.com/jithin-sabu/purge-app/issues/136), not yet shipped. **Affected:** v1.1.0 to v1.10.0.
+**Reported** by @zihua-zhang while testing the 1.9.0 Chinese beta ([#110](https://github.com/jithin-sabu/purge-app/issues/110)). **Fixed:** [#166](https://github.com/jithin-sabu/purge-app/pull/166), not yet shipped. **Affected:** v1.1.0 to v1.10.0.
 
 ### What happened
 
