@@ -11,6 +11,44 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-10-15: "Consider stale after" showed 6 months but worked as Show all
+
+**Found internally**, no report. **Fixed:** not yet shipped. **Affected:** v1.1.1 to v1.10.0, for anyone who never changed the setting.
+
+### What happened
+
+Settings showed "Consider stale after: 6 months", but that value was only a
+display default and was never saved. The scanner read the missing setting as
+0, and 0 means Show all. So the activity check from the 2026-10-01 entry below
+never ran. A project edited an hour ago was listed, its `node_modules` and
+build folders were Safe to Clean, and Clean Safe Items or a scheduled clean
+could move them to the Trash. The orphan leftover scan read the same setting
+and used its 30-day floor instead of 6 months.
+
+The activity check also failed open. It reads at most 20,000 entries in a
+project, and a walk that stopped there answered "not used".
+
+### Who was affected
+
+Nobody reported a loss. Anyone with code projects who had never changed the
+setting was exposed. The folders went to the Trash, so they could be put back
+or rebuilt with the project's install command.
+
+### What changed
+
+A missing setting now reads as the 6 months Settings shows. Only a saved Show
+all means Show all. A walk that hits the entry limit now counts as activity,
+so a project too big to check is left off the list.
+
+### What would have caught it earlier
+
+`StalenessThresholdDefaultTests` in
+[`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift)
+reads the setting from a fresh `ThrowawayDefaults` and expects 180 days, and
+checks that a project edited today is not listed. `entryLimitCountsAsActive`
+in the same file covers the cut-off walk. The earlier tests always passed the
+age in directly, so none of them read the setting the way the scanner does.
+
 ## 2026-10-14: Simulators were Safe to Clean although they are removed for good
 
 **Reported** by @zihua-zhang while testing the 1.9.0 Chinese beta ([#110](https://github.com/jithin-sabu/purge-app/issues/110)). **Fixed:** [#166](https://github.com/jithin-sabu/purge-app/pull/166) and [#167](https://github.com/jithin-sabu/purge-app/pull/167), not yet shipped. **Affected:** v1.1.0 to v1.10.0.

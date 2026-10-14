@@ -110,6 +110,11 @@ enum DevToolsStalenessOption: Int, Codable, CaseIterable, Identifiable {
     }
 
     nonisolated static func currentThresholdDays(userDefaults: UserDefaults = .standard) -> Int {
+        // Settings shows the default without ever saving it. A missing key reads as
+        // 0 through integer(forKey:), which is Show all, so check for it first.
+        guard userDefaults.object(forKey: userDefaultsKey) != nil else {
+            return defaultOption.rawValue
+        }
         let raw = userDefaults.integer(forKey: userDefaultsKey)
         if raw == showAll.rawValue {
             return showAll.rawValue

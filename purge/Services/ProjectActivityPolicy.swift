@@ -29,8 +29,8 @@ nonisolated enum ProjectActivityPolicy {
     }
 
     /// Most entries the activity walk reads in one project. Hitting the limit counts
-    /// as "no recent activity found", so a huge project falls back to its git and
-    /// artifact dates.
+    /// as activity: a walk that stopped early has not shown the project is unused,
+    /// so a huge project is left off the list rather than offered.
     static let walkEntryLimit = 20_000
 
     /// Files git rewrites on commit, checkout, fetch, and index refresh.
@@ -95,7 +95,7 @@ nonisolated enum ProjectActivityPolicy {
         var entriesRead = 0
         for case let url as URL in enumerator {
             entriesRead += 1
-            if entriesRead > entryLimit { return false }
+            if entriesRead > entryLimit { return true }
 
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
                   values.isSymbolicLink != true else { continue }

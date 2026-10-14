@@ -161,13 +161,13 @@ struct ProjectActivityTests {
         #expect(!isActive(fixture, project: "project"))
     }
 
-    @Test("hitting the entry limit falls back to not active, the old behaviour")
-    func entryLimitFallsBack() throws {
+    @Test("a walk that hits the entry limit counts as active, so the project is not offered")
+    func entryLimitCountsAsActive() throws {
         let fixture = try ActivityFixture(files: ["package.json", "src/app.js"], folders: ["node_modules"])
         defer { fixture.cleanUp() }
         try fixture.ageEverything(to: longAgo)
-        try fixture.setDate(now, of: "src/app.js")
-        #expect(!isActive(fixture, entryLimit: 0))
+        #expect(!isActive(fixture))
+        #expect(isActive(fixture, entryLimit: 0))
     }
 
     @Test("a repo at home is ignored, so a dotfiles repo cannot make every project look busy")
@@ -288,6 +288,46 @@ struct ProjectListingFilterTests {
         let showAll = DevToolsStalenessOption.showAll.rawValue
         #expect(listed(fixture, staleDays: showAll) == [.nodeModules])
         #expect(listed(fixture, staleDays: showAll, cwds: [fixture.root.path]) == nil)
+    }
+}
+
+@Suite("Consider stale after uses the 6 months Settings shows until the user changes it")
+struct StalenessThresholdDefaultTests {
+    @Test("no saved setting means 6 months, not Show all")
+    func missingKeyIsSixMonths() {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        #expect(DevToolsStalenessOption.currentThresholdDays(userDefaults: suite.defaults) == 180)
+        #expect(OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: suite.defaults) == 180)
+    }
+
+    @Test("a saved Show all is still Show all")
+    func savedShowAllIsKept() {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        suite.defaults.set(DevToolsStalenessOption.showAll.rawValue, forKey: DevToolsStalenessOption.userDefaultsKey)
+        #expect(DevToolsStalenessOption.currentThresholdDays(userDefaults: suite.defaults) == 0)
+    }
+
+    @Test("with no saved setting, a project edited today is not listed")
+    func missingKeyHidesRecentProject() throws {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let fixture = try ActivityFixture(
+            files: ["package.json", "package-lock.json", "src/app.js", "node_modules/pkg/index.js"]
+        )
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "src/app.js")
+        let filter = DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.currentThresholdDays(userDefaults: suite.defaults),
+            now: now,
+            live: .none
+        )
+        let (group, _) = DevScanner.sizeProjectGroup(
+            rootURL: fixture.root, types: [.node], access: .full, filter: filter
+        )
+        #expect(group == nil)
     }
 }
 
