@@ -171,8 +171,9 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
 
     /// Safe only when nothing uses the runtime: no simulator is built on it, Xcode
     /// does not create new simulators on it, and it has not been started in 30 days.
-    /// A missing last-use date counts as unused, the same reading the simulator
-    /// device rows give a missing boot date. Anything that could not be checked
+    /// A missing last-use date counts as unused. Simulator device rows read a
+    /// missing boot date the other way, because a device holds apps and data and a
+    /// runtime holds nothing Xcode can't download again. Anything that could not be checked
     /// (`deviceCount` or `isXcodeDefault` nil) keeps the row at Check First.
     static func safetyInfo(
         platformName: String,
