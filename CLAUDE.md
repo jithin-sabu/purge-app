@@ -53,6 +53,7 @@ Cloud sessions run on Linux, so they can build no Swift code. Run the two Linux 
   - `purge/Services/DeletionSafetyPolicy.swift`, `SafetyTierList.swift`, `SafetyAllowlistSummary.swift`, `FileDeleter.swift`
   - any `purge/Services/*ScanPolicy.swift` or `*Scanner.swift`
   - `purge/Resources/explanations.json` or `purge/Models/ProjectArtifactCatalog.swift`
+  - simulator runtimes (`purge/Models/SimulatorRuntime.swift`), whose `deletable` filter is a deletion gate
   - scheduled cleaning (`purge/Services/ScheduledCleaning*.swift`)
   - the root helper (`purge/PrivilegedHelper/`, `PurgeHelper/`)
   - the Apple Intelligence models (`purge/Services/AppleIntelligenceModel*.swift`, `purge/Models/AppleIntelligenceModels.swift`, `PurgeAssetWorker/`)
