@@ -11,12 +11,22 @@ struct SimulatorRuntimeStoreTests {
         id: String = "7AE1D6B6-5524-4FAD-B793-1D1C911E5269",
         version: String = "26.3.1",
         deviceCount: Int = 0,
-        sizeBytes: Int64 = 8_393_503_393
+        sizeBytes: Int64 = 8_393_503_393,
+        level: SafetyLevel? = nil
     ) -> SimulatorRuntime {
-        let safety = SimulatorRuntime.safetyInfo(
+        var safety = SimulatorRuntime.safetyInfo(
             platformName: "iOS", version: version, state: "Ready", sizeBytes: sizeBytes,
             lastUsedAt: nil, deviceCount: deviceCount, isXcodeDefault: false, isLegacyImage: false
         )
+        if let level {
+            safety = SafetyInfo(
+                level: level,
+                headline: safety.headline,
+                explanation: safety.explanation,
+                recoverySteps: safety.recoverySteps,
+                reinstallCommand: safety.reinstallCommand
+            )
+        }
         return SimulatorRuntime(
             id: id,
             runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-3",
@@ -69,12 +79,13 @@ struct SimulatorRuntimeStoreTests {
     }
 
     /// Same rule as simulator devices: the safe clean and the scheduled clean only
-    /// move things to the Trash, and a runtime cannot come back from there.
+    /// move things to the Trash, and a runtime cannot come back from there. Runtimes
+    /// are never Safe (#136); the row is forced Safe here to prove the one-click
+    /// clean skips it even so.
     @Test func safeRuntimeStaysOutOfTheOneClickSafeClean() async {
         let scans = FakeScans()
         defer { scans.cleanUp() }
-        let row = runtime()
-        #expect(row.safetyInfo.level == .safe)
+        let row = runtime(level: .safe)
         scans.developerEvents = [.simulatorRuntimeFound(row)]
         let store = scans.makeStore()
         await store.scanDeveloper()

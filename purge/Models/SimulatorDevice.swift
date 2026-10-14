@@ -17,6 +17,9 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
         return formatBytes(sizeOnDisk)
     }
 
+    /// Always Check First. Safe means Clean Safe Items and scheduled cleans take the
+    /// item without asking, and they only move things to the Trash. `simctl delete`
+    /// removes the device and its apps and data for good (#136).
     static func safetyInfo(
         isAvailable: Bool,
         lastBootedAt: Date?,
@@ -24,54 +27,31 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
         runtimeVersion: String
     ) -> SafetyInfo {
         let headline = "\(deviceName) · \(runtimeVersion)"
-        // The safety badge already says whether it is safe, so the explanation
-        // only covers when it was last used and what deleting costs. `simctl
-        // delete` removes the device and its apps and data; the runtime stays.
+        // The explanation says when the device was last used, so the user can tell
+        // a forgotten one from one in use, and what deleting costs. The runtime stays.
         let cost = String(localized: "Deletes its apps and data.")
-        if !isAvailable {
-            return SafetyInfo(
-                // Removing a runtime makes its devices unavailable, and their apps
-                // and data come back when the runtime is downloaded again. Purge
-                // removes runtimes itself, so these stay Check First (#136).
-                level: .medium,
-                headline: headline,
-                // CoreSimulator marks a device unavailable for more than one reason
-                // (missing runtime, unsupported device type), so don't name one.
-                explanation: String(localized: "Xcode can no longer run this device. \(cost)"),
-                recoverySteps: "",
-                reinstallCommand: nil
-            )
-        }
-        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
-
-        // simctl omits lastBootedAt for some devices that have been used, so a
-        // missing date does not mean the device was never booted. Deleting one
-        // removes its apps and data with no Trash copy, so it stays Check First (#136).
-        guard let lastUsed = lastBootedAt else {
-            return SafetyInfo(
-                level: .medium,
-                headline: headline,
-                explanation: String(localized: "Last use unknown. \(cost)"),
-                recoverySteps: "",
-                reinstallCommand: nil
-            )
-        }
-
-        let level: SafetyLevel = lastUsed >= thirtyDaysAgo ? .medium : .safe
-        let monthsAgo = Calendar.current.dateComponents([.month], from: lastUsed, to: Date()).month ?? 0
         let explanation: String
-        if monthsAgo < 1 {
-            explanation = String(localized: "Used in the last month. \(cost)")
-        } else {
-            if monthsAgo == 1 {
+        if !isAvailable {
+            // CoreSimulator marks a device unavailable for more than one reason
+            // (missing runtime, unsupported device type), so don't name one.
+            explanation = String(localized: "Xcode can no longer run this device. \(cost)")
+        } else if let lastUsed = lastBootedAt {
+            let monthsAgo = Calendar.current.dateComponents([.month], from: lastUsed, to: Date()).month ?? 0
+            if monthsAgo < 1 {
+                explanation = String(localized: "Used in the last month. \(cost)")
+            } else if monthsAgo == 1 {
                 explanation = String(localized: "Last used 1 month ago. \(cost)")
             } else {
                 explanation = String(localized: "Last used \(monthsAgo) months ago. \(cost)")
             }
+        } else {
+            // simctl omits lastBootedAt for some devices that have been used, so a
+            // missing date does not mean the device was never booted.
+            explanation = String(localized: "Last use unknown. \(cost)")
         }
 
         return SafetyInfo(
-            level: level,
+            level: .medium,
             headline: headline,
             explanation: explanation,
             recoverySteps: "",
