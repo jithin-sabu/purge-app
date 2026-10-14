@@ -92,6 +92,10 @@ nonisolated enum ProjectActivityPolicy {
             errorHandler: { _, _ in true }
         ) else { return false }
 
+        // Compared in resolved form: the enumerator can spell a path differently from
+        // the URL the artifact was built from.
+        let offeredPaths = Set(artifactPaths.map { $0.resolvingSymlinksInPath().path })
+
         var entriesRead = 0
         for case let url as URL in enumerator {
             entriesRead += 1
@@ -102,10 +106,14 @@ nonisolated enum ProjectActivityPolicy {
             if let date = values.contentModificationDate, date > cutoff { return true }
 
             guard values.isDirectory == true else { continue }
-            // Dependency and build trees change on install or build, can hold
-            // hundreds of thousands of files, and are what is being offered.
-            if url.lastPathComponent == ".git"
-                || ProjectArtifactCatalog.artifactFolderNames.contains(url.lastPathComponent)
+            // Only the folders being offered are skipped, plus .git and node_modules,
+            // which can hold hundreds of thousands of files nobody edits by hand. A
+            // folder that merely shares an artifact's name, like a build/ of the
+            // user's own scripts in a Node project, is read like any other.
+            let name = url.lastPathComponent
+            if name == ".git" || name == "node_modules"
+                || (ProjectArtifactCatalog.artifactFolderNames.contains(name)
+                    && offeredPaths.contains(url.resolvingSymlinksInPath().path))
                 || !ProtectedLocations.isReadable(url, access: access, home: home) {
                 enumerator.skipDescendants()
             }

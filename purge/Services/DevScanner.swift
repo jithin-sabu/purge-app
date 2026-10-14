@@ -1346,17 +1346,20 @@ nonisolated final class DevScanner {
         if ProjectActivityPolicy.isInUse(projectRoot: rootURL, live: filter.live, access: access) {
             return (nil, 0)
         }
-        if filter.staleDays != DevToolsStalenessOption.showAll.rawValue {
-            let cutoff = Calendar.current.date(byAdding: .day, value: -filter.staleDays, to: filter.now)
-                ?? filter.now
-            if ProjectActivityPolicy.hasActivity(
-                since: cutoff,
-                projectRoot: rootURL,
-                artifactPaths: rows.map(\.path),
-                access: access
-            ) {
-                return (nil, 0)
-            }
+        // Show all still lists a project worked on lately, but measured against the
+        // default window it is not stale, so its folders become Check First below.
+        let showAll = filter.staleDays == DevToolsStalenessOption.showAll.rawValue
+        let windowDays = showAll ? DevToolsStalenessOption.defaultOption.rawValue : filter.staleDays
+        let cutoff = Calendar.current.date(byAdding: .day, value: -windowDays, to: filter.now)
+            ?? filter.now
+        let usedRecently = ProjectActivityPolicy.hasActivity(
+            since: cutoff,
+            projectRoot: rootURL,
+            artifactPaths: rows.map(\.path),
+            access: access
+        )
+        if usedRecently && !showAll {
+            return (nil, 0)
         }
 
         let artifactPaths = rows.map(\.path)
@@ -1375,9 +1378,12 @@ nonisolated final class DevScanner {
                     sizeBytes: bytes,
                     lastModified: modified,
                     isSelected: false,
-                    safetyInfo: row.safetyInfo,
+                    safetyInfo: usedRecently
+                        ? row.safetyInfo.checkFirstForRecentUse(path: row.path)
+                        : row.safetyInfo,
                     reinstallSafety: row.reinstallSafety,
-                    gitStatus: .unknown
+                    gitStatus: .unknown,
+                    usedRecently: usedRecently
                 )
             )
         }

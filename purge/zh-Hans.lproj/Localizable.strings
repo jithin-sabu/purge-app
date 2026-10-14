@@ -89,7 +89,7 @@
 "Add an app…" = "添加应用…";
 "Add folder…" = "添加文件夹…";
 "All" = "全部";
-"All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now." = "“开发项目”会显示所有检测到的项目，不限上次使用时间，但正在使用的项目除外。";
+"All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them." = "“开发项目”会显示所有检测到的项目，不限上次使用时间，但正在使用的项目除外。过去 6 个月内使用过的项目会标记为“先检查”，“清理安全项目”和定时清理都会跳过它们。";
 "Also in this cleanup" = "此次清理中的其他项目";
 "Also select" = "同时选择";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ 由管理员安装，因此 macOS 需要获得许可才能将其移到废纸篓。";
@@ -713,6 +713,7 @@
 "You're all clear" = "暂无需要清理的内容";
 "You're all clear." = "一切正常，暂无需要清理的内容。";
 "You're all set" = "准备就绪";
+"You worked on this project in the last 6 months, so Purge won't clean it without asking." = "你在过去 6 个月内使用过这个项目，因此 Purge 不会未经询问就清理它。";
 "You're deleting all %lld copies of %@. No copy will remain." = "你将删除全部 %lld 份 %@ 副本，不会留下任何副本。";
 "Your Mac has a little more breathing room." = "你的 Mac 现在有更多可用空间了。";
 "Your Mac is looking clean." = "你的 Mac 很整洁。";

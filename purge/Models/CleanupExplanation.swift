@@ -45,7 +45,8 @@ extension SafetyInfo {
         kind: DeletableArtifactKind,
         path: URL,
         reinstallCommand: String? = nil,
-        level: SafetyLevel = .safe
+        level: SafetyLevel = .safe,
+        usedRecently: Bool = false
     ) -> SafetyInfo {
         let base = fromExplanationDatabase(
             key: kind.explanationKey,
@@ -54,12 +55,33 @@ extension SafetyInfo {
             path: path
         )
         if UserOverridesStore.read(path: path) != nil { return base }
-        return SafetyInfo(
+        let info = SafetyInfo(
             level: level,
             headline: base.headline,
             explanation: base.explanation,
             recoverySteps: base.recoverySteps,
             reinstallCommand: base.reinstallCommand
         )
+        return usedRecently ? info.checkFirstForRecentUse(path: path) : info
+    }
+
+    /// Show all lists projects worked on recently. Their folders are still offered,
+    /// but as Check First, so Clean Safe Items and scheduled cleans leave them alone.
+    /// A manual override of this exact path is the user's decision and is kept.
+    nonisolated func checkFirstForRecentUse(path: URL) -> SafetyInfo {
+        guard UserOverridesStore.read(path: path) == nil else { return self }
+        switch level {
+        case .safe:
+            let note = String(localized: "You worked on this project in the last 6 months, so Purge won't clean it without asking.")
+            return SafetyInfo(
+                level: .medium,
+                headline: headline,
+                explanation: explanation.isEmpty ? note : explanation + " " + note,
+                recoverySteps: recoverySteps,
+                reinstallCommand: reinstallCommand
+            )
+        case .medium, .unknown:
+            return self
+        }
     }
 }

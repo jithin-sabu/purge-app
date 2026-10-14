@@ -117,6 +117,29 @@ struct ProjectActivityTests {
         #expect(!isActive(fixture))
     }
 
+    @Test("an edit in a folder that only shares an artifact's name counts")
+    func sameNameFolderIsWalked() throws {
+        let fixture = try ActivityFixture(files: ["package.json", "build/release.sh"], folders: ["node_modules"])
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "build/release.sh")
+        #expect(isActive(fixture))
+    }
+
+    @Test("a folder that is offered is still skipped, whatever its name")
+    func offeredFolderIsSkipped() throws {
+        let fixture = try ActivityFixture(files: ["build.gradle", "build/out/app.jar"])
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "build/out/app.jar")
+        #expect(!ProjectActivityPolicy.hasActivity(
+            since: cutoff,
+            projectRoot: fixture.root,
+            artifactPaths: [fixture.url("build")],
+            access: .full
+        ))
+    }
+
     @Test("a recent artifact folder date still counts, as it did before")
     func artifactFolderDateStillCounts() throws {
         let fixture = try ActivityFixture(files: ["package.json"], folders: ["node_modules"])
@@ -288,6 +311,98 @@ struct ProjectListingFilterTests {
         let showAll = DevToolsStalenessOption.showAll.rawValue
         #expect(listed(fixture, staleDays: showAll) == [.nodeModules])
         #expect(listed(fixture, staleDays: showAll, cwds: [fixture.root.path]) == nil)
+    }
+
+    private func showAllArtifacts(_ fixture: ActivityFixture) -> [ProjectCacheArtifact] {
+        let filter = DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.showAll.rawValue,
+            now: now,
+            live: .none
+        )
+        let (group, _) = DevScanner.sizeProjectGroup(
+            rootURL: fixture.root, types: [.node], access: .full, filter: filter
+        )
+        return group?.artifacts ?? []
+    }
+
+    @Test("Show all marks a project worked on in the last 6 months Check First")
+    func showAllRecentProjectIsCheckFirst() throws {
+        let fixture = try nodeProject()
+        defer { fixture.cleanUp() }
+        try fixture.setDate(now, of: "src/app.js")
+        let artifacts = showAllArtifacts(fixture)
+        #expect(!artifacts.isEmpty)
+        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .medium && $0.usedRecently })
+    }
+
+    @Test("Show all keeps an old project Safe")
+    func showAllOldProjectStaysSafe() throws {
+        let fixture = try nodeProject()
+        defer { fixture.cleanUp() }
+        let artifacts = showAllArtifacts(fixture)
+        #expect(!artifacts.isEmpty)
+        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .safe && !$0.usedRecently })
+    }
+}
+
+@MainActor
+@Suite("A recently used project stays Check First after a reset")
+struct RecentProjectResetTests {
+    private func store(with artifact: ProjectCacheArtifact) -> PurgeStore {
+        let store = PurgeStore()
+        store.projectGroups = [ProjectGroup(
+            displayName: "project",
+            rootPath: artifact.projectRoot,
+            inferredTypes: [.node],
+            artifacts: [artifact]
+        )]
+        return store
+    }
+
+    /// A path that does not exist and that no override can name.
+    private func recentArtifact() -> ProjectCacheArtifact {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-\(UUID().uuidString)", isDirectory: true)
+        let path = root.appendingPathComponent("node_modules", isDirectory: true)
+        return ProjectCacheArtifact(
+            kind: .nodeModules,
+            path: path,
+            projectRoot: root,
+            sizeBytes: 1024,
+            lastModified: .distantPast,
+            isSelected: false,
+            safetyInfo: SafetyInfo.forStaleProjectArtifact(kind: .nodeModules, path: path, usedRecently: true),
+            reinstallSafety: .notApplicable,
+            gitStatus: .clean,
+            usedRecently: true
+        )
+    }
+
+    @Test("Reset to automatic")
+    func resetKeepsCheckFirst() {
+        let artifact = recentArtifact()
+        let store = store(with: artifact)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        #expect(store.manualSafeCleanupCandidates().isEmpty)
+    }
+
+    @Test("without recent use, a reset lands on Safe as before")
+    func resetWithoutRecentUseIsSafe() {
+        var artifact = recentArtifact()
+        artifact.usedRecently = false
+        let store = store(with: artifact)
+        store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .safe)
+    }
+
+    @Test("Recategorize")
+    func recategorizeKeepsCheckFirst() {
+        let store = store(with: recentArtifact())
+        store.recategorizeProjectArtifact(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        #expect(store.manualSafeCleanupCandidates().isEmpty)
     }
 }
 

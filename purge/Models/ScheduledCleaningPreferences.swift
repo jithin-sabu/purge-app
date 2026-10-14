@@ -103,7 +103,7 @@ enum DevToolsStalenessOption: Int, Codable, CaseIterable, Identifiable {
     var description: String {
         switch self {
         case .showAll:
-            return String(localized: "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now.")
+            return String(localized: "All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them.")
         case .oneMonth, .threeMonths, .sixMonths, .twelveMonths, .twoYears:
             return String(localized: "Projects you have not worked on within this period appear in Developer Projects for cleanup. Editing any file or using git in a project counts as working on it, and a project in use right now never appears. Choose Show all to see every detected project regardless of age.")
         }

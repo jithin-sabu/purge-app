@@ -11,7 +11,7 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
-## 2026-10-15: "Consider stale after" showed 6 months but worked as Show all
+## 2026-10-15: Projects in use were Safe to Clean under "Consider stale after"
 
 **Found internally**, no report. **Fixed:** not yet shipped. **Affected:** v1.1.1 to v1.10.0, for anyone who never changed the setting.
 
@@ -25,8 +25,14 @@ build folders were Safe to Clean, and Clean Safe Items or a scheduled clean
 could move them to the Trash. The orphan leftover scan read the same setting
 and used its 30-day floor instead of 6 months.
 
-The activity check also failed open. It reads at most 20,000 entries in a
-project, and a walk that stopped there answered "not used".
+The activity check also failed open in two ways. It reads at most 20,000
+entries in a project, and a walk that stopped there answered "not used". And it
+skipped every folder named like a build folder of any language, such as
+`build`, `bin` or `vendor`, so edits to the user's own scripts in a Node
+project's `build/` folder did not count as use.
+
+Show all, chosen on purpose, had the same effect as the bug: a project edited
+an hour ago was listed with its folders Safe to Clean.
 
 ### Who was affected
 
@@ -38,16 +44,25 @@ or rebuilt with the project's install command.
 
 A missing setting now reads as the 6 months Settings shows. Only a saved Show
 all means Show all. A walk that hits the entry limit now counts as activity,
-so a project too big to check is left off the list.
+so a project too big to check is left off the list. The walk skips only the
+folders being offered for that project, plus `.git` and `node_modules`.
+
+Show all still lists every project, but folders of a project worked on in the
+last 6 months are Check First, so Clean Safe Items and scheduled cleans skip
+them. The project keeps that fact, so Reset to automatic and Recategorize land
+on Check First again. A path the user marked Safe by hand stays Safe.
 
 ### What would have caught it earlier
 
 `StalenessThresholdDefaultTests` in
 [`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift)
 reads the setting from a fresh `ThrowawayDefaults` and expects 180 days, and
-checks that a project edited today is not listed. `entryLimitCountsAsActive`
-in the same file covers the cut-off walk. The earlier tests always passed the
-age in directly, so none of them read the setting the way the scanner does.
+checks that a project edited today is not listed. In the same file,
+`entryLimitCountsAsActive` covers the cut-off walk, `sameNameFolderIsWalked`
+the skipped folder names, `showAllRecentProjectIsCheckFirst` Show all, and
+`RecentProjectResetTests` the reset and recategorize paths. The earlier tests
+always passed the age in directly, so none of them read the setting the way the
+scanner does.
 
 ## 2026-10-14: Simulators were Safe to Clean although they are removed for good
 

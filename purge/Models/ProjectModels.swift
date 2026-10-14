@@ -209,6 +209,11 @@ nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {
     /// Per-session Git cleanliness for the enclosing repo (`unknown` until resolved).
     var gitStatus: GitWorktreeStatus
 
+    /// The project was worked on within the default stale window. Only possible
+    /// with Show all, which lists such projects; kept so a reset or recategorize
+    /// lands on Check First again instead of Safe.
+    var usedRecently = false
+
     var formattedSize: String { formatBytes(sizeBytes) }
 }
 
