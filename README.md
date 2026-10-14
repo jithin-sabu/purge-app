@@ -103,8 +103,8 @@ Large Files is separate from cache cleanup: these are your personal files, not r
 Some big files carry a label that says what they are. Hover it for the full explanation.
 
 - **Restore image**: a macOS `.ipsw`, often 15 to 25 GB. It's only needed to set up a Mac, a device, or a virtual machine.
-- **Virtual machine**: a Parallels (`.pvm`), UTM (`.utm`), or VMware Fusion (`.vmwarevm`) bundle. It's one row and goes to the Trash whole, never a disk file from inside it. If the app is still installed, the label says to remove the VM there, since the app keeps its own list.
-- **Unfinished download**: `.crdownload`, `.part`, Safari's `.download`, and Parallels' `.prlupd-part`.
+- **Virtual machine**: a Parallels (`.pvm`), UTM (`.utm`), or VMware Fusion (`.vmwarevm`) bundle. It's one row and goes to the Trash whole, never a disk file from inside it. If the app is still installed, the label says to remove the VM there, since the app keeps its own list. A VM whose app is open, or that holds a lock file, stays off the list until you quit the app.
+- **Unfinished download**: `.crdownload`, `.part`, and Parallels' `.prlupd-part` files, and Safari's `.download` bundle when it sits directly in Downloads.
 
 #### Local AI models
 

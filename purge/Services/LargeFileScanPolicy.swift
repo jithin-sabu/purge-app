@@ -88,7 +88,47 @@ enum LargeFileScanPolicy {
                 return true
             }
             // A file inside a VM is part of its disk. Only the whole bundle goes.
-            if LargeFileKind.wholeBundleExtensions.contains(ext) { return true }
+            if LargeFileKind.virtualMachineExtensions.contains(ext) { return true }
+        }
+        return false
+    }
+
+    /// Safari's unfinished download: a `.download` folder directly in
+    /// `~/Downloads` with Safari's `Info.plist` inside. Any other folder that
+    /// happens to end in `.download` is the user's and is walked like any folder.
+    nonisolated static func isSafariDownloadBundle(_ url: URL, home: URL) -> Bool {
+        guard url.pathExtension.lowercased() == "download" else { return false }
+        // Resolved on both sides: the enumerator spells a temporary home
+        // `/private/var/…` while the caller may pass `/var/…`.
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+            .resolvingSymlinksInPath().standardizedFileURL.path
+        let parent = url.deletingLastPathComponent()
+            .resolvingSymlinksInPath().standardizedFileURL.path
+        guard parent == downloads else { return false }
+        return FileManager.default.fileExists(atPath: url.appendingPathComponent("Info.plist").path)
+    }
+
+    /// Whether a VM may be running: its app is open, or the bundle holds a lock
+    /// file. Trashing a running VM is a rename on the same volume, so the VM
+    /// keeps writing its disk inside the Trash and emptying the Trash loses it.
+    /// Checked when the scan lists the VM and again just before it is trashed,
+    /// because the app can open between the two (see the 2026-09-21 Chrome
+    /// entry in `docs/safety-notes.md`). Only the bundle's top two levels are
+    /// read, where VMware puts its `.lck` folders and Parallels its `.lock` files.
+    nonisolated static func virtualMachineIsInUse(
+        _ bundle: URL,
+        isAppRunning: (String) -> Bool = { DeletionSafetyPolicy.isAppRunning(bundleID: $0) }
+    ) -> Bool {
+        if let app = VirtualMachineApp(bundleExtension: bundle.pathExtension), isAppRunning(app.bundleID) {
+            return true
+        }
+        guard let enumerator = FileManager.default.enumerator(
+            at: bundle, includingPropertiesForKeys: nil, options: []
+        ) else { return false }
+        while let next = enumerator.nextObject() as? URL {
+            if enumerator.level >= 2 { enumerator.skipDescendants() }
+            let ext = next.pathExtension.lowercased()
+            if ext == "lck" || ext == "lock" { return true }
         }
         return false
     }
@@ -96,13 +136,18 @@ enum LargeFileScanPolicy {
     /// A file may be deleted only if it is a regular file under one of the scan
     /// roots and nowhere near Library or system locations.
     ///
-    /// The one kind of folder allowed is a whole bundle Large Files lists as one
-    /// item: a VM (`.pvm`, `.utm`, `.vmwarevm`) or an unfinished download
-    /// bundle. It may sit under a scan root, and a VM also under a VM root. A
-    /// loose file in a VM root is never eligible; that walk lists bundles only.
+    /// Two kinds of folder are allowed, each as the whole item Large Files lists:
+    /// a VM bundle (`.pvm`, `.utm`, `.vmwarevm`) that is not in use, under a scan
+    /// root or a VM root, and a Safari download bundle in `~/Downloads`. A loose
+    /// file in a VM root is never eligible; that walk lists bundles only. Nor is a
+    /// file inside either kind of bundle.
+    ///
+    /// This is Large Files' own gate, not `DeletionSafetyPolicy.evaluate(_:)`:
+    /// these are the user's files, which the cache allowlist refuses by design.
     nonisolated static func isEligibleForDeletion(
         _ url: URL,
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        isAppRunning: (String) -> Bool = { DeletionSafetyPolicy.isAppRunning(bundleID: $0) }
     ) -> Bool {
         let fm = FileManager.default
         let std = url.standardizedFileURL
@@ -119,11 +164,20 @@ enum LargeFileScanPolicy {
             }
         }
 
+        // Inside a Safari download bundle: only the whole bundle goes.
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true).standardizedFileURL.path + "/"
+        if path.hasPrefix(downloads),
+           let first = path.dropFirst(downloads.count).split(separator: "/").first,
+           path.count > downloads.count + first.count,
+           isSafariDownloadBundle(URL(fileURLWithPath: downloads + first), home: home) {
+            return false
+        }
+
         guard isDir.boolValue else { return isUnder(scanRoots(home: home)) }
 
-        let ext = std.pathExtension.lowercased()
-        guard LargeFileKind.wholeBundleExtensions.contains(ext) else { return false }
-        if isUnder(scanRoots(home: home)) { return true }
-        return VirtualMachineApp(bundleExtension: ext) != nil && isUnder(virtualMachineRoots(home: home))
+        if isSafariDownloadBundle(std, home: home) { return true }
+        guard VirtualMachineApp(bundleExtension: std.pathExtension) != nil else { return false }
+        guard isUnder(scanRoots(home: home)) || isUnder(virtualMachineRoots(home: home)) else { return false }
+        return !virtualMachineIsInUse(std, isAppRunning: isAppRunning)
     }
 }

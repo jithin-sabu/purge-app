@@ -109,12 +109,12 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
     case virtualMachine(VirtualMachineApp, appInstalled: Bool)
     case unfinishedDownload
 
-    /// Folders that are one item: listed and trashed whole, never walked. A
-    /// file inside a VM is part of a disk, and trashing it alone breaks the VM.
-    /// Of the unfinished downloads only Safari's `.download` is a folder; the
-    /// others are files, and a user folder named `Chapter.part` is not a download.
-    static let wholeBundleExtensions: Set<String> = Set(VirtualMachineApp.allCases.map(\.bundleExtension))
-        .union(["download"])
+    /// VM bundles are one item: listed and trashed whole, never walked. A file
+    /// inside a VM is part of a disk, and trashing it alone breaks the VM.
+    /// Safari's `.download` bundle is one item too, but only where Safari puts
+    /// it, so `LargeFileScanPolicy.isSafariDownloadBundle` decides that by
+    /// location, not by extension.
+    static let virtualMachineExtensions: Set<String> = Set(VirtualMachineApp.allCases.map(\.bundleExtension))
 
     /// VM kinds come back with `appInstalled: false`. The scanner fills it in.
     static func kind(forExtension ext: String) -> LargeFileKind? {

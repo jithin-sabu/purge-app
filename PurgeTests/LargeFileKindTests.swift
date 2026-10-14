@@ -11,6 +11,7 @@ struct LargeFileKindTests {
     private struct Home {
         let url: URL
         var downloads: URL { url.appendingPathComponent("Downloads", isDirectory: true) }
+        var documents: URL { url.appendingPathComponent("Documents", isDirectory: true) }
         var parallels: URL { url.appendingPathComponent("Parallels", isDirectory: true) }
 
         init() throws {
@@ -33,14 +34,17 @@ struct LargeFileKindTests {
     private func scan(
         _ home: Home,
         minBytes: Int64 = 1,
-        installedApps: Set<VirtualMachineApp> = []
+        installedApps: Set<VirtualMachineApp> = [],
+        runningApps: Set<String> = []
     ) async -> [String: LargeFile] {
         let stream = LargeFileScanner().scanStream(
             minBytes: minBytes,
             staleDays: 0,
-            roots: [home.downloads],
+            roots: [home.downloads, home.documents],
             virtualMachineRoots: [home.parallels],
             installedApps: installedApps,
+            isAppRunning: { runningApps.contains($0) },
+            home: home.url,
             exclusions: ScanExclusions(keys: []),
             isExcluded: { _ in false }
         )
@@ -163,6 +167,67 @@ struct LargeFileKindTests {
         #expect(Set(found.keys) == ["Parallels/Win.pvm", "Parallels/Nested/Mac.pvm"])
     }
 
+    /// Only Safari's bundle is a download: a `.download` folder directly in
+    /// Downloads with its `Info.plist`. Elsewhere, or without the plist, the
+    /// folder is the user's: never labelled, never trashed whole. macOS treats
+    /// every `.download` folder as a package (Safari declares the type), so the
+    /// walk doesn't enter it and nothing inside is listed, as before #128.
+    @Test
+    func aDownloadFolderThatIsNotSafarisIsNeverAnItem() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.write("Documents/Client.download/report.pdf")
+        try home.write("Downloads/Fake.download/movie.mov")
+
+        let found = await scan(home)
+
+        #expect(found.keys.allSatisfy { !$0.hasSuffix(".download") })
+        #expect(found.values.allSatisfy { $0.kind == nil })
+        for relative in ["Documents/Client.download/report.pdf", "Downloads/Fake.download/movie.mov"] {
+            let url = home.url.appendingPathComponent(relative)
+            #expect(LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url, isAppRunning: { _ in false }), "\(relative)")
+        }
+        for relative in ["Documents/Client.download", "Downloads/Fake.download"] {
+            let url = home.url.appendingPathComponent(relative)
+            #expect(!LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url, isAppRunning: { _ in false }), "\(relative)")
+        }
+    }
+
+    /// A running VM keeps writing its disk after a move to the Trash, so
+    /// emptying the Trash would lose it. It is left off the list, and the
+    /// delete check refuses it in case the app opens after the scan.
+    @Test
+    func vmWhoseAppIsRunningIsNotListedOrTrashed() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.write("Downloads/Win.pvm/harddisk.hdd/disk.hds")
+        let parallels = VirtualMachineApp.parallels.bundleID
+
+        let found = await scan(home, runningApps: [parallels])
+        #expect(found.isEmpty)
+
+        let url = home.downloads.appendingPathComponent("Win.pvm")
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url, isAppRunning: { $0 == parallels }))
+        #expect(LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url, isAppRunning: { _ in false }))
+    }
+
+    /// Bundle IDs only see GUI apps. VMware's `.lck` folders and Parallels'
+    /// `.lock` files mark a VM in use whatever runs it.
+    @Test(arguments: ["Old.vmwarevm/Old.vmx.lck/M00001.lck", "Win.pvm/harddisk.hdd/harddisk.hdd.lock"])
+    func lockedVMIsNotListedOrTrashed(lockFile: String) async throws {
+        let home = try Home()
+        defer { home.remove() }
+        try home.write("Downloads/\(lockFile)")
+        let bundle = String(lockFile.prefix { $0 != "/" })
+        try home.write("Downloads/\(bundle)/disk.bin")
+
+        let found = await scan(home)
+        #expect(found.isEmpty)
+
+        let url = home.downloads.appendingPathComponent(bundle)
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url, isAppRunning: { _ in false }))
+    }
+
     // MARK: - Delete check
 
     @Test
@@ -171,11 +236,12 @@ struct LargeFileKindTests {
         defer { home.remove() }
         try home.write("Downloads/Win.pvm/harddisk.hdd/disk.hds")
         try home.write("Downloads/archive.zip.download/archive.zip")
+        try home.write("Downloads/archive.zip.download/Info.plist")
         try home.write("Parallels/Mac.pvm/harddisk.hdd/disk.hds")
 
         for relative in ["Downloads/Win.pvm", "Downloads/archive.zip.download", "Parallels/Mac.pvm"] {
             let url = home.url.appendingPathComponent(relative)
-            #expect(LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url), "\(relative)")
+            #expect(LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url, isAppRunning: { _ in false }), "\(relative)")
         }
     }
 
@@ -190,6 +256,9 @@ struct LargeFileKindTests {
         try home.write("Downloads/Chapter.part/notes.pdf")
         try home.write("Parallels/screen-recording.mov")
         try home.write("Parallels/archive.zip.download/archive.zip")
+        try home.write("Downloads/archive.zip.download/archive.zip")
+        try home.write("Downloads/archive.zip.download/Info.plist")
+        try home.write("Documents/Client.download/report.pdf")
 
         for relative in [
             "Downloads/Project",
@@ -200,9 +269,11 @@ struct LargeFileKindTests {
             "Downloads/Chapter.part",
             "Parallels/screen-recording.mov",
             "Parallels/archive.zip.download",
+            "Downloads/archive.zip.download/archive.zip",
+            "Documents/Client.download",
         ] {
             let url = home.url.appendingPathComponent(relative)
-            #expect(!LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url), "\(relative)")
+            #expect(!LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url, isAppRunning: { _ in false }), "\(relative)")
         }
     }
 
@@ -213,7 +284,7 @@ struct LargeFileKindTests {
         try home.write("Downloads/Xcode_26.xip")
 
         let url = home.downloads.appendingPathComponent("Xcode_26.xip")
-        #expect(LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url))
+        #expect(LargeFileScanPolicy.isEligibleForDeletion(url, home: home.url, isAppRunning: { _ in false }))
     }
 
     // MARK: - Labels

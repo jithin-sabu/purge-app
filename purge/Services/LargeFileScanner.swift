@@ -16,19 +16,23 @@ nonisolated final class LargeFileScanner {
     /// `virtualMachineRoots` are walked for VM bundles only. They default to the
     /// policy's VM folders, but only when `roots` is also left to default: a
     /// caller that names its own roots never walks the real `~/Parallels` by
-    /// accident. `installedApps` defaults to a LaunchServices lookup.
+    /// accident. `installedApps` defaults to a LaunchServices lookup, and
+    /// `isAppRunning` to the running-apps list. `home` decides where a Safari
+    /// download bundle may sit; tests pass a temporary one.
     func scanStream(
         minBytes: Int64,
         staleDays: Int,
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
+        isAppRunning: (@Sendable (String) -> Bool)? = nil,
+        home: URL? = nil,
         exclusions: ScanExclusions? = nil,
         isExcluded: (@Sendable (URL) -> Bool)? = nil
     ) -> AsyncStream<LargeFile> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
-                let home = FileManager.default.homeDirectoryForCurrentUser
+                let home = home ?? FileManager.default.homeDirectoryForCurrentUser
                 var walks = (roots ?? LargeFileScanPolicy.scanRoots(home: home))
                     .map { (root: $0, bundlesOnly: false) }
                 let vmRoots = virtualMachineRoots
@@ -39,6 +43,8 @@ nonisolated final class LargeFileScanner {
                     staleDays: staleDays,
                     walks: walks,
                     installedApps: installedApps ?? Self.installedVirtualMachineApps(),
+                    isAppRunning: isAppRunning ?? { DeletionSafetyPolicy.isAppRunning(bundleID: $0) },
+                    home: home,
                     exclusions: exclusions,
                     isExcluded: isExcluded ?? { ExcludedPathsStore.isExcluded($0) },
                     continuation: continuation
@@ -67,6 +73,8 @@ nonisolated final class LargeFileScanner {
         staleDays: Int,
         walks: [(root: URL, bundlesOnly: Bool)],
         installedApps: Set<VirtualMachineApp>,
+        isAppRunning: @Sendable (String) -> Bool,
+        home: URL,
         exclusions: ScanExclusions?,
         isExcluded: @Sendable (URL) -> Bool,
         continuation: AsyncStream<LargeFile>.Continuation
@@ -118,15 +126,21 @@ nonisolated final class LargeFileScanner {
                         }
 
                         if values?.isDirectory == true || values?.isPackage == true {
-                            // A VM or an unfinished download bundle is one item. Never
-                            // walk into it, whether or not macOS calls it a package:
-                            // without the VM app installed it is a plain folder, and a
-                            // disk file listed from inside it could be trashed alone.
-                            let ext = fileURL.pathExtension.lowercased()
-                            if LargeFileKind.wholeBundleExtensions.contains(ext) {
+                            // A VM or a Safari download bundle is one item. Never walk
+                            // into it, whether or not macOS calls it a package: without
+                            // the VM app installed it is a plain folder, and a disk file
+                            // listed from inside it could be trashed alone.
+                            let isVirtualMachine = VirtualMachineApp(bundleExtension: fileURL.pathExtension) != nil
+                            if isVirtualMachine
+                                || (!bundlesOnly && LargeFileScanPolicy.isSafariDownloadBundle(fileURL, home: home)) {
                                 enumerator.skipDescendants()
                                 if isUserExcluded { continue }
-                                if bundlesOnly, VirtualMachineApp(bundleExtension: ext) == nil { continue }
+                                // A VM that may be running is left off the list; the
+                                // delete check refuses it again in case it starts later.
+                                if isVirtualMachine,
+                                   LargeFileScanPolicy.virtualMachineIsInUse(fileURL, isAppRunning: isAppRunning) {
+                                    continue
+                                }
                                 let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false)
                                 if let file = listed(
                                     fileURL, size: measured.bytes, lastUsed: measured.lastUsed,
