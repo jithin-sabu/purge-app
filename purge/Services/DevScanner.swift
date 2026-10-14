@@ -248,15 +248,18 @@ nonisolated final class DevScanner {
             deviceCounts = SimulatorRuntime.deviceCounts(fromDevicesList: devices.stdout)
         }
 
-        // Same for the runtime Xcode builds new simulators on: a failed lookup is
-        // "unknown", not "none". The one exception is a Mac without Xcode, reached
-        // through the framework's own simctl: there is no SDK to match, so nothing
-        // can be a default, and the lookup fails for that reason alone.
+        // Same for the runtime Xcode builds new simulators on: a failed or empty
+        // lookup is "unknown", not "none". The one exception is a Mac without Xcode,
+        // reached through the framework's own simctl: there is no SDK to match, so
+        // nothing can be a default, and the lookup comes back empty for that reason
+        // alone. A refused xcrun leaves the launcher at `.xcrun`, so a Mac whose
+        // Xcode license is pending stays "unknown".
         var xcodeBuilds: Set<String>?
         if let match = await Simctl.runAsync(["runtime", "match", "list", "-j"], timeout: Self.simctlListTimeout),
            match.succeeded {
             xcodeBuilds = SimulatorRuntime.xcodeRuntimeBuilds(fromMatchList: match.stdout)
-        } else if Simctl.launcher() == .framework {
+        }
+        if xcodeBuilds == nil, Simctl.launcher() == .framework {
             xcodeBuilds = []
         }
 
@@ -272,34 +275,37 @@ nonisolated final class DevScanner {
 
     // MARK: - iOS Simulators
 
-    /// Metadata only (`sizeOnDisk` is `nil`). Requires `xcrun` and a CoreSimulator devices folder.
+    /// Metadata only (`sizeOnDisk` is `nil`). Requires a `simctl` that runs (see
+    /// `Simctl`) and a CoreSimulator devices folder.
     func discoverShutdownSimulatorsWithoutSizes(access: ScanAccess = .full) async -> [SimulatorDevice] {
         let devicesRoot = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Developer/CoreSimulator/Devices", isDirectory: true)
         guard ProtectedLocations.isReadable(devicesRoot, access: access),
               FileManager.default.fileExists(atPath: devicesRoot.path) else { return [] }
-        guard FileManager.default.isExecutableFile(atPath: Self.xcrunPath) else { return [] }
 
-        let devices = await loadSimulatorsFromSimctl(devicesRoot: devicesRoot)
-            ?? loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot)
-        return devices.filter { !ExcludedPathsStore.isExcluded($0.folderURL) }
+        // `nil` here also covers `Simctl.launcher()` finding no simctl at all.
+        let listing = await Simctl.runAsync(["list", "devices", "--json"], timeout: Self.simctlListTimeout)
+        return simulatorDevices(fromListing: listing, devicesRoot: devicesRoot)
+            .filter { !ExcludedPathsStore.isExcluded($0.folderURL) }
     }
-
-    private static let xcrunPath = "/usr/bin/xcrun"
 
     /// CoreSimulator can take a while to answer on a cold first call; past this the plist
     /// fallback is a better answer than a stalled scan.
     private static let simctlListTimeout: TimeInterval = 30
 
-    private func loadSimulatorsFromSimctl(devicesRoot: URL) async -> [SimulatorDevice]? {
-        let result = await ProcessRunner.runAsync(
-            executablePath: Self.xcrunPath,
-            arguments: ["simctl", "list", "devices", "--json"],
-            timeout: Self.simctlListTimeout
-        )
-        guard let result, result.succeeded else { return nil }
+    /// Devices come only from a `simctl` that can also delete them, because the
+    /// delete goes through the same `simctl`. The `device.plist` files stand in
+    /// only when simctl ran but was slow to list. When it could not be launched,
+    /// or failed (Xcode license, out-of-date CoreSimulator), every row offered
+    /// would fail to delete (#161), so none are.
+    func simulatorDevices(fromListing listing: ProcessRunner.Output?, devicesRoot: URL) -> [SimulatorDevice] {
+        guard let listing else { return [] }
+        if listing.timedOut { return loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot) }
+        guard listing.succeeded else { return [] }
+        return parseSimulatorList(listing.stdout, devicesRoot: devicesRoot) ?? []
+    }
 
-        let data = result.stdout
+    private func parseSimulatorList(_ data: Data, devicesRoot: URL) -> [SimulatorDevice]? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let devicesMap = root["devices"] as? [String: Any] else {
             return nil

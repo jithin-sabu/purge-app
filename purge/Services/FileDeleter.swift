@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 nonisolated struct DeletedItem: Identifiable {
     let id: UUID
@@ -101,15 +102,26 @@ nonisolated enum SimulatorRuntimeRemoval: Sendable, Equatable {
     case failed(String)
 }
 
+/// Outcome of asking CoreSimulator to delete one simulator device.
+nonisolated enum SimulatorDeviceRemoval: Sendable, Equatable {
+    case removed
+    /// `detail` is simctl's own text and exit status, for the log only.
+    case failed(CleanFailureReason, detail: String)
+}
+
 /// Deletion engine. Runs off the main actor (`@concurrent`) so large removals
 /// never block the UI; progress reaches the UI via the `onProgress` buffer.
 nonisolated final class FileDeleter: Sendable {
     typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) -> SimulatorRuntimeRemoval
+    typealias SimulatorDeviceRemover = @Sendable (_ udid: String, _ folder: URL) -> SimulatorDeviceRemoval
     typealias PrivilegedMover = @Sendable (_ urls: [URL]) async -> PrivilegedMoveResult
 
     /// How a simulator runtime row is removed. The live one calls `simctl`; tests
     /// hand in a fake so the dispatch can be checked without CoreSimulator.
     private let simulatorRuntimeRemover: SimulatorRuntimeRemover
+
+    /// How a simulator device row is removed. Same reason as the runtime remover.
+    private let simulatorDeviceRemover: SimulatorDeviceRemover
 
     /// Moves root-owned paths to the Trash through the helper. Tests hand in a fake
     /// so the routing can be checked without a registered helper.
@@ -120,10 +132,12 @@ nonisolated final class FileDeleter: Sendable {
 
     init(
         simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = FileDeleter.removeSimulatorRuntime,
+        simulatorDeviceRemover: @escaping SimulatorDeviceRemover = { FileDeleter.removeSimulatorDevice(udid: $0, folder: $1) },
         privilegedMover: @escaping PrivilegedMover = { await PrivilegedUninstall.moveToTrash($0) },
         installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() }
     ) {
         self.simulatorRuntimeRemover = simulatorRuntimeRemover
+        self.simulatorDeviceRemover = simulatorDeviceRemover
         self.privilegedMover = privilegedMover
         self.installLeftoverRule = installLeftoverRule
     }
@@ -264,8 +278,8 @@ nonisolated final class FileDeleter: Sendable {
                         onProgress?(.itemDeleted(sizeBytes: 0))
                     }
                 } else if let udid = Self.coreSimulatorDeviceUDID(from: url) {
-                    switch Self.deleteCoreSimulatorDevice(udid: udid) {
-                    case .success:
+                    switch simulatorDeviceRemover(udid, url) {
+                    case .removed:
                         bytesRemovedDirectly += size
                         deletedItems.append(DeletedItem(
                             path: url.path,
@@ -274,12 +288,14 @@ nonisolated final class FileDeleter: Sendable {
                             movedToTrash: false
                         ))
                         onProgress?(.itemDeleted(sizeBytes: size))
-                    case .failure:
-                        NSLog("Purge: failed to delete simulator %@ — %@", url.path, udid)
+                    case .failed(let reason, let detail):
+                        Self.simulatorLog.error(
+                            "simctl could not delete simulator \(udid, privacy: .public): \(detail, privacy: .public)"
+                        )
                         failedItems.append(FailedDeletionItem(
                             path: url.path,
                             displayName: friendlyTitle,
-                            reason: .unknown,
+                            reason: reason,
                             sizeBytes: size
                         ))
                     }
@@ -612,14 +628,18 @@ nonisolated final class FileDeleter: Sendable {
         return name
     }
 
-    private enum SimctlDeleteResult {
-        case success
-        case failure(String)
-    }
-
     /// Deleting a large device is real disk work, so this is generous — but still bounded, so a
     /// wedged CoreSimulator cannot leave the delete run hanging forever.
     private static let simctlDeleteTimeout: TimeInterval = 120
+    private static let simctlDeviceListTimeout: TimeInterval = 30
+
+    /// `simctl delete` removes the folder and the list entry before it exits: 0.07 s
+    /// for a new device on the dev Mac. The few extra checks only cover a slow disk.
+    private static let simctlDeviceGoneChecks = 4
+
+    /// Public on purpose: simctl's text is the only way to read a failed device
+    /// delete from someone's log (#161).
+    private static let simulatorLog = Logger(subsystem: "io.getpurge.app", category: "simulators")
 
     /// Prefetched with a contents-only listing, so sizing a file costs no extra stat.
     private static let contentsEntryKeys: [URLResourceKey] = [
@@ -648,26 +668,55 @@ nonisolated final class FileDeleter: Sendable {
         return sizes
     }
 
-    private static func deleteCoreSimulatorDevice(udid: String) -> SimctlDeleteResult {
-        guard let result = ProcessRunner.run(
-            executablePath: "/usr/bin/xcrun",
-            arguments: ["simctl", "delete", udid],
-            timeout: simctlDeleteTimeout
-        ) else {
-            return .failure("Could not launch xcrun")
+    /// Asks CoreSimulator to delete one device. It counts as removed only when the
+    /// UDID is gone from `simctl list devices` and its folder is gone, whatever
+    /// simctl's exit code said.
+    static func removeSimulatorDevice(
+        udid: String,
+        folder: URL,
+        runSimctl: Simctl.Runner = Simctl.run,
+        folderExists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) },
+        pollInterval: TimeInterval = 0.5
+    ) -> SimulatorDeviceRemoval {
+        guard let result = runSimctl(["delete", udid], simctlDeleteTimeout) else {
+            return .failed(.fromSimctl(nil), detail: "could not launch simctl")
         }
 
+        let checks = result.succeeded ? simctlDeviceGoneChecks : 1
+        for check in 0..<checks {
+            if check > 0 { Thread.sleep(forTimeInterval: pollInterval) }
+            if isSimulatorDeviceListed(udid, runSimctl: runSimctl) == false, !folderExists(folder) {
+                return .removed
+            }
+        }
+
+        let stderr = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail: String
         if result.timedOut {
-            return .failure("simctl delete timed out after \(Int(simctlDeleteTimeout))s")
+            detail = "timed out after \(Int(simctlDeleteTimeout))s"
+        } else if result.status == 0 {
+            detail = "exit 0, but the device is still listed or its folder is still there"
+        } else {
+            detail = "exit \(result.status): \(stderr.isEmpty ? "no error text" : stderr)"
         }
-        if result.status == 0 {
-            return .success
+        // simctl said yes and the device is still there: nothing in its text names
+        // a cause, so this stays unknown and a retry stays on offer.
+        let reason: CleanFailureReason = result.succeeded ? .unknown : .fromSimctl(result)
+        return .failed(reason, detail: detail)
+    }
+
+    /// `nil` when the list could not be read, which never counts as gone.
+    private static func isSimulatorDeviceListed(_ udid: String, runSimctl: Simctl.Runner) -> Bool? {
+        guard let listing = runSimctl(["list", "devices", "--json"], simctlDeviceListTimeout),
+              listing.succeeded,
+              let root = try? JSONSerialization.jsonObject(with: listing.stdout) as? [String: Any],
+              let devicesByRuntime = root["devices"] as? [String: Any]
+        else { return nil }
+        return devicesByRuntime.values.contains { runtimeDevices in
+            (runtimeDevices as? [[String: Any]])?.contains {
+                ($0["udid"] as? String)?.caseInsensitiveCompare(udid) == .orderedSame
+            } == true
         }
-        let errText = result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !errText.isEmpty {
-            return .failure(errText)
-        }
-        return .failure("simctl delete failed (exit \(result.status))")
     }
 
     /// `simctl runtime delete` hands the work to simdiskimaged and returns at once

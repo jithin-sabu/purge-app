@@ -42,6 +42,12 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     case systemProtected
     case safetySkipped
     case keptForOtherApp
+    /// Xcode was updated and its license waits to be accepted, so `simctl` won't run.
+    case xcodeLicenseNotAccepted
+    /// CoreSimulator's service is older than the installed Xcode, until a restart.
+    case simulatorServiceNeedsRestart
+    /// No `simctl` on this Mac could be run, so nothing can remove a simulator.
+    case simulatorToolsMissing
     case unknown
 
     var explanation: String {
@@ -58,6 +64,12 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             String(localized: "Purge left this one alone to stay on the safe side.")
         case .keptForOtherApp:
             String(localized: "Another app you still have installed uses this too, so Purge kept it.")
+        case .xcodeLicenseNotAccepted:
+            String(localized: "Open Xcode once to accept its license, then try again.")
+        case .simulatorServiceNeedsRestart:
+            String(localized: "Apple's simulator service is out of date. Restart your Mac, then clean again.")
+        case .simulatorToolsMissing:
+            String(localized: "Apple's simulator tools aren't working on this Mac, so Purge can't remove simulators. Reinstalling Xcode fixes this.")
         case .unknown:
             String(localized: "This one couldn't be removed. Try again.")
         }
@@ -77,6 +89,12 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             "hand.raised.fill"
         case .keptForOtherApp:
             "square.on.square"
+        case .xcodeLicenseNotAccepted:
+            "hammer.fill"
+        case .simulatorServiceNeedsRestart:
+            "arrow.clockwise.circle.fill"
+        case .simulatorToolsMissing:
+            "hammer.fill"
         case .unknown:
             "exclamationmark.circle.fill"
         }
@@ -86,8 +104,16 @@ nonisolated enum CleanFailureReason: Equatable, Error {
         self == .needsFullDiskAccess
     }
 
+    /// Only where tapping it can work while the result is still on screen. Accepting
+    /// the Xcode license takes a minute; a restart or a reinstall does not fit.
     var showsRetry: Bool {
-        self == .inUse || self == .unknown || self == .needsAdministrator
+        switch self {
+        case .inUse, .unknown, .needsAdministrator, .xcodeLicenseNotAccepted:
+            true
+        case .needsFullDiskAccess, .systemProtected, .safetySkipped, .keptForOtherApp,
+             .simulatorServiceNeedsRestart, .simulatorToolsMissing:
+            false
+        }
     }
 
     /// The retry button's label. The administrator case says what the tap will do —
@@ -136,6 +162,23 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             return .systemProtected
         }
 
+        return .unknown
+    }
+
+    /// Reads a failed `simctl` call: `nil` when none could be launched. Texts that
+    /// name no known cause, and timeouts, stay `.unknown`.
+    static func fromSimctl(_ output: ProcessRunner.Output?) -> CleanFailureReason {
+        guard let output else { return .simulatorToolsMissing }
+        if output.timedOut { return .unknown }
+        let text = output.stderrText.lowercased()
+        if Simctl.mentionsXcodeLicense(text) { return .xcodeLicenseNotAccepted }
+        // "CoreSimulator is out of date. Current version (…) is older than build
+        // version (…)", and the dropped connection that comes with it.
+        if text.contains("coresimulator is out of date")
+            || text.contains("coresimulatorservice connection became invalid") {
+            return .simulatorServiceNeedsRestart
+        }
+        if Simctl.xcrunRefused(output) { return .simulatorToolsMissing }
         return .unknown
     }
 
