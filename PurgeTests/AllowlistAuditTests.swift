@@ -437,6 +437,7 @@ struct AllowlistAdditionTests {
         "Downloads/installer.dmg.crdownload",
         "Downloads/movie.mkv.part",
         "Downloads/archive.zip.download",
+        "Downloads/ParallelsDesktop.dmg.prlupd-part",
     ])
     func newCachesAreOffered(relative: String) {
         #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
@@ -455,6 +456,10 @@ struct AllowlistAdditionTests {
         "Library/Containers/com.apple.mail/Data/Library/Mail",
         "Downloads/report.pdf",
         "Downloads/project/notes.part",
+        "Downloads/project/setup.prlupd-part",
+        "Downloads/Notes.part/chapter.pdf",
+        "Downloads/X.prlupd-part/inner.bin",
+        "Downloads/X.crdownload/inner.bin",
         ".oh-my-zsh/custom",
         "Movies/My Film.mov",
     ])
@@ -565,6 +570,26 @@ struct AllowlistAdditionTests {
 
         let found = CacheDiscoveryPaths.unfinishedDownloadURLs(home: home).map(\.lastPathComponent)
         #expect(found == ["old.iso.crdownload"])
+    }
+
+    /// Only Safari writes a download as a folder. A week-old folder named like
+    /// a Chrome, Firefox or Parallels download is the user's and stays out.
+    @Test
+    func onlySafariDownloadsMayBeFolders() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let longAgo = Date().addingTimeInterval(-10 * 24 * 60 * 60)
+        for name in ["Notes.part", "X.prlupd-part", "Y.crdownload", "Z.zip.download"] {
+            let folder = downloads.appendingPathComponent(name, isDirectory: true)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: folder.appendingPathComponent("inner.bin"))
+            try fm.setAttributes([.modificationDate: longAgo], ofItemAtPath: folder.path)
+        }
+
+        let found = CacheDiscoveryPaths.unfinishedDownloadURLs(home: home).map(\.lastPathComponent)
+        #expect(found == ["Z.zip.download"])
     }
 }
 

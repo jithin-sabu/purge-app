@@ -320,6 +320,7 @@
 "Logs, crash reports, and update leftovers" = "日志、崩溃报告和更新残留";
 "Look deeper" = "深入扫描";
 "Looking deeper" = "正在深入查看";
+"macOS restore image. Only needed to set up a Mac, device or virtual machine. Safe to remove once setup is done." = "macOS 恢复映像。只在设置 Mac、设备或虚拟机时需要，设置完成后可以安全移除。";
 "Made with" = "用";
 "Manual category" = "手动分类";
 "Manual clean" = "手动清理";
@@ -503,6 +504,7 @@
 "Reset to automatic" = "恢复自动选择";
 "Restart Watcher" = "重新启动监测";
 "Restarting…" = "正在重新启动…";
+"Restore image" = "恢复映像";
 "Retry" = "重试";
 "Reveal in Finder, %@" = "在访达中显示 %@";
 "Review" = "检查";
@@ -654,6 +656,8 @@
 "Unable to delete the selected files. Please try again." = "无法删除所选文件。请重试。";
 "Unable to remove %@. Please try again." = "无法移除 %@。请重试。";
 "Unable to remove the selected leftovers. Please try again." = "无法移除所选残留文件。请重试。";
+"Unfinished download" = "未完成的下载";
+"Unfinished download. It can't be opened as it is. Remove it unless the download is still running." = "未完成的下载，目前无法打开。除非仍在下载，否则可以移除。";
 "Uninstall" = "卸载";
 "Uninstall ${app} with Purge" = "使用 Purge 卸载 ${app}";
 "Uninstall %@?" = "卸载 %@？";
@@ -678,6 +682,12 @@
 "Version %@ · %@" = "版本 %@ · %@";
 "Videos" = "视频";
 "View the full allowlist" = "查看完整允许清理列表";
+"Virtual machine · %@" = "虚拟机 · %@";
+"Virtual machine. Everything inside it goes with it." = "虚拟机。其中的所有内容会一并移除。";
+"Virtual machine. Everything inside it goes with it. Remove it in Parallels Desktop so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 Parallels Desktop 中移除，以免应用里的虚拟机列表出错。";
+"Virtual machine. Everything inside it goes with it. Remove it in UTM so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 UTM 中移除，以免应用里的虚拟机列表出错。";
+"Virtual machine. Everything inside it goes with it. Remove it in VMware Fusion so the app's list of virtual machines stays right." = "虚拟机。其中的所有内容会一并移除。请在 VMware Fusion 中移除，以免应用里的虚拟机列表出错。";
+"Virtual Machines" = "虚拟机";
 "Vite cache" = "Vite 缓存";
 "Waiting for App Caches and Dev Tools to finish scanning" = "等待应用缓存和开发工具扫描完成";
 "Want Purge to look deeper?" = "让 Purge 深入扫描？";

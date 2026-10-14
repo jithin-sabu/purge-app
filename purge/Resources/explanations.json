@@ -3670,7 +3670,7 @@
     "key": "unfinished-downloads",
     "display_name": "Unfinished Downloads",
     "tag": "medium",
-    "explanation": "Downloads from Safari, Chrome or Firefox that stopped before finishing and have not changed in over a week. A browser can sometimes still resume one, so check before deleting.",
+    "explanation": "Downloads from Safari, Chrome, Firefox or Parallels that stopped before finishing and have not changed in over a week. The app that started one can sometimes still resume it, so check before deleting.",
     "bundle_ids": [],
     "aliases": [
       "Unfinished Downloads"

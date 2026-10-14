@@ -16,7 +16,7 @@ Before you start, read the newest entries in `docs/safety-notes.md`. They show t
 2. **Is each new Safe item only rebuildable data?** `.safe` items go into Clean Safe Items and scheduled cleans without asking. Look inside each folder as a real app writes it. If it can hold settings, installed tools or plugins, keys, history, databases, projects, or offline downloads, it must be `.medium` (Check First) or not offered.
    Past examples: `~/.gem` held installed gems, and VS Code `workspaceStorage` held AI chat history.
 
-3. **Does every removal still go through `DeletionSafetyPolicy.evaluate(_:)`?** Look for any new code that deletes, moves, or trashes files some other way.
+3. **Does every removal still go through its gate?** Cache and Dev Tools removals go through `DeletionSafetyPolicy.evaluate(_:)`. Items the user picks one by one (Large Files, AI models, the uninstaller) go through `FileDeleter.deleteUserSelectedFiles` and its policy gates: `LargeFileScanPolicy`, `AIModelScanPolicy`, `AppUninstallScanPolicy`. Look for any new code that deletes, moves, or trashes files some other way. If a gate now allows folders, check what lives inside them, and whether an app may be using them when they are trashed.
 
 4. **Can it be undone?** Files moved to the Trash can come back. Anything removed for good needs clear wording in the UI and the docs.
 

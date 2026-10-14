@@ -408,8 +408,11 @@ nonisolated final class FileDeleter: Sendable {
         )
     }
 
-    /// Dedicated route for the Large & Old Files feature. It only handles
-    /// individually selected regular files and always moves them to Trash.
+    /// The route for items the user picks one by one: Large Files rows (single
+    /// files, and whole VM and Safari download bundles), AI models, and the
+    /// uninstaller's apps and leftovers. Each path must pass one of the three
+    /// policy gates below; this route never consults the cache allowlist,
+    /// which refuses the user's own files by design. Items always move to Trash.
     @concurrent func deleteUserSelectedFiles(
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],

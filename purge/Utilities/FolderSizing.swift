@@ -141,6 +141,41 @@ enum FolderSizing {
         directorySizes(at: [url])[url.standardizedFileURL.path]
     }
 
+    /// Allocated bytes under `url`, and the latest access or change inside it,
+    /// summed file by file in-process. Unlike `du`, this needs no subprocess and
+    /// stops when the calling task is cancelled.
+    ///
+    /// `skipsPackages` leaves out nested packages. A virtual machine must pass
+    /// false: its disk folders (Parallels' `.hdd`) can register as packages,
+    /// and skipping them would leave out most of the bytes.
+    nonisolated static func walkedSize(at url: URL, skipsPackages: Bool) -> (bytes: Int64, lastUsed: Date) {
+        let keys: Set<URLResourceKey> = [
+            .isRegularFileKey, .totalFileAllocatedSizeKey, .fileSizeKey,
+            .contentAccessDateKey, .contentModificationDateKey
+        ]
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: Array(keys),
+            options: skipsPackages ? [.skipsPackageDescendants] : []
+        ) else { return (0, .distantPast) }
+
+        var bytes: Int64 = 0
+        var lastUsed = Date.distantPast
+        while let next = enumerator.nextObject() {
+            if Task.isCancelled { break }
+            guard let fileURL = next as? URL,
+                  let values = try? fileURL.resourceValues(forKeys: keys),
+                  values.isRegularFile == true
+            else { continue }
+            bytes += Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
+            lastUsed = max(lastUsed, max(
+                values.contentAccessDate ?? .distantPast,
+                values.contentModificationDate ?? .distantPast
+            ))
+        }
+        return (bytes, lastUsed)
+    }
+
     nonisolated static func singleFileSize(at url: URL) -> Int64 {
         guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
               let size = values.fileSize else { return 0 }

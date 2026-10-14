@@ -86,17 +86,25 @@ Git worktrees made by AI coding tools (Cursor, Codex, Conductor, T3 Code, and Cl
 
 Find space-hogging personal files without digging through folders:
 
-- Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**
+- Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**, plus `~/Parallels` and `~/Virtual Machines.localized` for virtual machines only
 - Skips managed libraries (Photos, iMovie, Music, and similar), hidden folders, and project folders like `node_modules`, `Pods`, `DerivedData` and build output. Deleting a single file out of a dependency tree only breaks the install, so those belong in Dev Tools, which removes them a folder at a time
 - **Search** filters the list as you type, matching the file name, the folder it sits in, and its source label
 - Filter by **size** (5 MB to 1 GB) and **last used** (any time up to over 1 year ago)
-- Category chips for videos, audio, images, PDFs, archives, documents, AI models, and other files
+- Category chips for videos, audio, images, PDFs, archives, documents, AI models, virtual machines, and other files
 - **Duplicates**: a byte-for-byte scan finds identical copies, groups them together, and shows how much you'd reclaim by keeping one. A **Duplicates** chip gathers them in one place. **Keep one of each** clears a whole tab of duplicates in one go. It suggests a copy to keep per set and marks the rest for Trash, and you can move the keeper to a different copy before anything is deleted. Nothing is removed until you review and confirm
 - Sort by size, date, or name; select files and review before deleting
 - **Quick Look** preview and **Reveal in Finder** from each row
 - Deletions move files to **Trash**, so nothing is permanently erased
 
 Large Files is separate from cache cleanup: these are your personal files, not rebuildable caches.
+
+#### Restore images, virtual machines, and unfinished downloads
+
+Some big files carry a label that says what they are. Hover it for the full explanation.
+
+- **Restore image**: a macOS `.ipsw`, often 15 to 25 GB. It's only needed to set up a Mac, a device, or a virtual machine.
+- **Virtual machine**: a Parallels (`.pvm`), UTM (`.utm`), or VMware Fusion (`.vmwarevm`) bundle. It's one row and goes to the Trash whole, never a disk file from inside it. If the app is still installed, the label says to remove the VM there, since the app keeps its own list. A VM whose app is open, or that holds a lock file, stays off the list until you quit the app.
+- **Unfinished download**: `.crdownload`, `.part`, and Parallels' `.prlupd-part` files, and Safari's `.download` bundle when it sits directly in Downloads.
 
 #### Local AI models
 
