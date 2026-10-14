@@ -42,10 +42,11 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
         let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
 
         // simctl omits lastBootedAt for some devices that have been used, so a
-        // missing date does not mean the device was never booted.
+        // missing date does not mean the device was never booted. Deleting one
+        // removes its apps and data with no Trash copy, so it stays Check First (#136).
         guard let lastUsed = lastBootedAt else {
             return SafetyInfo(
-                level: .safe,
+                level: .medium,
                 headline: headline,
                 explanation: String(localized: "Last use unknown. \(cost)"),
                 recoverySteps: "",

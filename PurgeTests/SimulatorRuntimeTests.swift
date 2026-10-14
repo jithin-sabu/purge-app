@@ -187,8 +187,8 @@ struct SimulatorRuntimeTests {
     }
 
     /// `simctl` omits `lastUsedAt` for a runtime that was never started. That is
-    /// the strongest orphan signal there is, so it stays Safe, the same reading
-    /// the device rows give a missing boot date.
+    /// the strongest orphan signal there is, so it stays Safe. Device rows keep a
+    /// missing boot date at Check First, because a device holds apps and data.
     @Test func neverUsedRuntimeWithNoDevicesIsSafe() throws {
         let never = try #require(runtime("18.4", in: parsed()))
         #expect(never.safetyInfo.level == .safe)
