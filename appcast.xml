@@ -3,6 +3,26 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.11.0</title>
+      <pubDate>Thu, 15 Oct 2026 09:27:01 +0000</pubDate>
+      <sparkle:version>33</sparkle:version>
+      <sparkle:shortVersionString>1.11.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Security fix.</strong> The git check Purge runs on projects can no longer be made to run a program by a project's own git settings.</li>
+          <li><strong>Projects you are working on stay put.</strong> "Consider stale after" now really uses 6 months, projects used recently are Check First under Show all, and each project card shows its safety level and why.</li>
+          <li><strong>Simulators are never Safe to Clean.</strong> They are removed for good, so they are always Check First.</li>
+          <li><strong>More to find.</strong> Leftover macOS update files in App Caches, labels for restore images, virtual machines and unfinished downloads in Large Files, and apps in subfolders in the uninstaller.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.11.0/Purgev1.11.0.dmg"
+        sparkle:edSignature="7XVNhBl/e8+fwY/hD0L7MG7RfKaKYlABLRDAiJDRMXCaYsZXBQRHR4vPklcRyRBy4+IRU0MOCyeF4siPqjSTAA=="
+        length="9335958"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.10.0</title>
       <pubDate>Mon, 12 Oct 2026 16:13:53 +0000</pubDate>
       <sparkle:version>32</sparkle:version>
