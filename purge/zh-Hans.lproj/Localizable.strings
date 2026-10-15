@@ -636,7 +636,6 @@
 "This folder may involve synced or user-facing app data. Deleting it can be safe, but it may cause inconvenience." = "此文件夹可能包含同步数据或应用中可见的数据。删除可能是安全的，但也可能影响使用。";
 "This includes folders marked Not Sure. They will be moved to Trash. Only continue if you understand the risk." = "其中包含标记为“无法确定”的文件夹。它们将被移到废纸篓。请仅在了解风险时继续。";
 "This is a known cache folder that apps or developer tools recreate automatically." = "这是已知的缓存文件夹，应用或开发工具会自动重新生成。";
-"This project is too big for Purge to check every file for recent changes, so Purge won't clean it without asking." = "此项目太大，Purge 无法逐一检查其中的文件是否有近期更改，因此不会未经询问就清理它。";
 "This one couldn't be removed. Try again." = "无法移除此内容，请重试。";
 "This one may hold something you'd miss. If you're not sure about it, cancel and untick it." = "此项目可能包含你需要的内容。不确定时，请取消并取消勾选它。";
 "This removes all saved cleanup records from this Mac. It cannot be undone." = "这会移除本机保存的所有清理记录，且无法撤销。";
@@ -714,11 +713,11 @@
 "You're all clear" = "暂无需要清理的内容";
 "You're all clear." = "一切正常，暂无需要清理的内容。";
 "You're all set" = "准备就绪";
-"You worked on this project in the last 6 months, so Purge won't clean it without asking." = "你在过去 6 个月内使用过这个项目，因此 Purge 不会未经询问就清理它。";
 "You're deleting all %lld copies of %@. No copy will remain." = "你将删除全部 %lld 份 %@ 副本，不会留下任何副本。";
 "Your Mac has a little more breathing room." = "你的 Mac 现在有更多可用空间了。";
 "Your Mac is looking clean." = "你的 Mac 很整洁。";
 "Your Mac is looking clean. Check back later." = "你的 Mac 很整洁。稍后再来检查吧。";
+"Worked on in the last 6 months, so Purge won't clean it without asking." = "过去 6 个月内使用过，因此 Purge 不会未经询问就清理它。";
 "Zig cache" = "Zig 缓存";
 "Zig output" = "Zig 输出";
 "a copy of Chrome" = "一份 Chrome";
@@ -994,6 +993,7 @@
 "In System Settings, select \"Purge: Apple Intelligence models removed\"." = "在“系统设置”中，选择“Purge: Apple Intelligence models removed”。";
 "Click the minus button below the list, then Remove." = "点按列表下方的减号按钮，然后点按“移除”。";
 "Purge carries on by itself once that's done." = "完成后 Purge 会自动继续。";
+"Too big to check for recent changes, so Purge won't clean it without asking." = "项目太大，无法检查是否有近期更改，因此 Purge 不会未经询问就清理它。";
 "Total" = "总计";
 
 /* Simulator delete failures (#161) */

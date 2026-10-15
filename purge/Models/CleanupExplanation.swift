@@ -62,29 +62,21 @@ extension SafetyInfo {
             recoverySteps: base.recoverySteps,
             reinstallCommand: base.reinstallCommand
         )
-        guard let checkFirstReason else { return info }
-        return info.checkFirst(for: checkFirstReason, path: path)
+        return checkFirstReason == nil ? info : info.heldAtCheckFirst(path: path)
     }
 
     /// Holds an artifact of a project that may still be in use at Check First, so
     /// Clean Safe Items and scheduled cleans leave it alone while it stays listed.
-    /// A manual override of this exact path is the user's decision and is kept.
-    nonisolated func checkFirst(for reason: ProjectCheckFirstReason, path: URL) -> SafetyInfo {
+    /// The reason is shown once on the project card, so the folder's own explanation
+    /// is kept as is. A manual override of this exact path is the user's decision.
+    nonisolated func heldAtCheckFirst(path: URL) -> SafetyInfo {
         guard UserOverridesStore.read(path: path) == nil else { return self }
         switch level {
         case .safe:
-            let note: String
-            switch reason {
-            case .usedRecently:
-                note = String(localized: "You worked on this project in the last 6 months, so Purge won't clean it without asking.")
-            case .tooBigToCheck:
-                note = String(localized: "This project is too big for Purge to check every file for recent changes, so Purge won't clean it without asking.")
-            }
             return SafetyInfo(
                 level: .medium,
                 headline: headline,
-                // First, so the row's line limit never cuts it off.
-                explanation: explanation.isEmpty ? note : note + " " + explanation,
+                explanation: explanation,
                 recoverySteps: recoverySteps,
                 reinstallCommand: reinstallCommand
             )

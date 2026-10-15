@@ -47,8 +47,8 @@ keeps its 30-day buffer until the user picks an age; leftovers are always
 Check First.
 
 A walk that hits the entry limit no longer answers "not used". The project is
-listed, but its folders are Check First, with a note saying Purge could not
-check every file. The walk skips dependency trees nobody edits, such as
+listed, but its folders are Check First, and the project card says Purge could
+not check every file. The walk skips dependency trees nobody edits, such as
 `node_modules`, `.venv` and `Pods`, wherever they sit, and skips a generic name
 such as `build` only when it is the folder being offered.
 
@@ -57,6 +57,10 @@ last 6 months are Check First, so Clean Safe Items and scheduled cleans skip
 them. Each artifact keeps the reason it is Check First, so Reset to automatic
 and Recategorize land on Check First again. A path the user marked Safe by hand
 stays Safe.
+
+A closed project card used to show only the name and size, so a project held at
+Check First looked the same as a Safe one. The card header now shows the
+strictest level among its folders and one line saying why.
 
 ### What would have caught it earlier
 

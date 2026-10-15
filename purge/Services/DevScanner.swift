@@ -1387,8 +1387,9 @@ nonisolated final class DevScanner {
                     sizeBytes: bytes,
                     lastModified: modified,
                     isSelected: false,
-                    safetyInfo: checkFirstReason.map { row.safetyInfo.checkFirst(for: $0, path: row.path) }
-                        ?? row.safetyInfo,
+                    safetyInfo: checkFirstReason == nil
+                        ? row.safetyInfo
+                        : row.safetyInfo.heldAtCheckFirst(path: row.path),
                     reinstallSafety: row.reinstallSafety,
                     gitStatus: .unknown,
                     checkFirstReason: checkFirstReason

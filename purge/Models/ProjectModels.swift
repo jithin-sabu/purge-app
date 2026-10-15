@@ -195,6 +195,16 @@ nonisolated enum ProjectCheckFirstReason: Hashable {
     case usedRecently
     /// The activity walk hit its limit, so recent use could not be ruled out.
     case tooBigToCheck
+
+    /// One line for the project card header, which says why once for every folder.
+    var summary: String {
+        switch self {
+        case .usedRecently:
+            return String(localized: "Worked on in the last 6 months, so Purge won't clean it without asking.")
+        case .tooBigToCheck:
+            return String(localized: "Too big to check for recent changes, so Purge won't clean it without asking.")
+        }
+    }
 }
 
 nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {

@@ -19,8 +19,10 @@ struct DevToolsView<PageHeader: View>: View {
         onScan: @escaping () -> Void,
         showsPageHeader: Bool = true,
         usesExternalScrollContainer: Bool = false,
+        initiallyExpandedProjectRoots: Set<String> = [],
         @ViewBuilder pageHeader: @escaping () -> PageHeader
     ) {
+        _expandedProjectRoots = State(initialValue: initiallyExpandedProjectRoots)
         self.isLoading = isLoading
         self.scanPhase = scanPhase
         self.onScan = onScan
@@ -1071,13 +1073,21 @@ struct DevToolsView<PageHeader: View>: View {
                             squareSize: AppStyle.Row.projectGroupIconSize
                         )
                         .accessibilityLabel(projectGroupIconAccessibilityLabel(for: group))
-                        Text(group.displayName)
-                            .font(AppStyle.Typography.rowTitle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(group.displayName)
+                                .font(AppStyle.Typography.rowTitle)
+                            Text(projectSummary(groupIndex: currentGroupIndex))
+                                .font(AppStyle.Typography.metadata)
+                                .foregroundStyle(AppColors.textSecondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Text(formatBytes(visibleGroupByteTotal(groupID: group.id)))
                             .font(AppStyle.Typography.rowTitle)
                             .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
+                        projectBadge(level: projectLevel(groupIndex: currentGroupIndex))
                         ZStack {
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 11, weight: .semibold))
@@ -1092,8 +1102,11 @@ struct DevToolsView<PageHeader: View>: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isExpanded ? LocalizedStringKey("Collapse project") : LocalizedStringKey("Expand project"))
+                .accessibilityValue(Text(verbatim:
+                    "\(projectLevel(groupIndex: currentGroupIndex).displayName). \(projectSummary(groupIndex: currentGroupIndex))"
+                ))
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, AppStyle.Spacing.xSmall)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
             .frame(minHeight: AppStyle.Row.parentHeight)
             // Header only: an overlay across the whole card would swallow the
@@ -1130,6 +1143,46 @@ struct DevToolsView<PageHeader: View>: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Project \(group.displayName)")
         .accessibilityHint("Grouped dev tool cleanup targets")
+        }
+    }
+
+    /// The strictest level among the folders on show, so a closed card never reads
+    /// Safe while one of its folders is Check First.
+    private func projectLevel(groupIndex gi: Int) -> SafetyLevel {
+        let levels = sortedVisibleArtifactIndices(forGroup: gi).map { store.projectGroups[gi].artifacts[$0].safetyInfo.level }
+        if levels.contains(.unknown) { return .unknown }
+        if levels.contains(.medium) { return .medium }
+        return .safe
+    }
+
+    /// Why the project is held at Check First, said once for all its folders, or
+    /// else the folders it holds.
+    private func projectSummary(groupIndex gi: Int) -> String {
+        let artifacts = sortedVisibleArtifactIndices(forGroup: gi).map { store.projectGroups[gi].artifacts[$0] }
+        if let held = artifacts.first(where: { $0.checkFirstReason != nil && $0.safetyInfo.level == .medium }),
+           let reason = held.checkFirstReason {
+            return reason.summary
+        }
+        return artifacts.map(\.safetyInfo.headline).joined(separator: String(localized: ", "))
+    }
+
+    /// As wide as the widest level's badge, so sizes line up down the list in any
+    /// language.
+    private func projectBadge(level: SafetyLevel) -> some View {
+        ZStack(alignment: .trailing) {
+            ForEach(SafetyLevel.allCases, id: \.self) { slot in
+                AppBadge(text: slot.displayName, tone: Self.badgeTone(for: slot)).hidden()
+            }
+            AppBadge(text: level.displayName, tone: Self.badgeTone(for: level))
+        }
+        .accessibilityHidden(true)
+    }
+
+    private static func badgeTone(for level: SafetyLevel) -> AppBadge.Tone {
+        switch level {
+        case .safe: return .safe
+        case .medium: return .warning
+        case .unknown: return .neutral
         }
     }
 
