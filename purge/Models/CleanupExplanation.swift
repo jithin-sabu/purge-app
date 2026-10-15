@@ -83,7 +83,8 @@ extension SafetyInfo {
             return SafetyInfo(
                 level: .medium,
                 headline: headline,
-                explanation: explanation.isEmpty ? note : explanation + " " + note,
+                // First, so the row's line limit never cuts it off.
+                explanation: explanation.isEmpty ? note : note + " " + explanation,
                 recoverySteps: recoverySteps,
                 reinstallCommand: reinstallCommand
             )
