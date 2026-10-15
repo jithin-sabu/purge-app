@@ -123,6 +123,14 @@ actor GitStatusChecker {
                 continue
             }
 
+            // A dotfiles repo at home would make `git status` walk the whole home
+            // folder. Unknown keeps these items out of one-click cleaning, as the
+            // dirty status such a repo almost always reports did.
+            guard repoRoot.path != Self.homePath else {
+                result[pathKey] = .unknown
+                continue
+            }
+
             if access == .limited {
                 // `.git` can itself be a link, so it is checked before it is read
                 // for a `gitdir:` line, and the git dir it names after that.
@@ -141,8 +149,10 @@ actor GitStatusChecker {
 
         await fetchMissingRepoStatuses(repoRootsToResolve)
 
+        // A cache cleared while the fetch was awaited has no answer, which is not
+        // the same as clean.
         for (pathKey, repoPath) in pathToRepoRoot {
-            result[pathKey] = cache[repoPath] ?? .clean
+            result[pathKey] = cache[repoPath] ?? .unknown
         }
 
         return result
@@ -196,11 +206,65 @@ actor GitStatusChecker {
     /// holding the scan open.
     private static let gitStatusTimeout: TimeInterval = 60
 
-    /// Returns `.unknown` only if Git is unavailable; empty porcelain means `.clean`.
-    private static func invokeGit(repository: URL) -> GitWorktreeStatus {
+    nonisolated private static let homePath =
+        FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+
+    /// Purge runs `git status` by itself, in projects it finds in Downloads, Desktop
+    /// and Documents, so the repository's own config is untrusted. These turn off
+    /// what it can use to run a program: an fsmonitor command, hooks (a status that
+    /// rewrites the index runs post-index-change), and submodules, which carry
+    /// config of their own.
+    nonisolated static let untrustedRepositoryArguments = [
+        "--no-optional-locks",
+        "-c", "core.fsmonitor=false",
+        "-c", "core.hooksPath=/dev/null",
+    ]
+
+    /// Whether the repository's own config names a filter driver. A clean or
+    /// process filter runs on any file `git status` has to re-read, and every file
+    /// of a freshly extracted archive needs that. Filters from the user's global
+    /// or system config, such as Git LFS, are the user's own and allowed. `git
+    /// config` only reads files, includes too, and runs nothing. Nil when the
+    /// answer is unclear.
+    nonisolated static func repositoryDefinesFilters(_ repository: URL) -> Bool? {
         guard let result = ProcessRunner.run(
             executablePath: "/usr/bin/git",
-            arguments: ["-C", repository.path, "status", "--porcelain"],
+            arguments: ["-C", repository.path] + untrustedRepositoryArguments
+                + ["config", "--show-scope", "--includes", "--get-regexp", "^filter\\."],
+            timeout: 10
+        ), !result.timedOut else {
+            return nil
+        }
+        switch result.status {
+        case 0:
+            let trusted: Set<String> = ["global", "system"]
+            return result.stdoutText.split(whereSeparator: \.isNewline).contains { line in
+                let scope = line.split(separator: "\t", maxSplits: 1).first.map(String.init) ?? ""
+                return !trusted.contains(scope)
+            }
+        case 1:
+            // `git config --get-regexp` exits 1 when nothing matches.
+            return result.stdout.isEmpty ? false : nil
+        default:
+            return nil
+        }
+    }
+
+    /// Returns `.unknown` if Git is unavailable or the repository could make it run
+    /// a program; empty porcelain means `.clean`.
+    nonisolated static func invokeGit(repository: URL) -> GitWorktreeStatus {
+        // Submodule config is not covered by the filter check, so a repository
+        // with submodules is not run at all.
+        if FileManager.default.fileExists(atPath: repository.appendingPathComponent(".gitmodules").path) {
+            return .unknown
+        }
+        guard repositoryDefinesFilters(repository) == false else {
+            return .unknown
+        }
+        guard let result = ProcessRunner.run(
+            executablePath: "/usr/bin/git",
+            arguments: ["-C", repository.path] + untrustedRepositoryArguments
+                + ["status", "--porcelain", "--ignore-submodules=all"],
             timeout: gitStatusTimeout
         ), result.succeeded else {
             return .unknown
