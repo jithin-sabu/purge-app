@@ -146,6 +146,31 @@ struct ProjectActivityTests {
         ) == .none)
     }
 
+    @Test("a sub-project's build output is skipped, even though the root does not offer it")
+    func moduleBuildOutputIsSkipped() throws {
+        let fixture = try ActivityFixture(
+            files: ["settings.gradle", "build.gradle", "app/build.gradle", "app/build/intermediates/classes.jar"],
+            folders: [".gradle"]
+        )
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "app/build/intermediates/classes.jar")
+        #expect(ProjectActivityPolicy.activity(
+            since: cutoff,
+            projectRoot: fixture.root,
+            artifactPaths: [fixture.url(".gradle")],
+            access: .full
+        ) == .none)
+    }
+
+    /// The walk may skip only folders the old walk skipped too, all of them artifact
+    /// names. A name outside the catalog would stop edits there counting as use.
+    @Test("every folder skipped by name is a catalog artifact name")
+    func neverEditedNamesAreArtifactNames() {
+        let names = ProjectActivityPolicy.neverEditedFolderNames.subtracting([".git"])
+        #expect(names.isSubset(of: ProjectArtifactCatalog.artifactFolderNames))
+    }
+
     @Test("a dependency tree nested anywhere in the project is skipped")
     func nestedDependencyTreeIsSkipped() throws {
         let fixture = try ActivityFixture(files: ["package.json", "tools/.venv/lib/site.py", "ios/Pods/Pod/a.m"])
@@ -382,8 +407,11 @@ struct ProjectListingFilterTests {
 @MainActor
 @Suite("A project held at Check First stays there after a reset")
 struct RecentProjectResetTests {
-    private func store(with artifact: ProjectCacheArtifact) -> PurgeStore {
-        let store = PurgeStore()
+    /// Built on fake scans and throwaway defaults, so the store never reads or
+    /// writes the real user's records.
+    private func store(with artifact: ProjectCacheArtifact, _ scans: FakeScans) -> PurgeStore {
+        scans.hasAccess = true
+        let store = scans.makeStore()
         store.projectGroups = [ProjectGroup(
             displayName: "project",
             rootPath: artifact.projectRoot,
@@ -414,8 +442,10 @@ struct RecentProjectResetTests {
 
     @Test("Reset to automatic")
     func resetKeepsCheckFirst() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
         let artifact = recentArtifact()
-        let store = store(with: artifact)
+        let store = store(with: artifact, scans)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
         store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
@@ -424,16 +454,22 @@ struct RecentProjectResetTests {
 
     @Test("without recent use, a reset lands on Safe as before")
     func resetWithoutRecentUseIsSafe() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
         var artifact = recentArtifact()
         artifact.checkFirstReason = nil
-        let store = store(with: artifact)
+        let store = store(with: artifact, scans)
         store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .safe)
+        // Shows the empty-candidates checks above fail on the level, not on reach.
+        #expect(store.manualSafeCleanupCandidates().count == 1)
     }
 
     @Test("Recategorize")
     func recategorizeKeepsCheckFirst() {
-        let store = store(with: recentArtifact())
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = store(with: recentArtifact(), scans)
         store.recategorizeProjectArtifact(groupIndex: 0, artifactIndex: 0)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
         #expect(store.manualSafeCleanupCandidates().isEmpty)
@@ -441,7 +477,9 @@ struct RecentProjectResetTests {
 
     @Test("a project too big to check stays Check First too")
     func tooBigToCheckSurvivesReset() {
-        let store = store(with: recentArtifact(.tooBigToCheck))
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = store(with: recentArtifact(.tooBigToCheck), scans)
         store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
         store.recategorizeProjectArtifact(groupIndex: 0, artifactIndex: 0)

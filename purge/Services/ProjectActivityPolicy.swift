@@ -77,6 +77,24 @@ nonisolated enum ProjectActivityPolicy {
             || (name.hasPrefix(".") && ProjectArtifactCatalog.artifactFolderNames.contains(name))
     }
 
+    /// Whether a folder with an artifact's name sits in a project of the kind that
+    /// produces it, such as `app/build` next to `app/build.gradle` in a multi-module
+    /// Gradle project. That module is offered as its own project, so its output is
+    /// not in the root's `artifactPaths`, but it is still build output. A Node
+    /// project's own `build/` scripts match no rule and are read.
+    static func isBuildOutput(_ url: URL, named name: String) -> Bool {
+        ProjectArtifactCatalog.rules.contains { rule in
+            let parts = rule.folder.split(separator: "/").map(String.init)
+            guard parts.last == name else { return false }
+            var root = url
+            for part in parts.reversed() {
+                guard root.lastPathComponent == part else { return false }
+                root.deleteLastPathComponent()
+            }
+            return rule.matchesRoot(root)
+        }
+    }
+
     /// Whether anything in the project changed after `cutoff`. Cheap signals first,
     /// then a bounded walk that stops at the first recent entry.
     static func activity(
@@ -130,7 +148,8 @@ nonisolated enum ProjectActivityPolicy {
             let name = url.lastPathComponent
             if isNeverEdited(folderName: name)
                 || (ProjectArtifactCatalog.artifactFolderNames.contains(name)
-                    && offeredPaths.contains(url.resolvingSymlinksInPath().path))
+                    && (offeredPaths.contains(url.resolvingSymlinksInPath().path)
+                        || isBuildOutput(url, named: name)))
                 || !ProtectedLocations.isReadable(url, access: access, home: home) {
                 enumerator.skipDescendants()
             }

@@ -49,8 +49,10 @@ Check First.
 A walk that hits the entry limit no longer answers "not used". The project is
 listed, but its folders are Check First, and the project card says Purge could
 not check every file. The walk skips dependency trees nobody edits, such as
-`node_modules`, `.venv` and `Pods`, wherever they sit, and skips a generic name
-such as `build` only when it is the folder being offered.
+`node_modules`, `.venv` and `Pods`, wherever they sit. It skips a generic name
+such as `build` only when it is the folder being offered, or when the folder
+around it is a project that produces it, like `app/build` next to
+`app/build.gradle`.
 
 Show all still lists every project, but folders of a project worked on in the
 last 6 months are Check First, so Clean Safe Items and scheduled cleans skip
