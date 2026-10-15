@@ -4546,7 +4546,7 @@ final class PurgeStore: ObservableObject {
             kind: artifact.kind,
             path: artifact.path,
             reinstallCommand: artifact.safetyInfo.reinstallCommand,
-            usedRecently: artifact.usedRecently
+            checkFirstReason: artifact.checkFirstReason
         )
         var groups = projectGroups
         groups[groupIndex].artifacts[artifactIndex].safetyInfo = info
@@ -4609,7 +4609,7 @@ final class PurgeStore: ObservableObject {
             kind: artifact.kind,
             path: artifact.path,
             reinstallCommand: artifact.safetyInfo.reinstallCommand,
-            usedRecently: artifact.usedRecently
+            checkFirstReason: artifact.checkFirstReason
         )
         scanSelection.artifactIDs.remove(artifact.id)
         var groups = projectGroups

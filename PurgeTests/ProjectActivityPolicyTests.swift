@@ -80,15 +80,21 @@ private let cutoff = now.addingTimeInterval(-180 * 86_400)
 
 @Suite("A project's age comes from the project, not its artifact folder")
 struct ProjectActivityTests {
-    private func isActive(_ fixture: ActivityFixture, project: String = "", entryLimit: Int = ProjectActivityPolicy.walkEntryLimit) -> Bool {
+    private func activity(
+        _ fixture: ActivityFixture, project: String = "", entryLimit: Int = ProjectActivityPolicy.walkEntryLimit
+    ) -> ProjectActivityPolicy.Activity {
         let root = project.isEmpty ? fixture.root : fixture.url(project)
-        return ProjectActivityPolicy.hasActivity(
+        return ProjectActivityPolicy.activity(
             since: cutoff,
             projectRoot: root,
             artifactPaths: [root.appendingPathComponent("node_modules")],
             access: .full,
             entryLimit: entryLimit
         )
+    }
+
+    private func isActive(_ fixture: ActivityFixture, project: String = "") -> Bool {
+        activity(fixture, project: project) == .recent
     }
 
     @Test("an old node_modules in a project edited today is active")
@@ -132,12 +138,22 @@ struct ProjectActivityTests {
         defer { fixture.cleanUp() }
         try fixture.ageEverything(to: longAgo)
         try fixture.setDate(now, of: "build/out/app.jar")
-        #expect(!ProjectActivityPolicy.hasActivity(
+        #expect(ProjectActivityPolicy.activity(
             since: cutoff,
             projectRoot: fixture.root,
             artifactPaths: [fixture.url("build")],
             access: .full
-        ))
+        ) == .none)
+    }
+
+    @Test("a dependency tree nested anywhere in the project is skipped")
+    func nestedDependencyTreeIsSkipped() throws {
+        let fixture = try ActivityFixture(files: ["package.json", "tools/.venv/lib/site.py", "ios/Pods/Pod/a.m"])
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "tools/.venv/lib/site.py")
+        try fixture.setDate(now, of: "ios/Pods/Pod/a.m")
+        #expect(activity(fixture) == .none)
     }
 
     @Test("a recent artifact folder date still counts, as it did before")
@@ -184,13 +200,13 @@ struct ProjectActivityTests {
         #expect(!isActive(fixture, project: "project"))
     }
 
-    @Test("a walk that hits the entry limit counts as active, so the project is not offered")
-    func entryLimitCountsAsActive() throws {
+    @Test("a walk that hits the entry limit is too big to check, not unused")
+    func entryLimitIsTooBigToCheck() throws {
         let fixture = try ActivityFixture(files: ["package.json", "src/app.js"], folders: ["node_modules"])
         defer { fixture.cleanUp() }
         try fixture.ageEverything(to: longAgo)
-        #expect(!isActive(fixture))
-        #expect(isActive(fixture, entryLimit: 0))
+        #expect(activity(fixture) == .none)
+        #expect(activity(fixture, entryLimit: 0) == .tooBigToCheck)
     }
 
     @Test("a repo at home is ignored, so a dotfiles repo cannot make every project look busy")
@@ -332,7 +348,25 @@ struct ProjectListingFilterTests {
         try fixture.setDate(now, of: "src/app.js")
         let artifacts = showAllArtifacts(fixture)
         #expect(!artifacts.isEmpty)
-        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .medium && $0.usedRecently })
+        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .medium && $0.checkFirstReason == .usedRecently })
+    }
+
+    @Test("a project too big to check is listed as Check First, not hidden")
+    func tooBigProjectIsCheckFirst() throws {
+        let fixture = try nodeProject()
+        defer { fixture.cleanUp() }
+        let filter = DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.sixMonths.rawValue,
+            now: now,
+            live: .none,
+            activityEntryLimit: 0
+        )
+        let (group, _) = DevScanner.sizeProjectGroup(
+            rootURL: fixture.root, types: [.node], access: .full, filter: filter
+        )
+        let artifacts = try #require(group?.artifacts)
+        #expect(!artifacts.isEmpty)
+        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .medium && $0.checkFirstReason == .tooBigToCheck })
     }
 
     @Test("Show all keeps an old project Safe")
@@ -341,12 +375,12 @@ struct ProjectListingFilterTests {
         defer { fixture.cleanUp() }
         let artifacts = showAllArtifacts(fixture)
         #expect(!artifacts.isEmpty)
-        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .safe && !$0.usedRecently })
+        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .safe && $0.checkFirstReason == nil })
     }
 }
 
 @MainActor
-@Suite("A recently used project stays Check First after a reset")
+@Suite("A project held at Check First stays there after a reset")
 struct RecentProjectResetTests {
     private func store(with artifact: ProjectCacheArtifact) -> PurgeStore {
         let store = PurgeStore()
@@ -360,7 +394,7 @@ struct RecentProjectResetTests {
     }
 
     /// A path that does not exist and that no override can name.
-    private func recentArtifact() -> ProjectCacheArtifact {
+    private func recentArtifact(_ reason: ProjectCheckFirstReason = .usedRecently) -> ProjectCacheArtifact {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("purge-test-\(UUID().uuidString)", isDirectory: true)
         let path = root.appendingPathComponent("node_modules", isDirectory: true)
@@ -371,10 +405,10 @@ struct RecentProjectResetTests {
             sizeBytes: 1024,
             lastModified: .distantPast,
             isSelected: false,
-            safetyInfo: SafetyInfo.forStaleProjectArtifact(kind: .nodeModules, path: path, usedRecently: true),
+            safetyInfo: SafetyInfo.forStaleProjectArtifact(kind: .nodeModules, path: path, checkFirstReason: reason),
             reinstallSafety: .notApplicable,
             gitStatus: .clean,
-            usedRecently: true
+            checkFirstReason: reason
         )
     }
 
@@ -391,7 +425,7 @@ struct RecentProjectResetTests {
     @Test("without recent use, a reset lands on Safe as before")
     func resetWithoutRecentUseIsSafe() {
         var artifact = recentArtifact()
-        artifact.usedRecently = false
+        artifact.checkFirstReason = nil
         let store = store(with: artifact)
         store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .safe)
@@ -404,6 +438,15 @@ struct RecentProjectResetTests {
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
         #expect(store.manualSafeCleanupCandidates().isEmpty)
     }
+
+    @Test("a project too big to check stays Check First too")
+    func tooBigToCheckSurvivesReset() {
+        let store = store(with: recentArtifact(.tooBigToCheck))
+        store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        store.recategorizeProjectArtifact(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+    }
 }
 
 @Suite("Consider stale after uses the 6 months Settings shows until the user changes it")
@@ -413,7 +456,13 @@ struct StalenessThresholdDefaultTests {
         let suite = ThrowawayDefaults()
         defer { suite.remove() }
         #expect(DevToolsStalenessOption.currentThresholdDays(userDefaults: suite.defaults) == 180)
-        #expect(OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: suite.defaults) == 180)
+    }
+
+    @Test("no saved setting keeps orphan leftovers at their 30-day buffer")
+    func missingKeyKeepsOrphanBuffer() {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        #expect(OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: suite.defaults) == 30)
     }
 
     @Test("a saved Show all is still Show all")

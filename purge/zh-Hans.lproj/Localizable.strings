@@ -636,6 +636,7 @@
 "This folder may involve synced or user-facing app data. Deleting it can be safe, but it may cause inconvenience." = "此文件夹可能包含同步数据或应用中可见的数据。删除可能是安全的，但也可能影响使用。";
 "This includes folders marked Not Sure. They will be moved to Trash. Only continue if you understand the risk." = "其中包含标记为“无法确定”的文件夹。它们将被移到废纸篓。请仅在了解风险时继续。";
 "This is a known cache folder that apps or developer tools recreate automatically." = "这是已知的缓存文件夹，应用或开发工具会自动重新生成。";
+"This project is too big for Purge to check every file for recent changes, so Purge won't clean it without asking." = "此项目太大，Purge 无法逐一检查其中的文件是否有近期更改，因此不会未经询问就清理它。";
 "This one couldn't be removed. Try again." = "无法移除此内容，请重试。";
 "This one may hold something you'd miss. If you're not sure about it, cancel and untick it." = "此项目可能包含你需要的内容。不确定时，请取消并取消勾选它。";
 "This removes all saved cleanup records from this Mac. It cannot be undone." = "这会移除本机保存的所有清理记录，且无法撤销。";

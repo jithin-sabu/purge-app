@@ -28,9 +28,8 @@ nonisolated enum ProjectActivityPolicy {
         }
     }
 
-    /// Most entries the activity walk reads in one project. Hitting the limit counts
-    /// as activity: a walk that stopped early has not shown the project is unused,
-    /// so a huge project is left off the list rather than offered.
+    /// Most entries the activity walk reads in one project. Hitting the limit gives
+    /// `.tooBigToCheck`: the project is offered, but only as Check First.
     static let walkEntryLimit = 20_000
 
     /// Files git rewrites on commit, checkout, fetch, and index refresh.
@@ -56,16 +55,38 @@ nonisolated enum ProjectActivityPolicy {
         return gitLockFiles.contains { modificationDate(gitDir.appendingPathComponent($0)) != nil }
     }
 
+    /// What the activity check found. A walk that stopped at its limit has proved
+    /// nothing either way, so it is neither recent nor unused.
+    enum Activity: Equatable {
+        case recent
+        case none
+        case tooBigToCheck
+    }
+
+    /// Folders nobody edits by hand, skipped wherever they sit in the project:
+    /// dependency trees and tool caches that can hold hundreds of thousands of
+    /// files. Generic names such as build, bin or vendor are not here, because a
+    /// project can keep its own scripts in them. Those are skipped only when they
+    /// are the folder being offered.
+    static let neverEditedFolderNames: Set<String> = [
+        ".git", "node_modules", "venv", "Pods", "DerivedDataCache", "dist-newstyle", "zig-cache",
+    ]
+
+    static func isNeverEdited(folderName name: String) -> Bool {
+        neverEditedFolderNames.contains(name)
+            || (name.hasPrefix(".") && ProjectArtifactCatalog.artifactFolderNames.contains(name))
+    }
+
     /// Whether anything in the project changed after `cutoff`. Cheap signals first,
     /// then a bounded walk that stops at the first recent entry.
-    static func hasActivity(
+    static func activity(
         since cutoff: Date,
         projectRoot: URL,
         artifactPaths: [URL],
         access: ScanAccess,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         entryLimit: Int = walkEntryLimit
-    ) -> Bool {
+    ) -> Activity {
         func isRecent(_ url: URL) -> Bool {
             guard let date = modificationDate(url) else { return false }
             return date > cutoff
@@ -73,16 +94,16 @@ nonisolated enum ProjectActivityPolicy {
 
         // The artifact folders' own dates are what the scan used before, so the new
         // rule can only hide more than the old one did, never list more.
-        if artifactPaths.contains(where: isRecent) { return true }
+        if artifactPaths.contains(where: isRecent) { return .recent }
 
         if let gitDir = gitDirectory(forProject: projectRoot, access: access, home: home),
            gitActivityFiles.contains(where: { isRecent(gitDir.appendingPathComponent($0)) }) {
-            return true
+            return .recent
         }
 
-        if isRecent(projectRoot) { return true }
+        if isRecent(projectRoot) { return .recent }
         // A project rooted at home would walk Documents, Desktop, and Library.
-        guard projectRoot.path != home.path else { return false }
+        guard projectRoot.path != home.path else { return .none }
 
         let keys: [URLResourceKey] = [.contentModificationDateKey, .isDirectoryKey, .isSymbolicLinkKey]
         guard let enumerator = FileManager.default.enumerator(
@@ -90,7 +111,7 @@ nonisolated enum ProjectActivityPolicy {
             includingPropertiesForKeys: keys,
             options: [],
             errorHandler: { _, _ in true }
-        ) else { return false }
+        ) else { return .none }
 
         // Compared in resolved form: the enumerator can spell a path differently from
         // the URL the artifact was built from.
@@ -99,26 +120,22 @@ nonisolated enum ProjectActivityPolicy {
         var entriesRead = 0
         for case let url as URL in enumerator {
             entriesRead += 1
-            if entriesRead > entryLimit { return true }
+            if entriesRead > entryLimit { return .tooBigToCheck }
 
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
                   values.isSymbolicLink != true else { continue }
-            if let date = values.contentModificationDate, date > cutoff { return true }
+            if let date = values.contentModificationDate, date > cutoff { return .recent }
 
             guard values.isDirectory == true else { continue }
-            // Only the folders being offered are skipped, plus .git and node_modules,
-            // which can hold hundreds of thousands of files nobody edits by hand. A
-            // folder that merely shares an artifact's name, like a build/ of the
-            // user's own scripts in a Node project, is read like any other.
             let name = url.lastPathComponent
-            if name == ".git" || name == "node_modules"
+            if isNeverEdited(folderName: name)
                 || (ProjectArtifactCatalog.artifactFolderNames.contains(name)
                     && offeredPaths.contains(url.resolvingSymlinksInPath().path))
                 || !ProtectedLocations.isReadable(url, access: access, home: home) {
                 enumerator.skipDescendants()
             }
         }
-        return false
+        return .none
     }
 
     /// The git dir of the repository holding the project, which may sit above it in

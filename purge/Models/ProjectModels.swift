@@ -189,6 +189,14 @@ nonisolated enum DeletableArtifactKind: String, Hashable, Sendable, CaseIterable
 }
 
 /// One folder under a detected project shown in lists and selectable for deletion.
+/// Why a project's otherwise Safe artifacts are offered only as Check First.
+nonisolated enum ProjectCheckFirstReason: Hashable {
+    /// Worked on within the default stale window, listed only because of Show all.
+    case usedRecently
+    /// The activity walk hit its limit, so recent use could not be ruled out.
+    case tooBigToCheck
+}
+
 nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {
     var id: String { path.path }
 
@@ -209,10 +217,9 @@ nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {
     /// Per-session Git cleanliness for the enclosing repo (`unknown` until resolved).
     var gitStatus: GitWorktreeStatus
 
-    /// The project was worked on within the default stale window. Only possible
-    /// with Show all, which lists such projects; kept so a reset or recategorize
-    /// lands on Check First again instead of Safe.
-    var usedRecently = false
+    /// Why the scan held this artifact at Check First, if it did. Kept so a reset
+    /// or recategorize lands on Check First again instead of Safe.
+    var checkFirstReason: ProjectCheckFirstReason?
 
     var formattedSize: String { formatBytes(sizeBytes) }
 }

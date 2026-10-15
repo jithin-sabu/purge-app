@@ -1330,6 +1330,7 @@ nonisolated final class DevScanner {
         let staleDays: Int
         let now: Date
         let live: ProjectActivityPolicy.LiveContext
+        var activityEntryLimit = ProjectActivityPolicy.walkEntryLimit
     }
 
     nonisolated static func sizeProjectGroup(
@@ -1348,18 +1349,26 @@ nonisolated final class DevScanner {
         }
         // Show all still lists a project worked on lately, but measured against the
         // default window it is not stale, so its folders become Check First below.
+        // A project too big to check is listed the same way in every mode.
         let showAll = filter.staleDays == DevToolsStalenessOption.showAll.rawValue
         let windowDays = showAll ? DevToolsStalenessOption.defaultOption.rawValue : filter.staleDays
         let cutoff = Calendar.current.date(byAdding: .day, value: -windowDays, to: filter.now)
             ?? filter.now
-        let usedRecently = ProjectActivityPolicy.hasActivity(
+        let checkFirstReason: ProjectCheckFirstReason?
+        switch ProjectActivityPolicy.activity(
             since: cutoff,
             projectRoot: rootURL,
             artifactPaths: rows.map(\.path),
-            access: access
-        )
-        if usedRecently && !showAll {
-            return (nil, 0)
+            access: access,
+            entryLimit: filter.activityEntryLimit
+        ) {
+        case .recent:
+            guard showAll else { return (nil, 0) }
+            checkFirstReason = .usedRecently
+        case .tooBigToCheck:
+            checkFirstReason = .tooBigToCheck
+        case .none:
+            checkFirstReason = nil
         }
 
         let artifactPaths = rows.map(\.path)
@@ -1378,12 +1387,11 @@ nonisolated final class DevScanner {
                     sizeBytes: bytes,
                     lastModified: modified,
                     isSelected: false,
-                    safetyInfo: usedRecently
-                        ? row.safetyInfo.checkFirstForRecentUse(path: row.path)
-                        : row.safetyInfo,
+                    safetyInfo: checkFirstReason.map { row.safetyInfo.checkFirst(for: $0, path: row.path) }
+                        ?? row.safetyInfo,
                     reinstallSafety: row.reinstallSafety,
                     gitStatus: .unknown,
-                    usedRecently: usedRecently
+                    checkFirstReason: checkFirstReason
                 )
             )
         }

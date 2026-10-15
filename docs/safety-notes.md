@@ -22,8 +22,7 @@ display default and was never saved. The scanner read the missing setting as
 0, and 0 means Show all. So the activity check from the 2026-10-01 entry below
 never ran. A project edited an hour ago was listed, its `node_modules` and
 build folders were Safe to Clean, and Clean Safe Items or a scheduled clean
-could move them to the Trash. The orphan leftover scan read the same setting
-and used its 30-day floor instead of 6 months.
+could move them to the Trash.
 
 The activity check also failed open in two ways. It reads at most 20,000
 entries in a project, and a walk that stopped there answered "not used". And it
@@ -43,14 +42,21 @@ or rebuilt with the project's install command.
 ### What changed
 
 A missing setting now reads as the 6 months Settings shows. Only a saved Show
-all means Show all. A walk that hits the entry limit now counts as activity,
-so a project too big to check is left off the list. The walk skips only the
-folders being offered for that project, plus `.git` and `node_modules`.
+all means Show all. The orphan leftover scan, which reads the same setting,
+keeps its 30-day buffer until the user picks an age; leftovers are always
+Check First.
+
+A walk that hits the entry limit no longer answers "not used". The project is
+listed, but its folders are Check First, with a note saying Purge could not
+check every file. The walk skips dependency trees nobody edits, such as
+`node_modules`, `.venv` and `Pods`, wherever they sit, and skips a generic name
+such as `build` only when it is the folder being offered.
 
 Show all still lists every project, but folders of a project worked on in the
 last 6 months are Check First, so Clean Safe Items and scheduled cleans skip
-them. The project keeps that fact, so Reset to automatic and Recategorize land
-on Check First again. A path the user marked Safe by hand stays Safe.
+them. Each artifact keeps the reason it is Check First, so Reset to automatic
+and Recategorize land on Check First again. A path the user marked Safe by hand
+stays Safe.
 
 ### What would have caught it earlier
 
@@ -58,9 +64,10 @@ on Check First again. A path the user marked Safe by hand stays Safe.
 [`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift)
 reads the setting from a fresh `ThrowawayDefaults` and expects 180 days, and
 checks that a project edited today is not listed. In the same file,
-`entryLimitCountsAsActive` covers the cut-off walk, `sameNameFolderIsWalked`
-the skipped folder names, `showAllRecentProjectIsCheckFirst` Show all, and
-`RecentProjectResetTests` the reset and recategorize paths. The earlier tests
+`entryLimitIsTooBigToCheck` and `tooBigProjectIsCheckFirst` cover the cut-off
+walk, `sameNameFolderIsWalked` the skipped folder names,
+`showAllRecentProjectIsCheckFirst` Show all, and `RecentProjectResetTests` the
+reset and recategorize paths. The earlier tests
 always passed the age in directly, so none of them read the setting the way the
 scanner does.
 
