@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-10-15: Projects in use were Safe to Clean under "Consider stale after"
 
-**Found internally**, no report. **Fixed:** not yet shipped. **Affected:** v1.1.1 to v1.10.0, for anyone who never changed the setting.
+**Found internally**, no report. **Fixed:** [#194](https://github.com/jithin-sabu/purge-app/pull/194), shipped in v1.11.0 (2026-10-15). **Affected:** v1.1.1 to v1.10.0, for anyone who never changed the setting.
 
 ### What happened
 
@@ -79,7 +79,7 @@ scanner does.
 
 ## 2026-10-14: Simulators were Safe to Clean although they are removed for good
 
-**Reported** by @zihua-zhang while testing the 1.9.0 Chinese beta ([#110](https://github.com/jithin-sabu/purge-app/issues/110)). **Fixed:** [#166](https://github.com/jithin-sabu/purge-app/pull/166) and [#167](https://github.com/jithin-sabu/purge-app/pull/167), not yet shipped. **Affected:** v1.1.0 to v1.10.0.
+**Reported** by @zihua-zhang while testing the 1.9.0 Chinese beta ([#110](https://github.com/jithin-sabu/purge-app/issues/110)). **Fixed:** [#166](https://github.com/jithin-sabu/purge-app/pull/166) and [#167](https://github.com/jithin-sabu/purge-app/pull/167), shipped in v1.11.0 (2026-10-15). **Affected:** v1.1.0 to v1.10.0.
 
 ### What happened
 
