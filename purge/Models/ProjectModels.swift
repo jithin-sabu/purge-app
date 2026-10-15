@@ -189,6 +189,24 @@ nonisolated enum DeletableArtifactKind: String, Hashable, Sendable, CaseIterable
 }
 
 /// One folder under a detected project shown in lists and selectable for deletion.
+/// Why a project's otherwise Safe artifacts are offered only as Check First.
+nonisolated enum ProjectCheckFirstReason: Hashable {
+    /// Worked on within the default stale window, listed only because of Show all.
+    case usedRecently
+    /// The activity walk hit its limit, so recent use could not be ruled out.
+    case tooBigToCheck
+
+    /// One line for the project card header, which says why once for every folder.
+    var summary: String {
+        switch self {
+        case .usedRecently:
+            return String(localized: "Worked on in the last 6 months, so Purge won't clean it without asking.")
+        case .tooBigToCheck:
+            return String(localized: "Too big to check for recent changes, so Purge won't clean it without asking.")
+        }
+    }
+}
+
 nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {
     var id: String { path.path }
 
@@ -208,6 +226,10 @@ nonisolated struct ProjectCacheArtifact: Identifiable, Hashable {
 
     /// Per-session Git cleanliness for the enclosing repo (`unknown` until resolved).
     var gitStatus: GitWorktreeStatus
+
+    /// Why the scan held this artifact at Check First, if it did. Kept so a reset
+    /// or recategorize lands on Check First again instead of Safe.
+    var checkFirstReason: ProjectCheckFirstReason?
 
     var formattedSize: String { formatBytes(sizeBytes) }
 }

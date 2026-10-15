@@ -1330,6 +1330,7 @@ nonisolated final class DevScanner {
         let staleDays: Int
         let now: Date
         let live: ProjectActivityPolicy.LiveContext
+        var activityEntryLimit = ProjectActivityPolicy.walkEntryLimit
     }
 
     nonisolated static func sizeProjectGroup(
@@ -1346,17 +1347,28 @@ nonisolated final class DevScanner {
         if ProjectActivityPolicy.isInUse(projectRoot: rootURL, live: filter.live, access: access) {
             return (nil, 0)
         }
-        if filter.staleDays != DevToolsStalenessOption.showAll.rawValue {
-            let cutoff = Calendar.current.date(byAdding: .day, value: -filter.staleDays, to: filter.now)
-                ?? filter.now
-            if ProjectActivityPolicy.hasActivity(
-                since: cutoff,
-                projectRoot: rootURL,
-                artifactPaths: rows.map(\.path),
-                access: access
-            ) {
-                return (nil, 0)
-            }
+        // Show all still lists a project worked on lately, but measured against the
+        // default window it is not stale, so its folders become Check First below.
+        // A project too big to check is listed the same way in every mode.
+        let showAll = filter.staleDays == DevToolsStalenessOption.showAll.rawValue
+        let windowDays = showAll ? DevToolsStalenessOption.defaultOption.rawValue : filter.staleDays
+        let cutoff = Calendar.current.date(byAdding: .day, value: -windowDays, to: filter.now)
+            ?? filter.now
+        let checkFirstReason: ProjectCheckFirstReason?
+        switch ProjectActivityPolicy.activity(
+            since: cutoff,
+            projectRoot: rootURL,
+            artifactPaths: rows.map(\.path),
+            access: access,
+            entryLimit: filter.activityEntryLimit
+        ) {
+        case .recent:
+            guard showAll else { return (nil, 0) }
+            checkFirstReason = .usedRecently
+        case .tooBigToCheck:
+            checkFirstReason = .tooBigToCheck
+        case .none:
+            checkFirstReason = nil
         }
 
         let artifactPaths = rows.map(\.path)
@@ -1375,9 +1387,12 @@ nonisolated final class DevScanner {
                     sizeBytes: bytes,
                     lastModified: modified,
                     isSelected: false,
-                    safetyInfo: row.safetyInfo,
+                    safetyInfo: checkFirstReason == nil
+                        ? row.safetyInfo
+                        : row.safetyInfo.heldAtCheckFirst(path: row.path),
                     reinstallSafety: row.reinstallSafety,
-                    gitStatus: .unknown
+                    gitStatus: .unknown,
+                    checkFirstReason: checkFirstReason
                 )
             )
         }

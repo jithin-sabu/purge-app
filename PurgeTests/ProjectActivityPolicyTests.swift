@@ -80,15 +80,21 @@ private let cutoff = now.addingTimeInterval(-180 * 86_400)
 
 @Suite("A project's age comes from the project, not its artifact folder")
 struct ProjectActivityTests {
-    private func isActive(_ fixture: ActivityFixture, project: String = "", entryLimit: Int = ProjectActivityPolicy.walkEntryLimit) -> Bool {
+    private func activity(
+        _ fixture: ActivityFixture, project: String = "", entryLimit: Int = ProjectActivityPolicy.walkEntryLimit
+    ) -> ProjectActivityPolicy.Activity {
         let root = project.isEmpty ? fixture.root : fixture.url(project)
-        return ProjectActivityPolicy.hasActivity(
+        return ProjectActivityPolicy.activity(
             since: cutoff,
             projectRoot: root,
             artifactPaths: [root.appendingPathComponent("node_modules")],
             access: .full,
             entryLimit: entryLimit
         )
+    }
+
+    private func isActive(_ fixture: ActivityFixture, project: String = "") -> Bool {
+        activity(fixture, project: project) == .recent
     }
 
     @Test("an old node_modules in a project edited today is active")
@@ -115,6 +121,64 @@ struct ProjectActivityTests {
         try fixture.ageEverything(to: longAgo)
         try fixture.setDate(now, of: "node_modules/pkg/index.js")
         #expect(!isActive(fixture))
+    }
+
+    @Test("an edit in a folder that only shares an artifact's name counts")
+    func sameNameFolderIsWalked() throws {
+        let fixture = try ActivityFixture(files: ["package.json", "build/release.sh"], folders: ["node_modules"])
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "build/release.sh")
+        #expect(isActive(fixture))
+    }
+
+    @Test("a folder that is offered is still skipped, whatever its name")
+    func offeredFolderIsSkipped() throws {
+        let fixture = try ActivityFixture(files: ["build.gradle", "build/out/app.jar"])
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "build/out/app.jar")
+        #expect(ProjectActivityPolicy.activity(
+            since: cutoff,
+            projectRoot: fixture.root,
+            artifactPaths: [fixture.url("build")],
+            access: .full
+        ) == .none)
+    }
+
+    @Test("a sub-project's build output is skipped, even though the root does not offer it")
+    func moduleBuildOutputIsSkipped() throws {
+        let fixture = try ActivityFixture(
+            files: ["settings.gradle", "build.gradle", "app/build.gradle", "app/build/intermediates/classes.jar"],
+            folders: [".gradle"]
+        )
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "app/build/intermediates/classes.jar")
+        #expect(ProjectActivityPolicy.activity(
+            since: cutoff,
+            projectRoot: fixture.root,
+            artifactPaths: [fixture.url(".gradle")],
+            access: .full
+        ) == .none)
+    }
+
+    /// The walk may skip only folders the old walk skipped too, all of them artifact
+    /// names. A name outside the catalog would stop edits there counting as use.
+    @Test("every folder skipped by name is a catalog artifact name")
+    func neverEditedNamesAreArtifactNames() {
+        let names = ProjectActivityPolicy.neverEditedFolderNames.subtracting([".git"])
+        #expect(names.isSubset(of: ProjectArtifactCatalog.artifactFolderNames))
+    }
+
+    @Test("a dependency tree nested anywhere in the project is skipped")
+    func nestedDependencyTreeIsSkipped() throws {
+        let fixture = try ActivityFixture(files: ["package.json", "tools/.venv/lib/site.py", "ios/Pods/Pod/a.m"])
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "tools/.venv/lib/site.py")
+        try fixture.setDate(now, of: "ios/Pods/Pod/a.m")
+        #expect(activity(fixture) == .none)
     }
 
     @Test("a recent artifact folder date still counts, as it did before")
@@ -161,13 +225,13 @@ struct ProjectActivityTests {
         #expect(!isActive(fixture, project: "project"))
     }
 
-    @Test("hitting the entry limit falls back to not active, the old behaviour")
-    func entryLimitFallsBack() throws {
+    @Test("a walk that hits the entry limit is too big to check, not unused")
+    func entryLimitIsTooBigToCheck() throws {
         let fixture = try ActivityFixture(files: ["package.json", "src/app.js"], folders: ["node_modules"])
         defer { fixture.cleanUp() }
         try fixture.ageEverything(to: longAgo)
-        try fixture.setDate(now, of: "src/app.js")
-        #expect(!isActive(fixture, entryLimit: 0))
+        #expect(activity(fixture) == .none)
+        #expect(activity(fixture, entryLimit: 0) == .tooBigToCheck)
     }
 
     @Test("a repo at home is ignored, so a dotfiles repo cannot make every project look busy")
@@ -288,6 +352,184 @@ struct ProjectListingFilterTests {
         let showAll = DevToolsStalenessOption.showAll.rawValue
         #expect(listed(fixture, staleDays: showAll) == [.nodeModules])
         #expect(listed(fixture, staleDays: showAll, cwds: [fixture.root.path]) == nil)
+    }
+
+    private func showAllArtifacts(_ fixture: ActivityFixture) -> [ProjectCacheArtifact] {
+        let filter = DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.showAll.rawValue,
+            now: now,
+            live: .none
+        )
+        let (group, _) = DevScanner.sizeProjectGroup(
+            rootURL: fixture.root, types: [.node], access: .full, filter: filter
+        )
+        return group?.artifacts ?? []
+    }
+
+    @Test("Show all marks a project worked on in the last 6 months Check First")
+    func showAllRecentProjectIsCheckFirst() throws {
+        let fixture = try nodeProject()
+        defer { fixture.cleanUp() }
+        try fixture.setDate(now, of: "src/app.js")
+        let artifacts = showAllArtifacts(fixture)
+        #expect(!artifacts.isEmpty)
+        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .medium && $0.checkFirstReason == .usedRecently })
+    }
+
+    @Test("a project too big to check is listed as Check First, not hidden")
+    func tooBigProjectIsCheckFirst() throws {
+        let fixture = try nodeProject()
+        defer { fixture.cleanUp() }
+        let filter = DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.sixMonths.rawValue,
+            now: now,
+            live: .none,
+            activityEntryLimit: 0
+        )
+        let (group, _) = DevScanner.sizeProjectGroup(
+            rootURL: fixture.root, types: [.node], access: .full, filter: filter
+        )
+        let artifacts = try #require(group?.artifacts)
+        #expect(!artifacts.isEmpty)
+        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .medium && $0.checkFirstReason == .tooBigToCheck })
+    }
+
+    @Test("Show all keeps an old project Safe")
+    func showAllOldProjectStaysSafe() throws {
+        let fixture = try nodeProject()
+        defer { fixture.cleanUp() }
+        let artifacts = showAllArtifacts(fixture)
+        #expect(!artifacts.isEmpty)
+        #expect(artifacts.allSatisfy { $0.safetyInfo.level == .safe && $0.checkFirstReason == nil })
+    }
+}
+
+@MainActor
+@Suite("A project held at Check First stays there after a reset")
+struct RecentProjectResetTests {
+    /// Built on fake scans and throwaway defaults, so the store never reads or
+    /// writes the real user's records.
+    private func store(with artifact: ProjectCacheArtifact, _ scans: FakeScans) -> PurgeStore {
+        scans.hasAccess = true
+        let store = scans.makeStore()
+        store.projectGroups = [ProjectGroup(
+            displayName: "project",
+            rootPath: artifact.projectRoot,
+            inferredTypes: [.node],
+            artifacts: [artifact]
+        )]
+        return store
+    }
+
+    /// A path that does not exist and that no override can name.
+    private func recentArtifact(_ reason: ProjectCheckFirstReason = .usedRecently) -> ProjectCacheArtifact {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-\(UUID().uuidString)", isDirectory: true)
+        let path = root.appendingPathComponent("node_modules", isDirectory: true)
+        return ProjectCacheArtifact(
+            kind: .nodeModules,
+            path: path,
+            projectRoot: root,
+            sizeBytes: 1024,
+            lastModified: .distantPast,
+            isSelected: false,
+            safetyInfo: SafetyInfo.forStaleProjectArtifact(kind: .nodeModules, path: path, checkFirstReason: reason),
+            reinstallSafety: .notApplicable,
+            gitStatus: .clean,
+            checkFirstReason: reason
+        )
+    }
+
+    @Test("Reset to automatic")
+    func resetKeepsCheckFirst() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let artifact = recentArtifact()
+        let store = store(with: artifact, scans)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        #expect(store.manualSafeCleanupCandidates().isEmpty)
+    }
+
+    @Test("without recent use, a reset lands on Safe as before")
+    func resetWithoutRecentUseIsSafe() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        var artifact = recentArtifact()
+        artifact.checkFirstReason = nil
+        let store = store(with: artifact, scans)
+        store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .safe)
+        // Shows the empty-candidates checks above fail on the level, not on reach.
+        #expect(store.manualSafeCleanupCandidates().count == 1)
+    }
+
+    @Test("Recategorize")
+    func recategorizeKeepsCheckFirst() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = store(with: recentArtifact(), scans)
+        store.recategorizeProjectArtifact(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        #expect(store.manualSafeCleanupCandidates().isEmpty)
+    }
+
+    @Test("a project too big to check stays Check First too")
+    func tooBigToCheckSurvivesReset() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = store(with: recentArtifact(.tooBigToCheck), scans)
+        store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+        store.recategorizeProjectArtifact(groupIndex: 0, artifactIndex: 0)
+        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
+    }
+}
+
+@Suite("Consider stale after uses the 6 months Settings shows until the user changes it")
+struct StalenessThresholdDefaultTests {
+    @Test("no saved setting means 6 months, not Show all")
+    func missingKeyIsSixMonths() {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        #expect(DevToolsStalenessOption.currentThresholdDays(userDefaults: suite.defaults) == 180)
+    }
+
+    @Test("no saved setting keeps orphan leftovers at their 30-day buffer")
+    func missingKeyKeepsOrphanBuffer() {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        #expect(OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: suite.defaults) == 30)
+    }
+
+    @Test("a saved Show all is still Show all")
+    func savedShowAllIsKept() {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        suite.defaults.set(DevToolsStalenessOption.showAll.rawValue, forKey: DevToolsStalenessOption.userDefaultsKey)
+        #expect(DevToolsStalenessOption.currentThresholdDays(userDefaults: suite.defaults) == 0)
+    }
+
+    @Test("with no saved setting, a project edited today is not listed")
+    func missingKeyHidesRecentProject() throws {
+        let suite = ThrowawayDefaults()
+        defer { suite.remove() }
+        let fixture = try ActivityFixture(
+            files: ["package.json", "package-lock.json", "src/app.js", "node_modules/pkg/index.js"]
+        )
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: longAgo)
+        try fixture.setDate(now, of: "src/app.js")
+        let filter = DevScanner.ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.currentThresholdDays(userDefaults: suite.defaults),
+            now: now,
+            live: .none
+        )
+        let (group, _) = DevScanner.sizeProjectGroup(
+            rootURL: fixture.root, types: [.node], access: .full, filter: filter
+        )
+        #expect(group == nil)
     }
 }
 

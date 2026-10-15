@@ -11,6 +11,72 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-10-15: Projects in use were Safe to Clean under "Consider stale after"
+
+**Found internally**, no report. **Fixed:** not yet shipped. **Affected:** v1.1.1 to v1.10.0, for anyone who never changed the setting.
+
+### What happened
+
+Settings showed "Consider stale after: 6 months", but that value was only a
+display default and was never saved. The scanner read the missing setting as
+0, and 0 means Show all. So the activity check from the 2026-10-01 entry below
+never ran. A project edited an hour ago was listed, its `node_modules` and
+build folders were Safe to Clean, and Clean Safe Items or a scheduled clean
+could move them to the Trash.
+
+The activity check also failed open in two ways. It reads at most 20,000
+entries in a project, and a walk that stopped there answered "not used". And it
+skipped every folder named like a build folder of any language, such as
+`build`, `bin` or `vendor`, so edits to the user's own scripts in a Node
+project's `build/` folder did not count as use.
+
+Show all, chosen on purpose, had the same effect as the bug: a project edited
+an hour ago was listed with its folders Safe to Clean.
+
+### Who was affected
+
+Nobody reported a loss. Anyone with code projects who had never changed the
+setting was exposed. The folders went to the Trash, so they could be put back
+or rebuilt with the project's install command.
+
+### What changed
+
+A missing setting now reads as the 6 months Settings shows. Only a saved Show
+all means Show all. The orphan leftover scan, which reads the same setting,
+keeps its 30-day buffer until the user picks an age; leftovers are always
+Check First.
+
+A walk that hits the entry limit no longer answers "not used". The project is
+listed, but its folders are Check First, and the project card says Purge could
+not check every file. The walk skips dependency trees nobody edits, such as
+`node_modules`, `.venv` and `Pods`, wherever they sit. It skips a generic name
+such as `build` only when it is the folder being offered, or when the folder
+around it is a project that produces it, like `app/build` next to
+`app/build.gradle`.
+
+Show all still lists every project, but folders of a project worked on in the
+last 6 months are Check First, so Clean Safe Items and scheduled cleans skip
+them. Each artifact keeps the reason it is Check First, so Reset to automatic
+and Recategorize land on Check First again. A path the user marked Safe by hand
+stays Safe.
+
+A closed project card used to show only the name and size, so a project held at
+Check First looked the same as a Safe one. The card header now shows the
+strictest level among its folders and one line saying why.
+
+### What would have caught it earlier
+
+`StalenessThresholdDefaultTests` in
+[`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift)
+reads the setting from a fresh `ThrowawayDefaults` and expects 180 days, and
+checks that a project edited today is not listed. In the same file,
+`entryLimitIsTooBigToCheck` and `tooBigProjectIsCheckFirst` cover the cut-off
+walk, `sameNameFolderIsWalked` the skipped folder names,
+`showAllRecentProjectIsCheckFirst` Show all, and `RecentProjectResetTests` the
+reset and recategorize paths. The earlier tests
+always passed the age in directly, so none of them read the setting the way the
+scanner does.
+
 ## 2026-10-14: Simulators were Safe to Clean although they are removed for good
 
 **Reported** by @zihua-zhang while testing the 1.9.0 Chinese beta ([#110](https://github.com/jithin-sabu/purge-app/issues/110)). **Fixed:** [#166](https://github.com/jithin-sabu/purge-app/pull/166) and [#167](https://github.com/jithin-sabu/purge-app/pull/167), not yet shipped. **Affected:** v1.1.0 to v1.10.0.

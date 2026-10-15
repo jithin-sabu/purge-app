@@ -45,7 +45,8 @@ extension SafetyInfo {
         kind: DeletableArtifactKind,
         path: URL,
         reinstallCommand: String? = nil,
-        level: SafetyLevel = .safe
+        level: SafetyLevel = .safe,
+        checkFirstReason: ProjectCheckFirstReason? = nil
     ) -> SafetyInfo {
         let base = fromExplanationDatabase(
             key: kind.explanationKey,
@@ -54,12 +55,33 @@ extension SafetyInfo {
             path: path
         )
         if UserOverridesStore.read(path: path) != nil { return base }
-        return SafetyInfo(
+        let info = SafetyInfo(
             level: level,
             headline: base.headline,
             explanation: base.explanation,
             recoverySteps: base.recoverySteps,
             reinstallCommand: base.reinstallCommand
         )
+        return checkFirstReason == nil ? info : info.heldAtCheckFirst(path: path)
+    }
+
+    /// Holds an artifact of a project that may still be in use at Check First, so
+    /// Clean Safe Items and scheduled cleans leave it alone while it stays listed.
+    /// The reason is shown once on the project card, so the folder's own explanation
+    /// is kept as is. A manual override of this exact path is the user's decision.
+    nonisolated func heldAtCheckFirst(path: URL) -> SafetyInfo {
+        guard UserOverridesStore.read(path: path) == nil else { return self }
+        switch level {
+        case .safe:
+            return SafetyInfo(
+                level: .medium,
+                headline: headline,
+                explanation: explanation,
+                recoverySteps: recoverySteps,
+                reinstallCommand: reinstallCommand
+            )
+        case .medium, .unknown:
+            return self
+        }
     }
 }

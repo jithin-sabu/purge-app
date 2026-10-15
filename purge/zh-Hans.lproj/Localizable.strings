@@ -89,7 +89,7 @@
 "Add an app…" = "添加应用…";
 "Add folder…" = "添加文件夹…";
 "All" = "全部";
-"All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now." = "“开发项目”会显示所有检测到的项目，不限上次使用时间，但正在使用的项目除外。";
+"All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them." = "“开发项目”会显示所有检测到的项目，不限上次使用时间，但正在使用的项目除外。过去 6 个月内使用过的项目会标记为“先检查”，“清理安全项目”和定时清理都会跳过它们。";
 "Also in this cleanup" = "此次清理中的其他项目";
 "Also select" = "同时选择";
 "An administrator installed %@, so macOS needs your permission before it can move to the Trash." = "%@ 由管理员安装，因此 macOS 需要获得许可才能将其移到废纸篓。";
@@ -717,6 +717,7 @@
 "Your Mac has a little more breathing room." = "你的 Mac 现在有更多可用空间了。";
 "Your Mac is looking clean." = "你的 Mac 很整洁。";
 "Your Mac is looking clean. Check back later." = "你的 Mac 很整洁。稍后再来检查吧。";
+"Worked on in the last 6 months, so Purge won't clean it without asking." = "过去 6 个月内使用过，因此 Purge 不会未经询问就清理它。";
 "Zig cache" = "Zig 缓存";
 "Zig output" = "Zig 输出";
 "a copy of Chrome" = "一份 Chrome";
@@ -992,6 +993,7 @@
 "In System Settings, select \"Purge: Apple Intelligence models removed\"." = "在“系统设置”中，选择“Purge: Apple Intelligence models removed”。";
 "Click the minus button below the list, then Remove." = "点按列表下方的减号按钮，然后点按“移除”。";
 "Purge carries on by itself once that's done." = "完成后 Purge 会自动继续。";
+"Too big to check for recent changes, so Purge won't clean it without asking." = "项目太大，无法检查是否有近期更改，因此 Purge 不会未经询问就清理它。";
 "Total" = "总计";
 
 /* Simulator delete failures (#161) */

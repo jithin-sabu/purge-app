@@ -300,7 +300,12 @@ enum OrphanLeftoverScanPolicy {
     /// a data tier that does not come back, so a mid-reinstall or just-quit app
     /// must never be swept. When the control is set to "Show all", the orphan
     /// scan still keeps a 30-day safety buffer instead of offering fresh data.
+    /// Until the user picks an age, the buffer alone applies: the 6 months Developer
+    /// Projects assumes is longer than leftovers, always Check First, need.
     nonisolated static func effectiveStaleDays(userDefaults: UserDefaults = .standard) -> Int {
+        guard userDefaults.object(forKey: DevToolsStalenessOption.userDefaultsKey) != nil else {
+            return minimumStaleDaysFloor
+        }
         let configured = DevToolsStalenessOption.currentThresholdDays(userDefaults: userDefaults)
         let base = configured == 0 ? minimumStaleDaysFloor : configured
         return max(base, minimumStaleDaysFloor)
