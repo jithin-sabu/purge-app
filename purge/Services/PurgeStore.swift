@@ -437,7 +437,7 @@ final class PurgeStore: ObservableObject {
     private let duplicateDetector = DuplicateFileDetector()
     private let fileDeleter = FileDeleter()
     private let defaults: UserDefaults
-    private let gitChecker = GitStatusChecker()
+    private let gitChecker: GitStatusChecker
 
     private enum ScanCoalesce {
         /// One publish every ~8 frames. Fast enough that the count reads as live,
@@ -505,9 +505,12 @@ final class PurgeStore: ObservableObject {
     init(defaults: UserDefaults = .standard, scanSources: ScanSources? = nil) {
         let cacheScanner = CacheScanner()
         let devScanner = DevScanner()
+        let gitChecker = GitStatusChecker()
         self.cacheScanner = cacheScanner
         self.devScanner = devScanner
-        self.scanSources = scanSources ?? .live(cacheScanner: cacheScanner, devScanner: devScanner)
+        self.gitChecker = gitChecker
+        self.scanSources = scanSources
+            ?? .live(cacheScanner: cacheScanner, devScanner: devScanner, gitChecker: gitChecker)
         self.defaults = defaults
         self.scanRecordStore = ScanRecordStore(defaults: defaults)
         var moved = Int64(defaults.integer(forKey: StorageKeys.totalMovedToTrashBytes))
@@ -2865,7 +2868,7 @@ final class PurgeStore: ObservableObject {
         guard scanGeneration == generation, !Task.isCancelled else { return }
         let hydrateStart = Date()
         let hydrateCount = cacheItems.count
-        await hydrateCacheSafetyMetadataParallel()
+        await hydrateCacheSafetyMetadataParallel(generation: generation)
         ScanPhaseTiming.finish(
             "git enrichment (cache hydrate)",
             since: hydrateStart,
@@ -2949,7 +2952,7 @@ final class PurgeStore: ObservableObject {
             defer { isEnrichingDeveloper = false }
             let hydrateStart = Date()
             let pathCount = devTools.flatMap(\.paths).count
-            await hydrateDeveloperToolRepoStatusesParallel()
+            await hydrateDeveloperToolRepoStatusesParallel(generation: generation)
             ScanPhaseTiming.finish(
                 "git enrichment (dev tool repo hydrate)",
                 since: hydrateStart,
@@ -3013,7 +3016,7 @@ final class PurgeStore: ObservableObject {
             defer { isEnrichingDeveloper = false }
             let hydrateStart = Date()
             let artifactCount = projectGroups.flatMap(\.artifacts).count
-            await hydrateDeveloperGitStatusesParallel()
+            await hydrateDeveloperGitStatusesParallel(generation: generation)
             ScanPhaseTiming.finish(
                 "git enrichment (project artifact hydrate)",
                 since: hydrateStart,
@@ -3552,7 +3555,7 @@ final class PurgeStore: ObservableObject {
             // Rows already listed are not rescanned. Their git status is read again
             // after the Dev Tools scan has cleared the git cache, as before.
             if reusesCacheRows {
-                await hydrateCacheSafetyMetadataParallel()
+                await hydrateCacheSafetyMetadataParallel(generation: scanGeneration)
             }
             if let discovery = projectDiscoveryTask {
                 await Self.waitForStep(discovery, patience: cacheStepPatience)
@@ -4123,63 +4126,70 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    private func hydrateCacheSafetyMetadataParallel() async {
+    /// `git status` can take seconds, and rows leave while it runs: a clean, an
+    /// exclusion, a new scan. So the answers are dropped if a newer scan than
+    /// `generation` has started, and otherwise go onto the rows listed when they
+    /// arrive, matched by path. A copy taken before the wait would bring removed
+    /// rows back (#172).
+    private func hydrateCacheSafetyMetadataParallel(generation: Int) async {
         guard !cacheItems.isEmpty else { return }
         isEnrichingGeneral = true
         defer { isEnrichingGeneral = false }
-        var copy = cacheItems
         // One `git status` per unique repository, same helper Dev Tools already uses.
         // The previous one-task-per-row fan-out still serialized on the git actor and
         // paid for a MainActor hop per location.
-        let urls = copy.flatMap(\.paths)
-        let statusesByPath = await gitChecker.cleanupStatuses(for: urls)
-        for index in copy.indices {
+        let urls = cacheItems.flatMap(\.paths)
+        let statusesByPath = await scanSources.gitStatuses(urls)
+        guard scanGeneration == generation, !Task.isCancelled else { return }
+
+        var updated = cacheItems
+        for index in updated.indices {
             var reinstall = ReinstallSafetyStatus.notApplicable
             var git = GitWorktreeStatus.clean
-            for location in copy[index].locations {
+            for location in updated[index].locations {
                 let url = location.path.standardizedFileURL
                 reinstall = Self.worstReinstall(reinstall, Self.cacheReinstallStatus(forPath: url))
-                git = Self.worstGit(git, statusesByPath[url.path] ?? .clean)
+                // A path the check was not asked about has no answer, which is not clean.
+                git = Self.worstGit(git, statusesByPath[url.path] ?? .unknown)
             }
-            copy[index].reinstallSafety = reinstall
-            copy[index].gitStatus = git
+            updated[index].reinstallSafety = reinstall
+            updated[index].gitStatus = git
         }
         withAnimation(.easeInOut(duration: 0.2)) {
-            cacheItems = copy
+            cacheItems = updated
         }
     }
 
-    private func hydrateDeveloperGitStatusesParallel() async {
-        guard !projectGroups.isEmpty else { return }
-        var snapshots: [(Int, Int, URL)] = []
-        for gIndex in projectGroups.indices {
-            for aIndex in projectGroups[gIndex].artifacts.indices {
-                snapshots.append((gIndex, aIndex, projectGroups[gIndex].artifacts[aIndex].path))
-            }
-        }
-        guard !snapshots.isEmpty else { return }
-
-        let paths = snapshots.map(\.2)
-        let statusesByPath = await gitChecker.cleanupStatuses(for: paths)
+    /// Same rules as the App Caches pass. Here a position taken before the wait
+    /// pointed past the end of the list once a project was excluded or cleaned,
+    /// and Purge crashed (#172).
+    private func hydrateDeveloperGitStatusesParallel(generation: Int) async {
+        let paths = projectGroups.flatMap { $0.artifacts.map(\.path) }
+        guard !paths.isEmpty else { return }
+        let statusesByPath = await scanSources.gitStatuses(paths)
+        guard scanGeneration == generation, !Task.isCancelled else { return }
 
         var updated = projectGroups
-        for (gIndex, aIndex, path) in snapshots {
-            let pathKey = path.standardizedFileURL.path
-            updated[gIndex].artifacts[aIndex].gitStatus = statusesByPath[pathKey] ?? .clean
+        for gIndex in updated.indices {
+            for aIndex in updated[gIndex].artifacts.indices {
+                let pathKey = updated[gIndex].artifacts[aIndex].path.standardizedFileURL.path
+                updated[gIndex].artifacts[aIndex].gitStatus = statusesByPath[pathKey] ?? .unknown
+            }
         }
         withAnimation(.easeInOut(duration: 0.2)) {
             projectGroups = updated
         }
     }
 
-    private func hydrateDeveloperToolRepoStatusesParallel() async {
+    private func hydrateDeveloperToolRepoStatusesParallel(generation: Int) async {
         let urls = devTools.flatMap(\.paths)
         guard !urls.isEmpty else {
             devToolRepoStatusByPath = [:]
             return
         }
 
-        let statusesByPath = await gitChecker.cleanupStatuses(for: urls)
+        let statusesByPath = await scanSources.gitStatuses(urls)
+        guard scanGeneration == generation, !Task.isCancelled else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             devToolRepoStatusByPath = statusesByPath
         }
