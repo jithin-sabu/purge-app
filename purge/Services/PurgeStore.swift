@@ -3200,6 +3200,9 @@ final class PurgeStore: ObservableObject {
         var elapsedSeconds: Double = 0
         var movedToTrashCount: Int = 0
         var failedItems: [CleanFailureItem] = []
+        /// True when another clean was running, so this one removed nothing. A
+        /// scheduled clean then stays due instead of counting as done (#173).
+        var skippedForAnotherClean = false
 
         var failedCount: Int { failedItems.count }
     }
@@ -3456,7 +3459,7 @@ final class PurgeStore: ObservableObject {
         }
 
         guard !isDeleting else {
-            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, skippedForAnotherClean: true)
         }
 
         isDeleting = true

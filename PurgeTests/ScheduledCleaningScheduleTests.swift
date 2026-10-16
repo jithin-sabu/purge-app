@@ -220,13 +220,17 @@ struct ScheduledCleaningScheduleTests {
     //        test posts the activation on a center of its own, so the app hosting
     //        the tests never hears it.
 
-    private func observeActivation(_ h: Harness, onboarded: Bool = true) -> NotificationCenter {
+    private func observeActivation(
+        _ h: Harness,
+        onboarded: Bool = true,
+        quitsOnItsOwn: Bool = false
+    ) -> NotificationCenter {
         h.prefs.frequency = .custom
         h.prefs.customIntervalAmount = 3
         h.prefs.customIntervalUnit = .day
         h.defaults.set(onboarded, forKey: FirstRunGate.onboardingCompletedKey)
         let center = NotificationCenter()
-        h.registrar.observeAppActivation(center: center)
+        h.registrar.observeAppActivation(center: center, quitsOnItsOwn: { quitsOnItsOwn })
         return center
     }
 
@@ -275,22 +279,42 @@ struct ScheduledCleaningScheduleTests {
         #expect(anchor(h) == nil)
     }
 
+    // The deleted-apps watcher opened Purge only for a review, and Purge quits as
+    // soon as that is done. A clean started then would be cut off.
+    @Test("An activation in a launch that quits on its own runs no clean")
+    func activationInSelfQuittingLaunchDoesNothing() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        let center = observeActivation(h, quitsOnItsOwn: true)
+
+        activate(center)
+        await settle()
+
+        #expect(h.clean.callCount == 0)
+        #expect(anchor(h) == nil)
+    }
+
+    /// A registrar on the harness's defaults whose clean runs until the test
+    /// finishes it, due three days after `enabledAt`.
+    private func heldRegistrar(_ h: Harness, clean held: HeldClean) -> ScheduledCleaningRegistrar {
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        return ScheduledCleaningRegistrar(
+            prefs: h.prefs,
+            userDefaults: h.defaults,
+            performClean: { await held.run() },
+            rearm: {}
+        )
+    }
+
     // The window's launch sweep and an activation both find the clean due. The
     // second must neither clean again nor return early: the window scans as soon
     // as its sweep returns, and a scan then would run beside the clean.
     @Test("A sweep asked for during a clean waits for it and starts none")
     func secondSweepWaitsForTheFirst() async {
         let h = makeHarness(enabledAt: enabledAt)
-        h.prefs.frequency = .custom
-        h.prefs.customIntervalAmount = 3
-        h.prefs.customIntervalUnit = .day
         let held = HeldClean()
-        let registrar = ScheduledCleaningRegistrar(
-            prefs: h.prefs,
-            userDefaults: h.defaults,
-            performClean: { await held.run() },
-            rearm: {}
-        )
+        let registrar = heldRegistrar(h, clean: held)
         let due = enabledAt.addingTimeInterval(3 * 86_400)
 
         let first = Task { await registrar.runGracefulActivationSweepIfPastDue(referenceDate: due) }
@@ -310,6 +334,59 @@ struct ScheduledCleaningScheduleTests {
         #expect(secondReturned.isSet)
         #expect(held.callCount == 1)
         #expect(anchor(h) == due)
+    }
+
+    // Run now used to return nil here, which Settings shows as "auto-clean is off".
+    @Test("Run now during a sweep waits for it and reports that clean")
+    func runNowDuringSweepReportsThatClean() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        let held = HeldClean()
+        let registrar = heldRegistrar(h, clean: held)
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
+
+        let sweep = Task { await registrar.runGracefulActivationSweepIfPastDue(referenceDate: due) }
+        await waitUntil { held.callCount == 1 }
+        let runNow = Task { await registrar.runScheduledCleanNow(referenceDate: due.addingTimeInterval(60)) }
+        await settle()
+
+        held.finish()
+        await sweep.value
+        let summary = await runNow.value
+
+        #expect(summary?.deletedCount == 1)
+        #expect(summary?.bytesMovedToTrash == 1_024)
+        #expect(held.callCount == 1)
+        #expect(anchor(h) == due)
+    }
+
+    // The clean found another clean running and removed nothing. Counting it as
+    // done would skip the schedule for a whole interval.
+    @Test("A clean skipped for another clean stays due")
+    func skippedCleanStaysDue() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        let done = h.clean.summary
+        h.clean.summary = PurgeStore.ScheduledCleaningSummary(
+            deletedCount: 0,
+            bytesMovedToTrash: 0,
+            skippedForAnotherClean: true
+        )
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) == nil)
+        #expect(h.registrar.lastOutcome == nil)
+
+        // The other clean has ended, and the next activation runs this one.
+        h.clean.summary = done
+        let later = due.addingTimeInterval(60)
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: later)
+        #expect(h.clean.callCount == 2)
+        #expect(anchor(h) == later)
+        #expect(h.registrar.lastOutcome?.deletedCount == 3)
     }
 
     // 14. The app only observes activation outside the test host and previews.
@@ -372,5 +449,40 @@ private final class RearmCounter {
         for _ in 0..<200 where count < target {
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
+    }
+}
+
+/// The store's half of a skipped clean (#173): a safe clean that finds another
+/// clean running removes nothing and says so, so the schedule can stay due.
+@Suite("Safe clean while another clean runs")
+@MainActor
+struct SafeCleanDuringAnotherCleanTests {
+    @Test("A safe clean during another clean is marked skipped")
+    func safeCleanDuringAnotherCleanIsSkipped() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        // A temporary folder, which the safety policy would refuse anyway.
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-skipped-clean-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let candidate = PurgeStore.DeletionCandidate(
+            title: "Cache",
+            path: folder,
+            sizeBytes: 1,
+            safetyInfo: SafetyInfo(level: .safe, headline: "Cache", explanation: "", recoverySteps: "", reinstallCommand: nil),
+            reinstallCommand: nil,
+            subtitle: nil,
+            reinstallSafety: .notApplicable,
+            gitStatus: .clean
+        )
+        store.isDeleting = true
+
+        let summary = await store.performManualSafeCleanNow(pinnedCandidates: [candidate])
+
+        #expect(summary.skippedForAnotherClean)
+        #expect(summary.deletedCount == 0)
+        #expect(FileManager.default.fileExists(atPath: folder.path))
     }
 }
