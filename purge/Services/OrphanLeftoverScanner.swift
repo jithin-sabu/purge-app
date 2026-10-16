@@ -15,12 +15,21 @@ nonisolated final class OrphanLeftoverScanner {
     private let home: URL
     private let defaults: UserDefaults
 
+    /// What is installed, which decides what counts as orphaned. The live one
+    /// walks every app root and reads each app's signature, which takes seconds
+    /// and blocks a thread, so tests hand in a small fixed index.
+    private let installedApps: @Sendable () -> OrphanLeftoverScanPolicy.InstalledAppIndex
+
     init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        installedApps: @escaping @Sendable () -> OrphanLeftoverScanPolicy.InstalledAppIndex = {
+            OrphanLeftoverScanPolicy.makeInstalledAppIndex()
+        }
     ) {
         self.home = home
         self.defaults = defaults
+        self.installedApps = installedApps
     }
 
     /// Streams each orphaned leftover as an `UninstallItem`, sized before it is
@@ -28,10 +37,10 @@ nonisolated final class OrphanLeftoverScanner {
     /// finishes with nothing when the installed-app view looks incomplete (an
     /// unmounted volume, an unreadable app root), rather than flag everything.
     func orphanStream() -> AsyncStream<UninstallItem> {
-        AsyncStream { [home, defaults] continuation in
+        AsyncStream { [home, defaults, installedApps] continuation in
             let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults)
             let task = Task.detached(priority: .userInitiated) {
-                Self.run(home: home, staleDays: staleDays, continuation: continuation)
+                Self.run(home: home, staleDays: staleDays, installed: installedApps(), continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -47,11 +56,11 @@ nonisolated final class OrphanLeftoverScanner {
     private static func run(
         home: URL,
         staleDays: Int,
+        installed: OrphanLeftoverScanPolicy.InstalledAppIndex,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
 
-        let installed = OrphanLeftoverScanPolicy.makeInstalledAppIndex()
         guard installed.looksComplete else {
             continuation.finish()
             return
