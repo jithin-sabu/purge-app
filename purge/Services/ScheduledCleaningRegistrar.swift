@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import UserNotifications
@@ -63,11 +64,17 @@ final class ScheduledCleaningRegistrar: ObservableObject {
 
     private weak var store: PurgeStore?
     private var prefsObserver: NSObjectProtocol?
-    /// The launch `.task` and the scene-activation handler can both find the same
-    /// overdue schedule before either advances the anchor (the scan inside the
-    /// clean takes a while), producing back-to-back duplicate cleans. One sweep
+    private var activationObserver: NSObjectProtocol?
+    private var activationCenter: NotificationCenter?
+    /// The window's launch `.task` and the activation handler can both find the
+    /// same overdue schedule before either advances the anchor (the scan inside
+    /// the clean takes a while), producing back-to-back duplicate cleans. One sweep
     /// at a time.
     private var isSweepRunning = false
+    /// Sweeps asked for while another was cleaning. Each returns when that clean
+    /// ends, so the window's launch scans never start in the middle of a clean the
+    /// activation handler started.
+    private var sweepWaiters: [CheckedContinuation<Void, Never>] = []
 
     // Injected dependencies. Production uses the defaults (the shared prefs store,
     // the standard defaults domain, the attached PurgeStore, the real re-arm);
@@ -148,9 +155,42 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         }
     }
 
+    /// Checks for a due clean each time Purge comes forward. This lives on the app,
+    /// not a window: Purge left running in the menu bar has no window to check from,
+    /// and `scenePhase` never changes after launch on macOS, so a due clean used to
+    /// wait until a new window opened (#173). Waits for onboarding, like the
+    /// window's launch sweep, since onboarding runs its own scan.
+    func observeAppActivation(center: NotificationCenter = .default) {
+        guard activationObserver == nil else { return }
+        activationCenter = center
+        activationObserver = center.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { await self?.sweepAfterActivation() }
+        }
+    }
+
+    private func sweepAfterActivation() async {
+        guard ud.bool(forKey: FirstRunGate.onboardingCompletedKey) else { return }
+        await runGracefulActivationSweepIfPastDue()
+    }
+
+    /// False in the unit-test host and in Xcode previews. Both run the app on the
+    /// user's real defaults, so an overdue schedule there would clean the user's
+    /// real caches.
+    nonisolated static func cleansOnActivation(environment: [String: String]) -> Bool {
+        !TestHost.isActive(environment: environment)
+            && environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
+    }
+
     deinit {
         if let prefsObserver {
             NotificationCenter.default.removeObserver(prefsObserver)
+        }
+        if let activationObserver {
+            activationCenter?.removeObserver(activationObserver)
         }
     }
 
@@ -215,7 +255,7 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         guard performCleanOverride != nil || store != nil, !isSweepRunning else { return nil }
 
         isSweepRunning = true
-        defer { isSweepRunning = false }
+        defer { finishSweep() }
 
         let summary = await performClean()
         ud.set(now, forKey: Self.lastGraceSweepKey)
@@ -228,18 +268,36 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// macOS has no background scheduling, so this lazy sweep — fired on launch and
     /// on every activation — is what actually executes the schedule. Anchored to the
     /// same due date the UI shows, so an overdue clean runs the next time Purge opens.
+    ///
+    /// Called while another sweep or Run now is cleaning, it starts no clean of its
+    /// own and returns once that one ends. The window scans right after this
+    /// returns, and those scans must show the state after the clean.
     func runGracefulActivationSweepIfPastDue(referenceDate now: Date = Date()) async {
+        if isSweepRunning {
+            await withCheckedContinuation { sweepWaiters.append($0) }
+            return
+        }
         guard prefs.isEnabled else { return }
-        guard performCleanOverride != nil || store != nil, !isSweepRunning else { return }
+        guard performCleanOverride != nil || store != nil else { return }
         guard now >= dueDate(referenceDate: now) else { return }
 
         isSweepRunning = true
-        defer { isSweepRunning = false }
+        defer { finishSweep() }
 
         let summary = await performClean()
         ud.set(now, forKey: Self.lastGraceSweepKey)
         recordOutcome(summary, at: now)
 
         await performRearm()
+    }
+
+    /// Ends the running sweep and lets every sweep that waited on it return.
+    private func finishSweep() {
+        isSweepRunning = false
+        let waiters = sweepWaiters
+        sweepWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 }

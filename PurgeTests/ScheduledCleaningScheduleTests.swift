@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Purge
@@ -214,6 +215,151 @@ struct ScheduledCleaningScheduleTests {
 
         #expect(rearms.count == 2)
     }
+
+    // 10-13. Purge coming forward checks the schedule, window or not (#173). Each
+    //        test posts the activation on a center of its own, so the app hosting
+    //        the tests never hears it.
+
+    private func observeActivation(_ h: Harness, onboarded: Bool = true) -> NotificationCenter {
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        h.defaults.set(onboarded, forKey: FirstRunGate.onboardingCompletedKey)
+        let center = NotificationCenter()
+        h.registrar.observeAppActivation(center: center)
+        return center
+    }
+
+    private func activate(_ center: NotificationCenter) {
+        center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+    }
+
+    @Test("An activation past the due date runs one clean")
+    func activationPastDueCleansOnce() async {
+        // Enabled in 2023 with a three-day interval, so long overdue by the real clock.
+        let h = makeHarness(enabledAt: enabledAt)
+        let center = observeActivation(h)
+
+        activate(center)
+        await waitUntil { anchor(h) != nil }
+        // The clean moved the anchor to now, so the next activation finds nothing due.
+        activate(center)
+        await settle()
+
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) != nil)
+        #expect(h.registrar.lastOutcome?.deletedCount == 3)
+    }
+
+    @Test("An activation before the due date runs no clean")
+    func activationBeforeDueDoesNothing() async {
+        let h = makeHarness(enabledAt: Date())
+        let center = observeActivation(h)
+
+        activate(center)
+        await settle()
+
+        #expect(h.clean.callCount == 0)
+        #expect(anchor(h) == nil)
+    }
+
+    @Test("An activation before onboarding ends runs no clean")
+    func activationDuringOnboardingDoesNothing() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        let center = observeActivation(h, onboarded: false)
+
+        activate(center)
+        await settle()
+
+        #expect(h.clean.callCount == 0)
+        #expect(anchor(h) == nil)
+    }
+
+    // The window's launch sweep and an activation both find the clean due. The
+    // second must neither clean again nor return early: the window scans as soon
+    // as its sweep returns, and a scan then would run beside the clean.
+    @Test("A sweep asked for during a clean waits for it and starts none")
+    func secondSweepWaitsForTheFirst() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        let held = HeldClean()
+        let registrar = ScheduledCleaningRegistrar(
+            prefs: h.prefs,
+            userDefaults: h.defaults,
+            performClean: { await held.run() },
+            rearm: {}
+        )
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
+
+        let first = Task { await registrar.runGracefulActivationSweepIfPastDue(referenceDate: due) }
+        await waitUntil { held.callCount == 1 }
+        let secondReturned = Flag()
+        let second = Task {
+            await registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+            secondReturned.isSet = true
+        }
+        await settle()
+        #expect(!secondReturned.isSet)
+
+        held.finish()
+        await first.value
+        await second.value
+
+        #expect(secondReturned.isSet)
+        #expect(held.callCount == 1)
+        #expect(anchor(h) == due)
+    }
+
+    // 14. The app only observes activation outside the test host and previews.
+    //     Both share the user's real defaults and would clean real caches.
+    @Test("The test host and previews never clean on activation")
+    func activationCleaningSkipsTestHostAndPreviews() {
+        #expect(ScheduledCleaningRegistrar.cleansOnActivation(environment: [:]))
+        #expect(!ScheduledCleaningRegistrar.cleansOnActivation(environment: ["XCTestConfigurationFilePath": "/tmp/x"]))
+        #expect(!ScheduledCleaningRegistrar.cleansOnActivation(environment: ["XCODE_RUNNING_FOR_PREVIEWS": "1"]))
+        #expect(!ScheduledCleaningRegistrar.cleansOnActivation(environment: ProcessInfo.processInfo.environment))
+    }
+}
+
+/// Waits for `condition`, giving up after about two seconds. The activation
+/// handler runs the sweep in a task of its own.
+@MainActor
+private func waitUntil(_ condition: () -> Bool) async {
+    for _ in 0..<200 where !condition() {
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+}
+
+/// Room for an activation that should do nothing to show up if it does something.
+@MainActor
+private func settle() async {
+    for _ in 0..<20 { await Task.yield() }
+    try? await Task.sleep(nanoseconds: 100_000_000)
+}
+
+/// A clean that stays running until the test lets it finish.
+@MainActor
+private final class HeldClean {
+    private(set) var callCount = 0
+    private var release: CheckedContinuation<Void, Never>?
+
+    func run() async -> PurgeStore.ScheduledCleaningSummary {
+        callCount += 1
+        await withCheckedContinuation { release = $0 }
+        return PurgeStore.ScheduledCleaningSummary(deletedCount: 1, bytesMovedToTrash: 1_024)
+    }
+
+    func finish() {
+        release?.resume()
+        release = nil
+    }
+}
+
+@MainActor
+private final class Flag {
+    var isSet = false
 }
 
 /// Counts the registrar's re-arms. A re-arm runs in its own task, so a test waits
