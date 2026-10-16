@@ -32,6 +32,11 @@ enum AppBootstrapper {
             menuModel?.performCleanFromNotification()
         }
         ScheduledCleaningRegistrar.shared.attach(store: env.store)
+        if ScheduledCleaningRegistrar.cleansOnActivation(environment: ProcessInfo.processInfo.environment) {
+            ScheduledCleaningRegistrar.shared.observeAppActivation(quitsOnItsOwn: {
+                RemovedAppMonitor.shared.quitsWhenDone
+            })
+        }
         RemovedAppMonitor.shared.attach(store: env.store)
         CleaningQuitGuard.isCleaningActive = { [weak store = env.store] in
             store?.isManualCleaningInProgress ?? false
