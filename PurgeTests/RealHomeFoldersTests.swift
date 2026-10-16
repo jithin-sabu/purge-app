@@ -45,6 +45,30 @@ struct RealHomeFoldersTests {
         #expect(fm.fileExists(atPath: toolWorktree.appendingPathComponent(".git").path))
     }
 
+    /// Parallel tests make their folders under the same parents. The first to finish
+    /// must not take a parent away from one still running, nor leave it behind.
+    @Test
+    func sharedParentsGoWithTheLastFixtureThatUsesThem() throws {
+        let home = try makeHome()
+        defer { try? fm.removeItem(at: home) }
+        let first = RealHomeFolders(home: home)
+        let second = RealHomeFolders(home: home)
+        defer {
+            first.remove()
+            second.remove()
+        }
+
+        try first.make(".cursor/worktrees/purge-first")
+        try second.make(".cursor/worktrees/purge-second")
+        first.remove()
+
+        #expect(fm.fileExists(atPath: home.appendingPathComponent(".cursor/worktrees/purge-second").path))
+        try second.make(".cursor/worktrees/purge-third")
+        second.remove()
+
+        #expect(!fm.fileExists(atPath: home.appendingPathComponent(".cursor").path))
+    }
+
     @Test
     func refusesAFolderThatIsAlreadyThere() throws {
         let home = try makeHome()

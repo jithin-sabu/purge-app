@@ -12,7 +12,14 @@ nonisolated enum TestHost {
     /// Where stores keep the files they would keep in Application Support while
     /// the tests run: one temporary folder per test run, shared by every test in it.
     static func supportDirectory() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("PurgeTestSupport-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        runSupportDirectory
     }
+
+    /// A later run can get the same process ID, and an earlier run's folder can still
+    /// be there, so the name also carries an ID made once per run.
+    private static let runSupportDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(
+            "PurgeTestSupport-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)",
+            isDirectory: true
+        )
 }

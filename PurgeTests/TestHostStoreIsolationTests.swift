@@ -12,6 +12,8 @@ struct TestHostStoreIsolationTests {
     @Test
     func exclusionsAndSafetyChoicesLiveInTheTestRunsScratchFolder() {
         #expect(TestHost.isActive())
+        // One folder for the whole run, or a store would lose what it saved.
+        #expect(TestHost.supportDirectory() == TestHost.supportDirectory())
         let scratch = TestHost.supportDirectory().standardizedFileURL
         for file in [ExcludedPathsStore.fileURL(), UserOverridesStore.fileURL()] {
             #expect(file.deletingLastPathComponent().standardizedFileURL == scratch)
