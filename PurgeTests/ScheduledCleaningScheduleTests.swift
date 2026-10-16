@@ -185,4 +185,46 @@ struct ScheduledCleaningScheduleTests {
         #expect(h.clean.callCount == 1)
         #expect(anchor(h) == oneDayIn)
     }
+
+    // 9. Only the registrar's own prefs re-arm it. The app's registrar listens
+    //    while the tests run, and every test here makes a prefs store of its own,
+    //    which must never re-arm the user's reminder (#171).
+    @Test("Another prefs store never re-arms the registrar")
+    func onlyItsOwnPrefsRearm() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        let rearms = RearmCounter()
+        let registrar = ScheduledCleaningRegistrar(
+            prefs: h.prefs,
+            userDefaults: h.defaults,
+            performClean: { h.clean.run() },
+            rearm: { rearms.count += 1 }
+        )
+        registrar.observePrefsChanges()
+        let otherSuite = ThrowawayDefaults()
+        defer { otherSuite.remove() }
+        let otherPrefs = ScheduledCleaningPreferenceStore(userDefaults: otherSuite.defaults)
+
+        h.prefs.frequency = .weekly
+        await rearms.wait(until: 1)
+        otherPrefs.frequency = .weekly
+        h.prefs.frequency = .monthly
+        await rearms.wait(until: 2)
+        // Room for a late re-arm from the other store to show up.
+        for _ in 0..<20 { await Task.yield() }
+
+        #expect(rearms.count == 2)
+    }
+}
+
+/// Counts the registrar's re-arms. A re-arm runs in its own task, so a test waits
+/// for the count it expects, giving up after about two seconds.
+@MainActor
+private final class RearmCounter {
+    var count = 0
+
+    func wait(until target: Int) async {
+        for _ in 0..<200 where count < target {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
 }

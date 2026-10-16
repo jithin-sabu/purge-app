@@ -131,15 +131,20 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     func attach(store: PurgeStore) {
         self.store = store
         Task { await applyScheduleFromPrefs() }
+        observePrefsChanges()
+    }
 
-        if prefsObserver == nil {
-            prefsObserver = NotificationCenter.default.addObserver(
-                forName: .scheduledCleaningPrefsChanged,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { await self?.applyScheduleFromPrefs() }
-            }
+    /// Re-arms when this registrar's own prefs change, and only then. The tests run
+    /// inside the app, whose registrar is attached, and they make prefs stores of
+    /// their own. Hearing those re-armed the user's real reminder (#171).
+    func observePrefsChanges() {
+        guard prefsObserver == nil else { return }
+        prefsObserver = NotificationCenter.default.addObserver(
+            forName: .scheduledCleaningPrefsChanged,
+            object: prefs,
+            queue: .main
+        ) { [weak self] _ in
+            Task { await self?.performRearm() }
         }
     }
 
