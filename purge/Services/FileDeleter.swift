@@ -115,6 +115,16 @@ nonisolated final class FileDeleter: Sendable {
     typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) -> SimulatorRuntimeRemoval
     typealias SimulatorDeviceRemover = @Sendable (_ udid: String, _ folder: URL) -> SimulatorDeviceRemoval
     typealias PrivilegedMover = @Sendable (_ urls: [URL]) async -> PrivilegedMoveResult
+    typealias Trasher = @Sendable (_ url: URL) throws -> Void
+
+    /// How one item moves to the Trash. Tests hand in a fake so nothing they make
+    /// reaches the user's own Trash (#171).
+    private let trash: Trasher
+
+    /// The home folder the user-selected gates check against. Tests hand in a
+    /// temporary one. The cache route never uses it: `DeletionSafetyPolicy`
+    /// knows only the real home, so its checks keep that one.
+    private let home: URL
 
     /// How a simulator runtime row is removed. The live one calls `simctl`; tests
     /// hand in a fake so the dispatch can be checked without CoreSimulator.
@@ -134,12 +144,16 @@ nonisolated final class FileDeleter: Sendable {
         simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = FileDeleter.removeSimulatorRuntime,
         simulatorDeviceRemover: @escaping SimulatorDeviceRemover = { FileDeleter.removeSimulatorDevice(udid: $0, folder: $1) },
         privilegedMover: @escaping PrivilegedMover = { await PrivilegedUninstall.moveToTrash($0) },
-        installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() }
+        installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() },
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        trash: @escaping Trasher = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
     ) {
         self.simulatorRuntimeRemover = simulatorRuntimeRemover
         self.simulatorDeviceRemover = simulatorDeviceRemover
         self.privilegedMover = privilegedMover
         self.installLeftoverRule = installLeftoverRule
+        self.home = home
+        self.trash = trash
     }
 
     /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
@@ -213,10 +227,11 @@ nonisolated final class FileDeleter: Sendable {
             let decision = DeletionSafetyPolicy.evaluate(url)
             switch decision {
             case .allow:
-                let home = FileManager.default.homeDirectoryForCurrentUser
-                let failsCursorBoundary = CursorAgentLeftoverScanPolicy.looksLikeCursorLeftoverPath(url, home: home)
+                // The real home, the one `evaluate` just allowed this path under.
+                let allowlistHome = FileManager.default.homeDirectoryForCurrentUser
+                let failsCursorBoundary = CursorAgentLeftoverScanPolicy.looksLikeCursorLeftoverPath(url, home: allowlistHome)
                     && !CursorAgentLeftoverScanPolicy.passesImmediateTrashBoundary(url)
-                let failsWorktreeBoundary = AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(url, home: home)
+                let failsWorktreeBoundary = AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(url, home: allowlistHome)
                     && !AgentWorktreeScanPolicy.passesImmediateTrashBoundary(url)
                 if failsCursorBoundary || failsWorktreeBoundary {
                     skippedItems.append(SkippedDeletionItem(
@@ -252,7 +267,7 @@ nonisolated final class FileDeleter: Sendable {
                         for contentURL in offered {
                             let entryBytes = entrySizes[contentURL] ?? 0
                             do {
-                                try FileManager.default.trashItem(at: contentURL, resultingItemURL: nil)
+                                try trash(contentURL)
                                 didDeleteAnyContent = true
                                 movedBytes += entryBytes
                                 onProgress?(.itemPartlyDeleted(sizeBytes: entryBytes))
@@ -312,7 +327,7 @@ nonisolated final class FileDeleter: Sendable {
                         continue
                     }
                     do {
-                        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                        try trash(url)
                         bytesMovedToTrash += size
                         deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
                         onProgress?(.itemDeleted(sizeBytes: size))
@@ -441,7 +456,7 @@ nonisolated final class FileDeleter: Sendable {
         var failedItems: [FailedDeletionItem] = []
         var skippedItems: [SkippedDeletionItem] = []
         var ownershipWarningPaths: [String] = []
-        let volumeURL = FileManager.default.homeDirectoryForCurrentUser
+        let volumeURL = home
         let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
 
         for url in urls {
@@ -452,9 +467,9 @@ nonisolated final class FileDeleter: Sendable {
             // large-file policy deliberately refuses, so they carry their own
             // equally narrow gate. The uninstaller adds a third: an app bundle in
             // an app root, or a leftover inside a known Library location.
-            let isEligible = LargeFileScanPolicy.isEligibleForDeletion(url)
-                || AIModelScanPolicy.isEligibleForDeletion(url)
-                || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url)
+            let isEligible = LargeFileScanPolicy.isEligibleForDeletion(url, home: home)
+                || AIModelScanPolicy.isEligibleForDeletion(url, home: home)
+                || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url, home: home)
             guard isEligible else {
                 skippedItems.append(SkippedDeletionItem(
                     path: url.path,
@@ -468,7 +483,7 @@ nonisolated final class FileDeleter: Sendable {
             onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
             let size = pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.singleFileSize(at: url)
             do {
-                try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                try trash(url)
                 bytesMovedToTrash += size
                 deletedItems.append(DeletedItem(path: url.path, sizeBytes: size, displayName: friendlyTitle))
                 onProgress?(.itemDeleted(sizeBytes: size))

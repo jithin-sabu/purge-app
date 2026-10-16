@@ -36,17 +36,17 @@ struct FileDeleterOffMainTests {
     /// invoked from the main actor, as PurgeStore does.
     @MainActor
     @Test func deleteItemsRunsOffMainThreadWhenCalledFromMainActor() async throws {
-        let fm = FileManager.default
-        let dir = fm.homeDirectoryForCurrentUser
+        // The cache allowlist only offers paths under the real home, so the folder
+        // is named there. It is never made, and the fake Trash moves nothing, so
+        // nothing on disk is written or moved (#171).
+        let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Caches/PurgeOffMainTests-\(UUID().uuidString)", isDirectory: true)
-        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        let payload = dir.appendingPathComponent("payload.bin")
-        try Data(repeating: 0xAB, count: 1024).write(to: payload)
-        defer { try? fm.removeItem(at: dir) }
+        try #require(!FileManager.default.fileExists(atPath: dir.path))
 
         let flag = MainThreadFlag()
+        let trash = FakeTrash()
         let key = dir.standardizedFileURL.path
-        let report = try await FileDeleter().deleteItems(
+        let report = try await FileDeleter(trash: trash.trash).deleteItems(
             at: [dir],
             pathToDisplayName: [key: "Off-main test payload"],
             pathToExpectedSizeBytes: [key: 1024],
@@ -55,7 +55,8 @@ struct FileDeleterOffMainTests {
 
         #expect(report.deletedItems.count == 1)
         #expect(report.bytesMovedToTrash == 1024)
-        #expect(!fm.fileExists(atPath: dir.path))
+        #expect(trash.trashedPaths == [key])
+        #expect(!trash.sawMainThread)
         #expect(flag.events >= 2)
         #expect(!flag.hitMainThread)
     }
@@ -63,16 +64,17 @@ struct FileDeleterOffMainTests {
     @MainActor
     @Test func deleteUserSelectedFilesRunsOffMainThreadWhenCalledFromMainActor() async throws {
         let fm = FileManager.default
-        let downloads = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads", isDirectory: true)
-        try #require(fm.fileExists(atPath: downloads.path))
-        let file = downloads.appendingPathComponent("PurgeOffMainTests-\(UUID().uuidString).bin")
+        let home = fm.temporaryDirectory.appendingPathComponent("PurgeOffMainTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        try fm.createDirectory(at: downloads, withIntermediateDirectories: true)
+        let file = downloads.appendingPathComponent("payload.bin")
         try Data(repeating: 0xCD, count: 2048).write(to: file)
-        defer { try? fm.removeItem(at: file) }
 
         let flag = MainThreadFlag()
+        let trash = FakeTrash()
         let key = file.standardizedFileURL.path
-        let report = try await FileDeleter().deleteUserSelectedFiles(
+        let report = try await FileDeleter(home: home, trash: trash.trash).deleteUserSelectedFiles(
             at: [file],
             pathToDisplayName: [key: "Off-main test file"],
             pathToExpectedSizeBytes: [key: 2048],
@@ -80,7 +82,8 @@ struct FileDeleterOffMainTests {
         )
 
         #expect(report.deletedItems.count == 1)
-        #expect(!fm.fileExists(atPath: file.path))
+        #expect(trash.trashedPaths == [key])
+        #expect(!trash.sawMainThread)
         #expect(flag.events >= 2)
         #expect(!flag.hitMainThread)
     }

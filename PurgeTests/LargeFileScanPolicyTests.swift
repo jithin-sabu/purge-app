@@ -8,20 +8,17 @@ struct LargeFileScanPolicyTests {
         FileManager.default.homeDirectoryForCurrentUser
     }
 
-    @Test
-    func downloadsVideoIsEligibleForLargeFileDeletion() throws {
-        let url = home.appendingPathComponent("Downloads/purge-test-eligibility-\(UUID().uuidString).mkv")
-        FileManager.default.createFile(atPath: url.path, contents: Data([0x00]))
-        defer { try? FileManager.default.removeItem(at: url) }
-        #expect(LargeFileScanPolicy.isEligibleForDeletion(url))
-    }
-
-    @Test
-    func moviesVideoIsEligibleForLargeFileDeletion() throws {
-        let url = home.appendingPathComponent("Movies/purge-test-eligibility-\(UUID().uuidString).mp4")
-        FileManager.default.createFile(atPath: url.path, contents: Data([0x00]))
-        defer { try? FileManager.default.removeItem(at: url) }
-        #expect(LargeFileScanPolicy.isEligibleForDeletion(url))
+    /// The gate checks the file is really there, so these make one, in a temporary
+    /// home rather than the user's own Downloads and Movies (#171).
+    @Test(arguments: ["Downloads/video.mkv", "Movies/video.mp4"])
+    func userVideoIsEligibleForLargeFileDeletion(relativePath: String) throws {
+        let fm = FileManager.default
+        let tempHome = fm.temporaryDirectory.appendingPathComponent("purge-test-home-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: tempHome) }
+        let url = tempHome.appendingPathComponent(relativePath)
+        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([0x00]).write(to: url)
+        #expect(LargeFileScanPolicy.isEligibleForDeletion(url, home: tempHome))
     }
 
     /// Both paths are refused by cache safety, but by different rules, and the
