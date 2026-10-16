@@ -1064,7 +1064,7 @@
     "key": "docker",
     "display_name": "Docker Desktop",
     "tag": "medium",
-    "explanation": "Every Docker image, container, and volume. A volume can hold the only copy of a database. Cleaning moves the whole folder to the Trash. Quit Docker first. To keep volumes, run docker --context desktop-linux system prune yourself.",
+    "explanation": "Every Docker image, container, and volume. A volume can hold the only copy of a database. To keep volumes, run docker --context desktop-linux system prune while Docker is open. To clean, quit Docker. The whole folder goes to the Trash.",
     "bundle_ids": [
       "com.docker.docker"
     ],
