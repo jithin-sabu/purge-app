@@ -81,6 +81,18 @@ enum GitWarningPolicy {
 actor GitStatusChecker {
     private var cache: [String: GitWorktreeStatus] = [:]
     private var access: ScanAccess = .full
+    /// Moves on with every `clearSessionCache()`. A `git status` that started
+    /// before a clear answers for the old session, so it stays out of the new
+    /// cache, where the next scan and the clean-time check would trust it (#172).
+    private var session = 0
+    /// Reads one repository's status. Tests hand in a fake they can hold open.
+    private let readStatus: @Sendable (URL) async -> GitWorktreeStatus
+
+    init(readStatus: @escaping @Sendable (URL) async -> GitWorktreeStatus = { repository in
+        await GitStatusChecker.runGitStatus(repository: repository)
+    }) {
+        self.readStatus = readStatus
+    }
 
     /// Set at the start of each scan. In a limited scan, a worktree whose git dir
     /// sits in a protected folder is reported `.unknown` instead: running `git`
@@ -160,6 +172,7 @@ actor GitStatusChecker {
 
     func clearSessionCache() {
         cache.removeAll()
+        session += 1
     }
 
     /// Unique-repo fetches only. Several cache rows often share one git root, so the
@@ -171,15 +184,15 @@ actor GitStatusChecker {
     private func fetchMissingRepoStatuses(_ repoRoots: Set<String>) async {
         let missing = repoRoots.filter { cache[$0] == nil }
         guard !missing.isEmpty else { return }
+        let startedIn = session
+        let readStatus = self.readStatus
 
         await withTaskGroup(of: (String, GitWorktreeStatus).self) { group in
             var remaining = Array(missing)
             func spawn() {
                 guard let repoPath = remaining.popLast() else { return }
                 group.addTask {
-                    let status = await GitStatusChecker.runGitStatus(
-                        repository: URL(fileURLWithPath: repoPath)
-                    )
+                    let status = await readStatus(URL(fileURLWithPath: repoPath))
                     return (repoPath, status)
                 }
             }
@@ -187,13 +200,16 @@ actor GitStatusChecker {
                 spawn()
             }
             for await (repoPath, status) in group {
+                // Cleared while this ran: the answers belong to the old session,
+                // and the repositories still waiting are the new session's to read.
+                guard session == startedIn else { continue }
                 cache[repoPath] = status
                 spawn()
             }
         }
     }
 
-    private static func runGitStatus(repository: URL) async -> GitWorktreeStatus {
+    static func runGitStatus(repository: URL) async -> GitWorktreeStatus {
         await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .utility).async {
                 let result = invokeGit(repository: repository)
