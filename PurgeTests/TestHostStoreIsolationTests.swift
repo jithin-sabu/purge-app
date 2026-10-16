@@ -10,12 +10,12 @@ struct TestHostStoreIsolationTests {
         .appendingPathComponent("io.getpurge.app", isDirectory: true)
 
     @Test
-    func exclusionsAndSafetyChoicesLiveInTheTestRunsScratchFolder() {
+    func exclusionsSafetyChoicesAndHistoryLiveInTheTestRunsScratchFolder() {
         #expect(TestHost.isActive())
         // One folder for the whole run, or a store would lose what it saved.
         #expect(TestHost.supportDirectory() == TestHost.supportDirectory())
         let scratch = TestHost.supportDirectory().standardizedFileURL
-        for file in [ExcludedPathsStore.fileURL(), UserOverridesStore.fileURL()] {
+        for file in [ExcludedPathsStore.fileURL(), UserOverridesStore.fileURL(), CleanupHistoryStore.fileURL()] {
             #expect(file.deletingLastPathComponent().standardizedFileURL == scratch)
             #expect(!file.standardizedFileURL.path.hasPrefix(realSupport.standardizedFileURL.path + "/"))
         }
