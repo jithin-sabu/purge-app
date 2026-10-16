@@ -715,7 +715,10 @@ final class PurgeStore: ObservableObject {
 
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
     /// (manual and scheduled — both clean the same set).
-    func manualSafeCleanupCandidates() -> [DeletionCandidate] {
+    ///
+    /// - Parameter includingProjects: False leaves every project folder out. A
+    ///   scheduled clean passes it when project discovery had not settled in time.
+    func manualSafeCleanupCandidates(includingProjects: Bool = true) -> [DeletionCandidate] {
         var candidates: [DeletionCandidate] = []
 
         // Revoking access already drops locked rows (`dropRowsLockedByRevokedAccess`).
@@ -728,7 +731,8 @@ final class PurgeStore: ObservableObject {
             !isLimited || isReadableWithoutFullDiskAccess(url)
         }
 
-        for artifact in projectGroups.flatMap(\.artifacts) {
+        let artifacts = includingProjects ? projectGroups.flatMap(\.artifacts) : []
+        for artifact in artifacts {
             guard isReachable(artifact.path) else { continue }
             guard artifact.safetyInfo.level == .safe else { continue }
             guard artifact.reinstallSafety != .missingLockfile else { continue }
@@ -2970,6 +2974,10 @@ final class PurgeStore: ObservableObject {
                 }
             }
             coalesce.debounceTask?.cancel()
+            // A stopped or replaced discovery gets here too, when its stream ends.
+            // What it still holds belongs to a list a newer scan has cleared, where
+            // the newer discovery's git check would mark it clean (#173).
+            guard scanGeneration == generation, !Task.isCancelled else { return }
             flushProjectGroupBuffers(coalesce: coalesce, animate: false)
             ScanPhaseTiming.finish(
                 "discoverProjects stream",
@@ -2977,7 +2985,6 @@ final class PurgeStore: ObservableObject {
                 detail: "\(projectGroupsFound) project groups published"
             )
 
-            guard scanGeneration == generation, !Task.isCancelled else { return }
             guard !projectGroups.isEmpty else { return }
             isEnrichingDeveloper = true
             defer { isEnrichingDeveloper = false }
@@ -3413,11 +3420,12 @@ final class PurgeStore: ObservableObject {
         // Pinned candidates skip the rescan that would otherwise set this, and the
         // checker must not keep `.full` from a scan made before access was revoked.
         await gitChecker.setAccess(currentScanAccess())
+        var includesProjects = true
         if pinnedCandidates == nil {
-            await rescanBeforeSafeCleanup()
+            includesProjects = await rescanBeforeSafeCleanup()
         }
 
-        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates()
+        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates(includingProjects: includesProjects)
         let access = currentScanAccess()
         await gitChecker.setAccess(access)
 
@@ -3499,7 +3507,12 @@ final class PurgeStore: ObservableObject {
     /// Dev Tools leaves running: Dev Tools then showed "scanning" until the next
     /// rescan, and the clean left out every project (#173). The clean list is
     /// built from those projects, so this also waits for discovery to settle.
-    func rescanBeforeSafeCleanup() async {
+    ///
+    /// The wait has the same limit as the queue's own App Caches and Dev Tools step,
+    /// `cacheStepPatience`, because the queue stays held until it ends. Returns false
+    /// when discovery was still running then, and the clean leaves projects out.
+    @discardableResult
+    func rescanBeforeSafeCleanup() async -> Bool {
         // Waits out a queued scan and keeps the next one from starting, so these
         // two never walk the disk beside it or cut a queued full scan short.
         await withScanQueueHeld {
@@ -3513,7 +3526,10 @@ final class PurgeStore: ObservableObject {
             if reusesCacheRows {
                 await hydrateCacheSafetyMetadataParallel()
             }
-            await awaitProjectDiscovery()
+            if let discovery = projectDiscoveryTask {
+                await Self.waitForStep(discovery, patience: cacheStepPatience)
+            }
+            return !isScanningProjects
         }
     }
 

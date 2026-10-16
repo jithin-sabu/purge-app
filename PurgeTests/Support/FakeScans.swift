@@ -16,8 +16,8 @@ final class FakeScans {
     var holdsFullAccessSteps = false
     /// Yielded by a Dev Tools scan that is not held, before it finishes.
     var developerEvents: [DeveloperScanEvent] = []
-    /// Yielded by project discovery just before it finishes: at once, or when a
-    /// held discovery is let go.
+    /// Yielded by project discovery as soon as it starts. A held discovery then
+    /// stays open until it is let go.
     var projectEvents: [DeveloperScanEvent] = []
     private(set) var generalAccesses: [ScanAccess] = []
     private(set) var developerAccesses: [ScanAccess] = []
@@ -48,11 +48,10 @@ final class FakeScans {
         steps.forEach { $0.resume() }
     }
 
-    /// Lets every held project discovery yield `projectEvents` and finish.
     func finishHeldProjects() {
         let held = heldProjects
         heldProjects = []
-        held.forEach { finish($0, yielding: projectEvents) }
+        held.forEach { $0.finish() }
     }
 
     /// Releases every held scan and stops holding new ones, so a scan that starts
@@ -97,10 +96,11 @@ final class FakeScans {
             projects: { _ in
                 self.projectScanCount += 1
                 let (stream, continuation) = AsyncStream<DeveloperScanEvent>.makeStream()
+                self.projectEvents.forEach { continuation.yield($0) }
                 if self.holdsProjects {
                     self.heldProjects.append(continuation)
                 } else {
-                    self.finish(continuation, yielding: self.projectEvents)
+                    continuation.finish()
                 }
                 return stream
             },
@@ -112,13 +112,5 @@ final class FakeScans {
                 }
             }
         )
-    }
-
-    private func finish(
-        _ continuation: AsyncStream<DeveloperScanEvent>.Continuation,
-        yielding events: [DeveloperScanEvent]
-    ) {
-        events.forEach { continuation.yield($0) }
-        continuation.finish()
     }
 }

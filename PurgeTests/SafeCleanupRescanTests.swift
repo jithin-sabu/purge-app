@@ -2,9 +2,10 @@ import Foundation
 import Testing
 @testable import Purge
 
-/// The rescan a scheduled clean, or the menu bar's Clean Now, runs before it picks
-/// what to move (#173). Project discovery runs on after the Dev Tools scan returns,
-/// so the clean list is only complete once discovery has settled.
+/// The rescan a scheduled clean runs before it picks what to move (#173). Project
+/// discovery runs on after the Dev Tools scan returns, so the clean list is only
+/// complete once discovery has settled, and must hold nothing a careful run
+/// would leave out.
 @MainActor
 @Suite("The safe clean's rescan settles before the clean list is built")
 struct SafeCleanupRescanTests {
@@ -15,22 +16,23 @@ struct SafeCleanupRescanTests {
     /// showed "scanning" until a manual rescan, and the clean left out every project.
     @Test
     func coldRescanFinishesProjectDiscovery() async throws {
-        let folders = RealHomeFolders()
-        defer { folders.remove() }
-        let artifact = try makeProject(in: folders)
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let modules = try fixture.project("app")
 
         let fake = FakeScans()
         defer { fake.cleanUp() }
         fake.hasAccess = true
-        fake.projectEvents = [.projectGroupFound(group(for: artifact))]
+        fake.projectEvents = [.projectGroupFound(group(artifact(at: modules)))]
         let store = fake.makeStore()
 
-        await store.rescanBeforeSafeCleanup()
+        let settled = await store.rescanBeforeSafeCleanup()
 
+        #expect(settled)
         #expect(fake.generalAccesses == [.full])
         #expect(fake.projectScanCount == 1)
         #expect(!store.isScanningProjects)
-        #expect(store.manualSafeCleanupCandidates().map(\.path) == [artifact.path])
+        #expect(store.manualSafeCleanupCandidates().map(\.path) == [modules])
     }
 
     /// App Caches rows are already listed, so the rescan reuses them and only
@@ -38,63 +40,200 @@ struct SafeCleanupRescanTests {
     /// which is held open here until the rescan has had every chance to return.
     @Test
     func rescanReusingCacheRowsWaitsForProjectDiscovery() async throws {
-        let folders = RealHomeFolders()
-        defer { folders.remove() }
-        let artifact = try makeProject(in: folders)
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let modules = try fixture.project("app")
 
         let fake = FakeScans()
         defer { fake.cleanUp() }
         fake.hasAccess = true
         fake.holdsProjects = true
-        fake.projectEvents = [.projectGroupFound(group(for: artifact))]
+        fake.projectEvents = [.projectGroupFound(group(artifact(at: modules)))]
         let store = fake.makeStore()
         store.cacheItems = [listedCacheRow()]
 
         let rescan = Task {
-            await store.rescanBeforeSafeCleanup()
+            let settled = await store.rescanBeforeSafeCleanup()
             fake.log.append("rescan returned")
-            return store.manualSafeCleanupCandidates().map(\.path)
+            return (settled, store.manualSafeCleanupCandidates().map(\.path))
         }
         #expect(await eventually { fake.projectScanCount == 1 })
         for _ in 0..<20 { await Task.yield() }
         #expect(!fake.log.contains("rescan returned"))
 
         fake.finishHeldProjects()
-        let candidates = await rescan.value
+        let (settled, candidates) = await rescan.value
 
+        #expect(settled)
         #expect(fake.generalAccesses.isEmpty)
         #expect(!store.isScanningProjects)
-        #expect(candidates == [artifact.path])
+        #expect(candidates == [modules])
+    }
+
+    /// A scan started outside the queue, like the menu bar's, is still discovering
+    /// when the scheduled clean's rescan replaces it. The old discovery's stream
+    /// ends with groups it has taken in but not shown yet. Those belong to the old
+    /// scan, so they must not land in the new list, where the new discovery's git
+    /// check would mark them clean.
+    @Test
+    func replacedDiscoveryLeavesNoGroupsBehind() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let modules = try fixture.project("app")
+
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        fake.holdsProjects = true
+        fake.projectEvents = [.projectGroupFound(group(artifact(at: modules)))]
+        let store = fake.makeStore()
+
+        await store.scanDeveloper()
+        #expect(await eventually { store.isScanningProjects })
+        for _ in 0..<5 { await Task.yield() }
+
+        fake.holdsProjects = false
+        fake.projectEvents = []
+        #expect(await store.rescanBeforeSafeCleanup())
+        for _ in 0..<20 { await Task.yield() }
+
+        #expect(store.projectGroups.isEmpty)
+        #expect(store.manualSafeCleanupCandidates().isEmpty)
+    }
+
+    /// The queue stays held while the rescan waits, so the wait ends when the
+    /// queue's own App Caches and Dev Tools step would. The clean then leaves
+    /// projects out, and discovery still finishes for Dev Tools.
+    @Test
+    func discoveryPastItsPatienceLeavesProjectsOut() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let modules = try fixture.project("app")
+
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        fake.holdsProjects = true
+        fake.projectEvents = [.projectGroupFound(group(artifact(at: modules)))]
+        let store = fake.makeStore()
+        store.cacheStepPatience = 0.2
+
+        let settled = await store.rescanBeforeSafeCleanup()
+
+        #expect(!settled)
+        #expect(!store.isScanQueueHeld)
+        #expect(store.isScanningProjects)
+
+        fake.finishHeldProjects()
+        await store.awaitProjectDiscovery()
+        #expect(!store.isScanningProjects)
+        #expect(store.manualSafeCleanupCandidates().map(\.path) == [modules])
+        #expect(store.manualSafeCleanupCandidates(includingProjects: false).isEmpty)
+    }
+
+    /// A project worked on recently is Check First (#194). Waiting for discovery
+    /// must not bring it into the scheduled clean beside a stale one.
+    @Test
+    func checkFirstProjectStaysOut() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let stale = try fixture.project("stale")
+        let active = try fixture.project("active")
+        var activeArtifact = artifact(at: active, level: .medium)
+        activeArtifact.checkFirstReason = .usedRecently
+
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        fake.projectEvents = [
+            .projectGroupFound(group(artifact(at: stale))),
+            .projectGroupFound(group(activeArtifact))
+        ]
+        let store = fake.makeStore()
+
+        #expect(await store.rescanBeforeSafeCleanup())
+
+        #expect(Set(store.projectGroups.flatMap(\.artifacts).map(\.path)) == [stale, active])
+        #expect(store.manualSafeCleanupCandidates().map(\.path) == [stale])
+    }
+
+    /// `vendor` is not on the git check's list of rebuildable folders, so a PHP
+    /// project with uncommitted changes is marked dirty. The list is built after
+    /// that check, so the project stays out.
+    @Test
+    func projectWithUncommittedChangesStaysOut() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let stale = try fixture.project("stale")
+        let vendor = try fixture.project("php", marker: "composer.json", folder: "vendor")
+        let php = vendor.deletingLastPathComponent()
+        try git(in: php, "init", "-q")
+        try git(in: php, "add", "composer.json")
+        try git(in: php, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-qm", "init")
+        try Data("{\"name\": \"edited\"}".utf8).write(to: php.appendingPathComponent("composer.json"))
+
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        fake.projectEvents = [
+            .projectGroupFound(group(artifact(at: stale))),
+            .projectGroupFound(group(artifact(at: vendor, kind: .composerVendor), type: .composer))
+        ]
+        let store = fake.makeStore()
+
+        #expect(await store.rescanBeforeSafeCleanup())
+
+        let vendorStatus = store.projectGroups.flatMap(\.artifacts).first { $0.path == vendor }?.gitStatus
+        #expect(vendorStatus == .dirty)
+        #expect(store.manualSafeCleanupCandidates().map(\.path) == [stale])
     }
 
     // MARK: Helpers
 
-    /// A Node project under the home folder, where the safety policy offers its
-    /// `node_modules`. It refuses the same folder under the temporary directory.
-    private func makeProject(in folders: RealHomeFolders) throws -> ProjectCacheArtifact {
-        let root = try folders.make(".purge-test-rescan-\(UUID().uuidString)")
-        let project = root.appendingPathComponent("app", isDirectory: true)
-        let modules = project.appendingPathComponent("node_modules", isDirectory: true)
-        try FileManager.default.createDirectory(at: modules, withIntermediateDirectories: true)
-        try Data("{}".utf8).write(to: project.appendingPathComponent("package.json"))
-        return ProjectCacheArtifact(
-            kind: .nodeModules,
-            path: modules,
-            projectRoot: project,
+    /// Projects under the home folder, where the safety policy offers their
+    /// folders. It refuses the same folders under the temporary directory.
+    private final class Fixture {
+        private let folders = RealHomeFolders()
+        private var root: URL?
+
+        /// Makes `<name>/<marker>` and `<name>/<folder>`, and returns the folder.
+        func project(_ name: String, marker: String = "package.json", folder: String = "node_modules") throws -> URL {
+            let root = try self.root ?? folders.make(".purge-test-rescan-\(UUID().uuidString)")
+            self.root = root
+            let project = root.appendingPathComponent(name, isDirectory: true)
+            let artifact = project.appendingPathComponent(folder, isDirectory: true)
+            try FileManager.default.createDirectory(at: artifact, withIntermediateDirectories: true)
+            try Data("{}".utf8).write(to: project.appendingPathComponent(marker))
+            return artifact
+        }
+
+        func remove() { folders.remove() }
+    }
+
+    /// As discovery reports it: the git check has not run yet.
+    private func artifact(
+        at path: URL,
+        kind: DeletableArtifactKind = .nodeModules,
+        level: SafetyLevel = .safe
+    ) -> ProjectCacheArtifact {
+        ProjectCacheArtifact(
+            kind: kind,
+            path: path,
+            projectRoot: path.deletingLastPathComponent(),
             sizeBytes: 1024,
             lastModified: .distantPast,
             isSelected: false,
-            safetyInfo: SafetyInfo(level: .safe, headline: "node_modules", explanation: "", recoverySteps: "", reinstallCommand: nil),
+            safetyInfo: SafetyInfo(level: level, headline: path.lastPathComponent, explanation: "", recoverySteps: "", reinstallCommand: nil),
             reinstallSafety: .notApplicable,
-            gitStatus: .clean
+            gitStatus: .unknown
         )
     }
 
-    private func group(for artifact: ProjectCacheArtifact) -> ProjectGroup {
+    private func group(_ artifact: ProjectCacheArtifact, type: ProjectType = .node) -> ProjectGroup {
         ProjectGroup(
             displayName: artifact.projectRoot.lastPathComponent,
             rootPath: artifact.projectRoot,
-            inferredTypes: [.node],
+            inferredTypes: [type],
             artifacts: [artifact]
         )
     }
@@ -114,6 +253,19 @@ struct SafeCleanupRescanTests {
             safetyInfo: SafetyInfo(level: .medium, headline: folder, explanation: "", recoverySteps: "", reinstallCommand: nil),
             gitStatus: .clean
         )
+    }
+
+    private func git(in folder: URL, _ arguments: String...) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-C", folder.path] + arguments
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 
     private func eventually(
