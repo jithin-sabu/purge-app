@@ -11,6 +11,14 @@ import Foundation
 /// and `du` sizing there.
 nonisolated final class AppUninstallScanner {
 
+    /// Where the leftover scan looks for the user's Library. Tests hand in a
+    /// temporary home so they never write to the user's own (#171).
+    private let home: URL
+
+    init(home: URL = FileManager.default.homeDirectoryForCurrentUser) {
+        self.home = home
+    }
+
     // MARK: Installed apps
 
     /// Streams the apps the uninstaller can act on. Bundles under `/System` and
@@ -118,9 +126,9 @@ nonisolated final class AppUninstallScanner {
     /// are resolved in one pass before emitting, so the review list is complete
     /// and sortable when it appears.
     func leftoverStream(for app: InstalledApp) -> AsyncStream<UninstallItem> {
-        AsyncStream { continuation in
+        AsyncStream { [home] continuation in
             let task = Task.detached(priority: .userInitiated) {
-                Self.runLeftoverScan(for: app, continuation: continuation)
+                Self.runLeftoverScan(for: app, home: home, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -134,10 +142,10 @@ nonisolated final class AppUninstallScanner {
 
     private static func runLeftoverScan(
         for app: InstalledApp,
+        home: URL,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser
         var matches: [Match] = []
         var seen = Set<String>()
 
@@ -167,7 +175,7 @@ nonisolated final class AppUninstallScanner {
                 let key = entry.standardizedFileURL.path
                 guard !seen.contains(key) else { continue }
                 // Defend in depth: only offer what the delete gate would accept.
-                guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(entry) else { continue }
+                guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(entry, home: home) else { continue }
                 seen.insert(key)
                 matches.append(Match(url: entry, category: root.category, reason: reason))
             }

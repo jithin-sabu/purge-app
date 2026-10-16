@@ -9,14 +9,29 @@ import Foundation
 /// the Launch Services lookups, and the `du` sizing there.
 nonisolated final class OrphanLeftoverScanner {
 
+    /// Where the scan looks for the user's Library, and where the Dev Tools
+    /// staleness setting is read. Tests hand in a temporary home and throwaway
+    /// defaults so they never touch the user's own (#171).
+    private let home: URL
+    private let defaults: UserDefaults
+
+    init(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        defaults: UserDefaults = .standard
+    ) {
+        self.home = home
+        self.defaults = defaults
+    }
+
     /// Streams each orphaned leftover as an `UninstallItem`, sized before it is
     /// emitted so the list is complete and sortable when it appears. The scan
     /// finishes with nothing when the installed-app view looks incomplete (an
     /// unmounted volume, an unreadable app root), rather than flag everything.
     func orphanStream() -> AsyncStream<UninstallItem> {
-        AsyncStream { continuation in
+        AsyncStream { [home, defaults] continuation in
+            let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults)
             let task = Task.detached(priority: .userInitiated) {
-                Self.run(continuation: continuation)
+                Self.run(home: home, staleDays: staleDays, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -29,18 +44,19 @@ nonisolated final class OrphanLeftoverScanner {
         let modified: Date
     }
 
-    private static func run(continuation: AsyncStream<UninstallItem>.Continuation) {
+    private static func run(
+        home: URL,
+        staleDays: Int,
+        continuation: AsyncStream<UninstallItem>.Continuation
+    ) {
         let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser
 
         let installed = OrphanLeftoverScanPolicy.makeInstalledAppIndex()
         guard installed.looksComplete else {
             continuation.finish()
             return
         }
-        let cutoff = OrphanLeftoverScanPolicy.staleCutoff(
-            staleDays: OrphanLeftoverScanPolicy.effectiveStaleDays()
-        )
+        let cutoff = OrphanLeftoverScanPolicy.staleCutoff(staleDays: staleDays)
 
         var candidates: [Candidate] = []
         var seen = Set<String>()
@@ -74,7 +90,7 @@ nonisolated final class OrphanLeftoverScanner {
                 // Orphan data lives outside the cache allowlist, so this is the
                 // same authority the deletion pass uses (`deleteUserSelectedFiles`),
                 // not `DeletionSafetyPolicy.isOfferedForCleanup`.
-                guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(entry) else { continue }
+                guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(entry, home: home) else { continue }
                 guard !ExcludedPathsStore.isExcluded(entry) else { continue }
 
                 let key = entry.standardizedFileURL.path

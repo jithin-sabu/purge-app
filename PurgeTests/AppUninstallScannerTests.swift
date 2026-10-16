@@ -2,9 +2,8 @@ import Foundation
 import Testing
 @testable import Purge
 
-/// Exercises the leftover scan against real `~/Library` locations, using a unique
-/// fake bundle id so it never collides with a real app's files and always cleans
-/// up after itself.
+/// Exercises the leftover scan against a temporary home's `Library`, so it never
+/// writes to the user's own (#171).
 ///
 /// Like `ScannerOffMainTests`, this does not assert the scanner's `nonisolated`
 /// property directly (only observable from inside the awaited callee, and not
@@ -25,9 +24,12 @@ struct AppUninstallScannerTests {
         let token = UUID().uuidString.prefix(8).lowercased()
         let bundleID = "com.purgetest.\(token)"
         let appName = "PurgeTest\(token)"
-        let home = fm.homeDirectoryForCurrentUser
+        let base = fm.temporaryDirectory.appendingPathComponent("purgetest-\(token)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
         let prefs = home.appendingPathComponent("Library/Preferences", isDirectory: true)
         let appSupport = home.appendingPathComponent("Library/Application Support", isDirectory: true)
+        try fm.createDirectory(at: prefs, withIntermediateDirectories: true)
 
         let plist = prefs.appendingPathComponent("\(bundleID).plist")
         let supportByID = appSupport.appendingPathComponent(bundleID, isDirectory: true)
@@ -36,22 +38,14 @@ struct AppUninstallScannerTests {
         // a name that only shares the vendor stem.
         let unrelated = appSupport.appendingPathComponent("com.purgetest.other\(token)", isDirectory: true)
 
-        fm.createFile(atPath: plist.path, contents: Data([0x00]))
+        try Data([0x00]).write(to: plist)
         try fm.createDirectory(at: supportByID, withIntermediateDirectories: true)
         try fm.createDirectory(at: supportByName, withIntermediateDirectories: true)
         try fm.createDirectory(at: unrelated, withIntermediateDirectories: true)
-        defer {
-            try? fm.removeItem(at: plist)
-            try? fm.removeItem(at: supportByID)
-            try? fm.removeItem(at: supportByName)
-            try? fm.removeItem(at: unrelated)
-        }
 
         // A temp .app bundle so the bundle row has a real path to size.
-        let bundleURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("\(appName).app", isDirectory: true)
+        let bundleURL = base.appendingPathComponent("\(appName).app", isDirectory: true)
         try fm.createDirectory(at: bundleURL, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: bundleURL) }
 
         let app = InstalledApp(
             name: appName,
@@ -61,7 +55,7 @@ struct AppUninstallScannerTests {
             isRunning: false
         )
 
-        let items = await collect(AppUninstallScanner().leftoverStream(for: app))
+        let items = await collect(AppUninstallScanner(home: home).leftoverStream(for: app))
         let byPath = Dictionary(uniqueKeysWithValues: items.map { ($0.path.standardizedFileURL.path, $0) })
 
         // Bundle row is present and comes through as the app itself.
