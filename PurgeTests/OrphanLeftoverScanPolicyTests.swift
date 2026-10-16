@@ -6,7 +6,10 @@ import Testing
 struct OrphanLeftoverScanPolicyTests {
 
     private func index(_ ids: [String]) -> OrphanLeftoverScanPolicy.InstalledAppIndex {
-        OrphanLeftoverScanPolicy.InstalledAppIndex(diskBundleIDs: Set(ids.map { $0.lowercased() }))
+        OrphanLeftoverScanPolicy.InstalledAppIndex(
+            diskBundleIDs: Set(ids.map { $0.lowercased() }),
+            evidence: InstalledCodeEvidence()
+        )
     }
 
     // MARK: Ownership
@@ -96,7 +99,8 @@ struct OrphanLeftoverScanPolicyTests {
     func unreadableRootLooksIncomplete() {
         let degraded = OrphanLeftoverScanPolicy.InstalledAppIndex(
             diskBundleIDs: Set(["a.b", "c.d", "e.f", "g.h", "i.j"]),
-            rootsReadable: false
+            rootsReadable: false,
+            evidence: InstalledCodeEvidence()
         )
         #expect(!degraded.looksComplete)
     }
@@ -259,24 +263,10 @@ struct OrphanLeftoverScanPolicyTests {
     }
 
     @Test
-    func recentlyTouchedIsNotStale() {
+    func cutoffIsThatManyDaysBeforeNow() {
         let now = Date()
-        let yesterday = now.addingTimeInterval(-24 * 60 * 60)
-        #expect(!OrphanLeftoverScanPolicy.isStale(modifiedAt: yesterday, staleDays: 180, now: now))
-    }
-
-    @Test
-    func longUntouchedIsStale() {
-        let now = Date()
-        let old = now.addingTimeInterval(-200 * 24 * 60 * 60)
-        #expect(OrphanLeftoverScanPolicy.isStale(modifiedAt: old, staleDays: 180, now: now))
-    }
-
-    /// An undeterminable date reads as not stale, so an entry Purge cannot date is
-    /// left alone rather than offered for removal.
-    @Test
-    func undeterminableDateIsNotStale() {
-        #expect(!OrphanLeftoverScanPolicy.isStale(modifiedAt: .distantPast, staleDays: 180))
+        let cutoff = OrphanLeftoverScanPolicy.staleCutoff(staleDays: 180, now: now)
+        #expect(now.timeIntervalSince(cutoff) == 180 * 24 * 60 * 60)
     }
 
     // MARK: Safety mapping
@@ -392,7 +382,9 @@ struct OrphanLeftoverScanPolicyTests {
     @Test
     func leftoversOfRemovedAppsAreStillFound() {
         let installed = index(apps: ["com.vendor.Other"], teams: ["BBBBBBBBBB"], code: ["com.vendor.Other.Helper"])
-        #expect(isOrphan("SY64MV22J9.com.raycast.macos.shared", in: .groupContainers, installed: installed))
+        // Made-up ids only: the name fallback asks this Mac's Launch Services,
+        // so a real app's id would pass or fail with what is installed here.
+        #expect(isOrphan("SY64MV22J9.com.gone.vendor.shared", in: .groupContainers, installed: installed))
         #expect(isOrphan("AAAAAAAAAA.com.vendor.App", in: .groupContainers, installed: installed))
         #expect(isOrphan("com.gone.App", in: .containers, installed: installed))
         #expect(isOrphan("com.gone.App.savedState", in: .savedState, installed: installed))
@@ -404,14 +396,14 @@ struct OrphanLeftoverScanPolicyTests {
     @Test
     func groupsAreNotJudgedWithoutReadableSignatures() {
         let ids: Set<String> = ["a.b", "c.d", "e.f", "g.h", "i.j"]
-        let unread = OrphanLeftoverScanPolicy.InstalledAppIndex(diskBundleIDs: ids)
-        #expect(!isOrphan("SY64MV22J9.com.raycast.macos.shared", in: .groupContainers, installed: unread))
+        let unread = OrphanLeftoverScanPolicy.InstalledAppIndex(diskBundleIDs: ids, evidence: InstalledCodeEvidence())
+        #expect(!isOrphan("SY64MV22J9.com.gone.vendor.shared", in: .groupContainers, installed: unread))
 
         var mostlyFailed = InstalledCodeEvidence()
         mostlyFailed.userAppSignaturesRead = 3
         mostlyFailed.userAppSignatureFailures = 2
         let degraded = OrphanLeftoverScanPolicy.InstalledAppIndex(diskBundleIDs: ids, evidence: mostlyFailed)
-        #expect(!isOrphan("SY64MV22J9.com.raycast.macos.shared", in: .groupContainers, installed: degraded))
+        #expect(!isOrphan("SY64MV22J9.com.gone.vendor.shared", in: .groupContainers, installed: degraded))
 
         // Bundle-id leftovers do not depend on signatures and are still judged.
         #expect(isOrphan("com.gone.App", in: .containers, installed: degraded))
@@ -500,18 +492,79 @@ struct OrphanLeftoverScanPolicyTests {
         }
     }
 
+    /// Opening a leftover in Finder writes `.DS_Store`, which also sets the
+    /// folder's date. That must not hide the leftover, in the top folder or a
+    /// subfolder. The files are written after the folders are backdated, the
+    /// order it happens in.
     @Test
-    func finderAndContainerMetadataDoNotCountAsUse() throws {
+    func finderVisitDoesNotHideALeftover() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Data().write(to: root.appendingPathComponent(".DS_Store"))
-        try Data().write(to: root.appendingPathComponent(".com.apple.containermanagerd.metadata.plist"))
+        let data = root.appendingPathComponent("Data", isDirectory: true)
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        let store = data.appendingPathComponent("store.sqlite")
+        try Data("x".utf8).write(to: store)
+        try setDate(longAgo, at: store)
+        try setDate(longAgo, at: data)
         try setDate(longAgo, at: root)
 
+        try Data().write(to: root.appendingPathComponent(".DS_Store"))
+        try Data().write(to: data.appendingPathComponent(".DS_Store"))
+        try Data().write(to: root.appendingPathComponent(".com.apple.containermanagerd.metadata.plist"))
+
         guard case .untouchedSince = OrphanLeftoverScanPolicy.contentAge(of: root, cutoff: cutoff) else {
-            Issue.record("metadata files made the folder look in use")
+            Issue.record("a Finder visit made the folder look in use")
             return
         }
+    }
+
+    /// Removing a file changes only its folder's date, so a recent folder date
+    /// with nothing to explain it is still use.
+    @Test
+    func removedFileStillCountsAsUse() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let kept = root.appendingPathComponent("kept")
+        let removed = root.appendingPathComponent("removed")
+        try Data("x".utf8).write(to: kept)
+        try Data("y".utf8).write(to: removed)
+        try setDate(longAgo, at: kept)
+        try setDate(longAgo, at: root)
+
+        try FileManager.default.removeItem(at: removed)
+
+        #expect(OrphanLeftoverScanPolicy.contentAge(of: root, cutoff: cutoff) == .recent)
+    }
+
+    /// An old `.DS_Store` cannot explain a folder date set long after it.
+    @Test
+    func olderIgnoredFileDoesNotExplainALaterChange() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let kept = root.appendingPathComponent("kept")
+        let removed = root.appendingPathComponent("removed")
+        let finder = root.appendingPathComponent(".DS_Store")
+        try Data("x".utf8).write(to: kept)
+        try Data("y".utf8).write(to: removed)
+        try Data().write(to: finder)
+        try setDate(longAgo, at: kept)
+        try setDate(longAgo, at: finder)
+        try setDate(longAgo, at: root)
+
+        try FileManager.default.removeItem(at: removed)
+
+        #expect(OrphanLeftoverScanPolicy.contentAge(of: root, cutoff: cutoff) == .recent)
+    }
+
+    /// A folder holding only ignored files has no date that says how old it is.
+    @Test
+    func onlyIgnoredFilesMakeTheAgeUnknown() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try setDate(longAgo, at: root)
+        try Data().write(to: root.appendingPathComponent(".DS_Store"))
+
+        #expect(OrphanLeftoverScanPolicy.contentAge(of: root, cutoff: cutoff) == .unknown)
     }
 
     /// Anything the walk cannot read leaves the age unknown, which the scan
@@ -563,6 +616,72 @@ struct OrphanLeftoverScanPolicyTests {
         }
         try setDate(Date(), at: cookies)
         #expect(OrphanLeftoverScanPolicy.contentAge(of: cookies, cutoff: cutoff) == .recent)
+    }
+
+    // MARK: The scan's decision
+
+    /// A leftover on disk: a data folder with one file, all backdated.
+    private func makeLeftover(named name: String, in root: URL) throws -> URL {
+        let leftover = root.appendingPathComponent(name, isDirectory: true)
+        let data = leftover.appendingPathComponent("data", isDirectory: true)
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        let image = data.appendingPathComponent("data.img")
+        try Data("disk".utf8).write(to: image)
+        try setDate(longAgo, at: image)
+        try setDate(longAgo, at: data)
+        try setDate(longAgo, at: leftover)
+        return leftover
+    }
+
+    /// The function the scanner calls for every entry runs all three checks:
+    /// the owner, whether installed code claims it, and the age of everything
+    /// inside. Each expectation fails if one check is dropped.
+    @Test
+    func orphanCandidateRunsEveryCheck() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let orbStack = try makeLeftover(named: "HUAQ24HBR6.dev.orbstack", in: root)
+        let cutoff = OrphanLeftoverScanPolicy.staleCutoff(staleDays: 30)
+        let installed = index(apps: ["dev.kdrag0n.MacVirt"], teams: ["HUAQ24HBR6"])
+        let removed = index(apps: ["com.vendor.Other"], teams: ["ZZZZZZZZZZ"])
+
+        // Claimed by OrbStack's team: kept.
+        #expect(OrphanLeftoverScanPolicy.orphanCandidate(
+            at: orbStack, category: .groupContainers, installed: installed, cutoff: cutoff
+        ) == nil)
+
+        // OrbStack gone and nothing touched: offered, dated by the newest file.
+        let found = OrphanLeftoverScanPolicy.orphanCandidate(
+            at: orbStack, category: .groupContainers, installed: removed, cutoff: cutoff
+        )
+        #expect(found?.owner == .appGroup("HUAQ24HBR6.dev.orbstack", teamID: "HUAQ24HBR6"))
+        if let found {
+            #expect(abs(found.lastModified.timeIntervalSince(longAgo)) < 2)
+        }
+
+        // Written deep inside today: kept, though the folder's own date is old.
+        try Data("disk, written today".utf8).write(to: orbStack.appendingPathComponent("data/data.img"))
+        #expect(OrphanLeftoverScanPolicy.orphanCandidate(
+            at: orbStack, category: .groupContainers, installed: removed, cutoff: cutoff
+        ) == nil)
+
+        // A name that says nothing about its owner: never offered.
+        let unnamed = try makeLeftover(named: "randomfolder", in: root)
+        #expect(OrphanLeftoverScanPolicy.orphanCandidate(
+            at: unnamed, category: .groupContainers, installed: removed, cutoff: cutoff
+        ) == nil)
+    }
+
+    /// The scan judges with the real index, which must carry evidence. Without
+    /// it, helper ids Launch Services cannot resolve read as orphans again.
+    @Test
+    func realIndexIsBuiltWithEvidence() {
+        let installed = OrphanLeftoverScanPolicy.makeInstalledAppIndex()
+        // Apple's apps are on every Mac, and these tests run inside Purge.
+        #expect(installed.evidence.bundleIDs.contains("com.apple.calculator"))
+        if let host = Bundle.main.bundleIdentifier {
+            #expect(installed.evidence.bundleIDs.contains(host.lowercased()))
+        }
     }
 
     private func makeTemporaryDirectory() throws -> URL {

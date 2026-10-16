@@ -38,9 +38,9 @@ nonisolated final class OrphanLeftoverScanner {
             continuation.finish()
             return
         }
-        let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays()
-        let now = Date()
-        let cutoff = now.addingTimeInterval(-Double(staleDays) * 24 * 60 * 60)
+        let cutoff = OrphanLeftoverScanPolicy.staleCutoff(
+            staleDays: OrphanLeftoverScanPolicy.effectiveStaleDays()
+        )
 
         var candidates: [Candidate] = []
         var seen = Set<String>()
@@ -52,7 +52,7 @@ nonisolated final class OrphanLeftoverScanner {
             }
             guard let entries = try? fm.contentsOfDirectory(
                 at: root.url,
-                includingPropertiesForKeys: [.contentModificationDateKey],
+                includingPropertiesForKeys: nil,
                 options: [.skipsHiddenFiles]
             ) else { continue }
 
@@ -61,22 +61,14 @@ nonisolated final class OrphanLeftoverScanner {
                     continuation.finish()
                     return
                 }
-                let name = entry.lastPathComponent
-                guard let owner = OrphanLeftoverScanPolicy.candidateOwner(
-                    entryName: name,
+                // Owner, orphaned, and untouched all the way down, in one
+                // tested decision.
+                guard let orphan = OrphanLeftoverScanPolicy.orphanCandidate(
+                    at: entry,
                     category: root.category,
-                    url: entry
+                    installed: installed,
+                    cutoff: cutoff
                 ) else { continue }
-                guard OrphanLeftoverScanPolicy.isOrphan(owner, installed: installed) else {
-                    continue
-                }
-
-                // The folder's own date first: it is free, and a recent one
-                // already means in use.
-                let folderDate = FolderSizing.contentModificationDate(at: entry)
-                guard OrphanLeftoverScanPolicy.isStale(modifiedAt: folderDate, staleDays: staleDays, now: now) else {
-                    continue
-                }
 
                 // Defend in depth: only offer what the delete gate would accept.
                 // Orphan data lives outside the cache allowlist, so this is the
@@ -88,20 +80,12 @@ nonisolated final class OrphanLeftoverScanner {
                 let key = entry.standardizedFileURL.path
                 guard seen.insert(key).inserted else { continue }
 
-                // Then everything inside: a folder's own date stays old while an
-                // app writes deeper in. This is the second line of defence, so
-                // data in use is kept even if its owner was misjudged above.
-                guard case .untouchedSince(let modified) = OrphanLeftoverScanPolicy.contentAge(
-                    of: entry,
-                    cutoff: cutoff
-                ) else { continue }
-
                 candidates.append(
                     Candidate(
                         url: entry,
                         category: root.category,
-                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: owner.displayName, url: entry),
-                        modified: modified
+                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: orphan.owner.displayName, url: entry),
+                        modified: orphan.lastModified
                     )
                 )
             }
