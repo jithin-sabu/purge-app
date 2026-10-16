@@ -19,7 +19,7 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
     @Published var isEnabled: Bool {
         didSet {
             ud.set(isEnabled, forKey: UDKeys.scheduledCleanEnabled)
-            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: self)
         }
     }
 
@@ -32,7 +32,7 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
     @Published var frequency: ScheduledCleaningFrequency {
         didSet {
             ud.set(frequency.rawValue, forKey: UDKeys.scheduledFrequency)
-            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: self)
         }
     }
 
@@ -44,7 +44,7 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
                 customIntervalAmount = clamped
             }
             ud.set(customIntervalAmount, forKey: UDKeys.customIntervalAmount)
-            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: self)
         }
     }
 
@@ -52,7 +52,7 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
     @Published var customIntervalUnit: CustomCleaningIntervalUnit {
         didSet {
             ud.set(customIntervalUnit.rawValue, forKey: UDKeys.customIntervalUnit)
-            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .scheduledCleaningPrefsChanged, object: self)
         }
     }
 
@@ -108,5 +108,8 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
 }
 
 extension Notification.Name {
+    /// Posted with the store that changed as `object`. Observe one store, never
+    /// all of them: tests make stores of their own, and their changes must not
+    /// re-arm the user's reminder (#171).
     static let scheduledCleaningPrefsChanged = Notification.Name("ScheduledCleaningPrefsChanged")
 }
