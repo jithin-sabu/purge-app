@@ -1,8 +1,8 @@
 import Foundation
 @testable import Purge
 
-/// Scans that record what they were asked for. App Caches scans and the Full Disk
-/// Access steps can be held open until the test finishes them.
+/// Scans that record what they were asked for. App Caches scans, project discovery
+/// and the Full Disk Access steps can be held open until the test finishes them.
 ///
 /// Exclusions and safety choices the store saves go to the test run's scratch
 /// folder (`TestHost.supportDirectory()`), which every test in the run shares, so
@@ -12,11 +12,16 @@ final class FakeScans {
     var hasAccess = false
     var holdsGeneral = false
     var holdsDeveloper = false
+    var holdsProjects = false
     var holdsFullAccessSteps = false
     /// Yielded by a Dev Tools scan that is not held, before it finishes.
     var developerEvents: [DeveloperScanEvent] = []
+    /// Yielded by project discovery as soon as it starts. A held discovery then
+    /// stays open until it is let go.
+    var projectEvents: [DeveloperScanEvent] = []
     private(set) var generalAccesses: [ScanAccess] = []
     private(set) var developerAccesses: [ScanAccess] = []
+    private(set) var projectScanCount = 0
     /// Full Disk Access steps as they start, plus anything a test adds.
     var log: [String] = []
     /// Every scan in the order it started: App Caches with its access, and the steps.
@@ -24,6 +29,7 @@ final class FakeScans {
 
     private var heldGeneral: [AsyncStream<CacheScanEvent>.Continuation] = []
     private var heldDeveloper: [AsyncStream<DeveloperScanEvent>.Continuation] = []
+    private var heldProjects: [AsyncStream<DeveloperScanEvent>.Continuation] = []
     private var heldSteps: [CheckedContinuation<Void, Never>] = []
     private let suite = ThrowawayDefaults()
 
@@ -42,14 +48,22 @@ final class FakeScans {
         steps.forEach { $0.resume() }
     }
 
+    func finishHeldProjects() {
+        let held = heldProjects
+        heldProjects = []
+        held.forEach { $0.finish() }
+    }
+
     /// Releases every held scan and stops holding new ones, so a scan that starts
     /// after this call cannot hang the test either.
     func cleanUp() {
         holdsGeneral = false
         holdsDeveloper = false
+        holdsProjects = false
         holdsFullAccessSteps = false
         heldGeneral.forEach { $0.finish() }
         heldDeveloper.forEach { $0.finish() }
+        finishHeldProjects()
         finishHeldSteps()
         suite.remove()
     }
@@ -79,7 +93,17 @@ final class FakeScans {
                 }
                 return stream
             },
-            projects: { _ in Self.finishedStream() },
+            projects: { _ in
+                self.projectScanCount += 1
+                let (stream, continuation) = AsyncStream<DeveloperScanEvent>.makeStream()
+                self.projectEvents.forEach { continuation.yield($0) }
+                if self.holdsProjects {
+                    self.heldProjects.append(continuation)
+                } else {
+                    continuation.finish()
+                }
+                return stream
+            },
             fullAccessStep: { step, _ in
                 self.log.append("step \(step.rawValue)")
                 self.events.append("step \(step.rawValue)")
@@ -88,11 +112,5 @@ final class FakeScans {
                 }
             }
         )
-    }
-
-    private static func finishedStream() -> AsyncStream<DeveloperScanEvent> {
-        let (stream, continuation) = AsyncStream<DeveloperScanEvent>.makeStream()
-        continuation.finish()
-        return stream
     }
 }
