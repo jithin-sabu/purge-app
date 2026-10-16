@@ -13,7 +13,6 @@ struct ContentView: View {
 
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
     // Same defaults as the tabs, so the subtitle counts what the list shows.
@@ -65,12 +64,6 @@ struct ContentView: View {
         }
         .onReceive(store.largeFileDuplicates.indexPublisher) { index in
             largeFilesDuplicateIndex = index
-        }
-        .onChange(of: scenePhase) { phase in
-            guard isLifecycleActive, phase == .active, !isRunningPreview, !isRunningAsTestHost else { return }
-            Task {
-                await ScheduledCleaningRegistrar.shared.runGracefulActivationSweepIfPastDue()
-            }
         }
         .onChange(of: isLifecycleActive) { isActive in
             guard isActive else { return }
@@ -262,9 +255,8 @@ struct ContentView: View {
     }
 
     /// Runs any past-due scheduled clean before the first scan so the UI reflects
-    /// the post-clean state. `.onChange(of: scenePhase)` never fires for the initial
-    /// `.active` value, so without this a cold launch would skip the activation
-    /// sweep entirely and an overdue clean would sit unexecuted.
+    /// the post-clean state. The app's activation handler may have started that
+    /// clean first; this call then waits for it to end before the scans start.
     private func runStartupMaintenance() async {
         guard isLifecycleActive, !isRunningPreview, !isRunningAsTestHost else { return }
         await ScheduledCleaningRegistrar.shared.runGracefulActivationSweepIfPastDue()

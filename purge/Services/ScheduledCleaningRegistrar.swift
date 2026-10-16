@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import UserNotifications
@@ -63,11 +64,19 @@ final class ScheduledCleaningRegistrar: ObservableObject {
 
     private weak var store: PurgeStore?
     private var prefsObserver: NSObjectProtocol?
-    /// The launch `.task` and the scene-activation handler can both find the same
-    /// overdue schedule before either advances the anchor (the scan inside the
-    /// clean takes a while), producing back-to-back duplicate cleans. One sweep
+    private var activationObserver: NSObjectProtocol?
+    private var activationCenter: NotificationCenter?
+    /// The window's launch `.task` and the activation handler can both find the
+    /// same overdue schedule before either advances the anchor (the scan inside
+    /// the clean takes a while), producing back-to-back duplicate cleans. One sweep
     /// at a time.
     private var isSweepRunning = false
+    /// Sweeps and Run now requests made while another was cleaning. Each returns
+    /// with that clean's summary when it ends, so the window's launch scans never
+    /// start in the middle of a clean the activation handler started.
+    private var sweepWaiters: [CheckedContinuation<PurgeStore.ScheduledCleaningSummary?, Never>] = []
+    /// True while Purge runs only to review a removed app and will quit after it.
+    private var quitsOnItsOwn: () -> Bool = { false }
 
     // Injected dependencies. Production uses the defaults (the shared prefs store,
     // the standard defaults domain, the attached PurgeStore, the real re-arm);
@@ -128,6 +137,16 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         return store?.isReviewingOrCleaning ?? false
     }
 
+    /// Moves the anchor, records the outcome, and re-arms, unless another clean was
+    /// running and this one removed nothing. Then the clean stays due, and the next
+    /// activation runs it.
+    private func finishSchedule(after summary: PurgeStore.ScheduledCleaningSummary, at now: Date) async {
+        guard !summary.skippedForAnotherClean else { return }
+        ud.set(now, forKey: Self.lastGraceSweepKey)
+        recordOutcome(summary, at: now)
+        await performRearm()
+    }
+
     private func recordOutcome(_ summary: PurgeStore.ScheduledCleaningSummary, at date: Date) {
         let outcome = LastScheduledCleanOutcome(
             date: date,
@@ -160,9 +179,51 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         }
     }
 
+    /// Checks for a due clean each time Purge comes forward. This lives on the app,
+    /// not a window: Purge left running in the menu bar has no window to check from,
+    /// and `scenePhase` never changes after launch on macOS, so a due clean used to
+    /// wait until a new window opened (#173). Waits for onboarding, like the
+    /// window's launch sweep, since onboarding runs its own scan.
+    ///
+    /// `quitsOnItsOwn` is true while the deleted-apps watcher has Purge open only
+    /// for a review. Purge quits as soon as that is done, which would cut a clean
+    /// off and leave it out of Cleanup History, so the clean waits for a launch
+    /// the user started.
+    func observeAppActivation(
+        center: NotificationCenter = .default,
+        quitsOnItsOwn: @escaping () -> Bool = { false }
+    ) {
+        guard activationObserver == nil else { return }
+        activationCenter = center
+        self.quitsOnItsOwn = quitsOnItsOwn
+        activationObserver = center.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { await self?.sweepAfterActivation() }
+        }
+    }
+
+    private func sweepAfterActivation() async {
+        guard ud.bool(forKey: FirstRunGate.onboardingCompletedKey), !quitsOnItsOwn() else { return }
+        await runGracefulActivationSweepIfPastDue()
+    }
+
+    /// False in the unit-test host and in Xcode previews. Both run the app on the
+    /// user's real defaults, so an overdue schedule there would clean the user's
+    /// real caches.
+    nonisolated static func cleansOnActivation(environment: [String: String]) -> Bool {
+        !TestHost.isActive(environment: environment)
+            && environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
+    }
+
     deinit {
         if let prefsObserver {
             NotificationCenter.default.removeObserver(prefsObserver)
+        }
+        if let activationObserver {
+            activationCenter?.removeObserver(activationObserver)
         }
     }
 
@@ -221,25 +282,35 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// the Settings "Run now" affordance so the schedule can be verified without
     /// waiting out a full interval. Advances the anchor and re-arms exactly like an
     /// activation sweep, so the next scheduled clean moves forward one interval.
+    ///
+    /// Asked while a sweep is cleaning, it waits and returns that clean's summary.
+    /// Settings reads `nil` as "auto-clean is off", which it was not (#173).
     @discardableResult
     func runScheduledCleanNow(referenceDate now: Date = Date()) async -> PurgeStore.ScheduledCleaningSummary? {
         guard prefs.isEnabled else { return nil }
-        guard performCleanOverride != nil || store != nil, !isSweepRunning else { return nil }
+        guard performCleanOverride != nil || store != nil else { return nil }
+        if isSweepRunning {
+            return await waitForRunningSweep()
+        }
 
         isSweepRunning = true
-        defer { isSweepRunning = false }
+        var summary: PurgeStore.ScheduledCleaningSummary?
+        defer { finishSweep(with: summary) }
 
-        let summary = await performClean()
-        ud.set(now, forKey: Self.lastGraceSweepKey)
-        recordOutcome(summary, at: now)
-        await performRearm()
-        return summary
+        let result = await performClean()
+        summary = result
+        await finishSchedule(after: result, at: now)
+        return result
     }
 
     /// Runs cleanup whenever the app is foregrounded past the next due date.
     /// macOS has no background scheduling, so this lazy sweep — fired on launch and
     /// on every activation — is what actually executes the schedule. Anchored to the
     /// same due date the UI shows, so an overdue clean runs the next time Purge opens.
+    ///
+    /// Called while another sweep or Run now is cleaning, it starts no clean of its
+    /// own and returns once that one ends. The window scans right after this
+    /// returns, and those scans must show the state after the clean.
     ///
     /// A due clean waits while the user is in a review or a delete confirmation, or
     /// a clean is running, and the anchor stays put so the next activation runs it.
@@ -248,18 +319,36 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// anything or saying why, and a confirmed manual clean could run beside the
     /// scheduled one (#173).
     func runGracefulActivationSweepIfPastDue(referenceDate now: Date = Date()) async {
+        if isSweepRunning {
+            _ = await waitForRunningSweep()
+            return
+        }
         guard prefs.isEnabled else { return }
-        guard performCleanOverride != nil || store != nil, !isSweepRunning else { return }
+        guard performCleanOverride != nil || store != nil else { return }
         guard now >= dueDate(referenceDate: now) else { return }
         guard !isReviewingOrCleaning else { return }
 
         isSweepRunning = true
-        defer { isSweepRunning = false }
+        var summary: PurgeStore.ScheduledCleaningSummary?
+        defer { finishSweep(with: summary) }
 
-        let summary = await performClean()
-        ud.set(now, forKey: Self.lastGraceSweepKey)
-        recordOutcome(summary, at: now)
+        let result = await performClean()
+        summary = result
+        await finishSchedule(after: result, at: now)
+    }
 
-        await performRearm()
+    /// Returns when the running sweep or Run now ends, with its summary.
+    private func waitForRunningSweep() async -> PurgeStore.ScheduledCleaningSummary? {
+        await withCheckedContinuation { sweepWaiters.append($0) }
+    }
+
+    /// Ends the running sweep and lets every request that waited on it return.
+    private func finishSweep(with summary: PurgeStore.ScheduledCleaningSummary?) {
+        isSweepRunning = false
+        let waiters = sweepWaiters
+        sweepWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume(returning: summary)
+        }
     }
 }

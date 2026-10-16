@@ -64,8 +64,9 @@ final class RemovedAppMonitor: ObservableObject {
     /// Cleared when the user opens the window themselves (`userOpenedWindow`).
     private var openedWindowForReview = RemovedAppMonitor.startsWindowless
     /// True when the watcher started Purge for this: it quits again once the
-    /// reviews are done, leaving the Mac as the user had it.
-    private var quitsWhenDone = RemovedAppMonitor.startsWindowless
+    /// reviews are done, leaving the Mac as the user had it. A due scheduled clean
+    /// waits while this is true, since the quit would cut it off (#173).
+    private(set) var quitsWhenDone = RemovedAppMonitor.startsWindowless
     private var retryTask: Task<Void, Never>?
     private var drainTask: Task<Void, Never>?
     private var needsAnotherDrain = false

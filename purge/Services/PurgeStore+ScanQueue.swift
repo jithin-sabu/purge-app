@@ -165,7 +165,7 @@ extension PurgeStore {
     }
 
     /// Returns when the step finishes or its patience runs out, whichever comes first.
-    private static func waitForStep(_ task: Task<Void, Never>, patience: TimeInterval) async {
+    static func waitForStep(_ task: Task<Void, Never>, patience: TimeInterval) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let gate = StepWaitGate(continuation)
             let timeout = Task { @MainActor in

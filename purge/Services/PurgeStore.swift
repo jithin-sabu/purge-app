@@ -725,7 +725,10 @@ final class PurgeStore: ObservableObject {
 
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
     /// (manual and scheduled — both clean the same set).
-    func manualSafeCleanupCandidates() -> [DeletionCandidate] {
+    ///
+    /// - Parameter includingProjects: False leaves every project folder out. A
+    ///   scheduled clean passes it when project discovery had not settled in time.
+    func manualSafeCleanupCandidates(includingProjects: Bool = true) -> [DeletionCandidate] {
         var candidates: [DeletionCandidate] = []
 
         // Revoking access already drops locked rows (`dropRowsLockedByRevokedAccess`).
@@ -738,7 +741,8 @@ final class PurgeStore: ObservableObject {
             !isLimited || isReadableWithoutFullDiskAccess(url)
         }
 
-        for artifact in projectGroups.flatMap(\.artifacts) {
+        let artifacts = includingProjects ? projectGroups.flatMap(\.artifacts) : []
+        for artifact in artifacts {
             guard isReachable(artifact.path) else { continue }
             guard artifact.safetyInfo.level == .safe else { continue }
             guard artifact.reinstallSafety != .missingLockfile else { continue }
@@ -2980,6 +2984,10 @@ final class PurgeStore: ObservableObject {
                 }
             }
             coalesce.debounceTask?.cancel()
+            // A stopped or replaced discovery gets here too, when its stream ends.
+            // What it still holds belongs to a list a newer scan has cleared, where
+            // the newer discovery's git check would mark it clean (#173).
+            guard scanGeneration == generation, !Task.isCancelled else { return }
             flushProjectGroupBuffers(coalesce: coalesce, animate: false)
             ScanPhaseTiming.finish(
                 "discoverProjects stream",
@@ -2987,7 +2995,6 @@ final class PurgeStore: ObservableObject {
                 detail: "\(projectGroupsFound) project groups published"
             )
 
-            guard scanGeneration == generation, !Task.isCancelled else { return }
             guard !projectGroups.isEmpty else { return }
             isEnrichingDeveloper = true
             defer { isEnrichingDeveloper = false }
@@ -3210,6 +3217,9 @@ final class PurgeStore: ObservableObject {
         var elapsedSeconds: Double = 0
         var movedToTrashCount: Int = 0
         var failedItems: [CleanFailureItem] = []
+        /// True when another clean was running, so this one removed nothing. A
+        /// scheduled clean then stays due instead of counting as done (#173).
+        var skippedForAnotherClean = false
 
         var failedCount: Int { failedItems.count }
     }
@@ -3423,20 +3433,12 @@ final class PurgeStore: ObservableObject {
         // Pinned candidates skip the rescan that would otherwise set this, and the
         // checker must not keep `.full` from a scan made before access was revoked.
         await gitChecker.setAccess(currentScanAccess())
+        var includesProjects = true
         if pinnedCandidates == nil {
-            // Waits out a queued scan and keeps the next one from starting, so these
-            // two never walk the disk beside it or cut a queued full scan short.
-            await withScanQueueHeld {
-                await scanDeveloper()
-                if cacheItems.isEmpty {
-                    await scanGeneral()
-                } else {
-                    await hydrateCacheSafetyMetadataParallel()
-                }
-            }
+            includesProjects = await rescanBeforeSafeCleanup()
         }
 
-        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates()
+        let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates(includingProjects: includesProjects)
         let access = currentScanAccess()
         await gitChecker.setAccess(access)
 
@@ -3466,7 +3468,7 @@ final class PurgeStore: ObservableObject {
         }
 
         guard !isDeleting else {
-            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, skippedForAnotherClean: true)
         }
 
         isDeleting = true
@@ -3509,6 +3511,38 @@ final class PurgeStore: ObservableObject {
                 errorMessage = String(localized: "Unable to clean safe items. Please try again.")
             }
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+        }
+    }
+
+    /// The rescan a safe clean runs when no caller hands it a list, which is the
+    /// scheduled clean. App Caches go first. Each standalone scan starts a new
+    /// generation, and one started after Dev Tools stopped the project discovery
+    /// Dev Tools leaves running: Dev Tools then showed "scanning" until the next
+    /// rescan, and the clean left out every project (#173). The clean list is
+    /// built from those projects, so this also waits for discovery to settle.
+    ///
+    /// The wait has the same limit as the queue's own App Caches and Dev Tools step,
+    /// `cacheStepPatience`, because the queue stays held until it ends. Returns false
+    /// when discovery was still running then, and the clean leaves projects out.
+    @discardableResult
+    func rescanBeforeSafeCleanup() async -> Bool {
+        // Waits out a queued scan and keeps the next one from starting, so these
+        // two never walk the disk beside it or cut a queued full scan short.
+        await withScanQueueHeld {
+            let reusesCacheRows = !cacheItems.isEmpty
+            if !reusesCacheRows {
+                await scanGeneral()
+            }
+            await scanDeveloper()
+            // Rows already listed are not rescanned. Their git status is read again
+            // after the Dev Tools scan has cleared the git cache, as before.
+            if reusesCacheRows {
+                await hydrateCacheSafetyMetadataParallel()
+            }
+            if let discovery = projectDiscoveryTask {
+                await Self.waitForStep(discovery, patience: cacheStepPatience)
+            }
+            return !isScanningProjects
         }
     }
 
