@@ -5,7 +5,8 @@ import Foundation
 /// can share that policy file without compiling uninstall models.
 enum RemovedAppReviewFiltering {
     /// Never the bundle (it has already left), never a leftover another installed
-    /// app also claims.
+    /// app also claims. `appGroupClaims` holds the app groups the survivors list
+    /// in their entitlements.
     ///
     /// Only identifier-anchored matches inside the home folder start ticked. This
     /// review opens unprompted from a record another process could have written, so
@@ -16,6 +17,7 @@ enum RemovedAppReviewFiltering {
         from scanned: [UninstallItem],
         owner: InstalledApp,
         survivors: [InstalledApp],
+        appGroupClaims: AppGroupClaims,
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> [UninstallItem] {
         let homePrefix = home.standardizedFileURL.path + "/"
@@ -25,7 +27,8 @@ enum RemovedAppReviewFiltering {
                 forLeftoverName: item.path.lastPathComponent,
                 category: item.category,
                 ownerID: owner.id,
-                among: survivors
+                among: survivors,
+                appGroupClaims: appGroupClaims
             )
             guard sharedWith == nil else { return nil }
             var reviewed = item

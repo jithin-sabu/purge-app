@@ -302,6 +302,56 @@ nonisolated struct InstalledCodeEvidence {
     }
 }
 
+/// The app groups each installed app lists in its entitlements, its own and
+/// those of the code nested in it, keyed by `InstalledApp.id`. The uninstaller
+/// keeps a group container that an app the user is keeping lists here (#200).
+/// The developer picks a group's name, so a group named after the app being
+/// removed can still be one that another app shares.
+///
+/// Only an exact listing counts, never a shared signing team. The group named
+/// after the app being removed is usually its own, and holding it back
+/// whenever the developer has another app installed would leave most
+/// uninstalls incomplete. A signature that cannot be read adds no claim, which
+/// leaves that app judged by name, as before.
+nonisolated struct AppGroupClaims: Equatable {
+    /// Lowercased app groups, by app id. Apps that list none are left out.
+    var groupsByAppID: [String: Set<String>] = [:]
+
+    /// True when `app` or code inside it lists `group`.
+    func app(_ app: InstalledApp, claims group: String) -> Bool {
+        groupsByAppID[app.id]?.contains(group.lowercased()) == true
+    }
+
+    /// The claims of `apps`, read off the main actor.
+    @concurrent static func gatherOffMain(
+        for apps: [InstalledApp],
+        leftovers: [UninstallItem]
+    ) async -> AppGroupClaims {
+        gather(for: apps, leftovers: leftovers)
+    }
+
+    /// The claims of `apps`. Empty when no leftover is a group container, the
+    /// only category these claims apply to, so most uninstalls skip the reads:
+    /// every app's signature and a walk of its nested code took 0.5 s for 28
+    /// apps on a dev Mac, 0.17 s of it Xcode's walk.
+    static func gather(
+        for apps: [InstalledApp],
+        leftovers: [UninstallItem],
+        readSignature: (URL) -> CodeSignature? = CodeSignature.read(at:)
+    ) -> AppGroupClaims {
+        var claims = AppGroupClaims()
+        guard leftovers.contains(where: { $0.category == .groupContainers }) else { return claims }
+        for app in apps {
+            let code = [app.bundleURL] + InstalledCodeEvidence.nestedCodeBundleURLs(in: app.bundleURL)
+            let groups = Set(code.flatMap { readSignature($0)?.appGroups ?? [] }.map { $0.lowercased() })
+            if !groups.isEmpty {
+                claims.groupsByAppID[app.id] = groups
+            }
+        }
+        return claims
+    }
+}
+
 /// The parts of a code signature that say who the code belongs to.
 nonisolated struct CodeSignature: Equatable {
     var identifier: String?
