@@ -39,6 +39,8 @@ nonisolated final class OrphanLeftoverScanner {
             return
         }
         let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays()
+        let now = Date()
+        let cutoff = now.addingTimeInterval(-Double(staleDays) * 24 * 60 * 60)
 
         var candidates: [Candidate] = []
         var seen = Set<String>()
@@ -60,17 +62,19 @@ nonisolated final class OrphanLeftoverScanner {
                     return
                 }
                 let name = entry.lastPathComponent
-                guard let bundleID = OrphanLeftoverScanPolicy.candidateBundleID(
+                guard let owner = OrphanLeftoverScanPolicy.candidateOwner(
                     entryName: name,
                     category: root.category,
                     url: entry
                 ) else { continue }
-                guard OrphanLeftoverScanPolicy.isOrphan(bundleID: bundleID, installed: installed) else {
+                guard OrphanLeftoverScanPolicy.isOrphan(owner, installed: installed) else {
                     continue
                 }
 
-                let modified = FolderSizing.contentModificationDate(at: entry)
-                guard OrphanLeftoverScanPolicy.isStale(modifiedAt: modified, staleDays: staleDays) else {
+                // The folder's own date first: it is free, and a recent one
+                // already means in use.
+                let folderDate = FolderSizing.contentModificationDate(at: entry)
+                guard OrphanLeftoverScanPolicy.isStale(modifiedAt: folderDate, staleDays: staleDays, now: now) else {
                     continue
                 }
 
@@ -84,11 +88,19 @@ nonisolated final class OrphanLeftoverScanner {
                 let key = entry.standardizedFileURL.path
                 guard seen.insert(key).inserted else { continue }
 
+                // Then everything inside: a folder's own date stays old while an
+                // app writes deeper in. This is the second line of defence, so
+                // data in use is kept even if its owner was misjudged above.
+                guard case .untouchedSince(let modified) = OrphanLeftoverScanPolicy.contentAge(
+                    of: entry,
+                    cutoff: cutoff
+                ) else { continue }
+
                 candidates.append(
                     Candidate(
                         url: entry,
                         category: root.category,
-                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: bundleID, url: entry),
+                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: owner.displayName, url: entry),
                         modified: modified
                     )
                 )

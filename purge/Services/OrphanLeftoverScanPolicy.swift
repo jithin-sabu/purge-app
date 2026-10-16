@@ -59,9 +59,9 @@ enum OrphanLeftoverScanPolicy {
 
     // MARK: Installed set
 
-    /// The set of installed application bundle identifiers, used to decide whether
-    /// a leftover's owner is still present. `owns` treats the set as prefixes so a
-    /// helper or extension id (`com.vendor.App.Helper`) is owned whenever its
+    /// The installed apps and what their code claims, used to decide whether a
+    /// leftover's owner is still present. `owns` treats bundle ids as prefixes so
+    /// a helper or extension id (`com.vendor.App.Helper`) is owned whenever its
     /// parent app (`com.vendor.App`) is installed.
     nonisolated struct InstalledAppIndex {
         /// Lowercased bundle ids of `.app` bundles found on disk in the user's app
@@ -74,6 +74,12 @@ enum OrphanLeftoverScanPolicy {
         /// orphaned, so it suppresses the scan. Defaults to `true` so callers that
         /// build an index directly (tests) are unaffected.
         var rootsReadable: Bool = true
+
+        /// Bundle ids, team ids, and app groups claimed by installed code beyond
+        /// the app ids above (see `InstalledCodeEvidence`). Only ever adds
+        /// claims. An index built without it cannot judge group containers, so
+        /// none is ever called orphaned.
+        var evidence = InstalledCodeEvidence()
 
         var appCount: Int { diskBundleIDs.count }
 
@@ -93,6 +99,10 @@ enum OrphanLeftoverScanPolicy {
             while components.count >= 2 {
                 let candidate = components.joined(separator: ".")
                 if diskBundleIDs.contains(candidate) { return true }
+                // Helpers, extensions, and XPC services inside installed apps,
+                // whose ids need not share their app's prefix (Sparkle's
+                // `org.sparkle-project.Downloader` ships inside many apps).
+                if evidence.bundleIDs.contains(candidate) { return true }
                 // LaunchServices resolves apps anywhere it has registered,
                 // including `/System`, so this covers app roots the disk walk
                 // does not. It returns nil for a pure helper/extension id, which
@@ -104,6 +114,25 @@ enum OrphanLeftoverScanPolicy {
             }
             return false
         }
+
+        /// Whether installed code owns the `<team id>.<name>` app group
+        /// `identifier`. The name after the team id is chosen freely by the
+        /// developer and is not a bundle id (#197), so a name match is only one
+        /// of three ways to claim it: the group is in an installed app's
+        /// entitlements, or any installed code is signed by the same team, or
+        /// the name is an installed bundle id. A vendor with any app still
+        /// installed keeps all of its team-prefixed groups, which can hide a
+        /// removed sibling's group but never offers a group a kept app uses.
+        func owns(appGroup identifier: String, teamID: String) -> Bool {
+            // Without readable signatures the claims below are near empty, and
+            // judging by them would flag every group whose name is not its
+            // app's bundle id.
+            guard evidence.canJudgeAppGroups else { return true }
+            if evidence.appGroups.contains(identifier.lowercased()) { return true }
+            if evidence.teamIDs.contains(teamID.uppercased()) { return true }
+            let name = String(identifier.dropFirst(teamID.count + 1))
+            return OrphanLeftoverScanPolicy.looksLikeBundleID(name) && owns(bundleID: name)
+        }
     }
 
     /// Fewer installed apps than this and the scan refuses to run — see
@@ -112,12 +141,14 @@ enum OrphanLeftoverScanPolicy {
 
     /// Enumerates `.app` bundle identifiers in the user-facing app roots, as deep
     /// as the uninstaller looks (vendors group their apps, e.g.
-    /// `/Applications/Utilities/…`). System apps are not walked: `owns` reaches them through LaunchServices, and counting them
-    /// would inflate `looksComplete` past the point where it can catch an empty
-    /// world.
+    /// `/Applications/Utilities/…`), then gathers what all installed code claims.
+    /// System apps are not counted: `owns` reaches them through LaunchServices
+    /// and the evidence, and counting them would inflate `looksComplete` past the
+    /// point where it can catch an empty world.
     nonisolated static func makeInstalledAppIndex() -> InstalledAppIndex {
         let fm = FileManager.default
         var ids = Set<String>()
+        var appBundles: [URL] = []
         // A root that is absent (e.g. no `~/Applications`) is fine and reads as
         // empty. A root that exists but fails to enumerate means our view of what
         // is installed is degraded, not just sparse, so the scan must not run.
@@ -133,53 +164,104 @@ enum OrphanLeftoverScanPolicy {
                 continue
             }
             for url in bundles {
+                appBundles.append(url)
                 if let id = Bundle(url: url)?.bundleIdentifier, !id.isEmpty {
                     ids.insert(id.lowercased())
                 }
             }
         }
-        return InstalledAppIndex(diskBundleIDs: ids, rootsReadable: rootsReadable)
+        return InstalledAppIndex(
+            diskBundleIDs: ids,
+            rootsReadable: rootsReadable,
+            evidence: InstalledCodeEvidence.gather(userAppBundles: appBundles)
+        )
+    }
+
+    // MARK: Owner keys
+
+    /// What a leftover's name says about its owner. The two kinds are checked
+    /// against different evidence and must never be mixed up: treating an app
+    /// group's name as a bundle id is what flagged an installed OrbStack's data
+    /// (#197).
+    nonisolated enum LeftoverOwner: Equatable {
+        /// An app, helper, or extension bundle id: Containers, HTTPStorages,
+        /// Saved Application State, and Application Support entries.
+        case bundleID(String)
+        /// A `<team id>.<name>` app group: Group Containers entries. The whole
+        /// folder name is the group identifier.
+        case appGroup(String, teamID: String)
+
+        /// The name shown on the row when Finder has no better one.
+        var displayName: String {
+            switch self {
+            case .bundleID(let id):
+                return id
+            case .appGroup(let identifier, let teamID):
+                return String(identifier.dropFirst(teamID.count + 1))
+            }
+        }
     }
 
     // MARK: Orphan test
 
     /// Whether a leftover keyed by `bundleID` should be treated as orphaned.
-    /// Never true for Apple's own identifiers, protected containers, or Purge
-    /// itself, and never true when an installed app owns the id.
     nonisolated static func isOrphan(bundleID: String, installed: InstalledAppIndex) -> Bool {
-        let lower = bundleID.lowercased()
+        isOrphan(.bundleID(bundleID), installed: installed)
+    }
+
+    /// Whether a leftover with this owner should be treated as orphaned. Never
+    /// true for Apple's own identifiers, protected containers, or Purge itself,
+    /// and never true when installed code claims the owner.
+    nonisolated static func isOrphan(_ owner: LeftoverOwner, installed: InstalledAppIndex) -> Bool {
+        let name: String
+        switch owner {
+        case .bundleID(let id): name = id
+        case .appGroup: name = owner.displayName
+        }
+        let lower = name.lowercased()
         guard !lower.isEmpty else { return false }
-        // Apple ships a long tail of `com.apple.*` containers for system services
-        // whose "app" never sits in /Applications; none of them are the
-        // dragged-to-Trash third-party leftovers this feature targets.
-        guard !lower.hasPrefix("com.apple.") else { return false }
-        guard !DeletionSafetyPolicy.isProtectedContainerBundleID(bundleID) else { return false }
+        guard !isAppleIdentifier(lower) else { return false }
+        guard !DeletionSafetyPolicy.isProtectedContainerBundleID(name) else { return false }
         guard !AppUninstallScanPolicy.protectedBundleIDs.contains(where: {
             $0.lowercased() == lower
         }) else { return false }
-        return !installed.owns(bundleID: bundleID)
+        switch owner {
+        case .bundleID(let id):
+            return !installed.owns(bundleID: id)
+        case .appGroup(let identifier, let teamID):
+            return !installed.owns(appGroup: identifier, teamID: teamID)
+        }
     }
 
-    // MARK: Bundle-id extraction
+    /// Apple ships a long tail of `com.apple.*` containers for system services
+    /// whose "app" never sits in /Applications; none of them are the
+    /// dragged-to-Trash third-party leftovers this feature targets. Apple's
+    /// team-prefixed groups put the `com.apple.` part further in
+    /// (`243LU875E5.groups.com.apple.podcasts`), so it is matched anywhere.
+    nonisolated static func isAppleIdentifier(_ lowercased: String) -> Bool {
+        lowercased.hasPrefix("com.apple.") || lowercased.contains(".com.apple.")
+    }
 
-    /// The owning bundle id for one entry directly inside an orphan root, or `nil`
-    /// when the entry is not identifier-keyed (and so cannot be attributed).
-    nonisolated static func candidateBundleID(
+    // MARK: Owner extraction
+
+    /// The owner of one entry directly inside an orphan root, or `nil` when the
+    /// entry is not identifier-keyed (and so cannot be attributed).
+    nonisolated static func candidateOwner(
         entryName name: String,
         category: UninstallCategory,
         url: URL
-    ) -> String? {
+    ) -> LeftoverOwner? {
         switch category {
         case .applicationSupport:
-            return applicationSupportBundleID(from: name, url: url)
+            return applicationSupportBundleID(from: name, url: url).map(LeftoverOwner.bundleID)
         case .containers:
-            return owningBundleIDForContainer(at: url, directoryName: name)
+            return owningBundleIDForContainer(at: url, directoryName: name).map(LeftoverOwner.bundleID)
         case .groupContainers:
-            return groupContainerBundleID(from: name)
+            return groupContainerOwner(from: name)
         case .caches:      // HTTPStorages
-            return httpStorageBundleID(from: name)
+            return httpStorageBundleID(from: name).map(LeftoverOwner.bundleID)
         case .savedState:
-            return savedStateBundleID(from: name)
+            return savedStateBundleID(from: name).map(LeftoverOwner.bundleID)
         default:
             return nil
         }
@@ -238,22 +320,28 @@ enum OrphanLeftoverScanPolicy {
         return nil
     }
 
-    /// The owning bundle id for a `<teamID>.<bundle id>` group container, whose
-    /// remainder after the team id is a real application bundle identifier we can
-    /// check against installed apps.
+    /// The app group a `<teamID>.<name>` group container belongs to. The name
+    /// after the team id is a developer-chosen app-group name, not a bundle id:
+    /// OrbStack (`dev.kdrag0n.MacVirt`) keeps its data in
+    /// `HUAQ24HBR6.dev.orbstack` (#197). So the result is checked against the
+    /// team ids and app-group entitlements of installed code, never against
+    /// bundle ids alone. Only names that look reverse-DNS are attributed, the
+    /// same set as before #197, so this never offers a folder kind it did not.
     ///
-    /// The `group.<name>` form is deliberately not handled: that name is a
-    /// developer-chosen app-group identifier, not an app bundle id, and is
-    /// routinely shared by an installed app and its extensions (for example a
-    /// password manager and its Safari extension). Matching it against installed
-    /// bundle ids would flag a group an installed app still uses. Attributing it
-    /// correctly needs the installed apps' app-group entitlements, which is out of
-    /// scope here, so those containers are left alone rather than guessed at.
-    nonisolated static func groupContainerBundleID(from name: String) -> String? {
-        guard let dot = name.firstIndex(of: "."),
-              isTeamIdentifier(String(name[..<dot])) else { return nil }
-        let candidate = String(name[name.index(after: dot)...])
-        return looksLikeBundleID(candidate) ? candidate : nil
+    /// The `group.<name>` form is deliberately not handled: it carries no team
+    /// id, and is routinely shared by an installed app and its extensions (for
+    /// example a password manager and its Safari extension). Entitlements could
+    /// attribute it, but code outside the places the evidence looks (an app on
+    /// another volume that is not running) would leave a group it still uses
+    /// looking orphaned, with no team to fall back on. Those containers are left
+    /// alone rather than guessed at.
+    nonisolated static func groupContainerOwner(from name: String) -> LeftoverOwner? {
+        guard let dot = name.firstIndex(of: ".") else { return nil }
+        let teamID = String(name[..<dot])
+        guard isTeamIdentifier(teamID) else { return nil }
+        let groupName = String(name[name.index(after: dot)...])
+        guard looksLikeBundleID(groupName) else { return nil }
+        return .appGroup(name, teamID: teamID)
     }
 
     /// HTTPStorages entries are `<bundle id>` directories and `<bundle id>.binarycookies` files.
@@ -327,6 +415,76 @@ enum OrphanLeftoverScanPolicy {
         guard seconds >= 0 else { return false }
         let days = seconds / (24 * 60 * 60)
         return days >= Double(staleDays)
+    }
+
+    /// When anything inside a leftover was last changed, judged against `cutoff`.
+    nonisolated enum ContentAge: Equatable {
+        /// Something inside changed at or after the cutoff: still in use.
+        case recent
+        /// Nothing inside changed after this date, which is before the cutoff.
+        case untouchedSince(Date)
+        /// The walk could not finish (an unreadable item, a missing date, too
+        /// many items, a cancelled scan), so the age is not known.
+        case unknown
+    }
+
+    /// Files whose date says nothing about use: Finder rewrites `.DS_Store` on a
+    /// visit, and macOS keeps the container metadata plist itself.
+    nonisolated static let contentAgeIgnoredNames: Set<String> = [
+        ".DS_Store",
+        ".com.apple.containermanagerd.metadata.plist"
+    ]
+
+    /// A guard against a runaway walk, not a product limit.
+    nonisolated static let contentAgeEntryLimit = 500_000
+
+    /// The age of everything inside `url`, not just the folder's own date. A
+    /// folder's date only changes when an entry directly inside it is added,
+    /// removed, or renamed, so an app writing deep inside (OrbStack's disk image,
+    /// Telegram's database) leaves it months old while in daily use. Stops at the
+    /// first item changed at or after `cutoff`. Symbolic links are skipped: old
+    /// sandbox containers link to Desktop and Downloads, whose dates say nothing
+    /// about the app. Anything the walk cannot read or date makes the age
+    /// unknown, which the scan treats as in use.
+    nonisolated static func contentAge(
+        of url: URL,
+        cutoff: Date,
+        entryLimit: Int = contentAgeEntryLimit
+    ) -> ContentAge {
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isDirectoryKey, .isSymbolicLinkKey]
+        // A URL keeps the values it was listed with; read the date as it is now.
+        var url = url
+        url.removeAllCachedResourceValues()
+        guard let top = try? url.resourceValues(forKeys: keys),
+              let topDate = top.contentModificationDate,
+              topDate > .distantPast else { return .unknown }
+        if topDate >= cutoff { return .recent }
+        guard top.isDirectory == true, top.isSymbolicLink != true else { return .untouchedSince(topDate) }
+
+        var failed = false
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: Array(keys),
+            options: [],
+            errorHandler: { _, _ in
+                failed = true
+                return false
+            }
+        ) else { return .unknown }
+
+        var newest = topDate
+        var seen = 0
+        for case let item as URL in enumerator {
+            seen += 1
+            if seen > entryLimit || Task.isCancelled { return .unknown }
+            if contentAgeIgnoredNames.contains(item.lastPathComponent) { continue }
+            guard let values = try? item.resourceValues(forKeys: keys) else { return .unknown }
+            if values.isSymbolicLink == true { continue }
+            guard let date = values.contentModificationDate, date > .distantPast else { return .unknown }
+            if date >= cutoff { return .recent }
+            if date > newest { newest = date }
+        }
+        return failed ? .unknown : .untouchedSince(newest)
     }
 
     // MARK: Presentation
