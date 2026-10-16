@@ -11,6 +11,16 @@ struct SimulatorDeviceRemovalTests {
     private let udid = "0C6F3F7E-6B0E-4E59-9E57-5D1C8F1A2B3C"
     private let folder = URL(fileURLWithPath: "/nonexistent/CoreSimulator/Devices/0C6F3F7E-6B0E-4E59-9E57-5D1C8F1A2B3C")
 
+    @Test
+    func deviceFolderAndRuntimePathAreRemovedDirectly() {
+        #expect(FileDeleter.removesDirectly(folder, simulatorRuntimePaths: []))
+        let cache = URL(fileURLWithPath: "/Users/me/Library/Caches/com.example")
+        #expect(FileDeleter.removesDirectly(cache, simulatorRuntimePaths: []) == false)
+        let runtime = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS_22C150")
+        #expect(FileDeleter.removesDirectly(runtime, simulatorRuntimePaths: [runtime.standardizedFileURL.path]))
+        #expect(FileDeleter.removesDirectly(runtime, simulatorRuntimePaths: []) == false)
+    }
+
     static let licenseText = """
         You have not agreed to the Xcode license agreements. You must agree to both license agreements below in order to use Xcode.
         """
@@ -289,6 +299,45 @@ struct SimulatorDeviceRemovalTests {
         let item = try #require(report.deletedItems.first)
         #expect(item.movedToTrash == false)
         #expect(report.failedItems.isEmpty)
+    }
+
+    /// The confirmations say "you can put them back" unless `removesDirectly` flags a
+    /// path. That holds only while the engine sends exactly those paths to simctl and
+    /// reports them as not in the Trash. The folder path does not exist, so its Trash
+    /// move fails and nothing on disk changes.
+    @Test func removesDirectlyMatchesWhatTheEngineRemovesForGood() async throws {
+        let device = try unusedDevicePath()
+        let runtime = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS_TEST1", isDirectory: true)
+        let folder = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/PurgeRemovesDirectlyTests-\(UUID().uuidString)", isDirectory: true)
+        try #require(!FileManager.default.fileExists(atPath: folder.path))
+        let runtimeKey = runtime.standardizedFileURL.path
+        let runtimePaths: Set<String> = [runtimeKey]
+        let recorder = Recorder()
+        let deleter = FileDeleter(
+            simulatorRuntimeRemover: { id in
+                recorder.record(id)
+                return .removed
+            },
+            simulatorDeviceRemover: { udid, _ in
+                recorder.record(udid)
+                return .removed
+            }
+        )
+        let urls = [device, runtime, folder]
+        let report = try await deleter.deleteItems(
+            at: urls,
+            pathToExpectedSizeBytes: Dictionary(uniqueKeysWithValues: urls.map { ($0.standardizedFileURL.path, Int64(1)) }),
+            simulatorRuntimeIDsByPath: [runtimeKey: "RUNTIME-ID"]
+        )
+
+        #expect(urls.map { FileDeleter.removesDirectly($0, simulatorRuntimePaths: runtimePaths) } == [true, true, false])
+        #expect(Set(recorder.asked) == [device.lastPathComponent, "RUNTIME-ID"])
+        #expect(report.deletedItems.count == 2)
+        for item in report.deletedItems {
+            let flagged = FileDeleter.removesDirectly(URL(fileURLWithPath: item.path), simulatorRuntimePaths: runtimePaths)
+            #expect(item.movedToTrash == !flagged)
+        }
     }
 
     @Test func retryReturnsTheSameReason() async throws {

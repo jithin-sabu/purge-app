@@ -21,4 +21,18 @@ struct DockerSafetyTierTests {
         let info = DevScanner.automaticSafetyInfo(forDevToolLabel: "Docker Desktop", primaryPath: nil)
         #expect(info.level == .medium)
     }
+
+    /// Cleaning moves the container folder to the Trash. The prune command is
+    /// something the user runs, not Purge, and only works while Docker is open.
+    /// Quitting comes before cleaning, so the text must not read "quit, then prune".
+    @Test
+    func dockerExplanationSaysTheFolderGoesToTheTrash() throws {
+        let record = ExplanationDatabase.matchBundledDatabase(folderName: "docker")
+        #expect(record?.displayName == "Docker Desktop")
+        let explanation = record?.explanation ?? ""
+        #expect(explanation.contains("The whole folder goes to the Trash"))
+        let prune = try #require(explanation.range(of: "run docker --context desktop-linux system prune while Docker is open"))
+        let quit = try #require(explanation.range(of: "quit Docker"))
+        #expect(prune.upperBound <= quit.lowerBound)
+    }
 }

@@ -1062,9 +1062,9 @@
   },
   {
     "key": "docker",
-    "display_name": "Docker Containers",
+    "display_name": "Docker Desktop",
     "tag": "medium",
-    "explanation": "This is Docker Desktop's virtual disk. It holds every image, container, and volume you have. Images can be pulled again, but volumes often hold database data that exists nowhere else. To free space and keep your volumes, run docker --context desktop-linux system prune while Docker Desktop is running. Quit Docker Desktop before deleting this folder.",
+    "explanation": "Every Docker image, container, and volume. A volume can hold the only copy of a database. To keep volumes, run docker --context desktop-linux system prune while Docker is open. To clean, quit Docker. The whole folder goes to the Trash.",
     "bundle_ids": [
       "com.docker.docker"
     ],

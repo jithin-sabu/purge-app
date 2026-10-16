@@ -44,7 +44,7 @@
 Your Mac quietly fills up with cache and junk you never see and never asked for. Purge finds it, marks what is safe, and clears it in one click.
 
 > [!NOTE]
-> Files and folders always move to the Trash, so anything Purge removes can come back. The exceptions are iOS simulators, Time Machine snapshots and the Apple Intelligence models, which the Trash can't hold. The models can be downloaded again from Purge.
+> Files and folders go to the Trash by default, and Purge never empties the Trash, so you can put them back until you empty it yourself. Removed for good: iOS simulators and simulator runtimes, through Xcode's `simctl`; Time Machine local snapshots, through `tmutil` (Purge keeps the newest and the one from your last backup); and the Apple Intelligence models on macOS 27, which Apple's asset service releases and Purge can download again. Docker Desktop's folder goes to the Trash. Purge does not run `docker system prune`.
 
 You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-language explanation and a safety label, so nothing gets touched that you cannot see and verify first.
 
@@ -141,7 +141,7 @@ The labels and explanations are there to be checked, not read cover to cover. Se
 - **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete. Git and lockfile checks run first
 - **Clean Safe Files**: same safe cleanup from the menu bar
 - **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning** and choose **How often** (weekly, monthly, every 3 months, or a **Custom** interval you set in days, weeks, or months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
-- Files and folders move to **Trash**, not permanent removal. iOS simulators and simulator runtimes can't go to the Trash, so they are removed through Xcode's `simctl` instead
+- Files and folders move to the **Trash**. Purge never empties the Trash. iOS simulators and simulator runtimes are removed for good through Xcode's `simctl`. Time Machine local snapshots are removed for good through `tmutil`; Purge keeps the newest and the one from your last backup. The Apple Intelligence models are released through Apple's asset service and can be downloaded again
 
 ### Settings
 
@@ -342,7 +342,7 @@ Purge does not use AI. Nothing you scan or clean is sent to an AI service.
 
 Purge deletes files, so safety is the point. A few things worth knowing:
 
-- **Trash by default**: Files and folders move to the macOS Trash and can be restored until you empty it. iOS simulators, simulator runtimes and Time Machine snapshots can't go to the Trash, so those are removed for good. The Apple Intelligence models are released through Apple's own asset service and can be downloaded again from Purge.
+- **Trash by default**: Files and folders move to the macOS Trash, and Purge never empties it. You can restore them until you empty the Trash yourself. iOS simulators and simulator runtimes are removed for good through `simctl`. Time Machine local snapshots are removed for good through `tmutil`; Purge keeps the newest and the one from your last backup. The Apple Intelligence models are released through Apple's asset service and can be downloaded again from Purge. Docker Desktop's data folder goes to the Trash. Purge does not run `docker system prune`.
 - **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched. The [safety page](https://purgemac.com/safety) lists every allowed location and everything Purge will never touch, generated from the app's source.
 - **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
 - **Open source**: The full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.

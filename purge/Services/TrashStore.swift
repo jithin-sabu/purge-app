@@ -54,11 +54,11 @@ enum TrashAccess: Equatable {
 
 /// Owns the trash total and hands the user off to Finder to act on it.
 ///
-/// Purge deliberately cannot empty the trash. Deleting for good is the user's decision
-/// to make, in the app that owns the trash across every mounted volume, with its own
-/// warning in front of it. That keeps "Purge never permanently deletes anything" true
-/// without an asterisk, and costs nothing: Finder is one click away, and this needs no
-/// automation permission at all.
+/// Purge deliberately cannot empty the trash. Emptying it is the user's decision, in
+/// Finder, which owns the trash on every volume and puts its own warning in front of
+/// it. This store only counts the Trash. It does not cover the removals that never
+/// enter it: simulators and simulator runtimes (`simctl`), Time Machine local
+/// snapshots (`tmutil`), and the Apple Intelligence models.
 ///
 /// The total comes from watching the trash directories rather than from refresh calls wired
 /// into each clean path. Anything that changes the trash updates the number: Purge's own

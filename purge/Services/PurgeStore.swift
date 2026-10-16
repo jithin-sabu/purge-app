@@ -902,6 +902,28 @@ final class PurgeStore: ObservableObject {
         highRiskDeletionStagingCandidates = nil
     }
 
+    /// The Not Sure alert. Those folders go to the Trash. A simulator or runtime
+    /// selected in the same cleanup is removed for good, so the alert says so.
+    var highRiskDeletionSecondConfirmMessage: String {
+        let base = String(localized: "Purge doesn't know what these folders are for. They go to the Trash, so you can put them back, but check that nothing depends on them before you clean.")
+        guard confirmationRemovesSimulators(highRiskDeletionStagingCandidates ?? []) else { return base }
+        return base + " " + String(localized: "iOS simulators and simulator runtimes in this cleanup are removed for good through simctl and can't be put back.")
+    }
+
+    /// The unsaved-git alert. The projects go to the Trash. Same simulator note.
+    var uncommittedGitFrictionMessage: String {
+        let base = String(localized: "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash, so you can put them back.")
+        guard confirmationRemovesSimulators(stagedDeletionCandidates ?? []) else { return base }
+        return String(localized: "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are removed for good through simctl and can't be put back.")
+    }
+
+    /// Same split `FileDeleter.deleteItems` uses: runtimes by path, devices by the
+    /// CoreSimulator device-folder shape.
+    private func confirmationRemovesSimulators(_ candidates: [DeletionCandidate]) -> Bool {
+        let runtimePaths = Set(simulatorRuntimeIDsByPath().keys)
+        return candidates.contains { FileDeleter.removesDirectly($0.path, simulatorRuntimePaths: runtimePaths) }
+    }
+
     private func beginManualDeletionPipeline(with picks: [DeletionCandidate]) {
         stagedDeletionCandidates = picks
         stagedDeletionTrigger = .manual

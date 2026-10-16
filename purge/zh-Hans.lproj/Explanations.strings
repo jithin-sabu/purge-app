@@ -309,8 +309,8 @@
 "Temporary data for in-app purchases and App Store transactions. Nothing is lost, but apps may ask you to restore purchases or sign in again." = "应用内购买与 App Store 交易的临时数据。不会丢失内容，但应用可能要求恢复购买或重新登录。";
 
 /* docker */
-"Docker Containers" = "Docker 容器";
-"This is Docker Desktop's virtual disk. It holds every image, container, and volume you have. Images can be pulled again, but volumes often hold database data that exists nowhere else. To free space and keep your volumes, run docker --context desktop-linux system prune while Docker Desktop is running. Quit Docker Desktop before deleting this folder." = "这是 Docker Desktop 的虚拟磁盘，保存你的所有镜像、容器和卷。镜像可再次拉取，但卷通常包含没有其他副本的数据库数据。若想释放空间并保留卷，请在 Docker Desktop 运行时执行 docker --context desktop-linux system prune。删除此文件夹前，请先退出 Docker Desktop。";
+"Docker Desktop" = "Docker Desktop";
+"Every Docker image, container, and volume. A volume can hold the only copy of a database. To keep volumes, run docker --context desktop-linux system prune while Docker is open. To clean, quit Docker. The whole folder goes to the Trash." = "Docker 的所有镜像、容器和卷。卷里可能是数据库的唯一副本。若要保留卷，请在 Docker 打开时运行 docker --context desktop-linux system prune。若要清理，请先退出 Docker。整个文件夹会移到废纸篓。";
 
 /* raycast */
 "Raycast Launcher" = "Raycast 启动器";

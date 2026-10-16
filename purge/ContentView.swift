@@ -202,12 +202,7 @@ struct ContentView: View {
             Button("Pause", role: .cancel) { store.cancelDeletionFrictionFlow() }
             Button("Clean anyway", role: .destructive) { store.acknowledgeUncommittedGitRisk() }
         } message: {
-            Text(
-                """
-                One of your projects has changes that have not been saved to git yet. Make sure your work is backed \
-                up before cleaning. Purge cannot undo deletions.
-                """
-            )
+            Text(store.uncommittedGitFrictionMessage)
         }
         .alert(
             "Clean items marked Not Sure?",
@@ -216,12 +211,7 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) { store.cancelHighRiskDeletionSecondStep() }
             Button("Clean anyway", role: .destructive) { store.confirmHighRiskDeletionSecondStep() }
         } message: {
-            Text(
-                """
-                Purge doesn't know what these folders are for. They go to the Trash, so you can put \
-                them back, but check that nothing depends on them before you clean.
-                """
-            )
+            Text(store.highRiskDeletionSecondConfirmMessage)
         }
         .alert("Something went wrong", isPresented: Binding(
             get: { store.errorMessage != nil },

@@ -21,14 +21,14 @@ patient, but safety reports get priority over everything else.
 ## How Purge protects you
 
 - **Trash by default.** Files and folders are moved to the macOS Trash, so
-  anything removed can be restored until you empty it yourself. Purge has no
-  button that empties the Trash. Two kinds of item are not ordinary files and
-  cannot go to the Trash: iOS simulators and simulator runtimes, which Purge
-  removes through Xcode's `simctl`, and Time Machine local snapshots, which it
-  removes through `tmutil`. Purge warns you before removing snapshots and never
-  removes the newest one. A third is the Apple Intelligence models on macOS 27,
-  which Purge releases through Apple's own asset service and can download
-  again; see below.
+  you can put them back until you empty it yourself. Purge has no button that
+  empties the Trash. Three removals are for good. iOS simulators
+  and simulator runtimes go through Xcode's `simctl`. Time Machine local
+  snapshots go through `tmutil deletelocalsnapshots`; Purge asks first and
+  keeps the newest snapshot and the one from your last backup. The Apple
+  Intelligence models on macOS 27 are released through Apple's own asset
+  service and can be downloaded again; see below. Docker Desktop's data folder
+  goes to the Trash. Purge does not run `docker system prune`.
 - **Allowlist-based deletion.** Only paths that match an explicit safety
   allowlist are ever eligible for cleanup. Anything not on the list is never
   touched.
@@ -149,9 +149,15 @@ shasum -a 256 -c Purgev*.dmg.sha256
 
 This confirms the file you downloaded matches the published release.
 
-Purge is signed with a Developer ID certificate and notarized by Apple, so it
-opens normally with no extra steps. To check the signature yourself after
-installing:
+The release DMG is signed with a Developer ID Application certificate
+(Jithin Sabu, team BX83ZBV95B), notarized by Apple, and stapled.
+`scripts/make-dmg.sh` does that signing, notarization, and stapling. The
+official Homebrew cask installs the same DMG (`brew install --cask purge`) and
+checks its checksum. macOS opens that copy normally. The unsigned build in
+GitHub Actions only compiles and runs tests. It is not a download. A copy you
+build yourself is not notarized.
+
+To check the signature of the installed release:
 
 ```
 spctl --assess --verbose /Applications/Purge.app

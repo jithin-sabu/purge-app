@@ -199,7 +199,6 @@
 "Delete Selected" = "删除所选项目";
 "Delete anyway" = "仍然删除";
 "Delete extra copies" = "删除多余副本";
-"Delete permanently" = "永久删除";
 "Deleted Apps" = "已删除应用";
 "Deleted apps' leftovers" = "已删除应用的残留文件";
 "Deleted-app reviews paused" = "已删除应用检查已暂停";
@@ -398,7 +397,8 @@
 "On" = "开";
 "On. Admin-locked apps can be moved to the Trash without a password." = "已开启。管理员锁定的应用可移到废纸篓，无需重复输入密码。";
 "On. Purge is watching for deleted apps." = "已开启。Purge 正在监测应用删除。";
-"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Purge cannot undo deletions." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。Purge 无法撤销删除。";
+"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash, so you can put them back." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。文件和文件夹会移到废纸篓，因此可以放回原处。";
+"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are removed for good through simctl and can't be put back." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。文件和文件夹会移到废纸篓。这次清理中的 iOS 模拟器和模拟器运行时会通过 simctl 永久移除，无法放回。";
 "Only cleans when you say" = "只在你确认后清理";
 "Only items marked Safe. They rebuild when needed, and you can put anything back from the Trash." = "只处理标记为“可安全清理”的项目。它们会在需要时重建，也可以从废纸篓恢复。";
 "Open Disk Utility" = "打开磁盘工具";
@@ -422,7 +422,6 @@
 "Parcel cache" = "Parcel 缓存";
 "Pause" = "暂停";
 "Peeking in caches…" = "正在瞄一眼缓存…";
-"Permanently delete these items?" = "永久删除这些项目？";
 "Pick your own interval. Purge will quietly clean the same safe items on that rhythm." = "选择清理间隔。Purge 会按此周期在后台清理相同的安全项目。";
 "Pods" = "Pods";
 "Pondering…" = "正在琢磨…";
@@ -437,7 +436,7 @@
 "Purge" = "Purge";
 "Purge can see everything now" = "Purge 现在可以查看全部内容";
 "Purge couldn't identify every folder you picked. Only continue if you know it's safe to remove. You'll confirm once more before anything moves." = "Purge 无法识别你选择的所有文件夹。请仅在确定可以安全移除时继续。移动前还会要求你再次确认。";
-"Purge couldn't identify this file. Only delete it if you know what it is. It can't be put back afterward." = "Purge 无法识别此文件。请仅在了解其用途时删除。删除后无法恢复。";
+"Purge couldn't identify this file. Only continue if you know what it is. It goes to the Trash, so you can put it back." = "Purge 无法识别此文件。请仅在了解其用途时继续。它会移到废纸篓，因此可以放回原处。";
 "Purge couldn't move the junk to the Trash. Open Purge to see why." = "Purge 无法将垃圾文件移到废纸篓。请打开 Purge 查看原因。";
 "Purge couldn't start its background watcher, so deleted apps go unnoticed." = "Purge 无法启动后台监测服务，因此无法检测已删除的应用。";
 "Purge couldn't work out what these folders are. Only continue if you know what they hold." = "Purge 无法确定这些文件夹的用途。请仅在了解其中内容时继续。";
@@ -448,7 +447,7 @@
 "Purge is still cleaning" = "Purge 仍在清理";
 "Purge is still cleaning. Quitting now may leave some items partially removed." = "Purge 仍在清理。现在退出可能导致部分项目未被完整移除。";
 "Purge keeps running after you close the window, so you can scan and clean from the menu bar." = "关闭窗口后 Purge 仍会运行，可从菜单栏扫描和清理。";
-"Purge keeps the newest snapshot, which Time Machine may need. If you're sure you don't, choose View > Show APFS Snapshots in Disk Utility to delete it." = "Purge 会保留最新快照，因为时间机器可能仍需要它。如果你确定不再需要，请在磁盘工具中选择“显示 > 显示 APFS 快照”来删除。";
+"Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. To delete those too, choose View > Show APFS Snapshots in Disk Utility." = "Purge 会保留最新的快照和上次备份留下的那张，时间机器可能仍需要它们。若要连这些也删除，请在磁盘工具中选择“显示 > 显示 APFS 快照”。";
 "Purge left this one alone to stay on the safe side." = "出于安全考虑，Purge 保留了此内容。";
 "Purge looks in Applications and your home Applications folder." = "Purge 会检查系统和个人主文件夹中的“应用程序”文件夹。";
 "Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted for good, so you can put anything back if you change your mind." = "Purge 会将各应用及仍被勾选的项目移到废纸篓，不会永久删除。改变主意时可将它们恢复。";
@@ -588,7 +587,7 @@
 "Skipped" = "已跳过";
 "Skipped for safety" = "出于安全考虑已跳过";
 "Smallest" = "最小优先";
-"Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest, which Time Machine may need for your next backup. Backups on your backup disk aren't touched." = "快照可能保存着自上次备份以来修改或删除文件的唯一副本。快照删除后无法恢复。Purge 会保留最新快照，时间机器可能需要它来进行下次备份。备份磁盘上的备份不会受到影响。";
+"Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. Backups on your backup disk aren't touched." = "快照可能保存着自上次备份以来修改或删除文件的唯一副本。快照删除后无法恢复。Purge 会保留最新的快照和上次备份留下的那张，时间机器可能仍需要它们。备份磁盘上的备份不会受到影响。";
 "Snooping around…" = "正在四处打探…";
 "Some apps are installed under an administrator and can't be moved to the Trash on their own, and neither can the files a finished macOS update leaves behind. Purge asks you to enable its secure removal helper only when something needs it. Items still go to the Trash, and you can turn it off here at any time." = "部分应用由管理员安装，无法直接移到废纸篓，macOS 更新完成后留下的文件也是如此。只有在需要时，Purge 才会要求启用安全移除助手。项目仍会进入废纸篓，你可以随时在此停用助手。";
 "Some clutter hides in folders macOS keeps locked." = "macOS 限制访问的文件夹中还可能有杂项。";
@@ -634,7 +633,6 @@
 "This app was installed by an administrator, so macOS won't let it be moved on its own. Set up secure removal once and Purge can finish it." = "此应用由管理员安装，macOS 不允许直接移动它。完成一次安全移除设置后，Purge 即可继续处理。";
 "This file was skipped for safety" = "出于安全考虑，已跳过此文件";
 "This folder may involve synced or user-facing app data. Deleting it can be safe, but it may cause inconvenience." = "此文件夹可能包含同步数据或应用中可见的数据。删除可能是安全的，但也可能影响使用。";
-"This includes folders marked Not Sure. They will be moved to Trash. Only continue if you understand the risk." = "其中包含标记为“无法确定”的文件夹。它们将被移到废纸篓。请仅在了解风险时继续。";
 "This is a known cache folder that apps or developer tools recreate automatically." = "这是已知的缓存文件夹，应用或开发工具会自动重新生成。";
 "This one couldn't be removed. Try again." = "无法移除此内容，请重试。";
 "This one may hold something you'd miss. If you're not sure about it, cancel and untick it." = "此项目可能包含你需要的内容。不确定时，请取消并取消勾选它。";
@@ -891,6 +889,7 @@
 "Purge cannot uninstall itself" = "Purge 无法卸载自身";
 "Purge checks once a day. When automatic installs are off, a new version opens the update window. Every download is signature-checked." = "Purge 每天检查一次更新。关闭自动安装时，有新版本会打开更新窗口。所有下载都会验证签名。";
 "Purge doesn't know what these folders are for. They go to the Trash, so you can put them back, but check that nothing depends on them before you clean." = "Purge 不清楚这些文件夹的用途。它们会移到废纸篓，因此可以放回原处，但清理前请确认没有其他内容依赖它们。";
+"iOS simulators and simulator runtimes in this cleanup are removed for good through simctl and can't be put back." = "这次清理中的 iOS 模拟器和模拟器运行时会通过 simctl 永久移除，无法放回。";
 "Purge never removes Apple's built-in apps." = "Purge 从不移除 Apple 内置应用。";
 "Purge uninstalls apps. Select an app in Finder and try again." = "Purge 只能卸载应用。请在访达中选择一个应用后重试。";
 "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller." = "从访达一次只能卸载一个应用。如需一次移除多个应用，请在 Purge 的卸载工具中勾选。";
