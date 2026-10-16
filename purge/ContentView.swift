@@ -87,6 +87,7 @@ struct ContentView: View {
         .sheet(isPresented: $store.showDeletionSheet) {
             DeletionConfirmSheet(
                 candidates: store.deletionCandidatesForSheet,
+                permanentIDs: store.permanentlyDeletedCandidateIDs(in: store.deletionCandidatesForSheet),
                 onCancel: { store.dismissDeletionSheet() },
                 onConfirm: {
                     store.userConfirmedDeletionFromPrimarySheet()

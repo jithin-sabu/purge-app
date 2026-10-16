@@ -1029,17 +1029,28 @@ struct DevToolsView<PageHeader: View>: View {
 
     private var iosSimulatorsSectionHeader: some View {
         devToolsSectionHeader {
-            Text("iOS Simulators")
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.textSecondary)
+            permanentSectionTitle(String(localized: "iOS Simulators"))
         }
     }
 
     private var simulatorRuntimesSectionHeader: some View {
         devToolsSectionHeader {
-            Text("Simulator Runtimes")
+            permanentSectionTitle(String(localized: "Simulator Runtimes"))
+        }
+    }
+
+    /// `simctl` deletes simulators and runtimes, so the header says they skip the
+    /// Trash before anything is ticked (#170).
+    private func permanentSectionTitle(_ title: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+            Text(title)
                 .font(AppStyle.Typography.metadataEmphasis)
                 .foregroundStyle(AppColors.textSecondary)
+            Spacer(minLength: AppStyle.Spacing.small)
+            Text("Deleted permanently, not moved to the Trash")
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textTertiary)
+                .lineLimit(1)
         }
     }
 

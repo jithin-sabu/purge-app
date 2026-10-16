@@ -35,25 +35,40 @@ struct CleanupHistorySummaryRow: View {
         return entry.trigger == .scheduled ? LocalizedStringKey("Automatic clean") : LocalizedStringKey("Manual clean")
     }
 
-    /// Moved bytes for a clean. For the Apple Intelligence models nothing was
-    /// moved, so the measured gain leads, or says it was not measured.
-    private var primaryFigure: String {
-        guard entry.kind == .appleIntelligenceModels else { return formatBytes(entry.bytesMovedToTrash) }
+    /// Moved bytes for a clean, plus what it deleted permanently. For the Apple
+    /// Intelligence models nothing was moved, so the measured gain leads, or says
+    /// it was not measured.
+    var primaryFigure: String {
+        guard entry.kind == .appleIntelligenceModels else {
+            return formatBytes(entry.bytesMovedToTrash + entry.bytesDeletedPermanently)
+        }
         guard let reclaimed = entry.bytesReclaimedOnVolume else { return String(localized: "Not measured") }
         return formatBytes(reclaimed)
     }
 
     /// Reclaimed is shown only for entries where it was measured. Older entries and
     /// cleans that only trashed files have nothing measured to show, so they stay
-    /// described as moved.
-    private var detailText: String {
+    /// described as moved. Simulators and runtimes are counted as deleted, never as
+    /// moved to the Trash (#170).
+    var detailText: String {
         if entry.kind == .appleIntelligenceModels {
             let apple = entry.deletedItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
             let sets = entry.deletedItems.count == 1 ? String(localized: "1 model set") : String(localized: "\(entry.deletedItems.count) model sets")
             return String(localized: "\(sets) released, Apple counted \(formatBytes(apple))")
         }
-        let noun = entry.deletedItems.count == 1 ? String(localized: "item") : String(localized: "items")
-        let items = String(localized: "\(entry.deletedItems.count) \(noun) to trash")
+        let trashed = entry.trashedItems.count
+        let deleted = entry.permanentlyDeletedItems.count
+        let noun = trashed == 1 ? String(localized: "item") : String(localized: "items")
+        let toTrash = String(localized: "\(trashed) \(noun) to trash")
+        let permanent = String(localized: "\(deleted) deleted permanently")
+        let items: String
+        if deleted == 0 {
+            items = toTrash
+        } else if trashed == 0 {
+            items = permanent
+        } else {
+            items = String(localized: "\(toTrash), \(permanent)")
+        }
         guard let reclaimed = entry.bytesReclaimedOnVolume else { return items }
         return String(localized: "\(items), \(formatBytes(reclaimed)) reclaimed")
     }

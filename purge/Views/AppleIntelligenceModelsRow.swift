@@ -321,7 +321,7 @@ struct OverviewAppleIntelligenceConfirmation: View {
             }
 
             // Removed for good, like simulators and snapshots, so it says so (CLAUDE.md).
-            Text("The models don't go to the Trash. macOS deletes them for good, and Download Again fetches them from Apple.")
+            Text("The models don't go to the Trash. macOS deletes them permanently, and Download Again fetches them from Apple.")
                 .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)

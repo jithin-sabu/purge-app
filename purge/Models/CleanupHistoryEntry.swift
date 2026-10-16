@@ -11,6 +11,25 @@ struct CleanupHistoryDeletedItemDTO: Codable, Hashable, Identifiable {
     let path: String
     /// Bytes recorded before deletion.
     let sizeBytes: Int64
+    /// `false` for an item deleted permanently instead of moved to the Trash, as
+    /// simulators and runtimes are through `simctl`. Absent before #170.
+    let movedToTrash: Bool?
+
+    init(path: String, sizeBytes: Int64, movedToTrash: Bool? = nil) {
+        self.path = path
+        self.sizeBytes = sizeBytes
+        self.movedToTrash = movedToTrash
+    }
+
+    /// Entries written before #170 don't say, so a path the engine only ever deletes
+    /// permanently counts as deleted: a simulator device folder, or anything under
+    /// the system's `/Library/Developer/CoreSimulator`, where only runtimes live and
+    /// nothing is offered for the Trash.
+    var wentToTrash: Bool {
+        if let movedToTrash { return movedToTrash }
+        if path.hasPrefix("/Library/Developer/CoreSimulator/") { return false }
+        return !FileDeleter.removesDirectly(URL(fileURLWithPath: path), simulatorRuntimePaths: [])
+    }
 }
 
 struct CleanupHistorySkippedItemDTO: Codable, Hashable, Identifiable {
@@ -63,6 +82,21 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         self.bytesReclaimedOnVolume = bytesReclaimedOnVolume
         self.deletedItems = deletedItems
         self.skippedItems = skippedItems
+    }
+
+    /// An ordinary clean's items, split by where they went (#170).
+    var trashedItems: [CleanupHistoryDeletedItemDTO] {
+        deletedItems.filter(\.wentToTrash)
+    }
+
+    var permanentlyDeletedItems: [CleanupHistoryDeletedItemDTO] {
+        deletedItems.filter { !$0.wentToTrash }
+    }
+
+    /// The sizes the scan recorded for the items deleted permanently. Not in
+    /// `bytesMovedToTrash`, which only counts what went to the Trash.
+    var bytesDeletedPermanently: Int64 {
+        permanentlyDeletedItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
     enum CodingKeys: String, CodingKey {
