@@ -94,14 +94,18 @@ struct GitStatusCheckerTests {
     }
 
     /// Answers clean the first time, after the test lets it go, and dirty after that.
+    /// A release that comes before the first read lets it through, so a test that
+    /// gave up waiting fails instead of hanging.
     private actor HeldGit {
         private(set) var reads = 0
         private(set) var isHolding = false
+        private var released = false
         private var held: CheckedContinuation<Void, Never>?
 
         func read() async -> GitWorktreeStatus {
             reads += 1
             guard reads == 1 else { return .dirty }
+            guard !released else { return .clean }
             await withCheckedContinuation { continuation in
                 held = continuation
                 isHolding = true
@@ -110,6 +114,7 @@ struct GitStatusCheckerTests {
         }
 
         func release() {
+            released = true
             held?.resume()
             held = nil
             isHolding = false
