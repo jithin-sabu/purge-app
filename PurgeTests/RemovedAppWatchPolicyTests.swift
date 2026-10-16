@@ -458,6 +458,7 @@ struct RemovedAppWatchPolicyTests {
             ],
             owner: owner,
             survivors: [],
+            appGroupClaims: AppGroupClaims(),
             home: URL(fileURLWithPath: "/Users/x")
         )
         #expect(rows.map(\.category) == [.preferences, .applicationSupport])
@@ -476,6 +477,7 @@ struct RemovedAppWatchPolicyTests {
             ],
             owner: makeApp(),
             survivors: [],
+            appGroupClaims: AppGroupClaims(),
             home: URL(fileURLWithPath: "/Users/x")
         )
         #expect(rows.map(\.isSelected) == [false, true])
@@ -494,9 +496,31 @@ struct RemovedAppWatchPolicyTests {
             ],
             owner: owner,
             survivors: [survivor],
+            appGroupClaims: AppGroupClaims(),
             home: URL(fileURLWithPath: "/Users/x")
         )
         #expect(rows.map(\.path.lastPathComponent) == ["com.a.notes.plist"])
+    }
+
+    /// A group container named after the removed app that a kept app lists in
+    /// its entitlements is not offered either (#200).
+    @Test
+    func reviewLeavesOutAGroupAKeptAppLists() {
+        let owner = makeApp(name: "Editor", bundlePath: "/nonexistent-purge-tests/Editor.app", bundleID: "com.vendor.Editor")
+        let survivor = makeApp(name: "Viewer", bundlePath: "/nonexistent-purge-tests/Viewer.app", bundleID: "org.other.Viewer")
+        let shared = item("/Users/x/Library/Group Containers/ABCDE12345.com.vendor.Editor", category: .groupContainers, reason: .groupID)
+        let own = item("/Users/x/Library/Group Containers/group.com.vendor.Editor", category: .groupContainers, reason: .groupID)
+        let claims = AppGroupClaims.gather(for: [survivor], leftovers: [shared, own]) { _ in
+            CodeSignature(identifier: "org.other.Viewer", teamID: "ZZZZZ99999", appGroups: ["ABCDE12345.com.vendor.Editor"])
+        }
+        let rows = RemovedAppReviewFiltering.reviewItems(
+            from: [shared, own],
+            owner: owner,
+            survivors: [survivor],
+            appGroupClaims: claims,
+            home: URL(fileURLWithPath: "/Users/x")
+        )
+        #expect(rows.map(\.path.lastPathComponent) == ["group.com.vendor.Editor"])
     }
 }
 

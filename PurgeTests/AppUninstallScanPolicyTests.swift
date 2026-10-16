@@ -397,7 +397,8 @@ struct AppUninstallScanPolicyTests {
             forLeftoverName: agent,
             category: .launchAgents,
             ownerID: main.id,
-            among: installed.filter { $0.id != main.id }
+            among: installed.filter { $0.id != main.id },
+            appGroupClaims: AppGroupClaims()
         )
         #expect(claimant?.id == helper.id)
     }
@@ -424,7 +425,8 @@ struct AppUninstallScanPolicyTests {
             forLeftoverName: "com.knollsoft.Rectangle.plist",
             category: .preferences,
             ownerID: owner.id,
-            among: [secondCopy]
+            among: [secondCopy],
+            appGroupClaims: AppGroupClaims()
         )
         #expect(claimant?.id == secondCopy.id)
     }
@@ -437,7 +439,8 @@ struct AppUninstallScanPolicyTests {
             forLeftoverName: "com.knollsoft.Rectangle.plist",
             category: .preferences,
             ownerID: owner.id,
-            among: [owner]
+            among: [owner],
+            appGroupClaims: AppGroupClaims()
         )
         #expect(claimant == nil)
     }
@@ -455,8 +458,135 @@ struct AppUninstallScanPolicyTests {
             forLeftoverName: "com.knollsoft.Rectangle.plist",
             category: .preferences,
             ownerID: owner.id,
-            among: [safari]
+            among: [safari],
+            appGroupClaims: AppGroupClaims()
         )
         #expect(claimant == nil)
+    }
+
+    // MARK: Group containers a kept app lists (#200)
+
+    private let editor = InstalledApp(
+        name: "Editor",
+        bundleURL: URL(fileURLWithPath: "/nonexistent-purge-tests/Editor.app", isDirectory: true),
+        bundleID: "com.vendor.Editor",
+        bundleSizeBytes: 0,
+        isRunning: false
+    )
+    private let viewer = InstalledApp(
+        name: "Viewer",
+        bundleURL: URL(fileURLWithPath: "/nonexistent-purge-tests/Viewer.app", isDirectory: true),
+        bundleID: "org.other.Viewer",
+        bundleSizeBytes: 0,
+        isRunning: false
+    )
+    private let editorGroup = "ABCDE12345.com.vendor.Editor"
+
+    private func leftover(_ name: String, category: UninstallCategory, reason: MatchReason) -> UninstallItem {
+        UninstallItem(
+            path: home.appendingPathComponent("Library/Group Containers/\(name)"),
+            sizeBytes: 10,
+            category: category,
+            safetyInfo: SafetyInfo(level: .safe, headline: "", explanation: "", recoverySteps: "", reinstallCommand: nil),
+            matchReason: reason,
+            isSelected: true
+        )
+    }
+
+    /// Claims as `AppGroupClaims.gather` builds them, from fake signatures in
+    /// which each app's own bundle lists `groups[app]` and is signed by `team`.
+    /// The bundles are not on disk, so no nested code is found.
+    private func claims(_ groups: [InstalledApp: [String]], team: String) -> AppGroupClaims {
+        var byPath: [String: [String]] = [:]
+        for (app, list) in groups { byPath[app.bundleURL.standardizedFileURL.path] = list }
+        return AppGroupClaims.gather(
+            for: Array(groups.keys),
+            leftovers: [leftover(editorGroup, category: .groupContainers, reason: .groupID)]
+        ) { url in
+            CodeSignature(identifier: nil, teamID: team, appGroups: byPath[url.standardizedFileURL.path] ?? [])
+        }
+    }
+
+    /// Editor's group is named after Editor, so only Editor matches it by name.
+    /// Viewer lists it in its entitlements under another id and another signing
+    /// team. That listing alone holds the group back.
+    @Test
+    func keptAppListingTheGroupHoldsItBack() {
+        #expect(AppUninstallScanPolicy.matchReason(forLeftoverName: editorGroup, category: .groupContainers, app: editor) == .groupID)
+        #expect(AppUninstallScanPolicy.matchReason(forLeftoverName: editorGroup, category: .groupContainers, app: viewer) == nil)
+
+        let claimant = AppUninstallScanPolicy.claimant(
+            forLeftoverName: editorGroup,
+            category: .groupContainers,
+            ownerID: editor.id,
+            among: [viewer],
+            appGroupClaims: claims([viewer: [editorGroup]], team: "ZZZZZ99999")
+        )
+        #expect(claimant?.id == viewer.id)
+    }
+
+    /// A kept app from the same developer that lists only its own group leaves
+    /// Editor's group to Editor. A shared signing team is not a claim, or most
+    /// uninstalls would leave their own group behind.
+    @Test
+    func groupNoKeptAppListsIsStillRemoved() {
+        let sketch = InstalledApp(
+            name: "Sketch",
+            bundleURL: URL(fileURLWithPath: "/nonexistent-purge-tests/Sketch.app", isDirectory: true),
+            bundleID: "com.vendor.Sketch",
+            bundleSizeBytes: 0,
+            isRunning: false
+        )
+        let claimant = AppUninstallScanPolicy.claimant(
+            forLeftoverName: editorGroup,
+            category: .groupContainers,
+            ownerID: editor.id,
+            among: [sketch, viewer],
+            appGroupClaims: claims([sketch: ["ABCDE12345.com.vendor.Sketch"], viewer: []], team: "ABCDE12345")
+        )
+        #expect(claimant == nil)
+    }
+
+    /// Entitlements list app groups, so a listing never claims a leftover in
+    /// any other category, even one with the same name.
+    @Test
+    func entitlementClaimsOnlyApplyToGroupContainers() {
+        let groupClaims = claims([viewer: ["com.vendor.Editor"]], team: "ZZZZZ99999")
+        for category in [UninstallCategory.caches, .containers, .applicationSupport] {
+            let claimant = AppUninstallScanPolicy.claimant(
+                forLeftoverName: "com.vendor.Editor",
+                category: category,
+                ownerID: editor.id,
+                among: [viewer],
+                appGroupClaims: groupClaims
+            )
+            #expect(claimant == nil, "\(category)")
+        }
+    }
+
+    /// The review sheet shows a group a kept app lists as "Kept, still used by
+    /// Viewer" and unticks it, and leaves a group no kept app lists ticked.
+    @Test
+    func sheetMarksAGroupAKeptAppListsAsKept() {
+        let ownGroup = "group.com.vendor.Editor"
+        #expect(AppUninstallScanPolicy.matchReason(forLeftoverName: ownGroup, category: .groupContainers, app: editor) == .groupID)
+        var plans = [UninstallAppPlan(app: editor, items: [
+            leftover("Editor.app", category: .bundle, reason: .appBundle),
+            leftover(editorGroup, category: .groupContainers, reason: .groupID),
+            leftover(ownGroup, category: .groupContainers, reason: .groupID)
+        ])]
+
+        PurgeStore.markSharedWithSurvivors(
+            in: &plans,
+            survivors: [viewer],
+            appGroupClaims: claims([viewer: [editorGroup]], team: "ZZZZZ99999")
+        )
+
+        let items = Dictionary(uniqueKeysWithValues: plans[0].items.map { ($0.path.lastPathComponent, $0) })
+        #expect(items[editorGroup]?.keptForApp == "Viewer")
+        #expect(items[editorGroup]?.isSelected == false)
+        #expect(items[ownGroup]?.keptForApp == nil)
+        #expect(items[ownGroup]?.isSelected == true)
+        #expect(items["Editor.app"]?.isSelected == true)
     }
 }

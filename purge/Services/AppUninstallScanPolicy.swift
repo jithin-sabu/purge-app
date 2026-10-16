@@ -169,15 +169,22 @@ enum AppUninstallScanPolicy {
     /// `matchReason`. A non-nil result means the leftover is shared with an app the
     /// user is keeping, so removing its owner must not trash it: the two-copies
     /// case, or one app of a suite that shares support with its siblings.
+    ///
+    /// A group container is also claimed by an app that lists that exact group in
+    /// its entitlements (`appGroupClaims`, #200). The developer names the group,
+    /// so `<team>.<id of the app being removed>` can be a group a kept app shares
+    /// while nothing in the kept app's own id matches it.
     nonisolated static func claimant(
         forLeftoverName name: String,
         category: UninstallCategory,
         ownerID: String,
-        among others: [InstalledApp]
+        among others: [InstalledApp],
+        appGroupClaims: AppGroupClaims
     ) -> InstalledApp? {
         others.first { candidate in
-            candidate.id != ownerID
-                && matchReason(forLeftoverName: name, category: category, app: candidate) != nil
+            guard candidate.id != ownerID else { return false }
+            if matchReason(forLeftoverName: name, category: category, app: candidate) != nil { return true }
+            return category == .groupContainers && appGroupClaims.app(candidate, claims: name)
         }
     }
 

@@ -155,6 +155,83 @@ struct InstalledCodeEvidenceTests {
         #expect(evidence.appGroups == ["abcde12345.com.vendor"])
     }
 
+    // MARK: App group claims for the uninstaller (#200)
+
+    /// A group a helper inside the app lists counts as the app's claim.
+    @Test
+    func appGroupClaimsIncludeNestedCode() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = try makeFakeApp(in: root)
+        let app = installedApp(at: bundle)
+
+        let claims = AppGroupClaims.gather(for: [app], leftovers: [groupContainer("TEAM123456.com.vendor.shared")]) { url in
+            let groups = url.lastPathComponent == "Fake Helper.app" ? ["TEAM123456.com.vendor.Shared"] : []
+            return CodeSignature(identifier: nil, teamID: "TEAM123456", appGroups: groups)
+        }
+        #expect(claims.app(app, claims: "TEAM123456.com.vendor.shared"))
+        #expect(!claims.app(app, claims: "TEAM123456.com.vendor.other"))
+    }
+
+    /// Without a group container among the leftovers there is nothing to
+    /// claim, so no signature is read.
+    @Test
+    func appGroupClaimsReadNothingWithoutAGroupContainer() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = installedApp(at: try makeFakeApp(in: root))
+        var reads = 0
+        let caches = UninstallItem(
+            path: root.appendingPathComponent("Caches/com.vendor.fake"),
+            sizeBytes: 1,
+            category: .caches,
+            safetyInfo: SafetyInfo(level: .safe, headline: "", explanation: "", recoverySteps: "", reinstallCommand: nil),
+            matchReason: .bundleID,
+            isSelected: true
+        )
+
+        let claims = AppGroupClaims.gather(for: [app], leftovers: [caches]) { _ in
+            reads += 1
+            return CodeSignature(appGroups: ["TEAM123456.com.vendor.shared"])
+        }
+        #expect(reads == 0)
+        #expect(claims == AppGroupClaims())
+    }
+
+    /// The default reader must find real entitlements. If it found nothing, the
+    /// uninstaller would quietly fall back to names alone.
+    @Test
+    func appGroupClaimsReadRealEntitlements() throws {
+        let podcasts = URL(fileURLWithPath: "/System/Applications/Podcasts.app", isDirectory: true)
+        try #require(FileManager.default.fileExists(atPath: podcasts.path))
+        let app = installedApp(at: podcasts)
+        let group = "243LU875E5.groups.com.apple.podcasts"
+
+        let claims = AppGroupClaims.gather(for: [app], leftovers: [groupContainer(group)])
+        #expect(claims.app(app, claims: group))
+    }
+
+    private func installedApp(at bundle: URL) -> InstalledApp {
+        InstalledApp(
+            name: bundle.deletingPathExtension().lastPathComponent,
+            bundleURL: bundle,
+            bundleID: InstalledCodeEvidence.bundleIdentifier(of: bundle),
+            bundleSizeBytes: 0,
+            isRunning: false
+        )
+    }
+
+    private func groupContainer(_ name: String) -> UninstallItem {
+        UninstallItem(
+            path: URL(fileURLWithPath: "/nonexistent-purge-tests/Group Containers/\(name)"),
+            sizeBytes: 1,
+            category: .groupContainers,
+            safetyInfo: SafetyInfo(level: .safe, headline: "", explanation: "", recoverySteps: "", reinstallCommand: nil),
+            matchReason: .groupID,
+            isSelected: true
+        )
+    }
+
     // MARK: Fixtures
 
     private func makeBundle(at url: URL, id: String, iOSLayout: Bool = false) throws {

@@ -1202,8 +1202,15 @@ final class PurgeStore: ObservableObject {
         var keptSharedFailures: [CleanFailureItem] = []
         let deletableLeftovers: [UninstallItem]
         if let owner = pending?.app {
+            let survivors = installedApps
+            let appGroupClaims = await AppGroupClaims.gatherOffMain(for: survivors, leftovers: leftovers)
             deletableLeftovers = leftovers.filter { leftover in
-                if let otherApp = appStillUsing(leftover: leftover, excludingOwner: owner, among: installedApps) {
+                if let otherApp = Self.appStillUsing(
+                    leftover: leftover,
+                    excludingOwner: owner,
+                    among: survivors,
+                    appGroupClaims: appGroupClaims
+                ) {
                     keptSharedFailures.append(keptSharedFailure(item: leftover, otherApp: otherApp))
                     return false
                 }
@@ -2007,7 +2014,13 @@ final class PurgeStore: ObservableObject {
         for await item in uninstallScanner.leftoverStream(for: app) {
             scanned.append(item)
         }
-        let items = RemovedAppReviewFiltering.reviewItems(from: scanned, owner: app, survivors: survivors)
+        let appGroupClaims = await AppGroupClaims.gatherOffMain(for: survivors, leftovers: scanned)
+        let items = RemovedAppReviewFiltering.reviewItems(
+            from: scanned,
+            owner: app,
+            survivors: survivors,
+            appGroupClaims: appGroupClaims
+        )
             .filter { !ExcludedPathsStore.isExcluded($0.path) }
             .sorted(by: uninstallItemOrder)
         guard !items.isEmpty else { return nil }
@@ -2184,7 +2197,14 @@ final class PurgeStore: ObservableObject {
             appPlans.append(UninstallAppPlan(app: app, items: items))
         }
 
-        markSharedWithSurvivors(in: &appPlans)
+        let removingIDs = Set(appPlans.map(\.app.id))
+        let survivors = installedApps.filter { !removingIDs.contains($0.id) }
+        let appGroupClaims = await AppGroupClaims.gatherOffMain(
+            for: survivors,
+            leftovers: appPlans.flatMap(\.items)
+        )
+        if Task.isCancelled { return }
+        Self.markSharedWithSurvivors(in: &appPlans, survivors: survivors, appGroupClaims: appGroupClaims)
 
         let id = appPlans.map(\.app.id).sorted().joined(separator: "|")
         uninstallPlan = UninstallPlan(id: id, apps: appPlans)
@@ -2195,9 +2215,13 @@ final class PurgeStore: ObservableObject {
     /// (the two-copies case, or one app of a suite that shares support). The bundle
     /// is never shared, and this reuses the deletion pass's `appStillUsing` matcher
     /// so the sheet and the actual removal agree on what is held back.
-    private func markSharedWithSurvivors(in appPlans: inout [UninstallAppPlan]) {
-        let removingIDs = Set(appPlans.map(\.app.id))
-        let survivors = installedApps.filter { !removingIDs.contains($0.id) }
+    /// `survivors` are the installed apps not being removed, and `appGroupClaims`
+    /// the app groups they list in their entitlements.
+    nonisolated static func markSharedWithSurvivors(
+        in appPlans: inout [UninstallAppPlan],
+        survivors: [InstalledApp],
+        appGroupClaims: AppGroupClaims
+    ) {
         guard !survivors.isEmpty else { return }
 
         for planIndex in appPlans.indices {
@@ -2208,7 +2232,8 @@ final class PurgeStore: ObservableObject {
                 if let survivor = appStillUsing(
                     leftover: item,
                     excludingOwner: owner,
-                    among: survivors
+                    among: survivors,
+                    appGroupClaims: appGroupClaims
                 ) {
                     appPlans[planIndex].items[itemIndex].isSelected = false
                     appPlans[planIndex].items[itemIndex].keptForApp = survivor.name
@@ -2257,18 +2282,21 @@ final class PurgeStore: ObservableObject {
     /// The other still-installed app, if any, that a leftover also belongs to.
     /// Removing the chosen app must not take a file a second installed app still
     /// needs, which is what happens when two copies share bundle-id-keyed support.
-    /// Matching reuses the scanner's strict identifier/name rules, so only a
-    /// genuinely shared leftover is ever held back.
-    private func appStillUsing(
+    /// Matching reuses the scanner's strict identifier/name rules, plus the app
+    /// groups the remaining apps list in their entitlements, so only a genuinely
+    /// shared leftover is ever held back.
+    private nonisolated static func appStillUsing(
         leftover item: UninstallItem,
         excludingOwner owner: InstalledApp,
-        among remaining: [InstalledApp]
+        among remaining: [InstalledApp],
+        appGroupClaims: AppGroupClaims
     ) -> InstalledApp? {
         AppUninstallScanPolicy.claimant(
             forLeftoverName: item.path.lastPathComponent,
             category: item.category,
             ownerID: owner.id,
-            among: remaining
+            among: remaining,
+            appGroupClaims: appGroupClaims
         )
     }
 
@@ -2446,6 +2474,10 @@ final class PurgeStore: ObservableObject {
 
         var leftoverReport: DeletionReport?
         if !leftoverBatch.isEmpty {
+            let appGroupClaims = await AppGroupClaims.gatherOffMain(
+                for: remainingApps,
+                leftovers: leftoverBatch.flatMap { $0.1 }
+            )
             var urls: [URL] = []
             var names: [String: String] = [:]
             var sizes: [String: Int64] = [:]
@@ -2457,7 +2489,12 @@ final class PurgeStore: ObservableObject {
                     // leftover, so a path can appear under both. Trash and size it once.
                     let key = item.path.standardizedFileURL.path
                     guard seen.insert(key).inserted else { continue }
-                    if let otherApp = appStillUsing(leftover: item, excludingOwner: app, among: remainingApps) {
+                    if let otherApp = Self.appStillUsing(
+                        leftover: item,
+                        excludingOwner: app,
+                        among: remainingApps,
+                        appGroupClaims: appGroupClaims
+                    ) {
                         keptSharedFailures.append(keptSharedFailure(item: item, otherApp: otherApp))
                         continue
                     }

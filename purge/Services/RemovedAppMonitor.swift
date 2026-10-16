@@ -754,13 +754,15 @@ nonisolated enum RemovedAppPresence {
         let index = currentIndex()
         guard isStillRemoved(plan.app, installedBundleIDs: index.bundleIDs) else { return nil }
         let survivors = Array(index.apps.values)
+        let appGroupClaims = AppGroupClaims.gather(for: survivors, leftovers: plan.items)
         var checked = plan
         checked.items = plan.items.filter { item in
             AppUninstallScanPolicy.claimant(
                 forLeftoverName: item.path.lastPathComponent,
                 category: item.category,
                 ownerID: plan.app.id,
-                among: survivors
+                among: survivors,
+                appGroupClaims: appGroupClaims
             ) == nil
         }
         return checked
