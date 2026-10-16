@@ -33,6 +33,8 @@ struct ScheduledCleaningScheduleTests {
         let prefs: ScheduledCleaningPreferenceStore
         let defaults: UserDefaults
         let clean: FakeScheduledClean
+        let review: FakeReview
+        let rearms: RearmCounter
     }
 
     private let suite = ThrowawayDefaults()
@@ -45,13 +47,23 @@ struct ScheduledCleaningScheduleTests {
         prefs.isEnabled = enabled
 
         let clean = FakeScheduledClean()
+        let review = FakeReview()
+        let rearms = RearmCounter()
         let registrar = ScheduledCleaningRegistrar(
             prefs: prefs,
             userDefaults: defaults,
             performClean: { clean.run() },
-            rearm: {}
+            rearm: { rearms.count += 1 },
+            isReviewingOrCleaning: { review.isOpen }
         )
-        return Harness(registrar: registrar, prefs: prefs, defaults: defaults, clean: clean)
+        return Harness(
+            registrar: registrar,
+            prefs: prefs,
+            defaults: defaults,
+            clean: clean,
+            review: review,
+            rearms: rearms
+        )
     }
 
     private func anchor(_ h: Harness) -> Date? {
@@ -398,6 +410,34 @@ struct ScheduledCleaningScheduleTests {
         #expect(!ScheduledCleaningRegistrar.cleansOnActivation(environment: ["XCODE_RUNNING_FOR_PREVIEWS": "1"]))
         #expect(!ScheduledCleaningRegistrar.cleansOnActivation(environment: ProcessInfo.processInfo.environment))
     }
+
+    // 15. A due clean waits while a review or confirmation is open, and leaves the
+    //     anchor alone so the next sweep after it closes runs the clean (#173).
+    @Test("A due clean waits for an open review")
+    func dueCleanWaitsForOpenReview() async {
+        let h = makeHarness(enabledAt: enabledAt)
+
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
+        h.review.isOpen = true
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+
+        #expect(h.clean.callCount == 0)
+        #expect(anchor(h) == nil)
+        #expect(h.registrar.lastOutcome == nil)
+        #expect(h.rearms.count == 0)
+
+        let later = due.addingTimeInterval(60)
+        h.review.isOpen = false
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: later)
+
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) == later)
+        #expect(h.rearms.count == 1)
+    }
 }
 
 /// Waits for `condition`, giving up after about two seconds. The activation
@@ -437,6 +477,143 @@ private final class HeldClean {
 @MainActor
 private final class Flag {
     var isSet = false
+}
+
+/// Stands in for the store's review state, so the registrar tests need no store.
+@MainActor
+final class FakeReview {
+    var isOpen = false
+}
+
+/// The store side of the review check: each review, confirmation, and running
+/// clean holds a due scheduled clean back, and an error alert alone does not.
+@Suite("Scheduled clean waits for reviews")
+@MainActor
+struct ScheduledCleanReviewHoldTests {
+    @Test("Every review, confirmation, and running clean holds the schedule")
+    func everyReviewHoldsTheSchedule() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        let app = InstalledApp(
+            name: "Gone",
+            bundleURL: URL(fileURLWithPath: "/Applications/Gone.app"),
+            bundleID: "com.example.gone",
+            bundleSizeBytes: 0,
+            isRunning: false
+        )
+        let states: [(String, (Bool) -> Void)] = [
+            ("deletion sheet", { store.showDeletionSheet = $0 }),
+            ("Not Sure sheet", { store.pendingUnknownDeletion = $0 ? .init(candidates: []) : nil }),
+            ("Large Files sheet", { store.showLargeFileDeletionSheet = $0 }),
+            ("duplicate cleanup", { store.pendingDuplicateCleanup = $0 ? DuplicateCleanupRequest(sets: []) : nil }),
+            ("uninstall review", { store.uninstallPlan = $0 ? UninstallPlan(id: "test", apps: []) : nil }),
+            ("uninstall plan being built", { store.isBuildingUninstallPlan = $0 }),
+            ("orphan review", { store.orphanCleanupPlan = $0 ? OrphanCleanupPlan(items: []) : nil }),
+            ("removed-app review", {
+                store.removedAppLeftoverPlan = $0
+                    ? RemovedAppLeftoverPlan(app: app, items: [], trashedBundleURL: nil)
+                    : nil
+            }),
+            ("missing lockfile alert", { store.showMissingLockfileFriction = $0 }),
+            ("unsaved git alert", { store.showUncommittedGitFriction = $0 }),
+            ("Not Sure second alert", { store.showHighRiskDeletionSecondConfirm = $0 }),
+            ("clean running", { store.isDeleting = $0 }),
+            // The Overview's Clean claims its rows before `isDeleting` turns on.
+            ("Overview clean claiming its rows", { open in
+                if open {
+                    _ = store.beginInteractiveSafeCleanup(candidates: [Self.candidate()], reduceMotion: true)
+                } else {
+                    store.cancelInteractiveSafeCleanup()
+                }
+            }),
+        ]
+
+        #expect(!store.isReviewingOrCleaning)
+        for (name, setOpen) in states {
+            setOpen(true)
+            #expect(store.isReviewingOrCleaning, "\(name) should hold the schedule")
+            setOpen(false)
+            #expect(!store.isReviewingOrCleaning, "\(name) should release the schedule")
+        }
+    }
+
+    // The cleanup overlay in its cleaning phase. Each path that shows it also sets
+    // `isDeleting` or claims the Overview's rows in the same step, so the overlay
+    // never holds the schedule alone. This checks that it holds at all.
+    @Test("The cleanup overlay holds the schedule while it cleans")
+    func cleaningOverlayHoldsTheSchedule() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+
+        let started = store.beginInteractiveSafeCleanup(
+            candidates: [Self.candidate()],
+            reduceMotion: true,
+            presentsLiveSession: true
+        )
+
+        #expect(started)
+        #expect(store.isManualCleaningInProgress)
+        #expect(store.isReviewingOrCleaning)
+
+        store.cancelInteractiveSafeCleanup()
+
+        #expect(!store.isManualCleaningInProgress)
+        #expect(!store.isReviewingOrCleaning)
+    }
+
+    // The sweep checks before the clean's rescan. A review that opens during the
+    // rescan stops the scheduled clean right before it claims `isDeleting`. A
+    // manual clean is the user's own click and only waits for another clean.
+    @Test("A scheduled clean checks for a review again before it starts")
+    func scheduledCleanChecksAgainBeforeItStarts() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+
+        #expect(store.mayStartSafeClean(trigger: .scheduled))
+        #expect(store.mayStartSafeClean(trigger: .manual))
+
+        store.showDeletionSheet = true
+        #expect(!store.mayStartSafeClean(trigger: .scheduled))
+        #expect(store.mayStartSafeClean(trigger: .manual))
+        store.showDeletionSheet = false
+
+        store.isDeleting = true
+        #expect(!store.mayStartSafeClean(trigger: .scheduled))
+        #expect(!store.mayStartSafeClean(trigger: .manual))
+    }
+
+    /// A row in a temporary folder that is never created. Nothing here deletes.
+    private static func candidate() -> PurgeStore.DeletionCandidate {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-review-hold-\(UUID().uuidString)", isDirectory: true)
+        return PurgeStore.DeletionCandidate(
+            title: "Cache",
+            path: path,
+            sizeBytes: 1,
+            safetyInfo: SafetyInfo(level: .safe, headline: "Cache", explanation: "", recoverySteps: "", reinstallCommand: nil),
+            reinstallCommand: nil,
+            subtitle: nil,
+            reinstallSafety: .notApplicable,
+            gitStatus: .clean
+        )
+    }
+
+    // An error alert can stay set with no window open to dismiss it. Holding the
+    // schedule on it would stop scheduled cleans for good.
+    @Test("An error alert does not hold the schedule")
+    func errorAlertDoesNotHold() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+
+        store.errorMessage = "Test error"
+
+        #expect(!store.isReviewingOrCleaning)
+        #expect(store.isShowingReviewOrCleaning)
+    }
 }
 
 /// Counts the registrar's re-arms. A re-arm runs in its own task, so a test waits

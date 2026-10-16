@@ -86,6 +86,7 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     private let prefs: ScheduledCleaningPreferenceStore
     private let performCleanOverride: (() async -> PurgeStore.ScheduledCleaningSummary)?
     private let rearmOverride: (() async -> Void)?
+    private let isReviewingOrCleaningOverride: (() -> Bool)?
 
     /// The anchor timestamp of the last clean, read through the injected domain.
     private var currentLastGraceSweepDate: Date? {
@@ -96,12 +97,14 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         prefs: ScheduledCleaningPreferenceStore = .shared,
         userDefaults: UserDefaults = .standard,
         performClean: (() async -> PurgeStore.ScheduledCleaningSummary)? = nil,
-        rearm: (() async -> Void)? = nil
+        rearm: (() async -> Void)? = nil,
+        isReviewingOrCleaning: (() -> Bool)? = nil
     ) {
         self.prefs = prefs
         self.ud = userDefaults
         self.performCleanOverride = performClean
         self.rearmOverride = rearm
+        self.isReviewingOrCleaningOverride = isReviewingOrCleaning
         if let data = ud.data(forKey: Self.lastOutcomeKey) {
             lastOutcome = try? JSONDecoder().decode(LastScheduledCleanOutcome.self, from: data)
         }
@@ -125,9 +128,18 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         }
     }
 
+    /// Whether a review, a delete confirmation, or a clean is under way, through
+    /// the injected override when present.
+    private var isReviewingOrCleaning: Bool {
+        if let isReviewingOrCleaningOverride {
+            return isReviewingOrCleaningOverride()
+        }
+        return store?.isReviewingOrCleaning ?? false
+    }
+
     /// Moves the anchor, records the outcome, and re-arms, unless another clean was
-    /// running and this one removed nothing. Then the clean stays due, and the next
-    /// activation runs it.
+    /// running or a review was open and this one removed nothing. Then the clean
+    /// stays due, and the next activation runs it.
     private func finishSchedule(after summary: PurgeStore.ScheduledCleaningSummary, at now: Date) async {
         guard !summary.skippedForAnotherClean else { return }
         ud.set(now, forKey: Self.lastGraceSweepKey)
@@ -299,6 +311,15 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// Called while another sweep or Run now is cleaning, it starts no clean of its
     /// own and returns once that one ends. The window scans right after this
     /// returns, and those scans must show the state after the clean.
+    ///
+    /// A due clean waits while the user is in a review or a delete confirmation, or
+    /// a clean is running, and the anchor stays put so the next activation runs it.
+    /// Starting then would hold `isDeleting` under the review: a leftover or
+    /// uninstall review confirmed during the clean closed without removing
+    /// anything or saying why, and a confirmed manual clean could run beside the
+    /// scheduled one (#173). A review can also open during the clean's rescan, so
+    /// the store checks again before it claims `isDeleting`
+    /// (`PurgeStore.mayStartSafeClean(trigger:)`).
     func runGracefulActivationSweepIfPastDue(referenceDate now: Date = Date()) async {
         if isSweepRunning {
             _ = await waitForRunningSweep()
@@ -307,6 +328,7 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         guard prefs.isEnabled else { return }
         guard performCleanOverride != nil || store != nil else { return }
         guard now >= dueDate(referenceDate: now) else { return }
+        guard !isReviewingOrCleaning else { return }
 
         isSweepRunning = true
         var summary: PurgeStore.ScheduledCleaningSummary?

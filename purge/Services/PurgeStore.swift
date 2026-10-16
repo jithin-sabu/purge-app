@@ -695,6 +695,18 @@ final class PurgeStore: ObservableObject {
     /// window. `ContentView` can present only one of these at a time, so an
     /// unprompted review waits until this clears.
     var isShowingReviewOrCleaning: Bool {
+        isReviewingOrCleaning
+            || manualDeletionSession != nil
+            || interactiveSafeCleanupSession != nil
+            || onboardingCelebrationMovedToTrashBytes != nil
+            || errorMessage != nil
+    }
+
+    /// `true` while a review or a delete confirmation is open, or a clean is
+    /// running. A due scheduled clean waits until this clears (#173). Summaries
+    /// and error alerts are left out: they can stay set with no window open, and
+    /// the schedule would then never run.
+    var isReviewingOrCleaning: Bool {
         uninstallPlan != nil
             || orphanCleanupPlan != nil
             || removedAppLeftoverPlan != nil
@@ -707,10 +719,21 @@ final class PurgeStore: ObservableObject {
             || showUncommittedGitFriction
             || showHighRiskDeletionSecondConfirm
             || isDeleting
-            || manualDeletionSession != nil
-            || interactiveSafeCleanupSession != nil
-            || onboardingCelebrationMovedToTrashBytes != nil
-            || errorMessage != nil
+            || isManualCleaningInProgress
+            || isInteractiveSafeCleanupInProgress
+    }
+
+    /// Whether a safe clean may claim `isDeleting` now. A scheduled clean also
+    /// waits for an open review or delete confirmation. The sweep checks before
+    /// the clean's rescan, and a review can open during it, so the clean checks
+    /// again right before it claims `isDeleting` (#173).
+    func mayStartSafeClean(trigger: CleanupTrigger) -> Bool {
+        switch trigger {
+        case .manual:
+            return !isDeleting
+        case .scheduled:
+            return !isReviewingOrCleaning
+        }
     }
 
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
@@ -3207,8 +3230,9 @@ final class PurgeStore: ObservableObject {
         var elapsedSeconds: Double = 0
         var movedToTrashCount: Int = 0
         var failedItems: [CleanFailureItem] = []
-        /// True when another clean was running, so this one removed nothing. A
-        /// scheduled clean then stays due instead of counting as done (#173).
+        /// True when another clean was running, or a review was open for a
+        /// scheduled clean, so this one removed nothing. A scheduled clean then
+        /// stays due instead of counting as done (#173).
         var skippedForAnotherClean = false
 
         var failedCount: Int { failedItems.count }
@@ -3457,7 +3481,8 @@ final class PurgeStore: ObservableObject {
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
 
-        guard !isDeleting else {
+        // No await between this check and the claim, so nothing starts in between.
+        guard mayStartSafeClean(trigger: historyTrigger) else {
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, skippedForAnotherClean: true)
         }
 
