@@ -11,14 +11,21 @@ final class CleanupHistoryStore: ObservableObject {
     @Published private(set) var archive: CleanupHistoryFile
 
     init() {
-        let url = Self.applicationSupportFileURL()
+        let url = Self.fileURL()
         archive = CleanupHistoryStore.load(from: url) ?? CleanupHistoryFile()
     }
 
-    private static func applicationSupportFileURL() -> URL {
-        let baseDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("io.getpurge.app", isDirectory: true)
-            ?? FileManager.default.temporaryDirectory
+    nonisolated static func fileURL() -> URL {
+        let baseDir: URL
+        if TestHost.isActive() {
+            // Tests run inside a hosted copy of the app. A clean a test drives must
+            // never reach the user's History, so they get a scratch folder (#171).
+            baseDir = TestHost.supportDirectory()
+        } else {
+            baseDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("io.getpurge.app", isDirectory: true)
+                ?? FileManager.default.temporaryDirectory
+        }
         if !FileManager.default.fileExists(atPath: baseDir.path) {
             try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
         }
@@ -33,7 +40,7 @@ final class CleanupHistoryStore: ObservableObject {
     }
 
     private func persist() {
-        let url = Self.applicationSupportFileURL()
+        let url = Self.fileURL()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
