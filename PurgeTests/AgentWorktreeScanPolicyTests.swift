@@ -212,9 +212,12 @@ struct AgentWorktreeScanPolicyTests {
     @Test
     func claudeCodeWorktreePassesTheGateOnlyAsALinkedWorktree() throws {
         let fm = FileManager.default
-        let root = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent(".purge-test-fixtures/\(UUID().uuidString)", isDirectory: true)
-        defer { try? fm.removeItem(at: root) }
+        let folders = RealHomeFolders()
+        defer { folders.remove() }
+        // A top folder of its own. Other suites remove the shared
+        // `~/.purge-test-fixtures` when it is empty, which could pull it away
+        // while this test is making folders in it (#171).
+        let root = try folders.make(".purge-test-worktree-\(UUID().uuidString)")
         let worktrees = root.appendingPathComponent("app/.claude/worktrees", isDirectory: true)
         let linked = worktrees.appendingPathComponent("brave-turing", isDirectory: true)
         let clone = worktrees.appendingPathComponent("full-clone", isDirectory: true)
