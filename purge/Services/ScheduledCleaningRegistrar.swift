@@ -138,8 +138,8 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     }
 
     /// Moves the anchor, records the outcome, and re-arms, unless another clean was
-    /// running and this one removed nothing. Then the clean stays due, and the next
-    /// activation runs it.
+    /// running or a review was open and this one removed nothing. Then the clean
+    /// stays due, and the next activation runs it.
     private func finishSchedule(after summary: PurgeStore.ScheduledCleaningSummary, at now: Date) async {
         guard !summary.skippedForAnotherClean else { return }
         ud.set(now, forKey: Self.lastGraceSweepKey)
@@ -317,7 +317,9 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// Starting then would hold `isDeleting` under the review: a leftover or
     /// uninstall review confirmed during the clean closed without removing
     /// anything or saying why, and a confirmed manual clean could run beside the
-    /// scheduled one (#173).
+    /// scheduled one (#173). A review can also open during the clean's rescan, so
+    /// the store checks again before it claims `isDeleting`
+    /// (`PurgeStore.mayStartSafeClean(trigger:)`).
     func runGracefulActivationSweepIfPastDue(referenceDate now: Date = Date()) async {
         if isSweepRunning {
             _ = await waitForRunningSweep()
