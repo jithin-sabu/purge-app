@@ -1187,7 +1187,7 @@ struct UninstallReviewSheet: View {
                 .font(AppStyle.Typography.pageTitle)
                 .foregroundStyle(AppColors.textPrimary)
 
-            Text("Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted for good, so you can put anything back if you change your mind.")
+            Text("Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted permanently, so you can put anything back if you change your mind.")
                 .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

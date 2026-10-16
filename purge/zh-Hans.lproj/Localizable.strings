@@ -398,7 +398,7 @@
 "On. Admin-locked apps can be moved to the Trash without a password." = "已开启。管理员锁定的应用可移到废纸篓，无需重复输入密码。";
 "On. Purge is watching for deleted apps." = "已开启。Purge 正在监测应用删除。";
 "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash, so you can put them back." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。文件和文件夹会移到废纸篓，因此可以放回原处。";
-"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are removed for good through simctl and can't be put back." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。文件和文件夹会移到废纸篓。这次清理中的 iOS 模拟器和模拟器运行时会通过 simctl 永久移除，无法放回。";
+"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。文件和文件夹会移到废纸篓。这次清理中的 iOS 模拟器和模拟器运行时会通过 simctl 永久删除，无法放回。";
 "Only cleans when you say" = "只在你确认后清理";
 "Only items marked Safe. They rebuild when needed, and you can put anything back from the Trash." = "只处理标记为“可安全清理”的项目。它们会在需要时重建，也可以从废纸篓恢复。";
 "Open Disk Utility" = "打开磁盘工具";
@@ -450,7 +450,7 @@
 "Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. To delete those too, choose View > Show APFS Snapshots in Disk Utility." = "Purge 会保留最新的快照和上次备份留下的那张，时间机器可能仍需要它们。若要连这些也删除，请在磁盘工具中选择“显示 > 显示 APFS 快照”。";
 "Purge left this one alone to stay on the safe side." = "出于安全考虑，Purge 保留了此内容。";
 "Purge looks in Applications and your home Applications folder." = "Purge 会检查系统和个人主文件夹中的“应用程序”文件夹。";
-"Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted for good, so you can put anything back if you change your mind." = "Purge 会将各应用及仍被勾选的项目移到废纸篓，不会永久删除。改变主意时可将它们恢复。";
+"Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted permanently, so you can put anything back if you change your mind." = "Purge 会将各应用及仍被勾选的项目移到废纸篓，不会永久删除。改变主意时可将它们恢复。";
 "Purge moves these to Trash. You can put anything back if you change your mind." = "Purge 会将这些项目移到废纸篓。改变主意时可以恢复。";
 "Purge needs Full Disk Access to remove this." = "Purge 需要完全磁盘访问权限才能移除此内容。";
 "Purge opens when you need it and quits when you close the window." = "需要时打开 Purge，关闭窗口时退出。";
@@ -889,7 +889,7 @@
 "Purge cannot uninstall itself" = "Purge 无法卸载自身";
 "Purge checks once a day. When automatic installs are off, a new version opens the update window. Every download is signature-checked." = "Purge 每天检查一次更新。关闭自动安装时，有新版本会打开更新窗口。所有下载都会验证签名。";
 "Purge doesn't know what these folders are for. They go to the Trash, so you can put them back, but check that nothing depends on them before you clean." = "Purge 不清楚这些文件夹的用途。它们会移到废纸篓，因此可以放回原处，但清理前请确认没有其他内容依赖它们。";
-"iOS simulators and simulator runtimes in this cleanup are removed for good through simctl and can't be put back." = "这次清理中的 iOS 模拟器和模拟器运行时会通过 simctl 永久移除，无法放回。";
+"iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back." = "这次清理中的 iOS 模拟器和模拟器运行时会通过 simctl 永久删除，无法放回。";
 "Purge never removes Apple's built-in apps." = "Purge 从不移除 Apple 内置应用。";
 "Purge uninstalls apps. Select an app in Finder and try again." = "Purge 只能卸载应用。请在访达中选择一个应用后重试。";
 "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller." = "从访达一次只能卸载一个应用。如需一次移除多个应用，请在 Purge 的卸载工具中勾选。";
@@ -944,7 +944,7 @@
 "Visual Intelligence, Photos Clean Up and Spatial Photos" = "视觉智能、照片“清理”和空间照片";
 "Xcode's predictive code completion" = "Xcode 的预测性代码补全";
 "Apps that use Apple's on-device models, such as Lightroom's AI Denoise" = "使用 Apple 设备端模型的 App，例如 Lightroom 的 AI 降噪";
-"The models don't go to the Trash. macOS deletes them for good, and Download Again fetches them from Apple." = "这些模型不会移到废纸篓，macOS 会将其永久删除。“重新下载”会从 Apple 重新获取。";
+"The models don't go to the Trash. macOS deletes them permanently, and Download Again fetches them from Apple." = "这些模型不会移到废纸篓，macOS 会将其永久删除。“重新下载”会从 Apple 重新获取。";
 "macOS will ask you to install a profile that stops the models downloading again. It stays in Device Management until you choose Download Again, which also brings the models back." = "macOS 会请你安装一个阻止模型重新下载的描述文件。它会一直保留在“设备管理”中，直到你选择“重新下载”，届时模型也会恢复。";
 "Remove Models" = "移除模型";
 "Apple's records don't say how much they take. Purge measures what the disk gives back." = "Apple 的记录没有说明它们占用多少空间。Purge 会测量磁盘实际腾出的空间。";
@@ -999,3 +999,15 @@
 "Open Xcode once to accept its license, then try again." = "请先打开一次 Xcode 并接受其许可协议，然后重试。";
 "Apple's simulator service is out of date. Restart your Mac, then clean again." = "Apple 的模拟器服务版本过旧。请重新启动 Mac，然后再次清理。";
 "Apple's simulator tools aren't working on this Mac, so Purge can't remove simulators. Reinstalling Xcode fixes this." = "这台 Mac 上的 Apple 模拟器工具无法正常工作，因此 Purge 无法移除模拟器。重新安装 Xcode 即可解决。";
+
+/* Items deleted permanently instead of moved to the Trash (#170) */
+"Clean selected items?" = "要清理所选项目吗？";
+"Delete selected items permanently?" = "要永久删除所选项目吗？";
+"None of these go to the Trash. Once they're deleted, you can't put them back." = "这些项目都不会移到废纸篓。删除后将无法恢复。";
+"Purge moves most of these to Trash, where you can put them back. The ones under Deleted Permanently can't be put back." = "Purge 会将其中大部分项目移到废纸篓，你可以将它们恢复。“永久删除”下的项目无法恢复。";
+"Clean %lld Items" = "清理 %lld 项";
+"Delete %lld Permanently" = "永久删除 %lld 项";
+"Deleted permanently" = "永久删除";
+"Xcode deletes these itself. They skip the Trash, so you can't put them back." = "这些项目由 Xcode 直接删除，不会经过废纸篓，因此无法恢复。";
+"%lld deleted permanently" = "%lld 项已永久删除";
+"Deleted permanently, not moved to the Trash" = "永久删除，不会移到废纸篓";

@@ -42,8 +42,15 @@ final class CleanupHistoryStore: ObservableObject {
     }
 
     func append(id: UUID = UUID(), trigger: CleanupTrigger, report: DeletionReport) {
+        archive.append(Self.entry(id: id, trigger: trigger, report: report), maxEntries: maxEntries)
+        persist()
+    }
+
+    /// The entry a clean's report becomes. Each item keeps whether it went to the
+    /// Trash, so History never lists a simulator as moved there (#170).
+    static func entry(id: UUID, trigger: CleanupTrigger, report: DeletionReport) -> CleanupHistoryEntry {
         let items = report.deletedItems.map {
-            CleanupHistoryDeletedItemDTO(path: $0.path, sizeBytes: $0.sizeBytes)
+            CleanupHistoryDeletedItemDTO(path: $0.path, sizeBytes: $0.sizeBytes, movedToTrash: $0.movedToTrash)
         }
 
         let skipped = report.skippedItems.map {
@@ -53,7 +60,7 @@ final class CleanupHistoryStore: ObservableObject {
         // Reclaimed is recorded only when the volume actually moved. A clean that only
         // trashes files reclaims nothing until the trash is emptied, so this is
         // usually nil, and that is the honest answer.
-        let entry = CleanupHistoryEntry(
+        return CleanupHistoryEntry(
             id: id,
             date: report.timestamp,
             trigger: trigger,
@@ -62,8 +69,6 @@ final class CleanupHistoryStore: ObservableObject {
             deletedItems: items,
             skippedItems: skipped
         )
-        archive.append(entry, maxEntries: maxEntries)
-        persist()
     }
 
     /// A removal of the Apple Intelligence models (#133). Nothing went to the

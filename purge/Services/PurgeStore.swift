@@ -903,25 +903,33 @@ final class PurgeStore: ObservableObject {
     }
 
     /// The Not Sure alert. Those folders go to the Trash. A simulator or runtime
-    /// selected in the same cleanup is removed for good, so the alert says so.
+    /// selected in the same cleanup is deleted permanently, so the alert says so.
     var highRiskDeletionSecondConfirmMessage: String {
         let base = String(localized: "Purge doesn't know what these folders are for. They go to the Trash, so you can put them back, but check that nothing depends on them before you clean.")
         guard confirmationRemovesSimulators(highRiskDeletionStagingCandidates ?? []) else { return base }
-        return base + " " + String(localized: "iOS simulators and simulator runtimes in this cleanup are removed for good through simctl and can't be put back.")
+        return base + " " + String(localized: "iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back.")
     }
 
     /// The unsaved-git alert. The projects go to the Trash. Same simulator note.
     var uncommittedGitFrictionMessage: String {
         let base = String(localized: "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash, so you can put them back.")
         guard confirmationRemovesSimulators(stagedDeletionCandidates ?? []) else { return base }
-        return String(localized: "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are removed for good through simctl and can't be put back.")
+        return String(localized: "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back.")
     }
 
-    /// Same split `FileDeleter.deleteItems` uses: runtimes by path, devices by the
-    /// CoreSimulator device-folder shape.
-    private func confirmationRemovesSimulators(_ candidates: [DeletionCandidate]) -> Bool {
+    /// The ids of the picks `FileDeleter.deleteItems` deletes permanently instead of
+    /// moving to the Trash. Same split the engine uses: runtimes by path, devices by
+    /// the CoreSimulator device-folder shape. The confirm sheet lists these on their
+    /// own, so what it promises can't drift from what the engine does (#170).
+    func permanentlyDeletedCandidateIDs(in candidates: [DeletionCandidate]) -> Set<String> {
         let runtimePaths = Set(simulatorRuntimeIDsByPath().keys)
-        return candidates.contains { FileDeleter.removesDirectly($0.path, simulatorRuntimePaths: runtimePaths) }
+        return Set(candidates.lazy
+            .filter { FileDeleter.removesDirectly($0.path, simulatorRuntimePaths: runtimePaths) }
+            .map(\.id))
+    }
+
+    private func confirmationRemovesSimulators(_ candidates: [DeletionCandidate]) -> Bool {
+        !permanentlyDeletedCandidateIDs(in: candidates).isEmpty
     }
 
     private func beginManualDeletionPipeline(with picks: [DeletionCandidate]) {

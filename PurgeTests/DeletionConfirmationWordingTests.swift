@@ -3,14 +3,14 @@ import Testing
 @testable import Purge
 
 /// The Not Sure and unsaved-git alerts say the files go to the Trash and can be
-/// put back. That is only true when nothing in the cleanup is removed for good,
+/// put back. That is only true when nothing in the cleanup is deleted permanently,
 /// so a simulator or runtime in the selection must add the simctl sentence.
 /// Every test stops at the alert and cancels, so nothing reaches the engine.
 /// The paths do not exist on disk.
 @MainActor
 @Suite("Deletion confirmation wording")
 struct DeletionConfirmationWordingTests {
-    private static let simctlSentence = "removed for good through simctl"
+    private static let simctlSentence = "deleted permanently through simctl"
     private static let putBack = "so you can put them back"
 
     private let home = FileManager.default.homeDirectoryForCurrentUser

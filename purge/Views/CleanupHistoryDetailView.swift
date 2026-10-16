@@ -12,7 +12,20 @@ struct CleanupHistoryDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     summarySection
-                    movedToTrashSection
+                    if entry.kind == .appleIntelligenceModels {
+                        itemsSection(String(localized: "Released"), items: entry.deletedItems)
+                    } else {
+                        // Simulators and runtimes never reach the Trash, so they get
+                        // their own list instead of sitting under "Moved to Trash" (#170).
+                        let permanent = entry.permanentlyDeletedItems
+                        let trashed = entry.trashedItems
+                        if !permanent.isEmpty {
+                            itemsSection(String(localized: "Deleted permanently"), items: permanent)
+                        }
+                        if !trashed.isEmpty || permanent.isEmpty {
+                            itemsSection(String(localized: "Moved to Trash"), items: trashed)
+                        }
+                    }
                     if !entry.skippedItems.isEmpty {
                         skippedSection
                     }
@@ -53,12 +66,12 @@ struct CleanupHistoryDetailView: View {
         }
     }
 
-    private var movedToTrashSection: some View {
+    private func itemsSection(_ title: String, items: [CleanupHistoryDeletedItemDTO]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionLabel(entry.kind == .appleIntelligenceModels ? String(localized: "Released") : String(localized: "Moved to Trash"))
+            sectionLabel(title)
 
             historySectionCard {
-                ForEach(Array(entry.deletedItems.enumerated()), id: \.element.id) { index, item in
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
                         InsetCardDivider()
                     }

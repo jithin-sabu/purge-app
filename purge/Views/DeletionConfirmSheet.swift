@@ -2,6 +2,9 @@ import SwiftUI
 
 struct DeletionConfirmSheet: View {
     let candidates: [PurgeStore.DeletionCandidate]
+    /// Ids of the picks the engine deletes permanently instead of moving to the
+    /// Trash, from `PurgeStore.permanentlyDeletedCandidateIDs(in:)`.
+    let permanentIDs: Set<String>
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
@@ -9,18 +12,52 @@ struct DeletionConfirmSheet: View {
         candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
+    /// Simulators and runtimes. `simctl` deletes them, so they never reach the
+    /// Trash and are listed apart from everything that does (#170).
+    var permanentCandidates: [PurgeStore.DeletionCandidate] {
+        candidates.filter { permanentIDs.contains($0.id) }.sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    private var trashCandidates: [PurgeStore.DeletionCandidate] {
+        candidates.filter { !permanentIDs.contains($0.id) }
+    }
+
     private var unknownCandidates: [PurgeStore.DeletionCandidate] {
-        candidates.filter { $0.safetyInfo.level == .unknown }.sorted { $0.sizeBytes > $1.sizeBytes }
+        trashCandidates.filter { $0.safetyInfo.level == .unknown }.sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
     /// Safe + Check First only (shown as lower-risk additions in the elevated layout).
     private var benignCandidates: [PurgeStore.DeletionCandidate] {
-        candidates.filter { $0.safetyInfo.level == .safe || $0.safetyInfo.level == .medium }
+        trashCandidates.filter { $0.safetyInfo.level == .safe || $0.safetyInfo.level == .medium }
             .sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
     private var showsElevatedRiskLayout: Bool {
-        !unknownCandidates.isEmpty
+        candidates.contains { $0.safetyInfo.level == .unknown }
+    }
+
+    /// The standard layout's title, explanation and button follow where the picks
+    /// go: all to the Trash, some deleted permanently, or all deleted permanently.
+    var title: String {
+        if permanentCandidates.isEmpty { return String(localized: "Move selected items to Trash?") }
+        if trashCandidates.isEmpty { return String(localized: "Delete selected items permanently?") }
+        return String(localized: "Clean selected items?")
+    }
+
+    var message: String {
+        if permanentCandidates.isEmpty {
+            return String(localized: "Purge moves these to Trash. You can put anything back if you change your mind.")
+        }
+        if trashCandidates.isEmpty {
+            return String(localized: "None of these go to the Trash. Once they're deleted, you can't put them back.")
+        }
+        return String(localized: "Purge moves most of these to Trash, where you can put them back. The ones under Deleted Permanently can't be put back.")
+    }
+
+    var primaryButtonTitle: String {
+        if permanentCandidates.isEmpty { return String(localized: "Move \(candidates.count) to Trash") }
+        if trashCandidates.isEmpty { return String(localized: "Delete \(candidates.count) Permanently") }
+        return String(localized: "Clean \(candidates.count) Items")
     }
 
     /// Check First leads, so a pick the user may not have meant is the first thing read.
@@ -56,11 +93,11 @@ struct DeletionConfirmSheet: View {
     private var standardLayout: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
-                Text("Move selected items to Trash?")
+                Text(title)
                     .font(AppStyle.Typography.pageTitle)
                     .foregroundStyle(AppColors.textPrimary)
 
-                Text("Purge moves these to Trash. You can put anything back if you change your mind.")
+                Text(message)
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -68,6 +105,7 @@ struct DeletionConfirmSheet: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+                    permanentSection
                     ForEach(groupedBenign, id: \.0) { level, items in
                         sectionHeader(level.displayName)
                         if level == .medium {
@@ -82,7 +120,20 @@ struct DeletionConfirmSheet: View {
             }
             .frame(minHeight: 260)
 
-            footer(primaryTitle: String(localized: "Move \(candidates.count) to Trash"))
+            footer(primaryTitle: primaryButtonTitle)
+        }
+    }
+
+    /// Leads both layouts when present: the one part of the cleanup that can't be
+    /// put back. Each card keeps its own safety tag.
+    @ViewBuilder
+    private var permanentSection: some View {
+        if !permanentCandidates.isEmpty {
+            sectionHeader(String(localized: "Deleted permanently"))
+            warningNote(String(localized: "Xcode deletes these itself. They skip the Trash, so you can't put them back."))
+            ForEach(permanentCandidates) { item in
+                candidateCard(item)
+            }
         }
     }
 
@@ -104,6 +155,8 @@ struct DeletionConfirmSheet: View {
                             candidateCard(item, showsExplanation: true)
                         }
                     }
+
+                    permanentSection
 
                     if !benignCandidates.isEmpty {
                         sectionHeader(String(localized: "Also in this cleanup"))
@@ -141,14 +194,18 @@ struct DeletionConfirmSheet: View {
     // MARK: - Shared pieces
 
     private func checkFirstNote(count: Int) -> some View {
+        warningNote(count == 1
+            ? String(localized: "This one may hold something you'd miss. If you're not sure about it, cancel and untick it.")
+            : String(localized: "These may hold something you'd miss. If you're not sure about one, cancel and untick it."))
+    }
+
+    private func warningNote(_ text: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(AppColors.statusCheckText)
                 .accessibilityHidden(true)
-            Text(count == 1
-                ? "This one may hold something you'd miss. If you're not sure about it, cancel and untick it."
-                : "These may hold something you'd miss. If you're not sure about one, cancel and untick it.")
+            Text(text)
                 .font(AppStyle.Typography.metadata)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
