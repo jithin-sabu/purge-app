@@ -38,7 +38,9 @@ nonisolated final class OrphanLeftoverScanner {
             continuation.finish()
             return
         }
-        let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays()
+        let cutoff = OrphanLeftoverScanPolicy.staleCutoff(
+            staleDays: OrphanLeftoverScanPolicy.effectiveStaleDays()
+        )
 
         var candidates: [Candidate] = []
         var seen = Set<String>()
@@ -50,7 +52,7 @@ nonisolated final class OrphanLeftoverScanner {
             }
             guard let entries = try? fm.contentsOfDirectory(
                 at: root.url,
-                includingPropertiesForKeys: [.contentModificationDateKey],
+                includingPropertiesForKeys: nil,
                 options: [.skipsHiddenFiles]
             ) else { continue }
 
@@ -59,20 +61,14 @@ nonisolated final class OrphanLeftoverScanner {
                     continuation.finish()
                     return
                 }
-                let name = entry.lastPathComponent
-                guard let bundleID = OrphanLeftoverScanPolicy.candidateBundleID(
-                    entryName: name,
+                // Owner, orphaned, and untouched all the way down, in one
+                // tested decision.
+                guard let orphan = OrphanLeftoverScanPolicy.orphanCandidate(
+                    at: entry,
                     category: root.category,
-                    url: entry
+                    installed: installed,
+                    cutoff: cutoff
                 ) else { continue }
-                guard OrphanLeftoverScanPolicy.isOrphan(bundleID: bundleID, installed: installed) else {
-                    continue
-                }
-
-                let modified = FolderSizing.contentModificationDate(at: entry)
-                guard OrphanLeftoverScanPolicy.isStale(modifiedAt: modified, staleDays: staleDays) else {
-                    continue
-                }
 
                 // Defend in depth: only offer what the delete gate would accept.
                 // Orphan data lives outside the cache allowlist, so this is the
@@ -88,8 +84,8 @@ nonisolated final class OrphanLeftoverScanner {
                     Candidate(
                         url: entry,
                         category: root.category,
-                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: bundleID, url: entry),
-                        modified: modified
+                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: orphan.owner.displayName, url: entry),
+                        modified: orphan.lastModified
                     )
                 )
             }

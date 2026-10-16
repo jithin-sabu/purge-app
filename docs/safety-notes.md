@@ -11,6 +11,73 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-10-16: Leftovers offered an installed OrbStack's Docker data
+
+**Reported** by @vim-diesel ([#197](https://github.com/jithin-sabu/purge-app/issues/197)). **Fixed:** not yet released. **Affected:** v1.5.2 to v1.11.0.
+
+### What happened
+
+App Uninstaller → Leftovers listed
+`~/Library/Group Containers/HUAQ24HBR6.dev.orbstack`, 4.59 GB, as left behind
+by a removed app. OrbStack was installed, and the folder held its Docker
+containers and images.
+
+The scan took the part of a group container's name after the team id as the
+owning app's bundle id, and looked for an installed app with that id. That part
+is an app-group name, which the developer picks freely. OrbStack's app is
+`dev.kdrag0n.MacVirt`, so no installed app matched `dev.orbstack`, and the data
+looked orphaned.
+
+The age check did not catch it either. It read only the folder's own date,
+which changes only when something directly inside is added or removed.
+OrbStack writes deeper in, so the folder looked months old while in use.
+Telegram's group container read 181 days old on a Mac where Telegram is used
+every day.
+
+Checking a second Mac found another case. Podcasts, which comes with macOS,
+keeps its data in `243LU875E5.groups.com.apple.podcasts`, and the scan would
+have offered it, because only names starting with `com.apple.` counted as
+Apple's.
+
+### Who was affected
+
+Nobody reported a loss, and the reporter did not delete the folder. Leftovers
+are always Check First, never ticked by default, and never part of Clean Safe
+Items or a scheduled clean, so removing one took ticking it and confirming. It
+would have gone to the Trash. Anyone with an installed app whose app-group name
+differs from its bundle id was exposed once that folder's own date was more
+than 30 days old.
+
+### What changed
+
+Ownership now comes from the installed code, not from folder names. Purge
+reads the signing team and the app-group entitlements of every app in
+Applications and ~/Applications, the helpers, extensions and XPC services
+inside them, the apps that come with macOS, running apps, and the programs
+launchd starts. A group container is kept when installed code lists that
+group, or when anything installed is signed by the same team. If most
+signatures cannot be read, group containers are not judged at all. A group
+name with `com.apple.` anywhere in it is Apple's.
+
+A leftover now has to be untouched all the way down: the newest file inside
+it, not the folder's own date, must be older than the age setting. If the walk
+cannot read or date something, the folder counts as in use.
+
+### What would have caught it earlier
+
+Tests built from real apps whose data folder is not named after their bundle
+id. `leftoverOfInstalledCodeIsKept` in
+[`PurgeTests/OrphanLeftoverScanPolicyTests.swift`](../PurgeTests/OrphanLeftoverScanPolicyTests.swift)
+runs OrbStack, Microsoft's shared groups, Telegram's share extension, Podcasts,
+Sparkle's downloader and others through the scan's rules, and
+`leftoversOfRemovedAppsAreStillFound` checks that real leftovers are still
+listed. `deepWriteMakesAnOldFolderRecent` covers the age check, and
+[`PurgeTests/InstalledCodeEvidenceTests.swift`](../PurgeTests/InstalledCodeEvidenceTests.swift)
+checks each source and that real signatures are read.
+
+It is the same lesson as the 2026-10-01 project entry: a folder's own date is
+not when it was last used.
+
 ## 2026-10-15: Projects in use were Safe to Clean under "Consider stale after"
 
 **Found internally**, no report. **Fixed:** [#194](https://github.com/jithin-sabu/purge-app/pull/194), shipped in v1.11.0 (2026-10-15). **Affected:** v1.1.1 to v1.10.0, for anyone who never changed the setting.
