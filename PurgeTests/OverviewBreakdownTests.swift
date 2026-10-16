@@ -210,7 +210,9 @@ struct OverviewPresentationTests {
 
     @MainActor
     @Test func aCategoryQueuedForARescanShowsNoFigure() {
-        let store = PurgeStore()
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let store = fake.makeStore()
         store.scanQueue.enqueue([.cachesAndDevTools])
         #expect(store.overviewPhase(for: .appCaches) == .waiting)
         #expect(!store.isShowingRecordedFigure(for: .appCaches))
@@ -220,7 +222,9 @@ struct OverviewPresentationTests {
 
     @MainActor
     @Test func devToolsWaitsWhileAppCachesScans() {
-        let store = PurgeStore()
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let store = fake.makeStore()
         store.markCacheScanStarting()
         #expect(store.overviewPhase(for: .appCaches) == .scanning)
         #expect(store.overviewPhase(for: .devTools) == .waiting)

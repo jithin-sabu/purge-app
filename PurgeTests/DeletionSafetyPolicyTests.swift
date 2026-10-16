@@ -18,6 +18,24 @@ private enum TestPaths {
     static func absoluteURL(_ path: String) -> URL {
         URL(fileURLWithPath: path)
     }
+
+    /// An empty temporary folder that stands in for the home folder, so a test can
+    /// lay out what discovery reads without reading the user's own Library (#171).
+    static func makeFakeHome() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-home-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    /// The same place as `url`, inside `fakeHome`, but in the real home. The cache
+    /// allowlist knows only the real home, so the guard is asked about this path.
+    static func inRealHome(_ url: URL, from fakeHome: URL) throws -> URL {
+        let root = fakeHome.standardizedFileURL.path + "/"
+        let path = url.standardizedFileURL.path
+        try #require(path.hasPrefix(root))
+        return home.appendingPathComponent(String(path.dropFirst(root.count)))
+    }
 }
 
 // MARK: - Group 1: Never-delete paths
@@ -448,18 +466,31 @@ struct AdobeMediaCacheTests {
     }
 
     @Test
-    func discoveryTargetsOnlyDefaultAppSupportLocations() {
-        let appSupportAdobe = TestPaths.homeURL(
-            "Library", "Application Support", "Adobe", "Common"
-        ).standardizedFileURL.path
+    func discoveryTargetsOnlyDefaultAppSupportLocations() throws {
         for entry in CacheDiscoveryPaths.adobeMediaCacheEntries {
             #expect(entry.relative.hasPrefix("Adobe/Common/"), "unexpected root: \(entry.relative)")
         }
-        // Every URL the discovery would surface must sit under the default location
-        // and pass the results-boundary guard.
-        for surfaced in CacheDiscoveryPaths.adobeMediaCacheURLs(home: TestPaths.home) {
-            #expect(surfaced.url.path.hasPrefix(appSupportAdobe + "/"))
-            #expect(DeletionSafetyPolicy.isOfferedForCleanup(surfaced.url))
+        let fakeHome = try TestPaths.makeFakeHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let common = fakeHome.appendingPathComponent("Library/Application Support/Adobe/Common", isDirectory: true)
+        for name in ["Media Cache Files", "Media Cache", "Media Cache Extras"] {
+            try FileManager.default.createDirectory(
+                at: common.appendingPathComponent(name, isDirectory: true), withIntermediateDirectories: true
+            )
+        }
+        // A media cache parked next to a project is not a default location.
+        try FileManager.default.createDirectory(
+            at: fakeHome.appendingPathComponent("Documents/MyEdit/Adobe/Common/Media Cache Files", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        // Discovery surfaces the two default locations and nothing else, and each
+        // passes the results-boundary guard.
+        let surfaced = CacheDiscoveryPaths.adobeMediaCacheURLs(home: fakeHome)
+        #expect(Set(surfaced.map(\.url.lastPathComponent)) == ["Media Cache Files", "Media Cache"])
+        for item in surfaced {
+            #expect(item.url.standardizedFileURL.path.hasPrefix(common.standardizedFileURL.path + "/"))
+            #expect(DeletionSafetyPolicy.isOfferedForCleanup(try TestPaths.inRealHome(item.url, from: fakeHome)))
         }
     }
 }
@@ -544,13 +575,32 @@ struct TelegramMediaCacheTests {
     }
 
     @Test
-    func discoverySurfacesOnlyPostboxMediaThatPassesTheGuard() {
-        // Whatever discovery surfaces on this machine (possibly nothing) must
-        // terminate at `postbox/media` and pass the results-boundary guard.
-        for surfaced in CacheDiscoveryPaths.telegramMediaCacheURLs(home: TestPaths.home) {
-            #expect(surfaced.url.path.hasSuffix("/postbox/media"))
-            #expect(surfaced.key == "Telegram Media Cache")
-            #expect(DeletionSafetyPolicy.isOfferedForCleanup(surfaced.url))
+    func discoverySurfacesOnlyPostboxMediaThatPassesTheGuard() throws {
+        // A Telegram layout in a temporary home, so the test never opens the
+        // user's real container.
+        let fakeHome = try TestPaths.makeFakeHome()
+        defer { try? FileManager.default.removeItem(at: fakeHome) }
+        let container = fakeHome.appendingPathComponent(Self.container.joined(separator: "/"), isDirectory: true)
+        for relative in [
+            "stable/account-1/postbox/media",
+            "stable/account-1/postbox/db",
+            "account-2/postbox/media",
+            "stable/account-3/postbox",
+            "stable/notes/postbox/media",
+            "stable/nested/account-4/postbox/media",
+        ] {
+            try FileManager.default.createDirectory(
+                at: container.appendingPathComponent(relative, isDirectory: true), withIntermediateDirectories: true
+            )
+        }
+
+        let surfaced = CacheDiscoveryPaths.telegramMediaCacheURLs(home: fakeHome)
+        let root = container.standardizedFileURL.path + "/"
+        #expect(Set(surfaced.map { String($0.url.standardizedFileURL.path.dropFirst(root.count)) })
+            == ["stable/account-1/postbox/media", "account-2/postbox/media"])
+        for item in surfaced {
+            #expect(item.key == "Telegram Media Cache")
+            #expect(DeletionSafetyPolicy.isOfferedForCleanup(try TestPaths.inRealHome(item.url, from: fakeHome)))
         }
     }
 

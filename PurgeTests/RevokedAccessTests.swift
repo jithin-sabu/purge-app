@@ -12,25 +12,16 @@ struct RevokedAccessTests {
     /// and then be skipped by the clean.
     @Test
     func revokingAccessDropsRowsInLockedPlaces() {
-        // Pruning persists the new total when a scan has completed before. Put the
-        // real value back so the test leaves this Mac's defaults as it found them.
-        let totalKey = "lastScanSafeRecoverableBytes"
-        let savedTotal = UserDefaults.standard.object(forKey: totalKey)
-        defer {
-            if let savedTotal {
-                UserDefaults.standard.set(savedTotal, forKey: totalKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: totalKey)
-            }
-        }
-
         // Paths that do not exist: the check reads links only, and stops at the
         // Documents root without touching it.
         let unique = "purge-test-\(UUID().uuidString)"
         let locked = artifact(at: home.appendingPathComponent("Documents/\(unique)/node_modules"))
         let open = artifact(at: home.appendingPathComponent("\(unique)/node_modules"))
 
-        let store = PurgeStore()
+        // Pruning saves the new total, so the store gets throwaway defaults.
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let store = fake.makeStore()
         store.hasFullDiskAccess = true
         store.projectGroups = [group(for: locked), group(for: open)]
         store.scanSelection.artifactIDs = [locked.id, open.id]
@@ -61,7 +52,9 @@ struct RevokedAccessTests {
         let linked = artifact(at: folder.appendingPathComponent("client/node_modules"))
         let open = artifact(at: folder.appendingPathComponent("other/node_modules"))
 
-        let store = PurgeStore()
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let store = fake.makeStore()
         store.hasFullDiskAccess = false
         store.projectGroups = [group(for: linked), group(for: open)]
 
