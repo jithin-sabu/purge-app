@@ -356,7 +356,7 @@ private struct HomeScopedFixture {
 
     init(files: [String] = [], folders: [String] = []) throws {
         root = Self.container.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Self.makeRoot(root)
         for file in files {
             let url = root.appendingPathComponent(file)
             try FileManager.default.createDirectory(
@@ -374,12 +374,25 @@ private struct HomeScopedFixture {
 
     func url(_ relative: String) -> URL { root.appendingPathComponent(relative, isDirectory: true) }
 
+    /// Another suite's `cleanUp` can remove the empty container between the
+    /// container being made and `root` being made inside it, so that is tried again.
+    private static func makeRoot(_ root: URL) throws {
+        for attempt in 1...5 {
+            do {
+                try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                return
+            } catch where attempt < 5 {
+                continue
+            }
+        }
+    }
+
     func cleanUp() {
         try? FileManager.default.removeItem(at: root)
-        // Tests using this fixture run in parallel and share the container, so it can
-        // only be removed when nothing is left in it — never recursively.
-        let remaining = (try? FileManager.default.contentsOfDirectory(at: Self.container, includingPropertiesForKeys: nil)) ?? []
-        if remaining.isEmpty { try? FileManager.default.removeItem(at: Self.container) }
+        // Shared with other suites running in parallel, so only removed when empty.
+        // rmdir checks and removes in one step. Listing it first and then removing
+        // it whole could take a fixture another suite made between the two (#171).
+        rmdir(Self.container.path)
     }
 }
 

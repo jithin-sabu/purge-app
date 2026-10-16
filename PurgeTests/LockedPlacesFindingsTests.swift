@@ -59,10 +59,10 @@ struct LockedPlacesFindingsTests {
 
     @Test
     func grantCountsOnceAndOnlyAfterRecordedDenial() {
-        let suite = ThrowawayDefaults()
-        defer { suite.remove() }
-        let defaults = suite.defaults
-        let store = PurgeStore()
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let defaults = fake.defaults
+        let store = fake.makeStore()
 
         // First launch ever: nothing recorded, so no grant to announce.
         store.hasFullDiskAccess = false
@@ -76,10 +76,10 @@ struct LockedPlacesFindingsTests {
 
     @Test
     func installThatAlwaysHadAccessNeverAnnouncesAGrant() {
-        let suite = ThrowawayDefaults()
-        defer { suite.remove() }
-        let defaults = suite.defaults
-        let store = PurgeStore()
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let defaults = fake.defaults
+        let store = fake.makeStore()
 
         store.hasFullDiskAccess = true
         #expect(!store.consumeFullDiskAccessGrant(userDefaults: defaults))

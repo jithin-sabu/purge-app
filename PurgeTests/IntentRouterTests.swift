@@ -277,9 +277,9 @@ struct IntentRouterTests {
 
     @Test("Before onboarding is done uninstall only opens the window")
     func uninstallBeforeOnboarding() async {
-        let suite = ThrowawayDefaults()
-        defer { suite.remove() }
-        let store = PurgeStore(defaults: suite.defaults)
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let store = fake.makeStore()
         let reveals = RevealCounter()
         var reviewed = false
         let router = IntentRouter(
