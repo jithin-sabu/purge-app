@@ -21,4 +21,17 @@ struct DockerSafetyTierTests {
         let info = DevScanner.automaticSafetyInfo(forDevToolLabel: "Docker Desktop", primaryPath: nil)
         #expect(info.level == .medium)
     }
+
+    /// Cleaning moves the container folder to the Trash. The prune command is
+    /// something the user runs, and it is permanent, so the explanation has to
+    /// say both.
+    @Test
+    func dockerExplanationSaysTheFolderGoesToTheTrash() {
+        let record = ExplanationDatabase.matchBundledDatabase(folderName: "docker")
+        #expect(record?.displayName == "Docker Desktop")
+        let explanation = record?.explanation ?? ""
+        #expect(explanation.contains("moves the whole folder to the Trash"))
+        #expect(explanation.contains("docker --context desktop-linux system prune"))
+        #expect(explanation.contains("Purge does not run it"))
+    }
 }

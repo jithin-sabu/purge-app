@@ -309,8 +309,8 @@
 "Temporary data for in-app purchases and App Store transactions. Nothing is lost, but apps may ask you to restore purchases or sign in again." = "应用内购买与 App Store 交易的临时数据。不会丢失内容，但应用可能要求恢复购买或重新登录。";
 
 /* docker */
-"Docker Containers" = "Docker 容器";
-"This is Docker Desktop's virtual disk. It holds every image, container, and volume you have. Images can be pulled again, but volumes often hold database data that exists nowhere else. To free space and keep your volumes, run docker --context desktop-linux system prune while Docker Desktop is running. Quit Docker Desktop before deleting this folder." = "这是 Docker Desktop 的虚拟磁盘，保存你的所有镜像、容器和卷。镜像可再次拉取，但卷通常包含没有其他副本的数据库数据。若想释放空间并保留卷，请在 Docker Desktop 运行时执行 docker --context desktop-linux system prune。删除此文件夹前，请先退出 Docker Desktop。";
+"Docker Desktop" = "Docker Desktop";
+"This is Docker Desktop's data folder at ~/Library/Containers/com.docker.docker. Almost all of it is Docker.raw, the virtual disk that holds every image, container, and volume. Images can be pulled again, but a volume often holds the only copy of a database. Cleaning moves the whole folder to the Trash. Quit Docker Desktop first, or it loses the disk while it is still running. To free space and keep the disk, run docker --context desktop-linux system prune while Docker Desktop is running. That command permanently deletes stopped containers, unused networks, dangling images, and unused build cache. It leaves volumes in place. Purge does not run it." = "这是 Docker Desktop 的数据文件夹 ~/Library/Containers/com.docker.docker。其中绝大部分是 Docker.raw，也就是存放所有镜像、容器和卷的虚拟磁盘。镜像可以重新拉取，但卷里常常是数据库的唯一副本。清理时，整个文件夹会移到废纸篓。请先退出 Docker Desktop，否则它在运行时会丢掉这块磁盘。若想腾出空间并保留这块磁盘，请在 Docker Desktop 运行时执行 docker --context desktop-linux system prune。该命令会永久删除已停止的容器、未使用的网络、悬空镜像和未使用的构建缓存，卷会留下。Purge 不会替你执行这条命令。";
 
 /* raycast */
 "Raycast Launcher" = "Raycast 启动器";

@@ -1062,9 +1062,9 @@
   },
   {
     "key": "docker",
-    "display_name": "Docker Containers",
+    "display_name": "Docker Desktop",
     "tag": "medium",
-    "explanation": "This is Docker Desktop's virtual disk. It holds every image, container, and volume you have. Images can be pulled again, but volumes often hold database data that exists nowhere else. To free space and keep your volumes, run docker --context desktop-linux system prune while Docker Desktop is running. Quit Docker Desktop before deleting this folder.",
+    "explanation": "This is Docker Desktop's data folder at ~/Library/Containers/com.docker.docker. Almost all of it is Docker.raw, the virtual disk that holds every image, container, and volume. Images can be pulled again, but a volume often holds the only copy of a database. Cleaning moves the whole folder to the Trash. Quit Docker Desktop first, or it loses the disk while it is still running. To free space and keep the disk, run docker --context desktop-linux system prune while Docker Desktop is running. That command permanently deletes stopped containers, unused networks, dangling images, and unused build cache. It leaves volumes in place. Purge does not run it.",
     "bundle_ids": [
       "com.docker.docker"
     ],

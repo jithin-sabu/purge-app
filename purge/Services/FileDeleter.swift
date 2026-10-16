@@ -618,6 +618,14 @@ nonisolated final class FileDeleter: Sendable {
         failedItems = stillFailed
     }
 
+    /// True when `deleteItems` removes this URL for good instead of moving it to the
+    /// Trash: a simulator runtime whose path is in `simulatorRuntimePaths`, or a
+    /// simulator device folder. Confirmations use the same rule as the engine.
+    static func removesDirectly(_ url: URL, simulatorRuntimePaths: Set<String>) -> Bool {
+        if simulatorRuntimePaths.contains(url.standardizedFileURL.path) { return true }
+        return coreSimulatorDeviceUDID(from: url) != nil
+    }
+
     /// Returns the simulator UDID when `url` is exactly `…/CoreSimulator/Devices/{UUID}`.
     private static func coreSimulatorDeviceUDID(from url: URL) -> String? {
         let std = url.standardizedFileURL

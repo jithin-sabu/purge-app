@@ -29,9 +29,10 @@ a match, a 👍 or a comment with your details is more useful than a new issue.
 
 Open a [feature request](../../issues/new?template=feature_request.yml) and
 describe the problem you're trying to solve, not just the solution. Purge is
-intentionally scoped — trash-by-default, allowlist-based cleanup, no
-destructive shortcuts — so features that fit that model are more likely to
-land.
+intentionally scoped: files go to the Trash by default, Purge never empties
+the Trash, and cleanup is allowlist-based. Simulators, simulator runtimes,
+Time Machine local snapshots, and the Apple Intelligence models are removed
+for good. Features that fit that model are more likely to land.
 
 ## Contributing code
 

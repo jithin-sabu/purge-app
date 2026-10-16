@@ -11,6 +11,16 @@ struct SimulatorDeviceRemovalTests {
     private let udid = "0C6F3F7E-6B0E-4E59-9E57-5D1C8F1A2B3C"
     private let folder = URL(fileURLWithPath: "/nonexistent/CoreSimulator/Devices/0C6F3F7E-6B0E-4E59-9E57-5D1C8F1A2B3C")
 
+    @Test
+    func deviceFolderAndRuntimePathAreRemovedDirectly() {
+        #expect(FileDeleter.removesDirectly(folder, simulatorRuntimePaths: []))
+        let cache = URL(fileURLWithPath: "/Users/me/Library/Caches/com.example")
+        #expect(FileDeleter.removesDirectly(cache, simulatorRuntimePaths: []) == false)
+        let runtime = URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS_22C150")
+        #expect(FileDeleter.removesDirectly(runtime, simulatorRuntimePaths: [runtime.standardizedFileURL.path]))
+        #expect(FileDeleter.removesDirectly(runtime, simulatorRuntimePaths: []) == false)
+    }
+
     static let licenseText = """
         You have not agreed to the Xcode license agreements. You must agree to both license agreements below in order to use Xcode.
         """
