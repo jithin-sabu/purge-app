@@ -12,11 +12,12 @@ enum AppUninstallScanPolicy {
     /// Folders the picker enumerates. `/System/Applications` and
     /// `/System/Library` are deliberately absent, so Apple's built-in apps are
     /// never listed, never matched, and never deletable.
-    nonisolated static func installedAppRoots() -> [URL] {
+    nonisolated static func installedAppRoots(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [URL] {
         [
             URL(fileURLWithPath: "/Applications", isDirectory: true),
-            FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Applications", isDirectory: true)
+            home.appendingPathComponent("Applications", isDirectory: true)
         ]
     }
 
@@ -85,7 +86,13 @@ enum AppUninstallScanPolicy {
     /// chosen app, and this refuses anything that is not either a top-level entry
     /// inside a known leftover root or an `.app` bundle inside an app root. A bug
     /// in matching can therefore never trash a path outside those bounds.
-    nonisolated static func isEligibleForUninstallDeletion(_ url: URL) -> Bool {
+    ///
+    /// `home` is the real home folder everywhere but the tests, which hand in a
+    /// temporary one so they never write to the user's Library (#171).
+    nonisolated static func isEligibleForUninstallDeletion(
+        _ url: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Bool {
         let std = url.standardizedFileURL
         let path = std.path
 
@@ -97,13 +104,12 @@ enum AppUninstallScanPolicy {
         // A path through another bundle or package, a symlink, or a hidden
         // folder stays out, so the gate never reaches bundle internals.
         if std.pathExtension == "app" {
-            let appRoots = installedAppRoots().map { $0.standardizedFileURL.path }
+            let appRoots = installedAppRoots(home: home).map { $0.standardizedFileURL.path }
             return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil
         }
 
         // A leftover: must live strictly inside one of the leftover roots, and
         // must not be one of the roots themselves.
-        let home = FileManager.default.homeDirectoryForCurrentUser
         for root in leftoverSearchRoots(home: home) {
             let rootPath = root.url.standardizedFileURL.path
             if path == rootPath { return false }
