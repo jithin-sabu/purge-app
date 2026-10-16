@@ -32,6 +32,7 @@ struct ScheduledCleaningScheduleTests {
         let prefs: ScheduledCleaningPreferenceStore
         let defaults: UserDefaults
         let clean: FakeScheduledClean
+        let review: FakeReview
     }
 
     private let suite = ThrowawayDefaults()
@@ -44,13 +45,15 @@ struct ScheduledCleaningScheduleTests {
         prefs.isEnabled = enabled
 
         let clean = FakeScheduledClean()
+        let review = FakeReview()
         let registrar = ScheduledCleaningRegistrar(
             prefs: prefs,
             userDefaults: defaults,
             performClean: { clean.run() },
-            rearm: {}
+            rearm: {},
+            isReviewingOrCleaning: { review.isOpen }
         )
-        return Harness(registrar: registrar, prefs: prefs, defaults: defaults, clean: clean)
+        return Harness(registrar: registrar, prefs: prefs, defaults: defaults, clean: clean, review: review)
     }
 
     private func anchor(_ h: Harness) -> Date? {
@@ -213,6 +216,98 @@ struct ScheduledCleaningScheduleTests {
         for _ in 0..<20 { await Task.yield() }
 
         #expect(rearms.count == 2)
+    }
+
+    // 10. A due clean waits while a review or confirmation is open, and leaves the
+    //     anchor alone so the next sweep after it closes runs the clean (#173).
+    @Test("A due clean waits for an open review")
+    func dueCleanWaitsForOpenReview() async {
+        let h = makeHarness(enabledAt: enabledAt)
+
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
+        h.review.isOpen = true
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+
+        #expect(h.clean.callCount == 0)
+        #expect(anchor(h) == nil)
+        #expect(h.registrar.lastOutcome == nil)
+
+        let later = due.addingTimeInterval(60)
+        h.review.isOpen = false
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: later)
+
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) == later)
+    }
+}
+
+/// Stands in for the store's review state, so the registrar tests need no store.
+@MainActor
+final class FakeReview {
+    var isOpen = false
+}
+
+/// The store side of the review check: each review, confirmation, and running
+/// clean holds a due scheduled clean back, and an error alert alone does not.
+@Suite("Scheduled clean waits for reviews")
+@MainActor
+struct ScheduledCleanReviewHoldTests {
+    @Test("Every review, confirmation, and running clean holds the schedule")
+    func everyReviewHoldsTheSchedule() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        let app = InstalledApp(
+            name: "Gone",
+            bundleURL: URL(fileURLWithPath: "/Applications/Gone.app"),
+            bundleID: "com.example.gone",
+            bundleSizeBytes: 0,
+            isRunning: false
+        )
+        let states: [(String, (Bool) -> Void)] = [
+            ("deletion sheet", { store.showDeletionSheet = $0 }),
+            ("Not Sure sheet", { store.pendingUnknownDeletion = $0 ? .init(candidates: []) : nil }),
+            ("Large Files sheet", { store.showLargeFileDeletionSheet = $0 }),
+            ("duplicate cleanup", { store.pendingDuplicateCleanup = $0 ? DuplicateCleanupRequest(sets: []) : nil }),
+            ("uninstall review", { store.uninstallPlan = $0 ? UninstallPlan(id: "test", apps: []) : nil }),
+            ("uninstall plan being built", { store.isBuildingUninstallPlan = $0 }),
+            ("orphan review", { store.orphanCleanupPlan = $0 ? OrphanCleanupPlan(items: []) : nil }),
+            ("removed-app review", {
+                store.removedAppLeftoverPlan = $0
+                    ? RemovedAppLeftoverPlan(app: app, items: [], trashedBundleURL: nil)
+                    : nil
+            }),
+            ("missing lockfile alert", { store.showMissingLockfileFriction = $0 }),
+            ("unsaved git alert", { store.showUncommittedGitFriction = $0 }),
+            ("Not Sure second alert", { store.showHighRiskDeletionSecondConfirm = $0 }),
+            ("clean running", { store.isDeleting = $0 }),
+        ]
+
+        #expect(!store.isReviewingOrCleaning)
+        for (name, setOpen) in states {
+            setOpen(true)
+            #expect(store.isReviewingOrCleaning, "\(name) should hold the schedule")
+            setOpen(false)
+            #expect(!store.isReviewingOrCleaning, "\(name) should release the schedule")
+        }
+    }
+
+    // An error alert can stay set with no window open to dismiss it. Holding the
+    // schedule on it would stop scheduled cleans for good.
+    @Test("An error alert does not hold the schedule")
+    func errorAlertDoesNotHold() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+
+        store.errorMessage = "Test error"
+
+        #expect(!store.isReviewingOrCleaning)
+        #expect(store.isShowingReviewOrCleaning)
     }
 }
 

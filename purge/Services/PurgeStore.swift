@@ -695,6 +695,18 @@ final class PurgeStore: ObservableObject {
     /// window. `ContentView` can present only one of these at a time, so an
     /// unprompted review waits until this clears.
     var isShowingReviewOrCleaning: Bool {
+        isReviewingOrCleaning
+            || manualDeletionSession != nil
+            || interactiveSafeCleanupSession != nil
+            || onboardingCelebrationMovedToTrashBytes != nil
+            || errorMessage != nil
+    }
+
+    /// `true` while a review or a delete confirmation is open, or a clean is
+    /// running. A due scheduled clean waits until this clears (#173). Summaries
+    /// and error alerts are left out: they can stay set with no window open, and
+    /// the schedule would then never run.
+    var isReviewingOrCleaning: Bool {
         uninstallPlan != nil
             || orphanCleanupPlan != nil
             || removedAppLeftoverPlan != nil
@@ -707,10 +719,8 @@ final class PurgeStore: ObservableObject {
             || showUncommittedGitFriction
             || showHighRiskDeletionSecondConfirm
             || isDeleting
-            || manualDeletionSession != nil
-            || interactiveSafeCleanupSession != nil
-            || onboardingCelebrationMovedToTrashBytes != nil
-            || errorMessage != nil
+            || isManualCleaningInProgress
+            || isInteractiveSafeCleanupInProgress
     }
 
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
