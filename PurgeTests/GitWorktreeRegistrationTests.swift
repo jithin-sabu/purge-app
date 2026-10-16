@@ -171,14 +171,13 @@ struct GitWorktreeRegistrationTests {
     func trashStepRefusesARegisteredWorktreeAndAllowsAnOrphan() throws {
         let fm = FileManager.default
         let fixture = try makeFixture()
-        let group = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cursor/worktrees/purge-test-\(UUID().uuidString.prefix(8))", isDirectory: true)
-        let leaf = group.appendingPathComponent("abc", isDirectory: true)
+        let folders = RealHomeFolders()
         defer {
             fixture.remove()
-            try? fm.removeItem(at: group)
+            folders.remove()
         }
-        try fm.createDirectory(at: group, withIntermediateDirectories: true)
+        let group = try folders.make(".cursor/worktrees/purge-test-\(UUID().uuidString.prefix(8))")
+        let leaf = group.appendingPathComponent("abc", isDirectory: true)
         try git(in: fixture.repo, "worktree", "add", "-q", "--detach", leaf.path)
 
         #expect(!AgentWorktreeScanPolicy.passesImmediateTrashBoundary(leaf))

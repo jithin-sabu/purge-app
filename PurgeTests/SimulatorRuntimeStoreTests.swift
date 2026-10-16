@@ -97,6 +97,7 @@ struct SimulatorRuntimeStoreTests {
         let scans = FakeScans()
         defer { scans.cleanUp() }
         let row = runtime()
+        defer { ExcludedPathsStore.remove(path: row.locationURL) }
         scans.developerEvents = [.simulatorRuntimeFound(row)]
         let store = scans.makeStore()
         await store.scanDeveloper()
@@ -106,6 +107,5 @@ struct SimulatorRuntimeStoreTests {
 
         #expect(store.simulatorRuntimes.isEmpty)
         #expect(store.selectedCount == 0)
-        ExcludedPathsStore.remove(path: row.locationURL)
     }
 }

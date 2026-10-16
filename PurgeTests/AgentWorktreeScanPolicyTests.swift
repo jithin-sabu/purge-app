@@ -189,21 +189,14 @@ struct AgentWorktreeScanPolicyTests {
     @Test
     func toolFolderLeavesPassTheGateButTheirSettingsDoNot() throws {
         let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser
+        let folders = RealHomeFolders()
+        defer { folders.remove() }
+        let home = folders.home
         let token = "purge-test-\(UUID().uuidString.prefix(8))"
-        let roots = [".cursor/worktrees", ".codex/worktrees", ".t3/worktrees"].map {
-            home.appendingPathComponent($0, isDirectory: true)
-        }
-        // Tool folders this test had to make are removed again; real ones stay.
-        let missingBefore = roots.filter { !fm.fileExists(atPath: $0.path) }
-        let created = roots.map { $0.appendingPathComponent(token, isDirectory: true) }
-        defer {
-            created.forEach { try? fm.removeItem(at: $0) }
-            missingBefore.forEach { try? fm.removeItem(at: $0) }
-        }
-        for group in created {
+        for root in [".cursor/worktrees", ".codex/worktrees", ".t3/worktrees"] {
+            let group = try folders.make("\(root)/\(token)")
             let leaf = group.appendingPathComponent("leaf", isDirectory: true)
-            try fm.createDirectory(at: leaf, withIntermediateDirectories: true)
+            try fm.createDirectory(at: leaf, withIntermediateDirectories: false)
             try Data().write(to: leaf.appendingPathComponent(".git"))
             #expect(DeletionSafetyPolicy.evaluate(leaf) == .allow)
             #expect(DeletionSafetyPolicy.evaluate(leaf.appendingPathComponent("src")) != .allow)
@@ -249,17 +242,14 @@ struct AgentWorktreeScanPolicyTests {
     @Test
     func worktreeReachedThroughSymlinkIsRefused() throws {
         let fm = FileManager.default
+        let folders = RealHomeFolders()
+        defer { folders.remove() }
         let token = UUID().uuidString.prefix(8)
-        let home = fm.homeDirectoryForCurrentUser
-        let real = home.appendingPathComponent(".cursor/worktrees/purge-real-\(token)/abc", isDirectory: true)
-        try fm.createDirectory(at: real, withIntermediateDirectories: true)
+        let group = try folders.make(".cursor/worktrees/purge-real-\(token)")
+        let real = group.appendingPathComponent("abc", isDirectory: true)
+        try fm.createDirectory(at: real, withIntermediateDirectories: false)
         try Data().write(to: real.appendingPathComponent(".git"))
-        let link = home.appendingPathComponent(".cursor/worktrees/purge-link-\(token)", isDirectory: true)
-        try fm.createSymbolicLink(at: link, withDestinationURL: real.deletingLastPathComponent())
-        defer {
-            try? fm.removeItem(at: link)
-            try? fm.removeItem(at: real.deletingLastPathComponent())
-        }
+        let link = try folders.link(".cursor/worktrees/purge-link-\(token)", to: group)
 
         let viaLink = link.appendingPathComponent("abc")
         #expect(DeletionSafetyPolicy.evaluate(viaLink) != .allow)

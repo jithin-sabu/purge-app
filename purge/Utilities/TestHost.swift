@@ -8,4 +8,11 @@ nonisolated enum TestHost {
         let testHostKeys = ["XCTestConfigurationFilePath", "XCTestBundlePath", "XCTestSessionIdentifier"]
         return testHostKeys.contains { environment[$0] != nil }
     }
+
+    /// Where stores keep the files they would keep in Application Support while
+    /// the tests run: one temporary folder per test run, shared by every test in it.
+    static func supportDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("PurgeTestSupport-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+    }
 }
