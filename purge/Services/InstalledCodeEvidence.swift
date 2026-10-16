@@ -130,7 +130,9 @@ nonisolated struct InstalledCodeEvidence {
     }
 
     /// Adds one bundle's claims and, when asked, those of the code nested inside
-    /// it. Returns false only when the bundle's own signature could not be read.
+    /// it. Returns false when any of those signatures could not be read: an
+    /// extension's groups are missing then, so the app counts toward the
+    /// degraded-read threshold in `canJudgeAppGroups`.
     @discardableResult
     private mutating func addBundle(
         _ bundle: URL,
@@ -138,11 +140,12 @@ nonisolated struct InstalledCodeEvidence {
         visited: inout Set<String>
     ) -> Bool {
         guard visited.insert(bundle.standardizedFileURL.path).inserted else { return true }
-        let readable = addCode(at: bundle)
+        var readable = addCode(at: bundle)
         guard includingNestedCode else { return readable }
         for nested in Self.nestedCodeBundleURLs(in: bundle)
         where visited.insert(nested.standardizedFileURL.path).inserted {
-            addCode(at: nested)
+            let nestedReadable = addCode(at: nested)
+            readable = readable && nestedReadable
         }
         return readable
     }

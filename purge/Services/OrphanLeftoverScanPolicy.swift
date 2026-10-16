@@ -77,9 +77,10 @@ enum OrphanLeftoverScanPolicy {
 
         /// Bundle ids, team ids, and app groups claimed by installed code beyond
         /// the app ids above (see `InstalledCodeEvidence`). Only ever adds
-        /// claims. An index built without it cannot judge group containers, so
-        /// none is ever called orphaned.
-        var evidence = InstalledCodeEvidence()
+        /// claims. No default: without it, helper ids Launch Services cannot
+        /// resolve (Sparkle's `org.sparkle-project.Downloader`) read as orphans,
+        /// so every caller has to say what evidence it is judging with.
+        var evidence: InstalledCodeEvidence
 
         var appCount: Int { diskBundleIDs.count }
 
@@ -401,21 +402,39 @@ enum OrphanLeftoverScanPolicy {
 
     nonisolated static let minimumStaleDaysFloor = 30
 
-    /// Whether a leftover has gone untouched for at least `staleDays`. An
-    /// undeterminable modification date reads as *not* stale, so an entry Purge
-    /// cannot date is left alone rather than offered.
-    nonisolated static func isStale(
-        modifiedAt date: Date,
-        staleDays: Int,
-        now: Date = Date()
-    ) -> Bool {
-        guard staleDays > 0 else { return true }
-        guard date > .distantPast else { return false }
-        let seconds = now.timeIntervalSince(date)
-        guard seconds >= 0 else { return false }
-        let days = seconds / (24 * 60 * 60)
-        return days >= Double(staleDays)
+    /// The moment a leftover must have gone untouched since.
+    nonisolated static func staleCutoff(staleDays: Int, now: Date = Date()) -> Date {
+        now.addingTimeInterval(-Double(staleDays) * 24 * 60 * 60)
     }
+
+    // MARK: Decision
+
+    /// One entry the scan offers: who it belonged to, and when anything in it
+    /// last changed.
+    nonisolated struct OrphanCandidate: Equatable {
+        let owner: LeftoverOwner
+        let lastModified: Date
+    }
+
+    /// The scan's whole decision for one entry directly inside an orphan root,
+    /// short of the delete gate the scanner applies afterwards: its owner can
+    /// be named, no installed code claims it, and nothing in it changed since
+    /// `cutoff`. Kept in one function so a test fails if any part is dropped.
+    nonisolated static func orphanCandidate(
+        at entry: URL,
+        category: UninstallCategory,
+        installed: InstalledAppIndex,
+        cutoff: Date
+    ) -> OrphanCandidate? {
+        guard let owner = candidateOwner(entryName: entry.lastPathComponent, category: category, url: entry),
+              isOrphan(owner, installed: installed),
+              case .untouchedSince(let lastModified) = contentAge(of: entry, cutoff: cutoff) else {
+            return nil
+        }
+        return OrphanCandidate(owner: owner, lastModified: lastModified)
+    }
+
+    // MARK: Content age
 
     /// When anything inside a leftover was last changed, judged against `cutoff`.
     nonisolated enum ContentAge: Equatable {
@@ -428,12 +447,18 @@ enum OrphanLeftoverScanPolicy {
         case unknown
     }
 
-    /// Files whose date says nothing about use: Finder rewrites `.DS_Store` on a
-    /// visit, and macOS keeps the container metadata plist itself.
+    /// Files whose date says nothing about use: Finder writes `.DS_Store` when
+    /// someone opens the folder, and macOS keeps the container metadata plist
+    /// itself.
     nonisolated static let contentAgeIgnoredNames: Set<String> = [
         ".DS_Store",
         ".com.apple.containermanagerd.metadata.plist"
     ]
+
+    /// How much later a folder's date may be than an ignored file inside it and
+    /// still be explained by writing that file. A file written in place and then
+    /// moved into the folder leaves the folder a moment newer than the file.
+    nonisolated static let ignoredFileDateTolerance: TimeInterval = 2
 
     /// A guard against a runaway walk, not a product limit.
     nonisolated static let contentAgeEntryLimit = 500_000
@@ -442,10 +467,18 @@ enum OrphanLeftoverScanPolicy {
     /// folder's date only changes when an entry directly inside it is added,
     /// removed, or renamed, so an app writing deep inside (OrbStack's disk image,
     /// Telegram's database) leaves it months old while in daily use. Stops at the
-    /// first item changed at or after `cutoff`. Symbolic links are skipped: old
-    /// sandbox containers link to Desktop and Downloads, whose dates say nothing
-    /// about the app. Anything the walk cannot read or date makes the age
-    /// unknown, which the scan treats as in use.
+    /// first file changed at or after `cutoff`.
+    ///
+    /// Folder dates still count, because removing or renaming a file changes
+    /// nothing else. But writing an ignored file also sets its folder's date,
+    /// so opening a real leftover in Finder would hide it. A recent folder date
+    /// is therefore set aside until the walk has seen the folder's entries, and
+    /// dropped when an ignored file inside is at least as new.
+    ///
+    /// Symbolic links are skipped: old sandbox containers link to Desktop and
+    /// Downloads, whose dates say nothing about the app. Anything the walk
+    /// cannot read or date makes the age unknown, which the scan treats as in
+    /// use.
     nonisolated static func contentAge(
         of url: URL,
         cutoff: Date,
@@ -458,8 +491,22 @@ enum OrphanLeftoverScanPolicy {
         guard let top = try? url.resourceValues(forKeys: keys),
               let topDate = top.contentModificationDate,
               topDate > .distantPast else { return .unknown }
-        if topDate >= cutoff { return .recent }
-        guard top.isDirectory == true, top.isSymbolicLink != true else { return .untouchedSince(topDate) }
+        guard top.isDirectory == true, top.isSymbolicLink != true else {
+            return topDate >= cutoff ? .recent : .untouchedSince(topDate)
+        }
+
+        // Folders whose own date is recent and not yet explained, by resolved
+        // path: the enumerator can spell `/var` as `/private/var`.
+        var unexplainedFolders: [String: Date] = [:]
+        func folderKey(_ folder: URL) -> String {
+            folder.standardizedFileURL.resolvingSymlinksInPath().path
+        }
+        var newest = Date.distantPast
+        if topDate >= cutoff {
+            unexplainedFolders[folderKey(url)] = topDate
+        } else {
+            newest = topDate
+        }
 
         var failed = false
         guard let enumerator = FileManager.default.enumerator(
@@ -472,19 +519,37 @@ enum OrphanLeftoverScanPolicy {
             }
         ) else { return .unknown }
 
-        var newest = topDate
         var seen = 0
         for case let item as URL in enumerator {
             seen += 1
             if seen > entryLimit || Task.isCancelled { return .unknown }
-            if contentAgeIgnoredNames.contains(item.lastPathComponent) { continue }
             guard let values = try? item.resourceValues(forKeys: keys) else { return .unknown }
             if values.isSymbolicLink == true { continue }
             guard let date = values.contentModificationDate, date > .distantPast else { return .unknown }
+            if contentAgeIgnoredNames.contains(item.lastPathComponent) {
+                let parent = folderKey(item.deletingLastPathComponent())
+                if let folderDate = unexplainedFolders[parent],
+                   folderDate <= date.addingTimeInterval(ignoredFileDateTolerance) {
+                    unexplainedFolders[parent] = nil
+                }
+                continue
+            }
+            if values.isDirectory == true {
+                if date >= cutoff {
+                    unexplainedFolders[folderKey(item)] = date
+                } else if date > newest {
+                    newest = date
+                }
+                continue
+            }
             if date >= cutoff { return .recent }
             if date > newest { newest = date }
         }
-        return failed ? .unknown : .untouchedSince(newest)
+        if failed { return .unknown }
+        if !unexplainedFolders.isEmpty { return .recent }
+        // Only ignored files, so nothing says how old the folder really is.
+        guard newest > .distantPast else { return .unknown }
+        return .untouchedSince(newest)
     }
 
     // MARK: Presentation
