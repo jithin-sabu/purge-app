@@ -21,6 +21,9 @@ enum ExcludedPathsStore {
     nonisolated(unsafe) private static var loadedEntries: [String: ExcludedPathEntry]?
 
     nonisolated private static func supportURL() -> URL {
+        // Tests run inside a hosted copy of the app. An exclusion a test makes must
+        // never reach the user's own list, so they get a scratch folder.
+        if TestHost.isActive() { return TestHost.supportDirectory() }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return base.appendingPathComponent("io.getpurge.app", isDirectory: true)
     }

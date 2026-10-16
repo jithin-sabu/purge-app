@@ -3,6 +3,10 @@ import Foundation
 
 /// Scans that record what they were asked for. App Caches scans and the Full Disk
 /// Access steps can be held open until the test finishes them.
+///
+/// Exclusions and safety choices the store saves go to the test run's scratch
+/// folder (`TestHost.supportDirectory()`), which every test in the run shares, so
+/// use paths no other test uses.
 @MainActor
 final class FakeScans {
     var hasAccess = false

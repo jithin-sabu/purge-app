@@ -19,6 +19,9 @@ enum UserOverridesStore {
     nonisolated(unsafe) private static var loadedEntries: [String: UserOverrideEntry]?
 
     nonisolated private static func supportURL() -> URL {
+        // Tests run inside a hosted copy of the app. A safety level a test sets must
+        // never reach the user's own choices, so they get a scratch folder.
+        if TestHost.isActive() { return TestHost.supportDirectory() }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return base.appendingPathComponent("io.getpurge.app", isDirectory: true)
     }
