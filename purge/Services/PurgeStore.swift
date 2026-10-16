@@ -3414,16 +3414,7 @@ final class PurgeStore: ObservableObject {
         // checker must not keep `.full` from a scan made before access was revoked.
         await gitChecker.setAccess(currentScanAccess())
         if pinnedCandidates == nil {
-            // Waits out a queued scan and keeps the next one from starting, so these
-            // two never walk the disk beside it or cut a queued full scan short.
-            await withScanQueueHeld {
-                await scanDeveloper()
-                if cacheItems.isEmpty {
-                    await scanGeneral()
-                } else {
-                    await hydrateCacheSafetyMetadataParallel()
-                }
-            }
+            await rescanBeforeSafeCleanup()
         }
 
         let syncCandidates = pinnedCandidates ?? manualSafeCleanupCandidates()
@@ -3499,6 +3490,30 @@ final class PurgeStore: ObservableObject {
                 errorMessage = String(localized: "Unable to clean safe items. Please try again.")
             }
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+        }
+    }
+
+    /// The rescan a safe clean runs when no caller hands it a list, which is the
+    /// scheduled clean. App Caches go first. Each standalone scan starts a new
+    /// generation, and one started after Dev Tools stopped the project discovery
+    /// Dev Tools leaves running: Dev Tools then showed "scanning" until the next
+    /// rescan, and the clean left out every project (#173). The clean list is
+    /// built from those projects, so this also waits for discovery to settle.
+    func rescanBeforeSafeCleanup() async {
+        // Waits out a queued scan and keeps the next one from starting, so these
+        // two never walk the disk beside it or cut a queued full scan short.
+        await withScanQueueHeld {
+            let reusesCacheRows = !cacheItems.isEmpty
+            if !reusesCacheRows {
+                await scanGeneral()
+            }
+            await scanDeveloper()
+            // Rows already listed are not rescanned. Their git status is read again
+            // after the Dev Tools scan has cleared the git cache, as before.
+            if reusesCacheRows {
+                await hydrateCacheSafetyMetadataParallel()
+            }
+            await awaitProjectDiscovery()
         }
     }
 
