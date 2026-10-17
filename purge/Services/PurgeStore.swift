@@ -1975,7 +1975,9 @@ final class PurgeStore: ObservableObject {
             if installedAppsScanGeneration != generation || Task.isCancelled { return }
             var total: Int64 = 0
             var items: [OverviewSizedItem] = []
+            var namedFolders: [URL] = []
             for await item in uninstallScanner.leftoverStream(for: app) {
+                if item.matchReason == .appName { namedFolders.append(item.path) }
                 guard sizedPaths.insert(item.path.standardizedFileURL.path).inserted else { continue }
                 total += item.sizeBytes
                 items.append(OverviewSizedItem(path: item.path.path, bytes: item.sizeBytes))
@@ -1983,6 +1985,19 @@ final class PurgeStore: ObservableObject {
             guard installedAppsScanGeneration == generation else { return }
             appFootprintItemsByAppID[app.id] = items
             removableBytesByAppID[app.id] = total
+            recordLeftoverOwner(app, namedFolders: namedFolders)
+        }
+    }
+
+    /// Remembers which human-named folders this installed app matched, so the
+    /// Leftovers scan can still attribute them once the app is gone (#224). Only
+    /// name matches are worth recording: identifier-named folders attribute
+    /// themselves. The write is a small JSON file, done off the main actor.
+    private func recordLeftoverOwner(_ app: InstalledApp, namedFolders: [URL]) {
+        guard let bundleID = app.bundleID, !bundleID.isEmpty, !namedFolders.isEmpty else { return }
+        let name = app.name
+        Task.detached(priority: .utility) {
+            LeftoverOwnerLedgerStore.shared.record(bundleID: bundleID, displayName: name, folders: namedFolders)
         }
     }
 

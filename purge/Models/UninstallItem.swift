@@ -84,13 +84,18 @@ nonisolated enum MatchReason: Hashable {
     /// Folder or file name equals the app's display name, e.g.
     /// `Application Support/Rectangle`. Weaker, because vendors reuse names.
     case appName
+    /// A human-named folder the installed-apps scan saw this app match by name
+    /// while the app was installed, recorded in the owner ledger (#224). Only
+    /// the Leftovers scan produces it, once the app is gone.
+    case ownerLedger
 
     /// Bundle-id and group-id anchoring are strong enough to preselect; a name
-    /// match is offered but left for the user to confirm.
+    /// match is offered but left for the user to confirm. Leftovers of removed
+    /// apps are never preselected, whatever attributed them.
     var isHighConfidence: Bool {
         switch self {
         case .appBundle, .bundleID, .groupID: return true
-        case .appName: return false
+        case .appName, .ownerLedger: return false
         }
     }
 
@@ -100,6 +105,7 @@ nonisolated enum MatchReason: Hashable {
         case .bundleID: return String(localized: "Matched by bundle identifier")
         case .groupID: return String(localized: "Matched by app group")
         case .appName: return String(localized: "Matched by name, check this belongs to the app")
+        case .ownerLedger: return String(localized: "Seen in use by this app while it was installed")
         }
     }
 }
@@ -125,6 +131,11 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// The app-uninstaller flow does not sort by date, so it leaves this at the
     /// default.
     var lastModified: Date = .distantPast
+    /// The bundle id of the removed app a leftover belonged to, when the evidence
+    /// names one (#224). The confirm step checks that app is not running or back
+    /// on this Mac before anything moves. `nil` for the uninstaller's own items,
+    /// whose app is the one being removed, and for app groups.
+    var ownerBundleID: String? = nil
 
     /// Shared with an app that is staying installed, so it must not be trashed.
     var isKeptForOtherApp: Bool { keptForApp != nil }

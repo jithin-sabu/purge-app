@@ -68,6 +68,12 @@ enum OrphanLeftoverScanPolicy {
         /// roots. Used both for ownership and for the completeness check.
         let diskBundleIDs: Set<String>
 
+        /// Lowercased display names of those apps, as the uninstaller matches
+        /// them (`AppUninstallScanner.displayName`). A human-named folder whose
+        /// name is an installed app's name is that app's, whatever its id, so
+        /// the human-name paths (#224) never attribute it to a removed app.
+        var diskAppNames: Set<String> = []
+
         /// False when an app root existed on disk but could not be enumerated
         /// (a permissions failure, a volume going away mid-read). A degraded read
         /// undercounts installed apps, which would flag their leftovers as
@@ -149,6 +155,7 @@ enum OrphanLeftoverScanPolicy {
     nonisolated static func makeInstalledAppIndex() -> InstalledAppIndex {
         let fm = FileManager.default
         var ids = Set<String>()
+        var names = Set<String>()
         var appBundles: [URL] = []
         // A root that is absent (e.g. no `~/Applications`) is fine and reads as
         // empty. A root that exists but fails to enumerate means our view of what
@@ -166,13 +173,16 @@ enum OrphanLeftoverScanPolicy {
             }
             for url in bundles {
                 appBundles.append(url)
-                if let id = Bundle(url: url)?.bundleIdentifier, !id.isEmpty {
+                let bundle = Bundle(url: url)
+                if let id = bundle?.bundleIdentifier, !id.isEmpty {
                     ids.insert(id.lowercased())
                 }
+                names.insert(AppUninstallScanner.displayName(for: url, bundle: bundle).lowercased())
             }
         }
         return InstalledAppIndex(
             diskBundleIDs: ids,
+            diskAppNames: names,
             rootsReadable: rootsReadable,
             evidence: InstalledCodeEvidence.gather(userAppBundles: appBundles)
         )
@@ -382,6 +392,64 @@ enum OrphanLeftoverScanPolicy {
         return true
     }
 
+    // MARK: Human-named folders (#224)
+
+    /// The owner of a human-named Library folder according to the ledger: an app
+    /// the installed-apps scan saw match it by name, now gone. Biased to keep:
+    /// any recorded owner still installed keeps the folder, and so does an
+    /// installed app that carries the folder's name, whatever its id.
+    nonisolated static func ledgerOwner(
+        ofFolderAt url: URL,
+        home: URL,
+        ledger: LeftoverOwnerLedger,
+        installed: InstalledAppIndex
+    ) -> LeftoverOwnerLedger.Entry? {
+        guard !installed.diskAppNames.contains(url.lastPathComponent.lowercased()) else { return nil }
+        guard let relative = LeftoverOwnerLedger.relativePath(url, home: home) else { return nil }
+        let owners = ledger.owners(ofFolder: relative)
+        guard !owners.isEmpty,
+              owners.allSatisfy({ isOrphan(.bundleID($0.bundleID), installed: installed) }) else { return nil }
+        return owners.first
+    }
+
+    /// Who an entry belonged to and what says so. Identifier-named entries are
+    /// attributed by their name alone, as before #224. A human-named
+    /// `Application Support` folder needs the ledger to vouch for it.
+    nonisolated struct Attribution: Equatable {
+        let owner: LeftoverOwner
+        let evidence: MatchReason
+        /// The app's name when the evidence knows it. Otherwise the row falls
+        /// back to `friendlyName`.
+        let appName: String?
+    }
+
+    nonisolated static func attribution(
+        entryName name: String,
+        category: UninstallCategory,
+        url: URL,
+        home: URL,
+        installed: InstalledAppIndex,
+        ledger: LeftoverOwnerLedger
+    ) -> Attribution? {
+        if let owner = candidateOwner(entryName: name, category: category, url: url) {
+            return Attribution(owner: owner, evidence: .bundleID, appName: nil)
+        }
+        guard category == .applicationSupport, isHumanNamedFolder(name, url: url) else { return nil }
+        if let entry = ledgerOwner(ofFolderAt: url, home: home, ledger: ledger, installed: installed) {
+            return Attribution(owner: .bundleID(entry.bundleID), evidence: .ownerLedger, appName: entry.displayName)
+        }
+        return nil
+    }
+
+    /// A folder whose name is not an identifier: `Antigravity`, `Docker`.
+    nonisolated static func isHumanNamedFolder(_ name: String, url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard !name.isEmpty, !looksLikeBundleID(name), UUID(uuidString: name) == nil,
+              FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return false }
+        return true
+    }
+
     // MARK: Staleness
 
     /// The untouched window an orphan must exceed before it is offered, reusing
@@ -409,10 +477,13 @@ enum OrphanLeftoverScanPolicy {
 
     // MARK: Decision
 
-    /// One entry the scan offers: who it belonged to, and when anything in it
-    /// last changed.
+    /// One entry the scan offers: who it belonged to, what says so, and when
+    /// anything in it last changed.
     nonisolated struct OrphanCandidate: Equatable {
         let owner: LeftoverOwner
+        let evidence: MatchReason
+        /// Known from the evidence, or nil for the row to resolve.
+        let appName: String?
         let lastModified: Date
     }
 
@@ -420,18 +491,33 @@ enum OrphanLeftoverScanPolicy {
     /// short of the delete gate the scanner applies afterwards: its owner can
     /// be named, no installed code claims it, and nothing in it changed since
     /// `cutoff`. Kept in one function so a test fails if any part is dropped.
+    /// With no ledger, only identifier-named entries are attributed.
     nonisolated static func orphanCandidate(
         at entry: URL,
         category: UninstallCategory,
         installed: InstalledAppIndex,
-        cutoff: Date
+        cutoff: Date,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        ledger: LeftoverOwnerLedger = LeftoverOwnerLedger()
     ) -> OrphanCandidate? {
-        guard let owner = candidateOwner(entryName: entry.lastPathComponent, category: category, url: entry),
-              isOrphan(owner, installed: installed),
+        guard let attribution = attribution(
+            entryName: entry.lastPathComponent,
+            category: category,
+            url: entry,
+            home: home,
+            installed: installed,
+            ledger: ledger
+        ),
+              isOrphan(attribution.owner, installed: installed),
               case .untouchedSince(let lastModified) = contentAge(of: entry, cutoff: cutoff) else {
             return nil
         }
-        return OrphanCandidate(owner: owner, lastModified: lastModified)
+        return OrphanCandidate(
+            owner: attribution.owner,
+            evidence: attribution.evidence,
+            appName: attribution.appName,
+            lastModified: lastModified
+        )
     }
 
     // MARK: Content age
