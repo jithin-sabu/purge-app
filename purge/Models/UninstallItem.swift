@@ -14,6 +14,9 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
     case logs
     case launchAgents
     case launchDaemons
+    /// A hidden folder an app keeps in the home folder, named by the catalog in
+    /// `app-dot-folders.json` (#224). Only the Leftovers scan produces it.
+    case homeFolderData
     case other
 
     var id: String { rawValue }
@@ -30,6 +33,7 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         case .logs: return String(localized: "Logs")
         case .launchAgents: return String(localized: "Launch Agents")
         case .launchDaemons: return String(localized: "Launch Daemons")
+        case .homeFolderData: return String(localized: "Home Folder Data")
         case .other: return String(localized: "Other")
         }
     }
@@ -46,6 +50,7 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         case .logs: return "doc.text"
         case .launchAgents: return "bolt.badge.clock"
         case .launchDaemons: return "bolt.horizontal"
+        case .homeFolderData: return "house"
         case .other: return "doc"
         }
     }
@@ -56,15 +61,16 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         switch self {
         case .bundle: return 0
         case .applicationSupport: return 1
-        case .containers: return 2
-        case .groupContainers: return 3
-        case .caches: return 4
-        case .savedState: return 5
-        case .logs: return 6
-        case .preferences: return 7
-        case .launchAgents: return 8
-        case .launchDaemons: return 9
-        case .other: return 10
+        case .homeFolderData: return 2
+        case .containers: return 3
+        case .groupContainers: return 4
+        case .caches: return 5
+        case .savedState: return 6
+        case .logs: return 7
+        case .preferences: return 8
+        case .launchAgents: return 9
+        case .launchDaemons: return 10
+        case .other: return 11
         }
     }
 }
@@ -92,6 +98,9 @@ nonisolated enum MatchReason: Hashable {
     /// a bundle id found in Preferences or Caches, where no installed code owns
     /// that id: `Antigravity` and `com.google.antigravity.plist` (#224).
     case libraryCrossEvidence
+    /// A hidden home folder the catalog in `app-dot-folders.json` names for an
+    /// app that is no longer installed (#224).
+    case dotFolderCatalog
 
     /// Bundle-id and group-id anchoring are strong enough to preselect; a name
     /// match is offered but left for the user to confirm. Leftovers of removed
@@ -99,7 +108,7 @@ nonisolated enum MatchReason: Hashable {
     var isHighConfidence: Bool {
         switch self {
         case .appBundle, .bundleID, .groupID: return true
-        case .appName, .ownerLedger, .libraryCrossEvidence: return false
+        case .appName, .ownerLedger, .libraryCrossEvidence, .dotFolderCatalog: return false
         }
     }
 
@@ -111,6 +120,7 @@ nonisolated enum MatchReason: Hashable {
         case .appName: return String(localized: "Matched by name, check this belongs to the app")
         case .ownerLedger: return String(localized: "Seen in use by this app while it was installed")
         case .libraryCrossEvidence: return String(localized: "Named like this app's Preferences or Caches identifier")
+        case .dotFolderCatalog: return String(localized: "A hidden folder this app is known to keep")
         }
     }
 }

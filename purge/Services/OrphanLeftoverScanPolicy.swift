@@ -273,7 +273,9 @@ enum OrphanLeftoverScanPolicy {
             return httpStorageBundleID(from: name).map(LeftoverOwner.bundleID)
         case .savedState:
             return savedStateBundleID(from: name).map(LeftoverOwner.bundleID)
-        default:
+        case .bundle, .preferences, .logs, .launchAgents, .launchDaemons, .homeFolderData, .other:
+            // Not orphan roots. Home folder data comes from the catalog
+            // (`dotFolderCandidates`), never from an entry's name.
             return nil
         }
     }
@@ -518,6 +520,38 @@ enum OrphanLeftoverScanPolicy {
         return true
     }
 
+    // MARK: Dot folders (#224)
+
+    /// One hidden home folder of a removed app, from the catalog.
+    nonisolated struct DotFolderCandidate: Equatable {
+        let url: URL
+        let entry: AppDotFolderCatalog.Entry
+        let lastModified: Date
+    }
+
+    /// The catalog folders of apps that are gone, untouched since `cutoff`. A
+    /// candidate is always a folder the catalog names in full; a parent shared
+    /// with other tools, such as `~/.gemini`, is never one. A missing folder, a
+    /// file, or a symbolic link in its place is skipped.
+    nonisolated static func dotFolderCandidates(
+        catalog: AppDotFolderCatalog,
+        home: URL,
+        installed: InstalledAppIndex,
+        cutoff: Date
+    ) -> [DotFolderCandidate] {
+        var result: [DotFolderCandidate] = []
+        for entry in catalog.entries where isOrphan(.bundleID(entry.bundleID), installed: installed) {
+            for folder in entry.folders {
+                guard let url = catalog.url(for: folder, home: home) else { continue }
+                guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                      values.isDirectory == true, values.isSymbolicLink != true else { continue }
+                guard case .untouchedSince(let date) = contentAge(of: url, cutoff: cutoff) else { continue }
+                result.append(DotFolderCandidate(url: url, entry: entry, lastModified: date))
+            }
+        }
+        return result
+    }
+
     // MARK: Staleness
 
     /// The untouched window an orphan must exceed before it is offered, reusing
@@ -730,12 +764,15 @@ enum OrphanLeftoverScanPolicy {
         appName: String,
         category: UninstallCategory
     ) -> SafetyInfo {
-        SafetyInfo(
+        let explanation = category == .homeFolderData
+            ? String(localized: "This hidden folder in your home folder was written by \(appName), which is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app.")
+            : String(localized: "This \(category.displayName.lowercased()) folder belongs to an app that is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app.")
+        return SafetyInfo(
             level: .medium,
             // No "leftover from a removed app" suffix here: the section and the
             // review sheet already say so, so on the row it is only noise.
             headline: appName,
-            explanation: String(localized: "This \(category.displayName.lowercased()) folder belongs to an app that is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app."),
+            explanation: explanation,
             recoverySteps: String(localized: "Removed items go to the Trash, so you can put them back until you empty it. If you reinstall the app, let it recreate its data."),
             reinstallCommand: nil
         )

@@ -25,6 +25,10 @@ nonisolated final class OrphanLeftoverScanner {
     /// are gone; tests hand in one built on a throwaway folder.
     private let ledger: @Sendable (URL) -> LeftoverOwnerLedger
 
+    /// The hidden home folders apps write, by bundle id (#224). The shipped
+    /// catalog in the app; tests hand in a small one.
+    private let catalog: AppDotFolderCatalog
+
     init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         defaults: UserDefaults = .standard,
@@ -33,12 +37,14 @@ nonisolated final class OrphanLeftoverScanner {
         },
         ledger: @escaping @Sendable (URL) -> LeftoverOwnerLedger = { home in
             LeftoverOwnerLedgerStore.shared.current(home: home)
-        }
+        },
+        catalog: AppDotFolderCatalog = .shared
     ) {
         self.home = home
         self.defaults = defaults
         self.installedApps = installedApps
         self.ledger = ledger
+        self.catalog = catalog
     }
 
     /// Streams each orphaned leftover as an `UninstallItem`, sized before it is
@@ -46,7 +52,7 @@ nonisolated final class OrphanLeftoverScanner {
     /// finishes with nothing when the installed-app view looks incomplete (an
     /// unmounted volume, an unreadable app root), rather than flag everything.
     func orphanStream() -> AsyncStream<UninstallItem> {
-        AsyncStream { [home, defaults, installedApps, ledger] continuation in
+        AsyncStream { [home, defaults, installedApps, ledger, catalog] continuation in
             let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults)
             let task = Task.detached(priority: .userInitiated) {
                 Self.run(
@@ -54,6 +60,7 @@ nonisolated final class OrphanLeftoverScanner {
                     staleDays: staleDays,
                     installed: installedApps(),
                     ledger: ledger(home),
+                    catalog: catalog,
                     continuation: continuation
                 )
             }
@@ -75,6 +82,7 @@ nonisolated final class OrphanLeftoverScanner {
         staleDays: Int,
         installed: OrphanLeftoverScanPolicy.InstalledAppIndex,
         ledger: LeftoverOwnerLedger,
+        catalog: AppDotFolderCatalog,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
@@ -146,6 +154,31 @@ nonisolated final class OrphanLeftoverScanner {
                     )
                 )
             }
+        }
+
+        // Hidden home folders of removed apps, from the catalog alone (#224).
+        for dotFolder in OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: catalog, home: home, installed: installed, cutoff: cutoff
+        ) {
+            if Task.isCancelled {
+                continuation.finish()
+                return
+            }
+            guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+                dotFolder.url, home: home, dotFolderCatalog: catalog
+            ) else { continue }
+            guard !ExcludedPathsStore.isExcluded(dotFolder.url) else { continue }
+            guard seen.insert(dotFolder.url.standardizedFileURL.path).inserted else { continue }
+            candidates.append(
+                Candidate(
+                    url: dotFolder.url,
+                    category: .homeFolderData,
+                    appName: dotFolder.entry.displayName,
+                    evidence: .dotFolderCatalog,
+                    ownerBundleID: dotFolder.entry.bundleID,
+                    modified: dotFolder.lastModified
+                )
+            )
         }
 
         let sizes = FolderSizing.directorySizes(at: candidates.map(\.url))

@@ -342,6 +342,77 @@ struct OrphanLeftoverScanPolicyTests {
         #expect(clues.identifiers(endingIn: "Google").isEmpty)
     }
 
+    // MARK: Dot folders (#224)
+
+    private var testCatalog: AppDotFolderCatalog {
+        try! AppDotFolderCatalog.parse(Data("""
+        {"apps": [{"bundle_id": "com.google.antigravity", "display_name": "Antigravity",
+                   "folders": ["~/.gemini/antigravity", "~/.gemini/antigravity-ide", "~/.antigravity"]}]}
+        """.utf8))
+    }
+
+    /// A catalog folder is offered only when its app's bundle id is absent, and
+    /// `~/.gemini` as a whole is never a candidate, whatever sits inside it.
+    @Test
+    func catalogFolderIsOfferedOnlyWhenItsAppIsGone() throws {
+        let home = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let gemini = home.appendingPathComponent(".gemini", isDirectory: true)
+        let antigravity = try makeLeftover(named: "antigravity", in: gemini)
+        try Data("cli settings".utf8).write(to: gemini.appendingPathComponent("settings.json"))
+        let cutoff = OrphanLeftoverScanPolicy.staleCutoff(staleDays: 30)
+
+        let gone = OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.vendor.Other"]), cutoff: cutoff
+        )
+        #expect(gone.map { $0.url.standardizedFileURL.path } == [antigravity.standardizedFileURL.path])
+        #expect(gone.first?.entry.displayName == "Antigravity")
+        #expect(gone.first.map { abs($0.lastModified.timeIntervalSince(longAgo)) < 2 } == true)
+        #expect(!gone.contains { $0.url.standardizedFileURL.path == gemini.standardizedFileURL.path })
+
+        // Antigravity installed: nothing.
+        #expect(OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.google.antigravity"]), cutoff: cutoff
+        ).isEmpty)
+
+        // Written today: still in use, kept.
+        try Data("today".utf8).write(to: antigravity.appendingPathComponent("data/data.img"))
+        #expect(OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.vendor.Other"]), cutoff: cutoff
+        ).isEmpty)
+    }
+
+    /// A link where the catalog expects a folder, or a plain file, is skipped.
+    @Test
+    func catalogSkipsLinksFilesAndMissingFolders() throws {
+        let home = try makeTemporaryDirectory()
+        let elsewhere = try makeTemporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: home)
+            try? FileManager.default.removeItem(at: elsewhere)
+        }
+        _ = try makeLeftover(named: "data", in: elsewhere)
+        try FileManager.default.createSymbolicLink(
+            at: home.appendingPathComponent(".antigravity"),
+            withDestinationURL: elsewhere
+        )
+        try FileManager.default.createDirectory(at: home.appendingPathComponent(".gemini"), withIntermediateDirectories: true)
+        try Data().write(to: home.appendingPathComponent(".gemini/antigravity"))
+
+        #expect(OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.vendor.Other"]),
+            cutoff: OrphanLeftoverScanPolicy.staleCutoff(staleDays: 30)
+        ).isEmpty)
+    }
+
+    @Test
+    func homeFolderDataIsCheckFirstWithItsOwnExplanation() {
+        let info = OrphanLeftoverScanPolicy.safetyInfo(appName: "Antigravity", category: .homeFolderData)
+        #expect(info.level == .medium)
+        #expect(info.headline == "Antigravity")
+        #expect(info.explanation.contains("hidden folder"))
+    }
+
     // MARK: Staleness
 
     @Test

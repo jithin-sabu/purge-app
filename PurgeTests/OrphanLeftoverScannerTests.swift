@@ -39,13 +39,18 @@ struct OrphanLeftoverScannerTests {
         await scanItems(home: home, ledger: ledger).map { $0.path.standardizedFileURL.path }
     }
 
-    private func scanItems(home: URL, ledger: LeftoverOwnerLedger = LeftoverOwnerLedger()) async -> [UninstallItem] {
+    private func scanItems(
+        home: URL,
+        ledger: LeftoverOwnerLedger = LeftoverOwnerLedger(),
+        catalog: AppDotFolderCatalog = .empty
+    ) async -> [UninstallItem] {
         var items: [UninstallItem] = []
         let scanner = OrphanLeftoverScanner(
             home: home,
             defaults: settings.defaults,
             installedApps: { Self.installed },
-            ledger: { _ in ledger }
+            ledger: { _ in ledger },
+            catalog: catalog
         )
         for await item in scanner.orphanStream() {
             items.append(item)
@@ -123,6 +128,42 @@ struct OrphanLeftoverScannerTests {
         #expect(found?.ownerBundleID == "com.google.antigravity")
         #expect(found?.safetyInfo.headline == "Antigravity")
         #expect(found?.safetyInfo.level == .medium)
+    }
+
+    /// A catalog dot folder of a removed app is offered as home folder data, with
+    /// the catalog as its evidence. Its shared parent is not (#224).
+    @Test
+    func catalogDotFolderIsOfferedAsHomeFolderData() async throws {
+        let (home, bundleIDLeftover) = try homeWithOldLeftover()
+        defer { try? FileManager.default.removeItem(at: home) }
+        settings.defaults.set(DevToolsStalenessOption.threeMonths.rawValue, forKey: DevToolsStalenessOption.userDefaultsKey)
+        let fm = FileManager.default
+        let gemini = home.appendingPathComponent(".gemini", isDirectory: true)
+        let antigravity = gemini.appendingPathComponent("antigravity", isDirectory: true)
+        try fm.createDirectory(at: antigravity, withIntermediateDirectories: true)
+        let file = antigravity.appendingPathComponent("brain.db")
+        try Data([0x02]).write(to: file)
+        let longAgo = Date().addingTimeInterval(-200 * 86_400)
+        try fm.setAttributes([.modificationDate: longAgo], ofItemAtPath: file.path)
+        try fm.setAttributes([.modificationDate: longAgo], ofItemAtPath: antigravity.path)
+        try Data("cli".utf8).write(to: gemini.appendingPathComponent("settings.json"))
+        let catalog = try AppDotFolderCatalog.parse(Data("""
+        {"apps": [{"bundle_id": "com.google.antigravity", "display_name": "Antigravity",
+                   "folders": ["~/.gemini/antigravity", "~/.antigravity"]}]}
+        """.utf8))
+
+        #expect(await scan(home: home) == [bundleIDLeftover.standardizedFileURL.path])
+
+        let items = await scanItems(home: home, catalog: catalog)
+        #expect(items.map { $0.path.standardizedFileURL.path }.sorted()
+            == [bundleIDLeftover.standardizedFileURL.path, antigravity.standardizedFileURL.path].sorted())
+        let found = items.first { $0.path.standardizedFileURL.path == antigravity.standardizedFileURL.path }
+        #expect(found?.category == .homeFolderData)
+        #expect(found?.matchReason == .dotFolderCatalog)
+        #expect(found?.ownerBundleID == "com.google.antigravity")
+        #expect(found?.safetyInfo.headline == "Antigravity")
+        #expect(found?.safetyInfo.level == .medium)
+        #expect(found?.isSelected == false)
     }
 
     /// Two years is longer than the leftover has sat untouched, so the scan keeps it.

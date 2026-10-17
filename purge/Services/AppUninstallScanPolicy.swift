@@ -83,21 +83,34 @@ enum AppUninstallScanPolicy {
 
     /// The gate `FileDeleter` calls before trashing an uninstall target. This is a
     /// safety net, not the matcher: the scanner decides which paths belong to the
-    /// chosen app, and this refuses anything that is not either a top-level entry
-    /// inside a known leftover root or an `.app` bundle inside an app root. A bug
-    /// in matching can therefore never trash a path outside those bounds.
+    /// chosen app, and this refuses anything that is not a top-level entry inside
+    /// a known leftover root, an `.app` bundle inside an app root, or a hidden
+    /// home folder the dot-folder catalog names in full (#224). A bug in matching
+    /// can therefore never trash a path outside those bounds.
     ///
     /// `home` is the real home folder everywhere but the tests, which hand in a
     /// temporary one so they never write to the user's Library (#171).
     nonisolated static func isEligibleForUninstallDeletion(
         _ url: URL,
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        dotFolderCatalog: AppDotFolderCatalog = .shared
     ) -> Bool {
         let std = url.standardizedFileURL
         let path = std.path
 
         // Never through this gate: system locations.
         if path.hasPrefix("/System/") { return false }
+
+        // A leftover: must live strictly inside one of the leftover roots, and
+        // must not be one of the roots themselves. Checked before the bundle
+        // rule below, because a bundle id can end in `.app`
+        // (`Application Support/com.granola.app`), and such leftovers were
+        // refused as bundles outside the app roots.
+        for root in leftoverSearchRoots(home: home) {
+            let rootPath = root.url.standardizedFileURL.path
+            if path == rootPath { return false }
+            if path.hasPrefix(rootPath + "/") { return true }
+        }
 
         // An app bundle inside an app root, at any depth the picker walks
         // (`AppBundleReach`), so every bundle it offers can actually be trashed.
@@ -108,14 +121,9 @@ enum AppUninstallScanPolicy {
             return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil
         }
 
-        // A leftover: must live strictly inside one of the leftover roots, and
-        // must not be one of the roots themselves.
-        for root in leftoverSearchRoots(home: home) {
-            let rootPath = root.url.standardizedFileURL.path
-            if path == rootPath { return false }
-            if path.hasPrefix(rootPath + "/") { return true }
-        }
-        return false
+        // A hidden home folder, only when the catalog names exactly this path.
+        // Nothing inside one, and never a parent such as `~/.gemini`.
+        return dotFolderCatalog.entry(forFolderAt: std, home: home) != nil
     }
 
     // MARK: Matching
@@ -236,7 +244,7 @@ enum AppUninstallScanPolicy {
         // removed apps, whose rows get their text from
         // `OrphanLeftoverScanPolicy.safetyInfo`; listed here so a name-strength
         // match is never read as safe.
-        case .appName, .ownerLedger, .libraryCrossEvidence:
+        case .appName, .ownerLedger, .libraryCrossEvidence, .dotFolderCatalog:
             return SafetyInfo(
                 level: .medium,
                 headline: String(localized: "\(appName) \(category.displayName)"),

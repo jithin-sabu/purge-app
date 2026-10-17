@@ -241,6 +241,77 @@ struct AppUninstallScanPolicyTests {
         #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
     }
 
+    /// A bundle id can end in `.app` (Granola, Voicenotes, Trae). Their leftovers
+    /// were read as app bundles outside the app roots and refused, so the
+    /// Leftovers scan dropped them. Inside a leftover root the name is a leftover.
+    @Test
+    func leftoverNamedLikeAnAppBundleIsEligible() {
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+            home.appendingPathComponent("Library/Application Support/com.granola.app")
+        ))
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+            home.appendingPathComponent("Library/HTTPStorages/com.voicenotes.app")
+        ))
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+            home.appendingPathComponent("Library/Something.app")
+        ))
+    }
+
+    // MARK: Home folder data (#224)
+
+    private var testCatalog: AppDotFolderCatalog {
+        try! AppDotFolderCatalog.parse(Data("""
+        {"apps": [{"bundle_id": "com.google.antigravity", "display_name": "Antigravity",
+                   "folders": ["~/.gemini/antigravity", "~/.antigravity"]}]}
+        """.utf8))
+    }
+
+    /// The gate accepts a hidden home folder only when the catalog names exactly
+    /// that path. Everything else in the home folder stays refused.
+    @Test
+    func gateAcceptsOnlyFoldersTheCatalogNames() {
+        let home = URL(fileURLWithPath: "/Users/alice", isDirectory: true)
+        func eligible(_ relative: String) -> Bool {
+            AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+                home.appendingPathComponent(relative), home: home, dotFolderCatalog: testCatalog
+            )
+        }
+        #expect(eligible(".gemini/antigravity"))
+        #expect(eligible(".antigravity"))
+        #expect(!eligible(".gemini"))
+        #expect(!eligible(".gemini/antigravity/extensions"))
+        #expect(!eligible(".gemini/antigravity-ide"))
+        #expect(!eligible(".cursor"))
+        #expect(!eligible(".ssh"))
+        #expect(!eligible("Documents"))
+        #expect(!eligible(""))
+    }
+
+    /// The same, with the catalog the app ships.
+    @Test
+    func shippedCatalogGateRefusesSharedParentsAndStrangers() {
+        func eligible(_ relative: String) -> Bool {
+            AppUninstallScanPolicy.isEligibleForUninstallDeletion(home.appendingPathComponent(relative))
+        }
+        #expect(eligible(".gemini/antigravity"))
+        #expect(eligible(".cursor"))
+        #expect(eligible(".trae"))
+        #expect(!eligible(".gemini"))
+        #expect(!eligible(".gemini/antigravity/brain"))
+        #expect(!eligible(".cursor/extensions"))
+        #expect(!eligible(".config"))
+        #expect(!eligible(".ssh"))
+    }
+
+    /// An empty catalog opens nothing in the home folder.
+    @Test
+    func emptyCatalogOpensNothing() {
+        let home = URL(fileURLWithPath: "/Users/alice", isDirectory: true)
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+            home.appendingPathComponent(".gemini/antigravity"), home: home, dotFolderCatalog: .empty
+        ))
+    }
+
     /// The scanner walks one folder into an app root (vendors that group their
     /// apps, e.g. `/Applications/Utilities/…`), so the delete gate must accept the
     /// same one level. Otherwise a nested app is offered but skipped for safety
