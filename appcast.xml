@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.11.1</title>
+      <pubDate>Sat, 17 Oct 2026 10:46:58 +0000</pubDate>
+      <sparkle:version>34</sparkle:version>
+      <sparkle:shortVersionString>1.11.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Leftovers keep what installed apps use</strong>: Data an installed app still claims, like OrbStack's Docker storage, is no longer offered.</li>
+          <li><strong>Uninstalling keeps shared app groups</strong>: A group another installed app lists stays, marked "Kept, still used by" that app.</li>
+          <li><strong>Simulators are shown as deleted permanently</strong>: The confirmation and Cleanup History list them apart from what goes to the Trash.</li>
+          <li><strong>Scheduled cleaning runs when it is due</strong>: It checks each time you switch to Purge, includes stale projects, and waits while a review is open.</li>
+          <li><strong>No crash during git checks</strong>: Excluding or cleaning a project while Purge checks it for unsaved changes no longer crashes it.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.11.1/Purgev1.11.1.dmg"
+        sparkle:edSignature="ZyvZ9Nl6SfBsMEFCNXDug7UVT/dCfXEs6rVYXAAT9xJVxlCuOgevSZUPWLHSF67xKo9jHePJxoMJ9wwSxmSDBA=="
+        length="9371524"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.11.0</title>
       <pubDate>Thu, 15 Oct 2026 09:27:01 +0000</pubDate>
       <sparkle:version>33</sparkle:version>
