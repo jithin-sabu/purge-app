@@ -137,11 +137,11 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         return store?.isReviewingOrCleaning ?? false
     }
 
-    /// Moves the anchor, records the outcome, and re-arms, unless another clean was
-    /// running or a review was open and this one removed nothing. Then the clean
-    /// stays due, and the next activation runs it.
+    /// Moves the anchor, records the outcome, and re-arms, unless the clean removed
+    /// nothing because another clean was running, a review was open, or it failed.
+    /// Then the clean stays due, and the next activation runs it again (#173).
     private func finishSchedule(after summary: PurgeStore.ScheduledCleaningSummary, at now: Date) async {
-        guard !summary.skippedForAnotherClean else { return }
+        guard !summary.skippedForAnotherClean, !summary.failed else { return }
         ud.set(now, forKey: Self.lastGraceSweepKey)
         recordOutcome(summary, at: now)
         await performRearm()

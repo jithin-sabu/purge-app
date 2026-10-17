@@ -401,6 +401,62 @@ struct ScheduledCleaningScheduleTests {
         #expect(h.registrar.lastOutcome?.deletedCount == 3)
     }
 
+    // A clean that failed removed nothing. Counting it as done would leave the
+    // caches until the next interval. The anchor, the last outcome and the
+    // reminder stay as they were, and the next activation tries again (#173).
+    @Test("A failed clean stays due")
+    func failedCleanStaysDue() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        let done = h.clean.summary
+        h.clean.summary = PurgeStore.ScheduledCleaningSummary(
+            deletedCount: 0,
+            bytesMovedToTrash: 0,
+            failed: true
+        )
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) == nil)
+        #expect(h.registrar.lastOutcome == nil)
+        #expect(h.rearms.count == 0)
+
+        // The cause is gone, and the next activation runs the clean.
+        h.clean.summary = done
+        let later = due.addingTimeInterval(60)
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: later)
+        #expect(h.clean.callCount == 2)
+        #expect(anchor(h) == later)
+        #expect(h.registrar.lastOutcome?.deletedCount == 3)
+        #expect(h.rearms.count == 1)
+    }
+
+    // Run now reports the failure to Settings and leaves the schedule alone.
+    @Test("A failed Run now leaves the schedule where it was")
+    func failedRunNowLeavesTheSchedule() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        h.clean.summary = PurgeStore.ScheduledCleaningSummary(
+            deletedCount: 0,
+            bytesMovedToTrash: 0,
+            failed: true
+        )
+
+        let oneDayIn = enabledAt.addingTimeInterval(86_400)
+        let summary = await h.registrar.runScheduledCleanNow(referenceDate: oneDayIn)
+
+        #expect(summary?.failed == true)
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) == nil)
+        #expect(h.registrar.lastOutcome == nil)
+        #expect(h.registrar.dueDate(referenceDate: oneDayIn) == enabledAt.addingTimeInterval(3 * 86_400))
+    }
+
     // 14. The app only observes activation outside the test host and previews.
     //     Both share the user's real defaults and would clean real caches.
     @Test("The test host and previews never clean on activation")
