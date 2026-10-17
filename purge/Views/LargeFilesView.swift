@@ -397,10 +397,6 @@ struct LargeFilesView: View {
         }
     }
 
-    /// Stable anchor pinned to the very top of the results list so a fresh scan or
-    /// first appearance can reset scroll position to the first row.
-    private static let topAnchorID = "large-files-top"
-
     /// Identity of the results List. Changes on scan completion so fresh results
     /// start at the top, and *also* when the list switches between flat rows and
     /// duplicate group containers.
@@ -432,13 +428,6 @@ struct LargeFilesView: View {
 
     private var resultsListContent: some View {
         List {
-            Color.clear
-                .frame(height: 0)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .id(Self.topAnchorID)
-
             if isDuplicatesFilterActive {
                 // One List row per *group*: the copies live inside the container,
                 // so a set of duplicates reads as one thing. Iterating group ids
@@ -483,6 +472,7 @@ struct LargeFilesView: View {
             ScanListBottomSpacer()
         }
         .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
         // On macOS, List rows are natively selectable even with no `selection:`
         // binding: the first click engages NSTableView selection/focus and it
         // scroll-to-visibles the clicked row (worse here than the scan tabs

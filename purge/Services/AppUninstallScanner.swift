@@ -14,9 +14,16 @@ nonisolated final class AppUninstallScanner {
     /// Where the leftover scan looks for the user's Library. Tests hand in a
     /// temporary home so they never write to the user's own (#171).
     private let home: URL
+    /// The hidden home folders an app is known to write (#228). The shipped
+    /// catalog in the app; tests hand in a small one.
+    private let catalog: AppDotFolderCatalog
 
-    init(home: URL = FileManager.default.homeDirectoryForCurrentUser) {
+    init(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        catalog: AppDotFolderCatalog = .shared
+    ) {
         self.home = home
+        self.catalog = catalog
     }
 
     // MARK: Installed apps
@@ -102,7 +109,10 @@ nonisolated final class AppUninstallScanner {
         return result
     }
 
-    private static func displayName(for bundleURL: URL, bundle: Bundle?) -> String {
+    /// Also read by `OrphanLeftoverScanPolicy.makeInstalledAppIndex`, so the
+    /// Leftovers scan knows installed apps by the same names the uninstaller
+    /// matches with.
+    static func displayName(for bundleURL: URL, bundle: Bundle?) -> String {
         if let display = bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
            !display.isEmpty {
             return display
@@ -126,9 +136,9 @@ nonisolated final class AppUninstallScanner {
     /// are resolved in one pass before emitting, so the review list is complete
     /// and sortable when it appears.
     func leftoverStream(for app: InstalledApp) -> AsyncStream<UninstallItem> {
-        AsyncStream { [home] continuation in
+        AsyncStream { [home, catalog] continuation in
             let task = Task.detached(priority: .userInitiated) {
-                Self.runLeftoverScan(for: app, home: home, continuation: continuation)
+                Self.runLeftoverScan(for: app, home: home, catalog: catalog, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -143,6 +153,7 @@ nonisolated final class AppUninstallScanner {
     private static func runLeftoverScan(
         for app: InstalledApp,
         home: URL,
+        catalog: AppDotFolderCatalog,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
@@ -181,6 +192,20 @@ nonisolated final class AppUninstallScanner {
             }
         }
 
+        // The hidden home folders the catalog names for this app (#228): a real
+        // directory at exactly the listed path, never a parent such as
+        // `~/.gemini`, never anything inside. The gate accepts only what the
+        // catalog names, so this is checked the same way as the Library rows.
+        for url in catalogFolders(for: app, home: home, catalog: catalog) {
+            let key = url.standardizedFileURL.path
+            guard !seen.contains(key) else { continue }
+            guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+                url, home: home, dotFolderCatalog: catalog
+            ) else { continue }
+            seen.insert(key)
+            matches.append(Match(url: url, category: .homeFolderData, reason: .dotFolderCatalog))
+        }
+
         let sizes = FolderSizing.directorySizes(at: matches.map(\.url))
 
         for match in matches {
@@ -201,12 +226,35 @@ nonisolated final class AppUninstallScanner {
                     matchReason: match.reason,
                     // Uninstalling an app means taking its files with it, so every
                     // matched item starts checked. The user unticks anything they
-                    // want to keep.
-                    isSelected: true
+                    // want to keep. A catalog dot folder is the exception: it holds
+                    // settings and extensions, not a cache, so it starts unticked
+                    // and the user opts in (#228).
+                    isSelected: match.category != .homeFolderData
                 )
             )
         }
         continuation.finish()
+    }
+
+    /// The catalog folders of `app` that exist as directories. A missing folder,
+    /// a file, or a symbolic link in its place is left out, as in the Leftovers
+    /// scan (`OrphanLeftoverScanPolicy.dotFolderCandidates`).
+    static func catalogFolders(
+        for app: InstalledApp,
+        home: URL,
+        catalog: AppDotFolderCatalog
+    ) -> [URL] {
+        guard let bundleID = app.bundleID?.lowercased(), !bundleID.isEmpty else { return [] }
+        var result: [URL] = []
+        for entry in catalog.entries where entry.bundleID.lowercased() == bundleID {
+            for folder in entry.folders {
+                guard let url = catalog.url(for: folder, home: home) else { continue }
+                guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                      values.isDirectory == true, values.isSymbolicLink != true else { continue }
+                result.append(url)
+            }
+        }
+        return result
     }
 }
 

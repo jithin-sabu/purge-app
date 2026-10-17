@@ -460,15 +460,21 @@ private struct OverviewCategoryRow: View {
 /// gradient, a hairline rim, and a white filled glyph. Leave `symbol` out for an
 /// empty tile, which is how free space is drawn. `imageName` shows an icon
 /// from the asset catalog as the whole tile instead, for Apple's own Apple
-/// Intelligence mark. The icon brings its own rounded corners, so it is drawn
-/// as it is, with no clip and no rim.
+/// Intelligence mark. `appPath` shows that app's own icon, the one Finder and the
+/// Dock draw, for Time Machine. Every tile uses the same continuous outline;
+/// image icons keep their own artwork without an added rim.
 struct OverviewIconTile: View {
     var symbol: String?
     let color: Color
     var imageName: String? = nil
+    var appPath: String? = nil
 
-    static let size: CGFloat = 28
-    private static let shape = RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+    static let size = AppStyle.IconTile.size
+    private static let shape = AppStyle.IconTile.shape()
+    /// An app icon fills about 82% of its canvas and leaves the rest clear, where a
+    /// catalog mark fills the whole tile. Drawing the icon this much larger than the
+    /// slot makes its body the same size as the tiles around it before clipping.
+    private static let appIconScale: CGFloat = 1 / 0.82
 
     private var tileBackground: some View {
         Self.shape
@@ -493,6 +499,13 @@ struct OverviewIconTile: View {
                     .interpolation(.high)
                     .scaledToFit()
                     .frame(width: Self.size, height: Self.size)
+            } else if let appPath {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: appPath))
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: Self.size * Self.appIconScale, height: Self.size * Self.appIconScale)
+                    .frame(width: Self.size, height: Self.size)
             } else if let symbol {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .medium))
@@ -508,6 +521,8 @@ struct OverviewIconTile: View {
                     .frame(width: Self.size, height: Self.size)
             }
         }
+        .frame(width: Self.size, height: Self.size)
+        .clipShape(Self.shape)
         .accessibilityHidden(true)
     }
 }
@@ -824,7 +839,7 @@ private struct OverviewSnapshotRow: View {
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            OverviewIconTile(symbol: "clock.arrow.circlepath", color: AppColors.Chart.everythingElse)
+            OverviewIconTile(symbol: nil, color: AppColors.Chart.everythingElse, appPath: "/System/Applications/Time Machine.app")
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text("Time Machine snapshots")

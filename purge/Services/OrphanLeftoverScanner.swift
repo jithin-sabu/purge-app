@@ -20,16 +20,31 @@ nonisolated final class OrphanLeftoverScanner {
     /// and blocks a thread, so tests hand in a small fixed index.
     private let installedApps: @Sendable () -> OrphanLeftoverScanPolicy.InstalledAppIndex
 
+    /// Which app each human-named folder belonged to while it was installed
+    /// (#224). The live one is the shared ledger file, pruned of folders that
+    /// are gone; tests hand in one built on a throwaway folder.
+    private let ledger: @Sendable (URL) -> LeftoverOwnerLedger
+
+    /// The hidden home folders apps write, by bundle id (#224). The shipped
+    /// catalog in the app; tests hand in a small one.
+    private let catalog: AppDotFolderCatalog
+
     init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         defaults: UserDefaults = .standard,
         installedApps: @escaping @Sendable () -> OrphanLeftoverScanPolicy.InstalledAppIndex = {
             OrphanLeftoverScanPolicy.makeInstalledAppIndex()
-        }
+        },
+        ledger: @escaping @Sendable (URL) -> LeftoverOwnerLedger = { home in
+            LeftoverOwnerLedgerStore.shared.current(home: home)
+        },
+        catalog: AppDotFolderCatalog = .shared
     ) {
         self.home = home
         self.defaults = defaults
         self.installedApps = installedApps
+        self.ledger = ledger
+        self.catalog = catalog
     }
 
     /// Streams each orphaned leftover as an `UninstallItem`, sized before it is
@@ -37,10 +52,17 @@ nonisolated final class OrphanLeftoverScanner {
     /// finishes with nothing when the installed-app view looks incomplete (an
     /// unmounted volume, an unreadable app root), rather than flag everything.
     func orphanStream() -> AsyncStream<UninstallItem> {
-        AsyncStream { [home, defaults, installedApps] continuation in
+        AsyncStream { [home, defaults, installedApps, ledger, catalog] continuation in
             let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults)
             let task = Task.detached(priority: .userInitiated) {
-                Self.run(home: home, staleDays: staleDays, installed: installedApps(), continuation: continuation)
+                Self.run(
+                    home: home,
+                    staleDays: staleDays,
+                    installed: installedApps(),
+                    ledger: ledger(home),
+                    catalog: catalog,
+                    continuation: continuation
+                )
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -50,6 +72,8 @@ nonisolated final class OrphanLeftoverScanner {
         let url: URL
         let category: UninstallCategory
         let appName: String
+        let evidence: MatchReason
+        let ownerBundleIDs: [String]
         let modified: Date
     }
 
@@ -57,6 +81,8 @@ nonisolated final class OrphanLeftoverScanner {
         home: URL,
         staleDays: Int,
         installed: OrphanLeftoverScanPolicy.InstalledAppIndex,
+        ledger: LeftoverOwnerLedger,
+        catalog: AppDotFolderCatalog,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
@@ -66,6 +92,9 @@ nonisolated final class OrphanLeftoverScanner {
             return
         }
         let cutoff = OrphanLeftoverScanPolicy.staleCutoff(staleDays: staleDays)
+        // Which ids Preferences and Caches carry, read once for every
+        // human-named Application Support folder (#224).
+        let clues = OrphanLeftoverScanPolicy.LibraryIdentifierClues.gather(home: home)
 
         var candidates: [Candidate] = []
         var seen = Set<String>()
@@ -92,7 +121,10 @@ nonisolated final class OrphanLeftoverScanner {
                     at: entry,
                     category: root.category,
                     installed: installed,
-                    cutoff: cutoff
+                    cutoff: cutoff,
+                    home: home,
+                    ledger: ledger,
+                    clues: clues
                 ) else { continue }
 
                 // Defend in depth: only offer what the delete gate would accept.
@@ -109,11 +141,39 @@ nonisolated final class OrphanLeftoverScanner {
                     Candidate(
                         url: entry,
                         category: root.category,
-                        appName: OrphanLeftoverScanPolicy.friendlyName(bundleID: orphan.owner.displayName, url: entry),
+                        appName: orphan.appName
+                            ?? OrphanLeftoverScanPolicy.friendlyName(bundleID: orphan.owner.displayName, url: entry),
+                        evidence: orphan.evidence,
+                        ownerBundleIDs: orphan.ownerBundleIDs,
                         modified: orphan.lastModified
                     )
                 )
             }
+        }
+
+        // Hidden home folders of removed apps, from the catalog alone (#224).
+        for dotFolder in OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: catalog, home: home, installed: installed, cutoff: cutoff
+        ) {
+            if Task.isCancelled {
+                continuation.finish()
+                return
+            }
+            guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+                dotFolder.url, home: home, dotFolderCatalog: catalog
+            ) else { continue }
+            guard !ExcludedPathsStore.isExcluded(dotFolder.url) else { continue }
+            guard seen.insert(dotFolder.url.standardizedFileURL.path).inserted else { continue }
+            candidates.append(
+                Candidate(
+                    url: dotFolder.url,
+                    category: .homeFolderData,
+                    appName: dotFolder.entry.displayName,
+                    evidence: .dotFolderCatalog,
+                    ownerBundleIDs: [dotFolder.entry.bundleID],
+                    modified: dotFolder.lastModified
+                )
+            )
         }
 
         let sizes = FolderSizing.directorySizes(at: candidates.map(\.url))
@@ -131,10 +191,11 @@ nonisolated final class OrphanLeftoverScanner {
                     sizeBytes: size,
                     category: candidate.category,
                     safetyInfo: safety,
-                    matchReason: .bundleID,
+                    matchReason: candidate.evidence,
                     // App data that does not regenerate: the user opts in per item.
                     isSelected: false,
-                    lastModified: candidate.modified
+                    lastModified: candidate.modified,
+                    ownerBundleIDs: candidate.ownerBundleIDs
                 )
             )
         }

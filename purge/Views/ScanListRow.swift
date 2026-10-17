@@ -158,11 +158,13 @@ extension ScanListRow where Footer == EmptyView {
 }
 
 enum ScanListRowInsets {
+    /// The plain macOS List adds an outer inset. This remainder aligns scan
+    /// cards with the page controls on App Caches, Dev Tools and Large Files.
     static let standard = EdgeInsets(
-        top: 4,
-        leading: AppStyle.Spacing.small,
-        bottom: 4,
-        trailing: AppStyle.Spacing.small
+        top: AppStyle.Spacing.xxSmall,
+        leading: AppStyle.Spacing.medium,
+        bottom: AppStyle.Spacing.xxSmall,
+        trailing: AppStyle.Spacing.medium
     )
 }
 

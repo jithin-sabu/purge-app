@@ -235,10 +235,297 @@ struct OrphanLeftoverScanPolicyTests {
 
     @Test
     func looksLikeBundleIDRejectsUUIDAndSingleWordAndLeadingDigit() {
+        #expect(!OrphanLeftoverScanPolicy.looksLikeBundleID("Foo Helper.app"))
         #expect(!OrphanLeftoverScanPolicy.looksLikeBundleID("3654A0C6-DBF7-4FCD-9CC3-3E42F9A94A5D"))
         #expect(!OrphanLeftoverScanPolicy.looksLikeBundleID("Rectangle"))
         #expect(!OrphanLeftoverScanPolicy.looksLikeBundleID("9to5.mac"))
         #expect(!OrphanLeftoverScanPolicy.looksLikeBundleID("com..App"))
+    }
+
+    // MARK: Cross-evidence inside Library (#224)
+
+    private func clues(preferences: [String] = [], caches: [String] = []) -> OrphanLeftoverScanPolicy.LibraryIdentifierClues {
+        OrphanLeftoverScanPolicy.LibraryIdentifierClues(preferenceIDs: Set(preferences), cacheIDs: Set(caches))
+    }
+
+    private func crossOwner(
+        _ name: String,
+        clues: OrphanLeftoverScanPolicy.LibraryIdentifierClues,
+        apps: [String] = ["com.vendor.Other"],
+        names: [String] = []
+    ) -> String? {
+        var installed = index(apps: apps)
+        installed.diskAppNames = Set(names.map { $0.lowercased() })
+        return OrphanLeftoverScanPolicy.crossEvidenceOwner(folderName: name, clues: clues, installed: installed)
+    }
+
+    /// A human-named folder with nothing else in Library naming its app is not
+    /// attributed, as before #224.
+    @Test
+    func humanNamedFolderWithoutCrossEvidenceIsNotAttributed() {
+        #expect(crossOwner("Antigravity", clues: clues()) == nil)
+        #expect(crossOwner("Antigravity", clues: clues(preferences: ["com.google.Keystone"])) == nil)
+    }
+
+    /// The reported case: `Application Support/Antigravity` with
+    /// `Preferences/com.google.antigravity.plist`, and the app gone.
+    @Test
+    func matchingPreferencesPlistForAnUninstalledIDAttributesTheFolder() {
+        #expect(crossOwner("Antigravity", clues: clues(preferences: ["com.google.antigravity"]))
+            == "com.google.antigravity")
+        #expect(crossOwner("Antigravity", clues: clues(caches: ["com.google.antigravity"]))
+            == "com.google.antigravity")
+        // Case-insensitive on both sides.
+        #expect(crossOwner("antigravity", clues: clues(preferences: ["com.google.Antigravity"]))
+            == "com.google.Antigravity")
+    }
+
+    @Test
+    func matchingPlistForAnInstalledIDKeepsTheFolder() {
+        #expect(crossOwner("Antigravity", clues: clues(preferences: ["com.google.antigravity"]),
+                           apps: ["com.google.antigravity"]) == nil)
+        // A helper id under an installed app is owned too.
+        #expect(crossOwner("Helper", clues: clues(preferences: ["com.vendor.Other.Helper"])) == nil)
+    }
+
+    /// `Code` is VS Code's folder, whatever stray id ends in `.code`: an
+    /// installed app with the folder's name owns it.
+    @Test
+    func installedAppWithTheFolderNameKeepsItDespiteAStrayID() {
+        #expect(crossOwner("Code", clues: clues(preferences: ["com.gone.code"]), names: ["Code"]) == nil)
+    }
+
+    /// Firefox removed, Firefox Nightly kept: both use `Application Support/Firefox`,
+    /// and the Preferences plist is the one clue. An installed app whose name
+    /// starts with the folder's name owns the folder. The ids are made up:
+    /// `owns` asks Launch Services too, and the CI runner has the real Firefox
+    /// installed, so `org.mozilla.firefox` never reads as gone there.
+    @Test
+    func installedSiblingAppKeepsASharedFolder() {
+        let firefox = clues(preferences: ["org.example.firefox"])
+        #expect(crossOwner("Firefox", clues: firefox, apps: ["org.example.nightly"], names: ["Firefox Nightly"]) == nil)
+        #expect(crossOwner("Firefox", clues: firefox, apps: ["org.example.firefoxdeveloperedition"],
+                           names: ["Firefox Developer Edition"]) == nil)
+        // No sibling installed: a real leftover.
+        #expect(crossOwner("Firefox", clues: firefox) == "org.example.firefox")
+    }
+
+    /// A real helper bundle at the top of Application Support is a program. Its
+    /// name is not an id, and it is never attributed, whatever is installed.
+    @Test
+    func realHelperBundleIsNeverACandidate() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let helper = root.appendingPathComponent("Library/Application Support/Foo Helper.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: helper.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        let plist = helper.appendingPathComponent("Contents/Info.plist")
+        try Data("<plist/>".utf8).write(to: plist)
+        try setDate(longAgo, at: plist)
+        try setDate(longAgo, at: helper.appendingPathComponent("Contents"))
+        try setDate(longAgo, at: helper)
+        let gone = index(apps: ["com.vendor.Other"])
+        #expect(OrphanLeftoverScanPolicy.candidateOwner(entryName: "Foo Helper.app", category: .applicationSupport, url: helper) == nil)
+        #expect(!OrphanLeftoverScanPolicy.isHumanNamedFolder("Foo Helper.app", url: helper))
+        #expect(OrphanLeftoverScanPolicy.orphanCandidate(
+            at: helper, category: .applicationSupport, installed: gone,
+            cutoff: OrphanLeftoverScanPolicy.staleCutoff(staleDays: 30), home: root
+        ) == nil)
+
+        // A bundle id that ends in `.app`, without a bundle inside, is still attributed.
+        let granola = root.appendingPathComponent("Library/Application Support/com.granola.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: granola, withIntermediateDirectories: true)
+        #expect(OrphanLeftoverScanPolicy.candidateOwner(entryName: "com.granola.app", category: .applicationSupport, url: granola)
+            == .bundleID("com.granola.app"))
+        // The same name with a real bundle inside is not.
+        try FileManager.default.createDirectory(at: granola.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        try Data("<plist/>".utf8).write(to: granola.appendingPathComponent("Contents/Info.plist"))
+        #expect(OrphanLeftoverScanPolicy.candidateOwner(entryName: "com.granola.app", category: .applicationSupport, url: granola) == nil)
+    }
+
+    // MARK: Confirm-time check (#224)
+
+    private func keeps(
+        owners: [String],
+        folder: String = "Antigravity",
+        category: UninstallCategory = .applicationSupport,
+        evidence: MatchReason = .ownerLedger,
+        installed: OrphanLeftoverScanPolicy.InstalledAppIndex,
+        present: Set<String> = []
+    ) -> Bool {
+        OrphanLeftoverScanPolicy.keepsAtConfirm(
+            ownerBundleIDs: owners, folderName: folder, category: category, evidence: evidence,
+            installed: installed, presentOwners: present
+        )
+    }
+
+    /// Between the scan and the click an owner can come back: installed again,
+    /// running from a disk image, or replaced by another app with the same name.
+    /// Any of those keeps the row; otherwise it goes ahead.
+    @Test
+    func confirmKeepsARowWhoseOwnerCameBack() {
+        let gone = index(apps: ["com.vendor.Other"])
+        #expect(!keeps(owners: ["com.google.antigravity"], installed: gone))
+        #expect(keeps(owners: ["com.google.antigravity"], installed: index(apps: ["com.google.antigravity"])))
+        #expect(keeps(owners: ["com.google.antigravity"], installed: gone, present: ["com.google.antigravity"]))
+        // The second of two ledger owners is back.
+        #expect(keeps(owners: ["com.a.App", "com.b.App"], installed: index(apps: ["com.b.App"])))
+        #expect(keeps(owners: ["com.a.App", "com.b.App"], installed: gone, present: ["com.b.App"]))
+        // A different app with the folder's name was installed since the scan.
+        var named = gone
+        named.diskAppNames = ["antigravity"]
+        #expect(keeps(owners: ["com.google.antigravity"], installed: named))
+        #expect(keeps(owners: ["com.google.antigravity"], evidence: .libraryCrossEvidence, installed: named))
+        // The name rule is for human-named Application Support folders only.
+        #expect(!keeps(owners: ["com.google.antigravity"], folder: "antigravity", category: .homeFolderData,
+                       evidence: .dotFolderCatalog, installed: named))
+        // Nothing to re-check for a row with no owner id.
+        #expect(!keeps(owners: [], installed: named))
+    }
+
+    /// With no trustworthy view of what is installed, everything is kept.
+    @Test
+    func confirmKeepsEverythingWhenTheInstalledViewIsIncomplete() {
+        let sparse = OrphanLeftoverScanPolicy.InstalledAppIndex(diskBundleIDs: ["a.b"], evidence: InstalledCodeEvidence())
+        #expect(!sparse.looksComplete)
+        #expect(keeps(owners: ["com.google.antigravity"], installed: sparse))
+    }
+
+    @Test
+    func twoCandidateIDsAreAmbiguousAndKeepTheFolder() {
+        #expect(crossOwner("Antigravity", clues: clues(
+            preferences: ["com.google.antigravity"], caches: ["com.other.antigravity"]
+        )) == nil)
+        // The same id in both places is one clue, not two.
+        #expect(crossOwner("Antigravity", clues: clues(
+            preferences: ["com.google.antigravity"], caches: ["com.google.antigravity"]
+        )) == "com.google.antigravity")
+    }
+
+    @Test
+    func appleIdentifiersAreNeverCrossEvidence() {
+        #expect(crossOwner("Safari", clues: clues(preferences: ["com.apple.Safari"])) == nil)
+        #expect(crossOwner("Podcasts", clues: clues(caches: ["groups.com.apple.podcasts"])) == nil)
+    }
+
+    @Test
+    func identifierNamedFoldersDoNotUseCrossEvidence() {
+        #expect(crossOwner("com.vendor.App", clues: clues(preferences: ["com.vendor.App"])) == nil)
+        #expect(crossOwner("", clues: clues(preferences: ["com.vendor.App"])) == nil)
+    }
+
+    /// The clues come from the plists and cache folders as they sit on disk;
+    /// anything not shaped like a bundle id is ignored.
+    @Test
+    func cluesAreReadFromPreferencesAndCaches() throws {
+        let home = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let lib = home.appendingPathComponent("Library", isDirectory: true)
+        let preferences = lib.appendingPathComponent("Preferences", isDirectory: true)
+        let caches = lib.appendingPathComponent("Caches", isDirectory: true)
+        try FileManager.default.createDirectory(at: preferences, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: caches, withIntermediateDirectories: true)
+        try Data().write(to: preferences.appendingPathComponent("com.google.antigravity.plist"))
+        try Data().write(to: preferences.appendingPathComponent("loginwindow.plist"))
+        try Data().write(to: preferences.appendingPathComponent("com.vendor.App.notaplist"))
+        try FileManager.default.createDirectory(at: caches.appendingPathComponent("com.vendor.App"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: caches.appendingPathComponent("Google"), withIntermediateDirectories: true)
+
+        let clues = OrphanLeftoverScanPolicy.LibraryIdentifierClues.gather(home: home)
+        #expect(clues.preferenceIDs == ["com.google.antigravity"])
+        #expect(clues.cacheIDs == ["com.vendor.App"])
+        #expect(clues.identifiers(endingIn: "Antigravity") == ["com.google.antigravity"])
+        #expect(clues.identifiers(endingIn: "App") == ["com.vendor.App"])
+        #expect(clues.identifiers(endingIn: "Google").isEmpty)
+    }
+
+    // MARK: Dot folders (#224)
+
+    private var testCatalog: AppDotFolderCatalog {
+        try! AppDotFolderCatalog.parse(Data("""
+        {"apps": [{"bundle_id": "com.google.antigravity", "display_name": "Antigravity",
+                   "folders": ["~/.gemini/antigravity", "~/.gemini/antigravity-ide", "~/.antigravity"]}]}
+        """.utf8))
+    }
+
+    /// A catalog folder is offered only when its app's bundle id is absent, and
+    /// `~/.gemini` as a whole is never a candidate, whatever sits inside it.
+    @Test
+    func catalogFolderIsOfferedOnlyWhenItsAppIsGone() throws {
+        let home = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let gemini = home.appendingPathComponent(".gemini", isDirectory: true)
+        let antigravity = try makeLeftover(named: "antigravity", in: gemini)
+        try Data("cli settings".utf8).write(to: gemini.appendingPathComponent("settings.json"))
+        let cutoff = OrphanLeftoverScanPolicy.staleCutoff(staleDays: 30)
+
+        let gone = OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.vendor.Other"]), cutoff: cutoff
+        )
+        #expect(gone.map { $0.url.standardizedFileURL.path } == [antigravity.standardizedFileURL.path])
+        #expect(gone.first?.entry.displayName == "Antigravity")
+        #expect(gone.first.map { abs($0.lastModified.timeIntervalSince(longAgo)) < 2 } == true)
+        #expect(!gone.contains { $0.url.standardizedFileURL.path == gemini.standardizedFileURL.path })
+
+        // Antigravity installed: nothing.
+        #expect(OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.google.antigravity"]), cutoff: cutoff
+        ).isEmpty)
+
+        // Written today: still in use, kept.
+        try Data("today".utf8).write(to: antigravity.appendingPathComponent("data/data.img"))
+        #expect(OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.vendor.Other"]), cutoff: cutoff
+        ).isEmpty)
+    }
+
+    /// `~/.gemini` linked into a synced folder: the old `antigravity` inside is
+    /// real, but trashing it would take the synced copy, so it is not a candidate.
+    @Test
+    func catalogSkipsAFolderBehindASymlinkedParent() throws {
+        let home = try makeTemporaryDirectory()
+        let synced = try makeTemporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: home)
+            try? FileManager.default.removeItem(at: synced)
+        }
+        _ = try makeLeftover(named: "antigravity", in: synced)
+        try FileManager.default.createSymbolicLink(at: home.appendingPathComponent(".gemini"), withDestinationURL: synced)
+
+        #expect(OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.vendor.Other"]),
+            cutoff: OrphanLeftoverScanPolicy.staleCutoff(staleDays: 30)
+        ).isEmpty)
+    }
+
+    /// A link where the catalog expects a folder, or a plain file, is skipped.
+    @Test
+    func catalogSkipsLinksFilesAndMissingFolders() throws {
+        let home = try makeTemporaryDirectory()
+        let elsewhere = try makeTemporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: home)
+            try? FileManager.default.removeItem(at: elsewhere)
+        }
+        _ = try makeLeftover(named: "data", in: elsewhere)
+        try FileManager.default.createSymbolicLink(
+            at: home.appendingPathComponent(".antigravity"),
+            withDestinationURL: elsewhere
+        )
+        try FileManager.default.createDirectory(at: home.appendingPathComponent(".gemini"), withIntermediateDirectories: true)
+        try Data().write(to: home.appendingPathComponent(".gemini/antigravity"))
+
+        #expect(OrphanLeftoverScanPolicy.dotFolderCandidates(
+            catalog: testCatalog, home: home, installed: index(apps: ["com.vendor.Other"]),
+            cutoff: OrphanLeftoverScanPolicy.staleCutoff(staleDays: 30)
+        ).isEmpty)
+    }
+
+    @Test
+    func homeFolderDataIsCheckFirstWithItsOwnExplanation() {
+        let info = OrphanLeftoverScanPolicy.safetyInfo(appName: "Antigravity", category: .homeFolderData)
+        #expect(info.level == .medium)
+        #expect(info.headline == "Antigravity")
+        #expect(info.explanation.contains("hidden folder"))
     }
 
     // MARK: Staleness
@@ -277,6 +564,22 @@ struct OrphanLeftoverScanPolicyTests {
             let info = OrphanLeftoverScanPolicy.safetyInfo(appName: "Docker", category: category)
             #expect(info.level == .medium)
         }
+    }
+
+    // MARK: Presentation
+
+    /// Finder shows `com.granola.app` as `com.granola`, and the row once showed
+    /// `com`. A bundle id that ends in `.app` stays the bundle id.
+    @Test
+    func friendlyNameKeepsABundleIDThatEndsInApp() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appendingPathComponent("com.granola.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        #expect(OrphanLeftoverScanPolicy.friendlyName(bundleID: "com.granola.app", url: folder) == "com.granola.app")
+        let plain = root.appendingPathComponent("com.vendor.App", isDirectory: true)
+        try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
+        #expect(OrphanLeftoverScanPolicy.friendlyName(bundleID: "com.vendor.App", url: plain) == "com.vendor.App")
     }
 
     // MARK: Ownership from installed code (#197)

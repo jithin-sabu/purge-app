@@ -241,6 +241,220 @@ struct AppUninstallScanPolicyTests {
         #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
     }
 
+    /// A bundle id can end in `.app` (Granola, Voicenotes, Trae). Their leftovers
+    /// were read as app bundles outside the app roots and refused, so the
+    /// Leftovers scan dropped them. Inside a leftover root the name is a leftover.
+    @Test
+    func leftoverNamedLikeAnAppBundleIsEligible() {
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+            home.appendingPathComponent("Library/Application Support/com.granola.app")
+        ))
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+            home.appendingPathComponent("Library/HTTPStorages/com.voicenotes.app")
+        ))
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+            home.appendingPathComponent("Library/Something.app")
+        ))
+    }
+
+    // MARK: Home folder data (#224)
+
+    private var testCatalog: AppDotFolderCatalog {
+        try! AppDotFolderCatalog.parse(Data("""
+        {"apps": [{"bundle_id": "com.google.antigravity", "display_name": "Antigravity",
+                   "folders": ["~/.gemini/antigravity", "~/.antigravity"]}]}
+        """.utf8))
+    }
+
+    /// The gate accepts a hidden home folder only when the catalog names exactly
+    /// that path. Everything else in the home folder stays refused.
+    @Test
+    func gateAcceptsOnlyFoldersTheCatalogNames() {
+        let home = URL(fileURLWithPath: "/Users/alice", isDirectory: true)
+        func eligible(_ relative: String) -> Bool {
+            AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+                home.appendingPathComponent(relative), home: home, dotFolderCatalog: testCatalog
+            )
+        }
+        #expect(eligible(".gemini/antigravity"))
+        #expect(eligible(".antigravity"))
+        #expect(!eligible(".gemini"))
+        #expect(!eligible(".gemini/antigravity/extensions"))
+        #expect(!eligible(".gemini/antigravity-ide"))
+        #expect(!eligible(".cursor"))
+        #expect(!eligible(".ssh"))
+        #expect(!eligible("Documents"))
+        #expect(!eligible(""))
+    }
+
+    /// The same, with the catalog the app ships.
+    @Test
+    func shippedCatalogGateRefusesSharedParentsAndStrangers() {
+        func eligible(_ relative: String) -> Bool {
+            AppUninstallScanPolicy.isEligibleForUninstallDeletion(home.appendingPathComponent(relative))
+        }
+        #expect(eligible(".gemini/antigravity"))
+        #expect(eligible(".trae"))
+        #expect(!eligible(".gemini"))
+        #expect(!eligible(".gemini/antigravity/brain"))
+        // Shared with the cursor-agent CLI and promised away by the Cursor policies.
+        #expect(!eligible(".cursor"))
+        #expect(!eligible(".cursor/extensions"))
+        #expect(!eligible(".config"))
+        #expect(!eligible(".ssh"))
+    }
+
+    /// `~/.gemini` linked into a synced folder: the catalog names
+    /// `~/.gemini/antigravity`, but trashing it would take the synced copy, so
+    /// both the gate and the scan refuse it.
+    @Test
+    func catalogFolderBehindASymlinkedParentIsRefused() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        let synced = fm.temporaryDirectory.appendingPathComponent("purgetest-synced-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? fm.removeItem(at: home)
+            try? fm.removeItem(at: synced)
+        }
+        try fm.createDirectory(at: synced.appendingPathComponent("antigravity"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: home, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".gemini"), withDestinationURL: synced)
+        let linked = home.appendingPathComponent(".gemini/antigravity", isDirectory: true)
+        #expect(fm.fileExists(atPath: linked.path))
+
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(linked, home: home, dotFolderCatalog: testCatalog))
+        #expect(!AppUninstallScanPolicy.staysInsideHomeWithoutLinks(linked, home: home))
+        // A real folder in the same place passes.
+        try fm.removeItem(at: home.appendingPathComponent(".gemini"))
+        try fm.createDirectory(at: linked, withIntermediateDirectories: true)
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(linked, home: home, dotFolderCatalog: testCatalog))
+        #expect(AppUninstallScanPolicy.staysInsideHomeWithoutLinks(linked, home: home))
+    }
+
+    /// A real application bundle under a leftover root is a program, not a
+    /// leftover, wherever it sits; a folder merely named `com.granola.app`
+    /// directly inside the root is one.
+    @Test
+    func realAppBundleUnderALeftoverRootIsRefused() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let support = home.appendingPathComponent("Library/Application Support", isDirectory: true)
+        let helper = support.appendingPathComponent("Foo Helper.app", isDirectory: true)
+        try fm.createDirectory(at: helper.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        try Data("<plist/>".utf8).write(to: helper.appendingPathComponent("Contents/Info.plist"))
+        let nested = support.appendingPathComponent("Vendor/Tool.app", isDirectory: true)
+        try fm.createDirectory(at: nested, withIntermediateDirectories: true)
+        let granola = support.appendingPathComponent("com.granola.app", isDirectory: true)
+        try fm.createDirectory(at: granola, withIntermediateDirectories: true)
+
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(helper, home: home))
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(nested, home: home))
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(granola, home: home))
+        #expect(AppUninstallScanPolicy.isRealAppBundle(helper))
+        #expect(!AppUninstallScanPolicy.isRealAppBundle(granola))
+    }
+
+    /// An empty catalog opens nothing in the home folder.
+    @Test
+    func emptyCatalogOpensNothing() {
+        let home = URL(fileURLWithPath: "/Users/alice", isDirectory: true)
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(
+            home.appendingPathComponent(".gemini/antigravity"), home: home, dotFolderCatalog: .empty
+        ))
+    }
+
+    /// A hidden home folder belongs to an app only when the catalog lists a
+    /// folder of that name under the app's bundle id (#228).
+    @Test
+    func catalogFolderMatchesItsAppByBundleID() {
+        let antigravity = makeApp(
+            name: "Antigravity", bundlePath: "/Applications/Antigravity.app", bundleID: "com.google.antigravity"
+        )
+        func reason(_ name: String, app: InstalledApp = antigravity) -> MatchReason? {
+            AppUninstallScanPolicy.matchReason(
+                forLeftoverName: name, category: .homeFolderData, app: app, dotFolderCatalog: testCatalog
+            )
+        }
+        #expect(reason(".antigravity") == .dotFolderCatalog)
+        #expect(reason("antigravity") == .dotFolderCatalog)
+        #expect(reason(".gemini") == nil)
+        #expect(reason(".ssh") == nil)
+        #expect(reason(".antigravity", app: makeApp()) == nil)
+        #expect(reason(".antigravity", app: makeApp(bundleID: nil)) == nil)
+        #expect(reason(".antigravity")?.isHighConfidence == false)
+    }
+
+    /// Two installed copies of Trae share `~/.trae`, so removing one keeps it
+    /// for the other, with the catalog the app ships. An unrelated survivor does
+    /// not claim it.
+    @Test
+    func secondCopyOfTheAppClaimsItsCatalogFolder() {
+        let traeID = "com.trae.app"
+        let owner = makeApp(name: "Trae", bundlePath: "/Applications/Trae.app", bundleID: traeID)
+        let secondCopy = makeApp(
+            name: "Trae",
+            bundlePath: home.appendingPathComponent("Applications/Trae.app").path,
+            bundleID: traeID
+        )
+        let claimant = AppUninstallScanPolicy.claimant(
+            forLeftoverName: ".trae", category: .homeFolderData, ownerID: owner.id,
+            among: [makeApp(), secondCopy], appGroupClaims: AppGroupClaims()
+        )
+        #expect(claimant?.id == secondCopy.id)
+        #expect(AppUninstallScanPolicy.claimant(
+            forLeftoverName: ".trae", category: .homeFolderData, ownerID: owner.id,
+            among: [makeApp()], appGroupClaims: AppGroupClaims()
+        ) == nil)
+    }
+
+    /// The review sheet unticks a catalog folder a kept copy still uses and says
+    /// so, and leaves a folder only the removed copy owns unticked but free to tick.
+    @Test
+    func sheetKeepsACatalogFolderASecondCopyStillUses() {
+        let traeID = "com.trae.app"
+        let owner = makeApp(name: "Trae", bundlePath: "/Applications/Trae.app", bundleID: traeID)
+        let secondCopy = makeApp(
+            name: "Trae",
+            bundlePath: home.appendingPathComponent("Applications/Trae.app").path,
+            bundleID: traeID
+        )
+        let folder = UninstallItem(
+            path: home.appendingPathComponent(".trae", isDirectory: true),
+            sizeBytes: 1,
+            category: .homeFolderData,
+            safetyInfo: AppUninstallScanPolicy.safetyInfo(
+                for: .dotFolderCatalog, category: .homeFolderData,
+                url: home.appendingPathComponent(".trae"), appName: "Trae"
+            ),
+            matchReason: .dotFolderCatalog,
+            isSelected: false
+        )
+        var plans = [UninstallAppPlan(app: owner, items: [folder])]
+        PurgeStore.markSharedWithSurvivors(in: &plans, survivors: [secondCopy], appGroupClaims: AppGroupClaims())
+        #expect(plans[0].items[0].keptForApp == "Trae")
+        #expect(plans[0].items[0].isSelected == false)
+
+        var alone = [UninstallAppPlan(app: owner, items: [folder])]
+        PurgeStore.markSharedWithSurvivors(in: &alone, survivors: [makeApp()], appGroupClaims: AppGroupClaims())
+        #expect(alone[0].items[0].keptForApp == nil)
+        #expect(alone[0].items[0].isSelected == false)
+    }
+
+    /// The uninstaller's catalog row is Check First with its own wording, not the
+    /// "matched by name" text of a name match.
+    @Test
+    func catalogFolderSafetyIsCheckFirstWithItsOwnExplanation() {
+        let info = AppUninstallScanPolicy.safetyInfo(
+            for: .dotFolderCatalog, category: .homeFolderData,
+            url: home.appendingPathComponent(".trae"), appName: "Trae"
+        )
+        #expect(info.level == .medium)
+        #expect(info.headline == "Trae Home Folder Data")
+        #expect(info.explanation.contains("known to keep"))
+        #expect(!info.explanation.contains("matched by name"))
+    }
+
     /// The scanner walks one folder into an app root (vendors that group their
     /// apps, e.g. `/Applications/Utilities/…`), so the delete gate must accept the
     /// same one level. Otherwise a nested app is offered but skipped for safety

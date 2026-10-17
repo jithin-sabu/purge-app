@@ -83,21 +83,40 @@ enum AppUninstallScanPolicy {
 
     /// The gate `FileDeleter` calls before trashing an uninstall target. This is a
     /// safety net, not the matcher: the scanner decides which paths belong to the
-    /// chosen app, and this refuses anything that is not either a top-level entry
-    /// inside a known leftover root or an `.app` bundle inside an app root. A bug
-    /// in matching can therefore never trash a path outside those bounds.
+    /// chosen app, and this refuses anything that is not a top-level entry inside
+    /// a known leftover root, an `.app` bundle inside an app root, or a hidden
+    /// home folder the dot-folder catalog names in full (#224). A bug in matching
+    /// can therefore never trash a path outside those bounds.
     ///
     /// `home` is the real home folder everywhere but the tests, which hand in a
     /// temporary one so they never write to the user's Library (#171).
     nonisolated static func isEligibleForUninstallDeletion(
         _ url: URL,
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        dotFolderCatalog: AppDotFolderCatalog = .shared
     ) -> Bool {
         let std = url.standardizedFileURL
         let path = std.path
 
         // Never through this gate: system locations.
         if path.hasPrefix("/System/") { return false }
+
+        // A leftover: must live strictly inside one of the leftover roots, and
+        // must not be one of the roots themselves. A bundle id can end in `.app`
+        // (`Application Support/com.granola.app`), and such leftovers were once
+        // refused as bundles outside the app roots. So a `.app` name is a
+        // leftover only directly inside a root, and only when it is not a real
+        // application bundle; a bundle anywhere under these roots is never one.
+        for root in leftoverSearchRoots(home: home) {
+            let rootPath = root.url.standardizedFileURL.path
+            if path == rootPath { return false }
+            guard path.hasPrefix(rootPath + "/") else { continue }
+            if std.pathExtension == "app" {
+                guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
+                      !isRealAppBundle(std) else { return false }
+            }
+            return true
+        }
 
         // An app bundle inside an app root, at any depth the picker walks
         // (`AppBundleReach`), so every bundle it offers can actually be trashed.
@@ -108,14 +127,31 @@ enum AppUninstallScanPolicy {
             return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil
         }
 
-        // A leftover: must live strictly inside one of the leftover roots, and
-        // must not be one of the roots themselves.
-        for root in leftoverSearchRoots(home: home) {
-            let rootPath = root.url.standardizedFileURL.path
-            if path == rootPath { return false }
-            if path.hasPrefix(rootPath + "/") { return true }
-        }
-        return false
+        // A hidden home folder, only when the catalog names exactly this path and
+        // no link leads there. Nothing inside one, never a parent such as
+        // `~/.gemini`, and never a `~/.gemini` that links into Dropbox or a
+        // dotfiles repository, where the Trash move would take the synced copy.
+        guard dotFolderCatalog.entry(forFolderAt: std, home: home) != nil else { return false }
+        return staysInsideHomeWithoutLinks(std, home: home)
+    }
+
+    /// A real application bundle, as opposed to a folder whose name ends in
+    /// `.app` because its bundle id does (`com.granola.app`).
+    nonisolated static func isRealAppBundle(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.appendingPathComponent("Contents/Info.plist").path)
+    }
+
+    /// Whether `url` sits inside `home` with no symbolic link on the way down:
+    /// the lexical path and the resolved path agree once both are resolved from
+    /// the home. A home that is itself a link, or spelled `/var` for
+    /// `/private/var`, still passes; a linked component under it does not.
+    nonisolated static func staysInsideHomeWithoutLinks(_ url: URL, home: URL) -> Bool {
+        let std = url.standardizedFileURL
+        let homePath = home.standardizedFileURL.path
+        guard std.path.hasPrefix(homePath + "/") else { return false }
+        let relative = String(std.path.dropFirst(homePath.count))
+        let resolvedHome = home.standardizedFileURL.resolvingSymlinksInPath().path
+        return std.resolvingSymlinksInPath().path == resolvedHome + relative
     }
 
     // MARK: Matching
@@ -132,9 +168,23 @@ enum AppUninstallScanPolicy {
     nonisolated static func matchReason(
         forLeftoverName name: String,
         category: UninstallCategory,
-        app: InstalledApp
+        app: InstalledApp,
+        dotFolderCatalog: AppDotFolderCatalog = .shared
     ) -> MatchReason? {
         let lowerName = name.lowercased()
+
+        // A hidden home folder is paired with a bundle id by the catalog and by
+        // nothing else (#228). The scanner lists them from the catalog directly;
+        // this branch is for `claimant`, so a second installed copy of the same
+        // app keeps the folder. The name is the folder's last component.
+        if category == .homeFolderData {
+            guard let bundleID = app.bundleID?.lowercased(), !bundleID.isEmpty else { return nil }
+            let listed = dotFolderCatalog.entries.contains { entry in
+                entry.bundleID.lowercased() == bundleID
+                    && entry.folders.contains { ($0 as NSString).lastPathComponent == name }
+            }
+            return listed ? .dotFolderCatalog : nil
+        }
 
         if let bundleID = app.bundleID?.lowercased(), !bundleID.isEmpty {
             // Exact bundle id, or bundle id plus a known suffix.
@@ -232,7 +282,22 @@ enum AppUninstallScanPolicy {
                 recoverySteps: String(localized: "\(appName) recreates what it needs the next time it runs."),
                 reinstallCommand: nil
             )
-        case .appName:
+        // A hidden home folder the catalog names for the app being uninstalled
+        // (#228). Settings, extensions and history live there, so it is Check
+        // First and starts unticked.
+        case .dotFolderCatalog:
+            return SafetyInfo(
+                level: .medium,
+                headline: String(localized: "\(appName) \(category.displayName)"),
+                explanation: String(localized: "A hidden folder in your home folder that \(appName) is known to keep. It holds settings, extensions and history rather than a cache, so check it before removing."),
+                recoverySteps: String(localized: "Removed items go to the Trash, so you can put them back until you empty it. If you reinstall the app, let it recreate its data."),
+                reinstallCommand: nil
+            )
+        // The ledger and the Library cross-evidence only attribute leftovers of
+        // removed apps, whose rows get their text from
+        // `OrphanLeftoverScanPolicy.safetyInfo`; listed here so a name-strength
+        // match is never read as safe.
+        case .appName, .ownerLedger, .libraryCrossEvidence:
             return SafetyInfo(
                 level: .medium,
                 headline: String(localized: "\(appName) \(category.displayName)"),

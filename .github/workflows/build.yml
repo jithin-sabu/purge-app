@@ -35,10 +35,50 @@ jobs:
       - name: Run unit tests
         timeout-minutes: 20
         run: |
+          # These two suites deliberately exhaust Swift's worker pool. Run them
+          # separately so unrelated async tests can finish before their deadlines.
+          mkdir -p TestResults
           xcodebuild test \
             -project purge.xcodeproj \
             -scheme purge \
             -destination 'platform=macOS' \
+            -skip-testing:PurgeTests/ProcessRunnerTests \
+            -skip-testing:PurgeTests/FolderSizingConcurrencyTests \
+            -resultBundlePath TestResults/UnitTests.xcresult \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Run process stress tests
+        timeout-minutes: 10
+        run: |
+          xcodebuild test \
+            -project purge.xcodeproj \
+            -scheme purge \
+            -destination 'platform=macOS' \
+            -only-testing:PurgeTests/ProcessRunnerTests \
+            -resultBundlePath TestResults/ProcessStressTests.xcresult \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run folder sizing stress tests
+        timeout-minutes: 10
+        run: |
+          xcodebuild test \
+            -project purge.xcodeproj \
+            -scheme purge \
+            -destination 'platform=macOS' \
+            -only-testing:PurgeTests/FolderSizingConcurrencyTests \
+            -resultBundlePath TestResults/FolderSizingStressTests.xcresult \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          if-no-files-found: ignore

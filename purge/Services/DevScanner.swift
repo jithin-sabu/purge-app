@@ -74,6 +74,9 @@ nonisolated final class DevScanner {
         "opam Download Cache": "opam-download-cache",
         "Puppeteer Browsers": "puppeteer-browsers",
         "Conda Package Cache": "conda-packages",
+        "Dart Analysis Cache": "dart-analysis-cache",
+        "Hermes Agent Cache": "hermes-agent-cache",
+        "Antigravity Browser Cache": "antigravity-browser-cache",
         "Bun Cache": "bun-cache",
         "VS Code Old Workspace Data": "orphaned-editor-workspace-storage",
         "Cursor Old Workspace Data": "orphaned-editor-workspace-storage"
@@ -579,11 +582,21 @@ nonisolated final class DevScanner {
             ("Oh My Zsh Cache", [home.appendingPathComponent(".oh-my-zsh/cache", isDirectory: true)]),
             ("opam Download Cache", [home.appendingPathComponent(".opam/download-cache", isDirectory: true)]),
             ("Puppeteer Browsers", [home.appendingPathComponent(".cache/puppeteer", isDirectory: true)]),
+            // The analysis server's byte store only. `.prompts`, `.instrumentation` and
+            // the pub package details next to it are not caches of any size.
+            ("Dart Analysis Cache", [home.appendingPathComponent(".dartServer/.analysis-driver", isDirectory: true)]),
+            // Check First: Hermes runs tasks unattended and keeps their scratch space
+            // here. Config, API keys, sessions and memories elsewhere in ~/.hermes are
+            // never listed.
+            ("Hermes Agent Cache", [home.appendingPathComponent(".hermes/cache", isDirectory: true)]),
             ("Conda Package Cache", [
                 ".conda/pkgs", "anaconda3/pkgs", "miniconda3/pkgs", "miniforge3/pkgs",
                 "mambaforge/pkgs", "opt/anaconda3/pkgs", "opt/miniconda3/pkgs"
             ].map { home.appendingPathComponent($0, isDirectory: true) }),
-            ("Gradle Cache", [home.appendingPathComponent(".gradle/caches", isDirectory: true)]),
+            ("Gradle Cache", [
+                home.appendingPathComponent(".gradle/caches", isDirectory: true),
+                home.appendingPathComponent(".gradle/wrapper/dists", isDirectory: true)
+            ]),
             ("Hex Package Cache", [home.appendingPathComponent(".hex/packages", isDirectory: true)]),
             ("Rebar3 Cache", [home.appendingPathComponent(".cache/rebar3", isDirectory: true)]),
             ("NuGet Packages", [home.appendingPathComponent(".nuget/packages", isDirectory: true)]),
@@ -689,7 +702,21 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent("Library/Caches/ms-playwright", isDirectory: true),
                 home.appendingPathComponent(".cache/ms-playwright", isDirectory: true)
             ])
-        ]
+        ] + chromiumUserDataCacheDefinitions(home: home)
+    }
+
+    /// One row per Chromium profile folder outside Application Support, listing
+    /// only its cache folders. The profile itself (cookies, saved passwords,
+    /// history, extensions) is never a path here, and the policy refuses it too.
+    /// Listed with limited access: a hidden home folder needs no permission, and a
+    /// store linked into Documents is skipped rather than followed.
+    private nonisolated static func chromiumUserDataCacheDefinitions(home: URL) -> [(label: String, paths: [URL])] {
+        DeletionSafetyPolicy.chromiumUserDataStores.map { store in
+            (store.label, CacheDiscoveryPaths.chromiumUserDataCacheURLs(
+                userData: home.appendingPathComponent(store.relative, isDirectory: true),
+                access: .limited
+            ))
+        }
     }
 
     private func scanGlobalCachePlaceholders(access: ScanAccess) -> ([DevTool], [DevToolSizeJob]) {
