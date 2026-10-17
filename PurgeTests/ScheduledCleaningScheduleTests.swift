@@ -473,7 +473,9 @@ struct ScheduledCleaningScheduleTests {
         #expect(h.rearms.count == 0)
     }
 
-    /// Run now reports the failure to Settings and leaves the schedule alone.
+    /// Run now reports the failure to Settings and leaves the schedule alone. It
+    /// does not stamp the failed attempt either: a failure half an hour before the
+    /// due date must not push the scheduled clean back by the retry gap.
     @Test("A failed Run now leaves the schedule where it was")
     func failedRunNowLeavesTheSchedule() async {
         let h = makeHarness(enabledAt: enabledAt)
@@ -485,15 +487,80 @@ struct ScheduledCleaningScheduleTests {
             bytesMovedToTrash: 0,
             failed: true
         )
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
 
-        let oneDayIn = enabledAt.addingTimeInterval(86_400)
-        let summary = await h.registrar.runScheduledCleanNow(referenceDate: oneDayIn)
+        let halfAnHourBefore = due.addingTimeInterval(-1_800)
+        let summary = await h.registrar.runScheduledCleanNow(referenceDate: halfAnHourBefore)
 
         #expect(summary?.failed == true)
         #expect(h.clean.callCount == 1)
         #expect(anchor(h) == nil)
         #expect(h.registrar.lastOutcome == nil)
-        #expect(h.registrar.dueDate(referenceDate: oneDayIn) == enabledAt.addingTimeInterval(3 * 86_400))
+        #expect(h.registrar.dueDate(referenceDate: halfAnHourBefore) == due)
+
+        // The scheduled clean still runs at its own due date.
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+        #expect(h.clean.callCount == 2)
+    }
+
+    /// A failed Run now on a schedule that is already due starts the retry gap,
+    /// like a failed sweep: otherwise the next switch into Purge runs the clean
+    /// again at once, with a second failure notification.
+    @Test("A failed Run now on an overdue schedule starts the retry gap")
+    func failedRunNowOnOverdueScheduleStartsTheGap() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        h.clean.summary = PurgeStore.ScheduledCleaningSummary(
+            deletedCount: 0,
+            bytesMovedToTrash: 0,
+            failed: true
+        )
+        let gap = ScheduledCleaningRegistrar.retryGapAfterFailure
+        let overdue = enabledAt.addingTimeInterval(3 * 86_400 + 600)
+
+        let summary = await h.registrar.runScheduledCleanNow(referenceDate: overdue)
+        #expect(summary?.failed == true)
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) == nil)
+        #expect(h.registrar.dueDate(referenceDate: overdue) == overdue.addingTimeInterval(gap))
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: overdue.addingTimeInterval(60))
+        #expect(h.clean.callCount == 1)
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: overdue.addingTimeInterval(gap))
+        #expect(h.clean.callCount == 2)
+    }
+
+    /// A failed Run now inside an existing retry gap refreshes the gap. Judged
+    /// against the retry-adjusted due date it would stamp nothing, and the gap's
+    /// end a minute later would run the clean again.
+    @Test("A failed Run now inside a retry gap refreshes the gap")
+    func failedRunNowInsideGapRefreshesTheGap() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        h.clean.summary = PurgeStore.ScheduledCleaningSummary(
+            deletedCount: 0,
+            bytesMovedToTrash: 0,
+            failed: true
+        )
+        let gap = ScheduledCleaningRegistrar.retryGapAfterFailure
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+        #expect(h.clean.callCount == 1)
+        #expect(h.registrar.dueDate(referenceDate: due) == due.addingTimeInterval(gap))
+
+        let lateInGap = due.addingTimeInterval(gap - 60)
+        _ = await h.registrar.runScheduledCleanNow(referenceDate: lateInGap)
+        #expect(h.clean.callCount == 2)
+        #expect(h.registrar.dueDate(referenceDate: lateInGap) == lateInGap.addingTimeInterval(gap))
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due.addingTimeInterval(gap + 60))
+        #expect(h.clean.callCount == 2)
     }
 
     /// Automatic cleaning turned off for a month and back on used to anchor on the

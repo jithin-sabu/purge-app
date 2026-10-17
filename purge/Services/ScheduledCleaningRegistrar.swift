@@ -319,6 +319,13 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     ///
     /// Asked while a sweep is cleaning, it waits and returns that clean's summary.
     /// Settings reads `nil` as "auto-clean is off", which it was not (#173).
+    ///
+    /// A failed Run now leaves the schedule as it was: before the due date it
+    /// stamps nothing, so it never pushes the next scheduled clean back by the
+    /// retry gap. On a schedule that is already due it does stamp the failed
+    /// attempt, like a sweep would, or the next activation would run the clean
+    /// again at once with a second failure notification. Settings shows the
+    /// failure either way.
     @discardableResult
     func runScheduledCleanNow(referenceDate now: Date = Date()) async -> PurgeStore.ScheduledCleaningSummary? {
         guard prefs.isEnabled else { return nil }
@@ -331,9 +338,16 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         var summary: PurgeStore.ScheduledCleaningSummary?
         defer { finishSweep(with: summary) }
 
+        // The schedule's own due date, not the retry-adjusted one: a failure
+        // inside an existing gap refreshes the gap instead of leaving its end in
+        // place for the next activation to run the clean again.
+        let wasDue = now >= scheduleAnchor(referenceDate: now)
+            .addingTimeInterval(prefs.effectiveRepeatIntervalSeconds)
         let result = await performClean()
         summary = result
-        await finishSchedule(after: result, at: now)
+        if !result.failed || wasDue {
+            await finishSchedule(after: result, at: now)
+        }
         return result
     }
 
