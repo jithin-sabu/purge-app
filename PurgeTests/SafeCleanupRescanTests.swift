@@ -157,24 +157,21 @@ struct SafeCleanupRescanTests {
         #expect(store.manualSafeCleanupCandidates().map(\.path) == [stale])
     }
 
-    /// `vendor` is not on the git check's list of rebuildable folders, so a PHP
-    /// project with uncommitted changes is marked dirty. The list is built after
-    /// that check, so the project stays out.
+    /// The git check marks a PHP project with uncommitted changes dirty. The list
+    /// is built after that check, so the project stays out.
     @Test
     func projectWithUncommittedChangesStaysOut() async throws {
         let fixture = Fixture()
         defer { fixture.remove() }
         let stale = try fixture.project("stale")
         let vendor = try fixture.project("php", marker: "composer.json", folder: "vendor")
-        let php = vendor.deletingLastPathComponent()
-        try git(in: php, "init", "-q")
-        try git(in: php, "add", "composer.json")
-        try git(in: php, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-qm", "init")
-        try Data("{\"name\": \"edited\"}".utf8).write(to: php.appendingPathComponent("composer.json"))
 
         let fake = FakeScans()
         defer { fake.cleanUp() }
         fake.hasAccess = true
+        // The scan's git check goes through the fake (#172): this project has
+        // changes that are not committed.
+        fake.gitAnswers[vendor.standardizedFileURL.path] = .dirty
         fake.projectEvents = [
             .projectGroupFound(group(artifact(at: stale))),
             .projectGroupFound(group(artifact(at: vendor, kind: .composerVendor), type: .composer))
@@ -253,19 +250,6 @@ struct SafeCleanupRescanTests {
             safetyInfo: SafetyInfo(level: .medium, headline: folder, explanation: "", recoverySteps: "", reinstallCommand: nil),
             gitStatus: .clean
         )
-    }
-
-    private func git(in folder: URL, _ arguments: String...) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", folder.path] + arguments
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw CocoaError(.fileWriteUnknown)
-        }
     }
 
     private func eventually(
