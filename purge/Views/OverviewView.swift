@@ -1006,6 +1006,7 @@ struct OverviewScanButton: View {
         case .largeFiles: return String(localized: "Large Files")
         case .apps: return String(localized: "installed apps")
         case .leftovers: return String(localized: "leftovers from deleted apps")
+        case .everythingElse: return String(localized: "Everything else")
         }
     }
 

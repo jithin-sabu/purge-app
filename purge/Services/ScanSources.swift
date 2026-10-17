@@ -16,6 +16,8 @@ struct ScanSources {
     var projects: (ScanAccess) -> AsyncStream<DeveloperScanEvent>
     /// Runs a Large Files, apps or leftovers step for the queue. Nil runs the real scan.
     var fullAccessStep: ((ScanStep, _ forced: Bool) async -> Void)?
+    /// The Everything else walk (#220), with the access it may read with.
+    var everythingElse: (ScanAccess) -> AsyncStream<EverythingElseMeasureEvent>
     /// Git status for the rows a scan found, keyed by standardized path. A clean
     /// asks `GitStatusChecker` again for each path before it moves anything, and
     /// never reads this.
@@ -24,7 +26,8 @@ struct ScanSources {
     static func live(
         cacheScanner: CacheScanner,
         devScanner: DevScanner,
-        gitChecker: GitStatusChecker
+        gitChecker: GitStatusChecker,
+        everythingElseMeasurer: EverythingElseMeasurer
     ) -> ScanSources {
         ScanSources(
             fullDiskAccess: { PermissionChecker().hasFullDiskAccess() },
@@ -32,6 +35,7 @@ struct ScanSources {
             developer: { devScanner.scanDevToolsStream(access: $0) },
             projects: { devScanner.discoverProjectsStream(access: $0) },
             fullAccessStep: nil,
+            everythingElse: { everythingElseMeasurer.measureStream(access: $0) },
             gitStatuses: { await gitChecker.cleanupStatuses(for: $0) }
         )
     }

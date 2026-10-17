@@ -421,6 +421,24 @@ final class PurgeStore: ObservableObject {
     private var scanRecordRefreshTask: Task<Void, Never>?
     /// Bumped whenever anything a category total reads changes; keys the Overview cache.
     private(set) var categoryInputsRevision = 0
+
+    // MARK: Everything else (#220)
+
+    /// What the Everything else walk has found this session, filling in as it
+    /// runs. Read only: nothing in it is selectable or reaches a delete path.
+    /// Written only by `measureEverythingElse` in `PurgeStore+EverythingElse.swift`.
+    @Published var everythingElseMeasurement: EverythingElseMeasurement?
+    /// Bumped on every change to the measurement; keys the breakdown cache.
+    var everythingElseMeasurementRevision = 0
+    @Published var isMeasuringEverythingElse = false
+    /// The Overview's Everything else row unfolded into its groups.
+    @Published var isEverythingElseExpanded = false
+    /// Which page the Overview tab shows: the summary, or Everything else opened.
+    @Published var overviewPage: OverviewPage = .summary
+    /// List or Map on the Everything else page. The page header owns the switch.
+    @Published var everythingElseViewMode: EverythingElseViewMode = .list
+    var everythingElseMeasureGeneration = 0
+    var everythingElseBreakdownCache: (key: EverythingElseBreakdownKey, breakdown: EverythingElseBreakdown)?
     /// The last Overview breakdown and what it was computed from. Scan flushes re-render
     /// every observer several times a second, and the breakdown walks every path found.
     var overviewBreakdownCache: (key: OverviewBreakdownKey, breakdown: OverviewBreakdown)?
@@ -510,7 +528,12 @@ final class PurgeStore: ObservableObject {
         self.devScanner = devScanner
         self.gitChecker = gitChecker
         self.scanSources = scanSources
-            ?? .live(cacheScanner: cacheScanner, devScanner: devScanner, gitChecker: gitChecker)
+            ?? .live(
+                cacheScanner: cacheScanner,
+                devScanner: devScanner,
+                gitChecker: gitChecker,
+                everythingElseMeasurer: EverythingElseMeasurer()
+            )
         self.defaults = defaults
         self.scanRecordStore = ScanRecordStore(defaults: defaults)
         var moved = Int64(defaults.integer(forKey: StorageKeys.totalMovedToTrashBytes))
@@ -3211,6 +3234,8 @@ final class PurgeStore: ObservableObject {
             return hasCompletedInstalledAppsScan && hasFinishedMeasuringApps
         case .leftovers:
             return hasCompletedOrphanScan
+        case .everythingElse:
+            return everythingElseMeasurement?.isComplete == true
         }
     }
 
@@ -4431,7 +4456,7 @@ final class PurgeStore: ObservableObject {
         userOverridePaths = UserOverridesStore.allOverriddenPaths()
     }
 
-    private func refreshExcludedPaths() {
+    func refreshExcludedPaths() {
         excludedPaths = ExcludedPathsStore.allExcludedPaths()
         exclusionRevision &+= 1
     }

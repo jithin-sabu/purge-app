@@ -10,7 +10,7 @@ extension PurgeStore {
     /// Scan Everything: every category, whether or not it has recent results.
     func scanEverything() {
         refreshPermission()
-        let steps = ScanStep.allCases.filter { !$0.needsFullDiskAccess || hasFullDiskAccess }
+        let steps = ScanStep.allCases.filter { !$0.runsOnlyOnDemand && (!$0.needsFullDiskAccess || hasFullDiskAccess) }
         scanQueueForcedSteps.formUnion(steps)
         scanQueue.enqueue(steps)
         startScanQueueIfIdle()
@@ -189,7 +189,7 @@ extension PurgeStore {
     }
 
     private func runScanStep(_ step: ScanStep, forced: Bool) async {
-        if step != .cachesAndDevTools, let fullAccessStep = scanSources.fullAccessStep {
+        if step.needsFullDiskAccess, let fullAccessStep = scanSources.fullAccessStep {
             await fullAccessStep(step, forced)
             return
         }
@@ -220,6 +220,9 @@ extension PurgeStore {
             } else {
                 await scanOrphanLeftoversIfNeeded()
             }
+        case .everythingElse:
+            // Only ever queued on demand, so it always measures afresh.
+            await measureEverythingElse()
         }
     }
 }

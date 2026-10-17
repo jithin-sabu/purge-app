@@ -102,8 +102,9 @@ nonisolated struct OverviewBreakdown: Equatable, Sendable {
 }
 
 /// Paths already counted, kept sorted so the folders under a new path can be found
-/// with a binary search instead of a scan of every earlier claim.
-nonisolated private struct ClaimedPaths {
+/// with a binary search instead of a scan of every earlier claim. Shared with the
+/// Everything else breakdown, which claims after the five categories have.
+nonisolated struct ClaimedPaths {
     private var set = Set<String>()
     private var sorted: [String] = []
     /// What each claimed path added, after its own overlaps were taken out.
