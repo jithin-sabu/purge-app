@@ -81,6 +81,72 @@ struct AppUninstallScannerTests {
         #expect(byPath[unrelated.standardizedFileURL.path] == nil)
     }
 
+    /// Uninstalling an app the catalog knows offers its hidden home folders,
+    /// Check First and unticked (#228). Only a real directory at exactly the
+    /// listed path counts: the shared parent, a symbolic link, a folder behind
+    /// a linked parent, a file and a missing folder stay out, and an app the
+    /// catalog does not name gets no such row.
+    @Test
+    func offersTheCatalogFoldersOfTheChosenAppUnticked() async throws {
+        let token = UUID().uuidString.prefix(8).lowercased()
+        let base = fm.temporaryDirectory.appendingPathComponent("purgetest-\(token)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let catalog = try AppDotFolderCatalog.parse(Data("""
+        {"apps": [{"bundle_id": "com.purgetest.\(token)", "display_name": "PurgeTest",
+                   "folders": ["~/.pt/data", "~/.pt-solo", "~/.pt-link", "~/.pt-file", "~/.pt-missing",
+                               "~/.pt-linked-parent/data"]}]}
+        """.utf8))
+
+        let nested = home.appendingPathComponent(".pt/data", isDirectory: true)
+        let solo = home.appendingPathComponent(".pt-solo", isDirectory: true)
+        let link = home.appendingPathComponent(".pt-link", isDirectory: true)
+        let file = home.appendingPathComponent(".pt-file")
+        try fm.createDirectory(at: nested, withIntermediateDirectories: true)
+        try fm.createDirectory(at: solo, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: link, withDestinationURL: solo)
+        try Data([0x00]).write(to: file)
+        // A real folder reached through a symbolic link in its parent: refused too.
+        let elsewhere = base.appendingPathComponent("elsewhere", isDirectory: true)
+        try fm.createDirectory(at: elsewhere.appendingPathComponent("data"), withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".pt-linked-parent"), withDestinationURL: elsewhere)
+        try fm.createDirectory(at: home.appendingPathComponent("Library/Preferences", isDirectory: true),
+                               withIntermediateDirectories: true)
+
+        let bundleURL = base.appendingPathComponent("PurgeTest.app", isDirectory: true)
+        try fm.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        let app = InstalledApp(
+            name: "PurgeTest", bundleURL: bundleURL, bundleID: "com.purgetest.\(token)",
+            bundleSizeBytes: 0, isRunning: false
+        )
+
+        let scanner = AppUninstallScanner(home: home, catalog: catalog)
+        let items = await collect(scanner.leftoverStream(for: app))
+        let homeRows = items.filter { $0.category == .homeFolderData }
+        #expect(Set(homeRows.map { $0.path.standardizedFileURL.path })
+            == Set([nested, solo].map { $0.standardizedFileURL.path }))
+        for row in homeRows {
+            #expect(row.matchReason == .dotFolderCatalog)
+            #expect(row.safetyInfo.level == .medium)
+            #expect(row.isSelected == false)
+            #expect(row.ownerBundleIDs.isEmpty)
+        }
+        #expect(items.contains { $0.category == .bundle && $0.isSelected })
+        #expect(!items.contains { $0.path.standardizedFileURL.path == home.appendingPathComponent(".pt").standardizedFileURL.path })
+
+        // The same home, an app the catalog does not name: nothing from the home folder.
+        let stranger = InstalledApp(
+            name: "Stranger", bundleURL: bundleURL, bundleID: "com.purgetest.stranger\(token)",
+            bundleSizeBytes: 0, isRunning: false
+        )
+        let strangerItems = await collect(scanner.leftoverStream(for: stranger))
+        #expect(strangerItems.allSatisfy { $0.category == .bundle })
+
+        // And with the shipped catalog, this throwaway id is unknown.
+        let shipped = await collect(AppUninstallScanner(home: home).leftoverStream(for: app))
+        #expect(shipped.allSatisfy { $0.category == .bundle })
+    }
+
     @Test
     func installedAppsScanExcludesSystemAppsAndPurge() async {
         var apps: [InstalledApp] = []

@@ -83,6 +83,7 @@
 "3 months" = "3 个月";
 "6 months" = "6 个月";
 "A %@ file that belongs to %@, matched by its identifier. Safe to remove with the app." = "类型为%@的文件，属于 %@，按应用标识符匹配。可随应用安全移除。";
+"A hidden folder in your home folder that %@ is known to keep. It holds settings, extensions and history rather than a cache, so check it before removing." = "个人文件夹中的一个隐藏文件夹，%@ 已知会保留它。其中存放的是设置、扩展和历史记录，而非缓存，移除前请先检查。";
 "A hidden folder this app is known to keep" = "此应用已知会保留的隐藏文件夹";
 "A leftover Chromium framework inside %@ that no running process is using. Quit and relaunch %@ before an older version still loaded by the running browser can be cleaned; those copies stay hidden until then. %@ also deletes leftover versions itself on relaunch." = "%@ 中未被任何运行中进程使用的 Chromium 框架残留。请先退出并重新打开 %@，才能清理浏览器仍在使用的旧版本；此前这些副本不会显示。%@ 重新启动时也会自行删除旧版本。";
 "AI Models" = "AI 模型";
