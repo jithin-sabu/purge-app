@@ -562,6 +562,12 @@ final class RemovedAppMonitor: ObservableObject {
         if store.manualDeletionSession != nil {
             phase = .cleaning
             updatePresenceWatch()
+        } else if store.takeRemovedAppReviewHeldForAnotherClean(), let current {
+            // Confirmed while another clean ran (#173). Back to the front of the
+            // queue: `processQueue` waits for that clean and the alert, then shows
+            // the review again with the leftovers as they are then.
+            queue.insert(current, at: 0)
+            finishReview()
         } else {
             finishReview()
         }

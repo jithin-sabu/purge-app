@@ -741,15 +741,32 @@ final class PurgeStore: ObservableObject {
 
     /// Whether a confirmed clean may start now. A running clean holds `isDeleting`,
     /// and a second one beside it would race it for the same rows and the progress
-    /// overlay. The picks are dropped and the alert says why, so a confirmation
-    /// never closes with nothing happening and no word (#173). Callers claim
-    /// `isDeleting` with no await after this check.
+    /// overlay. The confirmation has closed by the time this runs, and the alert
+    /// says why nothing happened (#173). What is kept: the rows stay selected, so
+    /// one click reopens the same confirmation once the clean ends. What is lost:
+    /// the keepers picked in a duplicates review go back to the suggested ones.
+    /// The removed-app review is the exception, since it cannot be reopened by
+    /// hand: `confirmRemovedAppLeftovers` holds it for `RemovedAppMonitor` to
+    /// show again. Callers claim `isDeleting` with no await after this check.
     private func claimConfirmedCleanOrExplain() -> Bool {
         guard !isDeleting else {
             errorMessage = String(localized: "Purge is already cleaning. Wait for it to finish, then try again.")
             return false
         }
         return true
+    }
+
+    /// Set when a removed-app review was confirmed while another clean ran. The
+    /// review closes with an alert, and `RemovedAppMonitor` reads this flag as the
+    /// sheet closes to put the review back at the front of its queue, so it opens
+    /// again once the clean ends. A review dismissed that way can't be reopened
+    /// by hand: its handoff record was discarded when it was first shown (#173).
+    private(set) var removedAppReviewHeldForAnotherClean = false
+
+    /// Reads and clears `removedAppReviewHeldForAnotherClean`.
+    func takeRemovedAppReviewHeldForAnotherClean() -> Bool {
+        defer { removedAppReviewHeldForAnotherClean = false }
+        return removedAppReviewHeldForAnotherClean
     }
 
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
@@ -2114,6 +2131,16 @@ final class PurgeStore: ObservableObject {
         let checked = await RemovedAppPresence.revalidate(plan)
         // A second click while the check ran finds the sheet already gone.
         guard removedAppLeftoverPlan?.id == plan.id else { return }
+        // A clean that started while the sheet was up, or during the check above,
+        // would make `performLeftoverCleanup` refuse this one. Unlike the other
+        // confirmations this review can't be reopened by hand, so it is held for
+        // the monitor to show again instead of dropped (#173).
+        guard !isDeleting else {
+            removedAppReviewHeldForAnotherClean = true
+            removedAppLeftoverPlan = nil
+            errorMessage = String(localized: "Purge is already cleaning. This review will open again when it's done.")
+            return
+        }
         removedAppLeftoverPlan = nil
         guard let checked else {
             errorMessage = String(localized: "\(plan.app.name) is on this Mac again, so its files were kept.")
