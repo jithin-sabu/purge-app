@@ -94,6 +94,14 @@ nonisolated struct DeletionReport: Identifiable {
     var movedToTrashCount: Int {
         deletedItems.lazy.filter(\.movedToTrash).count
     }
+
+    /// True when nothing was deleted and at least one item failed: the run did
+    /// not do its job, and a scheduled clean stays due. A run that moved some
+    /// items, one that only skipped items for safety, and one that removed items
+    /// permanently all count as done (#173).
+    var movedNothingAndFailed: Bool {
+        deletedItems.isEmpty && !failedItems.isEmpty
+    }
 }
 
 /// Outcome of asking CoreSimulator to remove a runtime image.

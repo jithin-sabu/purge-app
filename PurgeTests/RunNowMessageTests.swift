@@ -9,6 +9,7 @@ import Testing
 struct RunNowMessageTests {
     private typealias Summary = PurgeStore.ScheduledCleaningSummary
 
+    /// Five outcomes, five different lines, with no dependence on the English text.
     @Test("Each way a run can end gets its own message")
     func eachOutcomeHasItsOwnMessage() {
         let off = SettingsView.scheduledCleanNowMessage(for: nil)

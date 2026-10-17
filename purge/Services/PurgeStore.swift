@@ -3515,7 +3515,7 @@ final class PurgeStore: ObservableObject {
             }
             // Nothing moved and something failed: the clean did not do its job. A
             // clean that moved some items counts as done; the rest are listed as failed.
-            let failed = report.deletedItems.isEmpty && !report.failedItems.isEmpty
+            let failed = report.movedNothingAndFailed
             if scheduledNotifications {
                 if failed {
                     await ScheduledCleanupNotifier.notifyScheduledCleanFailed()
