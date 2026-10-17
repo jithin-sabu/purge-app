@@ -227,14 +227,19 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         }
     }
 
-    /// Anchor the schedule hangs off of. The last actual clean wins; before any
-    /// clean, fall back to when auto-clean was enabled; live `now` is the last
-    /// resort. Shared by `nextCleanDate` and the due check so the displayed date
-    /// and the activation sweep can never disagree.
+    /// Anchor the schedule hangs off of: the later of the last clean and the last
+    /// time automatic cleaning was turned on, and live `now` before either. Shared
+    /// by `nextCleanDate` and the due check so the displayed date and the
+    /// activation sweep can never disagree. The last enable counts so that
+    /// turning the schedule off for a while and back on starts a fresh interval
+    /// instead of running an overdue clean at the next activation (#173).
     func scheduleAnchor(referenceDate now: Date) -> Date {
-        currentLastGraceSweepDate
-            ?? prefs.enabledAt
-            ?? now
+        switch (currentLastGraceSweepDate, prefs.enabledAt) {
+        case let (lastClean?, enabledAt?): return max(lastClean, enabledAt)
+        case let (lastClean?, nil): return lastClean
+        case let (nil, enabledAt?): return enabledAt
+        case (nil, nil): return now
+        }
     }
 
     /// The moment the next clean becomes due (anchor + one interval), without the

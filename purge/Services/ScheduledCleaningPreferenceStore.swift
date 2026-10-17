@@ -23,8 +23,10 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         }
     }
 
-    /// Timestamp of when automatic cleaning was first enabled and not yet cleared.
-    /// Survives toggling off/on so the next-clean anchor is a pause/resume, not a restart.
+    /// When automatic cleaning was last turned on. The registrar anchors the
+    /// schedule on the later of this and the last clean, so turning it off and
+    /// back on starts a fresh interval instead of running an overdue clean at the
+    /// next activation (#173).
     var enabledAt: Date? {
         ud.object(forKey: UDKeys.scheduledEnabledAt) as? Date
     }
@@ -88,6 +90,11 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
     }
 
     func setEnabled(_ enabled: Bool, animation: Animation? = nil) async {
+        // Stamped before `isEnabled` changes, because that change re-arms the
+        // reminder from the anchor.
+        if Self.restartsSchedule(enabling: enabled, wasEnabled: isEnabled, hasAnchor: enabledAt != nil) {
+            restartSchedule()
+        }
         if let animation {
             withAnimation(animation) {
                 isEnabled = enabled
@@ -95,15 +102,23 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         } else {
             isEnabled = enabled
         }
-        // Anchor the schedule the first time it's enabled; never clear it on disable
-        // so toggling off then on resumes against the same anchor.
-        if enabled, enabledAt == nil {
-            ud.set(Date(), forKey: UDKeys.scheduledEnabledAt)
-        }
         if enabled {
             _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
         }
         Task { await ScheduledCleaningRegistrar.shared.applyScheduleFromPrefs() }
+    }
+
+    /// Whether turning automatic cleaning on restarts the schedule: yes from off,
+    /// and yes the first time, when there is no anchor yet. A second call while
+    /// it is already on leaves the schedule alone.
+    nonisolated static func restartsSchedule(enabling: Bool, wasEnabled: Bool, hasAnchor: Bool) -> Bool {
+        enabling && (!wasEnabled || !hasAnchor)
+    }
+
+    /// Stamps `now` as the moment automatic cleaning was turned on. The next clean
+    /// is then one interval from `now`, whatever the schedule did before (#173).
+    func restartSchedule(at now: Date = Date()) {
+        ud.set(now, forKey: UDKeys.scheduledEnabledAt)
     }
 }
 
