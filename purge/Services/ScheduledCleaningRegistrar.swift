@@ -234,7 +234,15 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// turning the schedule off for a while and back on starts a fresh interval
     /// instead of running an overdue clean at the next activation (#173).
     func scheduleAnchor(referenceDate now: Date) -> Date {
-        switch (currentLastGraceSweepDate, prefs.enabledAt) {
+        // A stamp from a clock that was ahead. Left alone it would outlast real
+        // cleans; clamped on each read the anchor would slide with `now` and never
+        // come due. Re-stamped once, at `now`, so the schedule runs from here.
+        var enabledAt = prefs.enabledAt
+        if let stamp = enabledAt, stamp > now {
+            prefs.restartSchedule(at: now)
+            enabledAt = now
+        }
+        switch (currentLastGraceSweepDate, enabledAt) {
         case let (lastClean?, enabledAt?): return max(lastClean, enabledAt)
         case let (lastClean?, nil): return lastClean
         case let (nil, enabledAt?): return enabledAt

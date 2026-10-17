@@ -90,10 +90,22 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
     }
 
     func setEnabled(_ enabled: Bool, animation: Animation? = nil) async {
-        // Stamped before `isEnabled` changes, because that change re-arms the
-        // reminder from the anchor.
+        applyEnabled(enabled, animation: animation)
+        if enabled {
+            _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
+        }
+        Task { await ScheduledCleaningRegistrar.shared.applyScheduleFromPrefs() }
+    }
+
+    /// The synchronous half of `setEnabled`: decides whether the schedule restarts,
+    /// stamps `enabledAt` if so, then flips `isEnabled`. The stamp lands first
+    /// because the flip posts `scheduledCleaningPrefsChanged`, which re-arms the
+    /// reminder from the anchor. Tests call this; `setEnabled` adds the
+    /// notification permission request and the shared registrar's re-arm, which
+    /// a test must never reach (#171).
+    func applyEnabled(_ enabled: Bool, now: Date = Date(), animation: Animation? = nil) {
         if Self.restartsSchedule(enabling: enabled, wasEnabled: isEnabled, hasAnchor: enabledAt != nil) {
-            restartSchedule()
+            restartSchedule(at: now)
         }
         if let animation {
             withAnimation(animation) {
@@ -102,10 +114,6 @@ final class ScheduledCleaningPreferenceStore: ObservableObject {
         } else {
             isEnabled = enabled
         }
-        if enabled {
-            _ = await ScheduledCleanupNotifier.requestAuthorizationIfNeeded()
-        }
-        Task { await ScheduledCleaningRegistrar.shared.applyScheduleFromPrefs() }
     }
 
     /// Whether turning automatic cleaning on restarts the schedule: yes from off,
