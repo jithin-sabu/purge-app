@@ -496,6 +496,115 @@ struct ScheduledCleaningScheduleTests {
         #expect(h.registrar.dueDate(referenceDate: oneDayIn) == enabledAt.addingTimeInterval(3 * 86_400))
     }
 
+    /// Automatic cleaning turned off for a month and back on used to anchor on the
+    /// old clean, so an overdue clean ran unattended at the next activation. Turning
+    /// it on now starts a fresh interval, and a clean after that moves the anchor
+    /// as before (#173).
+    @Test("Re-enabling after a pause starts a fresh interval")
+    func reenablingAfterPauseStartsAFreshInterval() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+
+        let firstDue = enabledAt.addingTimeInterval(3 * 86_400)
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: firstDue)
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) == firstDue)
+
+        h.prefs.applyEnabled(false, now: firstDue.addingTimeInterval(86_400))
+        let backOn = firstDue.addingTimeInterval(30 * 86_400)
+        h.prefs.applyEnabled(true, now: backOn)
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: backOn)
+        #expect(h.clean.callCount == 1)
+        #expect(h.registrar.dueDate(referenceDate: backOn) == backOn.addingTimeInterval(3 * 86_400))
+        #expect(h.registrar.nextCleanDate(referenceDate: backOn) == backOn.addingTimeInterval(3 * 86_400))
+
+        let nextDue = backOn.addingTimeInterval(3 * 86_400)
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: nextDue)
+        #expect(h.clean.callCount == 2)
+        #expect(anchor(h) == nextDue)
+    }
+
+    /// The Settings toggle goes through `applyEnabled`. The stamp must be in place
+    /// when `scheduledCleaningPrefsChanged` is posted, since the registrar re-arms
+    /// the reminder from the anchor on that notification. A second enable while
+    /// already on, and turning off, leave the stamp alone.
+    @Test("applyEnabled stamps the restart before it posts the change")
+    func applyEnabledStampsBeforeItPosts() {
+        let prefs = ScheduledCleaningPreferenceStore(userDefaults: suite.defaults)
+        var stampsSeen: [Date?] = []
+        let observer = NotificationCenter.default.addObserver(
+            forName: .scheduledCleaningPrefsChanged, object: prefs, queue: nil
+        ) { _ in
+            MainActor.assumeIsolated { stampsSeen.append(prefs.enabledAt) }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        let firstOn = enabledAt
+        prefs.applyEnabled(true, now: firstOn)
+        #expect(stampsSeen.last == firstOn)
+        #expect(prefs.isEnabled)
+
+        prefs.applyEnabled(true, now: firstOn.addingTimeInterval(3_600))
+        #expect(prefs.enabledAt == firstOn)
+
+        prefs.applyEnabled(false, now: firstOn.addingTimeInterval(7_200))
+        #expect(prefs.enabledAt == firstOn)
+        #expect(!prefs.isEnabled)
+
+        let backOn = firstOn.addingTimeInterval(30 * 86_400)
+        prefs.applyEnabled(true, now: backOn)
+        #expect(stampsSeen.last == backOn)
+        #expect(prefs.enabledAt == backOn)
+    }
+
+    /// What `setEnabled` decides: on from off restarts, the first enable restarts,
+    /// a second enable while already on does not, and turning off never does.
+    @Test("Turning on restarts the schedule only from off or the first time")
+    func restartDecision() {
+        typealias Prefs = ScheduledCleaningPreferenceStore
+        #expect(Prefs.restartsSchedule(enabling: true, wasEnabled: false, hasAnchor: true))
+        #expect(Prefs.restartsSchedule(enabling: true, wasEnabled: false, hasAnchor: false))
+        #expect(Prefs.restartsSchedule(enabling: true, wasEnabled: true, hasAnchor: false))
+        #expect(!Prefs.restartsSchedule(enabling: true, wasEnabled: true, hasAnchor: true))
+        #expect(!Prefs.restartsSchedule(enabling: false, wasEnabled: true, hasAnchor: true))
+        #expect(!Prefs.restartsSchedule(enabling: false, wasEnabled: false, hasAnchor: false))
+    }
+
+    /// A clean before the re-enable never wins over it, and a clean after it still does.
+    @Test("The anchor is the later of the last clean and the last enable")
+    func anchorIsTheLaterOfCleanAndEnable() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 1
+        h.prefs.customIntervalUnit = .day
+
+        // Enable stamped after the last clean.
+        h.defaults.set(enabledAt.addingTimeInterval(-10 * 86_400), forKey: Self.lastSweepKey)
+        #expect(h.registrar.scheduleAnchor(referenceDate: enabledAt) == enabledAt)
+
+        // Clean stamped after the enable.
+        let laterClean = enabledAt.addingTimeInterval(5 * 86_400)
+        h.defaults.set(laterClean, forKey: Self.lastSweepKey)
+        #expect(h.registrar.scheduleAnchor(referenceDate: laterClean) == laterClean)
+
+        // An enable stamped by a clock that was ahead is re-stamped at now, once:
+        // it never outlasts real cleans, and it does not slide with the clock.
+        let now = laterClean.addingTimeInterval(86_400)
+        h.defaults.set(now.addingTimeInterval(10 * 86_400), forKey: Self.enabledAtKey)
+        #expect(h.registrar.scheduleAnchor(referenceDate: now) == now)
+        #expect(h.prefs.enabledAt == now)
+        let later = now.addingTimeInterval(3_600)
+        #expect(h.registrar.scheduleAnchor(referenceDate: later) == now)
+        #expect(h.registrar.dueDate(referenceDate: later) == now.addingTimeInterval(86_400))
+
+        // A clean after the correction moves the anchor, as always.
+        h.defaults.set(later, forKey: Self.lastSweepKey)
+        #expect(h.registrar.scheduleAnchor(referenceDate: later) == later)
+    }
+
     // 14. The app only observes activation outside the test host and previews.
     //     Both share the user's real defaults and would clean real caches.
     @Test("The test host and previews never clean on activation")
