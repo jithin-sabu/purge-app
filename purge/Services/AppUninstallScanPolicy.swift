@@ -102,14 +102,20 @@ enum AppUninstallScanPolicy {
         if path.hasPrefix("/System/") { return false }
 
         // A leftover: must live strictly inside one of the leftover roots, and
-        // must not be one of the roots themselves. Checked before the bundle
-        // rule below, because a bundle id can end in `.app`
-        // (`Application Support/com.granola.app`), and such leftovers were
-        // refused as bundles outside the app roots.
+        // must not be one of the roots themselves. A bundle id can end in `.app`
+        // (`Application Support/com.granola.app`), and such leftovers were once
+        // refused as bundles outside the app roots. So a `.app` name is a
+        // leftover only directly inside a root, and only when it is not a real
+        // application bundle; a bundle anywhere under these roots is never one.
         for root in leftoverSearchRoots(home: home) {
             let rootPath = root.url.standardizedFileURL.path
             if path == rootPath { return false }
-            if path.hasPrefix(rootPath + "/") { return true }
+            guard path.hasPrefix(rootPath + "/") else { continue }
+            if std.pathExtension == "app" {
+                guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
+                      !isRealAppBundle(std) else { return false }
+            }
+            return true
         }
 
         // An app bundle inside an app root, at any depth the picker walks
@@ -121,9 +127,31 @@ enum AppUninstallScanPolicy {
             return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil
         }
 
-        // A hidden home folder, only when the catalog names exactly this path.
-        // Nothing inside one, and never a parent such as `~/.gemini`.
-        return dotFolderCatalog.entry(forFolderAt: std, home: home) != nil
+        // A hidden home folder, only when the catalog names exactly this path and
+        // no link leads there. Nothing inside one, never a parent such as
+        // `~/.gemini`, and never a `~/.gemini` that links into Dropbox or a
+        // dotfiles repository, where the Trash move would take the synced copy.
+        guard dotFolderCatalog.entry(forFolderAt: std, home: home) != nil else { return false }
+        return staysInsideHomeWithoutLinks(std, home: home)
+    }
+
+    /// A real application bundle, as opposed to a folder whose name ends in
+    /// `.app` because its bundle id does (`com.granola.app`).
+    nonisolated static func isRealAppBundle(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.appendingPathComponent("Contents/Info.plist").path)
+    }
+
+    /// Whether `url` sits inside `home` with no symbolic link on the way down:
+    /// the lexical path and the resolved path agree once both are resolved from
+    /// the home. A home that is itself a link, or spelled `/var` for
+    /// `/private/var`, still passes; a linked component under it does not.
+    nonisolated static func staysInsideHomeWithoutLinks(_ url: URL, home: URL) -> Bool {
+        let std = url.standardizedFileURL
+        let homePath = home.standardizedFileURL.path
+        guard std.path.hasPrefix(homePath + "/") else { return false }
+        let relative = String(std.path.dropFirst(homePath.count))
+        let resolvedHome = home.standardizedFileURL.resolvingSymlinksInPath().path
+        return std.resolvingSymlinksInPath().path == resolvedHome + relative
     }
 
     // MARK: Matching

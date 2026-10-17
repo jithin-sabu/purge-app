@@ -138,18 +138,51 @@ struct LeftoverOwnerLedgerTests {
     /// A match recorded while installed attributes the folder after the app is gone.
     @Test
     func recordedFolderIsAttributedOnceTheAppIsGone() {
-        let entry = OrphanLeftoverScanPolicy.ledgerOwner(
+        let owners = OrphanLeftoverScanPolicy.ledgerOwners(
             ofFolderAt: folder, home: home, ledger: recorded, installed: index(apps: ["com.vendor.Other"])
         )
-        #expect(entry?.bundleID == "com.google.antigravity")
-        #expect(entry?.displayName == "Antigravity")
+        #expect(owners.map(\.bundleID) == ["com.google.antigravity"])
+        #expect(owners.first?.displayName == "Antigravity")
+    }
+
+    /// Two gone apps once matched the folder. Both come back as owners, newest
+    /// first, so the confirm-time check sees either of them return.
+    @Test
+    func everyGoneOwnerIsReturned() {
+        var ledger = recorded
+        ledger.record(bundleID: "com.other.Antigravity", displayName: "Antigravity",
+                      folders: ["~/Library/Application Support/Antigravity"],
+                      seenAt: Date().addingTimeInterval(60))
+        let owners = OrphanLeftoverScanPolicy.ledgerOwners(
+            ofFolderAt: folder, home: home, ledger: ledger, installed: index(apps: ["com.vendor.Other"])
+        )
+        #expect(owners.map(\.bundleID) == ["com.other.Antigravity", "com.google.antigravity"])
+    }
+
+    /// `Firefox Nightly` keeps `Application Support/Firefox` after Firefox is
+    /// removed: an installed app whose name starts with the folder's name owns it.
+    @Test
+    func installedSiblingAppWithTheFolderNameKeepsIt() {
+        let firefox = home.appendingPathComponent("Library/Application Support/Firefox", isDirectory: true)
+        var ledger = LeftoverOwnerLedger()
+        ledger.record(bundleID: "org.mozilla.firefox", displayName: "Firefox",
+                      folders: ["~/Library/Application Support/Firefox"])
+        #expect(OrphanLeftoverScanPolicy.ledgerOwners(
+            ofFolderAt: firefox, home: home, ledger: ledger,
+            installed: index(apps: ["org.mozilla.nightly"], names: ["Firefox Nightly"])
+        ).isEmpty)
+        // A name that merely starts with the same letters is not the app.
+        #expect(!OrphanLeftoverScanPolicy.ledgerOwners(
+            ofFolderAt: firefox, home: home, ledger: ledger,
+            installed: index(apps: ["com.vendor.Other"], names: ["Firefoxy"])
+        ).isEmpty)
     }
 
     @Test
     func recordedFolderIsKeptWhileTheAppIsInstalled() {
-        #expect(OrphanLeftoverScanPolicy.ledgerOwner(
+        #expect(OrphanLeftoverScanPolicy.ledgerOwners(
             ofFolderAt: folder, home: home, ledger: recorded, installed: index(apps: ["com.google.antigravity"])
-        ) == nil)
+        ).isEmpty)
     }
 
     /// Two apps once matched the folder by name. One is still installed, so the
@@ -159,30 +192,30 @@ struct LeftoverOwnerLedgerTests {
         var ledger = recorded
         ledger.record(bundleID: "com.other.Antigravity", displayName: "Antigravity",
                       folders: ["~/Library/Application Support/Antigravity"])
-        #expect(OrphanLeftoverScanPolicy.ledgerOwner(
+        #expect(OrphanLeftoverScanPolicy.ledgerOwners(
             ofFolderAt: folder, home: home, ledger: ledger, installed: index(apps: ["com.other.Antigravity"])
-        ) == nil)
+        ).isEmpty)
     }
 
     /// An installed app with the folder's name owns it, even when the ledger
     /// never saw that app match it.
     @Test
     func installedAppWithTheFolderNameKeepsIt() {
-        #expect(OrphanLeftoverScanPolicy.ledgerOwner(
+        #expect(OrphanLeftoverScanPolicy.ledgerOwners(
             ofFolderAt: folder, home: home, ledger: recorded,
             installed: index(apps: ["com.vendor.Other"], names: ["Antigravity"])
-        ) == nil)
+        ).isEmpty)
     }
 
     @Test
     func unrecordedFolderIsNotAttributed() {
         let other = home.appendingPathComponent("Library/Application Support/Docker", isDirectory: true)
-        #expect(OrphanLeftoverScanPolicy.ledgerOwner(
+        #expect(OrphanLeftoverScanPolicy.ledgerOwners(
             ofFolderAt: other, home: home, ledger: recorded, installed: index(apps: [])
-        ) == nil)
-        #expect(OrphanLeftoverScanPolicy.ledgerOwner(
+        ).isEmpty)
+        #expect(OrphanLeftoverScanPolicy.ledgerOwners(
             ofFolderAt: folder, home: home, ledger: LeftoverOwnerLedger(), installed: index(apps: [])
-        ) == nil)
+        ).isEmpty)
     }
 
     /// Apple's and Purge's own identifiers never read as orphans, ledger or not.
@@ -191,9 +224,9 @@ struct LeftoverOwnerLedgerTests {
         var ledger = LeftoverOwnerLedger()
         ledger.record(bundleID: "com.apple.Something", displayName: "Something",
                       folders: ["~/Library/Application Support/Antigravity"])
-        #expect(OrphanLeftoverScanPolicy.ledgerOwner(
+        #expect(OrphanLeftoverScanPolicy.ledgerOwners(
             ofFolderAt: folder, home: home, ledger: ledger, installed: index(apps: [])
-        ) == nil)
+        ).isEmpty)
     }
 
     /// The scan's decision for a human-named folder goes through the ledger and
@@ -224,6 +257,7 @@ struct LeftoverOwnerLedgerTests {
         #expect(found?.owner == .bundleID("com.google.antigravity"))
         #expect(found?.evidence == .ownerLedger)
         #expect(found?.appName == "Antigravity")
+        #expect(found?.ownerBundleIDs == ["com.google.antigravity"])
 
         // Installed again: kept.
         #expect(OrphanLeftoverScanPolicy.orphanCandidate(

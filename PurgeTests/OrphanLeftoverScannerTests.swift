@@ -100,7 +100,7 @@ struct OrphanLeftoverScannerTests {
         let items = await scanItems(home: home, ledger: ledger)
         let found = items.first { $0.path.standardizedFileURL.path == folder.standardizedFileURL.path }
         #expect(found?.matchReason == .ownerLedger)
-        #expect(found?.ownerBundleID == "com.google.antigravity")
+        #expect(found?.ownerBundleIDs == ["com.google.antigravity"])
         #expect(found?.safetyInfo.headline == "Antigravity")
         #expect(found?.safetyInfo.level == .medium)
         #expect(found?.isSelected == false)
@@ -125,7 +125,7 @@ struct OrphanLeftoverScannerTests {
             == [bundleIDLeftover.standardizedFileURL.path, folder.standardizedFileURL.path].sorted())
         let found = items.first { $0.path.standardizedFileURL.path == folder.standardizedFileURL.path }
         #expect(found?.matchReason == .libraryCrossEvidence)
-        #expect(found?.ownerBundleID == "com.google.antigravity")
+        #expect(found?.ownerBundleIDs == ["com.google.antigravity"])
         #expect(found?.safetyInfo.headline == "Antigravity")
         #expect(found?.safetyInfo.level == .medium)
     }
@@ -160,7 +160,7 @@ struct OrphanLeftoverScannerTests {
         let found = items.first { $0.path.standardizedFileURL.path == antigravity.standardizedFileURL.path }
         #expect(found?.category == .homeFolderData)
         #expect(found?.matchReason == .dotFolderCatalog)
-        #expect(found?.ownerBundleID == "com.google.antigravity")
+        #expect(found?.ownerBundleIDs == ["com.google.antigravity"])
         #expect(found?.safetyInfo.headline == "Antigravity")
         #expect(found?.safetyInfo.level == .medium)
         #expect(found?.isSelected == false)

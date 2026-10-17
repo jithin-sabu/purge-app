@@ -294,13 +294,65 @@ struct AppUninstallScanPolicyTests {
             AppUninstallScanPolicy.isEligibleForUninstallDeletion(home.appendingPathComponent(relative))
         }
         #expect(eligible(".gemini/antigravity"))
-        #expect(eligible(".cursor"))
         #expect(eligible(".trae"))
         #expect(!eligible(".gemini"))
         #expect(!eligible(".gemini/antigravity/brain"))
+        // Shared with the cursor-agent CLI and promised away by the Cursor policies.
+        #expect(!eligible(".cursor"))
         #expect(!eligible(".cursor/extensions"))
         #expect(!eligible(".config"))
         #expect(!eligible(".ssh"))
+    }
+
+    /// `~/.gemini` linked into a synced folder: the catalog names
+    /// `~/.gemini/antigravity`, but trashing it would take the synced copy, so
+    /// both the gate and the scan refuse it.
+    @Test
+    func catalogFolderBehindASymlinkedParentIsRefused() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        let synced = fm.temporaryDirectory.appendingPathComponent("purgetest-synced-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? fm.removeItem(at: home)
+            try? fm.removeItem(at: synced)
+        }
+        try fm.createDirectory(at: synced.appendingPathComponent("antigravity"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: home, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".gemini"), withDestinationURL: synced)
+        let linked = home.appendingPathComponent(".gemini/antigravity", isDirectory: true)
+        #expect(fm.fileExists(atPath: linked.path))
+
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(linked, home: home, dotFolderCatalog: testCatalog))
+        #expect(!AppUninstallScanPolicy.staysInsideHomeWithoutLinks(linked, home: home))
+        // A real folder in the same place passes.
+        try fm.removeItem(at: home.appendingPathComponent(".gemini"))
+        try fm.createDirectory(at: linked, withIntermediateDirectories: true)
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(linked, home: home, dotFolderCatalog: testCatalog))
+        #expect(AppUninstallScanPolicy.staysInsideHomeWithoutLinks(linked, home: home))
+    }
+
+    /// A real application bundle under a leftover root is a program, not a
+    /// leftover, wherever it sits; a folder merely named `com.granola.app`
+    /// directly inside the root is one.
+    @Test
+    func realAppBundleUnderALeftoverRootIsRefused() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let support = home.appendingPathComponent("Library/Application Support", isDirectory: true)
+        let helper = support.appendingPathComponent("Foo Helper.app", isDirectory: true)
+        try fm.createDirectory(at: helper.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        try Data("<plist/>".utf8).write(to: helper.appendingPathComponent("Contents/Info.plist"))
+        let nested = support.appendingPathComponent("Vendor/Tool.app", isDirectory: true)
+        try fm.createDirectory(at: nested, withIntermediateDirectories: true)
+        let granola = support.appendingPathComponent("com.granola.app", isDirectory: true)
+        try fm.createDirectory(at: granola, withIntermediateDirectories: true)
+
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(helper, home: home))
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(nested, home: home))
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(granola, home: home))
+        #expect(AppUninstallScanPolicy.isRealAppBundle(helper))
+        #expect(!AppUninstallScanPolicy.isRealAppBundle(granola))
     }
 
     /// An empty catalog opens nothing in the home folder.

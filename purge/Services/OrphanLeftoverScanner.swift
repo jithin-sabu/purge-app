@@ -73,7 +73,7 @@ nonisolated final class OrphanLeftoverScanner {
         let category: UninstallCategory
         let appName: String
         let evidence: MatchReason
-        let ownerBundleID: String?
+        let ownerBundleIDs: [String]
         let modified: Date
     }
 
@@ -137,11 +137,6 @@ nonisolated final class OrphanLeftoverScanner {
                 let key = entry.standardizedFileURL.path
                 guard seen.insert(key).inserted else { continue }
 
-                let ownerBundleID: String?
-                switch orphan.owner {
-                case .bundleID(let id): ownerBundleID = id
-                case .appGroup: ownerBundleID = nil
-                }
                 candidates.append(
                     Candidate(
                         url: entry,
@@ -149,7 +144,7 @@ nonisolated final class OrphanLeftoverScanner {
                         appName: orphan.appName
                             ?? OrphanLeftoverScanPolicy.friendlyName(bundleID: orphan.owner.displayName, url: entry),
                         evidence: orphan.evidence,
-                        ownerBundleID: ownerBundleID,
+                        ownerBundleIDs: orphan.ownerBundleIDs,
                         modified: orphan.lastModified
                     )
                 )
@@ -175,7 +170,7 @@ nonisolated final class OrphanLeftoverScanner {
                     category: .homeFolderData,
                     appName: dotFolder.entry.displayName,
                     evidence: .dotFolderCatalog,
-                    ownerBundleID: dotFolder.entry.bundleID,
+                    ownerBundleIDs: [dotFolder.entry.bundleID],
                     modified: dotFolder.lastModified
                 )
             )
@@ -200,7 +195,7 @@ nonisolated final class OrphanLeftoverScanner {
                     // App data that does not regenerate: the user opts in per item.
                     isSelected: false,
                     lastModified: candidate.modified,
-                    ownerBundleID: candidate.ownerBundleID
+                    ownerBundleIDs: candidate.ownerBundleIDs
                 )
             )
         }

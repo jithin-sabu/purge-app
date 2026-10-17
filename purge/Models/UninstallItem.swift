@@ -146,11 +146,13 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// The app-uninstaller flow does not sort by date, so it leaves this at the
     /// default.
     var lastModified: Date = .distantPast
-    /// The bundle id of the removed app a leftover belonged to, when the evidence
-    /// names one (#224). The confirm step checks that app is not running or back
-    /// on this Mac before anything moves. `nil` for the uninstaller's own items,
-    /// whose app is the one being removed, and for app groups.
-    var ownerBundleID: String? = nil
+    /// The bundle ids of the removed apps a leftover belonged to, the row's owner
+    /// first, when the evidence names any (#224). The ledger can name more than
+    /// one gone app for a folder. The confirm step checks that none of them is
+    /// running or back on this Mac before anything moves. Empty for the
+    /// uninstaller's own items, whose app is the one being removed, and for app
+    /// groups.
+    var ownerBundleIDs: [String] = []
 
     /// Shared with an app that is staying installed, so it must not be trashed.
     var isKeptForOtherApp: Bool { keptForApp != nil }

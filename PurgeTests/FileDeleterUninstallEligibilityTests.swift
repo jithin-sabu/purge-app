@@ -52,19 +52,21 @@ struct FileDeleterUninstallEligibilityTests {
         let gemini = home.appendingPathComponent(".gemini", isDirectory: true)
         let antigravity = gemini.appendingPathComponent("antigravity", isDirectory: true)
         let other = home.appendingPathComponent(".other-tool", isDirectory: true)
+        let cursor = home.appendingPathComponent(".cursor", isDirectory: true)
         try fm.createDirectory(at: antigravity, withIntermediateDirectories: true)
         try fm.createDirectory(at: other, withIntermediateDirectories: true)
+        try fm.createDirectory(at: cursor, withIntermediateDirectories: true)
         try Data(repeating: 0x00, count: 64).write(to: antigravity.appendingPathComponent("state"))
         try Data(repeating: 0x00, count: 64).write(to: gemini.appendingPathComponent("settings.json"))
 
         let trash = FakeTrash()
         let report = try await FileDeleter(home: home, trash: trash.trash).deleteUserSelectedFiles(
-            at: [antigravity, gemini, other]
+            at: [antigravity, gemini, other, cursor]
         )
 
         #expect(trash.trashedPaths == [antigravity.standardizedFileURL.path])
         #expect(Set(report.skippedItems.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
-            == [gemini.standardizedFileURL.path, other.standardizedFileURL.path])
+            == [gemini.standardizedFileURL.path, other.standardizedFileURL.path, cursor.standardizedFileURL.path])
     }
 
     /// The app builds its deleter with no `home`, so the gate checks the real home.

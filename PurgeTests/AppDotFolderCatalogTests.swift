@@ -25,8 +25,16 @@ struct AppDotFolderCatalogTests {
             "~/.gemini/antigravity-browser-profile",
             "~/.antigravity"
         ])
-        #expect(shipped.entries.first { $0.bundleID == "com.todesktop.230313mzl4w4u92" }?.folders == ["~/.cursor"])
         #expect(shipped.entries.first { $0.bundleID == "com.trae.app" }?.folders == ["~/.trae"])
+    }
+
+    /// `~/.cursor` stays in use by the cursor-agent CLI after Cursor.app is gone,
+    /// and the Cursor policies in Dev Tools promise it is never offered whole.
+    @Test
+    func cursorIsNotInTheCatalog() {
+        let shipped = AppDotFolderCatalog.shared
+        #expect(!shipped.entries.contains { $0.bundleID == "com.todesktop.230313mzl4w4u92" })
+        #expect(!shipped.entries.flatMap(\.folders).contains { $0 == "~/.cursor" || $0.hasPrefix("~/.cursor/") })
     }
 
     /// `~/.gemini` also holds the Gemini CLI's settings, config and skills. It is

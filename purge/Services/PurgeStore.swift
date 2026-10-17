@@ -2111,26 +2111,46 @@ final class PurgeStore: ObservableObject {
     }
 
     /// The uninstaller quits a running app before it moves anything. A leftover
-    /// has no app to quit, so before anything moves each owner is checked
-    /// again: one that is running, or back on this Mac, keeps its files (#224).
-    /// The rest go ahead.
+    /// has no app to quit, so before anything moves each row is judged again
+    /// against a fresh view of what is installed and running
+    /// (`OrphanLeftoverScanPolicy.keepsAtConfirm`): an owner that is back, from
+    /// anywhere, or an installed app that now carries the folder's name, keeps
+    /// the row (#224). The rest go ahead, and the alert names what was kept.
     func confirmOrphanCleanup(_ plan: OrphanCleanupPlan) async {
         orphanCleanupPlan = nil
         let selected = plan.selectedItems
-        let owners = Set(selected.compactMap(\.ownerBundleID))
-        let present = await Task.detached(priority: .userInitiated) {
-            owners.filter { OrphanLeftoverScanPolicy.isOwnerPresent(bundleID: $0) }
+        let owners = Set(selected.flatMap(\.ownerBundleIDs))
+        let (installed, present) = await Task.detached(priority: .userInitiated) {
+            (
+                OrphanLeftoverScanPolicy.makeInstalledAppIndex(),
+                owners.filter { OrphanLeftoverScanPolicy.isOwnerPresent(bundleID: $0) }
+            )
         }.value
         let kept = selected.filter { item in
-            guard let owner = item.ownerBundleID else { return false }
-            return present.contains(owner)
-        }
-        if !kept.isEmpty {
-            let names = Set(kept.map(\.safetyInfo.headline)).sorted().joined(separator: ", ")
-            errorMessage = String(localized: "\(names) is open or back on this Mac, so its files were kept.")
+            OrphanLeftoverScanPolicy.keepsAtConfirm(
+                ownerBundleIDs: item.ownerBundleIDs,
+                folderName: item.path.lastPathComponent,
+                category: item.category,
+                evidence: item.matchReason,
+                installed: installed,
+                presentOwners: present
+            )
         }
         let keptIDs = Set(kept.map(\.id))
         await performLeftoverCleanup(items: selected.filter { !keptIDs.contains($0.id) })
+        // After the clean, which clears the message before it starts, and only
+        // when the clean itself had nothing to say: its own errors come first.
+        if !kept.isEmpty, errorMessage == nil {
+            errorMessage = keptOwnersMessage(kept)
+        }
+    }
+
+    private func keptOwnersMessage(_ kept: [UninstallItem]) -> String {
+        let names = Set(kept.map(\.safetyInfo.headline)).sorted()
+        if names.count == 1, let name = names.first {
+            return String(localized: "\(name) is open or back on this Mac, so its files were kept.")
+        }
+        return String(localized: "These apps are open or back on this Mac, so their files were kept: \(names.joined(separator: ", ")).")
     }
 
     // MARK: - Leftovers of apps removed outside Purge (issue #65)
