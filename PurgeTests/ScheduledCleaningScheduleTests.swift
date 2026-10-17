@@ -533,6 +533,36 @@ struct ScheduledCleaningScheduleTests {
         #expect(h.clean.callCount == 2)
     }
 
+    /// A failed Run now inside an existing retry gap refreshes the gap. Judged
+    /// against the retry-adjusted due date it would stamp nothing, and the gap's
+    /// end a minute later would run the clean again.
+    @Test("A failed Run now inside a retry gap refreshes the gap")
+    func failedRunNowInsideGapRefreshesTheGap() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        h.clean.summary = PurgeStore.ScheduledCleaningSummary(
+            deletedCount: 0,
+            bytesMovedToTrash: 0,
+            failed: true
+        )
+        let gap = ScheduledCleaningRegistrar.retryGapAfterFailure
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+        #expect(h.clean.callCount == 1)
+        #expect(h.registrar.dueDate(referenceDate: due) == due.addingTimeInterval(gap))
+
+        let lateInGap = due.addingTimeInterval(gap - 60)
+        _ = await h.registrar.runScheduledCleanNow(referenceDate: lateInGap)
+        #expect(h.clean.callCount == 2)
+        #expect(h.registrar.dueDate(referenceDate: lateInGap) == lateInGap.addingTimeInterval(gap))
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due.addingTimeInterval(gap + 60))
+        #expect(h.clean.callCount == 2)
+    }
+
     // 14. The app only observes activation outside the test host and previews.
     //     Both share the user's real defaults and would clean real caches.
     @Test("The test host and previews never clean on activation")

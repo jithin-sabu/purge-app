@@ -325,7 +325,11 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         var summary: PurgeStore.ScheduledCleaningSummary?
         defer { finishSweep(with: summary) }
 
-        let wasDue = now >= dueDate(referenceDate: now)
+        // The schedule's own due date, not the retry-adjusted one: a failure
+        // inside an existing gap refreshes the gap instead of leaving its end in
+        // place for the next activation to run the clean again.
+        let wasDue = now >= scheduleAnchor(referenceDate: now)
+            .addingTimeInterval(prefs.effectiveRepeatIntervalSeconds)
         let result = await performClean()
         summary = result
         if !result.failed || wasDue {
