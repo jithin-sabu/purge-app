@@ -233,8 +233,8 @@
 "This is used by NT-ware's SmartClient, a print management tool commonly found in offices and universities. Deleting it is generally safe but the print client may need to re-configure itself." = "NT-ware 的 SmartClient 使用的数据，这是一款常见于办公室和大学的打印管理工具。通常可以安全删除，但打印客户端可能需要重新配置。";
 
 /* openai-codex */
-"OpenAI Codex Tool" = "OpenAI Codex 工具";
-"This stores temporary data for OpenAI's Codex coding assistant tool. It is safe to delete and will be rebuilt automatically." = "OpenAI Codex 编程助理工具的临时数据。可以安全删除，会自动重建。";
+"OpenAI Codex" = "OpenAI Codex";
+"Page and script caches of the Codex app and command line tool. Safe to delete; Codex rebuilds them as you use it. Your sessions and sign-in in ~/.codex are left alone." = "Codex 应用和命令行工具的网页与脚本缓存。可以安全删除，使用时 Codex 会重建。不会动 ~/.codex 中的会话和登录信息。";
 
 /* todesktop-shipit */
 "ToDesktop App Updater" = "ToDesktop 应用更新器";
@@ -514,7 +514,7 @@
 
 /* gradle-global-cache */
 "Gradle Dependency Cache" = "Gradle 依赖缓存";
-"Libraries and build caches Gradle downloads for Java, Kotlin and Android projects. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline." = "Gradle 为 Java、Kotlin 和 Android 项目下载的代码库与构建缓存。不会丢失内容，但下次构建需重新下载全部内容，可能耗时较长，且无法离线完成。";
+"Libraries, build caches and the Gradle versions the wrapper downloaded, for Java, Kotlin and Android projects. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline." = "Gradle 为 Java、Kotlin 和 Android 项目下载的代码库、构建缓存和 wrapper 下载的 Gradle 版本。不会丢失内容，但下次构建需重新下载全部内容，可能耗时较长，且无法离线完成。";
 
 /* cocoapods-cache */
 "CocoaPods Cache" = "CocoaPods 缓存";
@@ -1131,3 +1131,19 @@
 /* conda-packages */
 "Conda Package Cache" = "Conda 软件包缓存";
 "Packages conda downloaded and unpacked to build your environments. Your environments keep working because they link to these files, which also means deleting frees less space than shown until those environments are removed. Running conda clean --all does this more carefully." = "conda 为构建环境而下载并解包的软件包。环境通过链接使用这些文件，因此仍可继续运行；这也意味着，在移除这些环境前，删除所释放的空间会少于显示值。运行 conda clean --all 会更谨慎地处理清理。";
+
+/* effectcraft */
+"EffectCraft Render Cache" = "EffectCraft 渲染缓存";
+"Rendered frames EffectCraft keeps so effects preview without rendering again. Safe to delete; EffectCraft renders them again when you open a project." = "EffectCraft 保存的已渲染帧，用于无需重新渲染即可预览效果。可以安全删除，打开项目时 EffectCraft 会重新渲染。";
+
+/* dart-analysis-cache */
+"Dart Analysis Cache" = "Dart 分析缓存";
+"Analysis results the Dart and Flutter language server keeps in ~/.dartServer so your editor opens projects faster. Safe to delete; the analyzer rebuilds them as you work." = "Dart 和 Flutter 语言服务器保存在 ~/.dartServer 中的分析结果，用于让编辑器更快打开项目。可以安全删除，分析器会在工作时重建。";
+
+/* hermes-agent-cache */
+"Hermes Agent Cache" = "Hermes 代理缓存";
+"Downloads, catalogues and scratch space the Hermes agent keeps in ~/.hermes/cache. Nothing is lost, but a running Hermes task may be using the scratch space, so clean it while Hermes is idle. Settings, keys and sessions are left alone." = "Hermes 代理保存在 ~/.hermes/cache 中的下载、目录和临时工作空间。不会丢失内容，但正在运行的 Hermes 任务可能正在使用临时工作空间，请在 Hermes 空闲时清理。不会动设置、密钥和会话。";
+
+/* antigravity-browser-cache */
+"Antigravity Browser Cache" = "Antigravity 浏览器缓存";
+"Page and script caches of the browser Antigravity uses for web tasks. Safe to delete; the browser fills them again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity 用于网页任务的浏览器的网页与脚本缓存。可以安全删除，浏览器加载页面时会重新填充。不会动登录信息、历史记录和扩展。";

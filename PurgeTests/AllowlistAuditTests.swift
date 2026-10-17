@@ -632,3 +632,162 @@ struct EditorWorkspaceStorageLookupTests {
         #expect(unused.level == .medium)
     }
 }
+
+// MARK: - Part 6: caches the Everything else breakdown found off the list (#222)
+
+@Suite("Allowlist audit: Everything else caches")
+struct EverythingElseCacheAuditTests {
+    /// Folders directly in `~/Library/Caches` are allowed by the prefix; what
+    /// decides whether a row appears is the entry each name resolves to.
+    @Test(arguments: [
+        ("Dia", SafetyLevel.safe),
+        ("company.thebrowser.dia", .safe),
+        ("Codex", .safe),
+        ("com.openai.codex", .safe),
+        ("EffectCraft", .safe),
+        ("ai.storyteller.effectcraft", .safe),
+    ])
+    func appCacheFoldersResolve(name: String, level: SafetyLevel) {
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: name)?.safetyLevel == level, "\(name)")
+        #expect(AuditPaths.evaluate("Library/Caches/\(name)") == .allow, "\(name)")
+    }
+
+    @Test(arguments: [
+        ("Dart Analysis Cache", SafetyLevel.safe),
+        ("Hermes Agent Cache", .medium),
+        ("Antigravity Browser Cache", .safe),
+        ("Gradle Cache", .medium),
+    ])
+    func newDevToolRowsResolve(label: String, level: SafetyLevel) {
+        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: label, primaryPath: nil)
+        #expect(info.level == level, "\(label) is \(info.level)")
+    }
+
+    @Test(arguments: [
+        ".dartServer/.analysis-driver",
+        ".dartServer/.analysis-driver/00/000221a840a7647fa5a6f8c8bca330a6.unlinked2",
+        ".hermes/cache",
+        ".hermes/cache/uv/archive-v0",
+        ".hermes/cache/scratch",
+        ".gradle/wrapper/dists",
+        ".gradle/wrapper/dists/gradle-8.7-bin/bhs2wmbdwecv87pi65oeuq5iu/gradle-8.7-bin.zip",
+        ".gemini/antigravity-browser-profile/Default/Cache",
+        ".gemini/antigravity-browser-profile/Default/Cache/Cache_Data/index",
+        ".gemini/antigravity-browser-profile/Default/Code Cache",
+        ".gemini/antigravity-browser-profile/Default/GPUCache",
+        ".gemini/antigravity-browser-profile/Default/ShaderCache",
+        ".gemini/antigravity-browser-profile/Profile 1/Cache",
+        ".gemini/antigravity-browser-profile/Default/Service Worker/CacheStorage",
+        ".gemini/antigravity-browser-profile/Default/Service Worker/ScriptCache",
+        ".gemini/antigravity-browser-profile/component_crx_cache",
+        ".gemini/antigravity-browser-profile/ShaderCache",
+    ])
+    func newCachesAreOffered(relative: String) {
+        #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
+    }
+
+    /// Everything next to each addition that holds settings, keys, sessions, a
+    /// browser's sign-ins, or an installed runtime stays out.
+    @Test(arguments: [
+        ".dartServer",
+        ".dartServer/.prompts/preferences.json",
+        ".dartServer/.instrumentation",
+        ".dartServer/.pub-package-details-cache",
+        ".hermes",
+        ".hermes/config.yaml",
+        ".hermes/.env",
+        ".hermes/auth.json",
+        ".hermes/memories",
+        ".hermes/sessions",
+        ".hermes/state.db",
+        ".hermes/skills",
+        ".hermes/hermes-agent",
+        ".hermes/bin/lightpanda",
+        ".gradle/wrapper",
+        ".gradle/wrapper/gradle-wrapper.properties",
+        ".gradle/jdks",
+        ".gradle/gradle.properties",
+        ".gradle/init.d",
+        ".gradle/daemon",
+        ".gemini",
+        ".gemini/settings.json",
+        ".gemini/antigravity",
+        ".gemini/antigravity-ide",
+        ".gemini/antigravity-browser-profile",
+        ".gemini/antigravity-browser-profile/Local State",
+        ".gemini/antigravity-browser-profile/Default",
+        ".gemini/antigravity-browser-profile/Default/Login Data",
+        ".gemini/antigravity-browser-profile/Default/Cookies",
+        ".gemini/antigravity-browser-profile/Default/History",
+        ".gemini/antigravity-browser-profile/Default/Preferences",
+        ".gemini/antigravity-browser-profile/Default/Extensions",
+        ".gemini/antigravity-browser-profile/Default/IndexedDB",
+        ".gemini/antigravity-browser-profile/Default/Local Storage",
+        ".gemini/antigravity-browser-profile/Default/Service Worker",
+        ".gemini/antigravity-browser-profile/Default/Service Worker/Database",
+        ".gemini/antigravity-browser-profile/Safe Browsing",
+        ".gemini/other-browser-profile/Default/Cache",
+        ".cache/codex-runtimes",
+        ".cache/codex-runtimes/codex-primary-runtime/dependencies/node",
+        ".cache/codex-runtimes/codex-runtime-install-8XQiDN/node-runtime.tar.xz",
+    ])
+    func neighboursStayOut(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+    }
+
+    /// Discovery lists the same shape the policy allows: the cache folders at the
+    /// root and in each profile, never a profile or the files beside the caches.
+    @Test
+    func chromiumUserDataDiscoveryListsOnlyCaches() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let userData = base.appendingPathComponent("browser-profile", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        for folder in [
+            "Default/Cache/Cache_Data", "Default/Code Cache/js", "Default/Service Worker/CacheStorage",
+            "Default/Service Worker/Database", "Default/Extensions", "Default/IndexedDB",
+            "Profile 1/GPUCache", "component_crx_cache", "Safe Browsing", "GraphiteDawnCache",
+        ] {
+            try fm.createDirectory(at: userData.appendingPathComponent(folder), withIntermediateDirectories: true)
+        }
+        for file in ["Local State", "Default/Login Data", "Default/Cookies", "Default/History"] {
+            try Data("x".utf8).write(to: userData.appendingPathComponent(file))
+        }
+
+        let root = userData.standardizedFileURL.path
+        let found = CacheDiscoveryPaths.chromiumUserDataCacheURLs(userData: userData, access: .full)
+            .map { String($0.path.dropFirst(root.count + 1)) }
+        #expect(found == [
+            "Default/Cache",
+            "Default/Code Cache",
+            "Default/Service Worker/CacheStorage",
+            "Profile 1/GPUCache",
+            "component_crx_cache",
+        ])
+    }
+
+    /// App Caches classifies an Application Support cache folder by the app
+    /// folder's name, so an alias reaches `<App>/Cache` even without Chromium's
+    /// `Cache_Data` inside, which `SafetyTierList` alone keeps Not Sure. The new
+    /// aliases join Code and Cursor in that behaviour; #226 tracks the guard.
+    @Test(arguments: ["Codex", "EffectCraft", "Code", "Cursor"])
+    func appNameAliasesDecideApplicationSupportCacheRows(appName: String) throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let bare = base.appendingPathComponent("Library/Application Support/\(appName)/Cache", isDirectory: true)
+        try fm.createDirectory(at: bare, withIntermediateDirectories: true)
+        #expect(SafetyTierList.evaluate(folderName: appName, path: bare) == nil)
+        let info = ExplanationResolver.initialSafetyForCacheFolder(folderName: appName, friendlyHeadline: appName, path: bare)
+        #expect(info.level == .safe, "\(appName)")
+    }
+
+    /// The store the scanner lists is the one the policy allows.
+    @Test
+    func antigravityProfileIsTheOnlyChromiumStoreOutsideApplicationSupport() {
+        let stores = DeletionSafetyPolicy.chromiumUserDataStores
+        #expect(stores.map(\.relative) == [".gemini/antigravity-browser-profile"])
+        #expect(stores.map(\.label) == ["Antigravity Browser Cache"])
+        #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "Antigravity Browser Cache", primaryPath: nil).level == .safe)
+    }
+}

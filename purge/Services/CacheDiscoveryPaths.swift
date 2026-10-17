@@ -82,6 +82,36 @@ enum CacheDiscoveryPaths {
         return results
     }
 
+    /// Cache folders inside a Chromium "User Data" folder that lives outside
+    /// Application Support (`DeletionSafetyPolicy.chromiumUserDataStores`): the
+    /// cache folders at its root and in each profile, nothing else. Same shape as
+    /// `DeletionSafetyPolicy.isWhitelistedChromiumUserDataCachePath`, which is
+    /// what makes each one deletable.
+    nonisolated static func chromiumUserDataCacheURLs(userData: URL, access: ScanAccess = .full) -> [URL] {
+        let fm = FileManager.default
+        guard ProtectedLocations.isReadable(userData, access: access),
+              fm.fileExists(atPath: userData.path) else { return [] }
+
+        var results: [URL] = []
+        var seen = Set<String>()
+
+        func appendIfExists(_ url: URL) {
+            guard ProtectedLocations.isReadable(url, access: access) else { return }
+            let key = url.standardizedFileURL.path
+            guard !seen.contains(key) else { return }
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { return }
+            seen.insert(key)
+            results.append(url.standardizedFileURL)
+        }
+
+        for name in applicationSupportDirectCacheNames.sorted() {
+            appendIfExists(userData.appendingPathComponent(name, isDirectory: true))
+        }
+        appendChromiumProfileCaches(userData: userData, appendIfExists: appendIfExists)
+        return results.sorted { $0.path < $1.path }
+    }
+
     private nonisolated static func appendChromiumProfileCaches(
         userData: URL,
         appendIfExists: (URL) -> Void
