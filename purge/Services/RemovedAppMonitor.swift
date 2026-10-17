@@ -67,6 +67,9 @@ final class RemovedAppMonitor: ObservableObject {
     /// reviews are done, leaving the Mac as the user had it. A due scheduled clean
     /// waits while this is true, since the quit would cut it off (#173).
     private(set) var quitsWhenDone = RemovedAppMonitor.startsWindowless
+    /// A review's quit that waits for a clean the user started beside it. Set by
+    /// `closeWindowIfOpenedForReview`, acted on when `isDeleting` clears (#173).
+    private var quitsOnceCleanEnds = false
     private var retryTask: Task<Void, Never>?
     private var drainTask: Task<Void, Never>?
     private var needsAnotherDrain = false
@@ -121,6 +124,14 @@ final class RemovedAppMonitor: ObservableObject {
             .filter { !$0 }
             .sink { [weak self] _ in
                 onNextRunloopTurn { self?.cleanupSummaryClosed() }
+            }
+            .store(in: &cancellables)
+        // A review's quit can wait for a clean the user started beside it (#173).
+        store.$isDeleting
+            .removeDuplicates()
+            .filter { !$0 }
+            .sink { [weak self] _ in
+                onNextRunloopTurn { self?.quitIfHeldForClean() }
             }
             .store(in: &cancellables)
         // A removal that arrived before Full Disk Access, or before onboarding
@@ -255,6 +266,7 @@ final class RemovedAppMonitor: ObservableObject {
     func userOpenedWindow() {
         openedWindowForReview = false
         quitsWhenDone = false
+        quitsOnceCleanEnds = false
     }
 
     /// Handles `purge://removed-apps` from the background agent. The URL carries
@@ -610,12 +622,31 @@ final class RemovedAppMonitor: ObservableObject {
         }
         // In on-demand mode there is no menu bar icon to come back to, so a
         // windowless Purge left running would only be a Dock icon.
-        if quitsWhenDone || !StartupPreferenceStore.persistedShowsMenuBarIcon() {
+        switch RemovedAppWatchPolicy.reviewWindowExit(
+            quitsWhenDone: quitsWhenDone,
+            showsMenuBarIcon: StartupPreferenceStore.persistedShowsMenuBarIcon(),
+            cleanInProgress: store.isAnyCleanInProgress
+        ) {
+        case .quit:
             quitsWhenDone = false
             NSApp.terminate(nil)
-        } else {
+        case .quitAfterClean:
+            quitsWhenDone = false
+            quitsOnceCleanEnds = true
+        case .hide:
             NSApp.hide(nil)
         }
+    }
+
+    /// Runs when `isDeleting` clears. The quit a finished review wanted waits here
+    /// while a clean the user started runs beside it, so the quit guard never
+    /// asks about a quit nobody started. A window the user brought back in the
+    /// meantime means Purge is in use, and the quit is dropped.
+    private func quitIfHeldForClean() {
+        guard quitsOnceCleanEnds, let store, !store.isAnyCleanInProgress else { return }
+        quitsOnceCleanEnds = false
+        guard !Self.appWindowIsOnScreen else { return }
+        NSApp.terminate(nil)
     }
 }
 

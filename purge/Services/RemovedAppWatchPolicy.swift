@@ -266,6 +266,24 @@ nonisolated enum RemovedAppWatchPolicy {
     /// process running as the user could write, so its path must be a bundle the
     /// watcher could really have indexed, its identifier must look like one, and its
     /// name must be short plain text.
+    /// What Purge does with itself once a review it opened its window for is over.
+    enum ReviewWindowExit: Equatable, Sendable {
+        /// The watcher started Purge for this review, or on-demand mode has no
+        /// menu bar icon to come back to: quit now.
+        case quit
+        /// The same, but a clean the user started is running beside the review.
+        /// Quitting now would meet the quit guard with a "still cleaning" alert
+        /// for a quit nobody asked for, so it waits for the clean to end (#173).
+        case quitAfterClean
+        /// Menu bar mode: hide the window and keep running.
+        case hide
+    }
+
+    static func reviewWindowExit(quitsWhenDone: Bool, showsMenuBarIcon: Bool, cleanInProgress: Bool) -> ReviewWindowExit {
+        guard quitsWhenDone || !showsMenuBarIcon else { return .hide }
+        return cleanInProgress ? .quitAfterClean : .quit
+    }
+
     static func isValidRecord(path: String, bundleID: String, name: String, roots: [String]) -> Bool {
         let normalized = normalizedPath(path)
         guard normalized.hasSuffix(".app"), !normalized.contains("/../"), !normalized.contains("/./") else {
