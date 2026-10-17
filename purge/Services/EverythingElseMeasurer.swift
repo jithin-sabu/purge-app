@@ -115,7 +115,9 @@ nonisolated final class EverythingElseMeasurer {
                 continue
             }
             if values.isDirectory == true {
-                guard ProtectedLocations.isReadable(entry, access: access, home: home) else { continue }
+                // A limited walk leaves the protected roots and the media and
+                // contacts folders alone, so no prompt ever comes from here.
+                if access == .limited, !EverythingElseRootPlan.isReadableByLimitedWalk(entry, home: home) { continue }
                 folders.append(entry)
             } else if !hiddenOnly {
                 looseFileBytes += Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)

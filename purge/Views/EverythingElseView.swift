@@ -87,7 +87,10 @@ enum EverythingElseStyle {
 
     static func labelColor(_ group: EverythingElseGroup) -> Color {
         switch group {
-        case .macOS, .notMeasured: return AppColors.textPrimary
+        // The macOS tile is dark in light mode and light in dark mode, the
+        // opposite of the text colour, which is what the primary button's label is.
+        case .macOS: return AppColors.onActionPrimary
+        case .notMeasured: return AppColors.textPrimary
         case .appsOutsideApplications, .managedLibraries, .uncleanableCaches, .appData,
              .yourFiles, .hiddenToolFolders, .otherUsers:
             return AppColors.Chart.everythingElseShadeLabels[shadeIndex(group)]
@@ -128,11 +131,19 @@ struct EverythingElseView: View {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The one group open to its folders. The map shows the same level.
-    @State private var openGroup: EverythingElseGroup?
-    /// The folder picked in the list or on the map.
-    @State private var selectedFolderPath: String?
     @State private var highlightedID: String?
+
+    /// The one group open to its folders. The map shows the same level.
+    private var openGroup: EverythingElseGroup? {
+        get { store.everythingElseOpenGroup }
+        nonmutating set { store.everythingElseOpenGroup = newValue }
+    }
+
+    /// The folder picked in the list or on the map.
+    private var selectedFolderPath: String? {
+        get { store.everythingElseSelectedFolderPath }
+        nonmutating set { store.everythingElseSelectedFolderPath = newValue }
+    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -154,15 +165,17 @@ struct EverythingElseView: View {
                 )
             }
 
-            if let breakdown {
+            // A walk that Stop ended before it finished is not a measure: the
+            // card offers to start again rather than showing half the groups.
+            if let breakdown, store.everythingElsePhase != .notMeasured {
                 switch store.everythingElseViewMode {
                 case .list:
                     groupsCard(breakdown)
                 case .map:
                     EverythingElseMapCard(
                         breakdown: breakdown,
-                        openGroup: $openGroup,
-                        selectedFolderPath: $selectedFolderPath,
+                        openGroup: $store.everythingElseOpenGroup,
+                        selectedFolderPath: $store.everythingElseSelectedFolderPath,
                         linkedState: linkedRowState
                     )
                 }
@@ -243,9 +256,9 @@ struct EverythingElseView: View {
                     breakdown: breakdown,
                     group: group,
                     isOpen: openGroup == group,
-                    selectedFolderPath: $selectedFolderPath,
+                    selectedFolderPath: $store.everythingElseSelectedFolderPath,
                     linkedState: linkedRowState(EverythingElseStyle.segmentID(group)),
-                    onToggle: { toggle(group) }
+                    onExpand: { toggle(group) }
                 )
             }
         }
@@ -342,7 +355,7 @@ private struct EverythingElseGroupRow: View {
     let isOpen: Bool
     @Binding var selectedFolderPath: String?
     let linkedState: OverviewLinkedRowState
-    let onToggle: () -> Void
+    let onExpand: () -> Void
 
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -386,11 +399,11 @@ private struct EverythingElseGroupRow: View {
         .background(isHovering || linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .onTapGesture(perform: onToggle)
+        .onTapGesture(perform: onExpand)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityValue(isOpen ? String(localized: "Expanded") : String(localized: "Collapsed"))
-        .accessibilityAction { onToggle() }
+        .accessibilityAction { onExpand() }
     }
 
     @ViewBuilder
@@ -400,6 +413,9 @@ private struct EverythingElseGroupRow: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.textTertiary)
                 .accessibilityLabel("Needs Full Disk Access")
+        } else if isMeasuring, figures?.bytes == 0 {
+            // The status line already says so; a zero here would read as a result.
+            EmptyView()
         } else {
             let bytes = figures?.bytes ?? 0
             HStack(spacing: AppStyle.Spacing.small) {

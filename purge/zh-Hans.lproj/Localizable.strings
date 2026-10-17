@@ -1126,3 +1126,5 @@
 "Has its own uninstall" = "有自己的卸载方式";
 "Under %@ each, with any loose files" = "每个小于 %@，包括零散文件";
 "%@, %@, %@" = "%@，%@，%@";
+"Part of this needs Full Disk Access" = "其中一部分需要完全磁盘访问权限";
+"Part needs Full Disk Access" = "部分内容需要完全磁盘访问权限";

@@ -55,6 +55,32 @@ nonisolated enum EverythingElseRootPlan {
     /// Hidden folders in the home folder that are not tool folders.
     static let ignoredHiddenFolders: Set<String> = [".Trash"]
 
+    /// Folders a limited walk never reads, on top of `ProtectedLocations`: the
+    /// media libraries, which macOS guards with a Photos or Media & Apple Music
+    /// prompt (the same stall `ProtectedLocations.mediaCacheRoots` records),
+    /// and the address book, which prompts for Contacts. A `du` inside any of
+    /// them would put a prompt on screen with Purge's name on it.
+    static let limitedWalkSkips: [String] = managedLibraryFolders + [
+        "Library/Application Support/AddressBook"
+    ]
+
+    /// Whether a limited walk may size `url`: outside the protected roots and
+    /// outside the media and contacts folders above. Pure string work.
+    static func isReadableByLimitedWalk(_ url: URL, home: URL) -> Bool {
+        guard ProtectedLocations.isReadable(url, access: .limited, home: home) else { return false }
+        let homePath = home.standardizedFileURL.path
+        let path = url.path
+        for relative in limitedWalkSkips {
+            let skipped = "\(homePath)/\(relative)"
+            if path == skipped || path.hasPrefix(skipped + "/") { return false }
+        }
+        // A media library anywhere under the media folders, by its bundle name.
+        let name = url.lastPathComponent
+        if LargeFileScanPolicy.excludedFolderNames.contains(name) { return false }
+        let ext = url.pathExtension.lowercased()
+        return !["photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater"].contains(ext)
+    }
+
     /// `steamLibraries` are the library roots from `libraryfolders.vdf`, each
     /// holding a `steamapps` folder. `otherUserHomes` are the folders directly in
     /// `/Users` other than this user's, `Shared` included. `usersFolder` is the
@@ -69,7 +95,7 @@ nonisolated enum EverythingElseRootPlan {
         var roots: [EverythingElseMeasureRoot] = []
 
         func add(_ group: EverythingElseGroup, _ url: URL, _ kind: EverythingElseMeasureRoot.Kind) {
-            let locked = access == .limited && !ProtectedLocations.isReadable(url, access: access, home: home)
+            let locked = access == .limited && !isReadableByLimitedWalk(url, home: home)
             roots.append(EverythingElseMeasureRoot(group: group, url: url, kind: kind, isLockedWithoutAccess: locked))
         }
 

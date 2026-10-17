@@ -301,7 +301,8 @@ struct EverythingElseMapLevel {
             let hint = EverythingElseFolderHint.hint(for: folder.path, group: group, home: home, steamGames: steamGames)
             let pill: Pill?
             switch hint?.action {
-            case .showInLargeFiles: pill = Pill(text: String(localized: "In Large Files"), tone: .safe)
+            // Neutral tones only: a green pill would read as "safe to clean".
+            case .showInLargeFiles: pill = Pill(text: String(localized: "In Large Files"), tone: .accent)
             case .openApp, .openURL: pill = Pill(text: String(localized: "Has its own uninstall"), tone: .accent)
             case nil: pill = nil
             }

@@ -728,6 +728,14 @@ private struct OverviewEverythingElseGroupRow: View {
                     Text(EverythingElseStyle.name(group))
                         .font(AppStyle.Typography.rowTitle)
                         .lineLimit(1)
+                    if figures?.isLocked == true, !isLocked {
+                        // Part of the group was skipped: the figure is a floor.
+                        Image(systemName: "lock")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(AppColors.textTertiary)
+                            .help("Part of this needs Full Disk Access")
+                            .accessibilityLabel("Part needs Full Disk Access")
+                    }
                     Spacer(minLength: AppStyle.Spacing.small)
                     trailing
                 }

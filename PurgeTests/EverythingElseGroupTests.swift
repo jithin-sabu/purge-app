@@ -114,6 +114,25 @@ struct EverythingElseGroupTests {
         #expect(open.contains("/Users/bob"))
     }
 
+    @Test func aLimitedScanNeverSizesAMediaLibraryOrTheAddressBook() {
+        // Reading inside these puts a Photos, Media & Apple Music or Contacts
+        // prompt on screen in Purge's name, so a limited walk stays out, whether
+        // they are roots of their own or folders inside Pictures and Music.
+        let plan = roots(access: .limited)
+        for root in plan where root.group == .managedLibraries {
+            #expect(root.isLockedWithoutAccess, Comment(rawValue: root.path))
+        }
+        #expect(!EverythingElseRootPlan.isReadableByLimitedWalk(home.appendingPathComponent("Pictures/Photos Library.photoslibrary"), home: home))
+        #expect(!EverythingElseRootPlan.isReadableByLimitedWalk(home.appendingPathComponent("Music/Music"), home: home))
+        #expect(!EverythingElseRootPlan.isReadableByLimitedWalk(home.appendingPathComponent("Movies/Holiday.imovielibrary"), home: home))
+        #expect(!EverythingElseRootPlan.isReadableByLimitedWalk(home.appendingPathComponent("Library/Application Support/AddressBook"), home: home))
+        #expect(!EverythingElseRootPlan.isReadableByLimitedWalk(home.appendingPathComponent("Library/Containers/com.apple.mail"), home: home))
+        #expect(EverythingElseRootPlan.isReadableByLimitedWalk(home.appendingPathComponent("Pictures/Scans"), home: home))
+        #expect(EverythingElseRootPlan.isReadableByLimitedWalk(home.appendingPathComponent("Library/Application Support/CoreAIKit"), home: home))
+        // With Full Disk Access the same roots are open.
+        #expect(roots(access: .full).allSatisfy { !$0.isLockedWithoutAccess })
+    }
+
     @Test func aLockedGroupSaysSoInTheBreakdown() {
         let plan = roots(access: .limited)
         var measurement = EverythingElseMeasurement(access: .limited)
@@ -127,10 +146,10 @@ struct EverythingElseGroupTests {
         #expect(breakdown[.managedLibraries]?.isLocked == true)
         #expect(breakdown[.uncleanableCaches]?.isLocked == false)
         #expect(breakdown[.hiddenToolFolders]?.isLocked == false)
-        // Measured roots still to come, so these groups are not finished yet; the
-        // Photos library under Pictures keeps Mail and Messages' group open too.
+        // Measured roots still to come, so this group is not finished yet.
         #expect(breakdown[.uncleanableCaches]?.isFinished == false)
-        #expect(breakdown[.managedLibraries]?.isFinished == false)
+        // Every library is locked without access, so that group is done at once.
+        #expect(breakdown[.managedLibraries]?.isFinished == true)
         // No other users on this Mac: nothing to wait for.
         #expect(breakdown[.otherUsers]?.isFinished == true)
     }

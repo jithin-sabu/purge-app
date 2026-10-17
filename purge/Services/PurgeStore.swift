@@ -437,6 +437,11 @@ final class PurgeStore: ObservableObject {
     @Published var overviewPage: OverviewPage = .summary
     /// List or Map on the Everything else page. The page header owns the switch.
     @Published var everythingElseViewMode: EverythingElseViewMode = .list
+    /// The one group open to its folders on the Everything else page. The list
+    /// and the map show the same level, so it lives here rather than in either.
+    @Published var everythingElseOpenGroup: EverythingElseGroup?
+    /// The folder picked in the list or on the map, by path.
+    @Published var everythingElseSelectedFolderPath: String?
     var everythingElseMeasureGeneration = 0
     var everythingElseBreakdownCache: (key: EverythingElseBreakdownKey, breakdown: EverythingElseBreakdown)?
     /// The last Overview breakdown and what it was computed from. Scan flushes re-render
