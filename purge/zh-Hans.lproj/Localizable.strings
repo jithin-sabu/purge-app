@@ -1059,8 +1059,9 @@
 "Measured %@. Hard links are counted once within each folder." = "%@统计。硬链接在每个文件夹内只计一次。";
 "Measuring. Groups fill in as their folders finish, biggest first." = "正在统计。各组会在其文件夹统计完成后依次显示，最大的在前。";
 "Without Full Disk Access, Documents, Desktop, Downloads, Mail, Messages and app containers are skipped and counted as not measured." = "没有完全磁盘访问权限时，文稿、桌面、下载、邮件、信息和应用容器会被跳过，计入“未统计”。";
-"Open" = "已展开";
-"Closed" = "已折叠";
+"Expanded" = "已展开";
+"Collapsed" = "已折叠";
+"Open" = "打开";
 "Measuring…" = "正在统计…";
 "Nothing here" = "这里没有内容";
 "%@ over %@" = "%@超过 %@";
@@ -1115,3 +1116,13 @@
 "Measuring your home folder and Library…" = "正在统计个人文件夹和资源库…";
 "Not measured yet" = "尚未统计";
 "Measured %@" = "%@统计";
+
+/* Everything else map (#220) */
+"Double-click a group to open it" = "连按两下某个组可打开它";
+"Click Everything else in the crumb to go back" = "点按路径中的“其他内容”可返回";
+"Hover a tile for its size and share. Tiles under 3 points are not drawn." = "将指针悬停在方块上可查看大小和占比。小于 3 点的方块不绘制。";
+"Hover a folder for its path and size." = "将指针悬停在文件夹上可查看路径和大小。";
+"In Large Files" = "在“大文件”中";
+"Has its own uninstall" = "有自己的卸载方式";
+"Under %@ each, with any loose files" = "每个小于 %@，包括零散文件";
+"%@, %@, %@" = "%@，%@，%@";

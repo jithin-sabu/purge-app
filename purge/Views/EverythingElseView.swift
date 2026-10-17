@@ -389,7 +389,7 @@ private struct EverythingElseGroupRow: View {
         .onTapGesture(perform: onToggle)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .accessibilityValue(isOpen ? String(localized: "Open") : String(localized: "Closed"))
+        .accessibilityValue(isOpen ? String(localized: "Expanded") : String(localized: "Collapsed"))
         .accessibilityAction { onToggle() }
     }
 

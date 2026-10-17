@@ -626,7 +626,7 @@ private struct OverviewEverythingElseRow: View {
         .onTapGesture(perform: toggle)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isButton)
-        .accessibilityValue(isExpanded ? String(localized: "Open") : String(localized: "Closed"))
+        .accessibilityValue(isExpanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
         .accessibilityAction { toggle() }
     }
 
