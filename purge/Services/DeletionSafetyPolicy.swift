@@ -289,6 +289,10 @@ enum DeletionSafetyPolicy {
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
             "\(home)/.gradle/caches",
+            // The Gradle versions the wrapper downloaded; a build fetches them again.
+            // `~/.gradle/jdks` (installed JDKs), `gradle.properties` and `init.d` are
+            // the user's own and are not listed.
+            "\(home)/.gradle/wrapper/dists",
             // Caches only. The rest of `~/.android` is emulators (`avd`), the adb key
             // every paired phone trusts, and `debug.keystore`, whose replacement breaks
             // Google Sign-In and Maps keys registered against the old one.
@@ -307,6 +311,9 @@ enum DeletionSafetyPolicy {
             // tools installed with `dart pub global activate`, which are not a cache.
             "\(home)/.pub-cache/hosted",
             "\(home)/.pub-cache/git",
+            // The Dart analysis server's byte store, rebuilt as it analyses. The
+            // rest of `~/.dartServer` is the server's own ids and preferences.
+            "\(home)/.dartServer/.analysis-driver",
             // Hex is Elixir/Erlang's package registry; `packages` is a pure download
             // cache, re-fetched by `mix deps.get`. `~/.mix` is deliberately NOT listed:
             // it holds installed Mix archives (tools the user chose to install), not a cache.
@@ -423,6 +430,10 @@ enum DeletionSafetyPolicy {
             "\(home)/mambaforge/pkgs",
             "\(home)/opt/anaconda3/pkgs",
             "\(home)/opt/miniconda3/pkgs",
+            // Check First by its explanation: Hermes runs tasks unattended and keeps
+            // their scratch space here. The rest of `~/.hermes` is config, API keys,
+            // sessions and memories, and is not listed.
+            "\(home)/.hermes/cache",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
             "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",
@@ -636,6 +647,38 @@ enum DeletionSafetyPolicy {
             return true
         }
 
+        return false
+    }
+
+    /// Chromium "User Data" folders outside Application Support whose cache
+    /// folders Purge offers, with the Dev Tools row each one is shown as. Only
+    /// the caches inside are ever allowed: the profile next to them holds
+    /// cookies, saved passwords, history and extensions.
+    nonisolated static let chromiumUserDataStores: [(relative: String, label: String)] = [
+        // The browser Antigravity drives for web tasks.
+        (".gemini/antigravity-browser-profile", "Antigravity Browser Cache")
+    ]
+
+    nonisolated static func chromiumUserDataRoots(home: String) -> [String] {
+        chromiumUserDataStores.map { "\(home)/\($0.relative)" }
+    }
+
+    /// Whether `path` is a cache folder inside one of `chromiumUserDataRoots`, or
+    /// a descendant of one: `<root>/<cache name>`, `<root>/<profile>/<cache name>`
+    /// or `<root>/<profile>/Service Worker/{CacheStorage,ScriptCache}`, the same
+    /// shape `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists. The root, a
+    /// profile folder and everything else in it are refused.
+    nonisolated static func isWhitelistedChromiumUserDataCachePath(_ path: String, home: String) -> Bool {
+        for root in chromiumUserDataRoots(home: home) {
+            guard path.hasPrefix(root + "/") else { continue }
+            let parts = String(path.dropFirst(root.count + 1)).split(separator: "/").map(String.init)
+            guard let first = parts.first else { return false }
+            if CacheDiscoveryPaths.applicationSupportDirectCacheNames.contains(first) { return true }
+            guard parts.count >= 2 else { return false }
+            if CacheDiscoveryPaths.chromiumProfileCacheNames.contains(parts[1]) { return true }
+            guard parts.count >= 3 else { return false }
+            return CacheDiscoveryPaths.chromiumProfileRelativePaths.contains("\(parts[1])/\(parts[2])")
+        }
         return false
     }
 
@@ -1144,6 +1187,9 @@ enum DeletionSafetyPolicy {
         }
 
         if isWhitelistedApplicationSupportCachePath(path, home: home) {
+            return .allow
+        }
+        if isWhitelistedChromiumUserDataCachePath(path, home: home) {
             return .allow
         }
         if isWhitelistedContainerCachePath(path, home: home) {

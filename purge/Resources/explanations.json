@@ -813,14 +813,15 @@
   },
   {
     "key": "openai-codex",
-    "display_name": "OpenAI Codex Tool",
+    "display_name": "OpenAI Codex",
     "tag": "safe",
-    "explanation": "This stores temporary data for OpenAI's Codex coding assistant tool. It is safe to delete and will be rebuilt automatically.",
+    "explanation": "Web page and script caches of the Codex app and the Codex command line tool. Safe to delete; Codex rebuilds them as you use it. Your sessions, settings and sign-in in ~/.codex are left alone.",
     "bundle_ids": [
       "com.openai.codex"
     ],
     "aliases": [
-      "com.openai.codex"
+      "com.openai.codex",
+      "Codex"
     ],
     "scope": "app_caches",
     "kind": "ai"
@@ -1737,7 +1738,7 @@
     "key": "gradle-global-cache",
     "display_name": "Gradle Dependency Cache",
     "tag": "medium",
-    "explanation": "Libraries and build caches Gradle downloads for Java, Kotlin and Android projects. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline.",
+    "explanation": "Libraries and build caches Gradle downloads for Java, Kotlin and Android projects, and the Gradle versions the wrapper downloaded. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline.",
     "bundle_ids": [],
     "aliases": [
       "Gradle Dependency Cache"
@@ -3785,5 +3786,50 @@
     "aliases": [],
     "scope": "dev_tools",
     "kind": "packages"
+  },
+  {
+    "key": "effectcraft",
+    "display_name": "EffectCraft Render Cache",
+    "tag": "safe",
+    "explanation": "Rendered frames EffectCraft keeps so effects preview without rendering again. Safe to delete; EffectCraft renders them again when you open a project.",
+    "bundle_ids": [
+      "ai.storyteller.effectcraft"
+    ],
+    "aliases": [
+      "EffectCraft",
+      "ai.storyteller.effectcraft"
+    ],
+    "scope": "app_caches",
+    "kind": "media"
+  },
+  {
+    "key": "dart-analysis-cache",
+    "display_name": "Dart Analysis Cache",
+    "tag": "safe",
+    "explanation": "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so your editor opens projects faster. Safe to delete; the analyzer rebuilds them as you work, so the first analysis of each project is slower once.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "code"
+  },
+  {
+    "key": "hermes-agent-cache",
+    "display_name": "Hermes Agent Cache",
+    "tag": "medium",
+    "explanation": "Package downloads, catalogues and scratch space the Hermes agent keeps in ~/.hermes/cache. Nothing is lost, but a task Hermes is running right now may be working in the scratch space, so clean it while Hermes is idle. Your settings, keys, sessions and memories elsewhere in ~/.hermes are left alone.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "ai"
+  },
+  {
+    "key": "antigravity-browser-cache",
+    "display_name": "Antigravity Browser Cache",
+    "tag": "safe",
+    "explanation": "Web page and script caches of the browser Antigravity uses for web tasks, inside ~/.gemini/antigravity-browser-profile. Safe to delete; the browser fills them again as it loads pages. Your sign-ins, history and extensions in that profile are left alone.",
+    "bundle_ids": [],
+    "aliases": [],
+    "scope": "dev_tools",
+    "kind": "browser"
   }
 ]
