@@ -16,6 +16,11 @@ final class FakeScans {
     var holdsProjects = false
     var holdsGitStatus = false
     var holdsFullAccessSteps = false
+    var holdsEverythingElse = false
+    /// Yielded by an Everything else walk as soon as it starts. A held walk then
+    /// stays open until it is let go.
+    var everythingElseEvents: [EverythingElseMeasureEvent] = []
+    private(set) var everythingElseAccesses: [ScanAccess] = []
     /// Yielded by a Dev Tools scan that is not held, before it finishes.
     var developerEvents: [DeveloperScanEvent] = []
     /// Yielded by project discovery as soon as it starts. A held discovery then
@@ -41,6 +46,7 @@ final class FakeScans {
     private var heldProjects: [AsyncStream<DeveloperScanEvent>.Continuation] = []
     private var heldGitStatus: [CheckedContinuation<Void, Never>] = []
     private var heldSteps: [CheckedContinuation<Void, Never>] = []
+    private var heldEverythingElse: [AsyncStream<EverythingElseMeasureEvent>.Continuation] = []
     private let suite = ThrowawayDefaults()
 
     func makeStore() -> PurgeStore {
@@ -70,6 +76,19 @@ final class FakeScans {
         held.forEach { $0.finish() }
     }
 
+    /// Sends more events to a held Everything else walk.
+    func yieldEverythingElse(_ events: [EverythingElseMeasureEvent]) {
+        for continuation in heldEverythingElse {
+            events.forEach { continuation.yield($0) }
+        }
+    }
+
+    func finishHeldEverythingElse() {
+        let held = heldEverythingElse
+        heldEverythingElse = []
+        held.forEach { $0.finish() }
+    }
+
     /// Lets every held git status check return, with `gitAnswers` as they are now.
     func finishHeldGitStatus() {
         let held = heldGitStatus
@@ -85,6 +104,8 @@ final class FakeScans {
         holdsProjects = false
         holdsGitStatus = false
         holdsFullAccessSteps = false
+        holdsEverythingElse = false
+        finishHeldEverythingElse()
         finishHeldGeneral()
         heldDeveloper.forEach { $0.finish() }
         finishHeldProjects()
@@ -135,6 +156,18 @@ final class FakeScans {
                 if self.holdsFullAccessSteps {
                     await withCheckedContinuation { self.heldSteps.append($0) }
                 }
+            },
+            everythingElse: { access in
+                self.everythingElseAccesses.append(access)
+                self.events.append("everythingElse \(access)")
+                let (stream, continuation) = AsyncStream<EverythingElseMeasureEvent>.makeStream()
+                self.everythingElseEvents.forEach { continuation.yield($0) }
+                if self.holdsEverythingElse {
+                    self.heldEverythingElse.append(continuation)
+                } else {
+                    continuation.finish()
+                }
+                return stream
             },
             gitStatuses: { urls in
                 self.gitStatusRequests.append(urls)

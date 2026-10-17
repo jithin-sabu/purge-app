@@ -563,7 +563,7 @@ struct ContentView: View {
         Group {
             if #available(macOS 26.0, *) {
                 overviewScrollView
-                    .detailPageScrollEdge(title: String(localized: "Overview"), includesSubtitle: true)
+                    .detailPageScrollEdge(title: overviewPageTitle, includesSubtitle: true)
             } else {
                 overviewScrollView
                     .underDetailPageHeader(includesSubtitle: true)
@@ -572,12 +572,26 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// The Overview tab is two pages: the summary, and Everything else opened (#220).
     private var overviewScrollView: some View {
         ScrollView {
-            OverviewView()
+            switch store.overviewPage {
+            case .summary:
+                OverviewView()
+            case .everythingElse:
+                EverythingElseView()
+            }
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.surfaceBase)
+    }
+
+    private var isOnEverythingElsePage: Bool {
+        store.selectedTab == .overview && store.overviewPage == .everythingElse
+    }
+
+    private var overviewPageTitle: String {
+        isOnEverythingElsePage ? String(localized: "Everything else") : String(localized: "Overview")
     }
 
     @ViewBuilder
@@ -610,8 +624,13 @@ struct ContentView: View {
     }
 
     private func pageHeader(now: Date) -> some View {
-        AppSectionPageHeader(title: store.selectedTab.displayName, subtitle: selectedPageSubtitle(now: now)) {
-            if store.selectedTab == .overview {
+        AppSectionPageHeader(
+            title: isOnEverythingElsePage ? overviewPageTitle : store.selectedTab.displayName,
+            subtitle: selectedPageSubtitle(now: now)
+        ) {
+            if isOnEverythingElsePage {
+                EverythingElseHeaderActions()
+            } else if store.selectedTab == .overview {
                 HStack(spacing: AppStyle.Spacing.xSmall) {
                     if !store.hasFullDiskAccess {
                         LookDeeperHeaderButton()
@@ -641,7 +660,7 @@ struct ContentView: View {
     private func selectedPageSubtitle(now: Date) -> String? {
         switch store.selectedTab {
         case .overview:
-            return overviewPageSubtitle(now: now)
+            return isOnEverythingElsePage ? everythingElsePageSubtitle(now: now) : overviewPageSubtitle(now: now)
         case .appCaches:
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
@@ -669,6 +688,21 @@ struct ContentView: View {
         }
         guard let latest = store.scanRecords.values.map(\.completedAt).max() else { return nil }
         return String(localized: "Scanned \(compactAgoText(from: latest, to: now))")
+    }
+
+    /// Where the walk stands, or when it finished. Read only, so no "to clean" here.
+    private func everythingElsePageSubtitle(now: Date) -> String? {
+        switch store.everythingElsePhase {
+        case .waiting:
+            return String(localized: "Up next, after the scan that is running")
+        case .measuring:
+            return String(localized: "Measuring your home folder and Library…")
+        case .notMeasured:
+            return String(localized: "Not measured yet")
+        case .ready:
+            guard let completedAt = store.everythingElseMeasurement?.completedAt else { return nil }
+            return String(localized: "Measured \(compactAgoText(from: completedAt, to: now))")
+        }
     }
 
     private func pageSubtitle(count: Int, bytes: Int64) -> String {
