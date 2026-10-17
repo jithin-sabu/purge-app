@@ -296,16 +296,18 @@ struct OrphanLeftoverScanPolicyTests {
     }
 
     /// Firefox removed, Firefox Nightly kept: both use `Application Support/Firefox`,
-    /// and `Preferences/org.mozilla.firefox.plist` is the one clue. An installed
-    /// app whose name starts with the folder's name owns the folder.
+    /// and the Preferences plist is the one clue. An installed app whose name
+    /// starts with the folder's name owns the folder. The ids are made up:
+    /// `owns` asks Launch Services too, and the CI runner has the real Firefox
+    /// installed, so `org.mozilla.firefox` never reads as gone there.
     @Test
     func installedSiblingAppKeepsASharedFolder() {
-        let firefox = clues(preferences: ["org.mozilla.firefox"])
-        #expect(crossOwner("Firefox", clues: firefox, apps: ["org.mozilla.nightly"], names: ["Firefox Nightly"]) == nil)
-        #expect(crossOwner("Firefox", clues: firefox, apps: ["org.mozilla.firefoxdeveloperedition"],
+        let firefox = clues(preferences: ["org.example.firefox"])
+        #expect(crossOwner("Firefox", clues: firefox, apps: ["org.example.nightly"], names: ["Firefox Nightly"]) == nil)
+        #expect(crossOwner("Firefox", clues: firefox, apps: ["org.example.firefoxdeveloperedition"],
                            names: ["Firefox Developer Edition"]) == nil)
         // No sibling installed: a real leftover.
-        #expect(crossOwner("Firefox", clues: firefox) == "org.mozilla.firefox")
+        #expect(crossOwner("Firefox", clues: firefox) == "org.example.firefox")
     }
 
     /// A real helper bundle at the top of Application Support is a program. Its

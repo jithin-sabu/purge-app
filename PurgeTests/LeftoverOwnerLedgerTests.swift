@@ -161,15 +161,18 @@ struct LeftoverOwnerLedgerTests {
 
     /// `Firefox Nightly` keeps `Application Support/Firefox` after Firefox is
     /// removed: an installed app whose name starts with the folder's name owns it.
+    /// The ids are made up: `owns` asks Launch Services too, and the CI runner
+    /// has the real Firefox installed, so `org.mozilla.firefox` never reads as
+    /// gone there.
     @Test
     func installedSiblingAppWithTheFolderNameKeepsIt() {
         let firefox = home.appendingPathComponent("Library/Application Support/Firefox", isDirectory: true)
         var ledger = LeftoverOwnerLedger()
-        ledger.record(bundleID: "org.mozilla.firefox", displayName: "Firefox",
+        ledger.record(bundleID: "org.example.firefox", displayName: "Firefox",
                       folders: ["~/Library/Application Support/Firefox"])
         #expect(OrphanLeftoverScanPolicy.ledgerOwners(
             ofFolderAt: firefox, home: home, ledger: ledger,
-            installed: index(apps: ["org.mozilla.nightly"], names: ["Firefox Nightly"])
+            installed: index(apps: ["org.example.nightly"], names: ["Firefox Nightly"])
         ).isEmpty)
         // A name that merely starts with the same letters is not the app.
         #expect(!OrphanLeftoverScanPolicy.ledgerOwners(
