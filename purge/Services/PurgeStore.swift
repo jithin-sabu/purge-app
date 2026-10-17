@@ -3237,6 +3237,10 @@ final class PurgeStore: ObservableObject {
         /// scheduled clean, so this one removed nothing. A scheduled clean then
         /// stays due instead of counting as done (#173).
         var skippedForAnotherClean = false
+        /// True when the engine threw, or nothing was moved and at least one item
+        /// failed. A scheduled clean then stays due instead of counting as done,
+        /// and the next activation tries again (#173).
+        var failed = false
 
         var failedCount: Int { failedItems.count }
     }
@@ -3509,18 +3513,26 @@ final class PurgeStore: ObservableObject {
             if clearSelectionsAfterCleanup {
                 clearAllSelections()
             }
+            // Nothing moved and something failed: the clean did not do its job. A
+            // clean that moved some items counts as done; the rest are listed as failed.
+            let failed = report.movedNothingAndFailed
             if scheduledNotifications {
-                await ScheduledCleanupNotifier.notifyScheduledCleanFinished(
-                    bytesMovedToTrash: movedBytes,
-                    deletedCount: report.deletedItems.count
-                )
+                if failed {
+                    await ScheduledCleanupNotifier.notifyScheduledCleanFailed()
+                } else {
+                    await ScheduledCleanupNotifier.notifyScheduledCleanFinished(
+                        bytesMovedToTrash: movedBytes,
+                        deletedCount: report.deletedItems.count
+                    )
+                }
             }
             return ScheduledCleaningSummary(
                 deletedCount: report.deletedItems.count,
                 bytesMovedToTrash: movedBytes,
                 elapsedSeconds: elapsedSeconds,
                 movedToTrashCount: report.movedToTrashCount,
-                failedItems: report.userVisibleFailures
+                failedItems: report.userVisibleFailures,
+                failed: failed
             )
         } catch {
             if scheduledNotifications {
@@ -3528,7 +3540,7 @@ final class PurgeStore: ObservableObject {
             } else {
                 errorMessage = String(localized: "Unable to clean safe items. Please try again.")
             }
-            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
+            return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0, failed: true)
         }
     }
 

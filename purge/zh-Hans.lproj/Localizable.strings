@@ -1011,3 +1011,6 @@
 "Xcode deletes these itself. They skip the Trash, so you can't put them back." = "这些项目由 Xcode 直接删除，不会经过废纸篓，因此无法恢复。";
 "%lld deleted permanently" = "%lld 项已永久删除";
 "Deleted permanently, not moved to the Trash" = "永久删除，不会移到废纸篓";
+
+"Purge is already cleaning, or a review is open. Wait for it to finish, then try again." = "Purge 正在清理，或有审核窗口打开。请等待其完成后再试。";
+"The clean couldn't finish, so nothing was moved. Try again in a moment." = "清理未能完成，没有移动任何项目。请稍后再试。";
