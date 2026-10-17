@@ -68,6 +68,14 @@ enum OrphanLeftoverScanPolicy {
         /// roots. Used both for ownership and for the completeness check.
         let diskBundleIDs: Set<String>
 
+        /// Lowercased names of those apps: the name the uninstaller matches with
+        /// (`AppUninstallScanner.displayName`) plus each bundle's `CFBundleName`
+        /// and `CFBundleDisplayName`. A human-named folder whose name is an
+        /// installed app's name, or the first word of one (`Firefox` for
+        /// `Firefox Nightly`), is that app's whatever its id, so the human-name
+        /// paths (#224) never attribute it to a removed app.
+        var diskAppNames: Set<String> = []
+
         /// False when an app root existed on disk but could not be enumerated
         /// (a permissions failure, a volume going away mid-read). A degraded read
         /// undercounts installed apps, which would flag their leftovers as
@@ -149,6 +157,7 @@ enum OrphanLeftoverScanPolicy {
     nonisolated static func makeInstalledAppIndex() -> InstalledAppIndex {
         let fm = FileManager.default
         var ids = Set<String>()
+        var names = Set<String>()
         var appBundles: [URL] = []
         // A root that is absent (e.g. no `~/Applications`) is fine and reads as
         // empty. A root that exists but fails to enumerate means our view of what
@@ -166,13 +175,21 @@ enum OrphanLeftoverScanPolicy {
             }
             for url in bundles {
                 appBundles.append(url)
-                if let id = Bundle(url: url)?.bundleIdentifier, !id.isEmpty {
+                let bundle = Bundle(url: url)
+                if let id = bundle?.bundleIdentifier, !id.isEmpty {
                     ids.insert(id.lowercased())
+                }
+                names.insert(AppUninstallScanner.displayName(for: url, bundle: bundle).lowercased())
+                for key in ["CFBundleName", "CFBundleDisplayName"] {
+                    if let name = bundle?.object(forInfoDictionaryKey: key) as? String, !name.isEmpty {
+                        names.insert(name.lowercased())
+                    }
                 }
             }
         }
         return InstalledAppIndex(
             diskBundleIDs: ids,
+            diskAppNames: names,
             rootsReadable: rootsReadable,
             evidence: InstalledCodeEvidence.gather(userAppBundles: appBundles)
         )
@@ -243,6 +260,18 @@ enum OrphanLeftoverScanPolicy {
         lowercased.hasPrefix("com.apple.") || lowercased.contains(".com.apple.")
     }
 
+    // MARK: Owner present again
+
+    /// Whether the removed app is back: running from anywhere (a copy in
+    /// Downloads, a disk image), or installed where Launch Services can see it.
+    /// The uninstaller quits a running app before it moves anything; a leftover
+    /// has no app to quit, so one whose owner is present is kept instead (#224).
+    nonisolated static func isOwnerPresent(bundleID: String) -> Bool {
+        guard !bundleID.isEmpty else { return false }
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty { return true }
+        return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
+
     // MARK: Owner extraction
 
     /// The owner of one entry directly inside an orphan root, or `nil` when the
@@ -263,7 +292,9 @@ enum OrphanLeftoverScanPolicy {
             return httpStorageBundleID(from: name).map(LeftoverOwner.bundleID)
         case .savedState:
             return savedStateBundleID(from: name).map(LeftoverOwner.bundleID)
-        default:
+        case .bundle, .preferences, .logs, .launchAgents, .launchDaemons, .homeFolderData, .other:
+            // Not orphan roots. Home folder data comes from the catalog
+            // (`dotFolderCandidates`), never from an entry's name.
             return nil
         }
     }
@@ -277,7 +308,9 @@ enum OrphanLeftoverScanPolicy {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
               isDirectory.boolValue,
-              looksLikeBundleID(name) else {
+              looksLikeBundleID(name),
+              // A real bundle whose id ends in `.app` is a program, not its data.
+              !AppUninstallScanPolicy.isRealAppBundle(url) else {
             return nil
         }
         return name
@@ -375,11 +408,242 @@ enum OrphanLeftoverScanPolicy {
     /// metadata instead).
     nonisolated static func looksLikeBundleID(_ value: String) -> Bool {
         guard UUID(uuidString: value) == nil else { return false }
+        // `Foo Helper.app` is a bundle's name, not an id.
+        guard !value.contains(where: \.isWhitespace) else { return false }
         let segments = value.split(separator: ".", omittingEmptySubsequences: false)
         guard segments.count >= 2 else { return false }
         guard segments.allSatisfy({ !$0.isEmpty }) else { return false }
         guard let first = value.first, first.isLetter else { return false }
         return true
+    }
+
+    // MARK: Human-named folders (#224)
+
+    /// Whether an installed app carries this folder's name: the whole name, or
+    /// the name followed by a word (`Firefox Nightly` keeps `Firefox`, which it
+    /// shares with the Firefox that was removed). Such a folder is that app's,
+    /// whatever its id.
+    nonisolated static func installedAppSharesName(_ folderName: String, installed: InstalledAppIndex) -> Bool {
+        let lower = folderName.lowercased()
+        guard !lower.isEmpty else { return false }
+        return installed.diskAppNames.contains { $0 == lower || $0.hasPrefix(lower + " ") }
+    }
+
+    /// The owners of a human-named Library folder according to the ledger: the
+    /// apps the installed-apps scan saw match it by name, all now gone, newest
+    /// first. Empty when the folder is kept. Biased to keep: any recorded owner
+    /// still installed keeps the folder, and so does an installed app that
+    /// carries the folder's name. Every owner is returned, so the confirm-time
+    /// check can see each of them come back.
+    nonisolated static func ledgerOwners(
+        ofFolderAt url: URL,
+        home: URL,
+        ledger: LeftoverOwnerLedger,
+        installed: InstalledAppIndex
+    ) -> [LeftoverOwnerLedger.Entry] {
+        guard !installedAppSharesName(url.lastPathComponent, installed: installed) else { return [] }
+        guard let relative = LeftoverOwnerLedger.relativePath(url, home: home) else { return [] }
+        let owners = ledger.owners(ofFolder: relative)
+        guard !owners.isEmpty,
+              owners.allSatisfy({ isOrphan(.bundleID($0.bundleID), installed: installed) }) else { return [] }
+        return owners
+    }
+
+    /// What Preferences and Caches say about which apps have been on this Mac:
+    /// the bundle ids of `~/Library/Preferences/<id>.plist` files and
+    /// `~/Library/Caches/<id>` folders. Neither location is offered here
+    /// (Preferences by design, Caches through App Caches), but each carries the
+    /// id its app wrote, which a human-named Application Support folder lacks.
+    nonisolated struct LibraryIdentifierClues: Equatable, Sendable {
+        var preferenceIDs: Set<String> = []
+        var cacheIDs: Set<String> = []
+
+        static func gather(home: URL) -> LibraryIdentifierClues {
+            let fm = FileManager.default
+            let lib = home.appendingPathComponent("Library", isDirectory: true)
+            var clues = LibraryIdentifierClues()
+            let preferences = (try? fm.contentsOfDirectory(atPath: lib.appendingPathComponent("Preferences").path)) ?? []
+            for name in preferences where name.hasSuffix(".plist") {
+                let id = String(name.dropLast(".plist".count))
+                if looksLikeBundleID(id) { clues.preferenceIDs.insert(id) }
+            }
+            let caches = (try? fm.contentsOfDirectory(atPath: lib.appendingPathComponent("Caches").path)) ?? []
+            for name in caches where looksLikeBundleID(name) {
+                clues.cacheIDs.insert(name)
+            }
+            return clues
+        }
+
+        /// The ids, from either location, whose last part is `name`, compared
+        /// case-insensitively. Each distinct id once.
+        func identifiers(endingIn name: String) -> Set<String> {
+            let lower = name.lowercased()
+            var seen = Set<String>()
+            var result = Set<String>()
+            for id in preferenceIDs.union(cacheIDs) {
+                guard id.split(separator: ".").last?.lowercased() == lower,
+                      seen.insert(id.lowercased()).inserted else { continue }
+                result.insert(id)
+            }
+            return result
+        }
+    }
+
+    /// The owner of a human-named `Application Support` folder from clues
+    /// elsewhere in Library: exactly one bundle id, in a Preferences plist or a
+    /// Caches folder, whose last part is the folder's name, and no installed
+    /// code owns it. Two independent clues, the folder and the id-named entry,
+    /// are required; the folder's name alone is never enough (#197). Biased to
+    /// keep: an installed app with the folder's name owns it, an id any
+    /// installed code owns keeps it, Apple's ids are never orphans, and two
+    /// candidate ids are ambiguous, so nothing is attributed.
+    nonisolated static func crossEvidenceOwner(
+        folderName: String,
+        clues: LibraryIdentifierClues,
+        installed: InstalledAppIndex
+    ) -> String? {
+        guard !folderName.isEmpty, !looksLikeBundleID(folderName) else { return nil }
+        guard !installedAppSharesName(folderName, installed: installed) else { return nil }
+        let candidates = clues.identifiers(endingIn: folderName)
+        guard candidates.count == 1, let id = candidates.first else { return nil }
+        guard isOrphan(.bundleID(id), installed: installed) else { return nil }
+        return id
+    }
+
+    /// Who an entry belonged to and what says so. Identifier-named entries are
+    /// attributed by their name alone, as before #224. A human-named
+    /// `Application Support` folder needs the ledger, or a Preferences or Caches
+    /// identifier, to vouch for it.
+    nonisolated struct Attribution: Equatable {
+        let owner: LeftoverOwner
+        let evidence: MatchReason
+        /// The app's name when the evidence knows it. Otherwise the row falls
+        /// back to `friendlyName`.
+        let appName: String?
+        /// Every bundle id the evidence names, the row's owner first. The ledger
+        /// can name more than one gone app for a folder, and each is checked
+        /// again before anything moves.
+        let ownerBundleIDs: [String]
+
+        init(owner: LeftoverOwner, evidence: MatchReason, appName: String?, ownerBundleIDs: [String]? = nil) {
+            self.owner = owner
+            self.evidence = evidence
+            self.appName = appName
+            if let ownerBundleIDs {
+                self.ownerBundleIDs = ownerBundleIDs
+            } else {
+                switch owner {
+                case .bundleID(let id): self.ownerBundleIDs = [id]
+                case .appGroup: self.ownerBundleIDs = []
+                }
+            }
+        }
+    }
+
+    nonisolated static func attribution(
+        entryName name: String,
+        category: UninstallCategory,
+        url: URL,
+        home: URL,
+        installed: InstalledAppIndex,
+        ledger: LeftoverOwnerLedger,
+        clues: LibraryIdentifierClues
+    ) -> Attribution? {
+        if let owner = candidateOwner(entryName: name, category: category, url: url) {
+            return Attribution(owner: owner, evidence: .bundleID, appName: nil)
+        }
+        guard category == .applicationSupport, isHumanNamedFolder(name, url: url) else { return nil }
+        let owners = ledgerOwners(ofFolderAt: url, home: home, ledger: ledger, installed: installed)
+        if let first = owners.first {
+            return Attribution(
+                owner: .bundleID(first.bundleID),
+                evidence: .ownerLedger,
+                appName: first.displayName,
+                ownerBundleIDs: owners.map(\.bundleID)
+            )
+        }
+        if let id = crossEvidenceOwner(folderName: name, clues: clues, installed: installed) {
+            // The folder's own name is the best name for the app here.
+            return Attribution(owner: .bundleID(id), evidence: .libraryCrossEvidence, appName: name)
+        }
+        return nil
+    }
+
+    /// A folder whose name is not an identifier: `Antigravity`, `Docker`. A
+    /// real application bundle (`Foo Helper.app`) is a program, never a folder
+    /// to attribute.
+    nonisolated static func isHumanNamedFolder(_ name: String, url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard !name.isEmpty, !looksLikeBundleID(name), UUID(uuidString: name) == nil,
+              FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue,
+              !AppUninstallScanPolicy.isRealAppBundle(url) else { return false }
+        return true
+    }
+
+    // MARK: Confirm-time check (#224)
+
+    /// Whether a leftover the user just confirmed must be kept after all, judged
+    /// against a fresh view of what is installed and running. The uninstaller
+    /// quits a running app before it moves anything; a leftover has no app to
+    /// quit, so one whose owner came back is kept instead. Kept when the view
+    /// is incomplete, when any of the row's owners is installed again or running
+    /// (`presentOwners`), or when a human-named folder's name is now carried by
+    /// an installed app, whatever its id. Rows with no owner id (app groups)
+    /// have nothing to re-check.
+    nonisolated static func keepsAtConfirm(
+        ownerBundleIDs: [String],
+        folderName: String,
+        category: UninstallCategory,
+        evidence: MatchReason,
+        installed: InstalledAppIndex,
+        presentOwners: Set<String>
+    ) -> Bool {
+        guard !ownerBundleIDs.isEmpty else { return false }
+        guard installed.looksComplete else { return true }
+        if ownerBundleIDs.contains(where: { presentOwners.contains($0) || !isOrphan(.bundleID($0), installed: installed) }) {
+            return true
+        }
+        if category == .applicationSupport,
+           evidence == .ownerLedger || evidence == .libraryCrossEvidence,
+           installedAppSharesName(folderName, installed: installed) {
+            return true
+        }
+        return false
+    }
+
+    // MARK: Dot folders (#224)
+
+    /// One hidden home folder of a removed app, from the catalog.
+    nonisolated struct DotFolderCandidate: Equatable {
+        let url: URL
+        let entry: AppDotFolderCatalog.Entry
+        let lastModified: Date
+    }
+
+    /// The catalog folders of apps that are gone, untouched since `cutoff`. A
+    /// candidate is always a folder the catalog names in full; a parent shared
+    /// with other tools, such as `~/.gemini`, is never one. A missing folder, a
+    /// file, a symbolic link in its place, or a link on the way to it (a
+    /// `~/.gemini` that points into a synced folder) is skipped.
+    nonisolated static func dotFolderCandidates(
+        catalog: AppDotFolderCatalog,
+        home: URL,
+        installed: InstalledAppIndex,
+        cutoff: Date
+    ) -> [DotFolderCandidate] {
+        var result: [DotFolderCandidate] = []
+        for entry in catalog.entries where isOrphan(.bundleID(entry.bundleID), installed: installed) {
+            for folder in entry.folders {
+                guard let url = catalog.url(for: folder, home: home),
+                      AppUninstallScanPolicy.staysInsideHomeWithoutLinks(url, home: home) else { continue }
+                guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                      values.isDirectory == true, values.isSymbolicLink != true else { continue }
+                guard case .untouchedSince(let date) = contentAge(of: url, cutoff: cutoff) else { continue }
+                result.append(DotFolderCandidate(url: url, entry: entry, lastModified: date))
+            }
+        }
+        return result
     }
 
     // MARK: Staleness
@@ -409,10 +673,15 @@ enum OrphanLeftoverScanPolicy {
 
     // MARK: Decision
 
-    /// One entry the scan offers: who it belonged to, and when anything in it
-    /// last changed.
+    /// One entry the scan offers: who it belonged to, what says so, and when
+    /// anything in it last changed.
     nonisolated struct OrphanCandidate: Equatable {
         let owner: LeftoverOwner
+        let evidence: MatchReason
+        /// Known from the evidence, or nil for the row to resolve.
+        let appName: String?
+        /// Every bundle id the evidence names; see `Attribution.ownerBundleIDs`.
+        let ownerBundleIDs: [String]
         let lastModified: Date
     }
 
@@ -420,18 +689,36 @@ enum OrphanLeftoverScanPolicy {
     /// short of the delete gate the scanner applies afterwards: its owner can
     /// be named, no installed code claims it, and nothing in it changed since
     /// `cutoff`. Kept in one function so a test fails if any part is dropped.
+    /// With no ledger and no clues, only identifier-named entries are attributed.
     nonisolated static func orphanCandidate(
         at entry: URL,
         category: UninstallCategory,
         installed: InstalledAppIndex,
-        cutoff: Date
+        cutoff: Date,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        ledger: LeftoverOwnerLedger = LeftoverOwnerLedger(),
+        clues: LibraryIdentifierClues = LibraryIdentifierClues()
     ) -> OrphanCandidate? {
-        guard let owner = candidateOwner(entryName: entry.lastPathComponent, category: category, url: entry),
-              isOrphan(owner, installed: installed),
+        guard let attribution = attribution(
+            entryName: entry.lastPathComponent,
+            category: category,
+            url: entry,
+            home: home,
+            installed: installed,
+            ledger: ledger,
+            clues: clues
+        ),
+              isOrphan(attribution.owner, installed: installed),
               case .untouchedSince(let lastModified) = contentAge(of: entry, cutoff: cutoff) else {
             return nil
         }
-        return OrphanCandidate(owner: owner, lastModified: lastModified)
+        return OrphanCandidate(
+            owner: attribution.owner,
+            evidence: attribution.evidence,
+            appName: attribution.appName,
+            ownerBundleIDs: attribution.ownerBundleIDs,
+            lastModified: lastModified
+        )
     }
 
     // MARK: Content age
@@ -556,11 +843,15 @@ enum OrphanLeftoverScanPolicy {
 
     /// A friendly name for the removed app: the folder's Finder-resolved name
     /// when it is meaningful (macOS resolves it from the same container metadata),
-    /// otherwise the bundle id itself.
+    /// otherwise the bundle id itself. Finder hides a `.app` extension, so for
+    /// `com.granola.app` it answers `com.granola`, which is the folder's own name
+    /// with its extension gone, not a resolved name; that reads as the id too.
     nonisolated static func friendlyName(bundleID: String, url: URL) -> String {
+        let name = url.lastPathComponent
         if let localized = try? url.resourceValues(forKeys: [.localizedNameKey]).localizedName,
            !localized.isEmpty,
-           localized != url.lastPathComponent,
+           localized != name,
+           localized != (name as NSString).deletingPathExtension,
            UUID(uuidString: localized) == nil {
             return (localized as NSString).deletingPathExtension
         }
@@ -574,12 +865,15 @@ enum OrphanLeftoverScanPolicy {
         appName: String,
         category: UninstallCategory
     ) -> SafetyInfo {
-        SafetyInfo(
+        let explanation = category == .homeFolderData
+            ? String(localized: "This hidden folder in your home folder was written by \(appName), which is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app.")
+            : String(localized: "This \(category.displayName.lowercased()) folder belongs to an app that is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app.")
+        return SafetyInfo(
             level: .medium,
             // No "leftover from a removed app" suffix here: the section and the
             // review sheet already say so, so on the row it is only noise.
             headline: appName,
-            explanation: String(localized: "This \(category.displayName.lowercased()) folder belongs to an app that is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app."),
+            explanation: explanation,
             recoverySteps: String(localized: "Removed items go to the Trash, so you can put them back until you empty it. If you reinstall the app, let it recreate its data."),
             reinstallCommand: nil
         )

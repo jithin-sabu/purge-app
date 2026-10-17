@@ -1,0 +1,23 @@
+{
+  "note": "Hidden home folders written by app bundles, by bundle id (#224). List exact folders only: a parent shared with other tools, such as ~/.gemini, is never offered whole. A folder a command-line tool keeps using after the app is gone, such as ~/.cursor (the cursor-agent CLI), does not belong here either. Command-line tools belong in #225, not here.",
+  "apps": [
+    {
+      "bundle_id": "com.google.antigravity",
+      "display_name": "Antigravity",
+      "folders": [
+        "~/.gemini/antigravity",
+        "~/.gemini/antigravity-ide",
+        "~/.gemini/antigravity-backup",
+        "~/.gemini/antigravity-browser-profile",
+        "~/.antigravity"
+      ]
+    },
+    {
+      "bundle_id": "com.trae.app",
+      "display_name": "Trae",
+      "folders": [
+        "~/.trae"
+      ]
+    }
+  ]
+}

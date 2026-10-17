@@ -102,7 +102,10 @@ nonisolated final class AppUninstallScanner {
         return result
     }
 
-    private static func displayName(for bundleURL: URL, bundle: Bundle?) -> String {
+    /// Also read by `OrphanLeftoverScanPolicy.makeInstalledAppIndex`, so the
+    /// Leftovers scan knows installed apps by the same names the uninstaller
+    /// matches with.
+    static func displayName(for bundleURL: URL, bundle: Bundle?) -> String {
         if let display = bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
            !display.isEmpty {
             return display

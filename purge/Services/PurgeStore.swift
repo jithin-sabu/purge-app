@@ -1975,7 +1975,9 @@ final class PurgeStore: ObservableObject {
             if installedAppsScanGeneration != generation || Task.isCancelled { return }
             var total: Int64 = 0
             var items: [OverviewSizedItem] = []
+            var namedFolders: [URL] = []
             for await item in uninstallScanner.leftoverStream(for: app) {
+                if item.matchReason == .appName { namedFolders.append(item.path) }
                 guard sizedPaths.insert(item.path.standardizedFileURL.path).inserted else { continue }
                 total += item.sizeBytes
                 items.append(OverviewSizedItem(path: item.path.path, bytes: item.sizeBytes))
@@ -1983,6 +1985,19 @@ final class PurgeStore: ObservableObject {
             guard installedAppsScanGeneration == generation else { return }
             appFootprintItemsByAppID[app.id] = items
             removableBytesByAppID[app.id] = total
+            recordLeftoverOwner(app, namedFolders: namedFolders)
+        }
+    }
+
+    /// Remembers which human-named folders this installed app matched, so the
+    /// Leftovers scan can still attribute them once the app is gone (#224). Only
+    /// name matches are worth recording: identifier-named folders attribute
+    /// themselves. The write is a small JSON file, done off the main actor.
+    private func recordLeftoverOwner(_ app: InstalledApp, namedFolders: [URL]) {
+        guard let bundleID = app.bundleID, !bundleID.isEmpty, !namedFolders.isEmpty else { return }
+        let name = app.name
+        Task.detached(priority: .utility) {
+            LeftoverOwnerLedgerStore.shared.record(bundleID: bundleID, displayName: name, folders: namedFolders)
         }
     }
 
@@ -2095,9 +2110,47 @@ final class PurgeStore: ObservableObject {
         orphanCleanupPlan = nil
     }
 
+    /// The uninstaller quits a running app before it moves anything. A leftover
+    /// has no app to quit, so before anything moves each row is judged again
+    /// against a fresh view of what is installed and running
+    /// (`OrphanLeftoverScanPolicy.keepsAtConfirm`): an owner that is back, from
+    /// anywhere, or an installed app that now carries the folder's name, keeps
+    /// the row (#224). The rest go ahead, and the alert names what was kept.
     func confirmOrphanCleanup(_ plan: OrphanCleanupPlan) async {
         orphanCleanupPlan = nil
-        await performLeftoverCleanup(items: plan.selectedItems)
+        let selected = plan.selectedItems
+        let owners = Set(selected.flatMap(\.ownerBundleIDs))
+        let (installed, present) = await Task.detached(priority: .userInitiated) {
+            (
+                OrphanLeftoverScanPolicy.makeInstalledAppIndex(),
+                owners.filter { OrphanLeftoverScanPolicy.isOwnerPresent(bundleID: $0) }
+            )
+        }.value
+        let kept = selected.filter { item in
+            OrphanLeftoverScanPolicy.keepsAtConfirm(
+                ownerBundleIDs: item.ownerBundleIDs,
+                folderName: item.path.lastPathComponent,
+                category: item.category,
+                evidence: item.matchReason,
+                installed: installed,
+                presentOwners: present
+            )
+        }
+        let keptIDs = Set(kept.map(\.id))
+        await performLeftoverCleanup(items: selected.filter { !keptIDs.contains($0.id) })
+        // After the clean, which clears the message before it starts, and only
+        // when the clean itself had nothing to say: its own errors come first.
+        if !kept.isEmpty, errorMessage == nil {
+            errorMessage = keptOwnersMessage(kept)
+        }
+    }
+
+    private func keptOwnersMessage(_ kept: [UninstallItem]) -> String {
+        let names = Set(kept.map(\.safetyInfo.headline)).sorted()
+        if names.count == 1, let name = names.first {
+            return String(localized: "\(name) is open or back on this Mac, so its files were kept.")
+        }
+        return String(localized: "These apps are open or back on this Mac, so their files were kept: \(names.joined(separator: ", ")).")
     }
 
     // MARK: - Leftovers of apps removed outside Purge (issue #65)
