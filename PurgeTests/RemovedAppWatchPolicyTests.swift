@@ -44,6 +44,27 @@ struct RemovedAppWatchPolicyTests {
         )
     }
 
+    // MARK: Review window exit
+
+    /// Once a review Purge opened its window for is over, Purge quits when the
+    /// watcher started it or on-demand mode has no menu bar icon, and hides in
+    /// menu bar mode. With a clean the user started running beside the review,
+    /// the quit waits: `NSApp.terminate` would meet the quit guard with a "still
+    /// cleaning" alert for a quit nobody asked for (#173).
+    @Test
+    func reviewWindowExitWaitsForACleanInProgress() {
+        typealias Exit = RemovedAppWatchPolicy.ReviewWindowExit
+        func exit(quitsWhenDone: Bool, menuBar: Bool, cleaning: Bool) -> Exit {
+            RemovedAppWatchPolicy.reviewWindowExit(quitsWhenDone: quitsWhenDone, showsMenuBarIcon: menuBar, cleanInProgress: cleaning)
+        }
+        #expect(exit(quitsWhenDone: true, menuBar: true, cleaning: false) == .quit)
+        #expect(exit(quitsWhenDone: false, menuBar: false, cleaning: false) == .quit)
+        #expect(exit(quitsWhenDone: true, menuBar: true, cleaning: true) == .quitAfterClean)
+        #expect(exit(quitsWhenDone: false, menuBar: false, cleaning: true) == .quitAfterClean)
+        #expect(exit(quitsWhenDone: false, menuBar: true, cleaning: false) == .hide)
+        #expect(exit(quitsWhenDone: false, menuBar: true, cleaning: true) == .hide)
+    }
+
     // MARK: Paths
 
     @Test
