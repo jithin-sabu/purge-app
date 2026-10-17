@@ -293,18 +293,15 @@ struct AppCachesView<PageHeader: View>: View {
         return item.reinstallSafety
     }
 
-    /// Stable anchor pinned to the very top of the results list so a fresh scan or
-    /// first appearance can reset scroll position to the first row.
-    private static var topAnchorID: String { "app-caches-top" }
-
     private func cacheResultsList(plan: ListPlan) -> some View {
         ScrollViewReader { proxy in
             cacheResultsListContent(plan: plan)
                 .onChange(of: scanPhase) { newPhase in
                     // A new scan just finished populating the list.
-                    guard newPhase == .completed else { return }
+                    guard newPhase == .completed, let firstIndex = plan.sortedVisibleIndices.first else { return }
+                    let firstItemID = items[firstIndex].id
                     DispatchQueue.main.async {
-                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                        proxy.scrollTo(firstItemID, anchor: .top)
                     }
                 }
         }
@@ -312,13 +309,6 @@ struct AppCachesView<PageHeader: View>: View {
 
     private func cacheResultsListContent(plan: ListPlan) -> some View {
         List {
-            Color.clear
-                .frame(height: 0)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .id(Self.topAnchorID)
-
             ForEach(plan.sortedVisibleIndices, id: \.self) { index in
                 let item = items[index]
                 let itemID = item.id
@@ -358,6 +348,7 @@ struct AppCachesView<PageHeader: View>: View {
                         isMetadataPending: store.cacheItemHasPendingSize(item)
                     )
                 }
+                .id(itemID)
                 .listRowInsets(ScanListRowInsets.standard)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -367,6 +358,7 @@ struct AppCachesView<PageHeader: View>: View {
             ScanListBottomSpacer()
         }
         .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
         .scrollContentBackground(.hidden)
         .background(AppColors.surfaceBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)

@@ -103,4 +103,11 @@ is scaled to fill the tile before clipping its transparent outer padding.
 
 Spacing: `xxSmall` 4, `xSmall` 8, `small` 12, `medium` 16, `large` 24, `xLarge` 32.
 
+App Caches, Dev Tools and Large Files share `ScanListRowInsets.standard`: `xxSmall`
+above and below each card and `medium` on either side, inside the native List's
+outer inset. Cards and section headings align with the Select All row's 24pt page
+inset. Lists start with real content so an invisible anchor row cannot add a top
+gap. Dev Tools headings use `medium` above later sections, no extra space above
+the first section, and `xxSmall` below, followed by the card's `xxSmall` top inset.
+
 Cards use a 0.5pt `borderSubtle` hairline instead of a shadow.

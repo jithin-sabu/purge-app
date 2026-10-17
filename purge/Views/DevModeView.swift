@@ -767,18 +767,32 @@ struct DevToolsView<PageHeader: View>: View {
             .accessibilityLabel("Scanning developer folders")
     }
 
-    /// Stable anchor pinned to the very top of the results list so a fresh scan or
-    /// first appearance can reset scroll position to the first row.
-    private static var topAnchorID: String { "dev-tools-top" }
+    private enum DeveloperListRowID: Hashable {
+        case tool(String)
+        case simulators
+        case runtimes
+        case projects
+    }
+
+    /// Scroll to real content: even a zero-height anchor occupies a native List row.
+    private var firstDeveloperListRowID: DeveloperListRowID? {
+        if case .tool(let id, _) = mergedStandardRowEntries().first {
+            return .tool(id)
+        }
+        if simulatorSectionVisible { return .simulators }
+        if runtimeSectionVisible { return .runtimes }
+        if !filteredProjectGroupIndices().isEmpty || store.isScanningProjects { return .projects }
+        return nil
+    }
 
     private var developerListOnly: some View {
         ScrollViewReader { proxy in
             developerListContent
                 .onChange(of: scanPhase) { newPhase in
                     // A new scan just finished populating the list.
-                    guard newPhase == .completed else { return }
+                    guard newPhase == .completed, let firstRowID = firstDeveloperListRowID else { return }
                     DispatchQueue.main.async {
-                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                        proxy.scrollTo(firstRowID, anchor: .top)
                     }
                 }
         }
@@ -786,13 +800,6 @@ struct DevToolsView<PageHeader: View>: View {
 
     private var developerListContent: some View {
         List {
-            Color.clear
-                .frame(height: 0)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .id(Self.topAnchorID)
-
             ForEach(mergedStandardRowEntries()) { entry in
                 switch entry {
                 case .tool(let entryID, let index):
@@ -838,6 +845,7 @@ struct DevToolsView<PageHeader: View>: View {
                     }
                     .disabled(!tool.isDetected)
                     .opacity(tool.isDetected ? 1 : 0.45)
+                    .id(DeveloperListRowID.tool(toolID))
                     .listRowInsets(ScanListRowInsets.standard)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -847,7 +855,7 @@ struct DevToolsView<PageHeader: View>: View {
             }
 
             if simulatorSectionVisible {
-                Section {
+                Group {
                     iosSimulatorsSectionHeader
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
@@ -895,7 +903,7 @@ struct DevToolsView<PageHeader: View>: View {
             }
 
             if runtimeSectionVisible {
-                Section {
+                Group {
                     simulatorRuntimesSectionHeader
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
@@ -943,7 +951,7 @@ struct DevToolsView<PageHeader: View>: View {
             }
 
             if !sortedProjectGroupIndices().isEmpty {
-                Section {
+                Group {
                     developerProjectsSectionHeader
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
@@ -964,7 +972,7 @@ struct DevToolsView<PageHeader: View>: View {
                     }
                 }
             } else if store.isScanningProjects {
-                Section {
+                Group {
                     developerProjectsSectionHeader
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
@@ -982,6 +990,9 @@ struct DevToolsView<PageHeader: View>: View {
             ScanListBottomSpacer()
         }
         .listStyle(.plain)
+        // Headings use their own token-based padding, without a minimum row height
+        // or native Section spacing adding a second gap.
+        .environment(\.defaultMinListRowHeight, 0)
         .scrollContentBackground(.hidden)
         .background(AppColors.surfaceBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.interactiveSafeCleanupRemovedPaths)
@@ -1020,7 +1031,7 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var developerProjectsSectionHeader: some View {
-        devToolsSectionHeader {
+        devToolsSectionHeader(.projects) {
             Text("Developer Projects")
                 .font(AppStyle.Typography.metadataEmphasis)
                 .foregroundStyle(AppColors.textSecondary)
@@ -1028,13 +1039,13 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var iosSimulatorsSectionHeader: some View {
-        devToolsSectionHeader {
+        devToolsSectionHeader(.simulators) {
             permanentSectionTitle(String(localized: "iOS Simulators"))
         }
     }
 
     private var simulatorRuntimesSectionHeader: some View {
-        devToolsSectionHeader {
+        devToolsSectionHeader(.runtimes) {
             permanentSectionTitle(String(localized: "Simulator Runtimes"))
         }
     }
@@ -1054,11 +1065,14 @@ struct DevToolsView<PageHeader: View>: View {
         }
     }
 
-    private func devToolsSectionHeader<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func devToolsSectionHeader<Content: View>(_ rowID: DeveloperListRowID, @ViewBuilder content: () -> Content) -> some View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, AppStyle.Spacing.medium)
-            .padding(.horizontal, AppStyle.Spacing.small)
+            .padding(.top, firstDeveloperListRowID == rowID ? 0 : AppStyle.Spacing.medium)
+            .padding(.bottom, AppStyle.Spacing.xxSmall)
+            .padding(.leading, ScanListRowInsets.standard.leading)
+            .padding(.trailing, ScanListRowInsets.standard.trailing)
+            .id(rowID)
     }
 
     @ViewBuilder
