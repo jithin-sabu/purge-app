@@ -53,6 +53,13 @@ final class ScheduledCleaningRegistrar: ObservableObject {
 
     private static let lastGraceSweepKey = "ScheduledCleaningRegistrar.lastGraceSweep"
     private static let lastOutcomeKey = "ScheduledCleaningRegistrar.lastOutcome"
+    private static let lastFailedAttemptKey = "ScheduledCleaningRegistrar.lastFailedAttempt"
+
+    /// How long a failed scheduled clean waits before an activation tries again.
+    /// The anchor stays put after a failure, so without this gap a Safe item the
+    /// Trash always refuses would run a rescan, a clean and a failure notification
+    /// on every switch into Purge (#173).
+    static let retryGapAfterFailure: TimeInterval = 60 * 60
 
     /// Convenience shim over the standard domain, kept for any external caller.
     /// The registrar itself reads the anchor through its injected `ud`.
@@ -91,6 +98,11 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// The anchor timestamp of the last clean, read through the injected domain.
     private var currentLastGraceSweepDate: Date? {
         ud.object(forKey: Self.lastGraceSweepKey) as? Date
+    }
+
+    /// When the last clean failed, until a clean works again.
+    private var lastFailedAttemptDate: Date? {
+        ud.object(forKey: Self.lastFailedAttemptKey) as? Date
     }
 
     init(
@@ -137,11 +149,17 @@ final class ScheduledCleaningRegistrar: ObservableObject {
         return store?.isReviewingOrCleaning ?? false
     }
 
-    /// Moves the anchor, records the outcome, and re-arms, unless another clean was
-    /// running or a review was open and this one removed nothing. Then the clean
-    /// stays due, and the next activation runs it.
+    /// Moves the anchor, records the outcome, and re-arms, unless the clean removed
+    /// nothing because another clean was running, a review was open, or it failed.
+    /// Then the clean stays due. A skipped clean runs on the next activation; a
+    /// failed one waits out `retryGapAfterFailure` first (#173).
     private func finishSchedule(after summary: PurgeStore.ScheduledCleaningSummary, at now: Date) async {
         guard !summary.skippedForAnotherClean else { return }
+        guard !summary.failed else {
+            ud.set(now, forKey: Self.lastFailedAttemptKey)
+            return
+        }
+        ud.removeObject(forKey: Self.lastFailedAttemptKey)
         ud.set(now, forKey: Self.lastGraceSweepKey)
         recordOutcome(summary, at: now)
         await performRearm()
@@ -251,10 +269,13 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     }
 
     /// The moment the next clean becomes due (anchor + one interval), without the
-    /// clamp `nextCleanDate` applies for display.
+    /// clamp `nextCleanDate` applies for display. After a failed clean this is the
+    /// end of the retry gap, if that comes later, so the sweep and Settings agree.
     func dueDate(referenceDate now: Date) -> Date {
         let interval = prefs.effectiveRepeatIntervalSeconds
-        return scheduleAnchor(referenceDate: now).addingTimeInterval(interval)
+        let due = scheduleAnchor(referenceDate: now).addingTimeInterval(interval)
+        guard let failedAt = lastFailedAttemptDate else { return due }
+        return max(due, failedAt.addingTimeInterval(Self.retryGapAfterFailure))
     }
 
     /// Single source of truth for the next scheduled clean, clamped to `now` once

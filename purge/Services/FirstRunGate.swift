@@ -46,6 +46,7 @@ enum FirstRunGate {
         "scheduledClean.frequency",
         "ScheduledCleaningRegistrar.lastOutcome",
         "ScheduledCleaningRegistrar.lastGraceSweep",
+        "ScheduledCleaningRegistrar.lastFailedAttempt",
         "cleanCompletion.lastShownTimeQuip",
         "largeFiles.minSizeMB",
         "filter.appCaches",

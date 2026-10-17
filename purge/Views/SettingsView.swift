@@ -622,11 +622,19 @@ struct SettingsView: View {
         }
     }
 
-    private static func scheduledCleanNowMessage(
+    /// What the Run now alert says. Each way a run can end with nothing moved has
+    /// its own line, so "nothing matched" is only said when that is what happened (#173).
+    static func scheduledCleanNowMessage(
         for summary: PurgeStore.ScheduledCleaningSummary?
     ) -> String {
         guard let summary else {
             return String(localized: "Auto-clean is off, so nothing ran. Turn it on and try again.")
+        }
+        if summary.skippedForAnotherClean {
+            return String(localized: "Purge is already cleaning, or a review is open. Wait for it to finish, then try again.")
+        }
+        if summary.failed {
+            return String(localized: "The clean couldn't finish, so nothing was moved. Try again in a moment.")
         }
         if summary.deletedCount == 0 {
             return String(localized: """
