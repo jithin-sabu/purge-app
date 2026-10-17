@@ -473,7 +473,9 @@ struct ScheduledCleaningScheduleTests {
         #expect(h.rearms.count == 0)
     }
 
-    /// Run now reports the failure to Settings and leaves the schedule alone.
+    /// Run now reports the failure to Settings and leaves the schedule alone. It
+    /// does not stamp the failed attempt either: a failure half an hour before the
+    /// due date must not push the scheduled clean back by the retry gap.
     @Test("A failed Run now leaves the schedule where it was")
     func failedRunNowLeavesTheSchedule() async {
         let h = makeHarness(enabledAt: enabledAt)
@@ -485,15 +487,20 @@ struct ScheduledCleaningScheduleTests {
             bytesMovedToTrash: 0,
             failed: true
         )
+        let due = enabledAt.addingTimeInterval(3 * 86_400)
 
-        let oneDayIn = enabledAt.addingTimeInterval(86_400)
-        let summary = await h.registrar.runScheduledCleanNow(referenceDate: oneDayIn)
+        let halfAnHourBefore = due.addingTimeInterval(-1_800)
+        let summary = await h.registrar.runScheduledCleanNow(referenceDate: halfAnHourBefore)
 
         #expect(summary?.failed == true)
         #expect(h.clean.callCount == 1)
         #expect(anchor(h) == nil)
         #expect(h.registrar.lastOutcome == nil)
-        #expect(h.registrar.dueDate(referenceDate: oneDayIn) == enabledAt.addingTimeInterval(3 * 86_400))
+        #expect(h.registrar.dueDate(referenceDate: halfAnHourBefore) == due)
+
+        // The scheduled clean still runs at its own due date.
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: due)
+        #expect(h.clean.callCount == 2)
     }
 
     // 14. The app only observes activation outside the test host and previews.

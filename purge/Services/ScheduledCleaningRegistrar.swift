@@ -306,6 +306,10 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     ///
     /// Asked while a sweep is cleaning, it waits and returns that clean's summary.
     /// Settings reads `nil` as "auto-clean is off", which it was not (#173).
+    ///
+    /// A failed Run now leaves the schedule exactly as it was: it does not stamp
+    /// the failed attempt, so it never pushes the next scheduled clean back by
+    /// the retry gap. Settings shows the failure instead.
     @discardableResult
     func runScheduledCleanNow(referenceDate now: Date = Date()) async -> PurgeStore.ScheduledCleaningSummary? {
         guard prefs.isEnabled else { return nil }
@@ -320,7 +324,9 @@ final class ScheduledCleaningRegistrar: ObservableObject {
 
         let result = await performClean()
         summary = result
-        await finishSchedule(after: result, at: now)
+        if !result.failed {
+            await finishSchedule(after: result, at: now)
+        }
         return result
     }
 
