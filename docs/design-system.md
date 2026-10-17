@@ -95,6 +95,12 @@ SF Rounded is for result numbers and titles only. Size numbers use `.monospacedD
 | `lg` | 14 | Cards, list rows, sheets, notices |
 | `xl` | 18 | Panels on the cleanup celebration |
 
+Overview icons use `AppStyle.IconTile.shape()`: a continuous rounded rectangle
+with a radius of 26% of the tile width, matching the bundled Apple Intelligence
+mark. The default tile is 28pt. Use this shape for fills, rims, image clipping,
+and the dashed Free outline so every tile shares the same corners. App artwork
+is scaled to fill the tile before clipping its transparent outer padding.
+
 Spacing: `xxSmall` 4, `xSmall` 8, `small` 12, `medium` 16, `large` 24, `xLarge` 32.
 
 Cards use a 0.5pt `borderSubtle` hairline instead of a shadow.

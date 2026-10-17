@@ -6,7 +6,7 @@ enum AppStyle {
     enum Radius {
         /// Badges, progress bars, skeleton bars, small icon tiles.
         static let xs: CGFloat = 4
-        /// Chips inside a field, dropdown rows, thumbnails, Overview tiles.
+        /// Chips inside a field, dropdown rows, thumbnails.
         static let sm: CGFloat = 6
         /// Controls that hold a value: pickers, fields, segmented controls.
         static let md: CGFloat = 8
@@ -14,6 +14,17 @@ enum AppStyle {
         static let lg: CGFloat = 14
         /// Panels floating on the cleanup celebration.
         static let xl: CGFloat = 18
+    }
+
+    enum IconTile {
+        static let size: CGFloat = 28
+        /// Matches the outline of the bundled Apple Intelligence mark. Keep the
+        /// radius proportional so the continuous curve scales with the tile.
+        static let cornerRadiusRatio: CGFloat = 0.26
+
+        static func shape(size: CGFloat = size) -> RoundedRectangle {
+            RoundedRectangle(cornerRadius: size * cornerRadiusRatio, style: .continuous)
+        }
     }
 
     enum Control {
