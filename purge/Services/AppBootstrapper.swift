@@ -39,7 +39,7 @@ enum AppBootstrapper {
         }
         RemovedAppMonitor.shared.attach(store: env.store)
         CleaningQuitGuard.isCleaningActive = { [weak store = env.store] in
-            store?.isManualCleaningInProgress ?? false
+            store?.isAnyCleanInProgress ?? false
         }
         WindowCloseQuitter.start()
         // Brings the yearly ledger up to date with what older versions recorded.

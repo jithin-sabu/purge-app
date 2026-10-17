@@ -688,10 +688,20 @@ final class PurgeStore: ObservableObject {
     }
 
     /// `true` while the cleanup overlay is in its cleaning phase — used to gate
-    /// navigation, window close, and app quit.
+    /// navigation. Window close and app quit read `isAnyCleanInProgress`.
     var isManualCleaningInProgress: Bool {
         manualDeletionSession?.phase == .cleaning
             || interactiveSafeCleanupSession?.phase == .cleaning
+    }
+
+    /// `true` while any clean is moving items: the cleanup overlay's cleaning
+    /// phase, or an engine run with no overlay, such as a scheduled clean, the
+    /// menu bar's Clean, an uninstall or a leftover review. Quitting then can
+    /// leave items half removed and the run out of Cleanup History, so window
+    /// close and app quit ask first. The guard read only the overlay, so an
+    /// unattended clean could be cut off without a word (#173).
+    var isAnyCleanInProgress: Bool {
+        isDeleting || isManualCleaningInProgress
     }
 
     /// `true` while a review sheet, confirmation, clean, or its summary owns the
