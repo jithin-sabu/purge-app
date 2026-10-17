@@ -8,10 +8,19 @@ name: Rebuild purgemac.com
 # the site is built here from that tag, so a rename that the site's parser can't
 # read fails this workflow instead of failing silently inside Cloudflare. After
 # the hook fires, the live page is polled until it shows the new version.
+#
+# It can also be run by hand for a published release, for example when the
+# deploy was skipped on release day: gh workflow run rebuild-site.yml -f tag=v1.2.3
 
 on:
   release:
     types: [published, edited, deleted]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to build the site from, such as v1.11.1
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -20,15 +29,31 @@ jobs:
   verify:
     name: Build the site from this release
     # The site only lists full releases, and a deleted tag can't be checked out.
-    if: ${{ !github.event.release.prerelease && github.event.action != 'deleted' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && github.event.action != 'deleted') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
     steps:
+      - name: Check the tag is a published full release
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! PRERELEASE=$(gh api "repos/${{ github.repository }}/releases/tags/$RELEASE_TAG" --jq .prerelease); then
+            echo "::error::$RELEASE_TAG is not a published release."
+            exit 1
+          fi
+          if [ "$PRERELEASE" != "false" ]; then
+            echo "::error::$RELEASE_TAG is a pre-release, and the site lists full releases only."
+            exit 1
+          fi
+
       - name: Check out the release
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ env.RELEASE_TAG }}
           path: app
 
       - name: Check the site token can read purge-landing-page
@@ -88,19 +113,19 @@ jobs:
         working-directory: site
         env:
           SAFETY_SOURCE_DIR: ${{ github.workspace }}/app
-          SAFETY_SOURCE_REF: ${{ github.event.release.tag_name }}
+          SAFETY_SOURCE_REF: ${{ env.RELEASE_TAG }}
         run: npm run build
 
+      # Since 2026-10-16 the site exports with trailingSlash, so /safety is
+      # safety/index.html. It was safety.html before.
       - name: Confirm the page carries this version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: grep -Fq -- "As of $RELEASE_TAG" site/out/safety.html
+        run: grep -Fq -- "As of $RELEASE_TAG" site/out/safety/index.html
 
   rebuild:
     name: Deploy and confirm
     needs: verify
     # Run on delete too, where verify is skipped on purpose.
-    if: ${{ always() && !github.event.release.prerelease && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || !github.event.release.prerelease) && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
