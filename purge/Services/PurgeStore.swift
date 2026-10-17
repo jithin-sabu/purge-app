@@ -739,6 +739,19 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Whether a confirmed clean may start now. A running clean holds `isDeleting`,
+    /// and a second one beside it would race it for the same rows and the progress
+    /// overlay. The picks are dropped and the alert says why, so a confirmation
+    /// never closes with nothing happening and no word (#173). Callers claim
+    /// `isDeleting` with no await after this check.
+    private func claimConfirmedCleanOrExplain() -> Bool {
+        guard !isDeleting else {
+            errorMessage = String(localized: "Purge is already cleaning. Wait for it to finish, then try again.")
+            return false
+        }
+        return true
+    }
+
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
     /// (manual and scheduled — both clean the same set).
     ///
@@ -1005,6 +1018,7 @@ final class PurgeStore: ObservableObject {
     private func executeStagedDeletion(trigger: CleanupTrigger) async {
         guard let staged = stagedDeletionCandidates else { return }
         stagedDeletionCandidates = nil
+        guard claimConfirmedCleanOrExplain() else { return }
         // Same rule as safe cleanup: a row from a full scan whose access has since
         // been turned off stays where it is. Moving it would prompt.
         let access = currentScanAccess()
@@ -1732,7 +1746,8 @@ final class PurgeStore: ObservableObject {
     private func performLargeFileDeletion(targets: [LargeFile]) async {
         // A row selected before its folder was excluded must not be trashed.
         let targets = targets.filter { !ExcludedPathsStore.isExcluded($0.path) }
-        guard !targets.isEmpty, !isDeleting else { return }
+        guard !targets.isEmpty else { return }
+        guard claimConfirmedCleanOrExplain() else { return }
 
         // A row can stand for several files (an AI model is a manifest plus its
         // blobs), so expand to components here. Component order matters: the
@@ -2131,7 +2146,8 @@ final class PurgeStore: ObservableObject {
     /// and the removed-app review never pre-ticks anything outside the home folder
     /// (`RemovedAppReviewFiltering`).
     private func performLeftoverCleanup(items: [UninstallItem]) async {
-        guard !items.isEmpty, !isDeleting else { return }
+        guard !items.isEmpty else { return }
+        guard claimConfirmedCleanOrExplain() else { return }
 
         var urls: [URL] = []
         var pathToDisplayName: [String: String] = [:]
@@ -2378,7 +2394,8 @@ final class PurgeStore: ObservableObject {
     /// the picker), and the large-files path is on the shipping critical path.
     private func performUninstallPlan(_ plan: UninstallPlan) async {
         let selectedByApp = plan.apps.map { ($0.app, $0.selectedItems) }.filter { !$0.1.isEmpty }
-        guard !selectedByApp.isEmpty, !isDeleting else { return }
+        guard !selectedByApp.isEmpty else { return }
+        guard claimConfirmedCleanOrExplain() else { return }
 
         // Claim the deleting flag before the first suspension point below (the
         // quit wait). On the main actor an `await` is a chance for a second tap to

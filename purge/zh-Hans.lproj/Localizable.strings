@@ -442,6 +442,7 @@
 "Purge couldn't work out what these folders are. Only continue if you know what they hold." = "Purge 无法确定这些文件夹的用途。请仅在了解其中内容时继续。";
 "Purge couldn’t read this folder to measure it. It’s still excluded." = "Purge 无法读取此文件夹以计算大小。它仍会从扫描中排除。";
 "Purge is already cleaning." = "Purge 正在清理中。";
+"Purge is already cleaning. Wait for it to finish, then try again." = "Purge 正在清理。请等待其完成后再试。";
 "Purge is cleaning right now. Scan again when it's done." = "Purge 正在清理。请在清理完成后再次扫描。";
 "Purge is free. " = "Purge 免费提供。 ";
 "Purge is still cleaning" = "Purge 仍在清理";
