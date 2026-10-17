@@ -766,6 +766,22 @@ struct EverythingElseCacheAuditTests {
         ])
     }
 
+    /// App Caches classifies an Application Support cache folder by the app
+    /// folder's name, so an alias reaches `<App>/Cache` even without Chromium's
+    /// `Cache_Data` inside, which `SafetyTierList` alone keeps Not Sure. The new
+    /// aliases join Code and Cursor in that behaviour; #226 tracks the guard.
+    @Test(arguments: ["Codex", "EffectCraft", "Code", "Cursor"])
+    func appNameAliasesDecideApplicationSupportCacheRows(appName: String) throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let bare = base.appendingPathComponent("Library/Application Support/\(appName)/Cache", isDirectory: true)
+        try fm.createDirectory(at: bare, withIntermediateDirectories: true)
+        #expect(SafetyTierList.evaluate(folderName: appName, path: bare) == nil)
+        let info = ExplanationResolver.initialSafetyForCacheFolder(folderName: appName, friendlyHeadline: appName, path: bare)
+        #expect(info.level == .safe, "\(appName)")
+    }
+
     /// The store the scanner lists is the one the policy allows.
     @Test
     func antigravityProfileIsTheOnlyChromiumStoreOutsideApplicationSupport() {

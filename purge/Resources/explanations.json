@@ -815,7 +815,7 @@
     "key": "openai-codex",
     "display_name": "OpenAI Codex",
     "tag": "safe",
-    "explanation": "Web page and script caches of the Codex app and the Codex command line tool. Safe to delete; Codex rebuilds them as you use it. Your sessions, settings and sign-in in ~/.codex are left alone.",
+    "explanation": "Page and script caches of the Codex app and command line tool. Safe to delete; Codex rebuilds them as you use it. Your sessions and sign-in in ~/.codex are left alone.",
     "bundle_ids": [
       "com.openai.codex"
     ],
@@ -1738,7 +1738,7 @@
     "key": "gradle-global-cache",
     "display_name": "Gradle Dependency Cache",
     "tag": "medium",
-    "explanation": "Libraries and build caches Gradle downloads for Java, Kotlin and Android projects, and the Gradle versions the wrapper downloaded. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline.",
+    "explanation": "Libraries, build caches and the Gradle versions the wrapper downloaded, for Java, Kotlin and Android projects. Nothing is lost, but your next build downloads everything again, which can take a long time and does not work offline.",
     "bundle_ids": [],
     "aliases": [
       "Gradle Dependency Cache"
@@ -3806,7 +3806,7 @@
     "key": "dart-analysis-cache",
     "display_name": "Dart Analysis Cache",
     "tag": "safe",
-    "explanation": "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so your editor opens projects faster. Safe to delete; the analyzer rebuilds them as you work, so the first analysis of each project is slower once.",
+    "explanation": "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so your editor opens projects faster. Safe to delete; the analyzer rebuilds them as you work.",
     "bundle_ids": [],
     "aliases": [],
     "scope": "dev_tools",
@@ -3816,7 +3816,7 @@
     "key": "hermes-agent-cache",
     "display_name": "Hermes Agent Cache",
     "tag": "medium",
-    "explanation": "Package downloads, catalogues and scratch space the Hermes agent keeps in ~/.hermes/cache. Nothing is lost, but a task Hermes is running right now may be working in the scratch space, so clean it while Hermes is idle. Your settings, keys, sessions and memories elsewhere in ~/.hermes are left alone.",
+    "explanation": "Downloads, catalogues and scratch space the Hermes agent keeps in ~/.hermes/cache. Nothing is lost, but a running Hermes task may be using the scratch space, so clean it while Hermes is idle. Settings, keys and sessions are left alone.",
     "bundle_ids": [],
     "aliases": [],
     "scope": "dev_tools",
@@ -3826,7 +3826,7 @@
     "key": "antigravity-browser-cache",
     "display_name": "Antigravity Browser Cache",
     "tag": "safe",
-    "explanation": "Web page and script caches of the browser Antigravity uses for web tasks, inside ~/.gemini/antigravity-browser-profile. Safe to delete; the browser fills them again as it loads pages. Your sign-ins, history and extensions in that profile are left alone.",
+    "explanation": "Page and script caches of the browser Antigravity uses for web tasks. Safe to delete; the browser fills them again as it loads pages. Sign-ins, history and extensions are left alone.",
     "bundle_ids": [],
     "aliases": [],
     "scope": "dev_tools",
