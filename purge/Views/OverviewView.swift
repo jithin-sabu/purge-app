@@ -87,6 +87,8 @@ struct OverviewView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// The grey segment splits into the Everything else groups while the row is
+    /// unfolded and a measure exists; the remainder keeps the row's own id and grey.
     private func barSegments(_ breakdown: OverviewBreakdown) -> [OverviewDiskBar.Segment] {
         var segments = OverviewCategory.allCases.map { category in
             OverviewDiskBar.Segment(
@@ -96,10 +98,22 @@ struct OverviewView: View {
                 color: OverviewCategoryStyle.color(category)
             )
         }
+        var remainder = breakdown.everythingElseBytes
+        if store.isEverythingElseExpanded, let groups = everythingElseBreakdown {
+            for group in groups.measuredGroupsBySize {
+                segments.append(OverviewDiskBar.Segment(
+                    id: EverythingElseStyle.segmentID(group),
+                    label: EverythingElseStyle.name(group),
+                    bytes: groups.bytes(for: group),
+                    color: EverythingElseStyle.color(group)
+                ))
+            }
+            remainder = groups.notMeasuredOnOverviewBytes
+        }
         segments.append(OverviewDiskBar.Segment(
             id: OverviewDiskBar.everythingElseID,
             label: String(localized: "Everything else"),
-            bytes: breakdown.everythingElseBytes,
+            bytes: remainder,
             color: AppColors.Chart.everythingElse
         ))
         segments.append(OverviewDiskBar.Segment(
@@ -131,16 +145,17 @@ struct OverviewView: View {
         .overviewCard()
     }
 
+    private var everythingElseBreakdown: EverythingElseBreakdown? {
+        store.everythingElseBreakdown(totalBytes: diskStore.totalDiskBytes, freeBytes: diskStore.freeDiskBytes)
+    }
+
     private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
         VStack(spacing: 0) {
-            OverviewPlainRow(
-                symbol: "ellipsis",
-                color: AppColors.Chart.everythingElse,
-                title: String(localized: "Everything else"),
-                detail: String(localized: "macOS, your documents and photos, and files Purge doesn't sort"),
-                bytes: breakdown.everythingElseBytes,
-                share: breakdown.share(of: breakdown.everythingElseBytes),
-                linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
+            OverviewEverythingElseRow(
+                breakdown: breakdown,
+                groups: everythingElseBreakdown,
+                linkedState: linkedRowState(OverviewDiskBar.everythingElseID),
+                groupLinkedState: linkedRowState
             )
             InsetCardDivider()
             OverviewPlainRow(
@@ -497,7 +512,7 @@ struct OverviewIconTile: View {
     }
 }
 
-private struct OverviewPlainRow: View {
+struct OverviewPlainRow: View {
     var symbol: String?
     let color: Color
     let title: String
@@ -534,6 +549,240 @@ private struct OverviewPlainRow: View {
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Everything else
+
+/// The Everything else row (#220). A click unfolds it in place into its groups,
+/// each with a thin bar, and starts the walk the first time; the chevron opens
+/// Everything else as its own page. Read only: nothing here is selectable.
+private struct OverviewEverythingElseRow: View {
+    let breakdown: OverviewBreakdown
+    let groups: EverythingElseBreakdown?
+    let linkedState: OverviewLinkedRowState
+    let groupLinkedState: (String) -> OverviewLinkedRowState
+
+    @EnvironmentObject private var store: PurgeStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    private var isExpanded: Bool { store.isEverythingElseExpanded }
+    private var phase: EverythingElsePhase { store.everythingElsePhase }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            if isExpanded {
+                groupRows
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isExpanded)
+    }
+
+    private var header: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            OverviewIconTile(symbol: "ellipsis", color: AppColors.Chart.everythingElse)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Everything else")
+                    .font(AppStyle.Typography.headline)
+                Text(detail)
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(reduceMotion ? nil : OverviewMotion.number, value: detail)
+                    .shimmeringText(phase == .measuring)
+            }
+            Spacer(minLength: AppStyle.Spacing.small)
+            Text(OverviewCategoryStyle.shareText(breakdown.share(of: breakdown.everythingElseBytes)))
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textTertiary)
+                .overviewNumberTransition(breakdown.everythingElseBytes, reduceMotion: reduceMotion)
+            Text(formatStorageBytes(breakdown.everythingElseBytes))
+                .font(AppStyle.Typography.sectionTitle)
+                .overviewNumberTransition(breakdown.everythingElseBytes, reduceMotion: reduceMotion)
+                .frame(minWidth: 64, alignment: .trailing)
+            // The chevron is the one part that leaves the page.
+            Button {
+                store.showEverythingElsePage()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.textTertiary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open Everything else")
+            .accessibilityLabel("Open Everything else")
+        }
+        .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
+        .padding(.vertical, 11)
+        .overviewLinked(linkedState)
+        .background(isHovering || linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .onTapGesture(perform: toggle)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(isExpanded ? String(localized: "Open") : String(localized: "Closed"))
+        .accessibilityAction { toggle() }
+    }
+
+    private func toggle() {
+        if isExpanded {
+            store.isEverythingElseExpanded = false
+        } else {
+            store.openEverythingElse()
+        }
+    }
+
+    private var detail: String {
+        switch phase {
+        case .notMeasured:
+            return isExpanded
+                ? String(localized: "Stopped before it could measure")
+                : String(localized: "macOS, your files, app data and more. Click to see what's in it")
+        case .waiting:
+            return String(localized: "Up next")
+        case .measuring:
+            return String(localized: "Measuring…")
+        case .ready:
+            return String(localized: "macOS, your files, app data and more")
+        }
+    }
+
+    /// The groups biggest first, locked ones saying so, and the remainder last.
+    @ViewBuilder
+    private var groupRows: some View {
+        if let groups {
+            ForEach(groups.measuredGroupsBySize, id: \.self) { group in
+                OverviewEverythingElseGroupRow(
+                    group: group,
+                    figures: groups[group],
+                    bytes: groups.bytes(for: group),
+                    shareOfDisk: breakdown.share(of: groups.bytes(for: group)),
+                    shareOfEverythingElse: share(groups.bytes(for: group), of: groups.everythingElseBytes),
+                    isMeasuring: phase == .measuring && groups[group]?.isFinished == false,
+                    linkedState: groupLinkedState(EverythingElseStyle.segmentID(group))
+                )
+            }
+            OverviewEverythingElseGroupRow(
+                group: .notMeasured,
+                figures: nil,
+                bytes: groups.notMeasuredOnOverviewBytes,
+                shareOfDisk: breakdown.share(of: groups.notMeasuredOnOverviewBytes),
+                shareOfEverythingElse: share(groups.notMeasuredOnOverviewBytes, of: groups.everythingElseBytes),
+                isMeasuring: false,
+                linkedState: groupLinkedState(OverviewDiskBar.everythingElseID)
+            )
+            .padding(.bottom, AppStyle.Spacing.xxSmall)
+        } else {
+            ForEach(EverythingElseGroup.measured, id: \.self) { group in
+                OverviewEverythingElseGroupRow(
+                    group: group,
+                    figures: nil,
+                    bytes: 0,
+                    shareOfDisk: 0,
+                    shareOfEverythingElse: 0,
+                    isMeasuring: phase == .measuring || phase == .waiting,
+                    linkedState: .normal
+                )
+            }
+        }
+    }
+
+    private func share(_ bytes: Int64, of total: Int64) -> Double {
+        guard total > 0 else { return 0 }
+        return min(1, max(0, Double(bytes) / Double(total)))
+    }
+}
+
+/// One group under the unfolded row: indented, with a thin bar for its share of
+/// Everything else.
+private struct OverviewEverythingElseGroupRow: View {
+    let group: EverythingElseGroup
+    let figures: EverythingElseGroupBreakdown?
+    let bytes: Int64
+    let shareOfDisk: Double
+    let shareOfEverythingElse: Double
+    let isMeasuring: Bool
+    let linkedState: OverviewLinkedRowState
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let barHeight: CGFloat = 4
+    private var isLocked: Bool { figures?.isLocked == true && bytes == 0 }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: AppStyle.Spacing.xSmall) {
+            Image(systemName: EverythingElseStyle.symbol(group))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(AppColors.textTertiary)
+                .frame(width: 16)
+                .padding(.top, 1)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+                    Text(EverythingElseStyle.name(group))
+                        .font(AppStyle.Typography.rowTitle)
+                        .lineLimit(1)
+                    Spacer(minLength: AppStyle.Spacing.small)
+                    trailing
+                }
+                if !isLocked {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                                .fill(AppColors.fillSecondary)
+                            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                                .fill(EverythingElseStyle.color(group))
+                                .frame(width: max(bytes > 0 ? Self.barHeight : 0, geometry.size.width * shareOfEverythingElse))
+                                .animation(reduceMotion ? nil : OverviewMotion.bar, value: shareOfEverythingElse)
+                        }
+                    }
+                    .frame(height: Self.barHeight)
+                    .accessibilityHidden(true)
+                }
+            }
+        }
+        .padding(.leading, AppStyle.Row.scanCardHorizontalPadding + OverviewIconTile.size + AppStyle.Spacing.small)
+        .padding(.trailing, AppStyle.Row.scanCardHorizontalPadding)
+        .padding(.vertical, AppStyle.Spacing.xSmall)
+        .overviewLinked(linkedState)
+        .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        if isLocked {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
+                Text("Needs Full Disk Access")
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textTertiary)
+                Image(systemName: "lock")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+        } else if isMeasuring, bytes == 0 {
+            Text("Measuring…")
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textTertiary)
+                .shimmeringText(true)
+        } else {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
+                Text(OverviewCategoryStyle.shareText(shareOfDisk))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .overviewNumberTransition(shareOfDisk, reduceMotion: reduceMotion)
+                Text(formatStorageBytes(bytes))
+                    .font(AppStyle.Typography.rowTitle)
+                    .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
+                    .frame(minWidth: 64, alignment: .trailing)
+            }
+        }
     }
 }
 
@@ -771,7 +1020,7 @@ extension View {
 
 // MARK: - Card
 
-private extension View {
+extension View {
     /// The card surface. Rows are clipped to its rounded shape so a row's hover fill
     /// stays inside the corners, and the border is drawn over them so the fill
     /// can't cover it.
