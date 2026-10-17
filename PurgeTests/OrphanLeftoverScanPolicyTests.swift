@@ -451,6 +451,22 @@ struct OrphanLeftoverScanPolicyTests {
         }
     }
 
+    // MARK: Presentation
+
+    /// Finder shows `com.granola.app` as `com.granola`, and the row once showed
+    /// `com`. A bundle id that ends in `.app` stays the bundle id.
+    @Test
+    func friendlyNameKeepsABundleIDThatEndsInApp() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appendingPathComponent("com.granola.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        #expect(OrphanLeftoverScanPolicy.friendlyName(bundleID: "com.granola.app", url: folder) == "com.granola.app")
+        let plain = root.appendingPathComponent("com.vendor.App", isDirectory: true)
+        try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
+        #expect(OrphanLeftoverScanPolicy.friendlyName(bundleID: "com.vendor.App", url: plain) == "com.vendor.App")
+    }
+
     // MARK: Ownership from installed code (#197)
 
     /// An index whose signatures all read, with the given claims.

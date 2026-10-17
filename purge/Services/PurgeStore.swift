@@ -2110,9 +2110,27 @@ final class PurgeStore: ObservableObject {
         orphanCleanupPlan = nil
     }
 
+    /// The uninstaller quits a running app before it moves anything. A leftover
+    /// has no app to quit, so before anything moves each owner is checked
+    /// again: one that is running, or back on this Mac, keeps its files (#224).
+    /// The rest go ahead.
     func confirmOrphanCleanup(_ plan: OrphanCleanupPlan) async {
         orphanCleanupPlan = nil
-        await performLeftoverCleanup(items: plan.selectedItems)
+        let selected = plan.selectedItems
+        let owners = Set(selected.compactMap(\.ownerBundleID))
+        let present = await Task.detached(priority: .userInitiated) {
+            owners.filter { OrphanLeftoverScanPolicy.isOwnerPresent(bundleID: $0) }
+        }.value
+        let kept = selected.filter { item in
+            guard let owner = item.ownerBundleID else { return false }
+            return present.contains(owner)
+        }
+        if !kept.isEmpty {
+            let names = Set(kept.map(\.safetyInfo.headline)).sorted().joined(separator: ", ")
+            errorMessage = String(localized: "\(names) is open or back on this Mac, so its files were kept.")
+        }
+        let keptIDs = Set(kept.map(\.id))
+        await performLeftoverCleanup(items: selected.filter { !keptIDs.contains($0.id) })
     }
 
     // MARK: - Leftovers of apps removed outside Purge (issue #65)

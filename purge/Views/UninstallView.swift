@@ -238,7 +238,8 @@ struct UninstallView: View {
                                     get: { store.orphanSelectedIDs.contains(item.id) },
                                     set: { _ in store.toggleOrphanSelected(id: item.id) }
                                 ),
-                                togglesOnRowTap: true
+                                togglesOnRowTap: true,
+                                evidenceNote: item.matchReason.rowNote
                             )
                         }
                     }
@@ -703,6 +704,10 @@ private struct UninstallItemRow: View {
     @Binding var isSelected: Bool
     var isToggleDisabled: Bool = false
     var togglesOnRowTap: Bool = false
+    /// What attributed the path to a removed app, shown under the path on
+    /// Leftovers rows (#224). The uninstaller's own rows leave it out: there the
+    /// user picked the app, so the link is not in question.
+    var evidenceNote: String? = nil
 
     @State private var isContextMenuActive = false
 
@@ -739,6 +744,13 @@ private struct UninstallItemRow: View {
                         .foregroundStyle(AppColors.statusCheckText)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                }
+                if let evidenceNote {
+                    Text(evidenceNote)
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
 
@@ -1311,7 +1323,8 @@ struct OrphanReviewSheet: View {
                     ForEach($plan.items) { $item in
                         UninstallItemRow(
                             item: item,
-                            isSelected: $item.isSelected
+                            isSelected: $item.isSelected,
+                            evidenceNote: item.matchReason.rowNote
                         )
                     }
                 }

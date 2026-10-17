@@ -253,6 +253,18 @@ enum OrphanLeftoverScanPolicy {
         lowercased.hasPrefix("com.apple.") || lowercased.contains(".com.apple.")
     }
 
+    // MARK: Owner present again
+
+    /// Whether the removed app is back: running from anywhere (a copy in
+    /// Downloads, a disk image), or installed where Launch Services can see it.
+    /// The uninstaller quits a running app before it moves anything; a leftover
+    /// has no app to quit, so one whose owner is present is kept instead (#224).
+    nonisolated static func isOwnerPresent(bundleID: String) -> Bool {
+        guard !bundleID.isEmpty else { return false }
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty { return true }
+        return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
+
     // MARK: Owner extraction
 
     /// The owner of one entry directly inside an orphan root, or `nil` when the
@@ -746,11 +758,15 @@ enum OrphanLeftoverScanPolicy {
 
     /// A friendly name for the removed app: the folder's Finder-resolved name
     /// when it is meaningful (macOS resolves it from the same container metadata),
-    /// otherwise the bundle id itself.
+    /// otherwise the bundle id itself. Finder hides a `.app` extension, so for
+    /// `com.granola.app` it answers `com.granola`, which is the folder's own name
+    /// with its extension gone, not a resolved name; that reads as the id too.
     nonisolated static func friendlyName(bundleID: String, url: URL) -> String {
+        let name = url.lastPathComponent
         if let localized = try? url.resourceValues(forKeys: [.localizedNameKey]).localizedName,
            !localized.isEmpty,
-           localized != url.lastPathComponent,
+           localized != name,
+           localized != (name as NSString).deletingPathExtension,
            UUID(uuidString: localized) == nil {
             return (localized as NSString).deletingPathExtension
         }
