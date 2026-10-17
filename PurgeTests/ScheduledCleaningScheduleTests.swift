@@ -503,6 +503,36 @@ struct ScheduledCleaningScheduleTests {
         #expect(h.clean.callCount == 2)
     }
 
+    /// A failed Run now on a schedule that is already due starts the retry gap,
+    /// like a failed sweep: otherwise the next switch into Purge runs the clean
+    /// again at once, with a second failure notification.
+    @Test("A failed Run now on an overdue schedule starts the retry gap")
+    func failedRunNowOnOverdueScheduleStartsTheGap() async {
+        let h = makeHarness(enabledAt: enabledAt)
+        h.prefs.frequency = .custom
+        h.prefs.customIntervalAmount = 3
+        h.prefs.customIntervalUnit = .day
+        h.clean.summary = PurgeStore.ScheduledCleaningSummary(
+            deletedCount: 0,
+            bytesMovedToTrash: 0,
+            failed: true
+        )
+        let gap = ScheduledCleaningRegistrar.retryGapAfterFailure
+        let overdue = enabledAt.addingTimeInterval(3 * 86_400 + 600)
+
+        let summary = await h.registrar.runScheduledCleanNow(referenceDate: overdue)
+        #expect(summary?.failed == true)
+        #expect(h.clean.callCount == 1)
+        #expect(anchor(h) == nil)
+        #expect(h.registrar.dueDate(referenceDate: overdue) == overdue.addingTimeInterval(gap))
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: overdue.addingTimeInterval(60))
+        #expect(h.clean.callCount == 1)
+
+        await h.registrar.runGracefulActivationSweepIfPastDue(referenceDate: overdue.addingTimeInterval(gap))
+        #expect(h.clean.callCount == 2)
+    }
+
     // 14. The app only observes activation outside the test host and previews.
     //     Both share the user's real defaults and would clean real caches.
     @Test("The test host and previews never clean on activation")
