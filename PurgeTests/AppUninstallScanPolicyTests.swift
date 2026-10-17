@@ -364,6 +364,97 @@ struct AppUninstallScanPolicyTests {
         ))
     }
 
+    /// A hidden home folder belongs to an app only when the catalog lists a
+    /// folder of that name under the app's bundle id (#228).
+    @Test
+    func catalogFolderMatchesItsAppByBundleID() {
+        let antigravity = makeApp(
+            name: "Antigravity", bundlePath: "/Applications/Antigravity.app", bundleID: "com.google.antigravity"
+        )
+        func reason(_ name: String, app: InstalledApp = antigravity) -> MatchReason? {
+            AppUninstallScanPolicy.matchReason(
+                forLeftoverName: name, category: .homeFolderData, app: app, dotFolderCatalog: testCatalog
+            )
+        }
+        #expect(reason(".antigravity") == .dotFolderCatalog)
+        #expect(reason("antigravity") == .dotFolderCatalog)
+        #expect(reason(".gemini") == nil)
+        #expect(reason(".ssh") == nil)
+        #expect(reason(".antigravity", app: makeApp()) == nil)
+        #expect(reason(".antigravity", app: makeApp(bundleID: nil)) == nil)
+        #expect(reason(".antigravity")?.isHighConfidence == false)
+    }
+
+    /// Two installed copies of Cursor share `~/.cursor`, so removing one keeps it
+    /// for the other, with the catalog the app ships. An unrelated survivor does
+    /// not claim it.
+    @Test
+    func secondCopyOfTheAppClaimsItsCatalogFolder() {
+        let cursorID = "com.todesktop.230313mzl4w4u92"
+        let owner = makeApp(name: "Cursor", bundlePath: "/Applications/Cursor.app", bundleID: cursorID)
+        let secondCopy = makeApp(
+            name: "Cursor",
+            bundlePath: home.appendingPathComponent("Applications/Cursor.app").path,
+            bundleID: cursorID
+        )
+        let claimant = AppUninstallScanPolicy.claimant(
+            forLeftoverName: ".cursor", category: .homeFolderData, ownerID: owner.id,
+            among: [makeApp(), secondCopy], appGroupClaims: AppGroupClaims()
+        )
+        #expect(claimant?.id == secondCopy.id)
+        #expect(AppUninstallScanPolicy.claimant(
+            forLeftoverName: ".cursor", category: .homeFolderData, ownerID: owner.id,
+            among: [makeApp()], appGroupClaims: AppGroupClaims()
+        ) == nil)
+    }
+
+    /// The review sheet unticks a catalog folder a kept copy still uses and says
+    /// so, and leaves a folder only the removed copy owns unticked but free to tick.
+    @Test
+    func sheetKeepsACatalogFolderASecondCopyStillUses() {
+        let cursorID = "com.todesktop.230313mzl4w4u92"
+        let owner = makeApp(name: "Cursor", bundlePath: "/Applications/Cursor.app", bundleID: cursorID)
+        let secondCopy = makeApp(
+            name: "Cursor",
+            bundlePath: home.appendingPathComponent("Applications/Cursor.app").path,
+            bundleID: cursorID
+        )
+        let folder = UninstallItem(
+            path: home.appendingPathComponent(".cursor", isDirectory: true),
+            sizeBytes: 1,
+            category: .homeFolderData,
+            safetyInfo: AppUninstallScanPolicy.safetyInfo(
+                for: .dotFolderCatalog, category: .homeFolderData,
+                url: home.appendingPathComponent(".cursor"), appName: "Cursor"
+            ),
+            matchReason: .dotFolderCatalog,
+            isSelected: false
+        )
+        var plans = [UninstallAppPlan(app: owner, items: [folder])]
+        PurgeStore.markSharedWithSurvivors(in: &plans, survivors: [secondCopy], appGroupClaims: AppGroupClaims())
+        #expect(plans[0].items[0].keptForApp == "Cursor")
+        #expect(plans[0].items[0].isSelected == false)
+
+        var alone = [UninstallAppPlan(app: owner, items: [folder])]
+        PurgeStore.markSharedWithSurvivors(in: &alone, survivors: [makeApp()], appGroupClaims: AppGroupClaims())
+        #expect(alone[0].items[0].keptForApp == nil)
+        #expect(alone[0].items[0].isSelected == false)
+    }
+
+    /// The uninstaller's catalog row is Check First with its own wording, not the
+    /// "matched by name" text of a name match.
+    @Test
+    func catalogFolderSafetyIsCheckFirstWithItsOwnExplanation() {
+        let info = AppUninstallScanPolicy.safetyInfo(
+            for: .dotFolderCatalog, category: .homeFolderData,
+            url: home.appendingPathComponent(".cursor"), appName: "Cursor"
+        )
+        #expect(info.level == .medium)
+        #expect(info.headline == "Cursor Home Folder Data")
+        #expect(info.explanation.contains("known to keep"))
+        #expect(!info.explanation.contains("matched by name"))
+    }
+
     /// The scanner walks one folder into an app root (vendors that group their
     /// apps, e.g. `/Applications/Utilities/…`), so the delete gate must accept the
     /// same one level. Otherwise a nested app is offered but skipped for safety

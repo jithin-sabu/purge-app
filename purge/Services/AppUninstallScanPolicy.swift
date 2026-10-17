@@ -168,9 +168,23 @@ enum AppUninstallScanPolicy {
     nonisolated static func matchReason(
         forLeftoverName name: String,
         category: UninstallCategory,
-        app: InstalledApp
+        app: InstalledApp,
+        dotFolderCatalog: AppDotFolderCatalog = .shared
     ) -> MatchReason? {
         let lowerName = name.lowercased()
+
+        // A hidden home folder is paired with a bundle id by the catalog and by
+        // nothing else (#228). The scanner lists them from the catalog directly;
+        // this branch is for `claimant`, so a second installed copy of the same
+        // app keeps the folder. The name is the folder's last component.
+        if category == .homeFolderData {
+            guard let bundleID = app.bundleID?.lowercased(), !bundleID.isEmpty else { return nil }
+            let listed = dotFolderCatalog.entries.contains { entry in
+                entry.bundleID.lowercased() == bundleID
+                    && entry.folders.contains { ($0 as NSString).lastPathComponent == name }
+            }
+            return listed ? .dotFolderCatalog : nil
+        }
 
         if let bundleID = app.bundleID?.lowercased(), !bundleID.isEmpty {
             // Exact bundle id, or bundle id plus a known suffix.
@@ -268,11 +282,22 @@ enum AppUninstallScanPolicy {
                 recoverySteps: String(localized: "\(appName) recreates what it needs the next time it runs."),
                 reinstallCommand: nil
             )
+        // A hidden home folder the catalog names for the app being uninstalled
+        // (#228). Settings, extensions and history live there, so it is Check
+        // First and starts unticked.
+        case .dotFolderCatalog:
+            return SafetyInfo(
+                level: .medium,
+                headline: String(localized: "\(appName) \(category.displayName)"),
+                explanation: String(localized: "A hidden folder in your home folder that \(appName) is known to keep. It holds settings, extensions and history rather than a cache, so check it before removing."),
+                recoverySteps: String(localized: "Removed items go to the Trash, so you can put them back until you empty it. If you reinstall the app, let it recreate its data."),
+                reinstallCommand: nil
+            )
         // The ledger and the Library cross-evidence only attribute leftovers of
         // removed apps, whose rows get their text from
         // `OrphanLeftoverScanPolicy.safetyInfo`; listed here so a name-strength
         // match is never read as safe.
-        case .appName, .ownerLedger, .libraryCrossEvidence, .dotFolderCatalog:
+        case .appName, .ownerLedger, .libraryCrossEvidence:
             return SafetyInfo(
                 level: .medium,
                 headline: String(localized: "\(appName) \(category.displayName)"),
