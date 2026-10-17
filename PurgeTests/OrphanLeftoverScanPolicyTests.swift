@@ -241,6 +241,107 @@ struct OrphanLeftoverScanPolicyTests {
         #expect(!OrphanLeftoverScanPolicy.looksLikeBundleID("com..App"))
     }
 
+    // MARK: Cross-evidence inside Library (#224)
+
+    private func clues(preferences: [String] = [], caches: [String] = []) -> OrphanLeftoverScanPolicy.LibraryIdentifierClues {
+        OrphanLeftoverScanPolicy.LibraryIdentifierClues(preferenceIDs: Set(preferences), cacheIDs: Set(caches))
+    }
+
+    private func crossOwner(
+        _ name: String,
+        clues: OrphanLeftoverScanPolicy.LibraryIdentifierClues,
+        apps: [String] = ["com.vendor.Other"],
+        names: [String] = []
+    ) -> String? {
+        var installed = index(apps: apps)
+        installed.diskAppNames = Set(names.map { $0.lowercased() })
+        return OrphanLeftoverScanPolicy.crossEvidenceOwner(folderName: name, clues: clues, installed: installed)
+    }
+
+    /// A human-named folder with nothing else in Library naming its app is not
+    /// attributed, as before #224.
+    @Test
+    func humanNamedFolderWithoutCrossEvidenceIsNotAttributed() {
+        #expect(crossOwner("Antigravity", clues: clues()) == nil)
+        #expect(crossOwner("Antigravity", clues: clues(preferences: ["com.google.Keystone"])) == nil)
+    }
+
+    /// The reported case: `Application Support/Antigravity` with
+    /// `Preferences/com.google.antigravity.plist`, and the app gone.
+    @Test
+    func matchingPreferencesPlistForAnUninstalledIDAttributesTheFolder() {
+        #expect(crossOwner("Antigravity", clues: clues(preferences: ["com.google.antigravity"]))
+            == "com.google.antigravity")
+        #expect(crossOwner("Antigravity", clues: clues(caches: ["com.google.antigravity"]))
+            == "com.google.antigravity")
+        // Case-insensitive on both sides.
+        #expect(crossOwner("antigravity", clues: clues(preferences: ["com.google.Antigravity"]))
+            == "com.google.Antigravity")
+    }
+
+    @Test
+    func matchingPlistForAnInstalledIDKeepsTheFolder() {
+        #expect(crossOwner("Antigravity", clues: clues(preferences: ["com.google.antigravity"]),
+                           apps: ["com.google.antigravity"]) == nil)
+        // A helper id under an installed app is owned too.
+        #expect(crossOwner("Helper", clues: clues(preferences: ["com.vendor.Other.Helper"])) == nil)
+    }
+
+    /// `Code` is VS Code's folder, whatever stray id ends in `.code`: an
+    /// installed app with the folder's name owns it.
+    @Test
+    func installedAppWithTheFolderNameKeepsItDespiteAStrayID() {
+        #expect(crossOwner("Code", clues: clues(preferences: ["com.gone.code"]), names: ["Code"]) == nil)
+    }
+
+    @Test
+    func twoCandidateIDsAreAmbiguousAndKeepTheFolder() {
+        #expect(crossOwner("Antigravity", clues: clues(
+            preferences: ["com.google.antigravity"], caches: ["com.other.antigravity"]
+        )) == nil)
+        // The same id in both places is one clue, not two.
+        #expect(crossOwner("Antigravity", clues: clues(
+            preferences: ["com.google.antigravity"], caches: ["com.google.antigravity"]
+        )) == "com.google.antigravity")
+    }
+
+    @Test
+    func appleIdentifiersAreNeverCrossEvidence() {
+        #expect(crossOwner("Safari", clues: clues(preferences: ["com.apple.Safari"])) == nil)
+        #expect(crossOwner("Podcasts", clues: clues(caches: ["groups.com.apple.podcasts"])) == nil)
+    }
+
+    @Test
+    func identifierNamedFoldersDoNotUseCrossEvidence() {
+        #expect(crossOwner("com.vendor.App", clues: clues(preferences: ["com.vendor.App"])) == nil)
+        #expect(crossOwner("", clues: clues(preferences: ["com.vendor.App"])) == nil)
+    }
+
+    /// The clues come from the plists and cache folders as they sit on disk;
+    /// anything not shaped like a bundle id is ignored.
+    @Test
+    func cluesAreReadFromPreferencesAndCaches() throws {
+        let home = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let lib = home.appendingPathComponent("Library", isDirectory: true)
+        let preferences = lib.appendingPathComponent("Preferences", isDirectory: true)
+        let caches = lib.appendingPathComponent("Caches", isDirectory: true)
+        try FileManager.default.createDirectory(at: preferences, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: caches, withIntermediateDirectories: true)
+        try Data().write(to: preferences.appendingPathComponent("com.google.antigravity.plist"))
+        try Data().write(to: preferences.appendingPathComponent("loginwindow.plist"))
+        try Data().write(to: preferences.appendingPathComponent("com.vendor.App.notaplist"))
+        try FileManager.default.createDirectory(at: caches.appendingPathComponent("com.vendor.App"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: caches.appendingPathComponent("Google"), withIntermediateDirectories: true)
+
+        let clues = OrphanLeftoverScanPolicy.LibraryIdentifierClues.gather(home: home)
+        #expect(clues.preferenceIDs == ["com.google.antigravity"])
+        #expect(clues.cacheIDs == ["com.vendor.App"])
+        #expect(clues.identifiers(endingIn: "Antigravity") == ["com.google.antigravity"])
+        #expect(clues.identifiers(endingIn: "App") == ["com.vendor.App"])
+        #expect(clues.identifiers(endingIn: "Google").isEmpty)
+    }
+
     // MARK: Staleness
 
     @Test

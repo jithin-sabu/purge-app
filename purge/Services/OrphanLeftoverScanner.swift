@@ -84,6 +84,9 @@ nonisolated final class OrphanLeftoverScanner {
             return
         }
         let cutoff = OrphanLeftoverScanPolicy.staleCutoff(staleDays: staleDays)
+        // Which ids Preferences and Caches carry, read once for every
+        // human-named Application Support folder (#224).
+        let clues = OrphanLeftoverScanPolicy.LibraryIdentifierClues.gather(home: home)
 
         var candidates: [Candidate] = []
         var seen = Set<String>()
@@ -112,7 +115,8 @@ nonisolated final class OrphanLeftoverScanner {
                     installed: installed,
                     cutoff: cutoff,
                     home: home,
-                    ledger: ledger
+                    ledger: ledger,
+                    clues: clues
                 ) else { continue }
 
                 // Defend in depth: only offer what the delete gate would accept.

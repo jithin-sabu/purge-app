@@ -102,6 +102,29 @@ struct OrphanLeftoverScannerTests {
         #expect(items.count == 2)
     }
 
+    /// `Application Support/Antigravity` with `Preferences/com.google.antigravity.plist`
+    /// and the app gone is offered on the plist's evidence (#224). The plist
+    /// itself is not offered: Preferences is left out of the scan by design.
+    @Test
+    func humanNamedFolderIsOfferedOnAPreferencesIdentifier() async throws {
+        let (home, bundleIDLeftover) = try homeWithOldLeftover()
+        defer { try? FileManager.default.removeItem(at: home) }
+        settings.defaults.set(DevToolsStalenessOption.threeMonths.rawValue, forKey: DevToolsStalenessOption.userDefaultsKey)
+        let folder = try addHumanNamedLeftover(named: "Antigravity", to: home)
+        let preferences = home.appendingPathComponent("Library/Preferences", isDirectory: true)
+        try FileManager.default.createDirectory(at: preferences, withIntermediateDirectories: true)
+        try Data().write(to: preferences.appendingPathComponent("com.google.antigravity.plist"))
+
+        let items = await scanItems(home: home)
+        #expect(items.map { $0.path.standardizedFileURL.path }.sorted()
+            == [bundleIDLeftover.standardizedFileURL.path, folder.standardizedFileURL.path].sorted())
+        let found = items.first { $0.path.standardizedFileURL.path == folder.standardizedFileURL.path }
+        #expect(found?.matchReason == .libraryCrossEvidence)
+        #expect(found?.ownerBundleID == "com.google.antigravity")
+        #expect(found?.safetyInfo.headline == "Antigravity")
+        #expect(found?.safetyInfo.level == .medium)
+    }
+
     /// Two years is longer than the leftover has sat untouched, so the scan keeps it.
     @Test
     func readsTheStalenessSettingFromTheDefaultsItWasGiven() async throws {

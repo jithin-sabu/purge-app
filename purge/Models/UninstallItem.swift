@@ -88,6 +88,10 @@ nonisolated enum MatchReason: Hashable {
     /// while the app was installed, recorded in the owner ledger (#224). Only
     /// the Leftovers scan produces it, once the app is gone.
     case ownerLedger
+    /// A human-named `Application Support` folder whose name is the last part of
+    /// a bundle id found in Preferences or Caches, where no installed code owns
+    /// that id: `Antigravity` and `com.google.antigravity.plist` (#224).
+    case libraryCrossEvidence
 
     /// Bundle-id and group-id anchoring are strong enough to preselect; a name
     /// match is offered but left for the user to confirm. Leftovers of removed
@@ -95,7 +99,7 @@ nonisolated enum MatchReason: Hashable {
     var isHighConfidence: Bool {
         switch self {
         case .appBundle, .bundleID, .groupID: return true
-        case .appName, .ownerLedger: return false
+        case .appName, .ownerLedger, .libraryCrossEvidence: return false
         }
     }
 
@@ -106,6 +110,7 @@ nonisolated enum MatchReason: Hashable {
         case .groupID: return String(localized: "Matched by app group")
         case .appName: return String(localized: "Matched by name, check this belongs to the app")
         case .ownerLedger: return String(localized: "Seen in use by this app while it was installed")
+        case .libraryCrossEvidence: return String(localized: "Named like this app's Preferences or Caches identifier")
         }
     }
 }

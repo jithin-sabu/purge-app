@@ -412,9 +412,72 @@ enum OrphanLeftoverScanPolicy {
         return owners.first
     }
 
+    /// What Preferences and Caches say about which apps have been on this Mac:
+    /// the bundle ids of `~/Library/Preferences/<id>.plist` files and
+    /// `~/Library/Caches/<id>` folders. Neither location is offered here
+    /// (Preferences by design, Caches through App Caches), but each carries the
+    /// id its app wrote, which a human-named Application Support folder lacks.
+    nonisolated struct LibraryIdentifierClues: Equatable, Sendable {
+        var preferenceIDs: Set<String> = []
+        var cacheIDs: Set<String> = []
+
+        static func gather(home: URL) -> LibraryIdentifierClues {
+            let fm = FileManager.default
+            let lib = home.appendingPathComponent("Library", isDirectory: true)
+            var clues = LibraryIdentifierClues()
+            let preferences = (try? fm.contentsOfDirectory(atPath: lib.appendingPathComponent("Preferences").path)) ?? []
+            for name in preferences where name.hasSuffix(".plist") {
+                let id = String(name.dropLast(".plist".count))
+                if looksLikeBundleID(id) { clues.preferenceIDs.insert(id) }
+            }
+            let caches = (try? fm.contentsOfDirectory(atPath: lib.appendingPathComponent("Caches").path)) ?? []
+            for name in caches where looksLikeBundleID(name) {
+                clues.cacheIDs.insert(name)
+            }
+            return clues
+        }
+
+        /// The ids, from either location, whose last part is `name`, compared
+        /// case-insensitively. Each distinct id once.
+        func identifiers(endingIn name: String) -> Set<String> {
+            let lower = name.lowercased()
+            var seen = Set<String>()
+            var result = Set<String>()
+            for id in preferenceIDs.union(cacheIDs) {
+                guard id.split(separator: ".").last?.lowercased() == lower,
+                      seen.insert(id.lowercased()).inserted else { continue }
+                result.insert(id)
+            }
+            return result
+        }
+    }
+
+    /// The owner of a human-named `Application Support` folder from clues
+    /// elsewhere in Library: exactly one bundle id, in a Preferences plist or a
+    /// Caches folder, whose last part is the folder's name, and no installed
+    /// code owns it. Two independent clues, the folder and the id-named entry,
+    /// are required; the folder's name alone is never enough (#197). Biased to
+    /// keep: an installed app with the folder's name owns it, an id any
+    /// installed code owns keeps it, Apple's ids are never orphans, and two
+    /// candidate ids are ambiguous, so nothing is attributed.
+    nonisolated static func crossEvidenceOwner(
+        folderName: String,
+        clues: LibraryIdentifierClues,
+        installed: InstalledAppIndex
+    ) -> String? {
+        let lower = folderName.lowercased()
+        guard !lower.isEmpty, !looksLikeBundleID(folderName) else { return nil }
+        guard !installed.diskAppNames.contains(lower) else { return nil }
+        let candidates = clues.identifiers(endingIn: folderName)
+        guard candidates.count == 1, let id = candidates.first else { return nil }
+        guard isOrphan(.bundleID(id), installed: installed) else { return nil }
+        return id
+    }
+
     /// Who an entry belonged to and what says so. Identifier-named entries are
     /// attributed by their name alone, as before #224. A human-named
-    /// `Application Support` folder needs the ledger to vouch for it.
+    /// `Application Support` folder needs the ledger, or a Preferences or Caches
+    /// identifier, to vouch for it.
     nonisolated struct Attribution: Equatable {
         let owner: LeftoverOwner
         let evidence: MatchReason
@@ -429,7 +492,8 @@ enum OrphanLeftoverScanPolicy {
         url: URL,
         home: URL,
         installed: InstalledAppIndex,
-        ledger: LeftoverOwnerLedger
+        ledger: LeftoverOwnerLedger,
+        clues: LibraryIdentifierClues
     ) -> Attribution? {
         if let owner = candidateOwner(entryName: name, category: category, url: url) {
             return Attribution(owner: owner, evidence: .bundleID, appName: nil)
@@ -437,6 +501,10 @@ enum OrphanLeftoverScanPolicy {
         guard category == .applicationSupport, isHumanNamedFolder(name, url: url) else { return nil }
         if let entry = ledgerOwner(ofFolderAt: url, home: home, ledger: ledger, installed: installed) {
             return Attribution(owner: .bundleID(entry.bundleID), evidence: .ownerLedger, appName: entry.displayName)
+        }
+        if let id = crossEvidenceOwner(folderName: name, clues: clues, installed: installed) {
+            // The folder's own name is the best name for the app here.
+            return Attribution(owner: .bundleID(id), evidence: .libraryCrossEvidence, appName: name)
         }
         return nil
     }
@@ -491,14 +559,15 @@ enum OrphanLeftoverScanPolicy {
     /// short of the delete gate the scanner applies afterwards: its owner can
     /// be named, no installed code claims it, and nothing in it changed since
     /// `cutoff`. Kept in one function so a test fails if any part is dropped.
-    /// With no ledger, only identifier-named entries are attributed.
+    /// With no ledger and no clues, only identifier-named entries are attributed.
     nonisolated static func orphanCandidate(
         at entry: URL,
         category: UninstallCategory,
         installed: InstalledAppIndex,
         cutoff: Date,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        ledger: LeftoverOwnerLedger = LeftoverOwnerLedger()
+        ledger: LeftoverOwnerLedger = LeftoverOwnerLedger(),
+        clues: LibraryIdentifierClues = LibraryIdentifierClues()
     ) -> OrphanCandidate? {
         guard let attribution = attribution(
             entryName: entry.lastPathComponent,
@@ -506,7 +575,8 @@ enum OrphanLeftoverScanPolicy {
             url: entry,
             home: home,
             installed: installed,
-            ledger: ledger
+            ledger: ledger,
+            clues: clues
         ),
               isOrphan(attribution.owner, installed: installed),
               case .untouchedSince(let lastModified) = contentAge(of: entry, cutoff: cutoff) else {

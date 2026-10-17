@@ -232,10 +232,11 @@ enum AppUninstallScanPolicy {
                 recoverySteps: String(localized: "\(appName) recreates what it needs the next time it runs."),
                 reinstallCommand: nil
             )
-        // The ledger only attributes leftovers of removed apps, whose rows get
-        // their text from `OrphanLeftoverScanPolicy.safetyInfo`; listed here so
-        // a name-strength match is never read as safe.
-        case .appName, .ownerLedger:
+        // The ledger and the Library cross-evidence only attribute leftovers of
+        // removed apps, whose rows get their text from
+        // `OrphanLeftoverScanPolicy.safetyInfo`; listed here so a name-strength
+        // match is never read as safe.
+        case .appName, .ownerLedger, .libraryCrossEvidence:
             return SafetyInfo(
                 level: .medium,
                 headline: String(localized: "\(appName) \(category.displayName)"),
