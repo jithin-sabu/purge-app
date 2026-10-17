@@ -1254,25 +1254,20 @@ struct UninstallReviewSheet: View {
         }
     }
 
-    /// Tri-state over the items the user can actually tick. Items kept for a
-    /// surviving app are locked off, so they never count toward "all".
+    /// Tri-state over the rows the header ticks. Items kept for a surviving
+    /// app are locked off, and a catalog dot folder (#228) is ticked only on its
+    /// own row, so neither counts toward "all". The rule lives on the plan, in
+    /// `UninstallAppPlan.headerSelection`, where the tests reach it.
     private func selectAllState(_ appPlan: UninstallAppPlan) -> SelectAllTriState {
-        let toggleable = appPlan.items.filter { !$0.isKeptForOtherApp }
-        guard !toggleable.isEmpty else { return .none }
-        let selected = toggleable.filter(\.isSelected).count
-        if selected == 0 { return .none }
-        if selected == toggleable.count { return .all }
-        return .mixed
+        switch appPlan.headerSelection {
+        case .none: return .none
+        case .mixed: return .mixed
+        case .all: return .all
+        }
     }
 
     private func toggleAll(_ appPlan: Binding<UninstallAppPlan>) {
-        let indices = appPlan.wrappedValue.items.indices.filter {
-            !appPlan.wrappedValue.items[$0].isKeptForOtherApp
-        }
-        let allOn = indices.allSatisfy { appPlan.wrappedValue.items[$0].isSelected }
-        for index in indices {
-            appPlan.wrappedValue.items[index].isSelected = !allOn
-        }
+        appPlan.wrappedValue.toggleAllFromHeader()
     }
 
     private var footer: some View {

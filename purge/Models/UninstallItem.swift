@@ -157,6 +157,13 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// Shared with an app that is staying installed, so it must not be trashed.
     var isKeptForOtherApp: Bool { keptForApp != nil }
 
+    /// Whether the per-app header checkbox in the review sheet ticks this row.
+    /// A row kept for a surviving app is locked off. A catalog dot folder (#228)
+    /// holds settings, extensions and history, so only a click on its own row
+    /// ticks it; the header never sweeps it in. The header can still clear it,
+    /// see `UninstallAppPlan.toggleAllFromHeader`.
+    var isTickedByHeader: Bool { !isKeptForOtherApp && category != .homeFolderData }
+
     var formattedSize: String { formatBytes(sizeBytes) }
 }
 
@@ -235,6 +242,41 @@ nonisolated struct UninstallAppPlan: Identifiable, Hashable {
 
     var selectedItems: [UninstallItem] { items.filter(\.isSelected) }
     var selectedBytes: Int64 { selectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+
+    /// What the per-app header checkbox shows.
+    enum HeaderSelection {
+        case none
+        case mixed
+        case all
+    }
+
+    /// The header state, over the rows the header ticks (`isTickedByHeader`).
+    /// A catalog dot folder is left out of the count, so a plan whose only
+    /// unticked row is that folder reads as `.all`, and one click clears the
+    /// list as it did before #228 instead of ticking the folder.
+    var headerSelection: HeaderSelection {
+        let counted = items.filter(\.isTickedByHeader)
+        guard !counted.isEmpty else { return .none }
+        let selected = counted.filter(\.isSelected).count
+        if selected == 0 { return .none }
+        if selected == counted.count { return .all }
+        return .mixed
+    }
+
+    /// A click on the header checkbox. When every header row is ticked, it
+    /// clears every row that is not locked, a ticked dot folder included, since
+    /// clearing is the safer direction. Otherwise it ticks the header rows only,
+    /// and a dot folder keeps whatever the user set on its own row.
+    mutating func toggleAllFromHeader() {
+        let allOn = headerSelection == .all
+        for index in items.indices where !items[index].isKeptForOtherApp {
+            if allOn {
+                items[index].isSelected = false
+            } else if items[index].isTickedByHeader {
+                items[index].isSelected = true
+            }
+        }
+    }
 }
 
 /// The reviewed removal across every selected app. `id` is derived from the app
