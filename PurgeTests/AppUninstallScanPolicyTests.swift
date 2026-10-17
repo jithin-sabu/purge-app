@@ -385,25 +385,25 @@ struct AppUninstallScanPolicyTests {
         #expect(reason(".antigravity")?.isHighConfidence == false)
     }
 
-    /// Two installed copies of Cursor share `~/.cursor`, so removing one keeps it
+    /// Two installed copies of Trae share `~/.trae`, so removing one keeps it
     /// for the other, with the catalog the app ships. An unrelated survivor does
     /// not claim it.
     @Test
     func secondCopyOfTheAppClaimsItsCatalogFolder() {
-        let cursorID = "com.todesktop.230313mzl4w4u92"
-        let owner = makeApp(name: "Cursor", bundlePath: "/Applications/Cursor.app", bundleID: cursorID)
+        let traeID = "com.trae.app"
+        let owner = makeApp(name: "Trae", bundlePath: "/Applications/Trae.app", bundleID: traeID)
         let secondCopy = makeApp(
-            name: "Cursor",
-            bundlePath: home.appendingPathComponent("Applications/Cursor.app").path,
-            bundleID: cursorID
+            name: "Trae",
+            bundlePath: home.appendingPathComponent("Applications/Trae.app").path,
+            bundleID: traeID
         )
         let claimant = AppUninstallScanPolicy.claimant(
-            forLeftoverName: ".cursor", category: .homeFolderData, ownerID: owner.id,
+            forLeftoverName: ".trae", category: .homeFolderData, ownerID: owner.id,
             among: [makeApp(), secondCopy], appGroupClaims: AppGroupClaims()
         )
         #expect(claimant?.id == secondCopy.id)
         #expect(AppUninstallScanPolicy.claimant(
-            forLeftoverName: ".cursor", category: .homeFolderData, ownerID: owner.id,
+            forLeftoverName: ".trae", category: .homeFolderData, ownerID: owner.id,
             among: [makeApp()], appGroupClaims: AppGroupClaims()
         ) == nil)
     }
@@ -412,27 +412,27 @@ struct AppUninstallScanPolicyTests {
     /// so, and leaves a folder only the removed copy owns unticked but free to tick.
     @Test
     func sheetKeepsACatalogFolderASecondCopyStillUses() {
-        let cursorID = "com.todesktop.230313mzl4w4u92"
-        let owner = makeApp(name: "Cursor", bundlePath: "/Applications/Cursor.app", bundleID: cursorID)
+        let traeID = "com.trae.app"
+        let owner = makeApp(name: "Trae", bundlePath: "/Applications/Trae.app", bundleID: traeID)
         let secondCopy = makeApp(
-            name: "Cursor",
-            bundlePath: home.appendingPathComponent("Applications/Cursor.app").path,
-            bundleID: cursorID
+            name: "Trae",
+            bundlePath: home.appendingPathComponent("Applications/Trae.app").path,
+            bundleID: traeID
         )
         let folder = UninstallItem(
-            path: home.appendingPathComponent(".cursor", isDirectory: true),
+            path: home.appendingPathComponent(".trae", isDirectory: true),
             sizeBytes: 1,
             category: .homeFolderData,
             safetyInfo: AppUninstallScanPolicy.safetyInfo(
                 for: .dotFolderCatalog, category: .homeFolderData,
-                url: home.appendingPathComponent(".cursor"), appName: "Cursor"
+                url: home.appendingPathComponent(".trae"), appName: "Trae"
             ),
             matchReason: .dotFolderCatalog,
             isSelected: false
         )
         var plans = [UninstallAppPlan(app: owner, items: [folder])]
         PurgeStore.markSharedWithSurvivors(in: &plans, survivors: [secondCopy], appGroupClaims: AppGroupClaims())
-        #expect(plans[0].items[0].keptForApp == "Cursor")
+        #expect(plans[0].items[0].keptForApp == "Trae")
         #expect(plans[0].items[0].isSelected == false)
 
         var alone = [UninstallAppPlan(app: owner, items: [folder])]
@@ -447,10 +447,10 @@ struct AppUninstallScanPolicyTests {
     func catalogFolderSafetyIsCheckFirstWithItsOwnExplanation() {
         let info = AppUninstallScanPolicy.safetyInfo(
             for: .dotFolderCatalog, category: .homeFolderData,
-            url: home.appendingPathComponent(".cursor"), appName: "Cursor"
+            url: home.appendingPathComponent(".trae"), appName: "Trae"
         )
         #expect(info.level == .medium)
-        #expect(info.headline == "Cursor Home Folder Data")
+        #expect(info.headline == "Trae Home Folder Data")
         #expect(info.explanation.contains("known to keep"))
         #expect(!info.explanation.contains("matched by name"))
     }
