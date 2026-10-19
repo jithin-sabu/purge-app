@@ -34,7 +34,7 @@ Tokens are named by job. The neutrals are a warm graphite: low-chroma greys lean
 | `statusDangerText` / `Fill` | `#B4302A` / `#FBE8E5` | `#F47468` / `#321B19` | In use, errors | 5.2 / 5.8 |
 | `statusUnsureText` / `Fill` | `#5A5853` / `#EFEDEA` | `#A9A6A0` / `#282725` | Unknown | 6.1 / 6.2 |
 
-Hover and pressed shades exist for `actionPrimary` and `actionDestructive` too. `AppColors.Chart` holds the Overview breakdown colours (Okabe and Ito, colour-blind safe) and the warm greys for "everything else" and free space.
+Hover and pressed shades exist for `actionPrimary` and `actionDestructive` too. `AppColors.Chart` holds the Overview breakdown colours (Okabe and Ito, colour-blind safe) and the warm greys for "everything else" and free space. It also holds the four Everything else page colours (#159), named for what the user can do: `managedInApps` blue, `yourFiles` amber, `leftAlone` coral and `managedByMacOS` grey. They differ in lightness as well as hue. Text on them is `bucketLabel`, except on the grey tile, which uses `managedByMacOSLabel`.
 
 The cleanup celebration follows the app's appearance and draws on `surfaceBase`, so it uses the ordinary tokens in both modes. Plain white and black are only for shadows, masks, glyphs on coloured chart tiles, and the menu bar dropdown's native selection highlight.
 
@@ -48,6 +48,7 @@ The cleanup celebration follows the app's appearance and draws on `surfaceBase`,
 | `.secondary` | `fillSecondary` fill, `borderStrong` outline | Every other action: Scan, Cancel, Not now |
 | `.destructive` | `actionDestructive` fill, white label | Confirming a move to Trash in a sheet |
 | `.quiet` | No fill until hover | Inline, low-weight actions: Turn Off, Open Settings, Retry |
+| `.soft` | `fillSecondary` fill, no outline | A quiet action that needs a visible edge to line up with the text around it: the way back from Everything else |
 
 | Size | Height | Label | Where |
 | --- | --- | --- | --- |

@@ -79,6 +79,13 @@ nonisolated struct ScanQueueState: Equatable, Sendable {
 
     var isRunning: Bool { active != nil || !pending.isEmpty }
 
+    /// A category scan is running or waiting. The Everything else walk is left
+    /// out: it feeds no category, so callers waiting on fresh results, and the
+    /// Scan Everything button, look past it.
+    var isRunningCategoryScan: Bool {
+        (active != nil && active != .everythingElse) || pending.contains { $0 != .everythingElse }
+    }
+
     func isQueued(_ step: ScanStep) -> Bool {
         pending.contains(step)
     }
@@ -114,6 +121,11 @@ nonisolated struct ScanQueueState: Equatable, Sendable {
 
     mutating func finishActive() {
         active = nil
+    }
+
+    /// Drops one waiting step. The running step is the caller's to stop.
+    mutating func remove(_ step: ScanStep) {
+        pending.removeAll { $0 == step }
     }
 
     /// Drops everything still waiting. The running step is the caller's to stop.

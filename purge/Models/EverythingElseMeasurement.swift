@@ -9,6 +9,14 @@ nonisolated struct EverythingElseMeasureRoot: Equatable, Hashable, Sendable {
         /// Sized as one folder. For libraries and other users' homes, whose
         /// insides are not something to list.
         case whole
+        /// Only the hidden folders directly inside, each on its own. The home
+        /// folder's dot folders, for Developer. Loose files are left out.
+        case hiddenChildren
+        /// The visible folders directly inside, apart from the names here,
+        /// compared ignoring case, which other roots measure. Loose files are
+        /// left out: the folder itself is never claimed, so the roots inside it
+        /// keep their own figures.
+        case childrenExcept(Set<String>)
     }
 
     let group: EverythingElseGroup
@@ -23,16 +31,14 @@ nonisolated struct EverythingElseMeasureRoot: Equatable, Hashable, Sendable {
 
 /// Which folders are walked for each group, given how much of the disk the scan
 /// may read. Pure: the lists that need the disk (other users' homes, Steam's
-/// libraries) are passed in, so the plan can be checked without a Mac behind it.
+/// libraries, the names in the home folder) are passed in, so the plan can be
+/// checked without a Mac behind it.
 nonisolated enum EverythingElseRootPlan {
-    /// The folders that hold the user's own files, each as a whole.
-    static let yourFileFolders = ["Documents", "Desktop", "Downloads", "Movies", "Music", "Pictures"]
+    /// The folders that hold the user's own files, each walked by folder.
+    static let documentFolders = ["Documents", "Desktop", "Downloads", "Movies", "Music", "Pictures"]
 
-    /// The managed libraries Large Files never descends into, by home-relative path.
-    /// Mail and Messages are protected roots; the rest live in the media folders.
-    static let managedLibraryFolders = [
-        "Library/Mail",
-        "Library/Messages",
+    /// The media libraries Large Files never descends into, by home-relative path.
+    static let mediaLibraryFolders = [
         "Pictures/Photos Library.photoslibrary",
         "Pictures/Photo Booth Library",
         "Movies/TV",
@@ -42,6 +48,9 @@ nonisolated enum EverythingElseRootPlan {
         "Music/GarageBand"
     ]
 
+    /// Mail's and Messages' folders. Both are protected roots.
+    static let mailAndMessagesFolders = ["Library/Mail", "Library/Messages"]
+
     /// Where apps installed outside Applications keep their installs, by
     /// home-relative path. Steam libraries are added from `libraryfolders.vdf`.
     static let appStoreFolders = [
@@ -49,10 +58,26 @@ nonisolated enum EverythingElseRootPlan {
         "Library/Application Support/itch/apps"
     ]
 
-    /// Epic's default install folder on a Mac, shared between users.
-    static let epicGamesFolder = "/Users/Shared/Epic Games"
+    /// Folders in the home folder that hold code projects, lowercased. Matched
+    /// against the names the home folder really has, so `~/Developer` and
+    /// `~/developer` on a case-insensitive disk are one folder, walked once (#175).
+    static let developerFolderNames: Set<String> = [
+        "developer", "projects", "code", "src", "repos", "repositories", "github", "workspace", "dev"
+    ]
 
-    /// Hidden folders in the home folder that are not tool folders.
+    /// Folders directly in `~/Library` that a root of their own measures, so the
+    /// rest-of-Library root leaves them out.
+    static let libraryFoldersMeasuredElsewhere: Set<String> = [
+        "Caches", "Application Support", "Containers", "Group Containers", "Mail", "Messages", "Developer"
+    ]
+
+    /// Folders directly in the home folder that the rest-of-home root leaves out:
+    /// the ones walked on their own, Library, and Applications, whose apps the
+    /// Installed apps row counts.
+    static let homeFoldersMeasuredElsewhere: Set<String> = Set(documentFolders + ["Library", "Applications"])
+
+    /// Hidden folders in the home folder that are not tool folders. The Trash
+    /// has a line of its own from `TrashStore`.
     static let ignoredHiddenFolders: Set<String> = [".Trash"]
 
     /// Folders a limited walk never reads, on top of `ProtectedLocations`: the
@@ -60,7 +85,7 @@ nonisolated enum EverythingElseRootPlan {
     /// prompt (the same stall `ProtectedLocations.mediaCacheRoots` records),
     /// and the address book, which prompts for Contacts. A `du` inside any of
     /// them would put a prompt on screen with Purge's name on it.
-    static let limitedWalkSkips: [String] = managedLibraryFolders + [
+    static let limitedWalkSkips: [String] = mediaLibraryFolders + mailAndMessagesFolders + [
         "Library/Application Support/AddressBook"
     ]
 
@@ -81,49 +106,82 @@ nonisolated enum EverythingElseRootPlan {
         return !["photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater"].contains(ext)
     }
 
-    /// `steamLibraries` are the library roots from `libraryfolders.vdf`, each
-    /// holding a `steamapps` folder. `otherUserHomes` are the folders directly in
-    /// `/Users` other than this user's, `Shared` included. `usersFolder` is the
-    /// parent of those homes, `/Users` outside tests.
+    /// The project folders among the names directly in the home folder, spelled
+    /// as the disk spells them. Hidden names are never project folders here.
+    static func developerFolders(inHome home: URL, names: [String]) -> [URL] {
+        names
+            .filter { !$0.hasPrefix(".") && developerFolderNames.contains($0.lowercased()) }
+            .sorted()
+            .map { home.appendingPathComponent($0, isDirectory: true) }
+    }
+
+    /// `steamLibraries` are the library roots from `libraryfolders.vdf` on the
+    /// startup disk, each holding a `steamapps` folder. `otherUserHomes` are the
+    /// folders directly in `/Users` other than this user's, `Shared` included.
+    /// `homeFolderNames` are the names directly in the home folder. `usersFolder`
+    /// is the parent of those homes, `/Users` outside tests.
     static func roots(
         home: URL,
         access: ScanAccess,
         steamLibraries: [URL],
         otherUserHomes: [URL],
+        homeFolderNames: [String],
         usersFolder: URL = URL(fileURLWithPath: "/Users", isDirectory: true)
     ) -> [EverythingElseMeasureRoot] {
         var roots: [EverythingElseMeasureRoot] = []
 
-        func add(_ group: EverythingElseGroup, _ url: URL, _ kind: EverythingElseMeasureRoot.Kind) {
-            let locked = access == .limited && !isReadableByLimitedWalk(url, home: home)
+        func add(
+            _ group: EverythingElseGroup,
+            _ url: URL,
+            _ kind: EverythingElseMeasureRoot.Kind,
+            lockedWhenLimited: Bool = false
+        ) {
+            let locked = access == .limited && (lockedWhenLimited || !isReadableByLimitedWalk(url, home: home))
             roots.append(EverythingElseMeasureRoot(group: group, url: url, kind: kind, isLockedWithoutAccess: locked))
         }
 
         for library in steamLibraries {
-            add(.appsOutsideApplications, library.appendingPathComponent("steamapps/common", isDirectory: true), .children)
+            add(.otherApps, library.appendingPathComponent("steamapps/common", isDirectory: true), .children)
         }
         for relative in appStoreFolders {
-            add(.appsOutsideApplications, home.appendingPathComponent(relative, isDirectory: true), .children)
+            add(.otherApps, home.appendingPathComponent(relative, isDirectory: true), .children)
         }
-        add(.appsOutsideApplications, usersFolder.appendingPathComponent("Shared/Epic Games", isDirectory: true), .children)
+        add(.otherApps, usersFolder.appendingPathComponent("Shared/Epic Games", isDirectory: true), .children)
 
-        for relative in managedLibraryFolders {
-            add(.managedLibraries, home.appendingPathComponent(relative, isDirectory: true), .whole)
+        for relative in mediaLibraryFolders {
+            add(.mediaLibraries, home.appendingPathComponent(relative, isDirectory: true), .whole)
+        }
+        for relative in mailAndMessagesFolders {
+            add(.mailAndMessages, home.appendingPathComponent(relative, isDirectory: true), .whole)
         }
 
-        add(.uncleanableCaches, home.appendingPathComponent("Library/Caches", isDirectory: true), .children)
+        add(.protectedCaches, home.appendingPathComponent("Library/Caches", isDirectory: true), .children)
+
+        let projectFolders = developerFolders(inHome: home, names: homeFolderNames)
+        for folder in projectFolders {
+            add(.developer, folder, .children)
+        }
+        add(.developer, home.appendingPathComponent("Library/Developer", isDirectory: true), .children)
+        // Only the home folder's hidden folders. Home is never a protected root.
+        add(.developer, home, .hiddenChildren)
 
         for relative in ["Library/Application Support", "Library/Containers", "Library/Group Containers"] {
             add(.appData, home.appendingPathComponent(relative, isDirectory: true), .children)
         }
+        // The rest of Library holds Calendars, Reminders and other folders macOS
+        // guards with prompts of their own, so a limited walk leaves it whole.
+        add(
+            .appData,
+            home.appendingPathComponent("Library", isDirectory: true),
+            .childrenExcept(Set(libraryFoldersMeasuredElsewhere.map { $0.lowercased() })),
+            lockedWhenLimited: true
+        )
 
-        for name in yourFileFolders {
-            add(.yourFiles, home.appendingPathComponent(name, isDirectory: true), .children)
+        for name in documentFolders {
+            add(.documents, home.appendingPathComponent(name, isDirectory: true), .children)
         }
-
-        // The home folder itself: only its hidden folders are measured, see the
-        // measurer. Home is never a protected root, so it is never locked.
-        add(.hiddenToolFolders, home, .children)
+        let skippedHomeNames = homeFoldersMeasuredElsewhere.union(projectFolders.map(\.lastPathComponent))
+        add(.documents, home, .childrenExcept(Set(skippedHomeNames.map { $0.lowercased() })))
 
         for other in otherUserHomes {
             add(.otherUsers, other, .whole)
@@ -230,6 +288,9 @@ nonisolated enum EverythingElseMeasureEvent: Equatable, Sendable {
     case planned([EverythingElseMeasureRoot])
     /// A root a limited scan must not read, or one that is not on this Mac.
     case skipped(EverythingElseMeasureRoot, locked: Bool)
+    /// How far through a root's folders the sizing is, 0...1, so the ring can
+    /// move inside a root and not only between roots.
+    case progress(EverythingElseMeasureRoot, Double)
     case measured(EverythingElseMeasuredRoot)
     /// The system volume's used space.
     case macOS(Int64)
@@ -244,6 +305,10 @@ nonisolated struct EverythingElseMeasurement: Equatable, Sendable {
     var measuredRoots: [EverythingElseMeasuredRoot] = []
     /// Roots the walk did not read because the scan was limited.
     var lockedRoots: [EverythingElseMeasureRoot] = []
+    /// Roots that are not on this Mac, or that could not be read.
+    var skippedRoots: [EverythingElseMeasureRoot] = []
+    /// How far into each unfinished root the walk is, 0...1.
+    var rootProgress: [EverythingElseMeasureRoot: Double] = [:]
     var macOSBytes: Int64?
     /// Steam's games by install folder.
     var steamGames: [String: SteamGame] = [:]
@@ -259,8 +324,16 @@ nonisolated struct EverythingElseMeasurement: Equatable, Sendable {
         case .planned(let roots):
             plannedRoots = roots
         case .skipped(let root, let locked):
-            if locked, !lockedRoots.contains(root) { lockedRoots.append(root) }
+            rootProgress[root] = nil
+            if locked {
+                if !lockedRoots.contains(root) { lockedRoots.append(root) }
+            } else if !skippedRoots.contains(root) {
+                skippedRoots.append(root)
+            }
+        case .progress(let root, let fraction):
+            rootProgress[root] = min(1, max(0, fraction))
         case .measured(let measured):
+            rootProgress[measured.root] = nil
             measuredRoots.removeAll { $0.root == measured.root }
             measuredRoots.append(measured)
         case .macOS(let bytes):
@@ -280,9 +353,50 @@ nonisolated struct EverythingElseMeasurement: Equatable, Sendable {
         // roots on this Mac (no other users, say) has nothing to wait for.
         guard !plannedRoots.isEmpty else { return false }
         let planned = plannedRoots.filter { $0.group == group }
-        return planned.allSatisfy { root in
-            lockedRoots.contains(root) || measuredRoots.contains { $0.root == root }
-        }
+        return planned.allSatisfy(isDone)
+    }
+
+    /// How many planned roots the walk has dealt with: measured, locked or skipped.
+    var finishedRootCount: Int {
+        plannedRoots.filter(isDone).count
+    }
+
+    /// The measured groups with a root on this Mac, in claim order. What the
+    /// page counts progress in: a group lands as one figure, a root does not.
+    var plannedGroups: [EverythingElseGroup] {
+        EverythingElseGroup.measured.filter { group in plannedRoots.contains { $0.group == group } }
+    }
+
+    var finishedGroupCount: Int {
+        plannedGroups.filter(hasFinished).count
+    }
+
+    /// How far the walk is, 0...1: the roots dealt with, plus how far into the
+    /// current one. What the ring shows.
+    var walkFraction: Double {
+        guard !plannedRoots.isEmpty else { return 0 }
+        if isComplete { return 1 }
+        let current = currentRoot.flatMap { rootProgress[$0] } ?? 0
+        return min(1, (Double(finishedRootCount) + current) / Double(plannedRoots.count))
+    }
+
+    /// Where finishing the current root would put `walkFraction`. The ring
+    /// creeps toward this between real figures and never past it, so it never
+    /// has to move backwards.
+    var walkCeiling: Double {
+        guard !plannedRoots.isEmpty else { return 0 }
+        if isComplete { return 1 }
+        return min(1, Double(finishedRootCount + 1) / Double(plannedRoots.count))
+    }
+
+    /// The root the walk is on now. Roots are walked in plan order, so it is the
+    /// first one not dealt with yet. Nil before the plan arrives and once done.
+    var currentRoot: EverythingElseMeasureRoot? {
+        plannedRoots.first { !isDone($0) }
+    }
+
+    private func isDone(_ root: EverythingElseMeasureRoot) -> Bool {
+        lockedRoots.contains(root) || skippedRoots.contains(root) || measuredRoots.contains { $0.root == root }
     }
 
     /// Whether a limited scan left part of the group unread.
@@ -302,7 +416,26 @@ nonisolated struct EverythingElseFolder: Equatable, Identifiable, Sendable {
 
     var id: String { path }
     var url: URL { URL(fileURLWithPath: path) }
-    var name: String { url.lastPathComponent }
+    /// The name to show. A group container is named `<team id>.<group>`, and the
+    /// ten-character team id means nothing to a person, so it is left off.
+    var displayName: String {
+        let name = self.name
+        guard let dot = name.firstIndex(of: "."),
+              name.distance(from: name.startIndex, to: dot) == 10,
+              name[..<dot].allSatisfy({ ($0.isUppercase && $0.isLetter) || $0.isNumber }),
+              name.index(after: dot) < name.endIndex
+        else { return name }
+        return String(name[name.index(after: dot)...])
+    }
+
+    /// The folder's name, without the extension a media library's bundle carries.
+    var name: String {
+        let ext = url.pathExtension.lowercased()
+        if ["photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater"].contains(ext) {
+            return url.deletingPathExtension().lastPathComponent
+        }
+        return url.lastPathComponent
+    }
 }
 
 /// One group's figures: its total, the folders over the floor, and the rest in a line.
@@ -313,6 +446,8 @@ nonisolated struct EverythingElseGroupBreakdown: Equatable, Sendable {
     let folders: [EverythingElseFolder]
     /// How many folders fell under the floor.
     let smallerFolderCount: Int
+    /// The biggest of those, so the smaller-folders line can say what is in it.
+    let smallerFolders: [EverythingElseFolder]
     /// What the folders under the floor and the loose files add up to.
     let smallerBytes: Int64
     /// A limited scan left part of this group unread.
@@ -321,50 +456,77 @@ nonisolated struct EverythingElseGroupBreakdown: Equatable, Sendable {
     let isFinished: Bool
     /// The measured roots held nothing at all: not on this Mac, or empty.
     var isEmpty: Bool { bytes == 0 && folders.isEmpty && smallerFolderCount == 0 }
+
+    /// The same figures with the total held to `limit`. The folders keep their
+    /// own sizes: they are what the walk counted.
+    func capped(at limit: Int64) -> EverythingElseGroupBreakdown {
+        EverythingElseGroupBreakdown(
+            group: group,
+            bytes: min(bytes, max(0, limit)),
+            folders: folders,
+            smallerFolderCount: smallerFolderCount,
+            smallerFolders: smallerFolders,
+            smallerBytes: smallerBytes,
+            isLocked: isLocked,
+            isFinished: isFinished
+        )
+    }
 }
 
 /// The unsorted space split into groups. Each byte is counted once: the five
 /// Overview categories claim theirs first, in their own order, then the groups
 /// claim in `EverythingElseGroup` order, with the same `ClaimedPaths` logic the
-/// Overview uses. So a cache App Caches already found adds nothing under App data,
-/// and a Steam game under Apps outside Applications comes out of Steam's App data.
+/// Overview uses. So a cache App Caches already found adds nothing under App Data,
+/// and a Steam game under Other Apps comes out of Steam's App Data.
+///
+/// The groups never add up to more than Everything else. A category shown from an
+/// earlier session's saved total has no paths to claim, so its bytes can be
+/// counted again here; the totals are then held to Everything else in claim order
+/// and the breakdown says it is approximate.
 nonisolated struct EverythingElseBreakdown: Equatable, Sendable {
     /// Folders under this are rolled into the "smaller folders" line.
     static let defaultFloorBytes: Int64 = 1_000_000_000
+    /// How many of a group's smaller folders it keeps by name, biggest first.
+    static let listedSmallerFolderCount = 8
 
     let groups: [EverythingElseGroup: EverythingElseGroupBreakdown]
     /// The Overview's Everything else figure, which this breaks down.
     let everythingElseBytes: Int64
     let macOSBytes: Int64?
+    /// What is in the Trash, or nil when it can't be read.
+    let trashBytes: Int64?
     let isComplete: Bool
     let completedAt: Date?
+    /// Some figure was held back to keep the page adding up, or a category is
+    /// shown from a saved total. The groups are then close, not exact.
+    let isApproximate: Bool
 
     var measuredBytes: Int64 {
         groups.values.reduce(0) { $0 + $1.bytes }
     }
 
-    /// The remainder on the drill-in, after macOS has its line.
-    var notMeasuredBytes: Int64 {
-        max(0, everythingElseBytes - measuredBytes - (macOSBytes ?? 0))
-    }
-
-    /// The remainder on the Overview, where macOS has no line and stays in it.
-    var notMeasuredOnOverviewBytes: Int64 {
-        max(0, everythingElseBytes - measuredBytes)
+    /// The remainder, after macOS and the Trash have their lines.
+    var systemDataBytes: Int64 {
+        max(0, everythingElseBytes - measuredBytes - (macOSBytes ?? 0) - (trashBytes ?? 0))
     }
 
     func bytes(for group: EverythingElseGroup) -> Int64 {
         switch group {
         case .macOS: return macOSBytes ?? 0
-        case .notMeasured: return notMeasuredBytes
-        case .appsOutsideApplications, .managedLibraries, .uncleanableCaches, .appData,
-             .yourFiles, .hiddenToolFolders, .otherUsers:
+        case .trash: return trashBytes ?? 0
+        case .systemData: return systemDataBytes
+        case .otherApps, .mediaLibraries, .mailAndMessages, .protectedCaches,
+             .developer, .appData, .documents, .otherUsers:
             return groups[group]?.bytes ?? 0
         }
     }
 
     subscript(group: EverythingElseGroup) -> EverythingElseGroupBreakdown? {
         groups[group]
+    }
+
+    func bytes(for bucket: EverythingElseBucket) -> Int64 {
+        bucket.groups.reduce(0) { $0 + bytes(for: $1) }
     }
 
     /// Measured groups with something in them, biggest first, then the rest in
@@ -379,10 +541,13 @@ nonisolated struct EverythingElseBreakdown: Equatable, Sendable {
     }
 
     /// `claimedFirst` are the five categories' live items in Overview claim order.
+    /// `includesRecordedFigures` is true when a category shows a saved total.
     init(
         measurement: EverythingElseMeasurement,
         claimedFirst: [OverviewSizedItem],
         everythingElseBytes: Int64,
+        trashBytes: Int64? = nil,
+        includesRecordedFigures: Bool = false,
         floorBytes: Int64 = EverythingElseBreakdown.defaultFloorBytes
     ) {
         var claims = ClaimedPaths()
@@ -396,6 +561,7 @@ nonisolated struct EverythingElseBreakdown: Equatable, Sendable {
             var folders: [EverythingElseFolder] = []
             var smallerCount = 0
             var smallerBytes: Int64 = 0
+            var smallerFolders: [EverythingElseFolder] = []
             var total: Int64 = 0
             for measured in roots {
                 // Children before the root, biggest first, so a nested claim is
@@ -404,22 +570,26 @@ nonisolated struct EverythingElseBreakdown: Equatable, Sendable {
                     let added = claims.claim(folder)
                     guard added > 0 else { continue }
                     total += added
+                    let item = EverythingElseFolder(path: folder.path, bytes: added, measuredBytes: folder.bytes, group: group)
                     if added >= floorBytes {
-                        folders.append(EverythingElseFolder(path: folder.path, bytes: added, measuredBytes: folder.bytes, group: group))
+                        folders.append(item)
                     } else {
                         smallerCount += 1
                         smallerBytes += added
+                        smallerFolders.append(item)
                     }
                 }
                 if measured.root.kind == .whole {
                     let added = claims.claim(OverviewSizedItem(path: measured.root.path, bytes: measured.totalBytes))
                     guard added > 0 else { continue }
                     total += added
+                    let item = EverythingElseFolder(path: measured.root.path, bytes: added, measuredBytes: measured.totalBytes, group: group)
                     if added >= floorBytes {
-                        folders.append(EverythingElseFolder(path: measured.root.path, bytes: added, measuredBytes: measured.totalBytes, group: group))
+                        folders.append(item)
                     } else {
                         smallerCount += 1
                         smallerBytes += added
+                        smallerFolders.append(item)
                     }
                 } else if measured.looseFileBytes > 0 {
                     // Loose files are not a folder anyone can open, so they join
@@ -436,16 +606,36 @@ nonisolated struct EverythingElseBreakdown: Equatable, Sendable {
                 bytes: total,
                 folders: folders,
                 smallerFolderCount: smallerCount,
+                smallerFolders: Array(smallerFolders.sorted { $0.bytes > $1.bytes }.prefix(Self.listedSmallerFolderCount)),
                 smallerBytes: smallerBytes,
                 isLocked: measurement.isLocked(group),
                 isFinished: measurement.hasFinished(group)
             )
         }
 
+        // Held to Everything else in claim order, then macOS, then the Trash.
+        var available = max(0, everythingElseBytes)
+        var wasCapped = false
+        for group in EverythingElseGroup.measured {
+            guard let figures = groups[group] else { continue }
+            if figures.bytes > available {
+                wasCapped = true
+                groups[group] = figures.capped(at: available)
+            }
+            available -= groups[group]?.bytes ?? 0
+        }
+        let macOS = measurement.macOSBytes.map { min(max(0, $0), available) }
+        if let macOS, let measured = measurement.macOSBytes, macOS < measured { wasCapped = true }
+        available -= macOS ?? 0
+        let trash = trashBytes.map { min(max(0, $0), available) }
+        if let trash, let given = trashBytes, trash < given { wasCapped = true }
+
         self.groups = groups
         self.everythingElseBytes = max(0, everythingElseBytes)
-        self.macOSBytes = measurement.macOSBytes
+        self.macOSBytes = macOS
+        self.trashBytes = trash
         self.isComplete = measurement.isComplete
         self.completedAt = measurement.completedAt
+        self.isApproximate = wasCapped || includesRecordedFigures
     }
 }

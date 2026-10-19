@@ -104,6 +104,15 @@ extension PurgeStore {
         return items
     }
 
+    /// True when any category shows a total saved by an earlier session. Its
+    /// paths are unknown, so the Everything else groups can't take it out.
+    func overviewShowsRecordedFigures() -> Bool {
+        OverviewCategory.allCases.contains { category in
+            if case .recorded = overviewSource(for: category, phase: overviewPhase(for: category)) { return true }
+            return false
+        }
+    }
+
     /// A scan in progress shows what it has found so far. A category waiting for its
     /// turn shows nothing: it is about to be measured again, so the old figure would
     /// only be replaced. One not scanned this session shows its saved figure.

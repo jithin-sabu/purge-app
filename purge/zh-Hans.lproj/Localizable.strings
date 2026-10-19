@@ -1086,7 +1086,6 @@
 "View" = "视图";
 "Map" = "地图";
 "The map is on its way." = "地图即将推出。";
-"%@ is installed by Steam. Uninstalling it in Steam removes the game and keeps your saves and settings." = "%@ 由 Steam 安装。在 Steam 中卸载会移除游戏并保留你的存档和设置。";
 "Uninstall in Steam" = "在 Steam 中卸载";
 "Steam keeps its installed games here. Uninstall a game from its page in your Steam library." = "Steam 把已安装的游戏放在这里。可在 Steam 库中该游戏的页面上卸载。";
 "Open Steam" = "打开 Steam";
@@ -1094,7 +1093,6 @@
 "Open Toolbox" = "打开 Toolbox";
 "itch installs games here. Uninstall one from its page in the itch app." = "itch 把游戏安装在这里。可在 itch 应用中该游戏的页面上卸载。";
 "Open itch" = "打开 itch";
-"Steam's own data. The games are under Apps outside Applications, where each can be uninstalled in Steam." = "Steam 自身的数据。游戏在“‘应用程序’文件夹之外的应用”下，每个都可以在 Steam 中卸载。";
 "Mail keeps a copy of every message and attachment here. Mail > Settings > Accounts lets you download only recent attachments, and Mailbox > Erase Junk Mail and Erase Deleted Items free space." = "邮件会在这里保存每封邮件和附件的副本。在“邮件”>“设置”>“帐户”中可以只下载最近的附件；“邮箱”>“抹掉垃圾邮件”和“抹掉已删除的项目”可释放空间。";
 "Open Mail" = "打开邮件";
 "Messages keeps the photos and videos from your conversations here. Messages > Settings > General > Keep messages sets how long they stay." = "信息会把对话中的照片和视频保存在这里。“信息”>“设置”>“通用”>“保留信息”可设置保留多久。";
@@ -1112,7 +1110,6 @@
 "Docker Desktop keeps its disk image here. It only shrinks from inside Docker: remove unused images and containers, or lower the disk image size under Settings > Resources." = "Docker Desktop 把磁盘映像放在这里。只能从 Docker 内部缩小：移除未使用的镜像和容器，或在“Settings”>“Resources”中调低磁盘映像大小。";
 "Open Docker" = "打开 Docker";
 "The models in here are listed one by one on the Large Files tab, where each can be removed." = "这里的模型会在“大文件”标签页中逐个列出，可在那里移除。";
-"Hugging Face keeps every model you downloaded here. Remove one with the huggingface-cli delete-cache command, or delete its folder under hub." = "Hugging Face 把你下载的每个模型放在这里。可用 huggingface-cli delete-cache 命令移除，或删除 hub 下对应的文件夹。";
 "Xcode's caches, simulators and archives are on the Dev Tools tab." = "Xcode 的缓存、模拟器和归档在“开发工具”标签页中。";
 "Files every user on this Mac can see. Anything here is yours to tidy in Finder." = "这台 Mac 上所有用户都能看到的文件。这里的内容可由你在访达中整理。";
 "Another user's home folder. Only that user, or an administrator in System Settings > Users & Groups, can remove it." = "另一个用户的个人文件夹。只有该用户，或管理员在“系统设置”>“用户与群组”中，才能移除它。";
@@ -1120,9 +1117,6 @@
 "Stopped before it could measure" = "统计开始前已停止";
 "macOS, your files, app data and more. Click to see what's in it" = "macOS、你的文件、应用数据等。点按查看其中有什么";
 "macOS, your files, app data and more" = "macOS、你的文件、应用数据等";
-"Up next, after the scan that is running" = "接下来，在当前扫描之后";
-"Measuring your home folder and Library…" = "正在统计个人文件夹和资源库…";
-"Not measured yet" = "尚未统计";
 "Measured %@" = "%@统计";
 
 /* Everything else map (#220) */
@@ -1136,3 +1130,62 @@
 "%@, %@, %@" = "%@，%@，%@";
 "Part of this needs Full Disk Access" = "其中一部分需要完全磁盘访问权限";
 "Part needs Full Disk Access" = "部分内容需要完全磁盘访问权限";
+
+/* Everything else page: the map above the list (#159) */
+"Other Apps" = "其他应用";
+"Media Libraries" = "媒体资料库";
+"Mail & Messages" = "邮件和信息";
+"Protected Caches" = "受保护的缓存";
+"App Data" = "应用数据";
+"Other Users" = "其他用户";
+"System Data" = "系统数据";
+"Apps and games that Steam, Epic, itch or JetBrains Toolbox installed." = "由 Steam、Epic、itch 或 JetBrains Toolbox 安装的应用和游戏。";
+"The libraries Photos, Music, TV, iMovie and GarageBand keep." = "“照片”、“音乐”、TV、iMovie 剪辑和库乐队保存的资料库。";
+"Mail's messages and attachments, and the photos and videos people send you in Messages." = "“邮件”中的邮件和附件，以及别人在“信息”中发给你的照片和视频。";
+"Code projects, Xcode's other data, and the toolchains, packages and AI agent data that developer tools keep in hidden folders in your home folder." = "代码项目、Xcode 的其他数据，以及开发者工具保存在个人文件夹隐藏文件夹中的工具链、软件包和 AI 代理数据。";
+"Application Support, Containers and the rest of your Library that no installed app claims." = "Application Support、Containers 以及“资源库”中其余不属于任何已安装应用的内容。";
+"Your files in Documents, Desktop, Downloads, Movies, Music, Pictures and your other home folders, apart from what Large Files lists." = "你在“文稿”、“桌面”、“下载”、“影片”、“音乐”、“图片”及其他个人文件夹中的文件，不含“大文件”已列出的内容。";
+"Other accounts on this Mac, and the Shared folder." = "这台 Mac 上的其他账户，以及“共享”文件夹。";
+"Files you moved to the Trash. They take up space until you empty it." = "你移到废纸篓的文件。清倒废纸篓之前，它们会一直占用空间。";
+"The operating system, on its own read-only volume. It can't be changed or removed." = "操作系统本身，位于独立的只读宗卷上，无法更改或移除。";
+"Snapshots, virtual memory, logs and other space macOS manages itself, plus anything Purge couldn't read." = "快照、虚拟内存、日志及其他由 macOS 自行管理的空间，以及 Purge 无法读取的内容。";
+"This is an installed app or game. The store that installed it knows how to remove it, so Purge leaves that to it." = "这是已安装的应用或游戏。安装它的商店知道如何移除它，所以 Purge 交给它处理。";
+"Projects and tool folders mix caches with source code, installed packages, keys and settings. Dev Tools lists the parts that are safe to clean; the rest stays." = "项目和工具文件夹中混有缓存、源代码、已安装的软件包、密钥和设置。“开发工具”会列出可以安全清理的部分，其余部分保留。";
+"Managed in Apps" = "在应用中管理";
+"Your Files" = "你的文件";
+"Managed by macOS" = "由 macOS 管理";
+"Free this space from inside the app that keeps it." = "在保存这些内容的应用中释放空间。";
+"Yours to keep or remove. Purge shows where they are and doesn't decide." = "保留还是移除由你决定。Purge 只显示它们的位置，不替你做决定。";
+"macOS creates and frees this space itself. There is nothing to do here." = "这部分空间由 macOS 自行创建和释放，无需任何操作。";
+"Loose files" = "零散文件";
+"Show in Dev Tools" = "在“开发工具”中显示";
+"See what Everything else holds" = "查看“其他内容”包含什么";
+"Opens what Everything else holds" = "打开“其他内容”的详细信息";
+"Measuring what it holds…" = "正在测量其中的内容…";
+"Map of Everything else" = "“其他内容”分布图";
+"Under %@ each" = "每个小于 %@";
+"Open Trash" = "打开废纸篓";
+"%@ is installed by Steam. Steam asks first, then deletes the game's files for good, not to the Trash. Only saves synced to Steam Cloud are kept." = "%@ 由 Steam 安装。Steam 会先询问，然后永久删除游戏文件，不会移到废纸篓。只有同步到 Steam 云的存档会保留。";
+"Steam's own data. The games are under Other Apps, where each can be uninstalled in Steam." = "Steam 自己的数据。游戏列在“其他应用”下，每个都可以在 Steam 中卸载。";
+"Sizes are as counted on disk." = "大小按磁盘上的统计计算。";
+"Sizes are as counted on disk. Some categories show totals from an earlier scan, so these are close, not exact." = "大小按磁盘上的统计计算。部分类别显示的是之前扫描的总量，因此只是近似值。";
+"Clones and purgeable files can make a folder read larger than what removing it would free. Hard links are counted once within each folder." = "克隆文件和可清除文件可能让文件夹看起来比移除后实际释放的空间更大。硬链接在每个文件夹内只计算一次。";
+"See what this space holds" = "查看这部分空间中有什么";
+"Starting…" = "正在开始…";
+"Waiting for %@" = "正在等待“%@”";
+"Everything else is what they leave unsorted." = "“其他内容”就是它们未归类的部分。";
+"Scans run one at a time." = "扫描逐个进行。";
+"Measuring %@" = "正在测量“%@”";
+"Finishing up" = "即将完成";
+"%lld of %lld groups" = "已完成 %lld / %lld 组";
+"Purge walks your home folder and Library. It can take a few minutes, and nothing is changed." = "Purge 会遍历你的个人文件夹和“资源库”。这可能需要几分钟，且不会更改任何内容。";
+"Needs Full Disk Access to measure: %@" = "需要完全磁盘访问权限才能测量：%@";
+"Shows what this is and what you can do about it" = "显示这是什么，以及你可以怎么处理";
+
+"Left Alone" = "保持原样";
+"Purge doesn't consider these safe to delete, so it never touches them." = "Purge 不认为这些可以安全删除，所以从不动它们。";
+"Cache folders that aren't on Purge's list of caches known to rebuild themselves, so Purge leaves them alone." = "这些缓存文件夹不在 Purge 已知会自行重建的缓存列表中，所以 Purge 不会动它们。";
+"Files that sit directly in these folders rather than in a folder of their own." = "直接放在这些文件夹中、而不在任何子文件夹里的文件。";
+"Each is too small to show on the map by itself." = "每一个都太小，无法在分布图中单独显示。";
+"Each is too small to show on the map by itself. These are the biggest." = "每一个都太小，无法在分布图中单独显示。以下是其中最大的几个。";
+"and %lld more" = "还有 %lld 个";

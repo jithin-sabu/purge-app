@@ -76,6 +76,9 @@ extension PurgeStore {
     /// rescan would otherwise walk the disk beside a queued scan or cut a queued
     /// full scan short.
     func withScanQueueHeld<T>(_ work: () async -> T) async -> T {
+        // The Everything else walk can take minutes and feeds no category, so a
+        // clean doesn't wait for it. The page offers to measure again.
+        stopEverythingElse()
         while scanQueueTask != nil || isScanQueueHeld, !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(100))
         }

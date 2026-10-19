@@ -431,17 +431,8 @@ final class PurgeStore: ObservableObject {
     /// Bumped on every change to the measurement; keys the breakdown cache.
     var everythingElseMeasurementRevision = 0
     @Published var isMeasuringEverythingElse = false
-    /// The Overview's Everything else row unfolded into its groups.
-    @Published var isEverythingElseExpanded = false
     /// Which page the Overview tab shows: the summary, or Everything else opened.
     @Published var overviewPage: OverviewPage = .summary
-    /// List or Map on the Everything else page. The page header owns the switch.
-    @Published var everythingElseViewMode: EverythingElseViewMode = .list
-    /// The one group open to its folders on the Everything else page. The list
-    /// and the map show the same level, so it lives here rather than in either.
-    @Published var everythingElseOpenGroup: EverythingElseGroup?
-    /// The folder picked in the list or on the map, by path.
-    @Published var everythingElseSelectedFolderPath: String?
     var everythingElseMeasureGeneration = 0
     var everythingElseBreakdownCache: (key: EverythingElseBreakdownKey, breakdown: EverythingElseBreakdown)?
     /// The last Overview breakdown and what it was computed from. Scan flushes re-render
@@ -3293,7 +3284,10 @@ final class PurgeStore: ObservableObject {
         case .leftovers:
             return hasCompletedOrphanScan
         case .everythingElse:
-            return everythingElseMeasurement?.isComplete == true
+            // A walk made without Full Disk Access is out of date once access
+            // lands: the locked groups can be read now.
+            guard let measurement = everythingElseMeasurement, measurement.isComplete else { return false }
+            return !(measurement.access == .limited && hasFullDiskAccess)
         }
     }
 

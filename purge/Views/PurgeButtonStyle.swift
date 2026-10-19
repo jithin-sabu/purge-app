@@ -4,7 +4,8 @@ import SwiftUI
 ///
 /// - Roles: `.primary` is the one main action on a screen or sheet. `.secondary`
 ///   is every other action (Cancel, Scan). `.destructive` confirms a move to
-///   Trash. `.quiet` is an inline, low-weight action.
+///   Trash. `.quiet` is an inline, low-weight action. `.soft` is a quiet action
+///   that needs a visible edge, such as a way back that lines up with a heading.
 /// - Sizes: `.small` (24pt) for rows and notices, `.regular` (30pt) for the
 ///   toolbar, sheets and Settings, `.large` (38pt) for onboarding and the
 ///   cleanup celebration.
@@ -19,6 +20,9 @@ struct PurgeButtonStyle: ButtonStyle {
         case secondary
         case destructive
         case quiet
+        /// A light fill with no outline, so it reads lighter than `.secondary`
+        /// but keeps an edge that lines up with the text beside it.
+        case soft
     }
 
     enum Size {
@@ -142,7 +146,7 @@ private struct PurgeButtonBody: View {
         case .primary: AppColors.onActionPrimary
         case .secondary: AppColors.textPrimary
         case .destructive: .white
-        case .quiet: isActive ? AppColors.textPrimary : AppColors.textSecondary
+        case .quiet, .soft: isActive ? AppColors.textPrimary : AppColors.textSecondary
         }
     }
 
@@ -157,6 +161,8 @@ private struct PurgeButtonBody: View {
             return pressed ? AppColors.actionDestructivePressed : (isActive ? AppColors.actionDestructiveHover : AppColors.actionDestructive)
         case .quiet:
             return pressed ? AppColors.fillSecondaryPressed : (isActive ? AppColors.fillSecondaryHover : .clear)
+        case .soft:
+            return pressed ? AppColors.fillSecondaryPressed : (isActive ? AppColors.fillSecondaryHover : AppColors.fillSecondary)
         }
     }
 

@@ -108,36 +108,19 @@ enum AppColors {
         /// Free space on the storage bars.
         static let freeSpace = Color(light: 0xDAD7D2, dark: 0x4E4B47)
 
-        /// The Everything else groups (#220): lightness steps of the one warm grey,
-        /// darkest first, so the groups read as parts of the grey segment rather
-        /// than as new categories. Hue stays reserved for Purge's own meaning.
-        /// Each group keeps its step across re-measures; the map lightens a step
-        /// for the level below.
-        static let everythingElseShades: [Color] = [
-            Color(light: 0x5B5852, dark: 0xC9C6BF),
-            Color(light: 0x6D6A64, dark: 0xB9B6AF),
-            Color(light: 0x7F7C76, dark: 0xA9A69F),
-            Color(light: 0x918E88, dark: 0x99958E),
-            Color(light: 0xA3A09A, dark: 0x89857E),
-            Color(light: 0xB5B2AC, dark: 0x79756E),
-            Color(light: 0xC7C4BE, dark: 0x69655E)
-        ]
-        /// Text drawn on each of `everythingElseShades`, in the same order: light
-        /// on the dark steps, dark on the light ones.
-        static let everythingElseShadeLabels: [Color] = [
-            Color(light: 0xF6F5F3, dark: 0x171615),
-            Color(light: 0xF6F5F3, dark: 0x171615),
-            Color(light: 0xF6F5F3, dark: 0x171615),
-            Color(light: 0xF6F5F3, dark: 0x171615),
-            Color(light: 0x2E2D2B, dark: 0xECEAE6),
-            Color(light: 0x2E2D2B, dark: 0xECEAE6),
-            Color(light: 0x2E2D2B, dark: 0xECEAE6)
-        ]
-        /// macOS on the drill-in bar: the deepest step, since it is the one part
-        /// of Everything else the user can do nothing about.
-        static let everythingElseMacOS = Color(light: 0x45433F, dark: 0xDBD8D1)
-        /// The part of Everything else the walk never reached.
-        static let everythingElseRemainder = Color(light: 0xCFCCC6, dark: 0x575450)
+        /// The Everything else page's four buckets (#159), the Signal palette:
+        /// each colour says what to do. Blue opens an app, amber is yours to
+        /// review, coral is what Purge leaves alone because it doesn't consider it safe to delete, and grey is what macOS
+        /// manages. They differ in lightness as well as hue, so they stay apart
+        /// without colour vision.
+        static let managedInApps = Color(light: 0x3E8FD3, dark: 0x5AA9E6)
+        static let yourFiles = Color(light: 0xD39B2F, dark: 0xE3B04B)
+        static let leftAlone = Color(light: 0xCC6655, dark: 0xD9786A)
+        static let managedByMacOS = Color(light: 0x8A8781, dark: 0x6E6B66)
+        /// Text on the first three bucket tiles, in both modes.
+        static let bucketLabel = Color(light: 0x171615, dark: 0x171615)
+        /// Text on the grey tile, which is dark in dark mode.
+        static let managedByMacOSLabel = Color(light: 0x171615, dark: 0xF4F2EE)
     }
 
     // MARK: - AppKit

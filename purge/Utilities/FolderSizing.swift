@@ -80,7 +80,12 @@ enum FolderSizing {
         return result
     }
 
-    nonisolated static func directorySizes(at urls: [URL]) -> [String: Int64] {
+    /// `onChunkDone` is told how many of the chunks have come back, out of how
+    /// many, after each one; it is called on a sizing thread.
+    nonisolated static func directorySizes(
+        at urls: [URL],
+        onChunkDone: (@Sendable (_ done: Int, _ total: Int) -> Void)? = nil
+    ) -> [String: Int64] {
         guard !urls.isEmpty else { return [:] }
 
         var chunks: [[URL]] = []
@@ -91,6 +96,7 @@ enum FolderSizing {
         }
 
         var result: [String: Int64] = [:]
+        var completedChunks = 0
         let lock = NSLock()
         let group = DispatchGroup()
 
@@ -121,7 +127,10 @@ enum FolderSizing {
                 for (path, size) in partial {
                     result[path] = size
                 }
+                completedChunks += 1
+                let done = completedChunks
                 lock.unlock()
+                onChunkDone?(done, chunks.count)
             }
         }
 

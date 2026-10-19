@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Purge
 
-/// Nothing on the Everything else screens can reach `FileDeleter` (#220).
+/// Nothing on the Everything else screens can reach `FileDeleter` (#159, #220).
 ///
 /// Two checks. The source audit reads every file the feature is made of and
 /// refuses any mention of the delete engine, the delete sheets, the selection
@@ -14,13 +14,14 @@ import Testing
 @Suite("Everything else reaches no delete path")
 struct EverythingElseNoDeleteTests {
     /// Every file that makes up the feature. A new file joins this list.
+    /// The Overview's row lives in `EverythingElseView.swift` so it is read here.
     static let featureFiles = [
         "purge/Views/EverythingElseView.swift",
-        "purge/Views/EverythingElseMapView.swift",
         "purge/Services/PurgeStore+EverythingElse.swift",
         "purge/Services/EverythingElseMeasurer.swift",
         "purge/Models/EverythingElseGroup.swift",
         "purge/Models/EverythingElseMeasurement.swift",
+        "purge/Models/EverythingElseSections.swift",
         "purge/Models/EverythingElseFolderHint.swift",
         "purge/Models/TreemapLayout.swift"
     ]
@@ -32,6 +33,10 @@ struct EverythingElseNoDeleteTests {
         "deleteUserSelectedFiles",
         "trashItem",
         "removeItem",
+        "moveItem",
+        "unlink",
+        "rmdir",
+        "Process(",
         "DeletionCandidate",
         "DeletionSession",
         "showDeletionSheet",
@@ -88,25 +93,35 @@ struct EverythingElseNoDeleteTests {
     }
 
     @Test func theOnlyWayOffTheScreensIsTheExcludedPathsList() throws {
-        // The store extension the screens call: its public surface is the walk,
-        // the breakdown, navigation, hints and hiding. Pinned here so a new
-        // method has to be added to this list on purpose.
+        // The store extension the screens call: its surface is the walk, the
+        // breakdown, navigation, hints and excluding. Pinned here so a new
+        // method has to be added to this list on purpose. Every `func` counts,
+        // whatever comes before it on the line.
         let url = Self.repoRoot.appendingPathComponent("purge/Services/PurgeStore+EverythingElse.swift")
         let source = try #require(try? String(contentsOf: url, encoding: .utf8))
-        let functions = source.split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { $0.hasPrefix("func ") }
-            .compactMap { $0.split(separator: "(").first.map { String($0.dropFirst("func ".count)) } }
+        let pattern = try NSRegularExpression(pattern: #"\bfunc\s+([A-Za-z_][A-Za-z0-9_]*)"#)
+        let range = NSRange(source.startIndex..<source.endIndex, in: source)
+        let functions = pattern.matches(in: source, range: range).compactMap { match in
+            Range(match.range(at: 1), in: source).map { String(source[$0]) }
+        }
         #expect(Set(functions) == [
-            "openEverythingElse",
             "showEverythingElsePage",
             "showOverviewSummary",
             "measureEverythingElseAgain",
+            "stopEverythingElse",
             "measureEverythingElse",
             "everythingElseBreakdown",
             "hideFromEverythingElse",
+            "everythingElseOwningApp",
+            "everythingElseFolderHint",
+            "performEverythingElseHint",
             "droppingFolders"
         ])
+        // The views add nothing to the store of their own.
+        for relative in Self.featureFiles where relative != "purge/Services/PurgeStore+EverythingElse.swift" {
+            let file = try #require(try? String(contentsOf: Self.repoRoot.appendingPathComponent(relative), encoding: .utf8))
+            #expect(!file.contains("extension PurgeStore"), Comment(rawValue: relative))
+        }
     }
 
     @MainActor
@@ -137,11 +152,11 @@ struct EverythingElseNoDeleteTests {
         ]
         let safeBefore = store.safeRecoverableBytes
 
-        store.openEverythingElse()
         store.showEverythingElsePage()
-        store.everythingElseViewMode = .map
         #expect(await eventually { store.everythingElsePhase == .ready })
-        let breakdown = try #require(store.everythingElseBreakdown(totalBytes: 500_000_000_000, freeBytes: 100_000_000_000))
+        let breakdown = try #require(store.everythingElseBreakdown(totalBytes: 500_000_000_000, freeBytes: 100_000_000_000, trashBytes: 0))
+        _ = EverythingElseSection.sections(for: breakdown)
+        _ = EverythingElseSection.sections(for: breakdown, onlyGroup: .appData)
         let folder = try #require(breakdown[.appData]?.folders.first)
 
         // The walk feeds no category and nothing to Clean Safe Items.
@@ -152,8 +167,7 @@ struct EverythingElseNoDeleteTests {
         }
 
         // Every store action the screens can call, short of opening another app.
-        store.everythingElseOpenGroup = .appData
-        store.everythingElseSelectedFolderPath = folder.path
+        store.performEverythingElseHint(.showInDevTools)
         store.performEverythingElseHint(.showInLargeFiles)
         _ = store.everythingElseFolderHint(for: folder)
         _ = store.everythingElseOwningApp(for: folder)
@@ -161,6 +175,7 @@ struct EverythingElseNoDeleteTests {
         store.showOverviewSummary()
         store.measureEverythingElseAgain()
         #expect(await eventually { store.everythingElsePhase == .ready })
+        store.stopEverythingElse()
 
         #expect(!store.isDeleting)
         #expect(!store.showDeletionSheet)

@@ -12,23 +12,29 @@ import Foundation
 /// `nonisolated` is load-bearing: the project defaults types to the main actor,
 /// and the walk takes minutes on a big home folder.
 nonisolated final class EverythingElseMeasurer {
-    /// `home`, `steamLibraries` and `otherUserHomes` default to this Mac's; tests
-    /// pass their own so nothing here reads the real home folder.
+    /// `home`, `steamLibraries`, `otherUserHomes` and `usersFolder` default to
+    /// this Mac's; tests pass their own so nothing here reads the real home
+    /// folder or `/Users`.
     func measureStream(
         access: ScanAccess,
         home: URL? = nil,
         steamLibraries: [URL]? = nil,
         otherUserHomes: [URL]? = nil,
+        usersFolder: URL? = nil,
         readsSystemVolume: Bool = true
     ) -> AsyncStream<EverythingElseMeasureEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .utility) {
                 let home = (home ?? FileManager.default.homeDirectoryForCurrentUser).standardizedFileURL
+                let usersFolder = usersFolder ?? URL(fileURLWithPath: "/Users", isDirectory: true)
+                let homeNames = (try? FileManager.default.contentsOfDirectory(atPath: home.path)) ?? []
                 let roots = EverythingElseRootPlan.roots(
                     home: home,
                     access: access,
                     steamLibraries: steamLibraries ?? Self.steamLibraries(home: home, access: access),
-                    otherUserHomes: otherUserHomes ?? Self.otherUserHomes(home: home)
+                    otherUserHomes: otherUserHomes ?? Self.otherUserHomes(home: home, usersFolder: usersFolder),
+                    homeFolderNames: homeNames,
+                    usersFolder: usersFolder
                 )
                 Self.run(roots: roots, access: access, home: home, readsSystemVolume: readsSystemVolume, continuation: continuation)
             }
@@ -69,8 +75,11 @@ nonisolated final class EverythingElseMeasurer {
                     continue
                 }
                 continuation.yield(.measured(EverythingElseMeasuredRoot(root: root, totalBytes: bytes)))
-            case .children:
-                guard let measured = measureChildren(of: root, access: access, home: home) else {
+            case .children, .hiddenChildren, .childrenExcept:
+                let measured = measureChildren(of: root, access: access, home: home) { fraction in
+                    continuation.yield(.progress(root, fraction))
+                }
+                guard let measured else {
                     continuation.yield(.skipped(root, locked: false))
                     continue
                 }
@@ -85,15 +94,31 @@ nonisolated final class EverythingElseMeasurer {
     }
 
     /// Sizes every folder directly inside the root and sums the files beside them.
-    /// For the home folder only its hidden folders count: the visible ones are
-    /// groups of their own, and the loose files in home are nobody's tool folder.
+    /// A `hiddenChildren` root sizes only its dot folders, and a `childrenExcept`
+    /// root only the visible folders no other root measures; neither counts
+    /// loose files, which stay in the remainder.
+    /// `progress` hears how far through the root's folders the sizing is, 0...1.
     private static func measureChildren(
         of root: EverythingElseMeasureRoot,
         access: ScanAccess,
-        home: URL
+        home: URL,
+        progress: @escaping @Sendable (Double) -> Void
     ) -> EverythingElseMeasuredRoot? {
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey, .fileSizeKey]
-        let hiddenOnly = root.group == .hiddenToolFolders
+        let hiddenOnly: Bool
+        let skippedNames: Set<String>
+        switch root.kind {
+        case .hiddenChildren:
+            hiddenOnly = true
+            skippedNames = []
+        case .childrenExcept(let names):
+            hiddenOnly = false
+            skippedNames = names
+        case .children, .whole:
+            hiddenOnly = false
+            skippedNames = []
+        }
+        let countsLooseFiles = root.kind == .children
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: root.url,
             includingPropertiesForKeys: Array(keys),
@@ -107,11 +132,12 @@ nonisolated final class EverythingElseMeasurer {
             if hiddenOnly {
                 guard name.hasPrefix("."), !EverythingElseRootPlan.ignoredHiddenFolders.contains(name) else { continue }
             }
+            if skippedNames.contains(name.lowercased()) { continue }
             guard let values = try? entry.resourceValues(forKeys: keys) else { continue }
             // A link is counted as the few bytes it is, never followed: the folder it
             // points at is measured where it really lives, or not at all.
             if values.isSymbolicLink == true {
-                if !hiddenOnly { looseFileBytes += Int64(values.fileSize ?? 0) }
+                if countsLooseFiles { looseFileBytes += Int64(values.fileSize ?? 0) }
                 continue
             }
             if values.isDirectory == true {
@@ -119,13 +145,15 @@ nonisolated final class EverythingElseMeasurer {
                 // contacts folders alone, so no prompt ever comes from here.
                 if access == .limited, !EverythingElseRootPlan.isReadableByLimitedWalk(entry, home: home) { continue }
                 folders.append(entry)
-            } else if !hiddenOnly {
+            } else if countsLooseFiles {
                 looseFileBytes += Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
             }
         }
         if Task.isCancelled { return nil }
 
-        let sizes = FolderSizing.directorySizes(at: folders)
+        let sizes = FolderSizing.directorySizes(at: folders) { done, total in
+            progress(Double(done) / Double(max(1, total)))
+        }
         var items: [OverviewSizedItem] = []
         items.reserveCapacity(folders.count)
         for folder in folders {
@@ -157,19 +185,32 @@ nonisolated final class EverythingElseMeasurer {
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
-    /// Steam's library roots, when the list is there and the scan may read it.
+    /// Steam's library roots on the startup disk, when the list is there and the
+    /// scan may read it. Everything else is a share of the startup disk, so a
+    /// library on another volume is left out. Links are resolved first, so a
+    /// library reached through one is matched against Excluded Paths the way the
+    /// store spells it.
     private static func steamLibraries(home: URL, access: ScanAccess) -> [URL] {
         let vdf = SteamLibraryFolders.vdfURL(home: home)
         guard ProtectedLocations.isReadable(vdf, access: access, home: home),
               let text = try? String(contentsOf: vdf, encoding: .utf8)
         else { return [] }
+        let homeVolume = volumeIdentifier(of: home)
         return SteamLibraryFolders.libraryRoots(fromVDF: text)
+            .map { $0.resolvingSymlinksInPath() }
+            .filter { library in
+                guard let homeVolume, let volume = volumeIdentifier(of: library) else { return false }
+                return volume.isEqual(homeVolume)
+            }
     }
 
-    private static func otherUserHomes(home: URL) -> [URL] {
-        let users = URL(fileURLWithPath: "/Users", isDirectory: true)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: users.path)) ?? []
-        return EverythingElseRootPlan.otherUserHomes(in: users, names: names, home: home)
+    private static func volumeIdentifier(of url: URL) -> NSObject? {
+        (try? url.resourceValues(forKeys: [.volumeIdentifierKey]))?.volumeIdentifier as? NSObject
+    }
+
+    private static func otherUserHomes(home: URL, usersFolder: URL) -> [URL] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: usersFolder.path)) ?? []
+        return EverythingElseRootPlan.otherUserHomes(in: usersFolder, names: names, home: home)
     }
 
     /// The system volume's used space, the figure System Settings calls macOS.

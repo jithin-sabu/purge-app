@@ -11,6 +11,8 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
         case openURL(URL, title: String)
         /// The folder is already listed on the Large Files tab, so the row links there.
         case showInLargeFiles
+        /// The cleanable parts are on the Dev Tools tab, so the row links there.
+        case showInDevTools
     }
 
     let steps: String
@@ -31,7 +33,7 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
 
         if let game = steamGames[path] {
             return EverythingElseFolderHint(
-                steps: String(localized: "\(game.name) is installed by Steam. Uninstalling it in Steam removes the game and keeps your saves and settings."),
+                steps: String(localized: "\(game.name) is installed by Steam. Steam asks first, then deletes the game's files for good, not to the Trash. Only saves synced to Steam Cloud are kept."),
                 action: URL(string: "steam://uninstall/\(game.appID)").map { .openURL($0, title: String(localized: "Uninstall in Steam")) }
             )
         }
@@ -57,7 +59,7 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
             }
             if relative.hasPrefix("Library/Application Support/Steam") {
                 return EverythingElseFolderHint(
-                    steps: String(localized: "Steam's own data. The games are under Apps outside Applications, where each can be uninstalled in Steam."),
+                    steps: String(localized: "Steam's own data. The games are under Other Apps, where each can be uninstalled in Steam."),
                     action: .openApp(bundleID: steamBundleID, title: String(localized: "Open Steam"))
                 )
             }
@@ -109,22 +111,16 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
                     action: .openApp(bundleID: "com.docker.docker", title: String(localized: "Open Docker"))
                 )
             }
-            if relative == ".ollama" || relative == ".lmstudio" || relative == ".cache/lm-studio" {
+            if relative == ".ollama" || relative == ".lmstudio" {
                 return EverythingElseFolderHint(
                     steps: String(localized: "The models in here are listed one by one on the Large Files tab, where each can be removed."),
                     action: .showInLargeFiles
                 )
             }
-            if relative == ".cache/huggingface" {
-                return EverythingElseFolderHint(
-                    steps: String(localized: "Hugging Face keeps every model you downloaded here. Remove one with the huggingface-cli delete-cache command, or delete its folder under hub."),
-                    action: nil
-                )
-            }
-            if relative == "Library/Developer" {
+            if relative.hasPrefix("Library/Developer/") {
                 return EverythingElseFolderHint(
                     steps: String(localized: "Xcode's caches, simulators and archives are on the Dev Tools tab."),
-                    action: nil
+                    action: .showInDevTools
                 )
             }
         }
@@ -141,8 +137,8 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
                 steps: String(localized: "Another user's home folder. Only that user, or an administrator in System Settings > Users & Groups, can remove it."),
                 action: nil
             )
-        case .appsOutsideApplications, .managedLibraries, .uncleanableCaches, .appData,
-             .yourFiles, .hiddenToolFolders, .macOS, .notMeasured:
+        case .otherApps, .mediaLibraries, .mailAndMessages, .protectedCaches,
+             .developer, .appData, .documents, .trash, .macOS, .systemData:
             return nil
         }
     }

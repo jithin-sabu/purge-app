@@ -2,9 +2,10 @@ import Foundation
 import Testing
 @testable import Purge
 
-/// The Everything else walk in the store (#220): it runs on demand as its own
-/// scan-queue step, never at launch, and the groups fill in as roots finish.
-/// Driven with `FakeScans`, so nothing here walks this Mac.
+/// The Everything else walk in the store (#159, #220): it runs on demand as its
+/// own scan-queue step, never at launch, the groups fill in as roots finish, and
+/// stopping it touches nothing else in the queue. Driven with `FakeScans`, so
+/// nothing here walks this Mac.
 @MainActor
 @Suite("Everything else in the store")
 struct EverythingElseStoreTests {
@@ -30,28 +31,44 @@ struct EverythingElseStoreTests {
         fake.cleanUp()
     }
 
-    @Test func openingTheRowMeasuresOnceThisSession() async {
+    @Test func openingThePageMeasuresOnceThisSession() async {
         let fake = FakeScans()
         let store = fake.makeStore()
-        store.openEverythingElse()
-        #expect(store.isEverythingElseExpanded)
+        store.showEverythingElsePage()
+        #expect(store.overviewPage == .everythingElse)
         #expect(await eventually { isIdle(store) })
         #expect(fake.everythingElseAccesses == [.limited])
         #expect(store.everythingElsePhase == .ready)
         #expect(store.everythingElseMeasurement?.isComplete == true)
 
-        // Opening it again, or opening the page, reuses this session's measure.
-        store.openEverythingElse()
+        // Coming back to the page reuses this session's measure.
+        store.showOverviewSummary()
         store.showEverythingElsePage()
         #expect(await eventually { isIdle(store) })
         #expect(fake.everythingElseAccesses == [.limited])
-        #expect(store.overviewPage == .everythingElse)
 
-        // Measure again is a fresh walk, with the access Purge has now.
-        fake.hasAccess = true
+        // Measure again is a fresh walk.
         store.measureEverythingElseAgain()
         #expect(await eventually { isIdle(store) })
+        #expect(fake.everythingElseAccesses == [.limited, .limited])
+        fake.cleanUp()
+    }
+
+    @Test func aWalkWithoutAccessIsRedoneOnceAccessLands() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        store.showEverythingElsePage()
+        #expect(await eventually { isIdle(store) })
+        #expect(store.hasSessionResults(for: .everythingElse))
+
+        fake.hasAccess = true
+        store.refreshPermission()
+        // The locked groups can be read now, so the old walk is out of date.
+        #expect(!store.hasSessionResults(for: .everythingElse))
+        store.showEverythingElsePage()
+        #expect(await eventually { isIdle(store) })
         #expect(fake.everythingElseAccesses == [.limited, .full])
+        #expect(store.hasSessionResults(for: .everythingElse))
         fake.cleanUp()
     }
 
@@ -61,9 +78,9 @@ struct EverythingElseStoreTests {
         fake.holdsEverythingElse = true
         let store = fake.makeStore()
         let support = root(.appData, "/Users/alice/Library/Application Support")
-        let caches = root(.uncleanableCaches, "/Users/alice/Library/Caches")
+        let caches = root(.protectedCaches, "/Users/alice/Library/Caches")
         fake.everythingElseEvents = [.planned([support, caches]), .macOS(14 * gb)]
-        store.openEverythingElse()
+        store.showEverythingElsePage()
         #expect(await eventually { store.everythingElseMeasurement?.macOSBytes == 14 * gb })
         #expect(store.everythingElsePhase == .measuring)
         #expect(store.everythingElseMeasurement?.isComplete == false)
@@ -72,35 +89,113 @@ struct EverythingElseStoreTests {
             OverviewSizedItem(path: "/Users/alice/Library/Application Support/CoreAIKit", bytes: 66 * gb)
         ], looseFileBytes: 0))])
         #expect(await eventually { store.everythingElseMeasurement?.measuredRoots.count == 1 })
-        let partial = store.everythingElseBreakdown(totalBytes: 1000 * gb, freeBytes: 500 * gb)
+        let partial = store.everythingElseBreakdown(totalBytes: 1000 * gb, freeBytes: 500 * gb, trashBytes: 0)
         #expect(partial?[.appData]?.bytes == 66 * gb)
         #expect(partial?[.appData]?.isFinished == true)
-        #expect(partial?[.uncleanableCaches]?.isFinished == false)
+        #expect(partial?[.protectedCaches]?.isFinished == false)
         #expect(partial?.isComplete == false)
 
         fake.finishHeldEverythingElse()
         #expect(await eventually { isIdle(store) })
-        let done = store.everythingElseBreakdown(totalBytes: 1000 * gb, freeBytes: 500 * gb)
+        let done = store.everythingElseBreakdown(totalBytes: 1000 * gb, freeBytes: 500 * gb, trashBytes: 2 * gb)
         #expect(done?.isComplete == true)
-        #expect(done?[.uncleanableCaches]?.isFinished == true)
+        #expect(done?[.protectedCaches]?.isFinished == true)
         #expect(done?.everythingElseBytes == 500 * gb)
-        #expect(done?.notMeasuredBytes == 500 * gb - 66 * gb - 14 * gb)
+        #expect(done?.systemDataBytes == 500 * gb - 66 * gb - 14 * gb - 2 * gb)
         #expect(store.everythingElsePhase == .ready)
         #expect(store.hasSessionResults(for: .everythingElse))
         fake.cleanUp()
     }
 
-    @Test func stopEndsTheWalkAndLeavesItUnfinished() async {
+    @Test func stopEndsTheWalkAndLeavesTheRestOfTheQueue() async {
         let fake = FakeScans()
+        fake.hasAccess = true
         fake.holdsEverythingElse = true
         let store = fake.makeStore()
-        store.openEverythingElse()
+        store.showEverythingElsePage()
         #expect(await eventually { store.scanQueue.active == .everythingElse })
-        store.stopScans()
+        store.requestScan(.largeFiles)
+        #expect(store.scanQueue.isQueued(.largeFiles))
+
+        store.stopEverythingElse()
         #expect(await eventually { isIdle(store) })
-        // Stopped before or during the walk: either way nothing counts as measured.
-        #expect(store.everythingElseMeasurement?.isComplete != true)
+        // Large Files still ran after the walk stopped.
+        #expect(fake.events.contains("step largeFiles"))
+        // Nothing half-measured stays behind.
+        #expect(store.everythingElseMeasurement == nil)
         #expect(!store.hasSessionResults(for: .everythingElse))
+        #expect(store.everythingElsePhase == .notMeasured)
+        fake.cleanUp()
+    }
+
+    @Test func stopCancelsAWalkThatIsStillWaiting() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        fake.holdsFullAccessSteps = true
+        let store = fake.makeStore()
+        store.requestScan(.largeFiles)
+        #expect(await eventually { fake.log == ["step largeFiles"] })
+        store.showEverythingElsePage()
+        #expect(store.everythingElsePhase == .waiting)
+
+        store.stopEverythingElse()
+        #expect(store.everythingElsePhase == .notMeasured)
+        #expect(store.scanQueue.active == .largeFiles)
+        fake.finishHeldSteps()
+        #expect(await eventually { isIdle(store) })
+        #expect(fake.everythingElseAccesses.isEmpty)
+        fake.cleanUp()
+    }
+
+    @Test func stoppingAMeasureAgainBringsBackTheLastFinishedWalk() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let support = root(.appData, "/Users/alice/Library/Application Support")
+        fake.everythingElseEvents = [.measured(EverythingElseMeasuredRoot(root: support, folders: [
+            OverviewSizedItem(path: "/Users/alice/Library/Application Support/CoreAIKit", bytes: 66 * gb)
+        ], looseFileBytes: 0))]
+        store.showEverythingElsePage()
+        #expect(await eventually { isIdle(store) && store.everythingElsePhase == .ready })
+
+        fake.everythingElseEvents = []
+        fake.holdsEverythingElse = true
+        store.measureEverythingElseAgain()
+        #expect(await eventually { store.scanQueue.active == .everythingElse })
+        store.stopEverythingElse()
+        #expect(await eventually { isIdle(store) })
+        #expect(store.everythingElsePhase == .ready)
+        let breakdown = store.everythingElseBreakdown(totalBytes: 1000 * gb, freeBytes: 500 * gb, trashBytes: 0)
+        #expect(breakdown?[.appData]?.bytes == 66 * gb)
+        fake.cleanUp()
+    }
+
+    @Test func theWalkIsNotACategoryScan() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        fake.holdsEverythingElse = true
+        let store = fake.makeStore()
+        store.showEverythingElsePage()
+        #expect(await eventually { store.scanQueue.active == .everythingElse })
+        // The queue is busy, but nothing a category or the intent waits on runs.
+        #expect(store.scanQueue.isRunning)
+        #expect(!store.scanQueue.isRunningCategoryScan)
+        store.requestScan(.largeFiles)
+        #expect(store.scanQueue.isRunningCategoryScan)
+        store.stopScans()
+        fake.cleanUp()
+    }
+
+    @Test func aHeldQueueStopsTheWalkInsteadOfWaitingForIt() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        fake.holdsEverythingElse = true
+        let store = fake.makeStore()
+        store.showEverythingElsePage()
+        #expect(await eventually { store.scanQueue.active == .everythingElse })
+        // A scheduled clean holds the queue; the walk would keep it waiting for minutes.
+        let ran = await store.withScanQueueHeld { true }
+        #expect(ran)
         #expect(store.everythingElsePhase == .notMeasured)
         fake.cleanUp()
     }
@@ -112,7 +207,7 @@ struct EverythingElseStoreTests {
         let store = fake.makeStore()
         store.requestScan(.largeFiles)
         #expect(await eventually { fake.log == ["step largeFiles"] })
-        store.openEverythingElse()
+        store.showEverythingElsePage()
         #expect(store.everythingElsePhase == .waiting)
         #expect(fake.everythingElseAccesses.isEmpty)
         fake.finishHeldSteps()
@@ -121,7 +216,7 @@ struct EverythingElseStoreTests {
         fake.cleanUp()
     }
 
-    @Test func hidingAFolderAddsItToExcludedPathsAndDropsItFromTheGroup() async {
+    @Test func excludingAFolderDropsItHereAndFromEveryTab() async {
         let fake = FakeScans()
         fake.hasAccess = true
         let store = fake.makeStore()
@@ -130,7 +225,7 @@ struct EverythingElseStoreTests {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("purge-ee-hide-\(UUID().uuidString)", isDirectory: true)
         let folder = base.appendingPathComponent("Application Support/Hidden Me", isDirectory: true)
         let keep = base.appendingPathComponent("Application Support/Keep", isDirectory: true)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: folder.appendingPathComponent("Cache"), withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: keep, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: base) }
         let support = root(.appData, base.appendingPathComponent("Application Support").path)
@@ -138,21 +233,45 @@ struct EverythingElseStoreTests {
             OverviewSizedItem(path: folder.path, bytes: 5 * gb),
             OverviewSizedItem(path: keep.path, bytes: 3 * gb)
         ], looseFileBytes: 0))]
-        store.openEverythingElse()
+        store.showEverythingElsePage()
         #expect(await eventually { isIdle(store) })
-        let before = store.everythingElseBreakdown(totalBytes: 100 * gb, freeBytes: 10 * gb)
+
+        // A ticked cache row and a ticked Large Files row inside the folder.
+        let cacheRow = CacheItem(
+            definitionKey: "hidden-me-cache",
+            location: CacheLocation(path: folder.appendingPathComponent("Cache"), sizeBytes: 1024, lastModified: .distantPast, folderName: "Cache"),
+            appName: "Hidden Me",
+            safetyInfo: SafetyInfo(level: .safe, headline: "Hidden Me", explanation: "", recoverySteps: "", reinstallCommand: nil),
+            gitStatus: .clean
+        )
+        store.cacheItems = [cacheRow]
+        store.scanSelection.cacheIDs = [cacheRow.id]
+        let file = LargeFile(
+            path: folder.appendingPathComponent("big.zip"),
+            sizeBytes: 1,
+            lastUsed: Date(),
+            category: LargeFileCategory.category(forExtension: "zip")
+        )
+        store.largeFiles = [file]
+        store.setLargeFileSelected(id: file.id, isSelected: true)
+
+        let before = store.everythingElseBreakdown(totalBytes: 100 * gb, freeBytes: 10 * gb, trashBytes: 0)
         let hidden = before?[.appData]?.folders.first { $0.name == "Hidden Me" }
         #expect(hidden != nil)
-
         if let hidden {
             store.hideFromEverythingElse(hidden)
         }
         defer { ExcludedPathsStore.remove(path: folder) }
+
         #expect(ExcludedPathsStore.isExcluded(folder))
-        #expect(!store.excludedPaths.isEmpty)
-        let after = store.everythingElseBreakdown(totalBytes: 100 * gb, freeBytes: 10 * gb)
+        let after = store.everythingElseBreakdown(totalBytes: 100 * gb, freeBytes: 10 * gb, trashBytes: 0)
         #expect(after?[.appData]?.folders.map(\.name) == ["Keep"])
         #expect(after?[.appData]?.bytes == 3 * gb)
+        // The rows and their ticks are gone, so "to clean" can't count them.
+        #expect(store.cacheItems.isEmpty)
+        #expect(store.scanSelection.cacheIDs.isEmpty)
+        #expect(store.largeFiles.isEmpty)
+        #expect(store.selectedLargeFiles.isEmpty)
         fake.cleanUp()
     }
 
