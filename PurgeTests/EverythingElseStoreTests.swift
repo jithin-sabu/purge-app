@@ -281,11 +281,20 @@ struct EverythingElseStoreTests {
         store.scanQueueTask == nil && !store.scanQueue.isRunning && !store.isScanningAll && !store.isMeasuringEverythingElse
     }
 
+    /// Counts only the time this loop was running. On CI the test host can
+    /// stall for tens of seconds at the start of a run, with every suite
+    /// waiting on the main actor; a wall-clock deadline expires during the
+    /// stall through no fault of the condition. A gap between two turns of
+    /// the loop counts for at most a quarter of a second.
     private func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
+        var waited: TimeInterval = 0
+        var last = Date()
         while !condition() {
-            guard Date() < deadline else { return false }
+            guard waited < timeout else { return false }
             try? await Task.sleep(for: .milliseconds(10))
+            let now = Date()
+            waited += min(now.timeIntervalSince(last), 0.25)
+            last = now
         }
         return true
     }
