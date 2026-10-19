@@ -49,7 +49,9 @@ nonisolated struct EverythingElseSection: Identifiable, Equatable, Sendable {
     static func sections(for breakdown: EverythingElseBreakdown, onlyGroup: EverythingElseGroup? = nil) -> [EverythingElseSection] {
         EverythingElseBucket.allCases.compactMap { bucket in
             let groups = bucket.groups.filter { onlyGroup == nil || $0 == onlyGroup }
-            let items = groups.flatMap { items(for: $0, in: breakdown) }.sorted(by: rowOrder)
+            // `Self.`: the local shadows the method, and the compiler CI runs
+            // (Xcode 26.6) resolves the bare name to the local.
+            let items = groups.flatMap { Self.items(for: $0, in: breakdown) }.sorted(by: rowOrder)
             guard !items.isEmpty else { return nil }
             let bytes = groups.reduce(Int64(0)) { $0 + breakdown.bytes(for: $1) }
             return EverythingElseSection(bucket: bucket, bytes: bytes, items: items)

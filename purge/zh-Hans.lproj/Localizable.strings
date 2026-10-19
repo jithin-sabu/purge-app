@@ -1065,7 +1065,6 @@
 "Measure again" = "重新统计";
 "Sizes are as counted on disk. Clones and purgeable files can make a folder read larger than what removing it would free." = "大小按磁盘上的计数显示。克隆文件和可清除文件可能使文件夹看起来比删除后实际释放的空间更大。";
 "Measured %@. Hard links are counted once within each folder." = "%@统计。硬链接在每个文件夹内只计一次。";
-"Measuring. Groups fill in as their folders finish, biggest first." = "正在统计。各组会在其文件夹统计完成后依次显示，最大的在前。";
 "Without Full Disk Access, Documents, Desktop, Downloads, Mail, Messages and app containers are skipped and counted as not measured." = "没有完全磁盘访问权限时，文稿、桌面、下载、邮件、信息和应用容器会被跳过，计入“未统计”。";
 "Expanded" = "已展开";
 "Collapsed" = "已折叠";
@@ -1165,7 +1164,7 @@
 "Map of Everything else" = "“其他内容”分布图";
 "Under %@ each" = "每个小于 %@";
 "Open Trash" = "打开废纸篓";
-"%@ is installed by Steam. Steam asks first, then deletes the game's files for good, not to the Trash. Only saves synced to Steam Cloud are kept." = "%@ 由 Steam 安装。Steam 会先询问，然后永久删除游戏文件，不会移到废纸篓。只有同步到 Steam 云的存档会保留。";
+"%@ is installed by Steam. Steam asks first, then deletes the game's files permanently, not to the Trash. Only saves synced to Steam Cloud are kept." = "%@ 由 Steam 安装。Steam 会先询问，然后永久删除游戏文件，不会移到废纸篓。只有同步到 Steam 云的存档会保留。";
 "Steam's own data. The games are under Other Apps, where each can be uninstalled in Steam." = "Steam 自己的数据。游戏列在“其他应用”下，每个都可以在 Steam 中卸载。";
 "Sizes are as counted on disk." = "大小按磁盘上的统计计算。";
 "Sizes are as counted on disk. Some categories show totals from an earlier scan, so these are close, not exact." = "大小按磁盘上的统计计算。部分类别显示的是之前扫描的总量，因此只是近似值。";

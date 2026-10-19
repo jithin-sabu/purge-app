@@ -33,7 +33,7 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
 
         if let game = steamGames[path] {
             return EverythingElseFolderHint(
-                steps: String(localized: "\(game.name) is installed by Steam. Steam asks first, then deletes the game's files for good, not to the Trash. Only saves synced to Steam Cloud are kept."),
+                steps: String(localized: "\(game.name) is installed by Steam. Steam asks first, then deletes the game's files permanently, not to the Trash. Only saves synced to Steam Cloud are kept."),
                 action: URL(string: "steam://uninstall/\(game.appID)").map { .openURL($0, title: String(localized: "Uninstall in Steam")) }
             )
         }

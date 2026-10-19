@@ -617,7 +617,9 @@ struct EverythingElseGroupTests {
         #expect(hint?.action == .showInDevTools)
     }
 
-    @Test func steamsUninstallSaysItIsForGood() throws {
+    /// Removals that skip the Trash say "permanently", the word the rest of
+    /// the app uses for them.
+    @Test func steamsUninstallSaysItIsPermanent() throws {
         let game = SteamGame(appID: "1145360", name: "Hades", installPath: "/Users/alice/Library/Application Support/Steam/steamapps/common/Hades")
         let hint = try #require(EverythingElseFolderHint.hint(
             for: game.installPath,
@@ -625,7 +627,8 @@ struct EverythingElseGroupTests {
             home: home,
             steamGames: [game.installPath: game]
         ))
-        #expect(hint.steps.contains("for good"))
+        #expect(hint.steps.contains("permanently"))
+        #expect(!hint.steps.contains("for good"))
         #expect(!hint.steps.contains("keeps your saves"))
     }
 }
