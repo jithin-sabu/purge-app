@@ -162,3 +162,52 @@ struct ApplicationSupportCacheShapeTests {
         #expect(SafetyTierList.evaluate(folderName: "Recordly", path: cache) == .safe)
     }
 }
+
+/// An app with no `explanations.json` entry used to get one App Caches row per
+/// cache folder, which the new GPU cache names turned into dozens of tiny rows.
+@Suite("Application Support caches: one row per app")
+struct ApplicationSupportCacheGroupingTests {
+    private func item(_ app: String, _ folder: String, bytes: Int64, level: SafetyLevel = .safe) -> CacheItem {
+        let path = URL(fileURLWithPath: "/Users/alice/Library/Application Support/\(app)/\(folder)", isDirectory: true)
+        return CacheItem(
+            definitionKey: CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: app),
+            location: CacheLocation(path: path, sizeBytes: bytes, lastModified: .distantPast, folderName: app),
+            appName: "\(app) Cache",
+            safetyInfo: ExplanationResolver.tierSafetyInfo(level: level, headline: "\(app) Cache")
+        )
+    }
+
+    @Test
+    func anAppsFoldersShareOneRow() {
+        let rows = DefinitionCacheGrouper.group([
+            item("Aqua Voice", "DawnWebGPUCache", bytes: 600),
+            item("Aqua Voice", "DawnGraphiteCache", bytes: 500),
+            item("Aqua Voice", "Crashpad/completed", bytes: 100),
+            item("Recordly", "DawnWebGPUCache", bytes: 5_800),
+        ])
+        #expect(rows.map(\.appName) == ["Recordly Cache", "Aqua Voice Cache"])
+        #expect(rows.map(\.locations.count) == [1, 3])
+        #expect(rows.map(\.sizeBytes) == [5_800, 1_200])
+        #expect(rows.allSatisfy { $0.safetyInfo.level == .safe })
+    }
+
+    /// A merged row takes its most cautious folder's tier.
+    @Test
+    func theRowIsAsCautiousAsItsMostCautiousFolder() {
+        let rows = DefinitionCacheGrouper.group([
+            item("Aqua Voice", "DawnWebGPUCache", bytes: 600),
+            item("Aqua Voice", "GPUCache", bytes: 500, level: .medium),
+        ])
+        #expect(rows.count == 1)
+        #expect(rows.first?.safetyInfo.level == .medium)
+    }
+
+    /// The key is only for grouping: it never finds an entry, so it can never
+    /// lend a folder an entry's tier.
+    @Test(arguments: ["Aqua Voice", "Claude", "Code", "Slack"])
+    func theGroupKeyNeverMatchesAnEntry(app: String) {
+        let key = CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: app)
+        #expect(ExplanationDatabase.record(forKey: key) == nil)
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: key) == nil)
+    }
+}

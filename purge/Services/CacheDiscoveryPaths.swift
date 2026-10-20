@@ -127,6 +127,13 @@ enum CacheDiscoveryPaths {
         return name != "Cache" || hasChromiumHTTPCacheLayout(url)
     }
 
+    /// Grouping key for the Application Support caches of an app with no
+    /// `explanations.json` entry, so they show as one row instead of one per
+    /// folder. It never matches an entry, so the row's tier comes from its folders.
+    nonisolated static func applicationSupportGroupKey(appFolderName: String) -> String {
+        "application-support:\(appFolderName)"
+    }
+
     /// Returns every cache candidate path under `~/Library/Application Support/<appRoot>/`.
     ///
     /// A limited scan checks each path with `ProtectedLocations.isReadable` before
