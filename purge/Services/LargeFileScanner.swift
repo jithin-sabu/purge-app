@@ -120,11 +120,16 @@ nonisolated final class LargeFileScanner {
         ]
 
         // A model store inside a walked folder (swift-transformers downloads to
-        // `~/Documents/huggingface/models`) is `AIModelScanner`'s: one row per
-        // model there, not a file per weight here. Resolved once, because the
-        // enumerator spells a root `/private/var/…` where the policy says `/var/…`.
+        // `~/Documents/huggingface/models`, or a Hub cache `HF_HUB_CACHE` moved
+        // into Documents) is `AIModelScanner`'s: one row per model there, not a
+        // file per weight here. Both spellings are kept, because the enumerator
+        // spells a root `/private/var/…` where the policy says `/var/…`, so each
+        // folder costs one set lookup at any depth and no resolve.
         let modelStoreRoots = Set(
-            AIModelScanPolicy.rootsInsideLargeFileScan(home: home).map { $0.resolvingSymlinksInPath().path }
+            AIModelScanPolicy.rootsInsideLargeFileScan(home: home).flatMap { root -> [String] in
+                let path = root.resolvingSymlinksInPath().path
+                return [path, "/private" + path]
+            }
         )
 
         for (root, bundlesOnly) in walks {
@@ -228,10 +233,7 @@ nonisolated final class LargeFileScanner {
                                 enumerator.skipDescendants()
                                 continue
                             }
-                            // Store roots sit two levels down at most; deeper
-                            // folders skip the resolve, which costs a stat per level.
-                            if !modelStoreRoots.isEmpty, enumerator.level <= 3,
-                               modelStoreRoots.contains(fileURL.resolvingSymlinksInPath().path) {
+                            if modelStoreRoots.contains(fileURL.standardizedFileURL.path) {
                                 enumerator.skipDescendants()
                             }
                             continue

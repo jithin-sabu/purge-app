@@ -287,10 +287,6 @@ nonisolated final class AIModelScanner {
         return models
     }
 
-    /// How many folder levels a store nests models under. Jan's
-    /// `huggingface.co/<org>/<repo>/` is the deepest known, at three.
-    private static let folderStoreMaxDepth = 4
-
     /// `relativeName` is the folder's path below the store root, kept as
     /// components rather than cut from the path: the listing can spell a root
     /// `/private/var/…` where the policy said `/var/…`, and a cut would then
@@ -341,11 +337,7 @@ nonisolated final class AIModelScanner {
         for entry in entries where entry.isDirectory {
             if Task.isCancelled { return }
             let name = entry.url.lastPathComponent
-            let holdsWeights = AIModelScanPolicy.isWeightBundle(named: name)
-                || children(of: entry.url).contains { child in
-                    child.isRegularFile && AIModelScanPolicy.isWeightFile(named: child.url.lastPathComponent, insideKnownStore: true)
-                }
-            if holdsWeights {
+            if AIModelScanPolicy.isModelFolder(entry.url) {
                 let measured = FolderSizing.walkedSize(at: entry.url, skipsPackages: false)
                 guard measured.bytes > 0 else { continue }
                 // Jan files Hub downloads under `huggingface.co/<org>/<repo>`;
@@ -362,7 +354,7 @@ nonisolated final class AIModelScanner {
                     componentPaths: [entry.url],
                     kind: .aiModel(store)
                 ))
-            } else if relativeName.count + 1 < folderStoreMaxDepth {
+            } else if relativeName.count + 1 < AIModelScanPolicy.folderStoreMaxDepth {
                 collectModels(under: entry.url, relativeName: relativeName + [name], store: store, names: names, into: &models)
             }
         }

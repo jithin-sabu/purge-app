@@ -66,7 +66,7 @@ nonisolated enum AIModelScanPolicy {
             case .lmStudio:
                 return String(localized: "Model downloaded with LM Studio. The whole model folder goes, and LM Studio stops listing it. Download it again in LM Studio.")
             case .huggingFaceHub:
-                return String(localized: "Model downloaded through the Hugging Face Hub. Every cached version goes with it, and the next use downloads it again.")
+                return String(localized: "Model downloaded through the Hugging Face Hub. Every cached version goes with it, and the next use downloads it again. A project folder that older Hugging Face tools filled with links to this cache stops working until then.")
             case .swiftTransformers:
                 return String(localized: "Model an app downloaded through the Hugging Face Hub. The next use downloads it again.")
             case .huggingFaceAppCache:
@@ -201,8 +201,11 @@ nonisolated enum AIModelScanPolicy {
     /// Whether `path` is `~/Library/Caches/huggingface` or inside it. The
     /// cache route (`DeletionSafetyPolicy.evaluate`) refuses these: the folder
     /// holds downloaded models that Large Files lists, never a cache.
+    /// Compared without case, as APFS names are by default: a folder an app
+    /// wrote as `HuggingFace` is the same folder.
     nonisolated static func isAppModelCachePath(_ path: String, home: String) -> Bool {
-        let folder = "\(home)/Library/Caches/huggingface"
+        let folder = "\(home)/Library/Caches/huggingface".lowercased()
+        let path = path.lowercased()
         return path == folder || path.hasPrefix(folder + "/")
     }
 
@@ -252,6 +255,37 @@ nonisolated enum AIModelScanPolicy {
 
     nonisolated static func isWeightBundle(named name: String) -> Bool {
         weightBundleExtensions.contains((name as NSString).pathExtension.lowercased())
+    }
+
+    /// How many folder levels a store nests models under. Jan's
+    /// `huggingface.co/<org>/<repo>/` and WhisperKit's
+    /// `argmaxinc/whisperkit-coreml/<model>/` are the deepest known, at three.
+    nonisolated static let folderStoreMaxDepth = 4
+
+    /// Files that mark a Hugging Face model folder whose weights sit in
+    /// subfolders: a diffusers pipeline (`unet/`, `text_encoder/`) or an ONNX
+    /// export (`onnx/`). With one of these, the folder is the model.
+    nonisolated static let modelFolderMarkers: Set<String> = ["config.json", "model_index.json"]
+
+    /// Whether a folder inside a store is one model: a Core ML bundle, or a
+    /// folder that directly holds weight files, Core ML bundles, or a model
+    /// marker. A folder of only plain folders is a namespace, like LM Studio's
+    /// publisher folder. Links count as neither file nor folder.
+    nonisolated static func isModelFolder(_ url: URL) -> Bool {
+        if isWeightBundle(named: url.lastPathComponent) { return true }
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey]
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: url, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]
+        )) ?? []
+        return children.contains { child in
+            guard let values = try? child.resourceValues(forKeys: Set(keys)), values.isSymbolicLink != true
+            else { return false }
+            let name = child.lastPathComponent
+            if values.isRegularFile == true {
+                return isWeightFile(named: name, insideKnownStore: true) || modelFolderMarkers.contains(name)
+            }
+            return values.isDirectory == true && isWeightBundle(named: name)
+        }
     }
 
     /// Draw Things keeps most of a model's bytes in `<name>.ckpt-tensordata`
@@ -341,33 +375,39 @@ nonisolated enum AIModelScanPolicy {
 
         for store in Store.folderStores {
             for root in roots(for: store, home: home, environment: environment) where isInside(root) {
-                return isStoreModel(standardized, isDirectory: isDirectory.boolValue)
+                return isStoreModel(standardized, isDirectory: isDirectory.boolValue, root: root)
             }
         }
         return isEligibleLooseWeight(standardized, home: home, sizeFloor: looseWeightSizeFloor)
     }
 
-    /// What `AIModelScanner.folderModels` lists: a weight file and its
-    /// companion, a Core ML bundle, or a folder that holds weight files directly.
-    nonisolated static func isStoreModel(_ url: URL, isDirectory: Bool) -> Bool {
+    /// What `AIModelScanner.folderModels` lists, by the same rules: a weight
+    /// file (with its companion) straight under the root, or the first model
+    /// folder on the way down, no deeper than `folderStoreMaxDepth`. A file or
+    /// folder inside a model is part of that row, never a row of its own, so
+    /// it can't be trashed alone and leave the model broken.
+    nonisolated static func isStoreModel(_ url: URL, isDirectory: Bool, root: URL) -> Bool {
+        let relative = url.path.dropFirst(root.path.count + 1).split(separator: "/").map(String.init)
+        guard !relative.isEmpty, !relative.contains(where: { $0.hasPrefix(".") }) else { return false }
         let name = url.lastPathComponent
         guard isDirectory else {
-            return isWeightFile(named: name, insideKnownStore: true) || isWeightCompanion(named: name)
+            return relative.count == 1
+                && (isWeightFile(named: name, insideKnownStore: true) || isWeightCompanion(named: name))
         }
-        if isWeightBundle(named: name) { return true }
-        let children = (try? FileManager.default.contentsOfDirectory(
-            at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]
-        )) ?? []
-        return children.contains { child in
-            (try? child.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
-                && isWeightFile(named: child.lastPathComponent, insideKnownStore: true)
+        guard relative.count <= folderStoreMaxDepth, isModelFolder(url) else { return false }
+        var ancestor = root
+        for part in relative.dropLast() {
+            ancestor.appendPathComponent(part, isDirectory: true)
+            if isModelFolder(ancestor) { return false }
         }
+        return true
     }
 
-    /// The sweep's gate, applied again at delete time: strictly inside a sweep
-    /// root, never in a folder the sweep skips, a weight file or Core ML
-    /// bundle, and over the size floor. A row that passed the scan passes this;
-    /// a path that never could be a row does not.
+    /// The sweep's gate, applied again at delete time with the sweep's own
+    /// rules: strictly inside a sweep root, nothing hidden, never in a folder
+    /// or package the sweep skips, no deeper than it goes, a weight file or
+    /// Core ML bundle, and over the size floor by allocated size. A row that
+    /// passed the scan passes this; a path that never could be a row does not.
     nonisolated static func isEligibleLooseWeight(
         _ url: URL,
         home: URL,
@@ -377,21 +417,32 @@ nonisolated enum AIModelScanPolicy {
         guard let root = looseWeightRoots(home: home).first(where: { path.hasPrefix($0.path + "/") })
         else { return false }
 
-        let relative = path.dropFirst(root.path.count + 1).split(separator: "/")
-        guard relative.count <= looseWeightMaxDepth else { return false }
-        if relative.dropLast().contains(where: { sweepSkipsDirectory(named: String($0)) }) { return false }
+        let relative = path.dropFirst(root.path.count + 1).split(separator: "/").map(String.init)
+        guard !relative.contains(where: { $0.hasPrefix(".") }) else { return false }
+        if relative.dropLast().contains(where: { sweepSkipsDirectory(named: $0) }) { return false }
+
+        // The sweep never enters a package, so nothing inside one is a row.
+        var ancestor = root
+        for part in relative.dropLast() {
+            ancestor.appendPathComponent(part, isDirectory: true)
+            if (try? ancestor.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true { return false }
+        }
 
         let name = url.lastPathComponent
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { return false }
 
+        // The sweep stops entering folders at `looseWeightMaxDepth`, so a file
+        // can sit at that depth but a bundle only one above it.
         let bytes: Int64
         if isDirectory.boolValue {
-            guard isWeightBundle(named: name) else { return false }
+            guard isWeightBundle(named: name), relative.count < looseWeightMaxDepth else { return false }
             bytes = FolderSizing.walkedSize(at: url, skipsPackages: false).bytes
         } else {
-            guard isWeightFile(named: name, insideKnownStore: false) else { return false }
-            bytes = FolderSizing.singleFileSize(at: url)
+            guard isWeightFile(named: name, insideKnownStore: false), relative.count <= looseWeightMaxDepth,
+                  let values = try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileSizeKey])
+            else { return false }
+            bytes = Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
         }
         return bytes >= sizeFloor
     }

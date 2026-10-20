@@ -210,6 +210,30 @@ struct AIModelStoreScanTests {
         #expect(scan(home, access: .limited).isEmpty)
     }
 
+    @Test("A model made of Core ML bundles or weight subfolders is one row, and its parts are not")
+    func multiPartModelsAreOneRow() throws {
+        let home = try Home()
+        let store = "Documents/huggingface/models"
+        // WhisperKit: the model folder holds Core ML bundles and a config.
+        let whisper = "\(store)/argmaxinc/whisperkit-coreml/openai_whisper-large-v3"
+        try home.file("\(whisper)/AudioEncoder.mlmodelc/weights/weight.bin", bytes: 4096)
+        try home.file("\(whisper)/TextDecoder.mlmodelc/coremldata.bin", bytes: 4096)
+        try home.file("\(whisper)/config.json", bytes: 100)
+        // diffusers: the weights sit in component folders beside model_index.json.
+        try home.file("\(store)/org/sd/model_index.json", bytes: 100)
+        try home.file("\(store)/org/sd/unet/diffusion.safetensors", bytes: 4096)
+        try home.file("\(store)/org/sd/text_encoder/model.safetensors", bytes: 4096)
+
+        let models = scan(home).filter { $0.kind == .aiModel(.swiftTransformers) }
+        #expect(Set(models.map(\.displayName)) == ["argmaxinc/whisperkit-coreml/openai_whisper-large-v3", "org/sd"])
+        for model in models {
+            #expect(eligible(model.path, in: home), "\(model.path.path)")
+        }
+        for part in ["\(whisper)/AudioEncoder.mlmodelc", "\(store)/org/sd/unet", "\(store)/org/sd/unet/diffusion.safetensors"] {
+            #expect(!eligible(home.url.appendingPathComponent(part), in: home), "\(part)")
+        }
+    }
+
     @Test("A Draw Things model is its .ckpt and the tensordata beside it, trashed together")
     func drawThingsGroupsTensorData() throws {
         let home = try Home()
@@ -414,6 +438,32 @@ struct AIModelStoreScanTests {
             == [database.standardizedFileURL.path, janRoot.standardizedFileURL.path])
     }
 
+    @Test("Under the sweep roots, the gate admits exactly what the sweep lists")
+    func sweepGateMatchesTheSweep() throws {
+        let home = try Home()
+        let candidates = [
+            try home.file("Library/Application Support/SomeApp/big.gguf", bytes: 8192),
+            try home.file("Library/Application Support/SomeApp/.hidden.gguf", bytes: 8192),
+            try home.file("Library/Application Support/SomeApp/Thing.plugin/Contents/model.gguf", bytes: 8192),
+            try home.file("Library/Caches/tool/a/b/c/d/level6.gguf", bytes: 8192),
+            try home.file("Library/Caches/tool/a/b/c/d/e/level7.gguf", bytes: 8192)
+        ] + [
+            try home.folder("Library/Caches/tool/a/b/c/d/level6.mlmodelc"),
+            try home.folder("Library/Caches/tool/a/b/c/level5.mlmodelc")
+        ]
+        try home.file("Library/Caches/tool/a/b/c/d/level6.mlmodelc/model.mil", bytes: 8192)
+        try home.file("Library/Caches/tool/a/b/c/level5.mlmodelc/model.mil", bytes: 8192)
+
+        let listed = Set(scan(home).map(\.id))
+        #expect(listed.contains(candidates[0].standardizedFileURL.path))
+        #expect(listed.contains(candidates[3].standardizedFileURL.path))
+        #expect(listed.contains(candidates[6].standardizedFileURL.path))
+        for candidate in candidates {
+            let path = candidate.standardizedFileURL.path
+            #expect(eligible(candidate, in: home) == listed.contains(path), "\(path)")
+        }
+    }
+
     @Test("The real floor is 100 MB, so an app's bundled assets never qualify")
     func realFloorIsOneHundredMegabytes() {
         #expect(AIModelScanPolicy.looseWeightSizeFloorBytes == 100 * 1024 * 1024)
@@ -433,6 +483,10 @@ struct AIModelStoreScanTests {
             folder.appendingPathComponent("models/whispercpp-large-v3-turbo/ggml-large-v3-turbo.bin")
         ) == .blockedNeverDelete)
         #expect(!DeletionSafetyPolicy.isOfferedForCleanup(folder))
+        // APFS names ignore case, so a folder an app wrote as HuggingFace is the same one.
+        #expect(DeletionSafetyPolicy.evaluate(
+            home.appendingPathComponent("Library/Caches/HuggingFace", isDirectory: true)
+        ) == .blockedNeverDelete)
         // A neighbour is unaffected.
         #expect(DeletionSafetyPolicy.evaluate(home.appendingPathComponent("Library/Caches/huggingface-other")) == .allow)
     }

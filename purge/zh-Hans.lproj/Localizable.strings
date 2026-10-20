@@ -1212,7 +1212,7 @@
 "AI model" = "AI 模型";
 "Model downloaded with Ollama. Its manifest goes with its weights, so Ollama stops listing it. Pull it again to get it back." = "使用 Ollama 下载的模型。其清单会随权重一起移除，Ollama 将不再列出它。重新拉取即可恢复。";
 "Model downloaded with LM Studio. The whole model folder goes, and LM Studio stops listing it. Download it again in LM Studio." = "使用 LM Studio 下载的模型。整个模型文件夹会被移除，LM Studio 将不再列出它。可在 LM Studio 中重新下载。";
-"Model downloaded through the Hugging Face Hub. Every cached version goes with it, and the next use downloads it again." = "通过 Hugging Face Hub 下载的模型。所有缓存版本会一起移除，下次使用时会重新下载。";
+"Model downloaded through the Hugging Face Hub. Every cached version goes with it, and the next use downloads it again. A project folder that older Hugging Face tools filled with links to this cache stops working until then." = "通过 Hugging Face Hub 下载的模型。所有缓存版本会一起移除，下次使用时会重新下载。旧版 Hugging Face 工具在项目文件夹中创建的指向此缓存的链接，在重新下载前将无法使用。";
 "Model an app downloaded through the Hugging Face Hub. The next use downloads it again." = "某个应用通过 Hugging Face Hub 下载的模型。下次使用时会重新下载。";
 "Model an app downloaded into its Hugging Face cache. Purge can't change the app's own list of installed models, so the app may still show it as installed until it checks." = "某个应用下载到其 Hugging Face 缓存中的模型。Purge 无法修改该应用自己的已安装模型列表，因此在应用重新检查之前，它可能仍显示为已安装。";
 "Model downloaded by PyTorch Hub. The next use downloads it again." = "由 PyTorch Hub 下载的模型。下次使用时会重新下载。";
