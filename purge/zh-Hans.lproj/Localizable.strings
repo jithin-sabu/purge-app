@@ -1188,3 +1188,23 @@
 "Each is too small to show on the map by itself." = "每一个都太小，无法在分布图中单独显示。";
 "Each is too small to show on the map by itself. These are the biggest." = "每一个都太小，无法在分布图中单独显示。以下是其中最大的几个。";
 "and %lld more" = "还有 %lld 个";
+
+/* Large Files empty state (#230) */
+"No Large Files on This Mac" = "这台 Mac 上没有大文件";
+"Scan Incomplete" = "扫描未完成";
+"Scan incomplete" = "扫描未完成";
+"Nothing to review" = "没有需要查看的内容";
+"Files over %@" = "超过 %@ 的文件";
+"On this Mac" = "在这台 Mac 上";
+"%@, not downloaded" = "%@，未下载";
+"Inside %@" = "位于 %@ 内";
+"Purge never lists files inside a library" = "Purge 不会列出资料库内的文件";
+"Try %@" = "试试 %@";
+"%@ couldn't be read. Needs Full Disk Access." = "无法读取 %@。需要“完全磁盘访问权限”。";
+"Checked %@" = "已检查 %@";
+"Couldn't be listed" = "无法列出";
+"Cloud" = "云端";
+"1 file · %@" = "1 个文件 · %@";
+"1 file" = "1 个文件";
+"%lld files · %@" = "%lld 个文件 · %@";
+"%lld files" = "%lld 个文件";

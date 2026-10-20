@@ -30,6 +30,36 @@ nonisolated final class LargeFileScanner {
         exclusions: ScanExclusions? = nil,
         isExcluded: (@Sendable (URL) -> Bool)? = nil
     ) -> AsyncStream<LargeFile> {
+        let events = scanEvents(
+            minBytes: minBytes, staleDays: staleDays, roots: roots,
+            virtualMachineRoots: virtualMachineRoots, installedApps: installedApps,
+            isAppRunning: isAppRunning, home: home, exclusions: exclusions, isExcluded: isExcluded
+        )
+        return AsyncStream { continuation in
+            let task = Task {
+                for await event in events {
+                    if case .file(let file) = event { continuation.yield(file) }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// The rows as `scanStream` gives them, then one `.finished` with what the
+    /// walk skipped: cloud-only placeholders, media libraries and roots it
+    /// couldn't list (#230). A cancelled scan ends without the summary.
+    func scanEvents(
+        minBytes: Int64,
+        staleDays: Int,
+        roots: [URL]? = nil,
+        virtualMachineRoots: [URL]? = nil,
+        installedApps: Set<VirtualMachineApp>? = nil,
+        isAppRunning: (@Sendable (String) -> Bool)? = nil,
+        home: URL? = nil,
+        exclusions: ScanExclusions? = nil,
+        isExcluded: (@Sendable (URL) -> Bool)? = nil
+    ) -> AsyncStream<LargeFileScanEvent> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
                 let home = home ?? FileManager.default.homeDirectoryForCurrentUser
@@ -77,11 +107,12 @@ nonisolated final class LargeFileScanner {
         home: URL,
         exclusions: ScanExclusions?,
         isExcluded: @Sendable (URL) -> Bool,
-        continuation: AsyncStream<LargeFile>.Continuation
+        continuation: AsyncStream<LargeFileScanEvent>.Continuation
     ) async {
         let fm = FileManager.default
         let exclusions = exclusions ?? .current()
         let now = Date()
+        var summary = LargeFileScanSummary(minBytes: minBytes)
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
             .contentAccessDateKey, .contentModificationDateKey, .isPackageKey,
@@ -100,11 +131,27 @@ nonisolated final class LargeFileScanner {
             // matching is on the path below this prefix. See `ScanExclusions`.
             var walkedRootPrefix: String?
 
+            // A root macOS refuses to list used to look exactly like an empty one:
+            // the enumerator reports the refusal here and then yields nothing. The
+            // summary names it so the empty state can say the scan was incomplete.
+            let rootFailure = RootFailure()
+            let rootPath = root.resolvingSymlinksInPath().path
             guard let enumerator = fm.enumerator(
                 at: root,
                 includingPropertiesForKeys: Array(resourceKeys),
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            ) else { continue }
+                options: [.skipsHiddenFiles, .skipsPackageDescendants],
+                errorHandler: { url, error in
+                    if url.resolvingSymlinksInPath().path == rootPath {
+                        rootFailure.error = error
+                    }
+                    return true
+                }
+            ) else {
+                if !bundlesOnly {
+                    summary.unreadableRoots.append(.init(path: root, reason: String(localized: "Couldn't be listed")))
+                }
+                continue
+            }
 
             enumerateRoot: while true {
                 let keepGoing: Bool = autoreleasepool {
@@ -147,7 +194,22 @@ nonisolated final class LargeFileScanner {
                                     minBytes: minBytes, staleDays: staleDays, now: now,
                                     installedApps: installedApps, isExcluded: isExcluded
                                 ) {
-                                    continuation.yield(file)
+                                    continuation.yield(.file(file))
+                                }
+                                continue
+                            }
+                            // A media library is skipped like any excluded folder, but
+                            // its size goes in the summary: on a Mac whose big files
+                            // all live in Photos, an empty list with no reason reads as
+                            // a broken scan. Nothing inside it is ever listed.
+                            if !bundlesOnly, !isUserExcluded,
+                               LargeFileScanSummary.SkippedLibrary.extensions.contains(fileURL.pathExtension.lowercased()) {
+                                enumerator.skipDescendants()
+                                let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false)
+                                if measured.bytes >= minBytes, !isExcluded(fileURL) {
+                                    summary.skippedLibraries.append(
+                                        .init(path: fileURL.standardizedFileURL, bytes: measured.bytes)
+                                    )
                                 }
                                 continue
                             }
@@ -169,21 +231,63 @@ nonisolated final class LargeFileScanner {
                         let size = Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
                         let accessed = values?.contentAccessDate ?? .distantPast
                         let modified = values?.contentModificationDate ?? .distantPast
+
+                        // The placeholder still counts, under the provider that holds
+                        // it, so the empty state can say the files exist but take no
+                        // space here. Same filters as a listed row, so the summary
+                        // answers the question the chips ask.
+                        if size < minBytes, values?.totalFileAllocatedSize == 0,
+                           let logical = values?.fileSize, Int64(logical) >= minBytes,
+                           passesStaleFilter(lastUsed: max(accessed, modified), staleDays: staleDays, now: now),
+                           !isExcluded(fileURL) {
+                            let isUbiquitous = (try? fileURL.resourceValues(
+                                forKeys: [.isUbiquitousItemKey]
+                            ))?.isUbiquitousItem == true
+                            summary.addCloudOnly(
+                                LargeFileScanSummary.CloudProvider.provider(for: fileURL, isUbiquitous: isUbiquitous, home: home),
+                                bytes: Int64(logical)
+                            )
+                            continue
+                        }
                         if let file = listed(
                             fileURL, size: size, lastUsed: max(accessed, modified),
                             minBytes: minBytes, staleDays: staleDays, now: now,
                             installedApps: installedApps, isExcluded: isExcluded
                         ) {
-                            continuation.yield(file)
+                            continuation.yield(.file(file))
                         }
                     }
                     return true
                 }
                 if !keepGoing { break enumerateRoot }
             }
+
+            if !bundlesOnly {
+                if let error = rootFailure.error {
+                    summary.unreadableRoots.append(.init(path: root, reason: error.localizedDescription))
+                } else {
+                    summary.checkedRoots.append(root)
+                }
+            }
         }
 
+        if !Task.isCancelled {
+            continuation.yield(.finished(summary))
+        }
         continuation.finish()
+    }
+
+    /// Set by the enumerator's error handler, which must outlive the loop that
+    /// reads it.
+    private nonisolated final class RootFailure {
+        var error: Error?
+    }
+
+    /// The last-used filter, shared by the rows and the summary's tallies.
+    private static func passesStaleFilter(lastUsed: Date, staleDays: Int, now: Date) -> Bool {
+        guard staleDays > 0 else { return true }
+        let days = Calendar.current.dateComponents([.day], from: lastUsed, to: now).day ?? 0
+        return days >= staleDays
     }
 
     /// The checks every listed item passes, file or bundle, and the row it
@@ -199,10 +303,7 @@ nonisolated final class LargeFileScanner {
         isExcluded: (URL) -> Bool
     ) -> LargeFile? {
         guard size >= minBytes else { return nil }
-        if staleDays > 0 {
-            let days = Calendar.current.dateComponents([.day], from: lastUsed, to: now).day ?? 0
-            guard days >= staleDays else { return nil }
-        }
+        guard passesStaleFilter(lastUsed: lastUsed, staleDays: staleDays, now: now) else { return nil }
 
         // Never list a file the filesystem will refuse to give up — its own
         // flags or its directory's. Offering it can only end in "couldn't be

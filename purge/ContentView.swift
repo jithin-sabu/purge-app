@@ -720,6 +720,13 @@ struct ContentView: View {
     }
 
     private var largeFilesPageSubtitle: String {
+        // An empty result after a finished scan is a statement, not a count of
+        // zero: the empty state under it says what the scan found instead (#230).
+        if store.largeFiles.isEmpty, !store.isScanningLargeFiles, let summary = store.largeFileScanSummary {
+            return summary.unreadableRoots.isEmpty
+                ? String(localized: "Nothing to review")
+                : String(localized: "Scan incomplete")
+        }
         let files = largeFilesVisibleForSubtitle
         let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let fileLabel = files.count == 1 ? String(localized: "file") : String(localized: "files")

@@ -469,6 +469,16 @@ struct LargeFilesView: View {
                 }
             }
 
+            // The same bar under the rows when the scan skipped something, so a
+            // short list on a cloud-heavy Mac still says where the rest went.
+            if let summary = store.largeFileScanSummary, summary.hasSkippedSomething {
+                summaryCard(summary, forEmptyList: false)
+                    .padding(.top, AppStyle.Spacing.xSmall)
+                    .listRowInsets(ScanListRowInsets.standard)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+
             ScanListBottomSpacer()
         }
         .listStyle(.plain)
@@ -484,15 +494,63 @@ struct LargeFilesView: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.largeFilesRevision)
     }
 
+    /// The card under the empty-state heading is this wide: enough for a legend
+    /// row with a button, narrower than the list so it reads as a summary and not
+    /// as a row.
+    private static let summaryCardWidth: CGFloat = 540
+
+    /// The next size filter down from the current one, for the "Try 50 MB"
+    /// footer. Nil at the lowest step, where the button is left out.
+    private var lowerSizeThreshold: LargeFileSizeThreshold? {
+        LargeFileSizeThreshold.allCases.last { $0.rawValue < sizeThreshold.rawValue }
+    }
+
+    private func tryLowerThreshold() {
+        guard let lower = lowerSizeThreshold else { return }
+        minSizeMB = lower.rawValue
+        onScan()
+    }
+
+    /// What the scan skipped, as a card. With an empty list it carries the
+    /// heading's case and the filter and folder footers; under a list with rows
+    /// it is the bar alone.
+    private func summaryCard(_ summary: LargeFileScanSummary, forEmptyList: Bool) -> some View {
+        LargeFileScanSummaryCard(
+            summary: summary,
+            onThisMacCount: store.largeFiles.count,
+            onThisMacBytes: store.largeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes },
+            emptyListFooters: forEmptyList
+                ? .init(
+                    ageLabel: ageThreshold.menuButtonLabel,
+                    lowerThreshold: lowerSizeThreshold,
+                    onTryLowerThreshold: tryLowerThreshold
+                )
+                : nil
+        )
+    }
+
+    /// An empty list after a finished scan says why, in the Overview's bar
+    /// (#230). Before any scan has finished there is no summary, so the old hint
+    /// stands in.
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "tray.full")
-                .font(.system(size: 38))
-                .foregroundStyle(AppColors.textSecondary)
-            Text("No Large Files Found")
-                .font(AppStyle.Typography.sectionTitle.weight(.regular))
-            Text("Try a lower size threshold or a shorter last-used window.")
-                .foregroundStyle(AppColors.textSecondary)
+        let summary = store.largeFileScanSummary
+        let state = LargeFileEmptyState.resolve(summary)
+        return VStack(spacing: AppStyle.Spacing.medium) {
+            VStack(spacing: 10) {
+                Image(systemName: state.symbol)
+                    .font(.system(size: 38))
+                    .foregroundStyle(state.symbolColor)
+                Text(state.title)
+                    .font(AppStyle.Typography.sectionTitle.weight(.regular))
+                if summary == nil {
+                    Text("Try a lower size threshold or a shorter last-used window.")
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+            }
+            if let summary {
+                summaryCard(summary, forEmptyList: true)
+                    .frame(width: Self.summaryCardWidth)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

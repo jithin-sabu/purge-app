@@ -255,6 +255,9 @@ final class PurgeStore: ObservableObject {
     /// row's path string on each body evaluation; this is O(1) and, being driven from
     /// `didSet`, also catches in-place edits that an id list would miss.
     @Published private(set) var largeFilesRevision = 0
+    /// What the last Large Files scan looked at and left off the list (#230).
+    /// Nil until a scan finishes; a scan that was cancelled leaves none.
+    @Published var largeFileScanSummary: LargeFileScanSummary?
     /// Large-file selection lives in its own observable object (NOT @Published on the
     /// store) so toggling a row does not fire the store's objectWillChange and thus
     /// does not re-render the results List container — a List re-render reverts the
@@ -1641,6 +1644,7 @@ final class PurgeStore: ObservableObject {
         let generation = largeFileScanGeneration
         isScanningLargeFiles = true
         largeFiles = []
+        largeFileScanSummary = nil
         largeFileSelection.ids.removeAll()
         duplicateScanTask?.cancel()
         duplicateScanTask = nil
@@ -1687,17 +1691,24 @@ final class PurgeStore: ObservableObject {
         }
         publish()
 
-        for await file in largeFileScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
+        var summary: LargeFileScanSummary?
+        for await event in largeFileScanner.scanEvents(minBytes: minBytes, staleDays: staleDays) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
-            syncExclusions()
-            if let lateExclusions, lateExclusions.covers(path: file.id) { continue }
-            collected.append(file)
-            if collected.count % 25 == 0 {
-                publish()
+            switch event {
+            case .file(let file):
+                syncExclusions()
+                if let lateExclusions, lateExclusions.covers(path: file.id) { continue }
+                collected.append(file)
+                if collected.count % 25 == 0 {
+                    publish()
+                }
+            case .finished(let finished):
+                summary = finished
             }
         }
         guard largeFileScanGeneration == generation else { return }
         publish()
+        largeFileScanSummary = summary
         hasCompletedLargeFileScan = true
         stampScanRecords([.largeFiles])
         startDuplicateScan(for: largeFiles, generation: generation)
