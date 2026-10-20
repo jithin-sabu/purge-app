@@ -22,7 +22,14 @@ nonisolated enum CacheHeadline {
         case oldVersion(app: String, version: String)
     }
 
-    static func pattern(of headline: String, cacheFolder: String) -> Pattern? {
+    /// `appFolder` is the Application Support folder the row came from, when it has
+    /// one. Its cache folders share one row titled "<appFolder> Cache", so that title
+    /// is always a plain cache, whichever folder is largest: "T3 Code Cache" is not
+    /// T3's code cache.
+    static func pattern(of headline: String, cacheFolder: String, appFolder: String? = nil) -> Pattern? {
+        if let appFolder, !appFolder.isEmpty, headline == "\(appFolder) Cache" {
+            return .cache(app: appFolder)
+        }
         if let range = headline.range(of: " Old Version ", options: .backwards),
            range.lowerBound > headline.startIndex,
            range.upperBound < headline.endIndex {
@@ -53,8 +60,8 @@ nonisolated enum CacheHeadline {
     }
 
     /// `cacheFolder` is the last path component of the row's cache folder.
-    static func localized(_ headline: String, cacheFolder: String) -> String {
-        switch pattern(of: headline, cacheFolder: cacheFolder) {
+    static func localized(_ headline: String, cacheFolder: String, appFolder: String? = nil) -> String {
+        switch pattern(of: headline, cacheFolder: cacheFolder, appFolder: appFolder) {
         case .cache(let app): return String(localized: "\(app) Cache")
         case .codeCache(let app): return String(localized: "\(app) Code Cache")
         case .serviceWorkerCache(let app): return String(localized: "\(app) Service Worker Cache")
@@ -62,5 +69,14 @@ nonisolated enum CacheHeadline {
         case .oldVersion(let app, let version): return String(localized: "\(app) Old Version \(version)")
         case nil: return headline
         }
+    }
+
+    /// The app folder directly under `Library/Application Support` in `path`, if any.
+    static func applicationSupportAppFolder(of path: String) -> String? {
+        let parts = path.split(separator: "/").map(String.init)
+        guard let index = parts.indices.dropLast().first(where: {
+            parts[$0] == "Library" && parts[$0 + 1] == "Application Support"
+        }), index + 2 < parts.count else { return nil }
+        return parts[index + 2]
     }
 }

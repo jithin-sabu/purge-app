@@ -53,7 +53,7 @@ struct ApplicationSupportCacheShapeTests {
     /// What an Electron app keeps in its Application Support folder: caches next
     /// to its databases, local storage and settings.
     private static let electronFolders = [
-        "Cache/Cache_Data", "Code Cache/js", "GPUCache", "DawnWebGPUCache", "DawnGraphiteCache",
+        "Cache/Cache_Data", "Code Cache/js", "GPUCache", "DawnCache", "DawnWebGPUCache", "DawnGraphiteCache",
         "GraphiteDawnCache", "GrShaderCache", "Crashpad/completed", "Crashpad/pending",
         "IndexedDB", "Local Storage/leveldb", "Session Storage", "blob_storage", "Partitions/main/Cache/Cache_Data",
     ]
@@ -64,7 +64,7 @@ struct ApplicationSupportCacheShapeTests {
         defer { try? FileManager.default.removeItem(at: fake.home) }
         let root = try fake.app("Recordly", folders: Self.electronFolders, files: [marker, "Preferences"])
         #expect(fake.listed(root) == [
-            "Cache", "Code Cache", "Crashpad/completed", "DawnGraphiteCache", "DawnWebGPUCache",
+            "Cache", "Code Cache", "Crashpad/completed", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
             "GPUCache", "GrShaderCache", "GraphiteDawnCache",
         ])
     }
@@ -93,7 +93,8 @@ struct ApplicationSupportCacheShapeTests {
             folders: Self.electronFolders + [
                 "User Data/GrShaderCache", "User Data/GraphiteDawnCache", "User Data/ShaderCache",
                 "User Data/Safe Browsing", "User Data/Default/Cache/Cache_Data", "User Data/Default/Code Cache",
-                "User Data/Default/DawnWebGPUCache", "User Data/Default/Service Worker/CacheStorage",
+                "User Data/Default/DawnWebGPUCache", "User Data/Default/DawnCache",
+                "User Data/Default/Service Worker/CacheStorage",
                 "User Data/Default/Service Worker/Database", "User Data/Default/Extensions",
                 "User Data/Default/IndexedDB", "User Data/Profile 1/Cache", "User Data/Profile 1/GPUCache",
             ],
@@ -101,9 +102,10 @@ struct ApplicationSupportCacheShapeTests {
         )
         let listed = fake.listed(root)
         #expect(listed == [
-            "Cache", "Code Cache", "Crashpad/completed", "DawnGraphiteCache", "DawnWebGPUCache", "GPUCache",
-            "GrShaderCache", "GraphiteDawnCache",
-            "User Data/Default/Cache", "User Data/Default/Code Cache", "User Data/Default/DawnWebGPUCache",
+            "Cache", "Code Cache", "Crashpad/completed", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
+            "GPUCache", "GrShaderCache", "GraphiteDawnCache",
+            "User Data/Default/Cache", "User Data/Default/Code Cache", "User Data/Default/DawnCache",
+            "User Data/Default/DawnWebGPUCache",
             "User Data/Default/Service Worker/CacheStorage", "User Data/GrShaderCache",
             "User Data/GraphiteDawnCache", "User Data/Profile 1/GPUCache", "User Data/ShaderCache",
         ])
@@ -175,7 +177,7 @@ struct ApplicationSupportCacheShapeTests {
 
     /// An app with no `explanations.json` entry gets its tier from the shape, so
     /// its GPU caches are Safe instead of hidden as Not Sure.
-    @Test(arguments: ["DawnWebGPUCache", "DawnGraphiteCache", "GraphiteDawnCache", "GrShaderCache"])
+    @Test(arguments: ["DawnCache", "DawnWebGPUCache", "DawnGraphiteCache", "GraphiteDawnCache", "GrShaderCache"])
     func appWithoutAnEntryGetsSafeGPUCaches(name: String) throws {
         let fake = try makeHome()
         defer { try? FileManager.default.removeItem(at: fake.home) }
