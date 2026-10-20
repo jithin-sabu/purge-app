@@ -1684,7 +1684,7 @@ final class PurgeStore: ObservableObject {
         // instantly — running them ahead of the file walk puts the biggest
         // items on screen first instead of after a full home-directory sweep.
         // They live outside the walked folders, so the exclusion check is per row.
-        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
+        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: hasFullDiskAccess ? .full : .limited) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
             guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
             collected.append(model)

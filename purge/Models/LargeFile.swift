@@ -56,6 +56,8 @@ nonisolated enum LargeFileCategory: String, CaseIterable, Identifiable, Hashable
             return .archive
         case "doc", "docx", "pages", "xls", "xlsx", "numbers", "ppt", "pptx", "key", "txt", "rtf", "csv", "epub":
             return .document
+        case "gguf", "safetensors", "onnx", "pt", "pth", "ckpt", "tdict", "mlmodelc", "mlpackage":
+            return .aiModel
         default:
             return VirtualMachineApp(bundleExtension: ext) == nil ? .other : .virtualMachine
         }
@@ -108,6 +110,9 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
     /// `appInstalled` is looked up once per scan, never while drawing a row.
     case virtualMachine(VirtualMachineApp, appInstalled: Bool)
     case unfinishedDownload
+    /// A downloaded AI model and the store it came from. The explanation says
+    /// what the owning app will think once the row is trashed (#157).
+    case aiModel(AIModelScanPolicy.Store)
 
     /// VM bundles are one item: listed and trashed whole, never walked. A file
     /// inside a VM is part of a disk, and trashing it alone breaks the VM.
@@ -135,6 +140,8 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
             return String(localized: "Virtual machine · \(app.displayName)")
         case .unfinishedDownload:
             return String(localized: "Unfinished download")
+        case .aiModel:
+            return String(localized: "AI model")
         }
     }
 
@@ -157,6 +164,8 @@ nonisolated enum LargeFileKind: Hashable, Sendable {
             }
         case .unfinishedDownload:
             return String(localized: "Unfinished download. It can't be opened as it is. Remove it unless the download is still running.")
+        case .aiModel(let store):
+            return store.explanation
         }
     }
 }

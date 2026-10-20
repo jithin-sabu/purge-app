@@ -8,14 +8,27 @@ import Foundation
 /// a model without Ollama noticing — the manifest would still claim the model
 /// is installed. Blobs are also shared between models, so the reclaimable size
 /// of a model is only the blobs no other manifest references.
+///
+/// The other stores (#157) are folders an app or library fills with models:
+/// the Hugging Face Hub cache, swift-transformers' Documents folder, an app's
+/// own `~/Library/Caches/huggingface/models`, and the folders of GPT4All, Jan,
+/// DiffusionBee, Draw Things, PyTorch Hub and Whisper. Each model there is the
+/// first folder that holds weight files directly, or a loose weight file. A
+/// last sweep over `~/Library/Caches`, `~/Library/Application Support` and
+/// `~/.cache` finds weights in stores Purge does not know, shown by the folder
+/// they sit in.
+///
 /// `nonisolated` for the same reason as `LargeFileScanner` — see the note there.
 /// Without it the `Task.detached` in `scanStream` hops back to the main actor and
 /// this runs its manifest walk on the UI thread.
 nonisolated final class AIModelScanner {
-    func scanStream(minBytes: Int64, staleDays: Int) -> AsyncStream<LargeFile> {
+    /// `access` decides whether roots under protected folders (Documents, app
+    /// containers) and the media caches are read. A limited scan stays out of
+    /// them, the same as every other scan.
+    func scanStream(minBytes: Int64, staleDays: Int, access: ScanAccess = .full) -> AsyncStream<LargeFile> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
-                await Self.run(minBytes: minBytes, staleDays: staleDays, continuation: continuation)
+                await Self.run(minBytes: minBytes, staleDays: staleDays, access: access, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -24,11 +37,12 @@ nonisolated final class AIModelScanner {
     private static func run(
         minBytes: Int64,
         staleDays: Int,
+        access: ScanAccess,
         continuation: AsyncStream<LargeFile>.Continuation
     ) async {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let now = Date()
-        let discovered = ollamaModels(home: home) + lmStudioModels(home: home)
+        let discovered = allModels(home: home, access: access)
 
         for model in discovered {
             if Task.isCancelled { break }
@@ -41,6 +55,31 @@ nonisolated final class AIModelScanner {
         }
 
         continuation.finish()
+    }
+
+    /// Every model in every store, known stores first so the sweep can leave
+    /// their roots alone.
+    static func allModels(
+        home: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        access: ScanAccess,
+        looseWeightSizeFloor: Int64 = AIModelScanPolicy.looseWeightSizeFloorBytes
+    ) -> [LargeFile] {
+        var models = ollamaModels(home: home, environment: environment, access: access)
+        models += huggingFaceHubModels(home: home, environment: environment, access: access)
+        for store in AIModelScanPolicy.Store.folderStores {
+            if Task.isCancelled { return models }
+            models += folderModels(store: store, home: home, environment: environment, access: access)
+        }
+        models += looseWeights(home: home, environment: environment, access: access, sizeFloor: looseWeightSizeFloor)
+        return models
+    }
+
+    /// Whether a store root may be read with this access. A root under
+    /// Documents or inside an app container prompts without Full Disk Access.
+    private static func canRead(_ root: URL, home: URL, access: ScanAccess) -> Bool {
+        guard ProtectedLocations.isReadable(root, access: access, home: home) else { return false }
+        return FileManager.default.fileExists(atPath: root.path)
     }
 
     // MARK: - Ollama
@@ -59,12 +98,16 @@ nonisolated final class AIModelScanner {
         }
     }
 
-    static func ollamaModels(home: URL, environment: [String: String] = ProcessInfo.processInfo.environment) -> [LargeFile] {
+    static func ollamaModels(
+        home: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        access: ScanAccess = .full
+    ) -> [LargeFile] {
         let fm = FileManager.default
         let root = AIModelScanPolicy.ollamaRoot(home: home, environment: environment)
         let manifestRoot = root.appendingPathComponent("manifests", isDirectory: true)
         let blobRoot = root.appendingPathComponent("blobs", isDirectory: true)
-        guard fm.fileExists(atPath: manifestRoot.path) else { return [] }
+        guard canRead(root, home: home, access: access), fm.fileExists(atPath: manifestRoot.path) else { return [] }
 
         // Parse every manifest first: a blob is only reclaimable if exactly one
         // model references it, and that is not knowable one model at a time.
@@ -125,8 +168,9 @@ nonisolated final class AIModelScanner {
                 lastUsed: lastUsed == .distantPast ? Date.distantPast : lastUsed,
                 category: .aiModel,
                 displayNameOverride: ollamaModelName(manifestURL: manifest.url, manifestRoot: manifestRoot),
-                sourceLabel: AIModelScanPolicy.Runtime.ollama.displayName,
-                componentPaths: components
+                sourceLabel: AIModelScanPolicy.Store.ollama.displayName,
+                componentPaths: components,
+                kind: .aiModel(.ollama)
             )
         }
     }
@@ -147,53 +191,267 @@ nonisolated final class AIModelScanner {
         return "\(name.joined(separator: "/")):\(tag)"
     }
 
-    // MARK: - LM Studio
+    // MARK: - Hugging Face Hub
 
-    /// LM Studio lays models out as `<publisher>/<repo>/<weights>.gguf`, so the
-    /// repo directory is the unit — it holds the weights plus any config and
-    /// split parts that belong with them.
-    static func lmStudioModels(home: URL) -> [LargeFile] {
-        let fm = FileManager.default
+    /// The Hub cache lays a model out as `models--<org>--<name>/` holding
+    /// `blobs/` (the files, named by hash), `snapshots/<commit>/` (symlinks into
+    /// `blobs/`) and `refs/`. Two snapshots of one model share the blobs that
+    /// did not change between them, so the model folder is the unit: sizing it
+    /// counts each blob once, because the snapshot links are not regular files,
+    /// and trashing it never takes a blob another snapshot of the same model
+    /// still needs. Datasets and spaces in the same cache are not models and
+    /// are left alone.
+    static func huggingFaceHubModels(
+        home: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        access: ScanAccess = .full
+    ) -> [LargeFile] {
+        let root = AIModelScanPolicy.huggingFaceHubRoot(home: home, environment: environment)
+        guard canRead(root, home: home, access: access) else { return [] }
+
+        return directories(in: root).compactMap { repo in
+            if Task.isCancelled { return nil }
+            let folder = repo.lastPathComponent
+            guard folder.hasPrefix("models--") else { return nil }
+            let measured = FolderSizing.walkedSize(at: repo, skipsPackages: false)
+            guard measured.bytes > 0 else { return nil }
+
+            let name = folder.dropFirst("models--".count).replacingOccurrences(of: "--", with: "/")
+            return LargeFile(
+                path: repo,
+                sizeBytes: measured.bytes,
+                lastUsed: measured.lastUsed,
+                category: .aiModel,
+                displayNameOverride: name,
+                sourceLabel: AIModelScanPolicy.Store.huggingFaceHub.displayName,
+                componentPaths: [repo],
+                kind: .aiModel(.huggingFaceHub)
+            )
+        }
+    }
+
+    // MARK: - Folder stores
+
+    /// Models in a store that is a plain folder of them. A model is the first
+    /// folder on the way down that holds weight files directly — LM Studio's
+    /// `<publisher>/<repo>/`, Jan's `<name>/`, swift-transformers'
+    /// `<org>/<name>/` — or a loose weight file, as GPT4All and Whisper keep
+    /// them. A folder that holds only other folders is a namespace, not a
+    /// model, and the walk goes on into it.
+    ///
+    /// An app's Hugging Face cache names its models in `index.json`; the row
+    /// takes that name over the folder's id when it has one.
+    static func folderModels(
+        store: AIModelScanPolicy.Store,
+        home: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        access: ScanAccess = .full
+    ) -> [LargeFile] {
         var models: [LargeFile] = []
+        for root in AIModelScanPolicy.roots(for: store, home: home, environment: environment) {
+            guard canRead(root, home: home, access: access) else { continue }
+            let names = store == .huggingFaceAppCache ? installedModelNames(indexIn: root) : [:]
+            collectModels(under: root, relativeName: [], store: store, names: names, into: &models)
+        }
+        return models
+    }
 
-        for root in AIModelScanPolicy.lmStudioRoots(home: home) {
-            guard fm.fileExists(atPath: root.path) else { continue }
-            let publishers = (try? fm.contentsOfDirectory(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            )) ?? []
+    /// How many folder levels a store nests models under. Jan's
+    /// `huggingface.co/<org>/<repo>/` is the deepest known, at three.
+    private static let folderStoreMaxDepth = 4
 
-            for publisher in publishers {
-                if Task.isCancelled { return models }
-                guard (try? publisher.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+    /// `relativeName` is the folder's path below the store root, kept as
+    /// components rather than cut from the path: the listing can spell a root
+    /// `/private/var/…` where the policy said `/var/…`, and a cut would then
+    /// leave a stray `models/` on every name.
+    private static func collectModels(
+        under folder: URL,
+        relativeName: [String],
+        store: AIModelScanPolicy.Store,
+        names: [String: String],
+        into models: inout [LargeFile]
+    ) {
+        if Task.isCancelled { return }
+        let entries = children(of: folder)
+
+        // A loose weight file at the root is its own model, as GPT4All and
+        // Whisper keep them. Below the root, the folder is the model.
+        if relativeName.isEmpty {
+            for entry in entries where entry.isRegularFile {
+                guard AIModelScanPolicy.isWeightFile(named: entry.url.lastPathComponent, insideKnownStore: true),
+                      let values = try? entry.url.resourceValues(forKeys: [
+                          .totalFileAllocatedSizeKey, .fileSizeKey, .contentAccessDateKey, .contentModificationDateKey
+                      ])
                 else { continue }
-
-                let repos = (try? fm.contentsOfDirectory(
-                    at: publisher,
-                    includingPropertiesForKeys: [.isDirectoryKey],
-                    options: [.skipsHiddenFiles]
-                )) ?? []
-
-                for repo in repos {
-                    guard (try? repo.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
-                    else { continue }
-                    let measured = FolderSizing.walkedSize(at: repo, skipsPackages: true)
-                    guard measured.bytes > 0 else { continue }
-
-                    models.append(LargeFile(
-                        path: repo,
-                        sizeBytes: measured.bytes,
-                        lastUsed: measured.lastUsed,
-                        category: .aiModel,
-                        displayNameOverride: "\(publisher.lastPathComponent)/\(repo.lastPathComponent)",
-                        sourceLabel: AIModelScanPolicy.Runtime.lmStudio.displayName,
-                        componentPaths: [repo]
-                    ))
-                }
+                let bytes = Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
+                guard bytes > 0 else { continue }
+                models.append(LargeFile(
+                    path: entry.url,
+                    sizeBytes: bytes,
+                    lastUsed: max(values.contentAccessDate ?? .distantPast, values.contentModificationDate ?? .distantPast),
+                    category: .aiModel,
+                    sourceLabel: store.displayName,
+                    componentPaths: [entry.url],
+                    kind: .aiModel(store)
+                ))
             }
         }
 
+        for entry in entries where entry.isDirectory {
+            if Task.isCancelled { return }
+            let name = entry.url.lastPathComponent
+            let holdsWeights = AIModelScanPolicy.isWeightBundle(named: name)
+                || children(of: entry.url).contains { child in
+                    child.isRegularFile && AIModelScanPolicy.isWeightFile(named: child.url.lastPathComponent, insideKnownStore: true)
+                }
+            if holdsWeights {
+                let measured = FolderSizing.walkedSize(at: entry.url, skipsPackages: false)
+                guard measured.bytes > 0 else { continue }
+                // Jan files Hub downloads under `huggingface.co/<org>/<repo>`;
+                // the host says nothing the user would call the model by.
+                var relative = relativeName + [name]
+                if relative.count > 1, relative.first == "huggingface.co" { relative.removeFirst() }
+                models.append(LargeFile(
+                    path: entry.url,
+                    sizeBytes: measured.bytes,
+                    lastUsed: measured.lastUsed,
+                    category: .aiModel,
+                    displayNameOverride: names[name] ?? relative.joined(separator: "/"),
+                    sourceLabel: store.displayName,
+                    componentPaths: [entry.url],
+                    kind: .aiModel(store)
+                ))
+            } else if relativeName.count + 1 < folderStoreMaxDepth {
+                collectModels(under: entry.url, relativeName: relativeName + [name], store: store, names: names, into: &models)
+            }
+        }
+    }
+
+    /// The `index.json` an app keeps beside its models under
+    /// `~/Library/Caches/huggingface/models`: `installedModels[].id` is the
+    /// folder, `installedModels[].definition.name` what the app calls it. Read
+    /// only, never written: it is the app's file, and the row says so.
+    static func installedModelNames(indexIn root: URL) -> [String: String] {
+        let indexURL = root.appendingPathComponent("index.json", isDirectory: false)
+        guard let data = try? Data(contentsOf: indexURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let installed = json["installedModels"] as? [[String: Any]]
+        else { return [:] }
+
+        var names: [String: String] = [:]
+        for model in installed {
+            guard let id = model["id"] as? String,
+                  let definition = model["definition"] as? [String: Any],
+                  let name = definition["name"] as? String, !name.isEmpty
+            else { continue }
+            names[id] = name
+        }
+        return names
+    }
+
+    // MARK: - Loose weights
+
+    /// Weight files in the places Large Files does not walk and no known store
+    /// claims. One row per file, or per Core ML bundle, shown by the folder it
+    /// sits in so the user can tell which app downloaded it. Only files over
+    /// `looseWeightSizeFloorBytes` count: below that, a weight file in an app's
+    /// folder is an asset the app ships with.
+    static func looseWeights(
+        home: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        access: ScanAccess = .full,
+        sizeFloor: Int64 = AIModelScanPolicy.looseWeightSizeFloorBytes
+    ) -> [LargeFile] {
+        let fm = FileManager.default
+        let knownRoots = Set(AIModelScanPolicy.allRoots(home: home, environment: environment)
+            .map { $0.resolvingSymlinksInPath().path })
+        let keys: Set<URLResourceKey> = [
+            .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
+            .contentAccessDateKey, .contentModificationDateKey
+        ]
+        var models: [LargeFile] = []
+
+        for root in AIModelScanPolicy.looseWeightRoots(home: home) {
+            guard canRead(root, home: home, access: access) else { continue }
+            guard let enumerator = fm.enumerator(
+                at: root,
+                includingPropertiesForKeys: Array(keys),
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else { continue }
+
+            while let next = enumerator.nextObject() {
+                if Task.isCancelled { return models }
+                guard let url = next as? URL, let values = try? url.resourceValues(forKeys: keys) else { continue }
+                let name = url.lastPathComponent
+
+                if values.isDirectory == true {
+                    if AIModelScanPolicy.sweepSkipsDirectory(named: name)
+                        || enumerator.level >= AIModelScanPolicy.looseWeightMaxDepth
+                        || knownRoots.contains(url.resolvingSymlinksInPath().path)
+                        || !ProtectedLocations.isReadable(url, access: access, home: home) {
+                        enumerator.skipDescendants()
+                        continue
+                    }
+                    guard AIModelScanPolicy.isWeightBundle(named: name) else { continue }
+                    enumerator.skipDescendants()
+                    let measured = FolderSizing.walkedSize(at: url, skipsPackages: false)
+                    guard measured.bytes >= sizeFloor else { continue }
+                    models.append(looseWeightRow(url, bytes: measured.bytes, lastUsed: measured.lastUsed))
+                    continue
+                }
+
+                guard values.isRegularFile == true,
+                      AIModelScanPolicy.isWeightFile(named: name, insideKnownStore: false)
+                else { continue }
+                let bytes = Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
+                guard bytes >= sizeFloor else { continue }
+                models.append(looseWeightRow(
+                    url,
+                    bytes: bytes,
+                    lastUsed: max(values.contentAccessDate ?? .distantPast, values.contentModificationDate ?? .distantPast)
+                ))
+            }
+        }
         return models
+    }
+
+    /// No `sourceLabel`: the row shows its folder, the way an ordinary Large
+    /// Files row does, because the folder is what names the owning app.
+    private static func looseWeightRow(_ url: URL, bytes: Int64, lastUsed: Date) -> LargeFile {
+        LargeFile(
+            path: url.standardizedFileURL,
+            sizeBytes: bytes,
+            lastUsed: lastUsed,
+            category: .aiModel,
+            componentPaths: [url],
+            kind: .aiModel(.looseWeights)
+        )
+    }
+
+    // MARK: - Listing
+
+    private struct Entry {
+        let url: URL
+        let isRegularFile: Bool
+        let isDirectory: Bool
+    }
+
+    /// One folder's visible entries, with symlinks left as neither file nor
+    /// folder: a link is not a model, and following one could leave the store.
+    private static func children(of folder: URL) -> [Entry] {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey]
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return urls.compactMap { url in
+            guard let values = try? url.resourceValues(forKeys: keys), values.isSymbolicLink != true else { return nil }
+            return Entry(url: url, isRegularFile: values.isRegularFile == true, isDirectory: values.isDirectory == true)
+        }
+    }
+
+    private static func directories(in folder: URL) -> [URL] {
+        children(of: folder).filter(\.isDirectory).map(\.url)
     }
 }
