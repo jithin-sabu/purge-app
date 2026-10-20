@@ -1680,11 +1680,17 @@ final class PurgeStore: ObservableObject {
             largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
         }
 
-        // Models resolve from a handful of manifests, so they land almost
-        // instantly — running them ahead of the file walk puts the biggest
-        // items on screen first instead of after a full home-directory sweep.
-        // They live outside the walked folders, so the exclusion check is per row.
-        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: hasFullDiskAccess ? .full : .limited) {
+        // Models in known stores resolve from a handful of manifests and
+        // folders, so they land almost instantly — running them ahead of the
+        // file walk puts the biggest items on screen first instead of after a
+        // full home-directory sweep. The loose-weight sweep walks three large
+        // Library trees, so it starts now and runs beside the file walk; its
+        // rows are read once the walk ends. Dropping the stream on an early
+        // return cancels it. Models live outside the walked folders, so the
+        // exclusion check is per row.
+        let access: ScanAccess = hasFullDiskAccess ? .full : .limited
+        let looseWeights = aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: access, pass: .looseWeights)
+        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: access, pass: .knownStores) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
             guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
             collected.append(model)
@@ -1705,6 +1711,11 @@ final class PurgeStore: ObservableObject {
             case .finished(let finished):
                 summary = finished
             }
+        }
+        for await model in looseWeights {
+            guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
+            guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
+            collected.append(model)
         }
         guard largeFileScanGeneration == generation else { return }
         publish()

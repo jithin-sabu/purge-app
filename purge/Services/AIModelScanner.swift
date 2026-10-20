@@ -22,13 +22,25 @@ import Foundation
 /// Without it the `Task.detached` in `scanStream` hops back to the main actor and
 /// this runs its manifest walk on the UI thread.
 nonisolated final class AIModelScanner {
+    /// Which part of the scan a stream runs. The known stores read a few
+    /// manifests and folders and finish almost at once. The loose sweep walks
+    /// three large Library trees, so it runs beside the Large Files walk
+    /// rather than ahead of it.
+    enum Pass: Sendable {
+        case knownStores
+        case looseWeights
+    }
+
     /// `access` decides whether roots under protected folders (Documents, app
     /// containers) and the media caches are read. A limited scan stays out of
     /// them, the same as every other scan.
-    func scanStream(minBytes: Int64, staleDays: Int, access: ScanAccess = .full) -> AsyncStream<LargeFile> {
+    ///
+    /// The scan starts when the stream is made, not when it is first read, and
+    /// stops when the stream is dropped.
+    func scanStream(minBytes: Int64, staleDays: Int, access: ScanAccess = .full, pass: Pass) -> AsyncStream<LargeFile> {
         AsyncStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
-                await Self.run(minBytes: minBytes, staleDays: staleDays, access: access, continuation: continuation)
+                await Self.run(minBytes: minBytes, staleDays: staleDays, access: access, pass: pass, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -38,11 +50,18 @@ nonisolated final class AIModelScanner {
         minBytes: Int64,
         staleDays: Int,
         access: ScanAccess,
+        pass: Pass,
         continuation: AsyncStream<LargeFile>.Continuation
     ) async {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let now = Date()
-        let discovered = allModels(home: home, access: access)
+        let discovered: [LargeFile]
+        switch pass {
+        case .knownStores:
+            discovered = knownStoreModels(home: home, access: access)
+        case .looseWeights:
+            discovered = looseWeights(home: home, access: access)
+        }
 
         for model in discovered {
             if Task.isCancelled { break }
@@ -65,13 +84,23 @@ nonisolated final class AIModelScanner {
         access: ScanAccess,
         looseWeightSizeFloor: Int64 = AIModelScanPolicy.looseWeightSizeFloorBytes
     ) -> [LargeFile] {
+        knownStoreModels(home: home, environment: environment, access: access)
+            + looseWeights(home: home, environment: environment, access: access, sizeFloor: looseWeightSizeFloor)
+    }
+
+    /// Every model in the stores Purge knows: Ollama, the Hub and the folder
+    /// stores. The loose sweep is left out; it is the slow part.
+    static func knownStoreModels(
+        home: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        access: ScanAccess
+    ) -> [LargeFile] {
         var models = ollamaModels(home: home, environment: environment, access: access)
         models += huggingFaceHubModels(home: home, environment: environment, access: access)
         for store in AIModelScanPolicy.Store.folderStores {
             if Task.isCancelled { return models }
             models += folderModels(store: store, home: home, environment: environment, access: access)
         }
-        models += looseWeights(home: home, environment: environment, access: access, sizeFloor: looseWeightSizeFloor)
         return models
     }
 
