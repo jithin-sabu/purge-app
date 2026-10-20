@@ -1,11 +1,37 @@
 import Foundation
 
-/// How macOS downloads a set again: the subscription Download again sends.
-/// Aliases and usages are what pared's catalog ships for macOS 27.
+/// How macOS downloads a set again: the subscription Download Again sends.
+/// Aliases and usages are what pared's catalog ships for macOS 27, except that
+/// a language alias is resolved on the Mac when the request is sent (#179).
 nonisolated struct AppleIntelligenceRecovery: Equatable, Sendable {
+    /// What a usage alias is asked for. macOS defines each alias's values under
+    /// `/System/Library/UnifiedAssetFramework/UsageAliases/<alias>/`, one plist
+    /// per value: `default`, or one `language_<code>` per Apple Intelligence
+    /// language.
+    enum AliasValue: Equatable, Sendable {
+        /// `language_<code>` for the Mac's Siri language, which is how System
+        /// Settings subscribes: its own row reads `<alias>_language_en` on an
+        /// en-US Mac. See `AppleIntelligenceAliasLanguage`.
+        case language
+        case fixed(String)
+    }
+
     let name: String
-    let usageAliases: [String: String]
+    let usageAliases: [String: AliasValue]
     let assetSetUsages: [String: [String: String]]
+
+    /// The aliases as the subscription sends them, each language alias
+    /// resolved by `language`.
+    func resolvedUsageAliases(language: (String) -> String) -> [String: String] {
+        var resolved: [String: String] = [:]
+        for (alias, value) in usageAliases {
+            switch value {
+            case .language: resolved[alias] = language(alias)
+            case .fixed(let fixed): resolved[alias] = fixed
+            }
+        }
+        return resolved
+    }
 }
 
 /// One group of models macOS manages as an *asset set*: a name the subscription
@@ -37,7 +63,7 @@ nonisolated enum AppleIntelligenceCatalog {
             title: String(localized: "Core Apple Intelligence models"),
             recovery: AppleIntelligenceRecovery(
                 name: "foundationModels",
-                usageAliases: ["com.apple.Settings.AppleIntelligence": "language_en"],
+                usageAliases: ["com.apple.Settings.AppleIntelligence": .language],
                 assetSetUsages: [:])),
         AppleIntelligenceModelSet(
             name: "com.apple.MobileAsset.UAF.FM.Visual",
@@ -46,8 +72,8 @@ nonisolated enum AppleIntelligenceCatalog {
             recovery: AppleIntelligenceRecovery(
                 name: "imageGeneration",
                 usageAliases: [
-                    "VisualGeneration.GenerativePlayground": "language_en",
-                    "VisualGeneration.KeyboardEmojiGenerator": "language_en",
+                    "VisualGeneration.GenerativePlayground": .language,
+                    "VisualGeneration.KeyboardEmojiGenerator": .language,
                 ],
                 assetSetUsages: [:])),
         AppleIntelligenceModelSet(
@@ -75,7 +101,7 @@ nonisolated enum AppleIntelligenceCatalog {
             title: String(localized: "Photos Clean Up models"),
             recovery: AppleIntelligenceRecovery(
                 name: "photosCleanup",
-                usageAliases: ["GenerativeEdit.CleanUp": "language_en"],
+                usageAliases: ["GenerativeEdit.CleanUp": .language],
                 assetSetUsages: [:])),
         AppleIntelligenceModelSet(
             name: "com.apple.MobileAsset.UAF.Photos.SpatialPhotosRelive",
@@ -83,7 +109,7 @@ nonisolated enum AppleIntelligenceCatalog {
             title: String(localized: "Spatial Photos models"),
             recovery: AppleIntelligenceRecovery(
                 name: "spatialPhotos",
-                usageAliases: ["spatialPhotos.relive.main": "default"],
+                usageAliases: ["spatialPhotos.relive.main": .fixed("default")],
                 assetSetUsages: [:])),
     ]
 

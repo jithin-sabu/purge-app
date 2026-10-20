@@ -150,6 +150,30 @@ struct AppleIntelligenceDownloadBlockTests {
         #expect(AppleIntelligenceDownloadBlock.typesToBlock(installed: [], adding: ["a"]) == ["a"])
     }
 
+    /// The profile goes to a folder of Purge's own, not Downloads, and the
+    /// write replaces a link at the path instead of following it (#179).
+    @Test func theProfileIsWrittenInPurgesOwnFolderAndNeverThroughALink() throws {
+        let temporary = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        #expect(AppleIntelligenceDownloadBlock.profileDirectoryURL.standardizedFileURL.path.hasPrefix(temporary))
+        #expect(!AppleIntelligenceDownloadBlock.profileDirectoryURL.path.contains("/Downloads"))
+
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("purge-ai-profile-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let elsewhere = folder.appendingPathComponent("elsewhere.txt")
+        try Data("keep me".utf8).write(to: elsewhere)
+        let path = folder.appendingPathComponent(AppleIntelligenceDownloadBlock.profileFileName)
+        try FileManager.default.createSymbolicLink(at: path, withDestinationURL: elsewhere)
+
+        let data = try AppleIntelligenceDownloadBlock.profileData(blocking: ["com.apple.MobileAsset.UAF.FM.Visual"])
+        let written = try AppleIntelligenceDownloadBlock.writeProfile(data, in: folder)
+        #expect(written == path)
+        #expect(try Data(contentsOf: elsewhere) == Data("keep me".utf8))
+        let type = try FileManager.default.attributesOfItem(atPath: path.path)[.type] as? FileAttributeType
+        #expect(type == .typeRegular)
+        #expect(try Data(contentsOf: path) == data)
+    }
+
     /// Only keys with Purge's URL count; another profile's redirect is not Purge's.
     @Test func installedBlocksComeFromTheManagedPreferences() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("purge-ai-\(UUID().uuidString).plist")

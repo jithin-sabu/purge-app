@@ -58,11 +58,18 @@ final class AppleIntelligenceModelStore: ObservableObject {
     private var downloadRequest: DownloadRequest? {
         didSet { Self.saveDownloadRequest(downloadRequest, to: defaults) }
     }
+    /// The sets Purge removed and has not brought back, by name, so Download
+    /// Again asks for those and no other, after a relaunch too (#179). A set
+    /// that is on the Mac again is dropped at the next reading.
+    private var removedSetNames: [String] {
+        didSet { Self.saveRemovedSetNames(removedSetNames, to: defaults) }
+    }
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         downloadRequest = Self.loadDownloadRequest(from: defaults)
+        removedSetNames = Self.loadRemovedSetNames(from: defaults)
     }
 
     /// How long the user gets to act in System Settings before Purge gives up.
@@ -106,8 +113,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     /// Whether the row has anything to say: models on disk, a block in place, or
     /// a removal this session or a download still pending. A Mac with none of
-    /// those shows no row at all, even though Download Again would work there:
-    /// it asks for all five sets, so it is not offered to a Mac that never had them.
+    /// those shows no row at all: there is nothing to remove, and nothing of
+    /// Purge's to bring back.
     var isRelevant: Bool {
         Self.isSupported && Self.isRelevant(reading: reading, isProfileInstalled: isProfileInstalled, lastOutcome: lastOutcome)
     }
@@ -141,6 +148,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
             reading = fresh
             installedBlocks = blocks
             noteArrivals(fresh)
+            let stillGone = Self.forgetting(present: fresh.present.map(\.set.name), from: removedSetNames)
+            if stillGone != removedSetNames { removedSetNames = stillGone }
         }
         return fresh
     }
@@ -297,9 +306,13 @@ final class AppleIntelligenceModelStore: ObservableObject {
 
     // MARK: Remove
 
-    /// Blocks the downloads, releases every set still present, and records what
-    /// the volume gave back. Stops at the first step the Mac does not pass.
-    func remove() async {
+    /// Blocks the downloads, releases the confirmed sets, and records what the
+    /// volume gave back. Stops at the first step the Mac does not pass.
+    ///
+    /// `planned` is what the confirmation showed. A set that has gone since
+    /// has nothing to release, and one that appeared since was never confirmed,
+    /// so neither is touched (#179).
+    func remove(sets planned: [AppleIntelligenceModelSet]) async {
         guard !isBusy, Self.isSupported else { return }
         // Busy before the first await, so a second click can't start another run.
         phase = .checking
@@ -307,7 +320,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         lastOutcome = nil
         downloadRequest = nil
         let before = await readLatest()
-        let targets = before.present.map(\.set)
+        let targets = Self.targets(planned: planned, present: before.present.map(\.set))
         guard !targets.isEmpty else {
             phase = .idle
             return
@@ -343,15 +356,19 @@ final class AppleIntelligenceModelStore: ObservableObject {
         let blockTypes = AppleIntelligenceDownloadBlock.typesToBlock(
             installed: installedBlocks, adding: targets.map(\.assetType))
         if !blockTypes.allSatisfy({ installedBlocks.contains($0) }) {
+            let profileURL: URL
             do {
-                let url = AppleIntelligenceDownloadBlock.profileFileURL
-                try AppleIntelligenceDownloadBlock.profileData(blocking: blockTypes).write(to: url)
-                NSWorkspace.shared.open(url)
+                profileURL = try AppleIntelligenceDownloadBlock.writeProfile(
+                    AppleIntelligenceDownloadBlock.profileData(blocking: blockTypes))
+                NSWorkspace.shared.open(profileURL)
             } catch {
                 phase = .idle
                 lastOutcome = .notReady(String(localized: "Purge couldn't write the profile: \(error.localizedDescription)"))
                 return
             }
+            // The Cancel button shows with the phase, so the flag is cleared
+            // before it, not in the wait: a click during the pause was lost (#179).
+            waitCancelled = false
             phase = .waitingForProfileInstall
             try? await Task.sleep(for: .seconds(1))
             openProfilesPane()
@@ -361,9 +378,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 return blockTypes.allSatisfy { now.contains($0) }
             }
             SettingsGuidePanel.shared.hide()
-            // System Settings keeps its own copy once opened; the file in Downloads
-            // would only linger.
-            try? FileManager.default.removeItem(at: AppleIntelligenceDownloadBlock.profileFileURL)
+            // System Settings keeps its own copy once opened; the file would only linger.
+            try? FileManager.default.removeItem(at: profileURL)
             installedBlocks = AppleIntelligenceDownloadBlock.installedBlocks()
             guard installed else {
                 phase = .idle
@@ -412,6 +428,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
             return gained >= VolumeCapacityReader.noiseFloorBytes ? gained : nil
         }()
         var left = 0
+        var gone: [AppleIntelligenceModelSet] = []
         for set in targets {
             let stillThere = after.sets.first { $0.set.name == set.name }?.isPresent ?? true
             if stillThere {
@@ -419,9 +436,11 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 if lockReplies.contains(set) {
                     failures[set.name] = String(localized: "macOS says these are still in use")
                 }
+            } else {
+                gone.append(set)
             }
         }
-        let removed = targets.count - left
+        let removed = gone.count
         phase = .idle
         if left == 0 {
             lastOutcome = .removed(sets: removed, freedShownBytes: freedShown, freedRawBytes: freedRaw)
@@ -441,18 +460,28 @@ final class AppleIntelligenceModelStore: ObservableObject {
             lastOutcome = .someLeft(removed: removed, left: left, reason: reason)
         }
         if removed > 0 {
+            removedSetNames = Self.remembering(removed: gone.map(\.name), in: removedSetNames)
             CleanupHistoryStore.shared.appendAppleIntelligenceRemoval(
-                sets: targets.filter { set in !(after.sets.first { $0.set.name == set.name }?.isPresent ?? true) },
+                sets: gone,
                 bytesBefore: before,
                 freedShownBytes: freedShown
             )
         }
     }
 
+    /// The confirmed sets that are still on the Mac, in the confirmed order.
+    nonisolated static func targets(
+        planned: [AppleIntelligenceModelSet],
+        present: [AppleIntelligenceModelSet]
+    ) -> [AppleIntelligenceModelSet] {
+        planned.filter { present.contains($0) }
+    }
+
     // MARK: Download again
 
-    /// Lifts the block, then asks the asset service for the sets. macOS
-    /// downloads them in the background; the row shows them arriving.
+    /// Lifts the block, then asks the asset service for the sets Purge removed,
+    /// in the Mac's Siri language. macOS downloads them in the background; the
+    /// row shows them arriving.
     func downloadAgain() async {
         guard !isBusy, Self.isSupported else { return }
         // Busy before the first await, so a second click can't start another run.
@@ -460,7 +489,12 @@ final class AppleIntelligenceModelStore: ObservableObject {
         lastOutcome = nil
         downloadRequest = nil
         let setsAtRequest = await readLatest().sets
+        // Read before the profile goes: a blocked set that is not on the Mac is
+        // one Purge removed, whether or not a record of it survived.
+        let sets = Self.setsToRequest(removed: removedSetNames, blockedTypes: installedBlocks, sets: setsAtRequest)
         if isProfileInstalled {
+            // Cleared before the Cancel button shows, not in the wait (#179).
+            waitCancelled = false
             phase = .waitingForProfileRemoval
             openProfilesPane()
             SettingsGuidePanel.shared.show(.removeProfile) { [weak self] in self?.cancelWaiting() }
@@ -473,19 +507,29 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 return
             }
         }
+        guard !sets.isEmpty else {
+            // Every set is on the Mac already, so the block was all there was
+            // to lift. The row goes back to showing the size.
+            phase = .idle
+            _ = await readLatest()
+            return
+        }
         phase = .requestingDownload
-        let sets = AppleIntelligenceCatalog.sets
-        let names = sets.map(\.recovery.name)
-        // A reset can leave an older request of ours behind, and the service
-        // skips an identical subscription, so clear ours first. One that was
-        // never there answers with an error, which is fine.
+        // Every name of ours, not only today's: a reset can leave an older
+        // request of ours behind, and the service skips an identical
+        // subscription, so ours are cleared first. One that was never there
+        // answers with an error, which is fine.
         _ = await AppleIntelligenceWorker.run("unsubscribe", [
-            "subscriber": AppleIntelligenceCatalog.subscriber, "names": names,
+            "subscriber": AppleIntelligenceCatalog.subscriber,
+            "names": AppleIntelligenceCatalog.sets.map(\.recovery.name),
         ], timeout: 60)
+        let siriLanguage = AppleIntelligenceAliasLanguage.siriLanguage()
         let subscriptions: [[String: Any]] = sets.map { set -> [String: Any] in
             [
                 "name": set.recovery.name,
-                "usageAliases": set.recovery.usageAliases,
+                "usageAliases": set.recovery.resolvedUsageAliases { alias in
+                    AppleIntelligenceAliasLanguage.value(for: alias, siriLanguage: siriLanguage)
+                },
                 "assetSetUsages": set.recovery.assetSetUsages,
             ]
         }
@@ -501,6 +545,48 @@ final class AppleIntelligenceModelStore: ObservableObject {
         }
         lastArrivalChange = Date()
         _ = await readLatest()
+    }
+
+    /// The sets Download Again asks for: those Purge removed, by its record or
+    /// by the block the profile still holds on them, that are not on the Mac.
+    /// With no record and no block, as after an update from a Purge that kept
+    /// neither, every absent set, which is what it asked for before (#179).
+    nonisolated static func setsToRequest(
+        removed: [String],
+        blockedTypes: [String],
+        sets: [AppleIntelligenceSetReading]
+    ) -> [AppleIntelligenceModelSet] {
+        let absent = sets.filter { !$0.isPresent }.map(\.set)
+        if removed.isEmpty, blockedTypes.isEmpty { return absent }
+        return absent.filter { removed.contains($0.name) || blockedTypes.contains($0.assetType) }
+    }
+
+    // MARK: Removed sets
+
+    nonisolated static let removedSetsKey = "appleIntelligence.removedSets"
+
+    nonisolated static func loadRemovedSetNames(from defaults: UserDefaults) -> [String] {
+        defaults.stringArray(forKey: removedSetsKey) ?? []
+    }
+
+    nonisolated static func saveRemovedSetNames(_ names: [String], to defaults: UserDefaults) {
+        if names.isEmpty {
+            defaults.removeObject(forKey: removedSetsKey)
+        } else {
+            defaults.set(names, forKey: removedSetsKey)
+        }
+    }
+
+    /// The record with today's removals added, each name once, in catalog order.
+    nonisolated static func remembering(removed: [String], in record: [String]) -> [String] {
+        let names = Set(record).union(removed)
+        return AppleIntelligenceCatalog.sets.map(\.name).filter { names.contains($0) }
+    }
+
+    /// The record without the sets that are on the Mac: downloaded again, by
+    /// Purge or by System Settings, so no longer Purge's to bring back.
+    nonisolated static func forgetting(present: [String], from record: [String]) -> [String] {
+        record.filter { !present.contains($0) }
     }
 
     // MARK: Pending request
@@ -558,10 +644,11 @@ final class AppleIntelligenceModelStore: ObservableObject {
     }
 
     /// Polls once a second until `condition` holds, the user cancels, or the
-    /// settings wait runs out.
-    private func waitUntil(_ condition: @escaping @Sendable () -> Bool) async -> Bool {
-        waitCancelled = false
-        let deadline = Date().addingTimeInterval(Self.settingsWait)
+    /// settings wait runs out. It does not clear `waitCancelled` itself: the
+    /// caller does that before it shows the Cancel button, so a click between
+    /// the button and this wait is kept (#179).
+    func waitUntil(_ condition: @escaping @Sendable () -> Bool, limit: TimeInterval = settingsWait) async -> Bool {
+        let deadline = Date().addingTimeInterval(limit)
         while Date() < deadline, !waitCancelled {
             if condition() { return true }
             try? await Task.sleep(for: .seconds(1))
