@@ -392,10 +392,17 @@ struct ScanQueueStoreTests {
         timeout: TimeInterval = 30,
         _ condition: () -> Bool
     ) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
+        // Counts only the time this loop was running: on CI the test host can
+        // stall for tens of seconds with every suite waiting, and a wall-clock
+        // deadline expires during the stall through no fault of the condition.
+        var waited: TimeInterval = 0
+        var last = Date()
         while !condition() {
-            guard Date() < deadline else { return false }
+            guard waited < timeout else { return false }
             try? await Task.sleep(for: .milliseconds(10))
+            let now = Date()
+            waited += min(now.timeIntervalSince(last), 0.25)
+            last = now
         }
         return true
     }

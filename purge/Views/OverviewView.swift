@@ -14,18 +14,28 @@ struct OverviewView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The bar segment under the pointer. Its row lifts and the others fade.
     @State private var highlightedID: String?
+    /// The snapshot and Apple Intelligence readings run `tmutil`, `dscl` and the
+    /// asset worker. In the unit-test host those have nothing to read and can
+    /// sit on their timeouts, holding threads every async test needs (#206), so
+    /// the host never starts them.
+    private let isRunningAsTestHost = TestHost.isActive()
 
     var body: some View {
         // Relative times ("Scanned 3h ago") move on their own.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             content(now: context.date)
         }
-        .task { await snapshotStore.refresh() }
-        .task { await appleIntelligenceStore.refresh() }
+        .task { await refreshReadings() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            Task { await snapshotStore.refresh() }
-            Task { await appleIntelligenceStore.refresh() }
+            Task { await refreshReadings() }
         }
+    }
+
+    private func refreshReadings() async {
+        guard !isRunningAsTestHost else { return }
+        async let snapshots: Void = snapshotStore.refresh()
+        async let models: Void = appleIntelligenceStore.refresh()
+        _ = await (snapshots, models)
     }
 
     @ViewBuilder
