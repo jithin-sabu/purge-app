@@ -318,6 +318,17 @@ nonisolated enum AppleIntelligenceDownloadBlock {
         return url
     }
 
+    /// Removes the profile Purge wrote, and only that: a regular file at the
+    /// path. The delete comes after a wait of up to ten minutes, so anything
+    /// else that turned up there meanwhile, a folder or a link, is left alone.
+    /// The attributes are read without following a link.
+    static func removeProfile(at url: URL, fileManager: FileManager = .default) {
+        guard let type = try? fileManager.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType,
+              type == .typeRegular
+        else { return }
+        try? fileManager.removeItem(at: url)
+    }
+
     static let profilesPaneURLs = [
         "x-apple.systempreferences:com.apple.Profiles-Settings.extension",
         "x-apple.systempreferences:com.apple.preferences.configurationprofiles",

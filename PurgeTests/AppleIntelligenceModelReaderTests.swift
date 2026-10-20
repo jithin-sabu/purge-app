@@ -174,6 +174,33 @@ struct AppleIntelligenceDownloadBlockTests {
         #expect(try Data(contentsOf: path) == data)
     }
 
+    /// The delete after the wait takes Purge's own file and nothing that
+    /// replaced it: not a folder, and not a link to something else.
+    @Test func onlyARegularFileAtTheProfilePathIsRemoved() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("purge-ai-remove-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let path = folder.appendingPathComponent(AppleIntelligenceDownloadBlock.profileFileName)
+
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: false)
+        try Data("inside".utf8).write(to: path.appendingPathComponent("inside.txt"))
+        AppleIntelligenceDownloadBlock.removeProfile(at: path)
+        #expect(FileManager.default.fileExists(atPath: path.appendingPathComponent("inside.txt").path))
+        try FileManager.default.removeItem(at: path)
+
+        let elsewhere = folder.appendingPathComponent("elsewhere.txt")
+        try Data("keep me".utf8).write(to: elsewhere)
+        try FileManager.default.createSymbolicLink(at: path, withDestinationURL: elsewhere)
+        AppleIntelligenceDownloadBlock.removeProfile(at: path)
+        #expect(FileManager.default.fileExists(atPath: elsewhere.path))
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: path.path)) != nil)
+        try FileManager.default.removeItem(at: path)
+
+        try Data("profile".utf8).write(to: path)
+        AppleIntelligenceDownloadBlock.removeProfile(at: path)
+        #expect(!FileManager.default.fileExists(atPath: path.path))
+    }
+
     /// Only keys with Purge's URL count; another profile's redirect is not Purge's.
     @Test func installedBlocksComeFromTheManagedPreferences() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("purge-ai-\(UUID().uuidString).plist")

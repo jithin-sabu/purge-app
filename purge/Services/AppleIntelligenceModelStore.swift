@@ -65,9 +65,29 @@ final class AppleIntelligenceModelStore: ObservableObject {
         didSet { Self.saveRemovedSetNames(removedSetNames, to: defaults) }
     }
     private let defaults: UserDefaults
+    private let services: Services
 
-    init(defaults: UserDefaults = .standard) {
+    /// The Mac behind the store. Tests replace it so `remove` and
+    /// `downloadAgain` run against a fake Mac and never touch this one: no
+    /// worker, no profile, no history entry.
+    struct Services {
+        var read: @Sendable () -> AppleIntelligenceReading = { AppleIntelligenceModelReader.read() }
+        var installedBlocks: @Sendable () -> [String] = { AppleIntelligenceDownloadBlock.installedBlocks() }
+        var runWorker: (String, [String: Any], TimeInterval) async -> AppleIntelligenceWorker.Outcome = {
+            await AppleIntelligenceWorker.run($0, $1, timeout: $2)
+        }
+        var siriLanguage: () -> String? = { AppleIntelligenceAliasLanguage.siriLanguage() }
+        var definedAliasValues: (String) -> Set<String> = { AppleIntelligenceAliasLanguage.defined(for: $0) }
+        var recordRemoval: ([AppleIntelligenceModelSet], AppleIntelligenceReading, Int64?) -> Void = {
+            CleanupHistoryStore.shared.appendAppleIntelligenceRemoval(sets: $0, bytesBefore: $1, freedShownBytes: $2)
+        }
+
+        init() {}
+    }
+
+    init(defaults: UserDefaults = .standard, services: Services = Services()) {
         self.defaults = defaults
+        self.services = services
         downloadRequest = Self.loadDownloadRequest(from: defaults)
         removedSetNames = Self.loadRemovedSetNames(from: defaults)
     }
@@ -141,8 +161,9 @@ final class AppleIntelligenceModelStore: ObservableObject {
     private func readLatest() async -> AppleIntelligenceReading {
         latestPass += 1
         let pass = latestPass
-        let fresh = await Task.detached(priority: .utility) { AppleIntelligenceModelReader.read() }.value
-        let blocks = AppleIntelligenceDownloadBlock.installedBlocks()
+        let read = services.read
+        let fresh = await Task.detached(priority: .utility) { read() }.value
+        let blocks = services.installedBlocks()
         hasTriedReading = true
         if pass == latestPass {
             reading = fresh
@@ -335,7 +356,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 isStopping = false
                 return
             }
-            let mapping = await AppleIntelligenceWorker.run("asset-type", ["assetSet": set.name], timeout: 30)
+            let mapping = await services.runWorker("asset-type", ["assetSet": set.name], 30)
             guard mapping.ok, mapping.result["assetType"] as? String == set.assetType else {
                 phase = .idle
                 lastOutcome = .notReady(mapping.ok
@@ -373,14 +394,16 @@ final class AppleIntelligenceModelStore: ObservableObject {
             try? await Task.sleep(for: .seconds(1))
             openProfilesPane()
             SettingsGuidePanel.shared.show(.installProfile) { [weak self] in self?.cancelWaiting() }
+            let readBlocks = services.installedBlocks
             let installed = await waitUntil {
-                let now = AppleIntelligenceDownloadBlock.installedBlocks()
+                let now = readBlocks()
                 return blockTypes.allSatisfy { now.contains($0) }
             }
             SettingsGuidePanel.shared.hide()
-            // System Settings keeps its own copy once opened; the file would only linger.
-            try? FileManager.default.removeItem(at: profileURL)
-            installedBlocks = AppleIntelligenceDownloadBlock.installedBlocks()
+            // System Settings keeps its own copy once opened; the file would only
+            // linger. Only Purge's own regular file goes, nothing that replaced it.
+            AppleIntelligenceDownloadBlock.removeProfile(at: profileURL)
+            installedBlocks = services.installedBlocks()
             guard installed else {
                 phase = .idle
                 // A cancel is the user changing their mind: the row goes back to
@@ -402,7 +425,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 stopped = true
                 break
             }
-            let reset = await AppleIntelligenceWorker.run("reset", ["assetSets": [set.name]], timeout: 120)
+            let reset = await services.runWorker("reset", ["assetSets": [set.name]], 120)
             if reset.ok { continue }
             // macOS can answer "current locks" and still have removed the set
             // (pared, RemoveMacAI issue 15, and the spike all saw it), so those
@@ -461,11 +484,7 @@ final class AppleIntelligenceModelStore: ObservableObject {
         }
         if removed > 0 {
             removedSetNames = Self.remembering(removed: gone.map(\.name), in: removedSetNames)
-            CleanupHistoryStore.shared.appendAppleIntelligenceRemoval(
-                sets: gone,
-                bytesBefore: before,
-                freedShownBytes: freedShown
-            )
+            services.recordRemoval(gone, before, freedShown)
         }
     }
 
@@ -498,9 +517,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
             phase = .waitingForProfileRemoval
             openProfilesPane()
             SettingsGuidePanel.shared.show(.removeProfile) { [weak self] in self?.cancelWaiting() }
-            let removed = await waitUntil { AppleIntelligenceDownloadBlock.installedBlocks().isEmpty }
+            let readBlocks = services.installedBlocks
+            let removed = await waitUntil { readBlocks().isEmpty }
             SettingsGuidePanel.shared.hide()
-            installedBlocks = AppleIntelligenceDownloadBlock.installedBlocks()
+            installedBlocks = services.installedBlocks()
             guard removed else {
                 phase = .idle
                 lastOutcome = waitCancelled ? nil : .profileStillInstalled
@@ -519,23 +539,24 @@ final class AppleIntelligenceModelStore: ObservableObject {
         // request of ours behind, and the service skips an identical
         // subscription, so ours are cleared first. One that was never there
         // answers with an error, which is fine.
-        _ = await AppleIntelligenceWorker.run("unsubscribe", [
+        _ = await services.runWorker("unsubscribe", [
             "subscriber": AppleIntelligenceCatalog.subscriber,
             "names": AppleIntelligenceCatalog.sets.map(\.recovery.name),
-        ], timeout: 60)
-        let siriLanguage = AppleIntelligenceAliasLanguage.siriLanguage()
+        ], 60)
+        let siriLanguage = services.siriLanguage()
         let subscriptions: [[String: Any]] = sets.map { set -> [String: Any] in
             [
                 "name": set.recovery.name,
                 "usageAliases": set.recovery.resolvedUsageAliases { alias in
-                    AppleIntelligenceAliasLanguage.value(for: alias, siriLanguage: siriLanguage)
+                    AppleIntelligenceAliasLanguage.value(
+                        for: alias, siriLanguage: siriLanguage, definedValues: services.definedAliasValues)
                 },
                 "assetSetUsages": set.recovery.assetSetUsages,
             ]
         }
-        let subscribe = await AppleIntelligenceWorker.run("subscribe", [
+        let subscribe = await services.runWorker("subscribe", [
             "subscriber": AppleIntelligenceCatalog.subscriber, "subscriptions": subscriptions,
-        ], timeout: 60)
+        ], 60)
         phase = .idle
         if subscribe.ok {
             downloadRequest = DownloadRequest(requestedAt: Date(), sets: setsAtRequest)
