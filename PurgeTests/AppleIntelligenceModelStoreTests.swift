@@ -368,8 +368,8 @@ struct AppleIntelligenceModelStoreTests {
     /// Run whole: the confirmation showed sets 0 and 1, then set 0 went on
     /// its own and set 2 appeared. Only set 1 is sent to the service. With
     /// every type already blocked there is no profile step, so nothing waits.
-    @Test @MainActor func removeReleasesOnlyTheConfirmedSets() async throws {
-        try #require(Store.isSupported, "the removal is gated to macOS 27 on Apple silicon")
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func removeReleasesOnlyTheConfirmedSets() async throws {
         let present = reading(present: 3).sets.filter { $0.set != catalog[0] }
         let mac = FakeMac(
             reading: AppleIntelligenceReading(sets: present, readAt: Date()),
@@ -388,8 +388,8 @@ struct AppleIntelligenceModelStoreTests {
     /// Run whole: with no profile to lift, Download Again subscribes to the
     /// recorded sets that are absent, with each language alias resolved for
     /// the Siri language, and leaves a present set alone.
-    @Test @MainActor func downloadAgainSubscribesToTheRemovedSetsInTheSiriLanguage() async throws {
-        try #require(Store.isSupported, "the download is gated to macOS 27 on Apple silicon")
+    @Test(.enabled(if: Store.isSupported, "the download is gated to macOS 27 on Apple silicon"))
+    @MainActor func downloadAgainSubscribesToTheRemovedSetsInTheSiriLanguage() async throws {
         Store.saveRemovedSetNames([catalog[0].name, catalog[1].name, catalog[4].name], to: defaults.defaults)
         let present = reading(present: 1).sets.map { item in
             AppleIntelligenceSetReading(
