@@ -1717,7 +1717,9 @@ final class PurgeStore: ObservableObject {
             guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
             collected.append(model)
         }
-        guard largeFileScanGeneration == generation else { return }
+        // Cancelling ends a `for await` quietly, so Stop during either wait
+        // lands here; a stopped scan never counts as complete.
+        guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
         publish()
         largeFileScanSummary = summary
         hasCompletedLargeFileScan = true
