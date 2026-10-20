@@ -2,13 +2,20 @@ import Foundation
 
 /// Shared rules for locating cache directories outside `~/Library/Caches`.
 enum CacheDiscoveryPaths {
-    /// Direct cache folder names under an app’s Application Support root.
+    /// Cache folder names directly in a Chromium data folder: an Electron app’s
+    /// Application Support root, or the root of a Chromium `User Data` folder.
+    /// Chromium writes its GPU shader caches under several names over the years,
+    /// and current builds write both `DawnGraphiteCache` and `GraphiteDawnCache`.
     nonisolated static let applicationSupportDirectCacheNames: Set<String> = [
         "Cache",
         "Code Cache",
         "GPUCache",
         "ShaderCache",
+        "GrShaderCache",
+        "DawnCache",
         "DawnWebGPUCache",
+        "DawnGraphiteCache",
+        "GraphiteDawnCache",
         "CachedData",
         "component_crx_cache"
     ]
@@ -23,7 +30,11 @@ enum CacheDiscoveryPaths {
         "GPUCache",
         "ShaderCache",
         "Code Cache",
-        "Cache"
+        "Cache",
+        "DawnCache",
+        "DawnWebGPUCache",
+        "DawnGraphiteCache",
+        "GraphiteDawnCache"
     ]
 
     /// Relative paths under a Chromium profile directory.
@@ -43,6 +54,86 @@ enum CacheDiscoveryPaths {
         "com.apple.sharedfilelist"
     ]
 
+    /// Files Chromium writes at the root of its data folder. Any app can name a
+    /// folder `Cache`, so the generic cache names count only in a folder that has
+    /// one of these (#130). Some Electron apps write only `Network Persistent State`.
+    nonisolated static let chromiumDataFolderMarkers = ["Local State", "Network Persistent State"]
+
+    nonisolated static func isChromiumDataFolder(_ folder: URL, access: ScanAccess = .full) -> Bool {
+        let fm = FileManager.default
+        return chromiumDataFolderMarkers.contains {
+            let marker = folder.appendingPathComponent($0, isDirectory: false)
+            return ProtectedLocations.isReadable(marker, access: access) && fm.fileExists(atPath: marker.path)
+        }
+    }
+
+    /// A folder named `Cache` is Chromium's HTTP cache only with Chromium's
+    /// layout inside: `Cache_Data` since Chromium 96, or the older blockfile
+    /// `index` and `data_0`. A folder merely named Cache could be anything (#226).
+    nonisolated static func hasChromiumHTTPCacheLayout(_ cache: URL) -> Bool {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        if fm.fileExists(atPath: cache.appendingPathComponent("Cache_Data", isDirectory: true).path, isDirectory: &isDir),
+           isDir.boolValue {
+            return true
+        }
+        return ["index", "data_0"].allSatisfy {
+            fm.fileExists(atPath: cache.appendingPathComponent($0, isDirectory: false).path)
+        }
+    }
+
+    /// Whether `parts`, a path inside the Application Support folder `appRoot`,
+    /// is a cache Purge offers there: a cache directly in an Electron app's
+    /// folder, a cache in its Chromium `User Data` folder, or `Crashpad/completed`.
+    /// The name is never enough by itself. The folder it sits in must be a
+    /// Chromium data folder, and `Cache` needs Chromium's layout inside.
+    /// `applicationSupportCacheURLs` lists exactly these paths, and
+    /// `DeletionSafetyPolicy` allows exactly these.
+    nonisolated static func isApplicationSupportCachePath(_ parts: [String], appRoot: URL) -> Bool {
+        if applicationSupportRelativeCachePaths.contains(parts.joined(separator: "/")) { return true }
+        if parts.count == 1 {
+            return isChromiumDataFolder(appRoot)
+                && isChromiumCacheFolder(appRoot.appendingPathComponent(parts[0], isDirectory: true),
+                                         names: applicationSupportDirectCacheNames)
+        }
+        guard parts.first == "User Data" else { return false }
+        return isChromiumUserDataCachePath(
+            Array(parts.dropFirst()),
+            userData: appRoot.appendingPathComponent("User Data", isDirectory: true)
+        )
+    }
+
+    /// Whether `parts`, a path inside a Chromium `User Data` folder, is a cache
+    /// at its root, a cache in one of its profiles, or a profile's Service Worker
+    /// cache. Never the folder itself, a profile, or anything else in it.
+    nonisolated static func isChromiumUserDataCachePath(_ parts: [String], userData: URL) -> Bool {
+        guard !parts.isEmpty, parts.count <= 3, isChromiumDataFolder(userData) else { return false }
+        let url = parts.reduce(userData) { $0.appendingPathComponent($1, isDirectory: true) }
+        switch parts.count {
+        case 1:
+            return isChromiumCacheFolder(url, names: applicationSupportDirectCacheNames)
+        case 2:
+            return isChromiumCacheFolder(url, names: chromiumProfileCacheNames)
+        default:
+            return chromiumProfileRelativePaths.contains("\(parts[1])/\(parts[2])")
+        }
+    }
+
+    /// Call it only on a folder already checked with `ProtectedLocations.isReadable`:
+    /// the `Cache` check looks inside.
+    private nonisolated static func isChromiumCacheFolder(_ url: URL, names: Set<String>) -> Bool {
+        let name = url.lastPathComponent
+        guard names.contains(name) else { return false }
+        return name != "Cache" || hasChromiumHTTPCacheLayout(url)
+    }
+
+    /// Grouping key for the Application Support caches of an app with no
+    /// `explanations.json` entry, so they show as one row instead of one per
+    /// folder. It never matches an entry, so the row's tier comes from its folders.
+    nonisolated static func applicationSupportGroupKey(appFolderName: String) -> String {
+        "application-support:\(appFolderName)"
+    }
+
     /// Returns every cache candidate path under `~/Library/Application Support/<appRoot>/`.
     ///
     /// A limited scan checks each path with `ProtectedLocations.isReadable` before
@@ -56,18 +147,22 @@ enum CacheDiscoveryPaths {
         var results: [URL] = []
         var seen = Set<String>()
 
-        func appendIfExists(_ url: URL) {
+        func appendIfExists(_ url: URL, cacheNames: Set<String>? = nil) {
             guard ProtectedLocations.isReadable(url, access: access) else { return }
             let key = url.standardizedFileURL.path
             guard !seen.contains(key), fm.fileExists(atPath: url.path) else { return }
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { return }
+            if let cacheNames, !isChromiumCacheFolder(url, names: cacheNames) { return }
             seen.insert(key)
             results.append(url.standardizedFileURL)
         }
 
-        for name in applicationSupportDirectCacheNames {
-            appendIfExists(appRoot.appendingPathComponent(name, isDirectory: true))
+        if isChromiumDataFolder(appRoot, access: access) {
+            for name in applicationSupportDirectCacheNames.sorted() {
+                appendIfExists(appRoot.appendingPathComponent(name, isDirectory: true),
+                               cacheNames: applicationSupportDirectCacheNames)
+            }
         }
 
         for relative in applicationSupportRelativeCachePaths {
@@ -75,8 +170,8 @@ enum CacheDiscoveryPaths {
         }
 
         let userData = appRoot.appendingPathComponent("User Data", isDirectory: true)
-        if ProtectedLocations.isReadable(userData, access: access), fm.fileExists(atPath: userData.path) {
-            appendChromiumProfileCaches(userData: userData, appendIfExists: appendIfExists)
+        for url in chromiumUserDataCacheURLs(userData: userData, access: access) {
+            appendIfExists(url)
         }
 
         return results
@@ -95,18 +190,21 @@ enum CacheDiscoveryPaths {
         var results: [URL] = []
         var seen = Set<String>()
 
-        func appendIfExists(_ url: URL) {
+        func appendIfExists(_ url: URL, cacheNames: Set<String>? = nil) {
             guard ProtectedLocations.isReadable(url, access: access) else { return }
             let key = url.standardizedFileURL.path
             guard !seen.contains(key) else { return }
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { return }
+            if let cacheNames, !isChromiumCacheFolder(url, names: cacheNames) { return }
             seen.insert(key)
             results.append(url.standardizedFileURL)
         }
 
+        guard isChromiumDataFolder(userData, access: access) else { return [] }
         for name in applicationSupportDirectCacheNames.sorted() {
-            appendIfExists(userData.appendingPathComponent(name, isDirectory: true))
+            appendIfExists(userData.appendingPathComponent(name, isDirectory: true),
+                           cacheNames: applicationSupportDirectCacheNames)
         }
         appendChromiumProfileCaches(userData: userData, appendIfExists: appendIfExists)
         return results.sorted { $0.path < $1.path }
@@ -114,7 +212,7 @@ enum CacheDiscoveryPaths {
 
     private nonisolated static func appendChromiumProfileCaches(
         userData: URL,
-        appendIfExists: (URL) -> Void
+        appendIfExists: (URL, Set<String>?) -> Void
     ) {
         let fm = FileManager.default
         guard let profiles = try? fm.contentsOfDirectory(
@@ -128,10 +226,10 @@ enum CacheDiscoveryPaths {
                 continue
             }
             for name in chromiumProfileCacheNames {
-                appendIfExists(profileDir.appendingPathComponent(name, isDirectory: true))
+                appendIfExists(profileDir.appendingPathComponent(name, isDirectory: true), chromiumProfileCacheNames)
             }
             for relative in chromiumProfileRelativePaths {
-                appendIfExists(profileDir.appendingPathComponent(relative, isDirectory: true))
+                appendIfExists(profileDir.appendingPathComponent(relative, isDirectory: true), nil)
             }
         }
     }

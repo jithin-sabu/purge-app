@@ -9,7 +9,8 @@ nonisolated struct CacheLocation: Hashable {
 }
 
 nonisolated struct CacheItem: Identifiable, Hashable {
-    /// Canonical `explanations.json` key; `nil` means this row is not merged with others.
+    /// Canonical `explanations.json` key, or `CacheDiscoveryPaths.applicationSupportGroupKey`
+    /// for an app with no entry; `nil` means this row is not merged with others.
     let definitionKey: String?
     let locations: [CacheLocation]
     var appName: String

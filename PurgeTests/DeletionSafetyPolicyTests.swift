@@ -372,16 +372,22 @@ struct WhitelistedAbsolutePrefixesTests {
         #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
     }
 
-    @Test
-    func slackCache() {
-        let url = TestPaths.homeURL("Library", "Application Support", "Slack", "Cache")
-        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
-    }
+    /// An Electron app's HTTP cache is allowed by its shape: Chromium's marker
+    /// file in the app folder and `Cache_Data` inside. The name alone is not enough.
+    @Test(arguments: ["Slack", "Cursor"])
+    func electronHTTPCache(appName: String) throws {
+        let home = try TestPaths.makeFakeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let app = home.appendingPathComponent("Library/Application Support/\(appName)", isDirectory: true)
+        let cache = app.appendingPathComponent("Cache", isDirectory: true)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        #expect(!DeletionSafetyPolicy.isWhitelistedApplicationSupportCachePath(cache.path, home: home.path))
 
-    @Test
-    func cursorCache() {
-        let url = TestPaths.homeURL("Library", "Application Support", "Cursor", "Cache")
-        #expect(DeletionSafetyPolicy.evaluate(url) == .allow)
+        try Data().write(to: app.appendingPathComponent("Local State"))
+        #expect(!DeletionSafetyPolicy.isWhitelistedApplicationSupportCachePath(cache.path, home: home.path))
+
+        try FileManager.default.createDirectory(at: cache.appendingPathComponent("Cache_Data"), withIntermediateDirectories: true)
+        #expect(DeletionSafetyPolicy.isWhitelistedApplicationSupportCachePath(cache.path, home: home.path))
     }
 
     // ~/Library/Application Support/JetBrains holds plugins and settings, not caches.

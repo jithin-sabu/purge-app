@@ -316,11 +316,17 @@ nonisolated final class CacheScanner {
                 continue
             }
 
+            // An app with an `explanations.json` entry groups under that entry. Any
+            // other app gets a key of its own, so its cache folders share one row.
+            let groupKey = ExplanationDatabase.definitionKey(forFolderName: appFolderName) == nil
+                ? CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: appFolderName)
+                : nil
             for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir, access: access) {
                 guard let item = cacheItemAtDiscoveredPath(
                     cacheURL,
-                    headline: applicationSupportHeadline(appFolderName: appFolderName, cacheURL: cacheURL),
+                    headline: applicationSupportHeadline(appFolderName: appFolderName),
                     folderName: appFolderName,
+                    groupKey: groupKey,
                     access: access,
                     collectedPaths: &collectedPaths
                 ) else { continue }
@@ -466,6 +472,7 @@ nonisolated final class CacheScanner {
         _ url: URL,
         headline: String,
         folderName: String,
+        groupKey: String? = nil,
         access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> CacheItem? {
@@ -485,7 +492,7 @@ nonisolated final class CacheScanner {
             path: url
         )
         return CacheItem(
-            definitionKey: ExplanationDatabase.definitionKey(forFolderName: folderName),
+            definitionKey: groupKey ?? ExplanationDatabase.definitionKey(forFolderName: folderName),
             location: CacheLocation(
                 path: url,
                 sizeBytes: 0,
@@ -561,22 +568,13 @@ nonisolated final class CacheScanner {
         }
     }
 
-    private func applicationSupportHeadline(appFolderName: String, cacheURL: URL) -> String {
-        let cacheLeaf = cacheURL.lastPathComponent
+    /// One name for every cache folder of an app, since they share a row.
+    private func applicationSupportHeadline(appFolderName: String) -> String {
         let displayApp = appFolderName
             .replacingOccurrences(of: "company.thebrowser.", with: "")
             .replacingOccurrences(of: "com.google.", with: "")
             .replacingOccurrences(of: "com.apple.", with: "")
-        if cacheLeaf == "Cache" || cacheLeaf == "CachedData" {
-            return "\(displayApp) Cache"
-        }
-        if cacheURL.path.contains("Service Worker/CacheStorage") {
-            return "\(displayApp) Service Worker Cache"
-        }
-        if cacheURL.path.contains("Service Worker/ScriptCache") {
-            return "\(displayApp) Service Worker Script Cache"
-        }
-        return "\(displayApp) \(cacheLeaf)"
+        return "\(displayApp) Cache"
     }
 
     private func containerBundleID(from cacheURL: URL) -> String? {

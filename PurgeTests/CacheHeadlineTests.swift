@@ -20,6 +20,21 @@ struct CacheHeadlineTests {
             == .codeCache(app: "Visual Studio"))
     }
 
+    /// An app's Application Support caches share one row titled "<app folder> Cache",
+    /// so an app folder ending in "Code" never reads as a code cache, even when
+    /// its largest folder is `Code Cache`.
+    @Test func sharedApplicationSupportRowIsAPlainCache() {
+        #expect(CacheHeadline.pattern(of: "T3 Code Cache", cacheFolder: "Code Cache", appFolder: "T3 Code")
+            == .cache(app: "T3 Code"))
+        // A title saved before the rows were shared still reads as a code cache.
+        #expect(CacheHeadline.pattern(of: "Slack Code Cache", cacheFolder: "Code Cache", appFolder: "Slack")
+            == .codeCache(app: "Slack"))
+        #expect(CacheHeadline.applicationSupportAppFolder(
+            of: "/Users/alice/Library/Application Support/T3 Code/Code Cache"
+        ) == "T3 Code")
+        #expect(CacheHeadline.applicationSupportAppFolder(of: "/Users/alice/Library/Caches/com.t3.code") == nil)
+    }
+
     @Test func longerSuffixesWinOverPlainCache() {
         #expect(CacheHeadline.pattern(of: "Chrome Service Worker Cache", cacheFolder: "CacheStorage")
             == .serviceWorkerCache(app: "Chrome"))

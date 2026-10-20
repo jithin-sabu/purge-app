@@ -164,7 +164,7 @@ final class PurgeStore: ObservableObject {
         static func deletionCandidates(forCache item: CacheItem) -> [DeletionCandidate] {
             item.locations.map { location in
                 DeletionCandidate(
-                    title: CacheHeadline.localized(item.appName, cacheFolder: item.path.lastPathComponent),
+                    title: CacheHeadline.localized(item.appName, cacheFolder: item.path.lastPathComponent, appFolder: item.bundleID),
                     path: location.path,
                     sizeBytes: location.sizeBytes,
                     safetyInfo: item.safetyInfo,
@@ -845,7 +845,7 @@ final class PurgeStore: ObservableObject {
                 guard !MacOSInstallLeftovers.isEntryPath(path.path) else { continue }
                 candidates.append(
                     DeletionCandidate(
-                        title: CacheHeadline.localized(item.appName, cacheFolder: item.path.lastPathComponent),
+                        title: CacheHeadline.localized(item.appName, cacheFolder: item.path.lastPathComponent, appFolder: item.bundleID),
                         path: path,
                         sizeBytes: location.sizeBytes,
                         safetyInfo: item.safetyInfo,
