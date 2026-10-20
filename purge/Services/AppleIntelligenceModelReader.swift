@@ -298,10 +298,35 @@ nonisolated enum AppleIntelligenceDownloadBlock {
         }.sorted()
     }
 
-    /// Where the profile is written for System Settings to pick up.
-    static var profileFileURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads/Purge Apple Intelligence Models.mobileconfig")
+    /// Where the profile is written for System Settings to pick up: a folder of
+    /// Purge's own under the user's temporary directory. Earlier versions wrote
+    /// it to Downloads, which put a file there and could prompt for access (#179).
+    static var profileDirectoryURL: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("io.getpurge.app.profiles", isDirectory: true)
+    }
+
+    static let profileFileName = "Purge Apple Intelligence Models.mobileconfig"
+
+    /// Writes the profile and returns where. The write is atomic: it lands in a
+    /// temporary file that then replaces whatever is at the path, so a link
+    /// planted there is replaced rather than followed.
+    @discardableResult
+    static func writeProfile(_ data: Data, in directory: URL = profileDirectoryURL) throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(profileFileName)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    /// Removes the profile Purge wrote, and only that: a regular file at the
+    /// path. The delete comes after a wait of up to ten minutes, so anything
+    /// else that turned up there meanwhile, a folder or a link, is left alone.
+    /// The attributes are read without following a link.
+    static func removeProfile(at url: URL, fileManager: FileManager = .default) {
+        guard let type = try? fileManager.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType,
+              type == .typeRegular
+        else { return }
+        try? fileManager.removeItem(at: url)
     }
 
     static let profilesPaneURLs = [

@@ -243,8 +243,8 @@ struct AppleIntelligenceModelStoreTests {
     }
 
     /// The row shows for a pending request, but a Mac that never had the
-    /// models and asked for nothing still shows none: Download Again asks for
-    /// all five sets, so it is not offered there unasked.
+    /// models and asked for nothing still shows none: there is nothing of
+    /// Purge's to bring back there.
     @Test func onlyAPendingRequestKeepsTheRowOnAMacWithoutModels() {
         let none = reading(present: 0)
         #expect(!Store.isRelevant(reading: none, isProfileInstalled: false, lastOutcome: nil))
@@ -262,5 +262,163 @@ struct AppleIntelligenceModelStoreTests {
             lastArrivalChange: after(60), at: after(60))
         #expect(next.outcome == .profileStillInstalled)
         #expect(next.requestDone)
+    }
+
+    // MARK: Remove acts on the confirmation, Download Again on what was removed (#179)
+
+    private var catalog: [AppleIntelligenceModelSet] { AppleIntelligenceCatalog.sets }
+
+    /// The confirmation showed two sets. One went on its own before the click
+    /// and a third appeared: neither is touched.
+    @Test func removeActsOnlyOnTheConfirmedSets() {
+        let planned = [catalog[0], catalog[1]]
+        let present = [catalog[1], catalog[2]]
+        #expect(Store.targets(planned: planned, present: present) == [catalog[1]])
+        #expect(Store.targets(planned: planned, present: []).isEmpty)
+        #expect(Store.targets(planned: [], present: present).isEmpty)
+    }
+
+    /// Download Again asks for the sets Purge removed and nothing else: not a
+    /// set that stayed after a partial removal, and not one the Mac never had.
+    @Test func downloadAgainAsksForWhatWasRemoved() {
+        // Sets 0 and 1 removed and absent, 2 stayed, 3 and 4 never there.
+        let sets = reading(present: 3).sets.map { item in
+            AppleIntelligenceSetReading(
+                set: item.set, recordsOnDisk: item.set == catalog[2] ? 3 : 0, eliminating: 0,
+                latestBytes: nil, folder: item.set == catalog[2] ? .holdsFiles : .empty)
+        }
+        let byRecord = Store.setsToRequest(removed: [catalog[0].name, catalog[1].name], blockedTypes: [], sets: sets)
+        #expect(byRecord == [catalog[0], catalog[1]])
+
+        // After a relaunch with no record, the profile still says what was blocked.
+        let byBlock = Store.setsToRequest(
+            removed: [], blockedTypes: [catalog[0].assetType, catalog[2].assetType], sets: sets)
+        #expect(byBlock == [catalog[0]])
+
+        // A removed set that is back on the Mac is not asked for again.
+        let back = Store.setsToRequest(removed: [catalog[2].name], blockedTypes: [], sets: sets)
+        #expect(back.isEmpty)
+
+        // No record and no block, as after an update: every absent set, as before.
+        #expect(Store.setsToRequest(removed: [], blockedTypes: [], sets: sets).map(\.name)
+            == [catalog[0], catalog[1], catalog[3], catalog[4]].map(\.name))
+        #expect(Store.setsToRequest(removed: [], blockedTypes: [], sets: reading(present: 5).sets).isEmpty)
+    }
+
+    /// The record outlives a relaunch, adds up over removals, and lets go of a
+    /// set once it is on the Mac again, however it got there.
+    @Test func theRemovedSetsRecordSurvivesARelaunchAndForgetsWhatCameBack() {
+        let first = Store.remembering(removed: [catalog[3].name], in: [])
+        let both = Store.remembering(removed: [catalog[0].name, catalog[3].name], in: first)
+        #expect(both == [catalog[0].name, catalog[3].name])
+
+        Store.saveRemovedSetNames(both, to: defaults.defaults)
+        #expect(Store.loadRemovedSetNames(from: defaults.defaults) == both)
+
+        let afterDownload = Store.forgetting(present: [catalog[0].name], from: both)
+        #expect(afterDownload == [catalog[3].name])
+        Store.saveRemovedSetNames([], to: defaults.defaults)
+        #expect(Store.loadRemovedSetNames(from: defaults.defaults).isEmpty)
+        #expect(defaults.defaults.object(forKey: Store.removedSetsKey) == nil)
+    }
+
+    /// A Mac that answers the worker from memory and records what was asked of
+    /// it, so `remove` and `downloadAgain` can run whole in a test.
+    @MainActor
+    private final class FakeMac {
+        var reading: AppleIntelligenceReading
+        var blocks: [String]
+        var siriLanguage: String? = "zh-TW"
+        var resets: [String] = []
+        var subscribed: [[String: Any]] = []
+        var recorded: [[AppleIntelligenceModelSet]] = []
+
+        init(reading: AppleIntelligenceReading, blocks: [String]) {
+            self.reading = reading
+            self.blocks = blocks
+        }
+
+        var services: Store.Services {
+            var services = Store.Services()
+            services.read = { [reading] in reading }
+            services.installedBlocks = { [blocks] in blocks }
+            services.siriLanguage = { [siriLanguage] in siriLanguage }
+            services.definedAliasValues = { _ in ["language_en", "language_zh", "language_zh_TW"] }
+            services.recordRemoval = { [self] sets, _, _ in self.recorded.append(sets) }
+            services.runWorker = { [self] op, input, _ in
+                switch op {
+                case "asset-type":
+                    let name = input["assetSet"] as? String
+                    let type = AppleIntelligenceCatalog.sets.first { $0.name == name }?.assetType
+                    return AppleIntelligenceWorker.Outcome(ok: true, result: ["assetType": type as Any], error: nil)
+                case "reset":
+                    self.resets += input["assetSets"] as? [String] ?? []
+                    return AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
+                case "subscribe":
+                    self.subscribed = input["subscriptions"] as? [[String: Any]] ?? []
+                    return AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
+                default:
+                    return AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
+                }
+            }
+            return services
+        }
+    }
+
+    /// Run whole: the confirmation showed sets 0 and 1, then set 0 went on
+    /// its own and set 2 appeared. Only set 1 is sent to the service. With
+    /// every type already blocked there is no profile step, so nothing waits.
+    @Test @MainActor func removeReleasesOnlyTheConfirmedSets() async throws {
+        try #require(Store.isSupported, "the removal is gated to macOS 27 on Apple silicon")
+        let present = reading(present: 3).sets.filter { $0.set != catalog[0] }
+        let mac = FakeMac(
+            reading: AppleIntelligenceReading(sets: present, readAt: Date()),
+            blocks: catalog.map(\.assetType))
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+
+        await store.remove(sets: [catalog[0], catalog[1]])
+
+        #expect(mac.resets == [catalog[1].name])
+        #expect(store.phase == .idle)
+        // The fake Mac still lists set 1 afterwards, so nothing was recorded as gone.
+        #expect(mac.recorded.isEmpty)
+        #expect(Store.loadRemovedSetNames(from: defaults.defaults).isEmpty)
+    }
+
+    /// Run whole: with no profile to lift, Download Again subscribes to the
+    /// recorded sets that are absent, with each language alias resolved for
+    /// the Siri language, and leaves a present set alone.
+    @Test @MainActor func downloadAgainSubscribesToTheRemovedSetsInTheSiriLanguage() async throws {
+        try #require(Store.isSupported, "the download is gated to macOS 27 on Apple silicon")
+        Store.saveRemovedSetNames([catalog[0].name, catalog[1].name, catalog[4].name], to: defaults.defaults)
+        let present = reading(present: 1).sets.map { item in
+            AppleIntelligenceSetReading(
+                set: item.set, recordsOnDisk: item.set == catalog[1] ? 3 : 0, eliminating: 0,
+                latestBytes: nil, folder: item.set == catalog[1] ? .holdsFiles : .empty)
+        }
+        let mac = FakeMac(reading: AppleIntelligenceReading(sets: present, readAt: Date()), blocks: [])
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+
+        await store.downloadAgain()
+
+        #expect(mac.subscribed.compactMap { $0["name"] as? String } == [catalog[0], catalog[4]].map(\.recovery.name))
+        let aliases = mac.subscribed.first?["usageAliases"] as? [String: String]
+        #expect(aliases == ["com.apple.Settings.AppleIntelligence": "language_zh_TW"])
+        let spatial = mac.subscribed.last?["usageAliases"] as? [String: String]
+        #expect(spatial == ["spatialPhotos.relive.main": "default"])
+        #expect(store.lastOutcome == .downloadRequested)
+        // Set 1 is on the Mac, so the record let go of it at the reading.
+        #expect(Store.loadRemovedSetNames(from: defaults.defaults) == [catalog[0].name, catalog[4].name])
+    }
+
+    /// Cancel shows a second before the wait begins. A click in that second
+    /// used to be wiped by the wait and Purge sat there for ten minutes.
+    @Test @MainActor func aCancelBeforeTheWaitStartsIsKept() async {
+        let store = Store(defaults: defaults.defaults)
+        store.cancelWaiting()
+        let start = Date()
+        let held = await store.waitUntil({ false }, limit: 3)
+        #expect(!held)
+        #expect(Date().timeIntervalSince(start) < 1)
     }
 }

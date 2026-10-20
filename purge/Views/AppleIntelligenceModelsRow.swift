@@ -12,8 +12,9 @@ struct OverviewAppleIntelligenceRow: View {
     let linkedState: OverviewLinkedRowState
 
     @EnvironmentObject private var diskStore: DiskSummaryStore
-    /// Set when the confirmation is open. It drives the popover itself, so what
-    /// the click removes is fixed when it opens.
+    /// Set when the confirmation is open. It drives the popover itself, and
+    /// Remove acts on its sets, so what the click removes is fixed when the
+    /// confirmation opens (#179).
     @State private var plan: AppleIntelligenceRemovalPlan?
     @State private var isShowingInfo = false
 
@@ -112,7 +113,7 @@ struct OverviewAppleIntelligenceRow: View {
         Button {
             plan = AppleIntelligenceRemovalPlan(
                 bytes: store.reading?.latestBytes,
-                sets: store.reading?.present.count ?? 0,
+                sets: store.reading?.present.map(\.set) ?? [],
                 otherAccounts: store.otherAccounts,
                 reading: store.reading
             )
@@ -128,7 +129,7 @@ struct OverviewAppleIntelligenceRow: View {
                 onConfirm: {
                     self.plan = nil
                     Task {
-                        await store.remove()
+                        await store.remove(sets: plan.sets)
                         diskStore.refresh()
                     }
                 }
@@ -223,7 +224,8 @@ struct OverviewAppleIntelligenceRow: View {
 struct AppleIntelligenceRemovalPlan: Identifiable {
     let id = UUID()
     let bytes: Int64?
-    let sets: Int
+    /// The sets on the Mac when the confirmation opened: all Remove acts on.
+    let sets: [AppleIntelligenceModelSet]
     let otherAccounts: [AppleIntelligenceAccount]
     let reading: AppleIntelligenceReading?
 }
