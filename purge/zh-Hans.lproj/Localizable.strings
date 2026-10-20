@@ -1200,9 +1200,8 @@
 "Inside %@" = "位于 %@ 内";
 "Purge never lists files inside a library" = "Purge 不会列出资料库内的文件";
 "Try %@" = "试试 %@";
-"%@ couldn't be read. Needs Full Disk Access." = "无法读取 %@。需要“完全磁盘访问权限”。";
+"%@ couldn't be read." = "无法读取 %@。";
 "Checked %@" = "已检查 %@";
-"Couldn't be listed" = "无法列出";
 "Cloud" = "云端";
 "1 file · %@" = "1 个文件 · %@";
 "1 file" = "1 个文件";

@@ -148,7 +148,7 @@ nonisolated final class LargeFileScanner {
                 }
             ) else {
                 if !bundlesOnly {
-                    summary.unreadableRoots.append(.init(path: root, reason: String(localized: "Couldn't be listed")))
+                    summary.unreadableRoots.append(.init(path: root, reason: ""))
                 }
                 continue
             }
@@ -205,8 +205,11 @@ nonisolated final class LargeFileScanner {
                             if !bundlesOnly, !isUserExcluded,
                                LargeFileScanSummary.SkippedLibrary.extensions.contains(fileURL.pathExtension.lowercased()) {
                                 enumerator.skipDescendants()
+                                // The exclusion check comes before the walk: a library
+                                // the user excluded must not cost the scan its size.
+                                guard !isExcluded(fileURL) else { continue }
                                 let measured = FolderSizing.walkedSize(at: fileURL, skipsPackages: false)
-                                if measured.bytes >= minBytes, !isExcluded(fileURL) {
+                                if measured.bytes >= minBytes {
                                     summary.skippedLibraries.append(
                                         .init(path: fileURL.standardizedFileURL, bytes: measured.bytes)
                                     )

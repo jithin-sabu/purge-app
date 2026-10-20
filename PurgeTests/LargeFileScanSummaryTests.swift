@@ -102,6 +102,9 @@ struct LargeFileScanSummaryTests {
         #expect(provider("Library/CloudStorage/ProtonDrive-me/a.zip") == .other("ProtonDrive"))
         #expect(provider("Documents/a.pst") == .unknown)
         #expect(provider("Documents/a.pst", ubiquitous: true) == .iCloudDrive)
+        // File Provider items can carry iCloud's flag too; the sync root decides.
+        #expect(provider("Library/CloudStorage/OneDrive-Personal/a.pst", ubiquitous: true) == .oneDrive)
+        #expect(provider("Library/CloudStorage/Dropbox/a.mov", ubiquitous: true) == .dropbox)
         #expect(LargeFileScanSummary.CloudProvider.other("ProtonDrive").displayName == "ProtonDrive")
     }
 
@@ -194,16 +197,31 @@ struct LargeFileScanSummaryTests {
     func summaryPathsNeverPassTheDeleteGate() async throws {
         let home = try makeRoot("gatehome")
         defer { try? FileManager.default.removeItem(at: home) }
-        let pictures = home.appendingPathComponent("Pictures", isDirectory: true)
-        let library = pictures.appendingPathComponent("Photos Library.photoslibrary", isDirectory: true)
-        try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
-        try Data(repeating: 1, count: 4096).write(to: library.appendingPathComponent("db.sqlite"))
+        let fm = FileManager.default
+        let roots = ["Pictures", "Movies", "Music", "Downloads", "Documents", "Desktop"].map {
+            home.appendingPathComponent($0, isDirectory: true)
+        }
+        var expected = 0
+        for root in roots {
+            for ext in LargeFileScanSummary.SkippedLibrary.extensions.sorted() {
+                let library = root.appendingPathComponent("Library.\(ext)", isDirectory: true)
+                try fm.createDirectory(at: library, withIntermediateDirectories: true)
+                try Data(repeating: 1, count: 4096).write(to: library.appendingPathComponent("db.sqlite"))
+                expected += 1
+            }
+        }
 
-        let run = await scan(roots: [pictures], home: home)
+        let run = await scan(roots: roots, home: home)
         let summary = try #require(run.summary)
-        let skipped = try #require(summary.skippedLibraries.first)
-        #expect(!LargeFileScanPolicy.isEligibleForDeletion(skipped.path, home: home))
-        #expect(!LargeFileScanPolicy.isEligibleForDeletion(library.appendingPathComponent("db.sqlite"), home: home))
+        #expect(run.files.isEmpty)
+        #expect(summary.skippedLibraries.count == expected)
+        for skipped in summary.skippedLibraries {
+            #expect(!LargeFileScanPolicy.isEligibleForDeletion(skipped.path, home: home), "\(skipped.path.path)")
+            #expect(
+                !LargeFileScanPolicy.isEligibleForDeletion(skipped.path.appendingPathComponent("db.sqlite"), home: home),
+                "\(skipped.path.path)/db.sqlite"
+            )
+        }
     }
 
     @Test
@@ -232,6 +250,16 @@ struct LargeFileScanSummaryTests {
         #expect(summary.cloudOnly.map(\.provider) == [.iCloudDrive, .oneDrive, .unknown])
         #expect(summary.cloudOnly.map(\.count) == [1, 2, 1])
         #expect(summary.cloudOnly.map(\.bytes) == [3, 6, 1])
+    }
+
+    @Test
+    func unreadableTextCarriesTheSystemReasonWhenThereIsOne() {
+        let root = URL(fileURLWithPath: "/Users/someone/Documents", isDirectory: true)
+        #expect(
+            LargeFileScanSummaryCard.unreadableText(.init(path: root, reason: "You don't have permission."))
+                == "Documents couldn't be read. You don't have permission."
+        )
+        #expect(LargeFileScanSummaryCard.unreadableText(.init(path: root, reason: "")) == "Documents couldn't be read.")
     }
 
     @Test

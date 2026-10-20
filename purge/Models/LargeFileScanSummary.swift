@@ -45,12 +45,13 @@ nonisolated struct LargeFileScanSummary: Equatable, Sendable {
             }
         }
 
-        /// Which provider a placeholder belongs to. iCloud marks its items; the
-        /// File Provider services keep theirs under `~/Library/CloudStorage/<Name>-…`,
-        /// and a folder the user moved there (OneDrive's Folder Backup) resolves into
-        /// it through a link, so the path is resolved first.
+        /// Which provider a placeholder belongs to. The File Provider services keep
+        /// theirs under `~/Library/CloudStorage/<Name>-…`, and a folder the user
+        /// moved there (OneDrive's Folder Backup) resolves into it through a link,
+        /// so the path is resolved first. The sync root wins over iCloud's item
+        /// flag, which File Provider items can carry too; the flag decides only
+        /// outside any sync root, where iCloud Drive keeps its files.
         static func provider(for url: URL, isUbiquitous: Bool, home: URL) -> CloudProvider {
-            if isUbiquitous { return .iCloudDrive }
             let cloudStorage = home
                 .appendingPathComponent("Library/CloudStorage", isDirectory: true)
                 .resolvingSymlinksInPath().path + "/"
@@ -58,7 +59,7 @@ nonisolated struct LargeFileScanSummary: Equatable, Sendable {
             // missing resolves to itself, link and all.
             let resolved = url.deletingLastPathComponent().resolvingSymlinksInPath()
                 .appendingPathComponent(url.lastPathComponent).path
-            guard resolved.hasPrefix(cloudStorage) else { return .unknown }
+            guard resolved.hasPrefix(cloudStorage) else { return isUbiquitous ? .iCloudDrive : .unknown }
             let folder = String(resolved.dropFirst(cloudStorage.count)).split(separator: "/").first.map(String.init) ?? ""
             let prefix = folder.split(separator: "-", maxSplits: 1).first.map(String.init) ?? folder
             switch prefix {
@@ -110,6 +111,7 @@ nonisolated struct LargeFileScanSummary: Equatable, Sendable {
     /// without this record.
     struct UnreadableRoot: Equatable, Sendable, Identifiable {
         let path: URL
+        /// What macOS said, as a sentence, or empty when it gave no error.
         let reason: String
 
         var id: String { path.path }

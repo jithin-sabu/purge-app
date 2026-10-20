@@ -4,7 +4,7 @@ import SwiftUI
 /// The heading an empty Large Files list gets, from what the scan skipped (#230).
 /// One state at a time, the most urgent first: a folder the scan couldn't open
 /// beats everything, because the result may be missing files.
-enum LargeFileEmptyState: Equatable {
+nonisolated enum LargeFileEmptyState: Equatable {
     case nothingLarge
     case cloudOnly
     case library
@@ -63,7 +63,6 @@ struct LargeFileScanSummaryCard: View {
     let onThisMacCount: Int
     let onThisMacBytes: Int64
     var emptyListFooters: EmptyListFooters?
-    var onOpenSettings: () -> Void = { openFullDiskAccessSettings() }
 
     private static let thisMacID = "thisMac"
     private static let swatchSize: CGFloat = 10
@@ -126,12 +125,14 @@ struct LargeFileScanSummaryCard: View {
                     }
                 )
             }
+            // Large Files only scans with Full Disk Access, so a root that still
+            // can't be read failed for another reason: macOS's own words say which.
             ForEach(summary.unreadableRoots) { root in
                 footerRow(
                     symbol: "exclamationmark.triangle",
                     tint: AppColors.statusCheckText,
-                    text: String(localized: "\(root.name) couldn't be read. Needs Full Disk Access."),
-                    button: (String(localized: "Open System Settings"), onOpenSettings)
+                    text: Self.unreadableText(root),
+                    button: nil
                 )
             }
             if emptyListFooters != nil, !summary.checkedRoots.isEmpty {
@@ -265,6 +266,13 @@ struct LargeFileScanSummaryCard: View {
     private var checkedList: String {
         let names = summary.checkedRoots.map(\.lastPathComponent)
         return ListFormatter.localizedString(byJoining: names)
+    }
+
+    /// "Documents couldn't be read. You don't have permission to access the folder."
+    static func unreadableText(_ root: LargeFileScanSummary.UnreadableRoot) -> String {
+        let lead = String(localized: "\(root.name) couldn't be read.")
+        let reason = root.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        return reason.isEmpty ? lead : "\(lead) \(reason)"
     }
 
     /// "14 files · 9.8 GB", or "0 files" when there is no size to give.

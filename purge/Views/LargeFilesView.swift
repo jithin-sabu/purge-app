@@ -535,24 +535,32 @@ struct LargeFilesView: View {
     private var emptyState: some View {
         let summary = store.largeFileScanSummary
         let state = LargeFileEmptyState.resolve(summary)
-        return VStack(spacing: AppStyle.Spacing.medium) {
-            VStack(spacing: 10) {
-                Image(systemName: state.symbol)
-                    .font(.system(size: 38))
-                    .foregroundStyle(state.symbolColor)
-                Text(state.title)
-                    .font(AppStyle.Typography.sectionTitle.weight(.regular))
-                if summary == nil {
-                    Text("Try a lower size threshold or a shorter last-used window.")
-                        .foregroundStyle(AppColors.textSecondary)
+        // Centred while it fits, scrollable once the card grows a row per
+        // provider, library and unreadable folder past the window's height.
+        return GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: AppStyle.Spacing.medium) {
+                    VStack(spacing: 10) {
+                        Image(systemName: state.symbol)
+                            .font(.system(size: 38))
+                            .foregroundStyle(state.symbolColor)
+                        Text(state.title)
+                            .font(AppStyle.Typography.sectionTitle.weight(.regular))
+                        if summary == nil {
+                            Text("Try a lower size threshold or a shorter last-used window.")
+                                .foregroundStyle(AppColors.textSecondary)
+                        }
+                    }
+                    if let summary {
+                        summaryCard(summary, forEmptyList: true)
+                            .frame(width: Self.summaryCardWidth)
+                    }
                 }
-            }
-            if let summary {
-                summaryCard(summary, forEmptyList: true)
-                    .frame(width: Self.summaryCardWidth)
+                .padding(.vertical, AppStyle.Spacing.large)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: geometry.size.height)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyFilterState: some View {
