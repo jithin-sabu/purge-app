@@ -563,21 +563,35 @@ struct ContentView: View {
         Group {
             if #available(macOS 26.0, *) {
                 overviewScrollView
-                    .detailPageScrollEdge(title: String(localized: "Overview"), includesSubtitle: true)
+                    .detailPageScrollEdge(title: overviewPageTitle, includesSubtitle: !isOnEverythingElsePage)
             } else {
                 overviewScrollView
-                    .underDetailPageHeader(includesSubtitle: true)
+                    .underDetailPageHeader(includesSubtitle: !isOnEverythingElsePage)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// The Overview tab is two pages: the summary, and Everything else opened (#220).
     private var overviewScrollView: some View {
         ScrollView {
-            OverviewView()
+            switch store.overviewPage {
+            case .summary:
+                OverviewView()
+            case .everythingElse:
+                EverythingElseView()
+            }
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.surfaceBase)
+    }
+
+    private var isOnEverythingElsePage: Bool {
+        store.selectedTab == .overview && store.overviewPage == .everythingElse
+    }
+
+    private var overviewPageTitle: String {
+        isOnEverythingElsePage ? String(localized: "Everything else") : String(localized: "Overview")
     }
 
     @ViewBuilder
@@ -609,8 +623,22 @@ struct ContentView: View {
         }
     }
 
+    /// Everything else has no title of its own (#159): its header is the way
+    /// back on the left and Measure again on the right.
+    @ViewBuilder
     private func pageHeader(now: Date) -> some View {
-        AppSectionPageHeader(title: store.selectedTab.displayName, subtitle: selectedPageSubtitle(now: now)) {
+        if isOnEverythingElsePage {
+            EverythingElseHeaderBar(now: now)
+        } else {
+            sectionPageHeader(now: now)
+        }
+    }
+
+    private func sectionPageHeader(now: Date) -> some View {
+        AppSectionPageHeader(
+            title: store.selectedTab.displayName,
+            subtitle: selectedPageSubtitle(now: now)
+        ) {
             if store.selectedTab == .overview {
                 HStack(spacing: AppStyle.Spacing.xSmall) {
                     if !store.hasFullDiskAccess {

@@ -107,6 +107,20 @@ enum AppColors {
         static let everythingElse = Color(light: 0x8C8983, dark: 0xA8A49D)
         /// Free space on the storage bars.
         static let freeSpace = Color(light: 0xDAD7D2, dark: 0x4E4B47)
+
+        /// The Everything else page's four buckets (#159), the Signal palette:
+        /// each colour says what to do. Blue opens an app, amber is yours to
+        /// review, coral is what Purge leaves alone because it doesn't consider it safe to delete, and grey is what macOS
+        /// manages. They differ in lightness as well as hue, so they stay apart
+        /// without colour vision.
+        static let managedInApps = Color(light: 0x3E8FD3, dark: 0x5AA9E6)
+        static let yourFiles = Color(light: 0xD39B2F, dark: 0xE3B04B)
+        static let leftAlone = Color(light: 0xCC6655, dark: 0xD9786A)
+        static let managedByMacOS = Color(light: 0x8A8781, dark: 0x6E6B66)
+        /// Text on the first three bucket tiles, in both modes.
+        static let bucketLabel = Color(light: 0x171615, dark: 0x171615)
+        /// Text on the grey tile, which is dark in dark mode.
+        static let managedByMacOSLabel = Color(light: 0x171615, dark: 0xF4F2EE)
     }
 
     // MARK: - AppKit

@@ -76,7 +76,7 @@ final class IntentRouter {
         store.selectedTab = .overview
         reveal()
         guard !store.isDeleting else { return .busyCleaning }
-        if store.scanQueue.isRunning {
+        if store.scanQueue.isRunningCategoryScan {
             // Joining: make sure the answer has a cache scan behind it.
             store.requestScanIfNeeded(.cachesAndDevTools)
         } else {

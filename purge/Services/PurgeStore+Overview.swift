@@ -92,6 +92,27 @@ extension PurgeStore {
         }
     }
 
+    /// The five categories' live items in claim order, for the Everything else
+    /// breakdown to claim after. Recorded figures have no items, so they are left
+    /// out; their totals are capped by the live ones already.
+    func overviewLiveItemsInClaimOrder() -> [OverviewSizedItem] {
+        var items: [OverviewSizedItem] = []
+        for category in OverviewCategory.allCases {
+            guard case .live(let categoryItems) = overviewSource(for: category, phase: overviewPhase(for: category)) else { continue }
+            items.append(contentsOf: categoryItems)
+        }
+        return items
+    }
+
+    /// True when any category shows a total saved by an earlier session. Its
+    /// paths are unknown, so the Everything else groups can't take it out.
+    func overviewShowsRecordedFigures() -> Bool {
+        OverviewCategory.allCases.contains { category in
+            if case .recorded = overviewSource(for: category, phase: overviewPhase(for: category)) { return true }
+            return false
+        }
+    }
+
     /// A scan in progress shows what it has found so far. A category waiting for its
     /// turn shows nothing: it is about to be measured again, so the old figure would
     /// only be replaced. One not scanned this session shows its saved figure.

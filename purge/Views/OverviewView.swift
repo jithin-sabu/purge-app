@@ -14,18 +14,28 @@ struct OverviewView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The bar segment under the pointer. Its row lifts and the others fade.
     @State private var highlightedID: String?
+    /// The snapshot and Apple Intelligence readings run `tmutil`, `dscl` and the
+    /// asset worker. In the unit-test host those have nothing to read and can
+    /// sit on their timeouts, holding threads every async test needs (#206), so
+    /// the host never starts them.
+    private let isRunningAsTestHost = TestHost.isActive()
 
     var body: some View {
         // Relative times ("Scanned 3h ago") move on their own.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             content(now: context.date)
         }
-        .task { await snapshotStore.refresh() }
-        .task { await appleIntelligenceStore.refresh() }
+        .task { await refreshReadings() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            Task { await snapshotStore.refresh() }
-            Task { await appleIntelligenceStore.refresh() }
+            Task { await refreshReadings() }
         }
+    }
+
+    private func refreshReadings() async {
+        guard !isRunningAsTestHost else { return }
+        async let snapshots: Void = snapshotStore.refresh()
+        async let models: Void = appleIntelligenceStore.refresh()
+        _ = await (snapshots, models)
     }
 
     @ViewBuilder
@@ -133,13 +143,8 @@ struct OverviewView: View {
 
     private func restOfDiskCard(_ breakdown: OverviewBreakdown) -> some View {
         VStack(spacing: 0) {
-            OverviewPlainRow(
-                symbol: "ellipsis",
-                color: AppColors.Chart.everythingElse,
-                title: String(localized: "Everything else"),
-                detail: String(localized: "macOS, your documents and photos, and files Purge doesn't sort"),
-                bytes: breakdown.everythingElseBytes,
-                share: breakdown.share(of: breakdown.everythingElseBytes),
+            OverviewEverythingElseRow(
+                breakdown: breakdown,
                 linkedState: linkedRowState(OverviewDiskBar.everythingElseID)
             )
             InsetCardDivider()
@@ -512,7 +517,7 @@ struct OverviewIconTile: View {
     }
 }
 
-private struct OverviewPlainRow: View {
+struct OverviewPlainRow: View {
     var symbol: String?
     let color: Color
     let title: String
@@ -786,7 +791,7 @@ extension View {
 
 // MARK: - Card
 
-private extension View {
+extension View {
     /// The card surface. Rows are clipped to its rounded shape so a row's hover fill
     /// stays inside the corners, and the border is drawn over them so the fill
     /// can't cover it.
@@ -1021,19 +1026,21 @@ struct OverviewScanButton: View {
         case .largeFiles: return String(localized: "Large Files")
         case .apps: return String(localized: "installed apps")
         case .leftovers: return String(localized: "leftovers from deleted apps")
+        case .everythingElse: return String(localized: "Everything else")
         }
     }
 
     private var queue: ScanQueueState { store.scanQueue }
 
     private var isFinishingCacheScan: Bool {
-        (queue.active == .cachesAndDevTools && queue.pending.isEmpty)
-            || (!queue.isRunning && store.isScanningAll)
+        // A queued Everything else walk is not a category scan still to come.
+        (queue.active == .cachesAndDevTools && !queue.pending.contains { $0 != .everythingElse })
+            || (!queue.isRunningCategoryScan && store.isScanningAll)
     }
 
     var body: some View {
         Button {
-            if queue.isRunning {
+            if queue.isRunningCategoryScan {
                 store.stopScans()
             } else {
                 store.scanEverything()
@@ -1048,17 +1055,17 @@ struct OverviewScanButton: View {
         .buttonStyle(.purge(.secondary))
         .keyboardShortcut("r", modifiers: [.command])
         .disabled(isFinishingCacheScan || store.isDeleting)
-        .help(queue.isRunning ? LocalizedStringKey("Stop scanning") : LocalizedStringKey("Scan App Caches, Dev Tools, Large Files and apps, one after another"))
+        .help(queue.isRunningCategoryScan ? LocalizedStringKey("Stop scanning") : LocalizedStringKey("Scan App Caches, Dev Tools, Large Files and apps, one after another"))
     }
 
     private var title: String {
         if isFinishingCacheScan { return String(localized: "Scanning...") }
-        return queue.isRunning ? String(localized: "Stop") : String(localized: "Scan Everything")
+        return queue.isRunningCategoryScan ? String(localized: "Stop") : String(localized: "Scan Everything")
     }
 
     private var systemImage: String? {
         if isFinishingCacheScan { return nil }
-        return queue.isRunning ? "stop.fill" : "arrow.clockwise"
+        return queue.isRunningCategoryScan ? "stop.fill" : "arrow.clockwise"
     }
 }
 

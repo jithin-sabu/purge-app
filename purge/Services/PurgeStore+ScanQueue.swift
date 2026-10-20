@@ -8,9 +8,13 @@ import Foundation
 /// running beside it.
 extension PurgeStore {
     /// Scan Everything: every category, whether or not it has recent results.
+    /// A running or queued Everything else walk is stopped first: the queue
+    /// runs one step at a time, the walk can take minutes and feeds no
+    /// category, and the page offers to measure again.
     func scanEverything() {
         refreshPermission()
-        let steps = ScanStep.allCases.filter { !$0.needsFullDiskAccess || hasFullDiskAccess }
+        stopEverythingElse()
+        let steps = ScanStep.allCases.filter { !$0.runsOnlyOnDemand && (!$0.needsFullDiskAccess || hasFullDiskAccess) }
         scanQueueForcedSteps.formUnion(steps)
         scanQueue.enqueue(steps)
         startScanQueueIfIdle()
@@ -76,6 +80,9 @@ extension PurgeStore {
     /// rescan would otherwise walk the disk beside a queued scan or cut a queued
     /// full scan short.
     func withScanQueueHeld<T>(_ work: () async -> T) async -> T {
+        // The Everything else walk can take minutes and feeds no category, so a
+        // clean doesn't wait for it. The page offers to measure again.
+        stopEverythingElse()
         while scanQueueTask != nil || isScanQueueHeld, !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(100))
         }
@@ -189,7 +196,7 @@ extension PurgeStore {
     }
 
     private func runScanStep(_ step: ScanStep, forced: Bool) async {
-        if step != .cachesAndDevTools, let fullAccessStep = scanSources.fullAccessStep {
+        if step.needsFullDiskAccess, let fullAccessStep = scanSources.fullAccessStep {
             await fullAccessStep(step, forced)
             return
         }
@@ -220,6 +227,9 @@ extension PurgeStore {
             } else {
                 await scanOrphanLeftoversIfNeeded()
             }
+        case .everythingElse:
+            // Only ever queued on demand, so it always measures afresh.
+            await measureEverythingElse()
         }
     }
 }
