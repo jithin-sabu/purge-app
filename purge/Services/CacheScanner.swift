@@ -574,7 +574,7 @@ nonisolated final class CacheScanner {
             .replacingOccurrences(of: "company.thebrowser.", with: "")
             .replacingOccurrences(of: "com.google.", with: "")
             .replacingOccurrences(of: "com.apple.", with: "")
-        return String(localized: "\(displayApp) Cache")
+        return "\(displayApp) Cache"
     }
 
     private func containerBundleID(from cacheURL: URL) -> String? {
