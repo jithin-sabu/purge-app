@@ -1838,10 +1838,14 @@ final class PurgeStore: ObservableObject {
         var urls: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
+        var aiModelPaths = Set<String>()
         for file in targets {
+            let isAIModel: Bool
+            if case .aiModel? = file.kind { isAIModel = true } else { isAIModel = false }
             for component in file.componentPaths {
                 urls.append(component)
                 pathToDisplayName[component.path] = file.displayName
+                if isAIModel { aiModelPaths.insert(component.path) }
             }
             // Only single-file rows can claim a known size up front; for
             // multi-part rows each component is measured as it goes so the
@@ -1879,6 +1883,7 @@ final class PurgeStore: ObservableObject {
                 at: urls,
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                aiModelPaths: aiModelPaths,
                 onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)

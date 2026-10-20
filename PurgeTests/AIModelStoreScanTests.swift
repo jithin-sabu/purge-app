@@ -47,6 +47,10 @@ struct AIModelStoreScanTests {
         AIModelScanner.allModels(home: home.url, environment: environment, access: access, looseWeightSizeFloor: Self.floor)
     }
 
+    private func eligible(_ url: URL, in home: Home) -> Bool {
+        AIModelScanPolicy.isEligibleForDeletion(url, home: home.url, environment: [:], looseWeightSizeFloor: Self.floor)
+    }
+
     // MARK: - Hugging Face
 
     @Test("An app's Hugging Face cache names its models from index.json")
@@ -206,6 +210,61 @@ struct AIModelStoreScanTests {
         #expect(scan(home, access: .limited).isEmpty)
     }
 
+    @Test("A Draw Things model is its .ckpt and the tensordata beside it, trashed together")
+    func drawThingsGroupsTensorData() throws {
+        let home = try Home()
+        let root = "Library/Containers/com.liuliu.draw-things/Data/Documents/Models"
+        let ckpt = try home.file("\(root)/flux_1_schnell_q8p.ckpt", bytes: 4096)
+        let tensorData = try home.file("\(root)/flux_1_schnell_q8p.ckpt-tensordata", bytes: 8192)
+
+        let models = scan(home).filter { $0.kind == .aiModel(.drawThings) }
+        #expect(models.count == 1)
+        let row = try #require(models.first)
+        // The big half goes first, so an interrupted delete leaves the .ckpt,
+        // which a later scan lists again, rather than an orphan no scan can see.
+        #expect(row.componentPaths == [tensorData.standardizedFileURL, ckpt.standardizedFileURL])
+        #expect(row.sizeBytes == 12288)
+        for component in row.componentPaths {
+            #expect(eligible(component, in: home), "\(component.path)")
+        }
+        #expect(row.kind?.explanation.contains("can't be downloaded again") == true)
+    }
+
+    @Test("DiffusionBee's imported models are never listed, only its downloads")
+    func diffusionBeeImportsStayOut() throws {
+        let home = try Home()
+        try home.file(".diffusionbee/downloads/sd-v1-5/model.ckpt", bytes: 4096)
+        let imported = try home.file(".diffusionbee/custom_models/my-model.safetensors", bytes: 8192)
+
+        let models = scan(home).filter { $0.kind == .aiModel(.diffusionBee) }
+        #expect(models.map(\.displayName) == ["sd-v1-5"])
+        #expect(!eligible(imported, in: home))
+    }
+
+    // MARK: - Links
+
+    @Test("A store root that links elsewhere is neither listed nor deletable")
+    func linkedStoreRootIsRefused() throws {
+        let home = try Home()
+        try home.file("Projects/proj/foo.bin", bytes: 8192)
+        try home.link("jan/models", to: home.url.appendingPathComponent("Projects").path)
+
+        #expect(scan(home).isEmpty)
+        let throughLink = home.url.appendingPathComponent("jan/models/proj", isDirectory: true)
+        #expect(!eligible(throughLink, in: home))
+        #expect(!eligible(throughLink.appendingPathComponent("foo.bin"), in: home))
+    }
+
+    @Test("A link inside a sweep root never lets a file behind it pass")
+    func linkInsideSweepRootIsRefused() throws {
+        let home = try Home()
+        try home.file("Elsewhere/model.gguf", bytes: 8192)
+        try home.link(".cache/elsewhere", to: home.url.appendingPathComponent("Elsewhere").path)
+
+        #expect(scan(home).isEmpty)
+        #expect(!eligible(home.url.appendingPathComponent(".cache/elsewhere/model.gguf"), in: home))
+    }
+
     // MARK: - Loose weights
 
     @Test("An unknown weight file over the floor is listed by its folder; a small one is not")
@@ -332,6 +391,27 @@ struct AIModelStoreScanTests {
         #expect(!eligible(apple))
         #expect(!eligible(plainBin))
         #expect(!eligible(deep))
+    }
+
+    @Test("At the delete engine, a model row answers to the model gate alone")
+    func fileDeleterUsesOnlyTheModelGateForModelRows() async throws {
+        // Every path here sits under ~/Library/Application Support, where the
+        // uninstall gate admits anything. Marked as model components, only the
+        // model itself may go.
+        let home = try Home()
+        let model = try home.file("Library/Application Support/nomic.ai/GPT4All/llama.gguf", bytes: 4096)
+        let database = try home.file("Library/Application Support/nomic.ai/GPT4All/localdocs_v3.db", bytes: 4096)
+        let janRoot = try home.folder("Library/Application Support/Jan/data/models")
+        let paths = [model, database, janRoot].map(\.standardizedFileURL)
+
+        let trash = FakeTrash()
+        let report = try await FileDeleter(home: home.url, trash: trash.trash).deleteUserSelectedFiles(
+            at: paths,
+            aiModelPaths: Set(paths.map(\.path))
+        )
+        #expect(trash.trashedPaths == [model.standardizedFileURL.path])
+        #expect(Set(report.skippedItems.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
+            == [database.standardizedFileURL.path, janRoot.standardizedFileURL.path])
     }
 
     @Test("The real floor is 100 MB, so an app's bundled assets never qualify")

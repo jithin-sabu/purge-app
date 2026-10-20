@@ -82,7 +82,7 @@ nonisolated enum AIModelScanPolicy {
             case .diffusionBee:
                 return String(localized: "Model downloaded with DiffusionBee. Download it again in DiffusionBee.")
             case .drawThings:
-                return String(localized: "Model downloaded with Draw Things. Draw Things may still list it until it checks its models folder. Download it again in Draw Things.")
+                return String(localized: "Model in Draw Things' models folder. It may be one you imported or trained, which can't be downloaded again. Draw Things may still list it until it checks its models folder.")
             case .looseWeights:
                 return String(localized: "Model weights outside any model store Purge knows. The folder they sit in names the app that downloaded them, and that app may still list the model as installed.")
             }
@@ -164,9 +164,10 @@ nonisolated enum AIModelScanPolicy {
             // Current location first, then the pre-0.5 one an upgrade leaves behind.
             return [under("Library/Application Support/Jan/data/models"), under("jan/models")]
         case .diffusionBee:
-            // Only the model folders. `~/.diffusionbee/images` holds the
-            // pictures the user made, and is never a model.
-            return [under(".diffusionbee/downloads"), under(".diffusionbee/custom_models")]
+            // Only the downloads. `~/.diffusionbee/custom_models` holds the
+            // models the user imported, which can't be downloaded again, and
+            // `~/.diffusionbee/images` the pictures the user made.
+            return [under(".diffusionbee/downloads")]
         case .drawThings:
             return [under("Library/Containers/com.liuliu.draw-things/Data/Documents/Models")]
         case .looseWeights:
@@ -253,6 +254,39 @@ nonisolated enum AIModelScanPolicy {
         weightBundleExtensions.contains((name as NSString).pathExtension.lowercased())
     }
 
+    /// Draw Things keeps most of a model's bytes in `<name>.ckpt-tensordata`
+    /// beside `<name>.ckpt`. The pair is one model: listed, sized and trashed
+    /// together, so trashing the row never leaves the big half behind.
+    nonisolated static let weightCompanionSuffix = "-tensordata"
+
+    nonisolated static func companion(ofWeightFile url: URL) -> URL? {
+        guard url.pathExtension.lowercased() == "ckpt" else { return nil }
+        return url.deletingLastPathComponent()
+            .appendingPathComponent(url.lastPathComponent + weightCompanionSuffix, isDirectory: false)
+    }
+
+    nonisolated static func isWeightCompanion(named name: String) -> Bool {
+        name.lowercased().hasSuffix(".ckpt" + weightCompanionSuffix)
+    }
+
+    /// Whether a store or sweep root can be read and trusted: it is a folder,
+    /// and no part of its path is a link. A root that links elsewhere, such as
+    /// `~/jan/models` to `~/Projects`, would make every folder behind it with a
+    /// weight file in it look like a model.
+    nonisolated static func isUsableRoot(_ root: URL) -> Bool {
+        let path = root.standardizedFileURL.path
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue
+        else { return false }
+        return !hasLinkInPath(root)
+    }
+
+    /// `resolvingSymlinksInPath` drops a leading `/private` it added, so a
+    /// path under `/var` or `/tmp` with no link of its own compares equal.
+    nonisolated static func hasLinkInPath(_ url: URL) -> Bool {
+        url.resolvingSymlinksInPath().standardizedFileURL.path != url.standardizedFileURL.path
+    }
+
     /// Folders the sweep never enters. Apple's own folders hold system data,
     /// never a downloaded model, and dependency folders belong to a project.
     nonisolated static func sweepSkipsDirectory(named name: String) -> Bool {
@@ -283,6 +317,12 @@ nonisolated enum AIModelScanPolicy {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { return false }
 
+        // No part of the path may be a link. The rules below match paths as
+        // text, so a store root that links to `~/Projects`, or a link in a
+        // sweep root that leads to another drive, would otherwise let the
+        // real folder behind it pass as a model.
+        guard !hasLinkInPath(standardized) else { return false }
+
         func isInside(_ root: URL) -> Bool { path.hasPrefix(root.path + "/") }
 
         // Ollama: a manifest, or a blob the manifest names. Both are plain
@@ -307,11 +347,13 @@ nonisolated enum AIModelScanPolicy {
         return isEligibleLooseWeight(standardized, home: home, sizeFloor: looseWeightSizeFloor)
     }
 
-    /// What `AIModelScanner.folderModels` lists: a weight file, a Core ML
-    /// bundle, or a folder that holds weight files directly.
+    /// What `AIModelScanner.folderModels` lists: a weight file and its
+    /// companion, a Core ML bundle, or a folder that holds weight files directly.
     nonisolated static func isStoreModel(_ url: URL, isDirectory: Bool) -> Bool {
         let name = url.lastPathComponent
-        guard isDirectory else { return isWeightFile(named: name, insideKnownStore: true) }
+        guard isDirectory else {
+            return isWeightFile(named: name, insideKnownStore: true) || isWeightCompanion(named: name)
+        }
         if isWeightBundle(named: name) { return true }
         let children = (try? FileManager.default.contentsOfDirectory(
             at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]

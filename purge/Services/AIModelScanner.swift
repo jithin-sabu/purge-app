@@ -26,7 +26,7 @@ nonisolated final class AIModelScanner {
     /// manifests and folders and finish almost at once. The loose sweep walks
     /// three large Library trees, so it runs beside the Large Files walk
     /// rather than ahead of it.
-    enum Pass: Sendable {
+    nonisolated enum Pass: Sendable {
         case knownStores
         case looseWeights
     }
@@ -106,9 +106,11 @@ nonisolated final class AIModelScanner {
 
     /// Whether a store root may be read with this access. A root under
     /// Documents or inside an app container prompts without Full Disk Access.
+    /// A root reached through a link is never read: the folder behind it is
+    /// not the store, and the delete gate refuses it too.
     private static func canRead(_ root: URL, home: URL, access: ScanAccess) -> Bool {
         guard ProtectedLocations.isReadable(root, access: access, home: home) else { return false }
-        return FileManager.default.fileExists(atPath: root.path)
+        return AIModelScanPolicy.isUsableRoot(root)
     }
 
     // MARK: - Ollama
@@ -306,21 +308,31 @@ nonisolated final class AIModelScanner {
         // A loose weight file at the root is its own model, as GPT4All and
         // Whisper keep them. Below the root, the folder is the model.
         if relativeName.isEmpty {
+            let regularFiles = Set(entries.filter(\.isRegularFile).map(\.url.lastPathComponent))
             for entry in entries where entry.isRegularFile {
                 guard AIModelScanPolicy.isWeightFile(named: entry.url.lastPathComponent, insideKnownStore: true),
-                      let values = try? entry.url.resourceValues(forKeys: [
-                          .totalFileAllocatedSizeKey, .fileSizeKey, .contentAccessDateKey, .contentModificationDateKey
-                      ])
+                      let file = measuredFile(entry.url)
                 else { continue }
-                let bytes = Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
+                // Draw Things' `.ckpt-tensordata` goes with its `.ckpt`, first,
+                // so an interrupted delete never leaves the big half behind.
+                var components = [entry.url]
+                var bytes = file.bytes
+                var lastUsed = file.lastUsed
+                if let companion = AIModelScanPolicy.companion(ofWeightFile: entry.url),
+                   regularFiles.contains(companion.lastPathComponent),
+                   let measured = measuredFile(companion) {
+                    components.insert(companion, at: 0)
+                    bytes += measured.bytes
+                    lastUsed = max(lastUsed, measured.lastUsed)
+                }
                 guard bytes > 0 else { continue }
                 models.append(LargeFile(
                     path: entry.url,
                     sizeBytes: bytes,
-                    lastUsed: max(values.contentAccessDate ?? .distantPast, values.contentModificationDate ?? .distantPast),
+                    lastUsed: lastUsed,
                     category: .aiModel,
                     sourceLabel: store.displayName,
-                    componentPaths: [entry.url],
+                    componentPaths: components,
                     kind: .aiModel(store)
                 ))
             }
@@ -354,6 +366,16 @@ nonisolated final class AIModelScanner {
                 collectModels(under: entry.url, relativeName: relativeName + [name], store: store, names: names, into: &models)
             }
         }
+    }
+
+    private static func measuredFile(_ url: URL) -> (bytes: Int64, lastUsed: Date)? {
+        guard let values = try? url.resourceValues(forKeys: [
+            .totalFileAllocatedSizeKey, .fileSizeKey, .contentAccessDateKey, .contentModificationDateKey
+        ]) else { return nil }
+        return (
+            Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0),
+            max(values.contentAccessDate ?? .distantPast, values.contentModificationDate ?? .distantPast)
+        )
     }
 
     /// The `index.json` an app keeps beside its models under

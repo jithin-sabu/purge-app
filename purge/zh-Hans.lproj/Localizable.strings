@@ -1220,5 +1220,5 @@
 "Model downloaded with GPT4All. Download it again in GPT4All." = "使用 GPT4All 下载的模型。可在 GPT4All 中重新下载。";
 "Model downloaded with Jan. Jan may still list it until it checks its models folder. Download it again in Jan." = "使用 Jan 下载的模型。在 Jan 重新检查其模型文件夹之前，它可能仍被列出。可在 Jan 中重新下载。";
 "Model downloaded with DiffusionBee. Download it again in DiffusionBee." = "使用 DiffusionBee 下载的模型。可在 DiffusionBee 中重新下载。";
-"Model downloaded with Draw Things. Draw Things may still list it until it checks its models folder. Download it again in Draw Things." = "使用 Draw Things 下载的模型。在 Draw Things 重新检查其模型文件夹之前，它可能仍被列出。可在 Draw Things 中重新下载。";
+"Model in Draw Things' models folder. It may be one you imported or trained, which can't be downloaded again. Draw Things may still list it until it checks its models folder." = "Draw Things 模型文件夹中的模型。它可能是你导入或训练的模型，无法重新下载。在 Draw Things 重新检查其模型文件夹之前，它可能仍被列出。";
 "Model weights outside any model store Purge knows. The folder they sit in names the app that downloaded them, and that app may still list the model as installed." = "位于 Purge 已知模型存储之外的模型权重。它们所在的文件夹表明了下载它们的应用，该应用可能仍将此模型列为已安装。";
