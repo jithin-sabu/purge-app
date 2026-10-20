@@ -169,11 +169,25 @@ final class PurgeStore: ObservableObject {
                     sizeBytes: location.sizeBytes,
                     safetyInfo: item.safetyInfo,
                     reinstallCommand: item.safetyInfo.reinstallCommand,
-                    subtitle: location.folderName,
+                    subtitle: cacheLocationLabel(location),
                     reinstallSafety: cacheReinstallStatus(forPath: location.path),
                     gitStatus: item.gitStatus
                 )
             }
+        }
+
+        /// The line under a cache folder's title in the confirm sheets. An app's
+        /// Application Support cache folders share one row and one title (#231), so
+        /// each shows its path inside the app's folder, like `GPUCache` or
+        /// `Crashpad/completed`. Every other location keeps its folder key.
+        static func cacheLocationLabel(_ location: CacheLocation) -> String {
+            let components = location.path.pathComponents
+            guard let index = components.indices.dropLast(2).first(where: {
+                components[$0] == "Library"
+                    && components[$0 + 1] == "Application Support"
+                    && components[$0 + 2] == location.folderName
+            }), index + 3 < components.count else { return location.folderName }
+            return components[(index + 3)...].joined(separator: "/")
         }
 
         private static func cacheReinstallStatus(forPath url: URL) -> ReinstallSafetyStatus {
@@ -850,7 +864,7 @@ final class PurgeStore: ObservableObject {
                         sizeBytes: location.sizeBytes,
                         safetyInfo: item.safetyInfo,
                         reinstallCommand: item.safetyInfo.reinstallCommand,
-                        subtitle: location.folderName,
+                        subtitle: DeletionCandidate.cacheLocationLabel(location),
                         reinstallSafety: Self.cacheReinstallStatus(forPath: path),
                         gitStatus: item.gitStatus
                     )
