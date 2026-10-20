@@ -42,6 +42,33 @@ struct CacheLocationLabelTests {
         #expect(Set(candidates.map(\.title)).count == 1)
     }
 
+    /// Clean Safe Items builds its own candidates, so it needs the same label.
+    /// The path sits under the real home so the allowlist offers it, and does not
+    /// exist: `Crashpad/completed` is offered by its name alone.
+    @Test func cleanSafeItemsShowsTheFolderPathToo() throws {
+        let appFolder = "purge-test-\(UUID().uuidString)"
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/\(appFolder)/Crashpad/completed", isDirectory: true)
+        try #require(!FileManager.default.fileExists(atPath: path.path))
+        try #require(DeletionSafetyPolicy.isOfferedForCleanup(path))
+
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let store = fake.makeStore()
+        store.hasFullDiskAccess = true
+        store.cacheItems = [
+            CacheItem(
+                definitionKey: CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: appFolder),
+                locations: [CacheLocation(path: path, sizeBytes: 1, lastModified: .distantPast, folderName: appFolder)],
+                appName: "\(appFolder) Cache",
+                safetyInfo: safetyInfo("\(appFolder) Cache"),
+                gitStatus: .clean
+            ),
+        ]
+
+        #expect(store.manualSafeCleanupCandidates().map(\.subtitle) == ["Crashpad/completed"])
+    }
+
     @Test func libraryCachesFolderKeepsItsFolderName() {
         let label = PurgeStore.DeletionCandidate.cacheLocationLabel(
             location("Library/Caches/com.example.app", folderName: "com.example.app")
