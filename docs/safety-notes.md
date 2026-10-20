@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-10-16: Leftovers offered an installed OrbStack's Docker data
 
-**Reported** by @vim-diesel ([#197](https://github.com/jithin-sabu/purge-app/issues/197)). **Fixed:** not yet released. **Affected:** v1.5.2 to v1.11.0.
+**Reported** by @vim-diesel ([#197](https://github.com/jithin-sabu/purge-app/issues/197)). **Fixed:** [#199](https://github.com/jithin-sabu/purge-app/pull/199), shipped in v1.11.1 (2026-10-17). **Affected:** v1.5.2 to v1.11.0.
 
 ### What happened
 
