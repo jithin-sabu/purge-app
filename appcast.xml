@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.12.0</title>
+      <pubDate>Tue, 20 Oct 2026 12:40:49 +0000</pubDate>
+      <sparkle:version>35</sparkle:version>
+      <sparkle:shortVersionString>1.12.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>See what is in Everything else</strong>: Click the row on the Overview and a map shows the space Purge doesn't list: app data, your own files, caches off its list, and what macOS manages. It is read only.</li>
+          <li><strong>Leftovers find more removed apps</strong>: Folders named after an app, and hidden home folders such as Antigravity's and Trae's, are offered once the app is gone. Uninstalling those apps lists the folders too, Check First.</li>
+          <li><strong>Scheduled cleaning retries and asks</strong>: A failed clean stays due and tries again in an hour. Turning the schedule back on starts a fresh interval. Purge asks before quitting during any clean.</li>
+          <li><strong>App caches by their real shape</strong>: Application Support caches are offered only inside a Chromium-shaped profile, one row per app, with each folder named in the confirm sheet. New Safe entries for Codex, EffectCraft and the Dart analysis server.</li>
+          <li><strong>Large Files explains an empty result</strong>: A card shows cloud-only files, media libraries it stepped over, the folders it checked and any macOS refused. Apple Intelligence Download Again brings back only the sets Purge removed.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.12.0/Purgev1.12.0.dmg"
+        sparkle:edSignature="2JJZiAN4JmrXXPrWyOEyhF3DvhxYu8tkisMDf1/Y0I6ouAJRLBesKrtmHOnhMt6dW0PG3lIDM6r58n1VidhGCw=="
+        length="9928565"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.11.1</title>
       <pubDate>Sat, 17 Oct 2026 10:46:58 +0000</pubDate>
       <sparkle:version>34</sparkle:version>
