@@ -29,6 +29,12 @@ enum BrandRowIcon: Equatable {
 /// Icons doesn't carry it. Otherwise the definition's `kind` picks an SF Symbol
 /// that says what the cache is. Caches Purge doesn't recognise get
 /// `questionmark.folder`, so they look different from known ones.
+///
+/// Main actor by name, not only by the project default: the caches below are
+/// plain dictionaries, and a caller off the main actor could write them from
+/// two threads at once. Swift 5 mode does not catch a synchronous caller that
+/// does, so the annotation is the record of why (#236).
+@MainActor
 final class BrandIconService {
     static let shared = BrandIconService()
 

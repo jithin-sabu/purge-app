@@ -3,7 +3,11 @@ import Foundation
 import Testing
 @testable import Purge
 
+/// Main actor, like the service it drives. Swift Testing runs a suite's tests
+/// in parallel, and without this the tests wrote the service's row icon cache
+/// from several threads at once and crashed the host now and then (#236).
 @Suite("Row icons say what a cache is")
+@MainActor
 struct CacheKindTests {
     private func allDefinitionKeys() throws -> [String] {
         let url = try #require(Bundle.main.url(forResource: "explanations", withExtension: "json"))
