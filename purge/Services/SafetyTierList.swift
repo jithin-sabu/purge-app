@@ -93,6 +93,25 @@ enum SafetyTierList {
         "com.apple.icloud"
     ]
 
+    /// `<…>/Library/Application Support/<App>/<cache>`, checked against the app
+    /// folder with `CacheDiscoveryPaths.isApplicationSupportCachePath`.
+    private nonisolated static func isApplicationSupportChromiumCache(_ path: URL) -> Bool {
+        let components = path.standardizedFileURL.pathComponents
+        guard let index = components.indices.dropLast().first(where: {
+            components[$0] == "Library" && components[$0 + 1] == "Application Support"
+        }) else { return false }
+        let appIndex = index + 2
+        guard components.count > appIndex + 1 else { return false }
+        let appRoot = URL(
+            fileURLWithPath: NSString.path(withComponents: Array(components[...appIndex])),
+            isDirectory: true
+        )
+        return CacheDiscoveryPaths.isApplicationSupportCachePath(
+            Array(components[(appIndex + 1)...]),
+            appRoot: appRoot
+        )
+    }
+
     nonisolated static func evaluate(folderName: String, path: URL? = nil) -> SafetyLevel? {
         let lower = folderName.lowercased()
 
@@ -111,14 +130,10 @@ enum SafetyTierList {
                 || pathLower.contains("/appinstallationbinarydeltas") {
                 return .safe
             }
-            // An Electron or Chromium app's HTTP cache under Application Support:
-            // `<App>/Cache` with Chromium's `Cache_Data` inside. Only that shape;
-            // a folder merely named Cache could be anything.
-            if pathLower.contains("/library/application support/"),
-               path.lastPathComponent == "Cache",
-               FileManager.default.fileExists(
-                   atPath: path.appendingPathComponent("Cache_Data", isDirectory: true).path
-               ) {
+            // An Electron or Chromium app's cache under Application Support, in the
+            // shape the scan lists and the deletion policy allows. The shape decides,
+            // not the name: a folder merely named Cache could be anything.
+            if isApplicationSupportChromiumCache(path) {
                 return .safe
             }
             // Spotlight index data regenerates on its own, but search is slow or

@@ -529,6 +529,9 @@ struct AllowlistAdditionTests {
         try fm.createDirectory(at: chromium.appendingPathComponent("Cache_Data"), withIntermediateDirectories: true)
         let plain = support.appendingPathComponent("SomeApp/Cache", isDirectory: true)
         try fm.createDirectory(at: plain, withIntermediateDirectories: true)
+        #expect(SafetyTierList.evaluate(folderName: "Recordly", path: chromium) == nil)
+        try Data().write(to: support.appendingPathComponent("Recordly/Network Persistent State"))
+        try Data().write(to: support.appendingPathComponent("SomeApp/Network Persistent State"))
         #expect(SafetyTierList.evaluate(folderName: "Recordly", path: chromium) == .safe)
         #expect(SafetyTierList.evaluate(folderName: "SomeApp", path: plain) == nil)
     }
@@ -746,7 +749,8 @@ struct EverythingElseCacheAuditTests {
         for folder in [
             "Default/Cache/Cache_Data", "Default/Code Cache/js", "Default/Service Worker/CacheStorage",
             "Default/Service Worker/Database", "Default/Extensions", "Default/IndexedDB",
-            "Profile 1/GPUCache", "component_crx_cache", "Safe Browsing", "GraphiteDawnCache",
+            "Profile 1/GPUCache", "Profile 1/Cache", "component_crx_cache", "Safe Browsing", "GraphiteDawnCache",
+            "Profile 1/DawnGraphiteCache",
         ] {
             try fm.createDirectory(at: userData.appendingPathComponent(folder), withIntermediateDirectories: true)
         }
@@ -757,29 +761,19 @@ struct EverythingElseCacheAuditTests {
         let root = userData.standardizedFileURL.path
         let found = CacheDiscoveryPaths.chromiumUserDataCacheURLs(userData: userData, access: .full)
             .map { String($0.path.dropFirst(root.count + 1)) }
+        // `Profile 1/Cache` has no Chromium layout inside, so it is left out.
         #expect(found == [
             "Default/Cache",
             "Default/Code Cache",
             "Default/Service Worker/CacheStorage",
+            "GraphiteDawnCache",
+            "Profile 1/DawnGraphiteCache",
             "Profile 1/GPUCache",
             "component_crx_cache",
         ])
-    }
 
-    /// App Caches classifies an Application Support cache folder by the app
-    /// folder's name, so an alias reaches `<App>/Cache` even without Chromium's
-    /// `Cache_Data` inside, which `SafetyTierList` alone keeps Not Sure. The new
-    /// aliases join Code and Cursor in that behaviour; #226 tracks the guard.
-    @Test(arguments: ["Codex", "EffectCraft", "Code", "Cursor"])
-    func appNameAliasesDecideApplicationSupportCacheRows(appName: String) throws {
-        let fm = FileManager.default
-        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        defer { try? fm.removeItem(at: base) }
-        let bare = base.appendingPathComponent("Library/Application Support/\(appName)/Cache", isDirectory: true)
-        try fm.createDirectory(at: bare, withIntermediateDirectories: true)
-        #expect(SafetyTierList.evaluate(folderName: appName, path: bare) == nil)
-        let info = ExplanationResolver.initialSafetyForCacheFolder(folderName: appName, friendlyHeadline: appName, path: bare)
-        #expect(info.level == .safe, "\(appName)")
+        try fm.removeItem(at: userData.appendingPathComponent("Local State"))
+        #expect(CacheDiscoveryPaths.chromiumUserDataCacheURLs(userData: userData, access: .full).isEmpty)
     }
 
     /// The store the scanner lists is the one the policy allows.

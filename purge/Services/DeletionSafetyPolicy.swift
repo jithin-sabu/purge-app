@@ -622,32 +622,18 @@ enum DeletionSafetyPolicy {
         return isProtectedContainerBundleID(bundleID)
     }
 
+    /// A cache folder in an app's Application Support folder, in the shape
+    /// `CacheDiscoveryPaths.isApplicationSupportCachePath` describes. The folder
+    /// name alone used to be enough, at any depth and in any app (#130, #226).
     nonisolated static func isWhitelistedApplicationSupportCachePath(_ path: String, home: String) -> Bool {
         let prefix = "\(home)/Library/Application Support/"
         guard path.hasPrefix(prefix) else { return false }
 
-        let relative = String(path.dropFirst(prefix.count))
-        guard !relative.isEmpty else { return false }
+        let parts = String(path.dropFirst(prefix.count)).split(separator: "/").map(String.init)
+        guard parts.count >= 2 else { return false }
 
-        let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
-        if topFolder.isEmpty || topFolder == relative { return false }
-
-        if relative.hasSuffix("/Crashpad/completed") { return true }
-
-        let lastComponent = relative.split(separator: "/").last.map(String.init) ?? ""
-        if CacheDiscoveryPaths.applicationSupportDirectCacheNames.contains(lastComponent) {
-            return true
-        }
-
-        if relative.contains("/Service Worker/CacheStorage") { return true }
-        if relative.contains("/Service Worker/ScriptCache") { return true }
-
-        if relative.contains("/User Data/"),
-           CacheDiscoveryPaths.chromiumProfileCacheNames.contains(lastComponent) {
-            return true
-        }
-
-        return false
+        let appRoot = URL(fileURLWithPath: prefix + parts[0], isDirectory: true)
+        return CacheDiscoveryPaths.isApplicationSupportCachePath(Array(parts.dropFirst()), appRoot: appRoot)
     }
 
     /// Chromium "User Data" folders outside Application Support whose cache
