@@ -1033,7 +1033,8 @@ struct OverviewScanButton: View {
     private var queue: ScanQueueState { store.scanQueue }
 
     private var isFinishingCacheScan: Bool {
-        (queue.active == .cachesAndDevTools && queue.pending.isEmpty)
+        // A queued Everything else walk is not a category scan still to come.
+        (queue.active == .cachesAndDevTools && !queue.pending.contains { $0 != .everythingElse })
             || (!queue.isRunningCategoryScan && store.isScanningAll)
     }
 

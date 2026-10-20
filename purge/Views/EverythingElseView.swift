@@ -231,7 +231,6 @@ struct EverythingElseView: View {
             .padding(.bottom, AppStyle.Spacing.large)
             .frame(maxWidth: .infinity, alignment: .leading)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: highlightedBucket)
-            .onAppear { store.requestScanIfNeeded(.everythingElse) }
     }
 
     /// The Trash's figure. Nil only when it can't be read, so the map says it

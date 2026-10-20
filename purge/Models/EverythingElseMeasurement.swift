@@ -331,7 +331,9 @@ nonisolated struct EverythingElseMeasurement: Equatable, Sendable {
                 skippedRoots.append(root)
             }
         case .progress(let root, let fraction):
-            rootProgress[root] = min(1, max(0, fraction))
+            // Chunks finish on their own threads, so a later one can report
+            // first; the figure only ever moves forward.
+            rootProgress[root] = max(rootProgress[root] ?? 0, min(1, fraction))
         case .measured(let measured):
             rootProgress[measured.root] = nil
             measuredRoots.removeAll { $0.root == measured.root }

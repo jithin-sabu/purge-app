@@ -15,6 +15,24 @@ struct EverythingElseStoreTests {
         EverythingElseMeasureRoot(group: group, url: URL(fileURLWithPath: path, isDirectory: true), kind: .children, isLockedWithoutAccess: false)
     }
 
+    /// Scan Everything stops a walk that is running: the queue runs one step at
+    /// a time, and a cache scan must not wait minutes behind a walk that feeds
+    /// no category. The page offers to measure again.
+    @Test func scanEverythingStopsARunningWalk() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        fake.holdsEverythingElse = true
+        let store = fake.makeStore()
+        store.showEverythingElsePage()
+        #expect(await eventually { store.scanQueue.active == .everythingElse })
+
+        store.scanEverything()
+        #expect(await eventually { isIdle(store) })
+        #expect(fake.events.contains("general full"))
+        #expect(store.everythingElsePhase == .notMeasured)
+        fake.cleanUp()
+    }
+
     @Test func theLaunchScanAndScanEverythingLeaveItAlone() async {
         let fake = FakeScans()
         fake.hasAccess = true

@@ -277,6 +277,11 @@ struct EverythingElseGroupTests {
         measurement.apply(.progress(caches, 0.9))
         #expect(measurement.walkFraction == 0.5)
 
+        // Chunks report from their own threads: a late, lower figure never moves it back.
+        measurement.apply(.progress(support, 0.6))
+        measurement.apply(.progress(support, 0.4))
+        #expect(measurement.walkFraction == 0.8)
+
         measurement.isComplete = true
         #expect(measurement.walkFraction == 1)
         #expect(measurement.walkCeiling == 1)

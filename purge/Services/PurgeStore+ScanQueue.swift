@@ -8,8 +8,12 @@ import Foundation
 /// running beside it.
 extension PurgeStore {
     /// Scan Everything: every category, whether or not it has recent results.
+    /// A running or queued Everything else walk is stopped first: the queue
+    /// runs one step at a time, the walk can take minutes and feeds no
+    /// category, and the page offers to measure again.
     func scanEverything() {
         refreshPermission()
+        stopEverythingElse()
         let steps = ScanStep.allCases.filter { !$0.runsOnlyOnDemand && (!$0.needsFullDiskAccess || hasFullDiskAccess) }
         scanQueueForcedSteps.formUnion(steps)
         scanQueue.enqueue(steps)
