@@ -354,11 +354,11 @@ enum DeletionSafetyPolicy {
             "\(home)/.zcompdump",
             "\(home)/.cache/go-build",
             "\(home)/go/pkg/mod/cache",
-            "\(home)/Library/Application Support/Code/Cache",
-            "\(home)/Library/Application Support/Code/CachedData",
+            // VS Code's and Cursor's `Cache`, `CachedData` and the Electron apps'
+            // `Cache` and `Code Cache` are not listed here: a prefix would allow them
+            // by name alone. `isWhitelistedApplicationSupportCachePath` allows them
+            // by their Chromium shape (#226).
             "\(home)/Library/Application Support/Code/CachedExtensionVSIXs",
-            "\(home)/Library/Application Support/Cursor/Cache",
-            "\(home)/Library/Application Support/Cursor/CachedData",
             "\(home)/Library/Caches/JetBrains",
             // NOTE: `~/Library/Application Support/JetBrains` is deliberately NOT on
             // the allowlist. It holds installed plugins and all IDE settings (not a
@@ -369,12 +369,6 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Caches/ms-playwright",
             "\(home)/.cache/ms-playwright",
             "\(home)/Library/Developer/CoreSimulator/Devices",
-            "\(home)/Library/Application Support/Slack/Cache",
-            "\(home)/Library/Application Support/Slack/Code Cache",
-            "\(home)/Library/Application Support/discord/Cache",
-            "\(home)/Library/Application Support/discord/Code Cache",
-            "\(home)/Library/Application Support/Notion/Cache",
-            "\(home)/Library/Application Support/Figma/Cache",
             // Adobe stores its heavy caches under Application Support rather than
             // ~/Library/Caches, so the broad Caches sweep never reaches them. These
             // are the default Common media cache locations only (never a project-local
@@ -658,12 +652,12 @@ enum DeletionSafetyPolicy {
         for root in chromiumUserDataRoots(home: home) {
             guard path.hasPrefix(root + "/") else { continue }
             let parts = String(path.dropFirst(root.count + 1)).split(separator: "/").map(String.init)
-            guard let first = parts.first else { return false }
-            if CacheDiscoveryPaths.applicationSupportDirectCacheNames.contains(first) { return true }
-            guard parts.count >= 2 else { return false }
-            if CacheDiscoveryPaths.chromiumProfileCacheNames.contains(parts[1]) { return true }
-            guard parts.count >= 3 else { return false }
-            return CacheDiscoveryPaths.chromiumProfileRelativePaths.contains("\(parts[1])/\(parts[2])")
+            // The cache folder itself, or anything inside one, in the shape
+            // `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists.
+            let userData = URL(fileURLWithPath: root, isDirectory: true)
+            return (1...min(3, max(parts.count, 1))).contains { depth in
+                CacheDiscoveryPaths.isChromiumUserDataCachePath(Array(parts.prefix(depth)), userData: userData)
+            }
         }
         return false
     }

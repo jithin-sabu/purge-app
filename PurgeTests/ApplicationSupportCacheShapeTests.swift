@@ -135,6 +135,32 @@ struct ApplicationSupportCacheShapeTests {
         #expect(info.level == .safe, "\(appName)")
     }
 
+    /// No allowlist prefix under Application Support may end in a Chromium cache
+    /// name: `evaluate` checks the prefixes first, so one would allow the folder
+    /// by name and skip the shape check.
+    @Test
+    func noPrefixAllowsAnApplicationSupportCacheByName() {
+        let home = DeletionSafetyPolicy.cachedHomePath
+        let names = CacheDiscoveryPaths.applicationSupportDirectCacheNames
+            .union(CacheDiscoveryPaths.chromiumProfileCacheNames)
+        let byName = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: home).filter {
+            $0.hasPrefix("\(home)/Library/Application Support/")
+                && names.contains(URL(fileURLWithPath: $0).lastPathComponent)
+        }
+        #expect(byName.isEmpty, "\(byName)")
+    }
+
+    /// Through the whole decision chain: what an alias app's `Cache` holds is never
+    /// allowed by itself, whatever is on this Mac.
+    @Test(arguments: ["Code", "Cursor", "Slack", "discord", "Notion", "Figma", "Codex", "Claude"])
+    func evaluateRefusesFilesInsideAnAppCache(appName: String) {
+        for relative in ["Cache/notes.db", "Code Cache/js", "CachedData/settings.json", "Partitions/main/Cache"] {
+            let url = URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
+                .appendingPathComponent("Library/Application Support/\(appName)/\(relative)")
+            #expect(DeletionSafetyPolicy.evaluate(url) != .allow, "\(appName)/\(relative)")
+        }
+    }
+
     /// Chromium's HTTP cache before `Cache_Data`: blockfile `index` and `data_0`.
     @Test
     func olderChromiumCacheLayoutCounts() throws {

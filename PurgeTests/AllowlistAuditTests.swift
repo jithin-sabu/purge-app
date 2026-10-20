@@ -674,16 +674,6 @@ struct EverythingElseCacheAuditTests {
         ".hermes/cache/scratch",
         ".gradle/wrapper/dists",
         ".gradle/wrapper/dists/gradle-8.7-bin/bhs2wmbdwecv87pi65oeuq5iu/gradle-8.7-bin.zip",
-        ".gemini/antigravity-browser-profile/Default/Cache",
-        ".gemini/antigravity-browser-profile/Default/Cache/Cache_Data/index",
-        ".gemini/antigravity-browser-profile/Default/Code Cache",
-        ".gemini/antigravity-browser-profile/Default/GPUCache",
-        ".gemini/antigravity-browser-profile/Default/ShaderCache",
-        ".gemini/antigravity-browser-profile/Profile 1/Cache",
-        ".gemini/antigravity-browser-profile/Default/Service Worker/CacheStorage",
-        ".gemini/antigravity-browser-profile/Default/Service Worker/ScriptCache",
-        ".gemini/antigravity-browser-profile/component_crx_cache",
-        ".gemini/antigravity-browser-profile/ShaderCache",
     ])
     func newCachesAreOffered(relative: String) {
         #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
@@ -774,6 +764,41 @@ struct EverythingElseCacheAuditTests {
 
         try fm.removeItem(at: userData.appendingPathComponent("Local State"))
         #expect(CacheDiscoveryPaths.chromiumUserDataCacheURLs(userData: userData, access: .full).isEmpty)
+    }
+
+    /// The Antigravity profile's gate allows the same shape discovery lists, and
+    /// anything inside one of those caches. A bare `Cache` with nothing of
+    /// Chromium's inside is refused, as it is under Application Support.
+    @Test
+    func antigravityGateMatchesDiscovery() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purge-test-home-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let profile = home.appendingPathComponent(".gemini/antigravity-browser-profile", isDirectory: true)
+        for folder in [
+            "Default/Cache/Cache_Data", "Default/Code Cache", "Default/GPUCache", "Default/ShaderCache",
+            "Default/Service Worker/CacheStorage", "Default/Service Worker/ScriptCache", "Profile 1/Cache",
+            "component_crx_cache", "ShaderCache", "GraphiteDawnCache",
+        ] {
+            try fm.createDirectory(at: profile.appendingPathComponent(folder), withIntermediateDirectories: true)
+        }
+        try Data().write(to: profile.appendingPathComponent("Default/Cache/Cache_Data/index"))
+        func allowed(_ relative: String) -> Bool {
+            DeletionSafetyPolicy.isWhitelistedChromiumUserDataCachePath(profile.path + "/" + relative, home: home.path)
+        }
+
+        #expect(!allowed("Default/Cache"))
+        try Data().write(to: profile.appendingPathComponent("Local State"))
+        for relative in [
+            "Default/Cache", "Default/Cache/Cache_Data/index", "Default/Code Cache", "Default/GPUCache",
+            "Default/ShaderCache", "Default/Service Worker/CacheStorage", "Default/Service Worker/ScriptCache",
+            "component_crx_cache", "ShaderCache", "GraphiteDawnCache",
+        ] {
+            #expect(allowed(relative), "\(relative)")
+        }
+        for relative in ["Default", "Local State", "Default/Login Data", "Default/Service Worker", "Profile 1/Cache"] {
+            #expect(!allowed(relative), "\(relative)")
+        }
     }
 
     /// The store the scanner lists is the one the policy allows.
