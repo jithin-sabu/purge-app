@@ -1160,6 +1160,15 @@ enum DeletionSafetyPolicy {
             return .blockedNeverDelete
         }
 
+        // ~/Library/Caches/huggingface holds downloaded AI models, not a cache: an
+        // app's model weights plus its own index of what it installed (#157).
+        // Large Files lists each model there as a row with its own gate, so the
+        // cache route refuses the folder and everything in it. The same bytes are
+        // never in two tabs, and Clean Safe Items can never take a model.
+        if AIModelScanPolicy.isAppModelCachePath(path, home: home) {
+            return .blockedNeverDelete
+        }
+
         for allowed in whitelistedPrefixes(home: home) {
             if path == allowed || path.hasPrefix(allowed + "/") {
                 return .allow

@@ -119,6 +119,19 @@ nonisolated final class LargeFileScanner {
             .isUserImmutableKey, .isSystemImmutableKey
         ]
 
+        // A model store inside a walked folder (swift-transformers downloads to
+        // `~/Documents/huggingface/models`, or a Hub cache `HF_HUB_CACHE` moved
+        // into Documents) is `AIModelScanner`'s: one row per model there, not a
+        // file per weight here. Both spellings are kept, because the enumerator
+        // spells a root `/private/var/…` where the policy says `/var/…`, so each
+        // folder costs one set lookup at any depth and no resolve.
+        let modelStoreRoots = Set(
+            AIModelScanPolicy.rootsInsideLargeFileScan(home: home).flatMap { root -> [String] in
+                let path = root.resolvingSymlinksInPath().path
+                return [path, "/private" + path]
+            }
+        )
+
         for (root, bundlesOnly) in walks {
             if Task.isCancelled { break }
             guard fm.fileExists(atPath: root.path) else { continue }
@@ -217,6 +230,10 @@ nonisolated final class LargeFileScanner {
                                 continue
                             }
                             if LargeFileScanPolicy.isExcludedDirectory(fileURL) || isUserExcluded {
+                                enumerator.skipDescendants()
+                                continue
+                            }
+                            if modelStoreRoots.contains(fileURL.standardizedFileURL.path) {
                                 enumerator.skipDescendants()
                             }
                             continue

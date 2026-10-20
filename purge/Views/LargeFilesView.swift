@@ -1241,8 +1241,11 @@ private struct LargeFileThumbnailIcon: View {
         LargeFileThumbnailService.cacheKey(path: file.id, modified: file.lastUsed)
     }
 
+    /// Empty for a row the scanner named itself: a model folder like
+    /// `models--mlx-community--Llama-3.2-3B` has no extension, only a dot in
+    /// its name, and a `.2-3B…` label over the icon would be nonsense.
     private var fileExtension: String {
-        file.path.pathExtension.lowercased()
+        file.displayNameOverride == nil ? file.path.pathExtension.lowercased() : ""
     }
 
     var body: some View {

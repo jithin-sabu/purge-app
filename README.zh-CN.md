@@ -112,7 +112,9 @@
 
 #### 本地 AI 模型
 
-你用 **Ollama** 或 **LM Studio** 下载的模型，往往是 Mac 上最大的文件，而且很容易被忘记。它们会出现在大文件的 **AI 模型** 类别下，每个模型一行，名称与你安装时一致。Purge 理解 Ollama 的内容寻址存储方式，因此模型的大小只统计真正能回收的字节，不会把与其他模型共享的数据块算进去。
+下载的模型往往是 Mac 上最大的文件，而且很容易被忘记。它们会出现在大文件的 **AI 模型** 类别下，每个模型一行，名称与你安装时一致，位置显示为下载它的应用或库。Purge 认识 **Ollama**、**LM Studio**、**Hugging Face Hub** 缓存（`~/.cache/huggingface/hub`，支持 `HF_HOME` 和 `HF_HUB_CACHE`）、swift-transformers、把模型放在 `~/Library/Caches/huggingface` 下的应用、**PyTorch Hub**、**Whisper**、**GPT4All**、**Jan**、**DiffusionBee** 和 **Draw Things** 的模型存储。`~/Library/Caches`、`~/Library/Application Support` 和 `~/.cache` 中不属于任何已知存储、超过 100 MB 的权重文件也会列出，并显示所在文件夹，方便你判断是哪个应用下载的。
+
+Purge 理解 Ollama 的内容寻址存储方式，因此模型的大小只统计真正能回收的字节，不会把与其他模型共享的数据块算进去。一个 Hugging Face 模型就是它的整个缓存文件夹，两个快照共享的数据块只计一次，也不会在另一个快照还需要时被移除。模型始终移到废纸篓，并且永远不会成为"清理安全项目"或定时清理的一部分。如果某个应用维护自己的已安装模型列表而 Purge 无法更新，该行会说明应用可能仍显示该模型为已安装。
 
 ### 应用卸载（App Uninstaller）
 

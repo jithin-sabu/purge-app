@@ -109,7 +109,9 @@ Some big files carry a label that says what they are. Hover it for the full expl
 
 #### Local AI models
 
-Models you downloaded with **Ollama** or **LM Studio** are often the largest files on a Mac and are easy to forget. They appear in Large Files under the **AI Models** category, one row per model, named the way you installed it. Purge understands Ollama's content-addressed storage, so a model's size counts only the bytes that would actually be reclaimed rather than blobs shared with another model.
+Downloaded models are often the largest files on a Mac and are easy to forget. They appear in Large Files under the **AI Models** category, one row per model, named the way you installed it, with the app or library that downloaded it as the location. Purge knows the stores of **Ollama**, **LM Studio**, the **Hugging Face Hub** cache (`~/.cache/huggingface/hub`, with `HF_HOME` and `HF_HUB_CACHE` honoured), swift-transformers, apps that keep models under `~/Library/Caches/huggingface`, **PyTorch Hub**, **Whisper**, **GPT4All**, **Jan**, **DiffusionBee** and **Draw Things**. Weight files over 100 MB in `~/Library/Caches`, `~/Library/Application Support` and `~/.cache` that belong to no known store are listed too, by the folder they sit in, so you can tell which app downloaded them.
+
+Purge understands Ollama's content-addressed storage, so a model's size counts only the bytes that would actually be reclaimed rather than blobs shared with another model. A Hugging Face model is its whole cache folder, so a blob two snapshots share is counted once and never removed from under the other. Models always go to the Trash and are never part of Clean Safe Items or a scheduled clean. When an app keeps its own list of installed models that Purge can't update, the row says the app may still show the model as installed.
 
 ### App Uninstaller
 

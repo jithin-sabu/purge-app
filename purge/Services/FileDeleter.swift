@@ -452,10 +452,17 @@ nonisolated final class FileDeleter: Sendable {
     /// uninstaller's apps and leftovers. Each path must pass one of the three
     /// policy gates below; this route never consults the cache allowlist,
     /// which refuses the user's own files by design. Items always move to Trash.
+    ///
+    /// `aiModelPaths` are the components of AI model rows. They answer to
+    /// `AIModelScanPolicy` alone: several stores sit under `~/Library`, where
+    /// the uninstall gate admits any path, so the model gate's refusals (a
+    /// store root, GPT4All's local-documents database) would never hold if
+    /// another gate could still say yes (#157).
     @concurrent func deleteUserSelectedFiles(
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],
         pathToExpectedSizeBytes: [String: Int64] = [:],
+        aiModelPaths: Set<String> = [],
         privilegedEligiblePaths: Set<String> = [],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
@@ -475,9 +482,11 @@ nonisolated final class FileDeleter: Sendable {
             // large-file policy deliberately refuses, so they carry their own
             // equally narrow gate. The uninstaller adds a third: an app bundle in
             // an app root, or a leftover inside a known Library location.
-            let isEligible = LargeFileScanPolicy.isEligibleForDeletion(url, home: home)
-                || AIModelScanPolicy.isEligibleForDeletion(url, home: home)
-                || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url, home: home)
+            let isEligible = aiModelPaths.contains(standardizedPath)
+                ? AIModelScanPolicy.isEligibleForDeletion(url, home: home)
+                : LargeFileScanPolicy.isEligibleForDeletion(url, home: home)
+                    || AIModelScanPolicy.isEligibleForDeletion(url, home: home)
+                    || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url, home: home)
             guard isEligible else {
                 skippedItems.append(SkippedDeletionItem(
                     path: url.path,

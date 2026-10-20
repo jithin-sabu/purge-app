@@ -1680,11 +1680,17 @@ final class PurgeStore: ObservableObject {
             largeFiles = collected.sorted { $0.sizeBytes > $1.sizeBytes }
         }
 
-        // Models resolve from a handful of manifests, so they land almost
-        // instantly — running them ahead of the file walk puts the biggest
-        // items on screen first instead of after a full home-directory sweep.
-        // They live outside the walked folders, so the exclusion check is per row.
-        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays) {
+        // Models in known stores resolve from a handful of manifests and
+        // folders, so they land almost instantly — running them ahead of the
+        // file walk puts the biggest items on screen first instead of after a
+        // full home-directory sweep. The loose-weight sweep walks three large
+        // Library trees, so it starts now and runs beside the file walk; its
+        // rows are read once the walk ends. Dropping the stream on an early
+        // return cancels it. Models live outside the walked folders, so the
+        // exclusion check is per row.
+        let access: ScanAccess = hasFullDiskAccess ? .full : .limited
+        let looseWeights = aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: access, pass: .looseWeights)
+        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: access, pass: .knownStores) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
             guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
             collected.append(model)
@@ -1706,7 +1712,14 @@ final class PurgeStore: ObservableObject {
                 summary = finished
             }
         }
-        guard largeFileScanGeneration == generation else { return }
+        for await model in looseWeights {
+            guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
+            guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
+            collected.append(model)
+        }
+        // Cancelling ends a `for await` quietly, so Stop during either wait
+        // lands here; a stopped scan never counts as complete.
+        guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
         publish()
         largeFileScanSummary = summary
         hasCompletedLargeFileScan = true
@@ -1827,10 +1840,14 @@ final class PurgeStore: ObservableObject {
         var urls: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
+        var aiModelPaths = Set<String>()
         for file in targets {
+            let isAIModel: Bool
+            if case .aiModel? = file.kind { isAIModel = true } else { isAIModel = false }
             for component in file.componentPaths {
                 urls.append(component)
                 pathToDisplayName[component.path] = file.displayName
+                if isAIModel { aiModelPaths.insert(component.path) }
             }
             // Only single-file rows can claim a known size up front; for
             // multi-part rows each component is measured as it goes so the
@@ -1868,6 +1885,7 @@ final class PurgeStore: ObservableObject {
                 at: urls,
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+                aiModelPaths: aiModelPaths,
                 onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
