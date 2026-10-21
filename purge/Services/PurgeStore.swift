@@ -231,6 +231,9 @@ final class PurgeStore: ObservableObject {
     @Published var simulatorDevices: [SimulatorDevice] = [] {
         didSet { categoryInputsDidChange() }
     }
+    /// Booted simulators, shown without a checkbox so the space they take is not a
+    /// mystery. Never selected, never counted as recoverable, never deleted.
+    @Published var runningSimulatorDevices: [SimulatorDevice] = []
     /// Runtime images the simulators boot from. Sized by `simctl` on arrival, so
     /// there is no staged set; removed through `simctl runtime delete`, never
     /// trashed, so never part of the one-click safe clean or a scheduled clean.
@@ -3104,6 +3107,8 @@ final class PurgeStore: ObservableObject {
             case .simulatorRuntimeFound(let runtime):
                 coalesce.ingestSimulatorRuntime(runtime)
                 scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
+            case .runningSimulatorsFound(let devices):
+                runningSimulatorDevices = devices.sorted { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
             }
         }
         coalesce.debounceTask?.cancel()
@@ -3784,6 +3789,7 @@ final class PurgeStore: ObservableObject {
         simulatorDevices = []
         stagedSimulatorsByID = [:]
         simulatorRuntimes = []
+        runningSimulatorDevices = []
         projectGroups = []
         scanSelection.devToolIDs.removeAll()
         scanSelection.simulatorIDs.removeAll()
