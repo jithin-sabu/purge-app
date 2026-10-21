@@ -480,6 +480,23 @@ enum CacheDiscoveryPaths {
             .appendingPathComponent("Versions", isDirectory: true)
     }
 
+    /// The browser a framework version folder belongs to, `Google Chrome` for
+    /// `…/Google Chrome.app/Contents/Frameworks/…/Versions/155.0`. Walks up to the
+    /// `.app` rather than counting folders, so a row never reads "Contents Old Version".
+    nonisolated static func chromiumBrowserAppName(forFrameworkVersion versionURL: URL) -> String {
+        var url = versionURL.standardizedFileURL
+        while url.pathComponents.count > 1 {
+            url = url.deletingLastPathComponent()
+            if url.pathExtension == "app" {
+                return url.deletingPathExtension().lastPathComponent
+            }
+        }
+        // Not inside a bundle: name the framework instead of a folder like `Contents`.
+        let framework = versionURL.deletingLastPathComponent().deletingLastPathComponent()
+        return framework.deletingPathExtension().lastPathComponent
+            .replacingOccurrences(of: " Framework", with: "")
+    }
+
     /// Stale Chromium framework versions inside `.app` bundles (not the `Current` symlink target).
     /// Versions a running browser is still executing from are dropped later by
     /// `DeletionSafetyPolicy.staleBrowserFrameworkRefusesDeletion`.
