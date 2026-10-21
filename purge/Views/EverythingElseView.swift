@@ -126,6 +126,7 @@ enum EverythingElseStyle {
         case .openURL(_, let title): return title
         case .showInLargeFiles: return String(localized: "Show in Large Files")
         case .showInDevTools: return String(localized: "Show in Dev Tools")
+        case .showInCommandLineTools: return String(localized: "Show in Uninstaller")
         }
     }
 }
@@ -1092,7 +1093,7 @@ private struct EverythingElseGlass: View {
             switch runningStep {
             case .cachesAndDevTools:
                 return String(localized: "Everything else is what they leave unsorted.")
-            case .largeFiles, .apps, .leftovers, .everythingElse, nil:
+            case .largeFiles, .apps, .leftovers, .everythingElse, .commandLineTools, nil:
                 return String(localized: "Scans run one at a time.")
             }
         case .measuring:

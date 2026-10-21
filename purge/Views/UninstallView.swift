@@ -130,11 +130,26 @@ struct UninstallView: View {
     /// button to match; this view reads and writes it through `store`.
     private var section: UninstallSection { store.uninstallSection }
 
+    /// Where the switcher's thumb sits. It follows `section` on its own spring,
+    /// so the thumb glides while the page below only crossfades: animating the
+    /// page's layout along with it made the switch feel heavy.
+    @State private var thumbSection: UninstallSection?
+    private var shownThumb: UninstallSection { thumbSection ?? section }
+
+    private static let thumbSpring = Animation.spring(response: 0.34, dampingFraction: 0.86)
+    private static let sectionFade = Animation.easeOut(duration: 0.18)
+
     /// The Leftovers segment appears once a scan has found something, so the tab
     /// looks exactly as before for the common case of no orphans. It also stays up
     /// while the Overview's Leftovers row has opened it ahead of the scan.
     private var showsLeftoversSegment: Bool {
         !store.orphanLeftovers.isEmpty || (section == .leftovers && store.isLeftoversScanPending)
+    }
+
+    /// The Command-line tools segment appears once its scan finds a tool (#225).
+    private var showsCommandLineToolsSegment: Bool {
+        !store.commandLineTools.isEmpty
+            || (section == .commandLineTools && store.isCommandLineToolsScanPending)
     }
 
     private var currentSort: AppSortOption {
@@ -156,6 +171,7 @@ struct UninstallView: View {
     /// Shared geometry for sort reorders so the same app slides to its new slot
     /// instead of fading out in one place and in from another.
     @Namespace private var listReorderNamespace
+    @Namespace private var sectionTabNamespace
     @Namespace private var gridReorderNamespace
 
     var body: some View {
@@ -166,9 +182,10 @@ struct UninstallView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.surfaceBase)
         .task {
-            store.requestScanIfNeeded(.apps, .leftovers)
+            store.requestScanIfNeeded(.apps, .leftovers, .commandLineTools)
         }
         .onAppear(perform: applyUninstallerFocus)
+        .onAppear { thumbSection = store.uninstallSection }
         .onChange(of: store.uninstallerFocus) { _ in applyUninstallerFocus() }
         .onChange(of: appSearchQuery) { query in
             if let focusedSearch, query != focusedSearch.name { self.focusedSearch = nil }
@@ -177,7 +194,17 @@ struct UninstallView: View {
         // while it is the active view; fall back to the apps so the tab never
         // shows a segment that is no longer there.
         .onChange(of: showsLeftoversSegment) { shows in
-            if !shows { store.uninstallSection = .installedApps }
+            if !shows, section == .leftovers { store.uninstallSection = .installedApps }
+        }
+        .onChange(of: showsCommandLineToolsSegment) { shows in
+            if !shows, section == .commandLineTools { store.uninstallSection = .installedApps }
+        }
+        .onChange(of: store.uninstallSection) { newSection in
+            if reduceMotion {
+                thumbSection = newSection
+            } else {
+                withAnimation(Self.thumbSpring) { thumbSection = newSection }
+            }
         }
         .onChange(of: store.hasMeasuredAllRemovableTotals) { measured in
             if !measured, selectedSort.needsFullMeasurement {
@@ -186,14 +213,23 @@ struct UninstallView: View {
         }
     }
 
-    @ViewBuilder
     private var content: some View {
-        switch section {
-        case .installedApps:
-            appsContent
-        case .leftovers:
-            leftoversScroll
+        Group {
+            switch section {
+            case .installedApps:
+                appsContent
+            case .leftovers:
+                leftoversScroll
+            case .commandLineTools:
+                if store.commandLineTools.isEmpty {
+                    if store.isCommandLineToolsScanPending { leftoversSkeleton } else { Color.clear }
+                } else {
+                    CommandLineToolsSection()
+                }
+            }
         }
+        .id(section)
+        .transition(.opacity.animation(reduceMotion ? nil : Self.sectionFade))
     }
 
     private var leftoversSort: SortOption {
@@ -333,82 +369,125 @@ struct UninstallView: View {
     // not something anyone means to do, and offering it invites an accident.
 
     private var controls: some View {
-        HStack(spacing: 12) {
-            if showsLeftoversSegment {
-                sectionSegments
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            if showsLeftoversSegment || showsCommandLineToolsSegment {
+                sectionTabs
             }
 
-            // Sort, search and view mode apply to installed apps only; hide
-            // them on the
-            // leftovers view so its controls (Select all, Remove) stand alone.
+            // Sort, search and view mode apply to installed apps only. The
+            // other sections bring their own Select All row.
             if section == .installedApps {
-                AppDropdown(
-                    options: AppSortOption.allCases,
-                    selection: currentSort,
-                    optionLabel: { $0.displayName },
-                    isOptionEnabled: { option in
-                        !option.needsFullMeasurement || store.hasMeasuredAllRemovableTotals
-                    },
-                    onSelect: { option in
-                        guard option != selectedSort else { return }
-                        if reduceMotion {
-                            selectedSort = option
-                        } else {
-                            withAnimation(tileReorderAnimation) { selectedSort = option }
-                        }
-                    }
-                ) {
-                    FilterChip(
-                        style: .dropdown,
-                        label: currentSort.shortDisplayName,
-                        leadingSystemImage: "arrow.up.arrow.down"
-                    )
+                HStack(spacing: AppStyle.Spacing.small) {
+                    sortMenu
+                    Spacer(minLength: AppStyle.Spacing.xSmall)
+                    UninstallSearchField(query: $appSearchQuery)
+                    viewModePicker
                 }
-                .buttonStyle(.plain)
-                .fixedSize()
-                .accessibilityLabel("Sort apps")
-                .accessibilityValue(currentSort.displayName)
-
-                Spacer(minLength: 8)
-                UninstallSearchField(query: $appSearchQuery)
-                viewModePicker
-            } else {
-                Spacer(minLength: 8)
+                .transition(.opacity.animation(reduceMotion ? nil : Self.sectionFade))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
-    /// The Installed Apps / Leftovers switcher, reusing the tab-style chip the
-    /// App Caches safety filter uses so it reads as a first-class view switch.
-    private var sectionSegments: some View {
-        HStack(spacing: 4) {
-            segmentChip(.installedApps, count: nil)
-            segmentChip(.leftovers, count: store.orphanLeftovers.count)
-        }
-    }
-
-    private func segmentChip(_ target: UninstallSection, count: Int?) -> some View {
-        let isOn = section == target
-        return Button {
-            if reduceMotion {
-                store.uninstallSection = target
-            } else {
-                withAnimation(.easeInOut(duration: 0.2)) { store.uninstallSection = target }
+    private var sortMenu: some View {
+        AppDropdown(
+            options: AppSortOption.allCases,
+            selection: currentSort,
+            optionLabel: { $0.displayName },
+            isOptionEnabled: { option in
+                !option.needsFullMeasurement || store.hasMeasuredAllRemovableTotals
+            },
+            onSelect: { option in
+                guard option != selectedSort else { return }
+                if reduceMotion {
+                    selectedSort = option
+                } else {
+                    withAnimation(tileReorderAnimation) { selectedSort = option }
+                }
             }
-        } label: {
+        ) {
             FilterChip(
-                style: .tab,
-                label: target.label,
-                isSelected: isOn,
-                tier: target == .leftovers ? .checkFirst : .neutral,
-                leadingSystemImage: target.symbolName,
-                count: count
+                style: .dropdown,
+                label: currentSort.shortDisplayName,
+                leadingSystemImage: "arrow.up.arrow.down"
             )
         }
         .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel("Sort apps")
+        .accessibilityValue(currentSort.displayName)
+    }
+
+    /// Installed Apps, Leftovers and Command-Line Tools as one segmented pill on
+    /// its own row, so the switcher never competes with sort and search for
+    /// width. Shown once a second section has something.
+    private var sectionTabs: some View {
+        HStack(spacing: 2) {
+            sectionTab(.installedApps, count: store.installedApps.isEmpty ? nil : store.installedApps.count)
+            if showsLeftoversSegment {
+                sectionTab(.leftovers, count: store.orphanLeftovers.count)
+            }
+            if showsCommandLineToolsSegment {
+                sectionTab(
+                    .commandLineTools,
+                    count: store.commandLineTools.standalone.count + store.commandLineTools.managed.count
+                )
+            }
+        }
+        .padding(3)
+        .background(Capsule(style: .continuous).fill(AppColors.surfaceCard))
+        .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 1))
+        .fixedSize()
+    }
+
+    private func sectionTabLabel(_ target: UninstallSection, count: Int?, isOn: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: target.symbolName)
+                // Badged symbols report a taller ideal size; clip so every
+                // segment shares one height, as `FilterChip` does.
+                .font(AppStyle.Typography.callout.weight(.medium))
+                .frame(width: 14, height: 14)
+                .clipped()
+                .accessibilityHidden(true)
+            // One weight for every segment: a bolder selected label would push
+            // its name and count sideways each time the selection moves.
+            Text(target.label)
+                .font(AppStyle.Typography.body.weight(.medium))
+            if let count {
+                Text("\(count)")
+                    .font(AppStyle.Typography.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(isOn ? AppColors.textSecondary : AppColors.textTertiary)
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+            }
+        }
+    }
+
+    private func sectionTab(_ target: UninstallSection, count: Int?) -> some View {
+        let isOn = shownThumb == target
+        return Button {
+            store.uninstallSection = target
+        } label: {
+            sectionTabLabel(target, count: count, isOn: isOn)
+            .foregroundStyle(isOn ? AppColors.textPrimary : AppColors.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, AppStyle.Spacing.small)
+            .padding(.vertical, 6)
+            .background {
+                if isOn {
+                    Capsule(style: .continuous)
+                        .fill(AppColors.fillSecondaryPressed)
+                        .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderStrong, lineWidth: 1))
+                        .matchedGeometryEffect(id: "sectionTabThumb", in: sectionTabNamespace)
+                }
+            }
+            .fixedSize()
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
         .accessibilityLabel(count.map { "\(target.label), \($0) items" } ?? target.label)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityAddTraits(section == target ? .isSelected : [])
     }
 
     private var viewModePicker: some View {
@@ -1066,23 +1145,21 @@ private struct SkeletonAppTile: View {
 
 struct UninstallHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var onLeftovers: Bool { store.uninstallSection == .leftovers }
-
-    /// Rescan refreshes both lists on this tab, so the button reflects either scan.
+    /// Rescan refreshes every list on this tab, so the button reflects any scan.
     private var isScanning: Bool {
-        store.isScanningInstalledApps || store.isScanningOrphans
+        store.isScanningInstalledApps || store.isScanningOrphans || store.isScanningCommandLineTools
     }
 
     private var isQueued: Bool {
-        !isScanning && (store.isScanQueued(.apps) || store.isScanQueued(.leftovers))
+        !isScanning && (store.isScanQueued(.apps) || store.isScanQueued(.leftovers)
+            || store.isScanQueued(.commandLineTools))
     }
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
             Button {
-                store.requestScan(.apps, .leftovers)
+                store.requestScan(.apps, .leftovers, .commandLineTools)
             } label: {
                 CleaningButtonLabel(
                     title: isQueued ? ScanQueueLabels.queued : (isScanning ? "Scanning..." : "Rescan"),
@@ -1094,30 +1171,13 @@ struct UninstallHeaderActions: View {
             .disabled(isScanning || isQueued)
             .keyboardShortcut("r", modifiers: [.command])
 
-            // One destructive button whose job follows the active segment: Uninstall
-            // for the app grid, Remove for leftovers. Crossfading between them keeps
-            // the header from jumping as the user switches views.
-            ZStack {
-                if onLeftovers {
-                    removeLeftoversButton
-                } else {
-                    uninstallAppsButton
-                }
-            }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: onLeftovers)
-        }
-        .fixedSize()
-    }
-
-    // Same widening delete label as Large Files: compact ("Uninstall") with
-    // nothing ticked, growing to carry the count and size as apps are selected.
-    // While the plan is being gathered it shows a spinner in place.
-    private var uninstallAppsButton: some View {
-        Button {
-            Task { await store.requestUninstallSelectedApps() }
-        } label: {
-            Group {
-                if store.isBuildingUninstallPlan {
+            // One destructive button whose job follows the active segment:
+            // Uninstall for the apps, Remove for leftovers and command-line
+            // tools. It stays the same view across sections, so switching only
+            // crossfades its text and eases its width; swapping whole buttons
+            // made the header jump.
+            Button(action: performPrimaryAction) {
+                if section == .installedApps, store.isBuildingUninstallPlan {
                     CleaningButtonLabel(
                         title: String(localized: "Preparing..."),
                         systemImage: nil,
@@ -1125,33 +1185,60 @@ struct UninstallHeaderActions: View {
                     )
                 } else {
                     AnimatedDeleteActionLabel(
-                        inactiveTitle: String(localized: "Uninstall"),
-                        activeTitle: String(localized: "Uninstall"),
-                        selectedCount: store.selectedApps.count,
-                        selectedBytes: nil
+                        inactiveTitle: primaryTitle,
+                        activeTitle: primaryTitle,
+                        selectedCount: selectedCount,
+                        selectedBytes: selectedBytes
                     )
                 }
             }
+            .buttonStyle(.purge(.primary))
+            .disabled(isPrimaryDisabled)
         }
-        .buttonStyle(.purge(.primary))
-        .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
-        .transition(.opacity)
+        .fixedSize()
     }
 
-    private var removeLeftoversButton: some View {
-        Button {
-            store.requestOrphanCleanup()
-        } label: {
-            AnimatedDeleteActionLabel(
-                inactiveTitle: String(localized: "Remove"),
-                activeTitle: String(localized: "Remove"),
-                selectedCount: store.selectedOrphanCount,
-                selectedBytes: store.selectedOrphanBytes
-            )
+    private var section: UninstallSection { store.uninstallSection }
+
+    private var primaryTitle: String {
+        switch section {
+        case .installedApps: return String(localized: "Uninstall")
+        case .leftovers, .commandLineTools: return String(localized: "Remove")
         }
-        .buttonStyle(.purge(.primary))
-        .disabled(store.selectedOrphanCount == 0 || store.isDeleting)
-        .transition(.opacity)
+    }
+
+    private var selectedCount: Int {
+        switch section {
+        case .installedApps: return store.selectedApps.count
+        case .leftovers: return store.selectedOrphanCount
+        case .commandLineTools: return store.selectedCommandLineToolCount
+        }
+    }
+
+    /// Nil for apps: the review sheet owns the exact total there.
+    private var selectedBytes: Int64? {
+        switch section {
+        case .installedApps: return nil
+        case .leftovers: return store.selectedOrphanBytes
+        case .commandLineTools: return store.selectedCommandLineToolBytes
+        }
+    }
+
+    private var isPrimaryDisabled: Bool {
+        if store.isDeleting { return true }
+        switch section {
+        case .installedApps: return store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan
+        case .leftovers: return store.selectedOrphanCount == 0
+        case .commandLineTools: return store.selectedCommandLineToolCount == 0
+        }
+    }
+
+    private func performPrimaryAction() {
+        switch section {
+        case .installedApps: Task { await store.requestUninstallSelectedApps() }
+        case .leftovers: store.requestOrphanCleanup()
+        case .commandLineTools: store.requestCommandLineToolRemoval()
+        }
     }
 }
 

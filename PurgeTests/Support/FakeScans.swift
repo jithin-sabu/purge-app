@@ -20,6 +20,8 @@ final class FakeScans {
     /// Yielded by an Everything else walk as soon as it starts. A held walk then
     /// stays open until it is let go.
     var everythingElseEvents: [EverythingElseMeasureEvent] = []
+    /// What the Command-line tools scan returns (#225).
+    var commandLineTools = CommandLineToolScanResult()
     private(set) var everythingElseAccesses: [ScanAccess] = []
     /// Yielded by a Dev Tools scan that is not held, before it finishes.
     var developerEvents: [DeveloperScanEvent] = []
@@ -168,6 +170,10 @@ final class FakeScans {
                     continuation.finish()
                 }
                 return stream
+            },
+            commandLineTools: {
+                self.events.append("commandLineTools")
+                return self.commandLineTools
             },
             gitStatuses: { urls in
                 self.gitStatusRequests.append(urls)

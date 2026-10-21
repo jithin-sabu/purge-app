@@ -52,6 +52,16 @@ nonisolated final class EverythingElseMeasurer {
         defer { continuation.finish() }
         continuation.yield(.planned(roots))
 
+        // Which dot folders are command-line tools the uninstaller can remove.
+        // Reads `~/.local/bin` and a few short scripts; sizes nothing.
+        let tools = CommandLineToolScanPolicy.pairedInstalls(home: home)
+        if !tools.isEmpty {
+            continuation.yield(.commandLineTools(Dictionary(
+                tools.map { (OverviewSizedItem.normalized($0.folder.path), $0.name) },
+                uniquingKeysWith: { first, _ in first }
+            )))
+        }
+
         // The system volume first: one `diskutil` call, so the drill-in has its
         // macOS line before the long walk starts.
         if readsSystemVolume, let bytes = systemVolumeUsedBytes() {

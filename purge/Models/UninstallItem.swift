@@ -167,13 +167,14 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     var formattedSize: String { formatBytes(sizeBytes) }
 }
 
-/// The two views inside the App Uninstaller tab. `leftovers` only exists as a
-/// switchable segment once a scan finds any (issue #26). Lives here rather than
+/// The views inside the App Uninstaller tab. `leftovers` and `commandLineTools`
+/// only exist as switchable segments once a scan finds any (issues #26, #225). Lives here rather than
 /// in the view so `PurgeStore` can own the current selection and the tab's
 /// header can swap its action button to match.
 nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
     case installedApps
     case leftovers
+    case commandLineTools
 
     var id: String { rawValue }
 
@@ -181,6 +182,7 @@ nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
         switch self {
         case .installedApps: return String(localized: "Installed Apps")
         case .leftovers: return String(localized: "Leftovers")
+        case .commandLineTools: return String(localized: "Command-Line Tools")
         }
     }
 
@@ -188,6 +190,7 @@ nonisolated enum UninstallSection: String, CaseIterable, Identifiable {
         switch self {
         case .installedApps: return "square.grid.2x2"
         case .leftovers: return "clock.badge.xmark"
+        case .commandLineTools: return "terminal"
         }
     }
 }

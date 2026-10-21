@@ -449,8 +449,8 @@ nonisolated final class FileDeleter: Sendable {
 
     /// The route for items the user picks one by one: Large Files rows (single
     /// files, and whole VM and Safari download bundles), AI models, and the
-    /// uninstaller's apps and leftovers. Each path must pass one of the three
-    /// policy gates below; this route never consults the cache allowlist,
+    /// uninstaller's apps, leftovers and command-line tools. Each path must
+    /// pass one of the four policy gates below; this route never consults the cache allowlist,
     /// which refuses the user's own files by design. Items always move to Trash.
     ///
     /// `aiModelPaths` are the components of AI model rows. They answer to
@@ -473,6 +473,9 @@ nonisolated final class FileDeleter: Sendable {
         var ownershipWarningPaths: [String] = []
         let volumeURL = home
         let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
+        // A command-line tool's shims are eligible only while they point into
+        // its folder, so the pairs are read once, before anything moves (#225).
+        let commandLineToolPaths = CommandLineToolScanPolicy.eligiblePaths(home: home)
 
         for url in urls {
             let standardizedPath = url.standardizedFileURL.path
@@ -481,12 +484,14 @@ nonisolated final class FileDeleter: Sendable {
             // AI model components live in hidden runtime directories that the
             // large-file policy deliberately refuses, so they carry their own
             // equally narrow gate. The uninstaller adds a third: an app bundle in
-            // an app root, or a leftover inside a known Library location.
+            // an app root, or a leftover inside a known Library location. The
+            // fourth is a command-line tool's folder, shims and job plists.
             let isEligible = aiModelPaths.contains(standardizedPath)
                 ? AIModelScanPolicy.isEligibleForDeletion(url, home: home)
                 : LargeFileScanPolicy.isEligibleForDeletion(url, home: home)
                     || AIModelScanPolicy.isEligibleForDeletion(url, home: home)
                     || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url, home: home)
+                    || commandLineToolPaths.contains(standardizedPath)
             guard isEligible else {
                 skippedItems.append(SkippedDeletionItem(
                     path: url.path,

@@ -622,6 +622,24 @@ struct EverythingElseGroupTests {
         #expect(hint?.action == .showInDevTools)
     }
 
+    /// A dot folder the uninstaller lists as a command-line tool points there,
+    /// and only that folder (#225).
+    @Test func commandLineToolFolderPointsToTheUninstaller() throws {
+        let tools = ["/Users/alice/.hermes": "hermes"]
+        let hint = try #require(EverythingElseFolderHint.hint(
+            for: "/Users/alice/.hermes",
+            group: .developer,
+            home: home,
+            steamGames: [:],
+            commandLineTools: tools
+        ))
+        #expect(hint.action == .showInCommandLineTools)
+        #expect(hint.steps.hasPrefix("hermes"))
+        #expect(EverythingElseFolderHint.hint(
+            for: "/Users/alice/.nvm", group: .developer, home: home, steamGames: [:], commandLineTools: tools
+        ) == nil)
+    }
+
     /// Removals that skip the Trash say "permanently", the word the rest of
     /// the app uses for them.
     @Test func steamsUninstallSaysItIsPermanent() throws {

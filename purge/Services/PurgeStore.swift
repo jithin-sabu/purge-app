@@ -333,6 +333,19 @@ final class PurgeStore: ObservableObject {
     /// Leftovers of an app removed outside Purge, awaiting review (issue #65).
     /// Set by `RemovedAppMonitor`; drives its sheet in `ContentView`.
     @Published var removedAppLeftoverPlan: RemovedAppLeftoverPlan?
+
+    // MARK: Command-line tools (#225)
+
+    /// Standalone installs and package-manager tools, shown as the uninstaller's
+    /// third section. Every row is Check First and never preselected; a
+    /// package-manager row is removed by its manager, not by Purge.
+    @Published var commandLineTools = CommandLineToolScanResult()
+    @Published var isScanningCommandLineTools = false
+    @Published private(set) var hasCompletedCommandLineToolScan = false
+    /// Rows the user has ticked, both kinds, keyed by `id`.
+    @Published var commandLineToolSelectedIDs: Set<String> = []
+    /// The ticked tools, both kinds, from review to done. Drives one sheet.
+    @Published var commandLineToolRemovalPlan: CommandLineToolRemovalPlan?
     /// Best-effort git status keyed by standardized tool path (`URL.path`).
     @Published private(set) var devToolRepoStatusByPath: [String: GitWorktreeStatus] = [:] {
         didSet { invalidateSafeCleanupSummary() }
@@ -499,6 +512,7 @@ final class PurgeStore: ObservableObject {
     private var hasCompletedLargeFileScan = false
     private var installedAppsScanGeneration = 0
     private var orphanScanGeneration = 0
+    private var commandLineToolScanGeneration = 0
     /// The in-flight duplicate pass, so a new scan can abandon gigabytes of
     /// hashing nobody is waiting for any more.
     private var duplicateScanTask: Task<Void, Never>?
@@ -762,6 +776,7 @@ final class PurgeStore: ObservableObject {
         uninstallPlan != nil
             || orphanCleanupPlan != nil
             || removedAppLeftoverPlan != nil
+            || commandLineToolRemovalPlan != nil
             || isBuildingUninstallPlan
             || showDeletionSheet
             || pendingUnknownDeletion != nil
@@ -2377,6 +2392,294 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    // MARK: - Command-line tools (#225)
+
+    func scanCommandLineToolsIfNeeded() async {
+        guard !isScanningCommandLineTools, !hasCompletedCommandLineToolScan else { return }
+        await scanCommandLineTools()
+    }
+
+    func scanCommandLineTools() async {
+        commandLineToolScanGeneration += 1
+        let generation = commandLineToolScanGeneration
+        isScanningCommandLineTools = true
+        hasCompletedCommandLineToolScan = false
+        defer {
+            if commandLineToolScanGeneration == generation { isScanningCommandLineTools = false }
+        }
+        let result = await scanSources.commandLineTools()
+        guard commandLineToolScanGeneration == generation, !Task.isCancelled else { return }
+        commandLineTools = result
+        commandLineToolSelectedIDs.formIntersection(result.standalone.map(\.id) + result.managed.map(\.id))
+        hasCompletedCommandLineToolScan = true
+    }
+
+    func toggleCommandLineToolSelected(id: String) {
+        if commandLineToolSelectedIDs.contains(id) {
+            commandLineToolSelectedIDs.remove(id)
+        } else {
+            commandLineToolSelectedIDs.insert(id)
+        }
+    }
+
+    func setAllCommandLineToolsSelected(_ selected: Bool, ids: [String]) {
+        if selected {
+            commandLineToolSelectedIDs.formUnion(ids)
+        } else {
+            commandLineToolSelectedIDs.subtract(ids)
+        }
+    }
+
+    var selectedCommandLineTools: [StandaloneCommandLineTool] {
+        commandLineTools.standalone.filter { commandLineToolSelectedIDs.contains($0.id) }
+    }
+
+    var selectedPackageManagerTools: [PackageManagerTool] {
+        commandLineTools.managed.filter { commandLineToolSelectedIDs.contains($0.id) }
+    }
+
+    var selectedCommandLineToolCount: Int {
+        selectedCommandLineTools.count + selectedPackageManagerTools.count
+    }
+
+    var selectedCommandLineToolBytes: Int64 {
+        selectedCommandLineTools.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            + selectedPackageManagerTools.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+
+    /// Opens the review sheet with every ticked tool, both kinds.
+    func requestCommandLineToolRemoval() {
+        let tools = selectedCommandLineTools
+        let managed = selectedPackageManagerTools
+        guard !tools.isEmpty || !managed.isEmpty else { return }
+        commandLineToolRemovalPlan = CommandLineToolRemovalPlan(tools: tools, managed: managed)
+    }
+
+    /// Closes the sheet, except while the removal runs.
+    func closeCommandLineToolRemoval() {
+        switch commandLineToolRemovalPlan?.phase {
+        case .checking?, .working?:
+            return
+        case .review?, .finished?, nil:
+            commandLineToolRemovalPlan = nil
+        }
+    }
+
+    /// Removes every ticked tool in one pass the sheet follows row by row.
+    ///
+    /// Script installs first: Purge stops the background jobs paired with each
+    /// folder, refuses while any process still uses one, and only then moves
+    /// the folders, shims and job plists to the Trash through
+    /// `CommandLineToolScanPolicy`'s gate. A refusal stops everything before
+    /// anything runs. Then each package manager removes its own tools, one at a
+    /// time; Purge deletes none of those files itself. The batch is one History
+    /// entry.
+    func confirmCommandLineToolRemoval() async {
+        guard var plan = commandLineToolRemovalPlan, plan.phase == .review else { return }
+        guard claimConfirmedCleanOrExplain() else { return }
+        // Claimed now, not after the in-use check: that check can take seconds,
+        // and another clean must not start meanwhile.
+        isDeleting = true
+        errorMessage = nil
+        defer { isDeleting = false }
+        let planID = plan.id
+        func publish() {
+            if commandLineToolRemovalPlan?.id == planID { commandLineToolRemovalPlan = plan }
+        }
+
+        plan.phase = .checking
+        plan.refusal = nil
+        publish()
+        if !plan.tools.isEmpty {
+            let listedPlists = Set(plan.launchAgents.map(\.plist.standardizedFileURL.path))
+            let folders = plan.tools.map(\.folder)
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let refusal = await Task.detached(priority: .userInitiated) {
+                // Labels come from the plists as they are now, and only for the
+                // jobs the sheet listed.
+                let jobs = folders
+                    .flatMap { CommandLineToolScanPolicy.launchAgents(startingFrom: $0, home: home) }
+                    .filter { listedPlists.contains($0.plist.standardizedFileURL.path) }
+                return Self.commandLineToolRemovalRefusal(jobs: jobs, folders: folders)
+            }.value
+            if let refusal {
+                plan.phase = .review
+                plan.refusal = refusal
+                publish()
+                return
+            }
+        }
+
+        plan.phase = .working
+        publish()
+
+        let volumeURL = FileManager.default.homeDirectoryForCurrentUser
+        let capacityBefore = await Task.detached { VolumeCapacityReader.read(for: volumeURL) }.value
+        var deletedItems: [DeletedItem] = []
+        var failedItems: [FailedDeletionItem] = []
+        var skippedItems: [SkippedDeletionItem] = []
+        var bytesMovedToTrash: Int64 = 0
+        var bytesRemovedDirectly: Int64 = 0
+
+        if !plan.tools.isEmpty {
+            for tool in plan.tools { plan.states[tool.id] = .running }
+            publish()
+            var urls: [URL] = []
+            var pathToDisplayName: [String: String] = [:]
+            var pathToExpectedSizeBytes: [String: Int64] = [:]
+            for tool in plan.tools {
+                for url in tool.install.removalPaths {
+                    urls.append(url)
+                    pathToDisplayName[url.standardizedFileURL.path] = tool.name
+                }
+                pathToExpectedSizeBytes[tool.folder.standardizedFileURL.path] = tool.sizeBytes
+            }
+            do {
+                let report = try await fileDeleter.deleteUserSelectedFiles(
+                    at: urls,
+                    pathToDisplayName: pathToDisplayName,
+                    pathToExpectedSizeBytes: pathToExpectedSizeBytes
+                )
+                deletedItems += report.deletedItems
+                failedItems += report.failedItems
+                skippedItems += report.skippedItems
+                bytesMovedToTrash += report.bytesMovedToTrash
+                incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
+                let moved = Set(report.deletedItems.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
+                for tool in plan.tools {
+                    plan.states[tool.id] = moved.contains(tool.folder.standardizedFileURL.path)
+                        ? .movedToTrash
+                        : .failed(String(localized: "Purge couldn't move this folder to the Trash."))
+                }
+            } catch {
+                for tool in plan.tools {
+                    plan.states[tool.id] = .failed(String(localized: "Purge couldn't move this folder to the Trash."))
+                }
+            }
+            publish()
+        }
+
+        for tool in plan.managed {
+            guard tool.canRun else {
+                plan.states[tool.id] = .managerMissing
+                publish()
+                continue
+            }
+            plan.states[tool.id] = .running
+            publish()
+            switch await PackageManagerUninstaller.uninstall(tool) {
+            case .removed:
+                plan.states[tool.id] = .removedByManager
+                bytesRemovedDirectly += tool.sizeBytes
+                deletedItems.append(DeletedItem(
+                    path: tool.locations.first?.path ?? tool.name,
+                    sizeBytes: tool.sizeBytes,
+                    displayName: tool.name,
+                    movedToTrash: false
+                ))
+            case .failed(let message):
+                plan.states[tool.id] = .failed(message)
+            case .stillPresent:
+                plan.states[tool.id] = .failed(String(localized: "\(tool.manager.displayName) finished, but \(tool.name) is still there."))
+            case .managerMissing:
+                plan.states[tool.id] = .managerMissing
+            case .gone:
+                plan.states[tool.id] = .removedByManager
+            }
+            publish()
+        }
+
+        let capacityAfter = await Task.detached { VolumeCapacityReader.read(for: volumeURL) }.value
+        let report = DeletionReport(
+            bytesMovedToTrash: bytesMovedToTrash,
+            bytesRemovedDirectly: bytesRemovedDirectly,
+            deletedItems: deletedItems,
+            failedItems: failedItems,
+            skippedItems: skippedItems,
+            capacityBefore: capacityBefore,
+            capacityAfter: capacityAfter,
+            timestamp: Date()
+        )
+        if !deletedItems.isEmpty {
+            lastDeletionReport = report
+            recordCleanup(report, trigger: .manual, source: .commandLineTools)
+        }
+
+        let cleared = Set(plan.states.compactMap { id, state -> String? in
+            switch state {
+            case .movedToTrash, .removedByManager: return id
+            case .waiting, .running, .failed, .managerMissing: return nil
+            }
+        })
+        withAnimation(.easeInOut(duration: 0.2)) {
+            commandLineTools.standalone.removeAll { cleared.contains($0.id) }
+            commandLineTools.managed.removeAll { cleared.contains($0.id) }
+        }
+        commandLineToolSelectedIDs.subtract(cleared)
+        plan.phase = .finished
+        publish()
+    }
+
+    /// Why the folders can't go yet, or nil. A process can take a moment to
+    /// exit after its job stops, so a busy answer is asked again for up to two
+    /// seconds before it counts. On any refusal, every job this stopped is
+    /// started again, so nothing is left down for a removal that never ran.
+    nonisolated private static func commandLineToolRemovalRefusal(
+        jobs: [LaunchAgentJob],
+        folders: [URL]
+    ) -> String? {
+        var stopped: [LaunchAgentJob] = []
+        for job in jobs {
+            switch LaunchAgentStopper.stop(label: job.label) {
+            case .stopped:
+                stopped.append(job)
+            case .notLoaded:
+                continue
+            case .failed(let message):
+                return restartingJobs(
+                    stopped,
+                    after: String(localized: "Purge couldn't stop the background job \(job.label): \(message)")
+                )
+            }
+        }
+        var result = OpenFileCheck.check(folders: folders)
+        for _ in 0..<(stopped.isEmpty ? 0 : 8) {
+            guard case .inUse = result else { break }
+            Thread.sleep(forTimeInterval: 0.25)
+            result = OpenFileCheck.check(folders: folders)
+        }
+        switch result {
+        case .free:
+            return nil
+        case .inUse(let holders):
+            let names = holders.prefix(3).map { "\($0.command) (\($0.pid))" }
+            let list = ListFormatter.localizedString(byJoining: names)
+            let message = holders.count == 1
+                ? String(localized: "Quit \(list) first. It is using files Purge is about to remove.")
+                : String(localized: "Quit \(list) first. They are using files Purge is about to remove.")
+            return restartingJobs(stopped, after: message)
+        case .unavailable:
+            return restartingJobs(
+                stopped,
+                after: String(localized: "Purge couldn't check whether these tools are in use, so it left them alone. Try again in a moment.")
+            )
+        }
+    }
+
+    /// Starts the stopped jobs again and says so after `message`.
+    nonisolated private static func restartingJobs(_ jobs: [LaunchAgentJob], after message: String) -> String {
+        guard !jobs.isEmpty else { return message }
+        let notStarted = jobs.filter { !LaunchAgentStopper.start(plist: $0.plist) }.map(\.label)
+        if notStarted.isEmpty {
+            return message + " " + String(localized: "Purge started the background jobs it had stopped again.")
+        }
+        let labels = ListFormatter.localizedString(byJoining: notStarted)
+        let note = notStarted.count == 1
+            ? String(localized: "Purge couldn't start \(labels) again. It starts again when you next log in.")
+            : String(localized: "Purge couldn't start \(labels) again. They start again when you next log in.")
+        return message + " " + note
+    }
+
     // MARK: App selection
 
     func toggleAppSelected(id: String) {
@@ -3337,6 +3640,8 @@ final class PurgeStore: ObservableObject {
             // lands: the locked groups can be read now.
             guard let measurement = everythingElseMeasurement, measurement.isComplete else { return false }
             return !(measurement.access == .limited && hasFullDiskAccess)
+        case .commandLineTools:
+            return hasCompletedCommandLineToolScan
         }
     }
 

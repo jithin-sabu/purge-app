@@ -48,6 +48,10 @@ extension PurgeStore {
         scanQueue.active == .leftovers || scanQueue.isQueued(.leftovers) || isScanningOrphans
     }
 
+    var isCommandLineToolsScanPending: Bool {
+        scanQueue.active == .commandLineTools || scanQueue.isQueued(.commandLineTools) || isScanningCommandLineTools
+    }
+
     /// The safe-to-clean share of App Caches or Dev Tools. Nil for the categories
     /// Purge never cleans on its own.
     func safeCleanupBytes(for category: OverviewCategory) -> Int64? {

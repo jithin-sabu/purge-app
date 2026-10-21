@@ -296,6 +296,9 @@ nonisolated enum EverythingElseMeasureEvent: Equatable, Sendable {
     case macOS(Int64)
     /// The games a Steam library holds, so their rows can say what they are.
     case steamGames([SteamGame])
+    /// Command-line tool install folders, by path, with each tool's name (#225),
+    /// so their rows can point to the uninstaller.
+    case commandLineTools([String: String])
 }
 
 /// Everything the walk found so far. Groups fill in as their roots finish.
@@ -312,6 +315,8 @@ nonisolated struct EverythingElseMeasurement: Equatable, Sendable {
     var macOSBytes: Int64?
     /// Steam's games by install folder.
     var steamGames: [String: SteamGame] = [:]
+    /// Command-line tool names by install folder.
+    var commandLineTools: [String: String] = [:]
     var isComplete = false
     var completedAt: Date?
 
@@ -344,6 +349,8 @@ nonisolated struct EverythingElseMeasurement: Equatable, Sendable {
             for game in games {
                 steamGames[game.installPath] = game
             }
+        case .commandLineTools(let tools):
+            commandLineTools.merge(tools) { _, new in new }
         }
     }
 

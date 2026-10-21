@@ -13,6 +13,8 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
         case showInLargeFiles
         /// The cleanable parts are on the Dev Tools tab, so the row links there.
         case showInDevTools
+        /// The folder is a command-line tool the uninstaller lists (#225).
+        case showInCommandLineTools
     }
 
     let steps: String
@@ -26,10 +28,18 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
         for path: String,
         group: EverythingElseGroup,
         home: URL,
-        steamGames: [String: SteamGame]
+        steamGames: [String: SteamGame],
+        commandLineTools: [String: String] = [:]
     ) -> EverythingElseFolderHint? {
         let homePath = OverviewSizedItem.normalized(home.path)
         let relative: String? = path.hasPrefix(homePath + "/") ? String(path.dropFirst(homePath.count + 1)) : nil
+
+        if let name = commandLineTools[path] {
+            return EverythingElseFolderHint(
+                steps: String(localized: "\(name) is a command-line tool. The uninstaller lists it under Command-Line Tools with its commands, and can move them all to the Trash."),
+                action: .showInCommandLineTools
+            )
+        }
 
         if let game = steamGames[path] {
             return EverythingElseFolderHint(

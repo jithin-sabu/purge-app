@@ -1,0 +1,23 @@
+{
+  "note": "Command-line tools whose install folder the shim rule cannot see (#225). Each entry names one exact install folder, removed whole; the shims in ~/.local/bin that go with it, removed only when they point into that folder; and the settings that stay. Never list a folder shared with something else, such as ~/.gemini, ~/.config or ~/.local/share itself. A tool whose shim in ~/.local/bin points into its own ~/.<tool> folder needs no entry.",
+  "tools": [
+    {
+      "name": "Claude Code",
+      "folder": "~/.local/share/claude",
+      "shims": ["~/.local/bin/claude"],
+      "kept": ["~/.claude", "~/.claude.json"]
+    },
+    {
+      "name": "Cursor Agent",
+      "folder": "~/.local/share/cursor-agent",
+      "shims": ["~/.local/bin/cursor-agent", "~/.local/bin/agent"],
+      "kept": ["~/.cursor"]
+    },
+    {
+      "name": "opencode",
+      "folder": "~/.opencode",
+      "shims": [],
+      "kept": ["~/.local/share/opencode", "~/.config/opencode"]
+    }
+  ]
+}
