@@ -1515,6 +1515,7 @@ final class PurgeStore: ObservableObject {
             scanSelection.devToolIDs.formIntersection(detectedToolIDs)
 
             simulatorDevices.removeAll { isRemoved($0.folderURL) }
+            runningSimulatorDevices.removeAll { isRemoved($0.folderURL) }
             simulatorRuntimes.removeAll { isRemoved($0.locationURL) }
 
             var groups = projectGroups

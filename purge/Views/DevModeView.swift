@@ -531,6 +531,7 @@ struct DevToolsView<PageHeader: View>: View {
         return store.projectGroups.isEmpty
             && store.devTools.isEmpty
             && store.simulatorDevices.isEmpty
+            && store.runningSimulatorDevices.isEmpty
     }
 
     private var showsDeveloperListContent: Bool {
