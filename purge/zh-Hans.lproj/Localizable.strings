@@ -18,6 +18,8 @@
 "%@ cleaned up with Purge so far. " = "迄今已用 Purge 清理 %@。 ";
 "%@ each" = "每项 %@";
 "%@ free" = "可用 %@";
+"%@ free + %@ purgeable" = "可用 %1$@ + 可清除 %2$@";
+"%@ empty now. macOS frees the other %@ by itself when it needs room." = "当前空闲 %1$@。另外 %2$@ 会在需要空间时由 macOS 自动释放。";
 "%@ is on this Mac again, so its files were kept." = "%@ 又出现在这台 Mac 上了，因此已保留其文件。";
 "%@ is open or back on this Mac, so its files were kept." = "%@ 正在运行或已回到这台 Mac 上，因此已保留其文件。";
 "%@ is still open, so it was left installed. Quit it and try again." = "%@ 仍处于打开状态，因此未卸载。请先退出该应用，然后重试。";

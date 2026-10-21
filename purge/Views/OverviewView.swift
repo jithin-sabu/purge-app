@@ -88,13 +88,24 @@ struct OverviewView: View {
                 .foregroundStyle(AppColors.textSecondary)
                 .overviewNumberTransition(breakdown.totalBytes, reduceMotion: reduceMotion)
             Spacer(minLength: AppStyle.Spacing.small)
-            // Right end, above the free part of the bar.
-            Text("\(formatStorageBytes(breakdown.freeBytes)) free")
-                .font(AppStyle.Typography.rowTitle)
-                .foregroundStyle(AppColors.textSecondary)
-                .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
+            // Right end, above the free part of the bar. With purgeable space the
+            // empty figure comes first, so it matches System Settings.
+            Group {
+                if let split = freeSpaceSplit(breakdown) {
+                    Text("\(formatStorageBytes(split.freeNowBytes)) free + \(formatStorageBytes(split.purgeableBytes)) purgeable")
+                } else {
+                    Text("\(formatStorageBytes(breakdown.freeBytes)) free")
+                }
+            }
+            .font(AppStyle.Typography.rowTitle)
+            .foregroundStyle(AppColors.textSecondary)
+            .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private func freeSpaceSplit(_ breakdown: OverviewBreakdown) -> FreeSpaceSplit? {
+        FreeSpaceSplit(availableBytes: breakdown.freeBytes, freeNowBytes: diskStore.freeNowDiskBytes)
     }
 
     private func barSegments(_ breakdown: OverviewBreakdown) -> [OverviewDiskBar.Segment] {
@@ -151,7 +162,9 @@ struct OverviewView: View {
             OverviewPlainRow(
                 color: AppColors.Chart.freeSpace,
                 title: String(localized: "Free"),
-                detail: String(localized: "Available for new files"),
+                detail: freeSpaceSplit(breakdown).map {
+                    String(localized: "\(formatStorageBytes($0.freeNowBytes)) empty now. macOS frees the other \(formatStorageBytes($0.purgeableBytes)) by itself when it needs room.")
+                } ?? String(localized: "Available for new files"),
                 bytes: breakdown.freeBytes,
                 share: breakdown.share(of: breakdown.freeBytes),
                 linkedState: linkedRowState(OverviewDiskBar.freeID)

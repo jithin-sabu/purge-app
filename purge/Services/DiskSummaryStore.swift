@@ -7,6 +7,9 @@ final class DiskSummaryStore: ObservableObject {
     @Published private(set) var totalDiskBytes: Int64 = 0
     @Published private(set) var usedDiskBytes: Int64 = 0
     @Published private(set) var freeDiskBytes: Int64 = 0
+    /// Empty space right now, without the purgeable space `freeDiskBytes` includes.
+    /// Shown beside it so the Overview agrees with System Settings.
+    @Published private(set) var freeNowDiskBytes: Int64?
     /// How much free space the volume gained while the app was in the background. `nil`
     /// unless a real increase was observed.
     ///
@@ -27,6 +30,7 @@ final class DiskSummaryStore: ObservableObject {
         guard let capacity = VolumeCapacityReader.read() else { return false }
         totalDiskBytes = capacity.totalBytes
         freeDiskBytes = capacity.availableBytes
+        freeNowDiskBytes = capacity.freeNowBytes
         usedDiskBytes = capacity.usedBytes
         return true
     }
