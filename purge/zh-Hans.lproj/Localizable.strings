@@ -872,6 +872,8 @@
 /* Added with the 1.9.0 features: Finder uninstall, background updates, Command-F, iCloud warning, simulator runtimes. */
 "%@ %@ Runtime" = "%@ %@ 运行时";
 "%@ Older image format, so macOS may keep its original download." = "%@这是旧版镜像格式，macOS 可能会保留原始下载文件。";
+"Only runs %@ simulators. %@" = "只能运行 %1$@ 模拟器。%2$@";
+"The only %@ runtime here that runs most devices. %@" = "这是此 Mac 上唯一能运行大多数设备的 %1$@ 运行时。%2$@";
 "%@ is outside the Applications folder" = "%@ 不在“应用程序”文件夹中";
 "%@ is part of macOS" = "%@ 是 macOS 的一部分";
 "%@ is part of another app" = "%@ 是另一个应用的一部分";

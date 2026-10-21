@@ -273,10 +273,18 @@ nonisolated final class DevScanner {
             xcodeBuilds = []
         }
 
+        // Only adds a warning, so a failed lookup just leaves it out.
+        var deviceReach: [String: SimulatorRuntime.DeviceReach] = [:]
+        if let runtimes = await Simctl.runAsync(["list", "runtimes", "-j"], timeout: Self.simctlListTimeout),
+           runtimes.succeeded {
+            deviceReach = SimulatorRuntime.deviceReachByBuild(fromRuntimesList: runtimes.stdout)
+        }
+
         return SimulatorRuntime.parseRuntimeList(
             listing.stdout,
             deviceCountsByRuntimeIdentifier: deviceCounts,
             xcodeRuntimeBuilds: xcodeBuilds,
+            deviceReachByBuild: deviceReach,
             now: now
         )
         .filter { $0.safetyInfo.level.canSurfaceInScanResults }
