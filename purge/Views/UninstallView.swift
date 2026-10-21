@@ -415,7 +415,7 @@ struct UninstallView: View {
             }
         }
         .padding(3)
-        .background(Capsule(style: .continuous).fill(AppColors.fillSecondary))
+        .background(Capsule(style: .continuous).fill(AppColors.surfaceCard))
         .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 1))
         .fixedSize()
     }
@@ -429,8 +429,10 @@ struct UninstallView: View {
                 .frame(width: 14, height: 14)
                 .clipped()
                 .accessibilityHidden(true)
+            // One weight for every segment: a bolder selected label would push
+            // its name and count sideways each time the selection moves.
             Text(target.label)
-                .font(AppStyle.Typography.body.weight(isOn ? .semibold : .regular))
+                .font(AppStyle.Typography.body.weight(.medium))
             if let count {
                 Text("\(count)")
                     .font(AppStyle.Typography.metadata)
@@ -450,14 +452,7 @@ struct UninstallView: View {
                 withAnimation(.easeInOut(duration: 0.2)) { store.uninstallSection = target }
             }
         } label: {
-            // Each segment keeps its semibold width, so the pill never changes
-            // size when the selection moves.
-            ZStack(alignment: .leading) {
-                sectionTabLabel(target, count: count, isOn: true)
-                    .opacity(0)
-                    .accessibilityHidden(true)
-                sectionTabLabel(target, count: count, isOn: isOn)
-            }
+            sectionTabLabel(target, count: count, isOn: isOn)
             .foregroundStyle(isOn ? AppColors.textPrimary : AppColors.textSecondary)
             .lineLimit(1)
             .padding(.horizontal, AppStyle.Spacing.small)
@@ -465,8 +460,8 @@ struct UninstallView: View {
             .background {
                 if isOn {
                     Capsule(style: .continuous)
-                        .fill(AppColors.surfaceRaised)
-                        .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 1))
+                        .fill(AppColors.fillSecondaryPressed)
+                        .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderStrong, lineWidth: 1))
                         .matchedGeometryEffect(id: "sectionTabThumb", in: sectionTabNamespace)
                 }
             }
