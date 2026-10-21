@@ -429,13 +429,7 @@ nonisolated final class CacheScanner {
         var items: [CacheItem] = []
         for frameworkVersionURL in CacheDiscoveryPaths.staleChromiumFrameworkVersionURLs()
         where ProtectedLocations.isReadable(frameworkVersionURL, access: access) {
-            let appName = frameworkVersionURL
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .lastPathComponent
-                .replacingOccurrences(of: ".app", with: "")
+            let appName = CacheDiscoveryPaths.chromiumBrowserAppName(forFrameworkVersion: frameworkVersionURL)
             let version = frameworkVersionURL.lastPathComponent
             let headline = "\(appName) Old Version \(version)"
             let pathKey = frameworkVersionURL.standardizedFileURL.path
