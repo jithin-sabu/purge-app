@@ -36,6 +36,12 @@ enum FinderReveal {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    /// Puts plain text on the clipboard, such as a command to run in Terminal.
+    static func copyText(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
     /// Submenu label: abbreviated path, plus size when known.
     static func menuTitle(for location: ScanRowLocation) -> String {
         let path = displayDirectoryPath(for: location.url)

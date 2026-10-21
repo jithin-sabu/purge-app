@@ -13,6 +13,9 @@ nonisolated enum CleanupSource: String, Codable, Hashable, CaseIterable {
     case uninstall
     /// A failed item retried from the cleanup overlay.
     case retry
+    /// Command-line tools (#225): standalone installs moved to the Trash, and
+    /// tools a package manager removed permanently.
+    case commandLineTools
 }
 
 /// One item a clean removed. `path` is home-relative (`~/Library/Caches/Dia`), so

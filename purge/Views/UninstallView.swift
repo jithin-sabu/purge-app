@@ -137,6 +137,12 @@ struct UninstallView: View {
         !store.orphanLeftovers.isEmpty || (section == .leftovers && store.isLeftoversScanPending)
     }
 
+    /// The Command-line tools segment appears once its scan finds a tool (#225).
+    private var showsCommandLineToolsSegment: Bool {
+        !store.commandLineTools.isEmpty
+            || (section == .commandLineTools && store.isCommandLineToolsScanPending)
+    }
+
     private var currentSort: AppSortOption {
         if selectedSort.needsFullMeasurement, !store.hasMeasuredAllRemovableTotals {
             return .nameAZ
@@ -166,7 +172,7 @@ struct UninstallView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppColors.surfaceBase)
         .task {
-            store.requestScanIfNeeded(.apps, .leftovers)
+            store.requestScanIfNeeded(.apps, .leftovers, .commandLineTools)
         }
         .onAppear(perform: applyUninstallerFocus)
         .onChange(of: store.uninstallerFocus) { _ in applyUninstallerFocus() }
@@ -177,7 +183,10 @@ struct UninstallView: View {
         // while it is the active view; fall back to the apps so the tab never
         // shows a segment that is no longer there.
         .onChange(of: showsLeftoversSegment) { shows in
-            if !shows { store.uninstallSection = .installedApps }
+            if !shows, section == .leftovers { store.uninstallSection = .installedApps }
+        }
+        .onChange(of: showsCommandLineToolsSegment) { shows in
+            if !shows, section == .commandLineTools { store.uninstallSection = .installedApps }
         }
         .onChange(of: store.hasMeasuredAllRemovableTotals) { measured in
             if !measured, selectedSort.needsFullMeasurement {
@@ -193,6 +202,12 @@ struct UninstallView: View {
             appsContent
         case .leftovers:
             leftoversScroll
+        case .commandLineTools:
+            if store.commandLineTools.isEmpty {
+                if store.isCommandLineToolsScanPending { leftoversSkeleton } else { Color.clear }
+            } else {
+                CommandLineToolsSection()
+            }
         }
     }
 
@@ -334,7 +349,7 @@ struct UninstallView: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
-            if showsLeftoversSegment {
+            if showsLeftoversSegment || showsCommandLineToolsSegment {
                 sectionSegments
             }
 
@@ -384,7 +399,15 @@ struct UninstallView: View {
     private var sectionSegments: some View {
         HStack(spacing: 4) {
             segmentChip(.installedApps, count: nil)
-            segmentChip(.leftovers, count: store.orphanLeftovers.count)
+            if showsLeftoversSegment {
+                segmentChip(.leftovers, count: store.orphanLeftovers.count)
+            }
+            if showsCommandLineToolsSegment {
+                segmentChip(
+                    .commandLineTools,
+                    count: store.commandLineTools.standalone.count + store.commandLineTools.managed.count
+                )
+            }
         }
     }
 
@@ -401,7 +424,7 @@ struct UninstallView: View {
                 style: .tab,
                 label: target.label,
                 isSelected: isOn,
-                tier: target == .leftovers ? .checkFirst : .neutral,
+                tier: target == .installedApps ? .neutral : .checkFirst,
                 leadingSystemImage: target.symbolName,
                 count: count
             )
@@ -1068,21 +1091,20 @@ struct UninstallHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var onLeftovers: Bool { store.uninstallSection == .leftovers }
-
-    /// Rescan refreshes both lists on this tab, so the button reflects either scan.
+    /// Rescan refreshes every list on this tab, so the button reflects any scan.
     private var isScanning: Bool {
-        store.isScanningInstalledApps || store.isScanningOrphans
+        store.isScanningInstalledApps || store.isScanningOrphans || store.isScanningCommandLineTools
     }
 
     private var isQueued: Bool {
-        !isScanning && (store.isScanQueued(.apps) || store.isScanQueued(.leftovers))
+        !isScanning && (store.isScanQueued(.apps) || store.isScanQueued(.leftovers)
+            || store.isScanQueued(.commandLineTools))
     }
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
             Button {
-                store.requestScan(.apps, .leftovers)
+                store.requestScan(.apps, .leftovers, .commandLineTools)
             } label: {
                 CleaningButtonLabel(
                     title: isQueued ? ScanQueueLabels.queued : (isScanning ? "Scanning..." : "Rescan"),
@@ -1098,13 +1120,16 @@ struct UninstallHeaderActions: View {
             // for the app grid, Remove for leftovers. Crossfading between them keeps
             // the header from jumping as the user switches views.
             ZStack {
-                if onLeftovers {
-                    removeLeftoversButton
-                } else {
+                switch store.uninstallSection {
+                case .installedApps:
                     uninstallAppsButton
+                case .leftovers:
+                    removeLeftoversButton
+                case .commandLineTools:
+                    removeCommandLineToolsButton
                 }
             }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: onLeftovers)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: store.uninstallSection)
         }
         .fixedSize()
     }
@@ -1151,6 +1176,22 @@ struct UninstallHeaderActions: View {
         }
         .buttonStyle(.purge(.primary))
         .disabled(store.selectedOrphanCount == 0 || store.isDeleting)
+        .transition(.opacity)
+    }
+
+    private var removeCommandLineToolsButton: some View {
+        Button {
+            store.requestCommandLineToolRemoval()
+        } label: {
+            AnimatedDeleteActionLabel(
+                inactiveTitle: String(localized: "Remove"),
+                activeTitle: String(localized: "Remove"),
+                selectedCount: store.selectedCommandLineToolCount,
+                selectedBytes: store.selectedCommandLineTools.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            )
+        }
+        .buttonStyle(.purge(.primary))
+        .disabled(store.selectedCommandLineToolCount == 0 || store.isDeleting)
         .transition(.opacity)
     }
 }

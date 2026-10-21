@@ -1027,6 +1027,7 @@ struct OverviewScanButton: View {
         case .apps: return String(localized: "installed apps")
         case .leftovers: return String(localized: "leftovers from deleted apps")
         case .everythingElse: return String(localized: "Everything else")
+        case .commandLineTools: return String(localized: "command-line tools")
         }
     }
 

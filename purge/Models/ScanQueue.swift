@@ -11,6 +11,9 @@ nonisolated enum ScanStep: String, CaseIterable, Sendable {
     /// The Everything else walk (#220). Measures only; it feeds no category and
     /// nothing it finds is offered for cleaning.
     case everythingElse
+    /// The uninstaller's Command-line tools section (#225). Runs when the tab
+    /// opens; it feeds no Overview category.
+    case commandLineTools
 
     /// The Overview categories whose figures this step refreshes.
     var categories: [OverviewCategory] {
@@ -19,7 +22,7 @@ nonisolated enum ScanStep: String, CaseIterable, Sendable {
         case .largeFiles: return [.largeFiles]
         case .apps: return [.apps]
         case .leftovers: return [.leftovers]
-        case .everythingElse: return []
+        case .everythingElse, .commandLineTools: return []
         }
     }
 
@@ -28,7 +31,7 @@ nonisolated enum ScanStep: String, CaseIterable, Sendable {
     /// Everything else walk skips those places instead and says so on its rows.
     var needsFullDiskAccess: Bool {
         switch self {
-        case .cachesAndDevTools, .everythingElse: return false
+        case .cachesAndDevTools, .everythingElse, .commandLineTools: return false
         case .largeFiles, .apps, .leftovers: return true
         }
     }
@@ -37,7 +40,7 @@ nonisolated enum ScanStep: String, CaseIterable, Sendable {
     /// only when the row is opened: never at launch, and not from Scan Everything.
     var runsOnlyOnDemand: Bool {
         switch self {
-        case .everythingElse: return true
+        case .everythingElse, .commandLineTools: return true
         case .cachesAndDevTools, .largeFiles, .apps, .leftovers: return false
         }
     }

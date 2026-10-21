@@ -1092,7 +1092,7 @@ private struct EverythingElseGlass: View {
             switch runningStep {
             case .cachesAndDevTools:
                 return String(localized: "Everything else is what they leave unsorted.")
-            case .largeFiles, .apps, .leftovers, .everythingElse, nil:
+            case .largeFiles, .apps, .leftovers, .everythingElse, .commandLineTools, nil:
                 return String(localized: "Scans run one at a time.")
             }
         case .measuring:

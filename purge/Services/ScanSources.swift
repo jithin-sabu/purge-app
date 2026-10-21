@@ -18,6 +18,8 @@ struct ScanSources {
     var fullAccessStep: ((ScanStep, _ forced: Bool) async -> Void)?
     /// The Everything else walk (#220), with the access it may read with.
     var everythingElse: (ScanAccess) -> AsyncStream<EverythingElseMeasureEvent>
+    /// The uninstaller's Command-line tools scan (#225).
+    var commandLineTools: () async -> CommandLineToolScanResult
     /// Git status for the rows a scan found, keyed by standardized path. A clean
     /// asks `GitStatusChecker` again for each path before it moves anything, and
     /// never reads this.
@@ -36,6 +38,7 @@ struct ScanSources {
             projects: { devScanner.discoverProjectsStream(access: $0) },
             fullAccessStep: nil,
             everythingElse: { everythingElseMeasurer.measureStream(access: $0) },
+            commandLineTools: { await CommandLineToolScanner().scan() },
             gitStatuses: { await gitChecker.cleanupStatuses(for: $0) }
         )
     }

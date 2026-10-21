@@ -230,6 +230,12 @@ extension PurgeStore {
         case .everythingElse:
             // Only ever queued on demand, so it always measures afresh.
             await measureEverythingElse()
+        case .commandLineTools:
+            if forced {
+                await scanCommandLineTools()
+            } else {
+                await scanCommandLineToolsIfNeeded()
+            }
         }
     }
 }

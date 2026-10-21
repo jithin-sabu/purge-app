@@ -125,6 +125,20 @@ struct ContentView: View {
                 onConfirm: { edited in Task { await store.confirmOrphanCleanup(edited) } }
             )
         }
+        .sheet(item: $store.commandLineToolRemovalPlan) { plan in
+            CommandLineToolReviewSheet(
+                plan: plan,
+                onCancel: { store.cancelCommandLineToolRemoval() },
+                onConfirm: { Task { await store.confirmCommandLineToolRemoval() } }
+            )
+        }
+        .sheet(item: $store.packageManagerHandoff) { handoff in
+            PackageManagerHandoffSheet(
+                handoff: handoff,
+                onCancel: { store.cancelPackageManagerUninstall() },
+                onRun: { Task { await store.runPackageManagerUninstall() } }
+            )
+        }
         .sheet(item: $store.removedAppLeftoverPlan) { plan in
             RemovedAppLeftoverSheet(
                 plan: plan,
@@ -746,6 +760,19 @@ struct ContentView: View {
                 totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
                 selectedCount: store.selectedOrphanCount,
                 selectedBytes: store.selectedOrphanBytes,
+                measuring: false
+            )
+        }
+        if store.uninstallSection == .commandLineTools {
+            let tools = store.commandLineTools
+            guard !tools.isEmpty else { return nil }
+            let selected = store.selectedCommandLineTools
+            return uninstallSubtitle(
+                count: tools.standalone.count + tools.managed.count,
+                unit: (String(localized: "tool"), String(localized: "tools")),
+                totalBytes: tools.totalBytes,
+                selectedCount: selected.count,
+                selectedBytes: selected.reduce(Int64(0)) { $0 + $1.sizeBytes },
                 measuring: false
             )
         }
