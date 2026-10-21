@@ -392,6 +392,10 @@ struct AnimatedDeleteActionLabel: View {
         reduceMotion ? nil : .easeInOut(duration: 0.5)
     }
 
+    private var titleAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.25)
+    }
+
     private var accessibilityTitle: String {
         guard hasSelection else { return inactiveTitle }
         if let selectedBytes {
@@ -445,6 +449,9 @@ struct AnimatedDeleteActionLabel: View {
         }
         .animation(widthAnimation, value: hasSelection)
         .animation(textAnimation, value: selectedBytes)
+        // A new title (Uninstall to Remove in the uninstaller) crossfades
+        // while the width reader eases the label to its new size.
+        .animation(titleAnimation, value: inactiveTitle)
     }
 
     @ViewBuilder

@@ -1145,7 +1145,6 @@ private struct SkeletonAppTile: View {
 
 struct UninstallHeaderActions: View {
     @EnvironmentObject private var store: PurgeStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Rescan refreshes every list on this tab, so the button reflects any scan.
     private var isScanning: Bool {
@@ -1172,33 +1171,13 @@ struct UninstallHeaderActions: View {
             .disabled(isScanning || isQueued)
             .keyboardShortcut("r", modifiers: [.command])
 
-            // One destructive button whose job follows the active segment: Uninstall
-            // for the app grid, Remove for leftovers. Crossfading between them keeps
-            // the header from jumping as the user switches views.
-            ZStack {
-                switch store.uninstallSection {
-                case .installedApps:
-                    uninstallAppsButton
-                case .leftovers:
-                    removeLeftoversButton
-                case .commandLineTools:
-                    removeCommandLineToolsButton
-                }
-            }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: store.uninstallSection)
-        }
-        .fixedSize()
-    }
-
-    // Same widening delete label as Large Files: compact ("Uninstall") with
-    // nothing ticked, growing to carry the count and size as apps are selected.
-    // While the plan is being gathered it shows a spinner in place.
-    private var uninstallAppsButton: some View {
-        Button {
-            Task { await store.requestUninstallSelectedApps() }
-        } label: {
-            Group {
-                if store.isBuildingUninstallPlan {
+            // One destructive button whose job follows the active segment:
+            // Uninstall for the apps, Remove for leftovers and command-line
+            // tools. It stays the same view across sections, so switching only
+            // crossfades its text and eases its width; swapping whole buttons
+            // made the header jump.
+            Button(action: performPrimaryAction) {
+                if section == .installedApps, store.isBuildingUninstallPlan {
                     CleaningButtonLabel(
                         title: String(localized: "Preparing..."),
                         systemImage: nil,
@@ -1206,49 +1185,60 @@ struct UninstallHeaderActions: View {
                     )
                 } else {
                     AnimatedDeleteActionLabel(
-                        inactiveTitle: String(localized: "Uninstall"),
-                        activeTitle: String(localized: "Uninstall"),
-                        selectedCount: store.selectedApps.count,
-                        selectedBytes: nil
+                        inactiveTitle: primaryTitle,
+                        activeTitle: primaryTitle,
+                        selectedCount: selectedCount,
+                        selectedBytes: selectedBytes
                     )
                 }
             }
+            .buttonStyle(.purge(.primary))
+            .disabled(isPrimaryDisabled)
         }
-        .buttonStyle(.purge(.primary))
-        .disabled(store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan || store.isDeleting)
-        .transition(.opacity)
+        .fixedSize()
     }
 
-    private var removeLeftoversButton: some View {
-        Button {
-            store.requestOrphanCleanup()
-        } label: {
-            AnimatedDeleteActionLabel(
-                inactiveTitle: String(localized: "Remove"),
-                activeTitle: String(localized: "Remove"),
-                selectedCount: store.selectedOrphanCount,
-                selectedBytes: store.selectedOrphanBytes
-            )
+    private var section: UninstallSection { store.uninstallSection }
+
+    private var primaryTitle: String {
+        switch section {
+        case .installedApps: return String(localized: "Uninstall")
+        case .leftovers, .commandLineTools: return String(localized: "Remove")
         }
-        .buttonStyle(.purge(.primary))
-        .disabled(store.selectedOrphanCount == 0 || store.isDeleting)
-        .transition(.opacity)
     }
 
-    private var removeCommandLineToolsButton: some View {
-        Button {
-            store.requestCommandLineToolRemoval()
-        } label: {
-            AnimatedDeleteActionLabel(
-                inactiveTitle: String(localized: "Remove"),
-                activeTitle: String(localized: "Remove"),
-                selectedCount: store.selectedCommandLineToolCount,
-                selectedBytes: store.selectedCommandLineToolBytes
-            )
+    private var selectedCount: Int {
+        switch section {
+        case .installedApps: return store.selectedApps.count
+        case .leftovers: return store.selectedOrphanCount
+        case .commandLineTools: return store.selectedCommandLineToolCount
         }
-        .buttonStyle(.purge(.primary))
-        .disabled(store.selectedCommandLineToolCount == 0 || store.isDeleting)
-        .transition(.opacity)
+    }
+
+    /// Nil for apps: the review sheet owns the exact total there.
+    private var selectedBytes: Int64? {
+        switch section {
+        case .installedApps: return nil
+        case .leftovers: return store.selectedOrphanBytes
+        case .commandLineTools: return store.selectedCommandLineToolBytes
+        }
+    }
+
+    private var isPrimaryDisabled: Bool {
+        if store.isDeleting { return true }
+        switch section {
+        case .installedApps: return store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan
+        case .leftovers: return store.selectedOrphanCount == 0
+        case .commandLineTools: return store.selectedCommandLineToolCount == 0
+        }
+    }
+
+    private func performPrimaryAction() {
+        switch section {
+        case .installedApps: Task { await store.requestUninstallSelectedApps() }
+        case .leftovers: store.requestOrphanCleanup()
+        case .commandLineTools: store.requestCommandLineToolRemoval()
+        }
     }
 }
 
