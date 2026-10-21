@@ -189,7 +189,6 @@ struct EverythingElseNoDeleteTests {
         #expect(store.uninstallPlan == nil)
         #expect(store.orphanCleanupPlan == nil)
         #expect(store.commandLineToolRemovalPlan == nil)
-        #expect(store.packageManagerHandoff == nil)
         #expect(store.lastDeletionReport == nil)
         #expect(FileManager.default.fileExists(atPath: big.appendingPathComponent("keep.bin").path))
         #expect(FileManager.default.fileExists(atPath: small.path))

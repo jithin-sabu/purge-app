@@ -1231,7 +1231,7 @@ struct UninstallHeaderActions: View {
                 inactiveTitle: String(localized: "Remove"),
                 activeTitle: String(localized: "Remove"),
                 selectedCount: store.selectedCommandLineToolCount,
-                selectedBytes: store.selectedCommandLineTools.reduce(Int64(0)) { $0 + $1.sizeBytes }
+                selectedBytes: store.selectedCommandLineToolBytes
             )
         }
         .buttonStyle(.purge(.primary))

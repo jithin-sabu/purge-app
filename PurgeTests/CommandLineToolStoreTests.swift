@@ -73,7 +73,7 @@ struct CommandLineToolStoreTests {
         await store.confirmCommandLineToolRemoval()
 
         let plan = try #require(store.commandLineToolRemovalPlan)
-        #expect(!plan.isChecking)
+        #expect(plan.phase == .review)
         #expect(plan.refusal?.contains("tail") == true)
         #expect(fm.fileExists(atPath: folder.path))
         #expect(store.commandLineTools.standalone.count == 1)
@@ -81,8 +81,9 @@ struct CommandLineToolStoreTests {
         fake.cleanUp()
     }
 
-    /// The manager refuses: its message stays in the sheet, the row stays, and
-    /// the tool is still there.
+    /// Package-manager rows are ticked like the others. When the manager
+    /// refuses, its row in the sheet says so, the row stays in the list, the
+    /// tool is still there, and nothing is written to History.
     @Test
     func managerFailureStaysInTheSheet() async throws {
         let folder = try makeFolder()
@@ -93,24 +94,37 @@ struct CommandLineToolStoreTests {
             arguments: ["uninstall", "--formula", "jq"], environment: ["PATH": "/usr/bin:/bin"],
             sizeBytes: 1_000
         )
+        let missing = PackageManagerTool(
+            manager: .pipx, name: "black", locations: [folder], context: nil, executable: nil,
+            arguments: ["uninstall", "black"], environment: [:], sizeBytes: 500
+        )
         let fake = FakeScans()
-        fake.commandLineTools = CommandLineToolScanResult(standalone: [], managed: [tool])
+        fake.commandLineTools = CommandLineToolScanResult(standalone: [], managed: [tool, missing])
         let store = fake.makeStore()
         await store.scanCommandLineTools()
 
-        store.requestPackageManagerUninstall(tool)
-        await store.runPackageManagerUninstall()
+        store.setAllCommandLineToolsSelected(true, ids: [tool.id, missing.id])
+        #expect(store.selectedCommandLineToolCount == 2)
+        #expect(store.selectedCommandLineToolBytes == 1_500)
+        store.requestCommandLineToolRemoval()
+        #expect(store.commandLineToolRemovalPlan?.managed.count == 2)
+        await store.confirmCommandLineToolRemoval()
 
-        guard case .failed = store.packageManagerHandoff?.state else {
-            Issue.record("A failed run must stay in the sheet as a failure")
+        let plan = try #require(store.commandLineToolRemovalPlan)
+        #expect(plan.phase == .finished)
+        guard case .failed = plan.state(of: tool.id) else {
+            Issue.record("A failed run must show as failed in the sheet")
             fake.cleanUp()
             return
         }
-        #expect(store.commandLineTools.managed.map(\.id) == [tool.id])
+        #expect(plan.state(of: missing.id) == .managerMissing)
+        #expect(plan.failedCount == 2)
+        #expect(store.commandLineTools.managed.map(\.id) == [tool.id, missing.id])
+        #expect(store.lastDeletionReport == nil)
         #expect(fm.fileExists(atPath: folder.path))
         #expect(!store.isDeleting)
-        store.cancelPackageManagerUninstall()
-        #expect(store.packageManagerHandoff == nil)
+        store.closeCommandLineToolRemoval()
+        #expect(store.commandLineToolRemovalPlan == nil)
         fake.cleanUp()
     }
 
@@ -125,7 +139,7 @@ struct CommandLineToolStoreTests {
         store.setAllCommandLineToolsSelected(true, ids: [folder.path])
         store.requestCommandLineToolRemoval()
         #expect(store.isReviewingOrCleaning)
-        store.cancelCommandLineToolRemoval()
+        store.closeCommandLineToolRemoval()
         #expect(!store.isReviewingOrCleaning)
         fake.cleanUp()
     }

@@ -27,31 +27,52 @@ nonisolated struct CommandLineToolScanResult: Equatable, Sendable {
     }
 }
 
-/// The standalone installs the user ticked, awaiting confirmation. Drives the
-/// review sheet; the sheet stays open to say why when the removal is refused.
+/// The command-line tools the user ticked, both kinds, from review to done.
+/// Drives one sheet: script installs move to the Trash after the in-use check,
+/// then each package manager removes its own tools, one at a time.
 nonisolated struct CommandLineToolRemovalPlan: Identifiable, Equatable, Sendable {
-    let id = UUID()
-    let tools: [StandaloneCommandLineTool]
-    /// True while Purge stops background jobs and checks nothing is in use.
-    var isChecking = false
-    /// Why Purge would not remove them, shown in the sheet. Nil until a refusal.
-    var refusal: String?
+    nonisolated enum Phase: Equatable, Sendable {
+        case review
+        /// Stopping background jobs and checking nothing is in use.
+        case checking
+        case working
+        case finished
+    }
 
-    var totalBytes: Int64 { tools.reduce(Int64(0)) { $0 + $1.sizeBytes } }
-    var pathCount: Int { tools.reduce(0) { $0 + $1.install.removalPaths.count } }
-    var launchAgents: [LaunchAgentJob] { tools.flatMap(\.install.launchAgents) }
-}
-
-/// A package-manager tool the user asked to uninstall, and where that stands.
-/// The manager does the removal; the sheet shows its command first.
-nonisolated struct PackageManagerHandoff: Identifiable, Equatable, Sendable {
-    nonisolated enum State: Equatable, Sendable {
-        case ready
+    /// Where one tool stands once the removal runs.
+    nonisolated enum ItemState: Equatable, Sendable {
+        case waiting
         case running
+        case movedToTrash
+        case removedByManager
         case failed(String)
+        /// Purge found no program for the manager; nothing ran.
+        case managerMissing
     }
 
     let id = UUID()
-    let tool: PackageManagerTool
-    var state: State = .ready
+    let tools: [StandaloneCommandLineTool]
+    let managed: [PackageManagerTool]
+    var phase = Phase.review
+    /// Why Purge would not start, shown in the sheet. Nothing ran.
+    var refusal: String?
+    /// Keyed by tool id.
+    var states: [String: ItemState] = [:]
+
+    var totalBytes: Int64 {
+        tools.reduce(Int64(0)) { $0 + $1.sizeBytes } + managed.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+    var itemCount: Int { tools.count + managed.count }
+    var launchAgents: [LaunchAgentJob] { tools.flatMap(\.install.launchAgents) }
+
+    func state(of id: String) -> ItemState { states[id] ?? .waiting }
+
+    var failedCount: Int {
+        states.values.filter { state in
+            switch state {
+            case .failed, .managerMissing: return true
+            case .waiting, .running, .movedToTrash, .removedByManager: return false
+            }
+        }.count
+    }
 }
