@@ -133,7 +133,8 @@ struct CommandLineToolScanPolicyTests {
 
     /// Shared folders, version managers and app folders are never a tool's,
     /// even when a shim points straight into them.
-    @Test(arguments: [".gemini", ".nvm", ".local", ".config", ".cargo", ".cursor", ".claude"])
+    @Test(arguments: [".gemini", ".nvm", ".local", ".config", ".cargo", ".cursor", ".claude",
+                      ".lmstudio", ".ollama", ".rd", ".ghcup", ".dotnet", ".aws"])
     func sharedFolderIsNeverOfferedWhole(name: String) throws {
         let home = try makeHome()
         defer { try? fm.removeItem(at: home) }
@@ -158,6 +159,22 @@ struct CommandLineToolScanPolicyTests {
             """.utf8))
 
         #expect(installs(home, appCatalog: appCatalog).isEmpty)
+    }
+
+    /// A model store moved with `OLLAMA_MODELS` into a folder the deny list
+    /// does not know still keeps that folder from being offered as a tool.
+    @Test
+    func folderHoldingAModelStoreIsNeverATool() throws {
+        let home = try makeHome()
+        defer { try? fm.removeItem(at: home) }
+        try makeFolder(".mytool/models", in: home)
+        try link(".local/bin/mytool", to: "\(home.path)/.mytool/bin/mytool", in: home)
+        let environment = ["OLLAMA_MODELS": home.appendingPathComponent(".mytool/models").path]
+
+        #expect(installs(home).map(\.name) == ["mytool"])
+        #expect(CommandLineToolScanPolicy.pairedInstalls(
+            home: home, catalog: .empty, appCatalog: .empty, environment: environment
+        ).isEmpty)
     }
 
     @Test

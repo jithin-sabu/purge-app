@@ -50,16 +50,24 @@ nonisolated enum CommandLineToolScanPolicy {
     static let shimFolder = ".local/bin"
 
     /// Home-relative folders that are never an install folder: shared folders,
-    /// version managers and toolchains, settings other tools read, and folders
-    /// apps keep. A shim pointing into one pairs with nothing, and the catalog
-    /// may not name one.
+    /// version managers and language toolchains, settings other tools read, and
+    /// folders apps keep. A shim pointing into one pairs with nothing, and the
+    /// catalog may not name one. An app's dot folder can hold its own command
+    /// line tool beside downloaded models or VM disks, as `~/.lmstudio` does.
     static let sharedFolders: Set<String> = [
+        // Shared by many tools, or the user's own settings and keys.
         ".local", ".local/share", ".local/bin", ".local/state", ".local/lib",
-        ".config", ".cache", ".Trash", ".ssh", ".gnupg", ".git",
-        ".gemini", ".cursor", ".vscode", ".claude", ".docker", ".orbstack",
+        ".config", ".cache", ".Trash", ".ssh", ".gnupg", ".git", ".aws", ".azure", ".kube",
+        // Version managers, language toolchains and package caches.
         ".nvm", ".rbenv", ".pyenv", ".rustup", ".cargo", ".volta", ".mise", ".asdf",
-        ".sdkman", ".nodenv", ".goenv", ".jenv", ".bun", ".deno", ".npm",
-        ".gradle", ".m2"
+        ".sdkman", ".nodenv", ".goenv", ".jenv", ".bun", ".deno", ".npm", ".npm-global",
+        ".yarn", ".pnpm-store", ".gem", ".bundle", ".pub-cache", ".gradle", ".m2", ".ivy2",
+        ".sbt", ".ghcup", ".cabal", ".stack", ".opam", ".elan", ".julia", ".juliaup",
+        ".dotnet", ".conda", ".nimble", ".wasmtime", ".wasmer",
+        // Folders apps keep, some with a command-line tool inside.
+        ".gemini", ".cursor", ".cursor-server", ".vscode", ".vscode-server", ".vscode-insiders",
+        ".claude", ".codeium", ".windsurf", ".kiro", ".docker", ".orbstack", ".rd", ".colima",
+        ".lmstudio", ".ollama", ".android"
     ]
 
     /// Folders a launcher script may name besides the tool's own: the system
@@ -83,7 +91,8 @@ nonisolated enum CommandLineToolScanPolicy {
     static func pairedInstalls(
         home: URL,
         catalog: CommandLineToolCatalog = .shared,
-        appCatalog: AppDotFolderCatalog = .shared
+        appCatalog: AppDotFolderCatalog = .shared,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [CommandLineToolInstall] {
         let homePath = home.standardizedFileURL.path
         let leads = shimLeads(home: home)
@@ -118,7 +127,11 @@ nonisolated enum CommandLineToolScanPolicy {
             folders[folderPath] = (String(name.dropFirst()), .shim, [shim], [])
         }
 
+        // A folder that holds a model store is an app's, whatever points into it.
+        let modelStores = AIModelScanPolicy.allRoots(home: home, environment: environment)
+            .map(\.standardizedFileURL.path)
         return folders
+            .filter { path, _ in !modelStores.contains { $0 == path || $0.hasPrefix(path + "/") } }
             .map { path, value in
                 let folder = URL(fileURLWithPath: path, isDirectory: true)
                 return CommandLineToolInstall(
