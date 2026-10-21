@@ -36,7 +36,7 @@ struct CommandLineToolsSection: View {
                     if !managed.isEmpty {
                         sectionHeader(
                             String(localized: "Installed by a package manager"),
-                            detail: String(localized: "The package manager removes these, because it knows what else needs them. It deletes them permanently, not to the Trash.")
+                            detail: String(localized: "The package manager that installed each one removes it, with its own checks and records. It deletes them permanently, not to the Trash.")
                         )
                         .padding(.top, standalone.isEmpty ? 0 : AppStyle.Spacing.small)
                         ForEach(managed) { tool in
@@ -413,7 +413,7 @@ struct PackageManagerHandoffSheet: View {
                 Text("Uninstall \(tool.name) with \(tool.manager.displayName)?")
                     .font(AppStyle.Typography.pageTitle)
                     .foregroundStyle(AppColors.textPrimary)
-                Text("\(tool.manager.displayName) removes \(tool.name) and first checks whether anything else needs it. It deletes \(tool.name) permanently. It isn't moved to the Trash.")
+                Text("\(tool.manager.displayName) installed \(tool.name), so it removes it, with its own checks and records. It deletes \(tool.name) permanently. It isn't moved to the Trash.")
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
