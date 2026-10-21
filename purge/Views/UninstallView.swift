@@ -130,6 +130,15 @@ struct UninstallView: View {
     /// button to match; this view reads and writes it through `store`.
     private var section: UninstallSection { store.uninstallSection }
 
+    /// Where the switcher's thumb sits. It follows `section` on its own spring,
+    /// so the thumb glides while the page below only crossfades: animating the
+    /// page's layout along with it made the switch feel heavy.
+    @State private var thumbSection: UninstallSection?
+    private var shownThumb: UninstallSection { thumbSection ?? section }
+
+    private static let thumbSpring = Animation.spring(response: 0.34, dampingFraction: 0.86)
+    private static let sectionFade = Animation.easeOut(duration: 0.18)
+
     /// The Leftovers segment appears once a scan has found something, so the tab
     /// looks exactly as before for the common case of no orphans. It also stays up
     /// while the Overview's Leftovers row has opened it ahead of the scan.
@@ -176,6 +185,7 @@ struct UninstallView: View {
             store.requestScanIfNeeded(.apps, .leftovers, .commandLineTools)
         }
         .onAppear(perform: applyUninstallerFocus)
+        .onAppear { thumbSection = store.uninstallSection }
         .onChange(of: store.uninstallerFocus) { _ in applyUninstallerFocus() }
         .onChange(of: appSearchQuery) { query in
             if let focusedSearch, query != focusedSearch.name { self.focusedSearch = nil }
@@ -189,6 +199,13 @@ struct UninstallView: View {
         .onChange(of: showsCommandLineToolsSegment) { shows in
             if !shows, section == .commandLineTools { store.uninstallSection = .installedApps }
         }
+        .onChange(of: store.uninstallSection) { newSection in
+            if reduceMotion {
+                thumbSection = newSection
+            } else {
+                withAnimation(Self.thumbSpring) { thumbSection = newSection }
+            }
+        }
         .onChange(of: store.hasMeasuredAllRemovableTotals) { measured in
             if !measured, selectedSort.needsFullMeasurement {
                 selectedSort = .nameAZ
@@ -196,20 +213,23 @@ struct UninstallView: View {
         }
     }
 
-    @ViewBuilder
     private var content: some View {
-        switch section {
-        case .installedApps:
-            appsContent
-        case .leftovers:
-            leftoversScroll
-        case .commandLineTools:
-            if store.commandLineTools.isEmpty {
-                if store.isCommandLineToolsScanPending { leftoversSkeleton } else { Color.clear }
-            } else {
-                CommandLineToolsSection()
+        Group {
+            switch section {
+            case .installedApps:
+                appsContent
+            case .leftovers:
+                leftoversScroll
+            case .commandLineTools:
+                if store.commandLineTools.isEmpty {
+                    if store.isCommandLineToolsScanPending { leftoversSkeleton } else { Color.clear }
+                } else {
+                    CommandLineToolsSection()
+                }
             }
         }
+        .id(section)
+        .transition(.opacity.animation(reduceMotion ? nil : Self.sectionFade))
     }
 
     private var leftoversSort: SortOption {
@@ -363,6 +383,7 @@ struct UninstallView: View {
                     UninstallSearchField(query: $appSearchQuery)
                     viewModePicker
                 }
+                .transition(.opacity.animation(reduceMotion ? nil : Self.sectionFade))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -444,13 +465,9 @@ struct UninstallView: View {
     }
 
     private func sectionTab(_ target: UninstallSection, count: Int?) -> some View {
-        let isOn = section == target
+        let isOn = shownThumb == target
         return Button {
-            if reduceMotion {
-                store.uninstallSection = target
-            } else {
-                withAnimation(.easeInOut(duration: 0.2)) { store.uninstallSection = target }
-            }
+            store.uninstallSection = target
         } label: {
             sectionTabLabel(target, count: count, isOn: isOn)
             .foregroundStyle(isOn ? AppColors.textPrimary : AppColors.textSecondary)
@@ -470,7 +487,7 @@ struct UninstallView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(count.map { "\(target.label), \($0) items" } ?? target.label)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityAddTraits(section == target ? .isSelected : [])
     }
 
     private var viewModePicker: some View {
