@@ -45,10 +45,13 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     /// - Parameter xcodeRuntimeBuilds: from ``xcodeRuntimeBuilds(fromMatchList:)``; the
     ///   builds the selected Xcode creates new simulators on. `nil` when that could not
     ///   be read, which also keeps every row at Check First.
+    /// - Parameter deviceReachByBuild: from ``deviceReachByBuild(fromRuntimesList:)``;
+    ///   empty when that could not be read, which only leaves the warning out.
     static func parseRuntimeList(
         _ data: Data,
         deviceCountsByRuntimeIdentifier: [String: Int]?,
         xcodeRuntimeBuilds: Set<String>?,
+        deviceReachByBuild: [String: DeviceReach] = [:],
         now: Date = Date()
     ) -> [SimulatorRuntime] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -95,6 +98,7 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
                 deviceCount: deviceCount,
                 isXcodeDefault: xcodeRuntimeBuilds.map { $0.contains(build) },
                 isLegacyImage: !kind.hasPrefix("Patchable"),
+                deviceReach: deviceReachByBuild[build],
                 now: now
             )
 
@@ -153,6 +157,51 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         return builds.isEmpty ? nil : builds
     }
 
+    /// What a runtime boots, next to the other runtimes of its platform on this Mac.
+    /// Apple ships some runtimes for one new device only (an iOS 27.1 that runs
+    /// nothing but iPhone Duo), so a newer version is not always the one to keep.
+    enum DeviceReach: Equatable {
+        /// Runs only these device types while another runtime runs many.
+        case only([String])
+        /// The one runtime of its platform here that runs most devices; the others
+        /// each run only a few.
+        case onlyGeneralRuntime
+    }
+
+    /// A runtime that runs this many device types or fewer counts as made for
+    /// specific devices. A general iOS runtime runs dozens.
+    static let deviceSpecificMaxDeviceTypes = 3
+
+    /// Device reach per runtime build, from `simctl list runtimes -j`, which unlike
+    /// `simctl runtime list` names the device types each runtime supports. Only a
+    /// platform with both kinds of runtime gets an entry.
+    static func deviceReachByBuild(fromRuntimesList data: Data) -> [String: DeviceReach] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let runtimes = root["runtimes"] as? [[String: Any]] else { return [:] }
+
+        struct Entry { let build: String; let platform: String; let deviceNames: [String] }
+        let entries: [Entry] = runtimes.compactMap { runtime in
+            guard let build = runtime["buildversion"] as? String,
+                  let platform = runtime["platform"] as? String,
+                  let types = runtime["supportedDeviceTypes"] as? [[String: Any]] else { return nil }
+            return Entry(build: build, platform: platform, deviceNames: types.compactMap { $0["name"] as? String })
+        }
+
+        var reach: [String: DeviceReach] = [:]
+        for (_, siblings) in Dictionary(grouping: entries, by: \.platform) {
+            let specific = siblings.filter { $0.deviceNames.count <= deviceSpecificMaxDeviceTypes }
+            let general = siblings.filter { $0.deviceNames.count > deviceSpecificMaxDeviceTypes }
+            guard !specific.isEmpty, !general.isEmpty else { continue }
+            for entry in specific where !entry.deviceNames.isEmpty {
+                reach[entry.build] = .only(entry.deviceNames)
+            }
+            if general.count == 1, let only = general.first {
+                reach[only.build] = .onlyGeneralRuntime
+            }
+        }
+        return reach
+    }
+
     static func platformName(runtimeIdentifier: String, platformIdentifier: String?) -> String {
         switch platformIdentifier {
         case "com.apple.platform.iphonesimulator": return "iOS"
@@ -182,7 +231,52 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         deviceCount: Int?,
         isXcodeDefault: Bool?,
         isLegacyImage: Bool,
+        deviceReach: DeviceReach? = nil,
         now: Date = Date()
+    ) -> SafetyInfo {
+        let base = usageSafetyInfo(
+            platformName: platformName,
+            version: version,
+            state: state,
+            sizeBytes: sizeBytes,
+            lastUsedAt: lastUsedAt,
+            deviceCount: deviceCount,
+            isXcodeDefault: isXcodeDefault,
+            isLegacyImage: isLegacyImage,
+            now: now
+        )
+        // Leads the explanation: which runtime boots which devices is what decides
+        // the one to keep, more than the version number or how many simulators
+        // use it today.
+        let reach: String
+        switch deviceReach {
+        case .only(let names):
+            let devices = ListFormatter.localizedString(byJoining: names)
+            reach = String(localized: "Only runs \(devices) simulators. \(base.explanation)")
+        case .onlyGeneralRuntime:
+            reach = String(localized: "The only \(platformName) runtime here that runs most devices. \(base.explanation)")
+        case nil:
+            return base
+        }
+        return SafetyInfo(
+            level: base.level,
+            headline: base.headline,
+            explanation: reach,
+            recoverySteps: base.recoverySteps,
+            reinstallCommand: base.reinstallCommand
+        )
+    }
+
+    private static func usageSafetyInfo(
+        platformName: String,
+        version: String,
+        state: String,
+        sizeBytes: Int64,
+        lastUsedAt: Date?,
+        deviceCount: Int?,
+        isXcodeDefault: Bool?,
+        isLegacyImage: Bool,
+        now: Date
     ) -> SafetyInfo {
         let headline = String(localized: "\(platformName) \(version) Runtime")
         // Not a trash move: the only way back is Apple's download.
