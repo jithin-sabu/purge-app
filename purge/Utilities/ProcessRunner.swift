@@ -48,10 +48,13 @@ nonisolated enum ProcessRunner {
     ///
     /// Blocks the calling thread for up to `timeout`. The debug precondition is the guardrail
     /// against reintroducing the launch freeze: this must never run on the main queue.
+    ///
+    /// `environment`, when given, replaces the inherited one whole.
     static func run(
         executablePath: String,
         arguments: [String],
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        environment: [String: String]? = nil
     ) -> Output? {
         #if DEBUG
         dispatchPrecondition(condition: .notOnQueue(.main))
@@ -60,6 +63,7 @@ nonisolated enum ProcessRunner {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+        if let environment { process.environment = environment }
 
         let outPipe = Pipe()
         let errPipe = Pipe()
@@ -214,12 +218,18 @@ nonisolated enum ProcessRunner {
     static func runAsync(
         executablePath: String,
         arguments: [String],
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        environment: [String: String]? = nil
     ) async -> Output? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 continuation.resume(
-                    returning: run(executablePath: executablePath, arguments: arguments, timeout: timeout)
+                    returning: run(
+                        executablePath: executablePath,
+                        arguments: arguments,
+                        timeout: timeout,
+                        environment: environment
+                    )
                 )
             }
         }
