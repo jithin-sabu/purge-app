@@ -167,6 +167,8 @@ struct EverythingElseNoDeleteTests {
         }
 
         // Every store action the screens can call, short of opening another app.
+        store.performEverythingElseHint(.showInCommandLineTools)
+        #expect(store.uninstallSection == .commandLineTools)
         store.performEverythingElseHint(.showInDevTools)
         store.performEverythingElseHint(.showInLargeFiles)
         _ = store.everythingElseFolderHint(for: folder)
@@ -186,6 +188,8 @@ struct EverythingElseNoDeleteTests {
         #expect(store.interactiveSafeCleanupSession == nil)
         #expect(store.uninstallPlan == nil)
         #expect(store.orphanCleanupPlan == nil)
+        #expect(store.commandLineToolRemovalPlan == nil)
+        #expect(store.packageManagerHandoff == nil)
         #expect(store.lastDeletionReport == nil)
         #expect(FileManager.default.fileExists(atPath: big.appendingPathComponent("keep.bin").path))
         #expect(FileManager.default.fileExists(atPath: small.path))

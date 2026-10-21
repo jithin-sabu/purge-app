@@ -1266,3 +1266,5 @@
 "launchctl stopped with an error." = "launchctl 出错并已停止。";
 "tool" = "个工具";
 "tools" = "个工具";
+"%@ is a command-line tool. The uninstaller lists it under Command-Line Tools with its commands, and can move them all to the Trash." = "%@ 是一个命令行工具。卸载器会在“命令行工具”下列出它及其命令，并可将它们全部移到废纸篓。";
+"Show in Uninstaller" = "在卸载器中显示";

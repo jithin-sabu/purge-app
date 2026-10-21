@@ -165,7 +165,8 @@ extension PurgeStore {
             for: folder.path,
             group: folder.group,
             home: FileManager.default.homeDirectoryForCurrentUser,
-            steamGames: everythingElseMeasurement?.steamGames ?? [:]
+            steamGames: everythingElseMeasurement?.steamGames ?? [:],
+            commandLineTools: everythingElseMeasurement?.commandLineTools ?? [:]
         )
     }
 
@@ -182,6 +183,10 @@ extension PurgeStore {
             selectedTab = .largeFiles
         case .showInDevTools:
             selectedTab = .devTools
+        case .showInCommandLineTools:
+            uninstallSection = .commandLineTools
+            selectedTab = .uninstaller
+            requestScanIfNeeded(.commandLineTools)
         }
     }
 }
