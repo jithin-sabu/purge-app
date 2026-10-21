@@ -159,11 +159,6 @@ struct UninstallView: View {
         return selectedSort
     }
 
-    private static let columns = Array(
-        repeating: GridItem(.flexible(), spacing: 12),
-        count: 4
-    )
-
     /// Soft, near-critically damped spring so tiles glide to their new slots
     /// without a hard snap or an under-damped overshoot.
     private let tileReorderAnimation: Animation = .spring(response: 0.38, dampingFraction: 0.92)
@@ -176,7 +171,9 @@ struct UninstallView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            controls
+            if !isAwaitingFirstAppsScan {
+                controls
+            }
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -267,16 +264,20 @@ struct UninstallView: View {
                 leftoversToolbar
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
-                        ForEach(sortedOrphans) { item in
-                            UninstallItemRow(
-                                item: item,
-                                isSelected: Binding(
-                                    get: { store.orphanSelectedIDs.contains(item.id) },
-                                    set: { _ in store.toggleOrphanSelected(id: item.id) }
-                                ),
-                                togglesOnRowTap: true,
-                                evidenceNote: item.matchReason.rowNote
-                            )
+                        ForEach(Array(orphanSections.enumerated()), id: \.element.reason) { index, section in
+                            UninstallSectionHeader(title: section.reason.leftoverSectionTitle)
+                                .padding(.top, index == 0 ? 0 : AppStyle.Spacing.small)
+                            ForEach(section.items) { item in
+                                UninstallItemRow(
+                                    item: item,
+                                    isSelected: Binding(
+                                        get: { store.orphanSelectedIDs.contains(item.id) },
+                                        set: { _ in store.toggleOrphanSelected(id: item.id) }
+                                    ),
+                                    togglesOnRowTap: true,
+                                    showsShortLocation: true
+                                )
+                            }
                         }
                     }
                     .padding(.horizontal, AppDetailPageLayout.horizontalInset)
@@ -287,6 +288,13 @@ struct UninstallView: View {
                 .background(AppColors.surfaceBase)
             }
         }
+    }
+
+    /// One section per match reason, strongest first, each in the chosen sort.
+    private var orphanSections: [(reason: MatchReason, items: [UninstallItem])] {
+        let items = sortedOrphans
+        let reasons = Set(items.map(\.matchReason)).sorted { $0.leftoverSectionRank < $1.leftoverSectionRank }
+        return reasons.map { reason in (reason, items.filter { $0.matchReason == reason }) }
     }
 
     private var leftoversSelectAllState: SelectAllTriState {
@@ -500,19 +508,33 @@ struct UninstallView: View {
         store.isScanningInstalledApps && store.installedApps.isEmpty
     }
 
+    /// The apps list has not been found yet this session. Sort, search, view mode
+    /// and the section tabs have nothing to act on, so the tab shows only its
+    /// status. Leftovers and command-line tools keep their own controls.
+    private var isAwaitingFirstAppsScan: Bool {
+        section == .installedApps && store.installedApps.isEmpty && !store.hasCompletedInstalledAppsScan
+    }
+
     @ViewBuilder
     private var appsContent: some View {
         if store.installedApps.isEmpty && !store.isScanningInstalledApps {
-            emptyState(
-                symbol: "app.badge",
-                title: String(localized: "No apps found"),
-                detail: String(localized: "Purge looks in Applications and your home Applications folder.")
-            )
+            if store.hasCompletedInstalledAppsScan {
+                emptyState(
+                    symbol: "app.badge",
+                    title: String(localized: "No apps found"),
+                    detail: String(localized: "Purge looks in Applications and your home Applications folder.")
+                )
+            } else {
+                ScanStatusPlaceholder(
+                    status: store.scanWaitStatus(for: .apps, isScanning: false),
+                    copy: .apps
+                )
+            }
         } else {
-            // Crossfade the skeleton into the real collection instead of swapping view
+            // Crossfade the status into the real collection instead of swapping view
             // trees, so the load resolves smoothly rather than popping in.
             ScanContentCrossfade(isLoading: isLoadingApps, contentAlignment: .top) {
-                loadingApps
+                ScanStatusPlaceholder(status: .scanning, copy: .apps)
             } loaded: {
                 loadedApps
             }
@@ -632,16 +654,6 @@ struct UninstallView: View {
 
     // MARK: Loading
 
-    @ViewBuilder
-    private var loadingApps: some View {
-        switch viewMode {
-        case .list:
-            skeletonList
-        case .grid:
-            skeletonGrid
-        }
-    }
-
     /// Leftovers opened from the Overview before its scan has landed.
     private var leftoversSkeleton: some View {
         ScrollView {
@@ -658,42 +670,6 @@ struct UninstallView: View {
         .background(AppColors.surfaceBase)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Finding leftovers from deleted apps")
-    }
-
-    private var skeletonList: some View {
-        ScrollView {
-            LazyVStack(spacing: 6) {
-                ForEach(0..<12, id: \.self) { _ in
-                    SkeletonAppListRow()
-                }
-            }
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .padding(.top, 2)
-            .padding(.bottom, AppStyle.Spacing.large)
-        }
-        .scrollContentBackground(.hidden)
-        .background(AppColors.surfaceBase)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Finding installed apps")
-    }
-
-    /// Shown while the first scan discovers app bundles. It normally lasts only
-    /// until the first app is emitted; sizes continue to settle in the real view.
-    private var skeletonGrid: some View {
-        ScrollView {
-            LazyVGrid(columns: Self.columns, spacing: 12) {
-                ForEach(0..<20, id: \.self) { _ in
-                    SkeletonAppTile()
-                }
-            }
-            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .padding(.top, 2)
-            .padding(.bottom, AppStyle.Spacing.large)
-        }
-        .scrollContentBackground(.hidden)
-        .background(AppColors.surfaceBase)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Finding installed apps")
     }
 
     // MARK: Shared bits
@@ -787,6 +763,9 @@ private struct UninstallItemRow: View {
     /// Leftovers rows (#224). The uninstaller's own rows leave it out: there the
     /// user picked the app, so the link is not in question.
     var evidenceNote: String? = nil
+    /// Leftovers rows name only the folder the item sits in; the full path is
+    /// in the tooltip and Reveal in Finder.
+    var showsShortLocation = false
 
     @State private var isContextMenuActive = false
 
@@ -812,7 +791,7 @@ private struct UninstallItemRow: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(displayDirectoryPath(for: item.path))
+                Text(showsShortLocation ? shortLocationLabel(for: item.path) : displayDirectoryPath(for: item.path))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -851,6 +830,7 @@ private struct UninstallItemRow: View {
             RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
+        .help(showsShortLocation ? displayDirectoryPath(for: item.path) : "")
         .modifier(OptionalRowTap(enabled: togglesOnRowTap && !isToggleDisabled) {
             isSelected.toggle()
         })
@@ -858,6 +838,21 @@ private struct UninstallItemRow: View {
             [ScanRowLocation(url: item.path, sizeBytes: item.sizeBytes)]
         }
         .animation(.easeOut(duration: 0.12), value: isContextMenuActive)
+    }
+}
+
+/// A section title in the uninstaller's Leftovers and Command-line tools lists.
+struct UninstallSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(AppStyle.Typography.headline)
+            .foregroundStyle(AppColors.textPrimary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, AppStyle.Spacing.xxSmall)
+            .padding(.bottom, AppStyle.Spacing.xxSmall)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -1106,138 +1101,6 @@ private struct AppTile: View {
                 .font(.system(size: 20))
                 .foregroundStyle(isHovering ? AppColors.textSecondary : AppColors.textTertiary)
                 .background(Circle().fill(AppColors.fillSecondary).padding(1))
-        }
-    }
-}
-
-// MARK: - Skeleton tile
-
-private struct SkeletonAppTile: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
-                .frame(width: 56, height: 56)
-
-            VStack(spacing: 6) {
-                SkeletonBar(width: 96, height: 12, cornerRadius: AppStyle.Radius.xs)
-                SkeletonBar(width: 52, height: 10, cornerRadius: AppStyle.Radius.xs)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: AppTileMetrics.contentHeight)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 14)
-        .background {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-                .fill(AppColors.fillSecondary)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-                .stroke(AppColors.borderSubtle, lineWidth: 1)
-        }
-        .shimmering()
-        .accessibilityHidden(true)
-    }
-}
-
-// MARK: - Header actions (rendered by ContentView's page header)
-
-struct UninstallHeaderActions: View {
-    @EnvironmentObject private var store: PurgeStore
-
-    /// Rescan refreshes every list on this tab, so the button reflects any scan.
-    private var isScanning: Bool {
-        store.isScanningInstalledApps || store.isScanningOrphans || store.isScanningCommandLineTools
-    }
-
-    private var isQueued: Bool {
-        !isScanning && (store.isScanQueued(.apps) || store.isScanQueued(.leftovers)
-            || store.isScanQueued(.commandLineTools))
-    }
-
-    var body: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            Button {
-                store.requestScan(.apps, .leftovers, .commandLineTools)
-            } label: {
-                CleaningButtonLabel(
-                    title: isQueued ? ScanQueueLabels.queued : (isScanning ? "Scanning..." : "Rescan"),
-                    systemImage: isScanning || isQueued ? nil : "arrow.clockwise",
-                    isCleaning: isScanning || isQueued
-                )
-            }
-            .buttonStyle(.purge(.secondary))
-            .disabled(isScanning || isQueued)
-            .keyboardShortcut("r", modifiers: [.command])
-
-            // One destructive button whose job follows the active segment:
-            // Uninstall for the apps, Remove for leftovers and command-line
-            // tools. It stays the same view across sections, so switching only
-            // crossfades its text and eases its width; swapping whole buttons
-            // made the header jump.
-            Button(action: performPrimaryAction) {
-                if section == .installedApps, store.isBuildingUninstallPlan {
-                    CleaningButtonLabel(
-                        title: String(localized: "Preparing..."),
-                        systemImage: nil,
-                        isCleaning: true
-                    )
-                } else {
-                    AnimatedDeleteActionLabel(
-                        inactiveTitle: primaryTitle,
-                        activeTitle: primaryTitle,
-                        selectedCount: selectedCount,
-                        selectedBytes: selectedBytes
-                    )
-                }
-            }
-            .buttonStyle(.purge(.primary))
-            .disabled(isPrimaryDisabled)
-        }
-        .fixedSize()
-    }
-
-    private var section: UninstallSection { store.uninstallSection }
-
-    private var primaryTitle: String {
-        switch section {
-        case .installedApps: return String(localized: "Uninstall")
-        case .leftovers, .commandLineTools: return String(localized: "Remove")
-        }
-    }
-
-    private var selectedCount: Int {
-        switch section {
-        case .installedApps: return store.selectedApps.count
-        case .leftovers: return store.selectedOrphanCount
-        case .commandLineTools: return store.selectedCommandLineToolCount
-        }
-    }
-
-    /// Nil for apps: the review sheet owns the exact total there.
-    private var selectedBytes: Int64? {
-        switch section {
-        case .installedApps: return nil
-        case .leftovers: return store.selectedOrphanBytes
-        case .commandLineTools: return store.selectedCommandLineToolBytes
-        }
-    }
-
-    private var isPrimaryDisabled: Bool {
-        if store.isDeleting { return true }
-        switch section {
-        case .installedApps: return store.selectedAppIDs.isEmpty || store.isBuildingUninstallPlan
-        case .leftovers: return store.selectedOrphanCount == 0
-        case .commandLineTools: return store.selectedCommandLineToolCount == 0
-        }
-    }
-
-    private func performPrimaryAction() {
-        switch section {
-        case .installedApps: Task { await store.requestUninstallSelectedApps() }
-        case .leftovers: store.requestOrphanCleanup()
-        case .commandLineTools: store.requestCommandLineToolRemoval()
         }
     }
 }

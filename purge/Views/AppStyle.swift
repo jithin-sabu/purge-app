@@ -83,6 +83,8 @@ enum AppStyle {
         static let metadataEmphasis = Font.system(size: 11, weight: .medium)
         /// Badges and count pills.
         static let micro = Font.system(size: 10, weight: .semibold)
+        /// File-type labels laid over a 28pt icon, where `micro` is too wide.
+        static let iconLabel = Font.system(size: 8, weight: .semibold)
     }
 }
 

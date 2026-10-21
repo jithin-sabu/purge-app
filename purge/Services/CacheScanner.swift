@@ -441,7 +441,7 @@ nonisolated final class CacheScanner {
             let safety = SafetyInfo(
                 level: .medium,
                 headline: headline,
-                explanation: String(localized: "A leftover Chromium framework inside \(appName) that no running process is using. Quit and relaunch \(appName) before an older version still loaded by the running browser can be cleaned; those copies stay hidden until then. \(appName) also deletes leftover versions itself on relaunch."),
+                explanation: String(localized: "An unused leftover Chromium framework in \(appName). Relaunch the browser to clean versions still loaded; relaunching also removes old ones."),
                 recoverySteps: String(localized: "Quit and relaunch \(appName). If it still fails to open, reinstall it from the vendor."),
                 reinstallCommand: nil
             )

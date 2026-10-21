@@ -657,7 +657,9 @@ struct DevToolsView<PageHeader: View>: View {
                 }
             }
 
-            scanControlsChrome
+            if !isAwaitingFirstScan {
+                scanControlsChrome
+            }
             scanListStack
         }
     }
@@ -667,11 +669,27 @@ struct DevToolsView<PageHeader: View>: View {
         // list cuts off cleanly at its own edge with no scroll-edge blur, matching
         // the App Uninstaller tab.
         VStack(spacing: 0) {
-            fixedScanTabHeader
-            selectAllRowChrome
+            if !isAwaitingFirstScan {
+                fixedScanTabHeader
+                selectAllRowChrome
+            }
             scanListStack
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// No cache scan has finished this session and nothing has landed yet: the
+    /// filters, Select All and sort have nothing to act on, so the tab shows only
+    /// its status.
+    private var isAwaitingFirstScan: Bool {
+        store.isAwaitingFirstDevToolsScan
+    }
+
+    private var scanStatus: some View {
+        ScanStatusPlaceholder(
+            status: store.scanWaitStatus(for: .cachesAndDevTools, isScanning: isLoading),
+            copy: .devTools
+        )
     }
 
     /// Filter chips — fixed above the scroll edge; page title lives in the parent column header.
@@ -740,14 +758,14 @@ struct DevToolsView<PageHeader: View>: View {
     @ViewBuilder
     private var scanListOrPlaceholder: some View {
         if developerListEmpty {
-            if isLoading {
-                scanningPlaceholder
+            if isLoading || isAwaitingFirstScan {
+                scanStatus
             } else {
                 placeholderNoData
             }
         } else if nothingMatchesFilter {
             if isLoading {
-                scanningPlaceholder
+                scanStatus
             } else {
                 emptyFilterState
             }
@@ -764,13 +782,6 @@ struct DevToolsView<PageHeader: View>: View {
                 .foregroundStyle(AppColors.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var scanningPlaceholder: some View {
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Scanning developer folders")
     }
 
     private enum DeveloperListRowID: Hashable {

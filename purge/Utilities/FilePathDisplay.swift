@@ -16,6 +16,21 @@ nonisolated func displayDirectoryPath(for directoryURL: URL) -> String {
     return "~" + remainder
 }
 
+/// The folder an item sits in, short enough for a row's one detail line:
+/// "Application Support" for `~/Library/Application Support/com.app`, and
+/// "Application Support › Google" a level deeper. The full path stays in the
+/// row's tooltip and Reveal in Finder.
+nonisolated func shortLocationLabel(for itemURL: URL) -> String {
+    let parent = displayDirectoryPath(for: itemURL.deletingLastPathComponent())
+    if parent == "~" { return String(localized: "Home folder") }
+    if parent == "~/Library" { return String(localized: "Library") }
+    let libraryPrefix = "~/Library/"
+    guard parent.hasPrefix(libraryPrefix) else { return parent }
+    return parent.dropFirst(libraryPrefix.count)
+        .split(separator: "/")
+        .joined(separator: " › ")
+}
+
 /// Friendly application name for a bundle identifier, or `nil` if no installed app matches.
 nonisolated func appDisplayName(forBundleID bundleID: String) -> String? {
     guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {

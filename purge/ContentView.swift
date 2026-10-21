@@ -646,30 +646,11 @@ struct ContentView: View {
             title: store.selectedTab.displayName,
             subtitle: selectedPageSubtitle(now: now)
         ) {
-            if store.selectedTab == .overview {
-                HStack(spacing: AppStyle.Spacing.xSmall) {
-                    if !store.hasFullDiskAccess {
-                        LookDeeperHeaderButton()
-                    }
-                    OverviewScanButton()
-                    OverviewCleanSafeButton()
-                }
-            } else if store.selectedTab == .appCaches || store.selectedTab == .devTools {
-                HStack(spacing: AppStyle.Spacing.xSmall) {
-                    if !store.hasFullDiskAccess {
-                        LookDeeperHeaderButton()
-                    }
-                    AppScanCleanActions(
-                        onScan: { store.requestScan(.cachesAndDevTools) },
-                        scanPhase: store.scanPhase,
-                        isQueued: store.isScanQueued(.cachesAndDevTools)
-                    )
-                }
-            } else if store.selectedTab == .largeFiles, store.hasFullDiskAccess {
-                LargeFilesHeaderActions()
-            } else if store.selectedTab == .uninstaller, store.hasFullDiskAccess {
-                UninstallHeaderActions()
-            }
+            PageHeaderActionBar(
+                tab: store.selectedTab,
+                scanSelection: store.scanSelection,
+                largeFileSelection: store.largeFileSelection
+            )
         }
     }
 
@@ -680,6 +661,12 @@ struct ContentView: View {
         case .appCaches:
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
+            if store.isAwaitingFirstDevToolsScan {
+                let isScanning = store.isScanningDeveloper || store.isScanningAll
+                return ScanStatusPlaceholder.subtitle(
+                    for: store.scanWaitStatus(for: .cachesAndDevTools, isScanning: isScanning)
+                )
+            }
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
         case .largeFiles:
             return store.hasFullDiskAccess ? largeFilesPageSubtitle : nil
@@ -696,11 +683,11 @@ struct ContentView: View {
     private func overviewPageSubtitle(now: Date) -> String? {
         if let active = store.scanQueue.active {
             let waiting = store.scanQueue.pending.count
-            let name = OverviewScanButton.name(for: active)
+            let name = active.displayName
             return waiting > 0 ? String(localized: "Scanning \(name), then \(waiting) more…") : String(localized: "Scanning \(name)…")
         }
         if store.isScanningAll {
-            return String(localized: "Scanning \(OverviewScanButton.name(for: .cachesAndDevTools))…")
+            return String(localized: "Scanning \(ScanStep.cachesAndDevTools.displayName)…")
         }
         guard let latest = store.scanRecords.values.map(\.completedAt).max() else { return nil }
         return String(localized: "Scanned \(compactAgoText(from: latest, to: now))")
@@ -727,6 +714,11 @@ struct ContentView: View {
     }
 
     private var largeFilesPageSubtitle: String {
+        if store.isAwaitingFirstLargeFileScan {
+            return ScanStatusPlaceholder.subtitle(
+                for: store.scanWaitStatus(for: .largeFiles, isScanning: store.isScanningLargeFiles)
+            )
+        }
         // An empty result after a finished scan is a statement, not a count of
         // zero: the empty state under it says what the scan found instead (#230).
         if store.largeFiles.isEmpty, !store.isScanningLargeFiles, let summary = store.largeFileScanSummary {
@@ -769,6 +761,11 @@ struct ContentView: View {
             )
         }
 
+        if store.installedApps.isEmpty, !store.hasCompletedInstalledAppsScan {
+            return ScanStatusPlaceholder.subtitle(
+                for: store.scanWaitStatus(for: .apps, isScanning: store.isScanningInstalledApps)
+            )
+        }
         guard !store.installedApps.isEmpty else { return nil }
         return uninstallSubtitle(
             count: store.installedApps.count,
