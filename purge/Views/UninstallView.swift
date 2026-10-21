@@ -365,6 +365,7 @@ struct UninstallView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
@@ -397,39 +398,44 @@ struct UninstallView: View {
         .accessibilityValue(currentSort.displayName)
     }
 
-    /// Installed Apps, Leftovers and Command-Line Tools as underline tabs on
-    /// their own row, so the switcher never competes with sort and search for
+    /// Installed Apps, Leftovers and Command-Line Tools as one segmented pill on
+    /// its own row, so the switcher never competes with sort and search for
     /// width. Shown once a second section has something.
     private var sectionTabs: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: AppStyle.Spacing.large) {
-                sectionTab(.installedApps, count: store.installedApps.isEmpty ? nil : store.installedApps.count)
-                if showsLeftoversSegment {
-                    sectionTab(.leftovers, count: store.orphanLeftovers.count)
-                }
-                if showsCommandLineToolsSegment {
-                    sectionTab(
-                        .commandLineTools,
-                        count: store.commandLineTools.standalone.count + store.commandLineTools.managed.count
-                    )
-                }
-                Spacer(minLength: 0)
+        HStack(spacing: 2) {
+            sectionTab(.installedApps, count: store.installedApps.isEmpty ? nil : store.installedApps.count)
+            if showsLeftoversSegment {
+                sectionTab(.leftovers, count: store.orphanLeftovers.count)
             }
-            Rectangle()
-                .fill(AppColors.borderSubtle)
-                .frame(height: 1)
+            if showsCommandLineToolsSegment {
+                sectionTab(
+                    .commandLineTools,
+                    count: store.commandLineTools.standalone.count + store.commandLineTools.managed.count
+                )
+            }
         }
+        .padding(3)
+        .background(Capsule(style: .continuous).fill(AppColors.fillSecondary))
+        .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 1))
+        .fixedSize()
     }
 
-    private func sectionTabLabel(_ target: UninstallSection, count: Int?, weight: Font.Weight) -> some View {
-        HStack(spacing: AppStyle.Spacing.xxSmall) {
+    private func sectionTabLabel(_ target: UninstallSection, count: Int?, isOn: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: target.symbolName)
+                // Badged symbols report a taller ideal size; clip so every
+                // segment shares one height, as `FilterChip` does.
+                .font(AppStyle.Typography.callout.weight(.medium))
+                .frame(width: 14, height: 14)
+                .clipped()
+                .accessibilityHidden(true)
             Text(target.label)
-                .font(AppStyle.Typography.body.weight(weight))
+                .font(AppStyle.Typography.body.weight(isOn ? .semibold : .regular))
             if let count {
                 Text("\(count)")
                     .font(AppStyle.Typography.metadata)
                     .monospacedDigit()
-                    .foregroundStyle(AppColors.textTertiary)
+                    .foregroundStyle(isOn ? AppColors.textSecondary : AppColors.textTertiary)
                     .contentTransition(reduceMotion ? .identity : .numericText())
             }
         }
@@ -444,30 +450,28 @@ struct UninstallView: View {
                 withAnimation(.easeInOut(duration: 0.2)) { store.uninstallSection = target }
             }
         } label: {
-            VStack(spacing: AppStyle.Spacing.xSmall) {
-                // The tab keeps its semibold width either way, so the row never
-                // shifts when the selection moves; the spare space sits at the end.
-                ZStack(alignment: .leading) {
-                    sectionTabLabel(target, count: count, weight: .semibold)
-                        .opacity(0)
-                        .accessibilityHidden(true)
-                    sectionTabLabel(target, count: count, weight: isOn ? .semibold : .regular)
-                }
-                .foregroundStyle(isOn ? AppColors.textPrimary : AppColors.textSecondary)
-                .lineLimit(1)
-
-                ZStack {
-                    Rectangle().fill(Color.clear).frame(height: 2)
-                    if isOn {
-                        Rectangle()
-                            .fill(AppColors.actionPrimary)
-                            .frame(height: 2)
-                            .matchedGeometryEffect(id: "sectionTabUnderline", in: sectionTabNamespace)
-                    }
+            // Each segment keeps its semibold width, so the pill never changes
+            // size when the selection moves.
+            ZStack(alignment: .leading) {
+                sectionTabLabel(target, count: count, isOn: true)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+                sectionTabLabel(target, count: count, isOn: isOn)
+            }
+            .foregroundStyle(isOn ? AppColors.textPrimary : AppColors.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, AppStyle.Spacing.small)
+            .padding(.vertical, 6)
+            .background {
+                if isOn {
+                    Capsule(style: .continuous)
+                        .fill(AppColors.surfaceRaised)
+                        .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 1))
+                        .matchedGeometryEffect(id: "sectionTabThumb", in: sectionTabNamespace)
                 }
             }
             .fixedSize()
-            .contentShape(Rectangle())
+            .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(count.map { "\(target.label), \($0) items" } ?? target.label)
