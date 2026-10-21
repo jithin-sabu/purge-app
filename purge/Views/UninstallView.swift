@@ -162,6 +162,7 @@ struct UninstallView: View {
     /// Shared geometry for sort reorders so the same app slides to its new slot
     /// instead of fading out in one place and in from another.
     @Namespace private var listReorderNamespace
+    @Namespace private var sectionTabNamespace
     @Namespace private var gridReorderNamespace
 
     var body: some View {
@@ -348,70 +349,93 @@ struct UninstallView: View {
     // not something anyone means to do, and offering it invites an accident.
 
     private var controls: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             if showsLeftoversSegment || showsCommandLineToolsSegment {
-                sectionSegments
+                sectionTabs
             }
 
-            // Sort, search and view mode apply to installed apps only; hide
-            // them on the
-            // leftovers view so its controls (Select all, Remove) stand alone.
+            // Sort, search and view mode apply to installed apps only. The
+            // other sections bring their own Select All row.
             if section == .installedApps {
-                AppDropdown(
-                    options: AppSortOption.allCases,
-                    selection: currentSort,
-                    optionLabel: { $0.displayName },
-                    isOptionEnabled: { option in
-                        !option.needsFullMeasurement || store.hasMeasuredAllRemovableTotals
-                    },
-                    onSelect: { option in
-                        guard option != selectedSort else { return }
-                        if reduceMotion {
-                            selectedSort = option
-                        } else {
-                            withAnimation(tileReorderAnimation) { selectedSort = option }
-                        }
-                    }
-                ) {
-                    FilterChip(
-                        style: .dropdown,
-                        label: currentSort.shortDisplayName,
-                        leadingSystemImage: "arrow.up.arrow.down"
-                    )
+                HStack(spacing: AppStyle.Spacing.small) {
+                    sortMenu
+                    Spacer(minLength: AppStyle.Spacing.xSmall)
+                    UninstallSearchField(query: $appSearchQuery)
+                    viewModePicker
                 }
-                .buttonStyle(.plain)
-                .fixedSize()
-                .accessibilityLabel("Sort apps")
-                .accessibilityValue(currentSort.displayName)
-
-                Spacer(minLength: 8)
-                UninstallSearchField(query: $appSearchQuery)
-                viewModePicker
-            } else {
-                Spacer(minLength: 8)
             }
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
-    /// The Installed Apps / Leftovers switcher, reusing the tab-style chip the
-    /// App Caches safety filter uses so it reads as a first-class view switch.
-    private var sectionSegments: some View {
-        HStack(spacing: 4) {
-            segmentChip(.installedApps, count: nil)
-            if showsLeftoversSegment {
-                segmentChip(.leftovers, count: store.orphanLeftovers.count)
+    private var sortMenu: some View {
+        AppDropdown(
+            options: AppSortOption.allCases,
+            selection: currentSort,
+            optionLabel: { $0.displayName },
+            isOptionEnabled: { option in
+                !option.needsFullMeasurement || store.hasMeasuredAllRemovableTotals
+            },
+            onSelect: { option in
+                guard option != selectedSort else { return }
+                if reduceMotion {
+                    selectedSort = option
+                } else {
+                    withAnimation(tileReorderAnimation) { selectedSort = option }
+                }
             }
-            if showsCommandLineToolsSegment {
-                segmentChip(
-                    .commandLineTools,
-                    count: store.commandLineTools.standalone.count + store.commandLineTools.managed.count
-                )
+        ) {
+            FilterChip(
+                style: .dropdown,
+                label: currentSort.shortDisplayName,
+                leadingSystemImage: "arrow.up.arrow.down"
+            )
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel("Sort apps")
+        .accessibilityValue(currentSort.displayName)
+    }
+
+    /// Installed Apps, Leftovers and Command-Line Tools as underline tabs on
+    /// their own row, so the switcher never competes with sort and search for
+    /// width. Shown once a second section has something.
+    private var sectionTabs: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: AppStyle.Spacing.large) {
+                sectionTab(.installedApps, count: store.installedApps.isEmpty ? nil : store.installedApps.count)
+                if showsLeftoversSegment {
+                    sectionTab(.leftovers, count: store.orphanLeftovers.count)
+                }
+                if showsCommandLineToolsSegment {
+                    sectionTab(
+                        .commandLineTools,
+                        count: store.commandLineTools.standalone.count + store.commandLineTools.managed.count
+                    )
+                }
+                Spacer(minLength: 0)
+            }
+            Rectangle()
+                .fill(AppColors.borderSubtle)
+                .frame(height: 1)
+        }
+    }
+
+    private func sectionTabLabel(_ target: UninstallSection, count: Int?, weight: Font.Weight) -> some View {
+        HStack(spacing: AppStyle.Spacing.xxSmall) {
+            Text(target.label)
+                .font(AppStyle.Typography.body.weight(weight))
+            if let count {
+                Text("\(count)")
+                    .font(AppStyle.Typography.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(AppColors.textTertiary)
+                    .contentTransition(reduceMotion ? .identity : .numericText())
             }
         }
     }
 
-    private func segmentChip(_ target: UninstallSection, count: Int?) -> some View {
+    private func sectionTab(_ target: UninstallSection, count: Int?) -> some View {
         let isOn = section == target
         return Button {
             if reduceMotion {
@@ -420,14 +444,30 @@ struct UninstallView: View {
                 withAnimation(.easeInOut(duration: 0.2)) { store.uninstallSection = target }
             }
         } label: {
-            FilterChip(
-                style: .tab,
-                label: target.label,
-                isSelected: isOn,
-                tier: target == .installedApps ? .neutral : .checkFirst,
-                leadingSystemImage: target.symbolName,
-                count: count
-            )
+            VStack(spacing: AppStyle.Spacing.xSmall) {
+                // The tab keeps its semibold width either way, so the row never
+                // shifts when the selection moves; the spare space sits at the end.
+                ZStack(alignment: .leading) {
+                    sectionTabLabel(target, count: count, weight: .semibold)
+                        .opacity(0)
+                        .accessibilityHidden(true)
+                    sectionTabLabel(target, count: count, weight: isOn ? .semibold : .regular)
+                }
+                .foregroundStyle(isOn ? AppColors.textPrimary : AppColors.textSecondary)
+                .lineLimit(1)
+
+                ZStack {
+                    Rectangle().fill(Color.clear).frame(height: 2)
+                    if isOn {
+                        Rectangle()
+                            .fill(AppColors.actionPrimary)
+                            .frame(height: 2)
+                            .matchedGeometryEffect(id: "sectionTabUnderline", in: sectionTabNamespace)
+                    }
+                }
+            }
+            .fixedSize()
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(count.map { "\(target.label), \($0) items" } ?? target.label)
