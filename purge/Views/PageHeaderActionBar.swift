@@ -8,6 +8,8 @@ struct PageHeaderAction {
     var isBusy = false
     /// A selection's size, shown as " (size)" after the title.
     var suffixBytes: Int64?
+    /// How many items are ticked, for VoiceOver when there is no size to read.
+    var selectedCount = 0
     var isDisabled = false
     var help: LocalizedStringKey?
     var action: () -> Void
@@ -50,13 +52,24 @@ struct PageHeaderActionBar: View {
                 .buttonStyle(.purge(.primary))
                 .disabled(primary.isDisabled)
                 .help(primary.help ?? "")
-                .popover(isPresented: $isConfirmingSafeClean, arrowEdge: .bottom) {
+                // Only the Overview's Clean Safe Items confirms in a popover. The
+                // bar stays mounted across tabs, so a tab change closes it rather
+                // than leaving it beside another tab's button.
+                .popover(isPresented: safeCleanConfirmationShown, arrowEdge: .bottom) {
                     safeCleanConfirmation
                 }
             }
             .fixedSize()
+            .onChange(of: tab) { _ in isConfirmingSafeClean = false }
             .animation(reduceMotion ? nil : MorphingActionLabel.widthAnimation, value: showsLookDeeper)
         }
+    }
+
+    private var safeCleanConfirmationShown: Binding<Bool> {
+        Binding(
+            get: { isConfirmingSafeClean && tab == .overview },
+            set: { isConfirmingSafeClean = $0 }
+        )
     }
 
     private var showsLookDeeper: Bool {
@@ -226,6 +239,7 @@ struct PageHeaderActionBar: View {
             title: String(localized: "Clean Selected"),
             systemImage: "trash.fill",
             suffixBytes: count > 0 ? store.selectedTotalBytes : nil,
+            selectedCount: count,
             isDisabled: count == 0 || store.isDeleting
         ) {
             store.showDeletionSheet = true
@@ -238,6 +252,7 @@ struct PageHeaderActionBar: View {
             title: String(localized: "Delete Selected"),
             systemImage: "trash.fill",
             suffixBytes: count > 0 ? store.selectedLargeFileBytes : nil,
+            selectedCount: count,
             isDisabled: count == 0 || store.isDeleting
         ) {
             store.presentLargeFileDeletionSheet()
@@ -280,6 +295,7 @@ struct PageHeaderActionBar: View {
             title: title,
             systemImage: "trash.fill",
             suffixBytes: selectedCount > 0 ? selectedBytes : nil,
+            selectedCount: selectedCount,
             isDisabled: isDisabled || store.isDeleting
         ) {
             switch section {
@@ -409,8 +425,13 @@ struct MorphingActionLabel: View {
 
     private var accessibilityTitle: String {
         let title = String(localized: String.LocalizationValue(action.title))
-        guard let bytes = action.suffixBytes else { return title }
-        return String(localized: "\(title), \(formatBytes(bytes)) selected")
+        if let bytes = action.suffixBytes {
+            return String(localized: "\(title), \(formatBytes(bytes)) selected")
+        }
+        // Uninstall shows no size (the review sheet owns the total), so the
+        // count is what VoiceOver reads.
+        guard action.selectedCount > 0 else { return title }
+        return String(localized: "\(title), \(action.selectedCount) selected")
     }
 }
 

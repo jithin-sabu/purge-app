@@ -142,6 +142,10 @@ struct UninstallView: View {
     /// The Leftovers segment appears once a scan has found something, so the tab
     /// looks exactly as before for the common case of no orphans. It also stays up
     /// while the Overview's Leftovers row has opened it ahead of the scan.
+    private var showsSectionTabs: Bool {
+        showsLeftoversSegment || showsCommandLineToolsSegment
+    }
+
     private var showsLeftoversSegment: Bool {
         !store.orphanLeftovers.isEmpty || (section == .leftovers && store.isLeftoversScanPending)
     }
@@ -171,7 +175,7 @@ struct UninstallView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            if !isAwaitingFirstAppsScan {
+            if showsSectionTabs || !isAwaitingFirstAppsScan {
                 controls
             }
             content
@@ -378,13 +382,14 @@ struct UninstallView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-            if showsLeftoversSegment || showsCommandLineToolsSegment {
+            if showsSectionTabs {
                 sectionTabs
             }
 
             // Sort, search and view mode apply to installed apps only. The
-            // other sections bring their own Select All row.
-            if section == .installedApps {
+            // other sections bring their own Select All row. They wait for the
+            // apps list; the section tabs stay so the other lists stay reachable.
+            if section == .installedApps, !isAwaitingFirstAppsScan {
                 HStack(spacing: AppStyle.Spacing.small) {
                     sortMenu
                     Spacer(minLength: AppStyle.Spacing.xSmall)
@@ -508,9 +513,9 @@ struct UninstallView: View {
         store.isScanningInstalledApps && store.installedApps.isEmpty
     }
 
-    /// The apps list has not been found yet this session. Sort, search, view mode
-    /// and the section tabs have nothing to act on, so the tab shows only its
-    /// status. Leftovers and command-line tools keep their own controls.
+    /// The apps list has not been found yet this session. Sort, search and view
+    /// mode have nothing to act on, so they wait; the section tabs stay, since
+    /// Leftovers and Command-line tools may already have results.
     private var isAwaitingFirstAppsScan: Bool {
         section == .installedApps && store.installedApps.isEmpty && !store.hasCompletedInstalledAppsScan
     }

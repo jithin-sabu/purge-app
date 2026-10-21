@@ -1065,7 +1065,7 @@
     "key": "docker",
     "display_name": "Docker Desktop",
     "tag": "medium",
-    "explanation": "Volumes here can hold a database's only copy. To keep them, run docker --context desktop-linux system prune instead. Quit Docker to clean.",
+    "explanation": "Every image, container and volume. To keep volumes, which can hold databases, run docker --context desktop-linux system prune while Docker is open. Else quit Docker.",
     "bundle_ids": [
       "com.docker.docker"
     ],
@@ -1625,7 +1625,7 @@
     "key": "cypress-cache",
     "display_name": "Cypress Test Binaries",
     "tag": "medium",
-    "explanation": "Browsers Cypress downloaded for end-to-end tests. Cypress downloads them again before your next test run, which can take a few minutes.",
+    "explanation": "The Cypress app that runs your end-to-end tests. Tests fail until you run npx cypress install, which downloads it again.",
     "bundle_ids": [],
     "aliases": [
       "Cypress",
@@ -1723,7 +1723,7 @@
     "key": "gradle-cache",
     "display_name": "Gradle Build Cache",
     "tag": "safe",
-    "explanation": "Build caches and dependencies downloaded by Gradle, the Java and Android build tool. They download again on your next build.",
+    "explanation": "A project's own Gradle state, such as file hashes and build history. The next build recreates it; downloaded libraries live in ~/.gradle.",
     "bundle_ids": [],
     "aliases": [
       ".gradle",
@@ -1738,7 +1738,7 @@
     "key": "gradle-global-cache",
     "display_name": "Gradle Dependency Cache",
     "tag": "medium",
-    "explanation": "Gradle's libraries, build caches and wrapper downloads. Nothing is lost, but your next build downloads it all again, which is slow and needs a connection.",
+    "explanation": "Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow and needs a connection.",
     "bundle_ids": [],
     "aliases": [
       "Gradle Dependency Cache"

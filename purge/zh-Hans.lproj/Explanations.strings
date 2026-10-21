@@ -310,7 +310,7 @@
 
 /* docker */
 "Docker Desktop" = "Docker Desktop";
-"Volumes here can hold a database's only copy. To keep them, run docker --context desktop-linux system prune instead. Quit Docker to clean." = "这里的卷可能是数据库的唯一副本。若要保留，请改为运行 docker --context desktop-linux system prune。退出 Docker 后再清理。";
+"Every image, container and volume. To keep volumes, which can hold databases, run docker --context desktop-linux system prune while Docker is open. Else quit Docker." = "所有镜像、容器和卷。卷可能保存数据库，若要保留卷，请在 Docker 打开时运行 docker --context desktop-linux system prune。否则请先退出 Docker。";
 
 /* raycast */
 "Raycast Launcher" = "Raycast 启动器";
@@ -482,7 +482,7 @@
 
 /* cypress-cache */
 "Cypress Test Binaries" = "Cypress 测试程序";
-"Browsers Cypress downloaded for end-to-end tests. Cypress downloads them again before your next test run, which can take a few minutes." = "Cypress 为端到端测试下载的浏览器。下次运行测试前 Cypress 会重新下载，可能需要几分钟。";
+"The Cypress app that runs your end-to-end tests. Tests fail until you run npx cypress install, which downloads it again." = "运行端到端测试的 Cypress 应用。在运行 npx cypress install 重新下载之前，测试会失败。";
 
 /* python-cache */
 "Python Bytecode Cache" = "Python 字节码缓存";
@@ -510,11 +510,11 @@
 
 /* gradle-cache */
 "Gradle Build Cache" = "Gradle 构建缓存";
-"Build caches and dependencies downloaded by Gradle, the Java and Android build tool. They download again on your next build." = "Java 和 Android 构建工具 Gradle 的构建缓存与已下载依赖。下次构建时会重新下载。";
+"A project's own Gradle state, such as file hashes and build history. The next build recreates it; downloaded libraries live in ~/.gradle." = "项目自己的 Gradle 状态，例如文件哈希和构建历史。下次构建时会重新生成；已下载的代码库保存在 ~/.gradle 中。";
 
 /* gradle-global-cache */
 "Gradle Dependency Cache" = "Gradle 依赖缓存";
-"Gradle's libraries, build caches and wrapper downloads. Nothing is lost, but your next build downloads it all again, which is slow and needs a connection." = "Gradle 的代码库、构建缓存和 wrapper 下载内容。不会丢失内容，但下次构建需重新下载全部内容，耗时较长且需要联网。";
+"Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow and needs a connection." = "Gradle 下载的代码库、构建缓存和 wrapper 版本。不会丢失内容，但下次构建需重新下载并重建，耗时较长且需要联网。";
 
 /* cocoapods-cache */
 "CocoaPods Cache" = "CocoaPods 缓存";
