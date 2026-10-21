@@ -417,4 +417,36 @@ struct SimulatorDeviceListingTests {
         let devices = DevScanner().simulatorDevices(fromListing: output(0, stdout: json), devicesRoot: root)
         #expect(devices.map(\.id.uuidString) == [udid])
     }
+
+    /// A booted device is listed so its space shows, but never among the devices
+    /// that can be deleted.
+    @Test func bootedDeviceIsShownButNotOffered() throws {
+        let root = try makeDevicesRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let dataPath = root.appendingPathComponent("\(udid)/data").path
+        let json = """
+            {"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+              {"udid": "\(udid)", "state": "Booted", "name": "iPhone 17", "isAvailable": true, "dataPath": "\(dataPath)"}
+            ]}}
+            """
+        let scanner = DevScanner()
+        let listing = scanner.simulatorListing(fromListing: output(0, stdout: json), devicesRoot: root)
+        #expect(listing.shutdown.isEmpty)
+        #expect(listing.running.map(\.id.uuidString) == [udid])
+        #expect(listing.running.first?.safetyInfo.level == .medium)
+        #expect(scanner.simulatorDevices(fromListing: output(0, stdout: json), devicesRoot: root).isEmpty)
+    }
+
+    /// The plist fallback stores a booted device as state 3.
+    @Test func bootedDeviceFromThePlistsIsNotOffered() throws {
+        let root = try makeDevicesRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let plistURL = root.appendingPathComponent("\(udid)/device.plist")
+        let plist = try #require(NSMutableDictionary(contentsOf: plistURL))
+        plist["state"] = 3
+        try plist.write(to: plistURL)
+        let listing = DevScanner().simulatorListing(fromListing: output(0, timedOut: true), devicesRoot: root)
+        #expect(listing.shutdown.isEmpty)
+        #expect(listing.running.map(\.id.uuidString) == [udid])
+    }
 }

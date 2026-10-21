@@ -172,8 +172,13 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var simulatorSectionVisible: Bool {
-        !store.simulatorDevices.isEmpty
-            && store.simulatorDevices.contains { artifactVisible($0.safetyInfo) }
+        store.simulatorDevices.contains { artifactVisible($0.safetyInfo) }
+            || !visibleRunningSimulators.isEmpty
+    }
+
+    /// Booted simulators, shown under the ones that can be removed.
+    private var visibleRunningSimulators: [SimulatorDevice] {
+        store.runningSimulatorDevices.filter { artifactVisible($0.safetyInfo) }
     }
 
     private func visibleSimulatorIndices() -> [Int] {
@@ -526,6 +531,7 @@ struct DevToolsView<PageHeader: View>: View {
         return store.projectGroups.isEmpty
             && store.devTools.isEmpty
             && store.simulatorDevices.isEmpty
+            && store.runningSimulatorDevices.isEmpty
     }
 
     private var showsDeveloperListContent: Bool {
@@ -898,6 +904,26 @@ struct DevToolsView<PageHeader: View>: View {
                             .listRowSeparator(.hidden)
                             .transition(rowInsertionTransition)
                         }
+                    }
+
+                    // No checkbox: a running device is never offered for removal.
+                    ForEach(visibleRunningSimulators) { device in
+                        ScanResultRow(
+                            isSelected: false,
+                            primaryLabel: device.safetyInfo.headline,
+                            formattedSize: device.formattedSize,
+                            safetyInfo: device.safetyInfo,
+                            brandIcon: .sfSymbol("ipad.and.iphone"),
+                            revealLocations: {
+                                [ScanRowLocation(url: device.folderURL, sizeBytes: device.sizeOnDisk)]
+                            },
+                            allowsBulkSelection: false,
+                            usesCompactExplanation: true
+                        )
+                        .listRowInsets(ScanListRowInsets.standard)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .transition(rowInsertionTransition)
                     }
                 }
             }

@@ -206,6 +206,7 @@
 "Deleted apps' leftovers" = "已删除应用的残留文件";
 "Deleted-app reviews paused" = "已删除应用检查已暂停";
 "Deletes its apps and data." = "会删除此设备的应用和数据。";
+"Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "正在运行，因此无法移除。请先在“模拟器”中将其关闭，然后重新扫描。";
 "Dependencies" = "依赖项";
 "Dev Tools" = "开发工具";
 "Dev tool artifacts" = "开发工具生成文件";

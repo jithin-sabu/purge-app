@@ -7,6 +7,9 @@ enum DeveloperScanEvent {
     case projectGroupFound(ProjectGroup)
     case simulatorFound(SimulatorDevice)
     case simulatorSizeResolved(id: UUID, sizeBytes: Int64)
+    /// Booted simulators, already sized. Shown so their space is accounted for, never
+    /// offered: `simctl delete` is not run on a device something may be using.
+    case runningSimulatorsFound([SimulatorDevice])
     /// Sized on arrival: `simctl` reports the image size, so there is no sizing pass.
     case simulatorRuntimeFound(SimulatorRuntime)
 }
@@ -195,11 +198,12 @@ nonisolated final class DevScanner {
                 if Task.isCancelled { return }
                 continuation.yield(.status(String(localized: "Scanning iOS Simulators...")))
                 let simDiscoveryStart = Date()
-                let simulators = await self.discoverShutdownSimulatorsWithoutSizes(access: access)
+                let listing = await self.discoverSimulatorsWithoutSizes(access: access)
+                let simulators = listing.shutdown
                 ScanPhaseTiming.finish(
                     "simulator discovery",
                     since: simDiscoveryStart,
-                    detail: "\(simulators.count) shutdown simulators"
+                    detail: "\(simulators.count) shutdown simulators, \(listing.running.count) running"
                 )
                 for simulator in simulators {
                     if Task.isCancelled { return }
@@ -207,6 +211,9 @@ nonisolated final class DevScanner {
                 }
                 let simSizingStart = Date()
                 await self.runSimulatorSizeJobs(simulators, continuation: continuation)
+                if !listing.running.isEmpty, !Task.isCancelled {
+                    continuation.yield(.runningSimulatorsFound(Self.sized(listing.running)))
+                }
                 ScanPhaseTiming.finish(
                     "simulator sizing",
                     since: simSizingStart,
@@ -278,18 +285,41 @@ nonisolated final class DevScanner {
 
     // MARK: - iOS Simulators
 
+    /// Shut-down simulators, which can be deleted, and booted ones, which are only
+    /// shown. A booted device is skipped rather than offered, because something (a
+    /// test run, the Simulator app) may be using it.
+    struct SimulatorListing: Equatable {
+        var shutdown: [SimulatorDevice] = []
+        var running: [SimulatorDevice] = []
+    }
+
     /// Metadata only (`sizeOnDisk` is `nil`). Requires a `simctl` that runs (see
     /// `Simctl`) and a CoreSimulator devices folder.
     func discoverShutdownSimulatorsWithoutSizes(access: ScanAccess = .full) async -> [SimulatorDevice] {
+        await discoverSimulatorsWithoutSizes(access: access).shutdown
+    }
+
+    func discoverSimulatorsWithoutSizes(access: ScanAccess = .full) async -> SimulatorListing {
         let devicesRoot = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Developer/CoreSimulator/Devices", isDirectory: true)
         guard ProtectedLocations.isReadable(devicesRoot, access: access),
-              FileManager.default.fileExists(atPath: devicesRoot.path) else { return [] }
+              FileManager.default.fileExists(atPath: devicesRoot.path) else { return SimulatorListing() }
 
         // `nil` here also covers `Simctl.launcher()` finding no simctl at all.
         let listing = await Simctl.runAsync(["list", "devices", "--json"], timeout: Self.simctlListTimeout)
-        return simulatorDevices(fromListing: listing, devicesRoot: devicesRoot)
-            .filter { !ExcludedPathsStore.isExcluded($0.folderURL) }
+        var result = simulatorListing(fromListing: listing, devicesRoot: devicesRoot)
+        result.shutdown.removeAll { ExcludedPathsStore.isExcluded($0.folderURL) }
+        result.running.removeAll { ExcludedPathsStore.isExcluded($0.folderURL) }
+        return result
+    }
+
+    private static func sized(_ devices: [SimulatorDevice]) -> [SimulatorDevice] {
+        let sizesByPath = FolderSizing.directorySizes(at: devices.map(\.folderURL))
+        return devices.map { device in
+            var sized = device
+            sized.sizeOnDisk = sizesByPath[device.folderURL.standardizedFileURL.path] ?? 0
+            return sized
+        }
     }
 
     /// CoreSimulator can take a while to answer on a cold first call; past this the plist
@@ -302,19 +332,24 @@ nonisolated final class DevScanner {
     /// or failed (Xcode license, out-of-date CoreSimulator), every row offered
     /// would fail to delete (#161), so none are.
     func simulatorDevices(fromListing listing: ProcessRunner.Output?, devicesRoot: URL) -> [SimulatorDevice] {
-        guard let listing else { return [] }
-        if listing.timedOut { return loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot) }
-        guard listing.succeeded else { return [] }
-        return parseSimulatorList(listing.stdout, devicesRoot: devicesRoot) ?? []
+        simulatorListing(fromListing: listing, devicesRoot: devicesRoot).shutdown
     }
 
-    private func parseSimulatorList(_ data: Data, devicesRoot: URL) -> [SimulatorDevice]? {
+    func simulatorListing(fromListing listing: ProcessRunner.Output?, devicesRoot: URL) -> SimulatorListing {
+        guard let listing else { return SimulatorListing() }
+        if listing.timedOut { return loadSimulatorsFromPlistFiles(devicesRoot: devicesRoot) }
+        guard listing.succeeded else { return SimulatorListing() }
+        return parseSimulatorList(listing.stdout, devicesRoot: devicesRoot) ?? SimulatorListing()
+    }
+
+    private func parseSimulatorList(_ data: Data, devicesRoot: URL) -> SimulatorListing? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let devicesMap = root["devices"] as? [String: Any] else {
             return nil
         }
 
         var built: [SimulatorDevice] = []
+        var running: [SimulatorDevice] = []
         for (runtimeKey, rawList) in devicesMap {
             guard let deviceDicts = rawList as? [[String: Any]] else { continue }
             let runtimeVersion = Self.runtimeVersionLabel(from: runtimeKey)
@@ -324,7 +359,7 @@ nonisolated final class DevScanner {
                       let id = UUID(uuidString: udidString) else { continue }
 
                 let stateString = dict["state"] as? String ?? ""
-                if stateString == "Booted" { continue }
+                let isBooted = stateString == "Booted"
 
                 let name = dict["name"] as? String ?? String(localized: "Simulator")
                 let isAvailable = (dict["isAvailable"] as? Bool) ?? true
@@ -347,33 +382,38 @@ nonisolated final class DevScanner {
                 guard folderURL.standardizedFileURL.path.hasPrefix(devicesRoot.standardizedFileURL.path) else { continue }
                 guard FileManager.default.fileExists(atPath: folderURL.path) else { continue }
 
-                let safety = SimulatorDevice.safetyInfo(
-                    isAvailable: isAvailable,
-                    lastBootedAt: lastBootedAt,
-                    deviceName: name,
-                    runtimeVersion: runtimeVersion
-                )
-
-                built.append(
-                    SimulatorDevice(
-                        id: id,
-                        deviceName: name,
-                        runtimeVersion: runtimeVersion,
+                let safety = isBooted
+                    ? SimulatorDevice.runningSafetyInfo(deviceName: name, runtimeVersion: runtimeVersion)
+                    : SimulatorDevice.safetyInfo(
                         isAvailable: isAvailable,
                         lastBootedAt: lastBootedAt,
-                        sizeOnDisk: nil,
-                        folderURL: folderURL,
-                        isSelected: false,
-                        safetyInfo: safety
+                        deviceName: name,
+                        runtimeVersion: runtimeVersion
                     )
+
+                let device = SimulatorDevice(
+                    id: id,
+                    deviceName: name,
+                    runtimeVersion: runtimeVersion,
+                    isAvailable: isAvailable,
+                    lastBootedAt: lastBootedAt,
+                    sizeOnDisk: nil,
+                    folderURL: folderURL,
+                    isSelected: false,
+                    safetyInfo: safety
                 )
+                if isBooted {
+                    running.append(device)
+                } else {
+                    built.append(device)
+                }
             }
         }
 
-        return dedupeSimulators(built)
+        return SimulatorListing(shutdown: dedupeSimulators(built), running: dedupeSimulators(running))
     }
 
-    private func loadSimulatorsFromPlistFiles(devicesRoot: URL) -> [SimulatorDevice] {
+    private func loadSimulatorsFromPlistFiles(devicesRoot: URL) -> SimulatorListing {
         let fm = FileManager.default
         var candidates: [URL] = []
         if let top = try? fm.contentsOfDirectory(
@@ -401,13 +441,13 @@ nonisolated final class DevScanner {
         }
 
         var built: [SimulatorDevice] = []
+        var running: [SimulatorDevice] = []
         for folder in candidates {
             guard let id = UUID(uuidString: folder.lastPathComponent) else { continue }
             let plistURL = folder.appendingPathComponent("device.plist")
             guard let plist = NSDictionary(contentsOf: plistURL) as? [String: Any] else { continue }
 
-            if let stateNum = plist["state"] as? Int, stateNum == 3 { continue }
-            if let stateStr = plist["state"] as? String, stateStr == "Booted" { continue }
+            let isBooted = (plist["state"] as? Int) == 3 || (plist["state"] as? String) == "Booted"
 
             let name = plist["name"] as? String ?? String(localized: "Simulator")
             let runtimeKey = plist["runtime"] as? String ?? ""
@@ -418,29 +458,35 @@ nonisolated final class DevScanner {
 
             let isAvailable = !folder.path.contains("/Devices/unavailable/")
 
-            let safety = SimulatorDevice.safetyInfo(
-                isAvailable: isAvailable,
-                lastBootedAt: lastBootedAt,
-                deviceName: name,
-                runtimeVersion: runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion
-            )
-
-            built.append(
-                SimulatorDevice(
-                    id: id,
-                    deviceName: name,
-                    runtimeVersion: runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion,
+            let shownVersion = runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion
+            let safety = isBooted
+                ? SimulatorDevice.runningSafetyInfo(deviceName: name, runtimeVersion: shownVersion)
+                : SimulatorDevice.safetyInfo(
                     isAvailable: isAvailable,
                     lastBootedAt: lastBootedAt,
-                    sizeOnDisk: nil,
-                    folderURL: folder,
-                    isSelected: false,
-                    safetyInfo: safety
+                    deviceName: name,
+                    runtimeVersion: shownVersion
                 )
+
+            let device = SimulatorDevice(
+                id: id,
+                deviceName: name,
+                runtimeVersion: shownVersion,
+                isAvailable: isAvailable,
+                lastBootedAt: lastBootedAt,
+                sizeOnDisk: nil,
+                folderURL: folder,
+                isSelected: false,
+                safetyInfo: safety
             )
+            if isBooted {
+                running.append(device)
+            } else {
+                built.append(device)
+            }
         }
 
-        return dedupeSimulators(built)
+        return SimulatorListing(shutdown: dedupeSimulators(built), running: dedupeSimulators(running))
     }
 
     private func dedupeSimulators(_ items: [SimulatorDevice]) -> [SimulatorDevice] {
