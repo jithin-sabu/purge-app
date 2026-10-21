@@ -166,7 +166,9 @@ extension PurgeStore {
             group: folder.group,
             home: FileManager.default.homeDirectoryForCurrentUser,
             steamGames: everythingElseMeasurement?.steamGames ?? [:],
-            commandLineTools: everythingElseMeasurement?.commandLineTools ?? [:]
+            // The uninstaller is locked without Full Disk Access, so the link
+            // would land on the lock page.
+            commandLineTools: hasFullDiskAccess ? (everythingElseMeasurement?.commandLineTools ?? [:]) : [:]
         )
     }
 

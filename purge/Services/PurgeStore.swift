@@ -2477,6 +2477,11 @@ final class PurgeStore: ObservableObject {
     func confirmCommandLineToolRemoval() async {
         guard var plan = commandLineToolRemovalPlan, plan.phase == .review else { return }
         guard claimConfirmedCleanOrExplain() else { return }
+        // Claimed now, not after the in-use check: that check can take seconds,
+        // and another clean must not start meanwhile.
+        isDeleting = true
+        errorMessage = nil
+        defer { isDeleting = false }
         let planID = plan.id
         func publish() {
             if commandLineToolRemovalPlan?.id == planID { commandLineToolRemovalPlan = plan }
@@ -2486,10 +2491,16 @@ final class PurgeStore: ObservableObject {
         plan.refusal = nil
         publish()
         if !plan.tools.isEmpty {
-            let jobs = plan.launchAgents
+            let listedPlists = Set(plan.launchAgents.map(\.plist.standardizedFileURL.path))
             let folders = plan.tools.map(\.folder)
+            let home = FileManager.default.homeDirectoryForCurrentUser
             let refusal = await Task.detached(priority: .userInitiated) {
-                Self.commandLineToolRemovalRefusal(jobs: jobs, folders: folders)
+                // Labels come from the plists as they are now, and only for the
+                // jobs the sheet listed.
+                let jobs = folders
+                    .flatMap { CommandLineToolScanPolicy.launchAgents(startingFrom: $0, home: home) }
+                    .filter { listedPlists.contains($0.plist.standardizedFileURL.path) }
+                return Self.commandLineToolRemovalRefusal(jobs: jobs, folders: folders)
             }.value
             if let refusal {
                 plan.phase = .review
@@ -2499,9 +2510,6 @@ final class PurgeStore: ObservableObject {
             }
         }
 
-        isDeleting = true
-        errorMessage = nil
-        defer { isDeleting = false }
         plan.phase = .working
         publish()
 
@@ -2614,18 +2622,28 @@ final class PurgeStore: ObservableObject {
 
     /// Why the folders can't go yet, or nil. A process can take a moment to
     /// exit after its job stops, so a busy answer is asked again for up to two
-    /// seconds before it counts.
+    /// seconds before it counts. On any refusal, every job this stopped is
+    /// started again, so nothing is left down for a removal that never ran.
     nonisolated private static func commandLineToolRemovalRefusal(
         jobs: [LaunchAgentJob],
         folders: [URL]
     ) -> String? {
+        var stopped: [LaunchAgentJob] = []
         for job in jobs {
-            if case .failed(let message) = LaunchAgentStopper.stop(label: job.label) {
-                return String(localized: "Purge couldn't stop the background job \(job.label): \(message)")
+            switch LaunchAgentStopper.stop(label: job.label) {
+            case .stopped:
+                stopped.append(job)
+            case .notLoaded:
+                continue
+            case .failed(let message):
+                return restartingJobs(
+                    stopped,
+                    after: String(localized: "Purge couldn't stop the background job \(job.label): \(message)")
+                )
             }
         }
         var result = OpenFileCheck.check(folders: folders)
-        for _ in 0..<(jobs.isEmpty ? 0 : 8) {
+        for _ in 0..<(stopped.isEmpty ? 0 : 8) {
             guard case .inUse = result else { break }
             Thread.sleep(forTimeInterval: 0.25)
             result = OpenFileCheck.check(folders: folders)
@@ -2636,10 +2654,30 @@ final class PurgeStore: ObservableObject {
         case .inUse(let holders):
             let names = holders.prefix(3).map { "\($0.command) (\($0.pid))" }
             let list = ListFormatter.localizedString(byJoining: names)
-            return String(localized: "Quit \(list) first. It is using files in this folder.")
+            let message = holders.count == 1
+                ? String(localized: "Quit \(list) first. It is using files Purge is about to remove.")
+                : String(localized: "Quit \(list) first. They are using files Purge is about to remove.")
+            return restartingJobs(stopped, after: message)
         case .unavailable:
-            return String(localized: "Purge couldn't check whether these tools are in use, so it left them alone. Try again in a moment.")
+            return restartingJobs(
+                stopped,
+                after: String(localized: "Purge couldn't check whether these tools are in use, so it left them alone. Try again in a moment.")
+            )
         }
+    }
+
+    /// Starts the stopped jobs again and says so after `message`.
+    nonisolated private static func restartingJobs(_ jobs: [LaunchAgentJob], after message: String) -> String {
+        guard !jobs.isEmpty else { return message }
+        let notStarted = jobs.filter { !LaunchAgentStopper.start(plist: $0.plist) }.map(\.label)
+        if notStarted.isEmpty {
+            return message + " " + String(localized: "Purge started the background jobs it had stopped again.")
+        }
+        let labels = ListFormatter.localizedString(byJoining: notStarted)
+        let note = notStarted.count == 1
+            ? String(localized: "Purge couldn't start \(labels) again. It starts again when you next log in.")
+            : String(localized: "Purge couldn't start \(labels) again. They start again when you next log in.")
+        return message + " " + note
     }
 
     // MARK: App selection

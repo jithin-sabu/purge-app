@@ -79,6 +79,21 @@ struct OpenFileCheckTests {
         #expect(calls.entries == [["/bin/launchctl", "bootout", "gui/501/com.example.daemon"]])
     }
 
+    /// A job stopped for a removal that was then refused is started again
+    /// from its plist, in the same domain.
+    @Test
+    func startBootstrapsThePlistInTheUsersDomain() {
+        let calls = CallLog()
+        let plist = URL(fileURLWithPath: "/Users/a/Library/LaunchAgents/com.example.daemon.plist")
+        let started = LaunchAgentStopper.start(plist: plist, uid: 501) { path, arguments in
+            calls.append(path, arguments)
+            return output(0)
+        }
+        #expect(started)
+        #expect(calls.entries == [["/bin/launchctl", "bootstrap", "gui/501", plist.path]])
+        #expect(!LaunchAgentStopper.start(plist: plist, uid: 501) { _, _ in output(5) })
+    }
+
     @Test
     func jobThatIsNotLoadedCountsAsStopped() {
         #expect(LaunchAgentStopper.stop(label: "x", uid: 501) { _, _ in output(3) } == .notLoaded)

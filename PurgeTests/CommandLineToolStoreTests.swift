@@ -144,6 +144,32 @@ struct CommandLineToolStoreTests {
         fake.cleanUp()
     }
 
+    /// The Everything else link to Command-Line Tools appears only with Full
+    /// Disk Access: without it the uninstaller tab is the lock page.
+    @Test
+    func everythingElseToolLinkNeedsFullDiskAccess() async throws {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let home = URL(fileURLWithPath: "/Users/alice", isDirectory: true)
+        let path = home.appendingPathComponent(".hermes").path
+        let root = EverythingElseMeasureRoot(group: .developer, url: home, kind: .hiddenChildren, isLockedWithoutAccess: false)
+        fake.everythingElseEvents = [
+            .planned([root]),
+            .commandLineTools([path: "hermes"]),
+            .measured(EverythingElseMeasuredRoot(root: root, folders: [OverviewSizedItem(path: path, bytes: 1_000)], looseFileBytes: 0))
+        ]
+        store.showEverythingElsePage()
+        #expect(await eventually { store.everythingElsePhase == .ready })
+        let folder = EverythingElseFolder(path: path, bytes: 1_000, measuredBytes: 1_000, group: .developer)
+
+        store.hasFullDiskAccess = true
+        #expect(store.everythingElseFolderHint(for: folder)?.action == .showInCommandLineTools)
+        store.hasFullDiskAccess = false
+        #expect(store.everythingElseFolderHint(for: folder)?.action != .showInCommandLineTools)
+        fake.cleanUp()
+    }
+
     private func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
         var waited: TimeInterval = 0
         var last = Date()

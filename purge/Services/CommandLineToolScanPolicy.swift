@@ -80,9 +80,14 @@ nonisolated enum CommandLineToolScanPolicy {
     /// What a shim leads to.
     nonisolated struct ShimLead: Equatable, Sendable {
         /// Each target along a symlink chain, or every absolute path a launcher
-        /// script names. Standardized.
+        /// script names, settings included. Standardized.
         let paths: [String]
         let isScript: Bool
+        /// The file that runs: a link's final target, or the program a script
+        /// starts. Nil when there is none, or when it is not on disk. A shim
+        /// pairs only through this, so a link into a dotfiles repo or a script
+        /// that only sets a variable to a folder never offers that folder.
+        let program: String?
     }
 
     // MARK: Scan
@@ -97,12 +102,16 @@ nonisolated enum CommandLineToolScanPolicy {
         let homePath = home.standardizedFileURL.path
         let leads = shimLeads(home: home)
         let denied = deniedTopLevelNames(appCatalog: appCatalog)
+        // The names as stored on disk. The volume ignores case, so `~/.SSH`
+        // reaches `~/.ssh`; only a name spelled exactly as listed may pair.
+        let homeNames = Set((try? FileManager.default.contentsOfDirectory(atPath: homePath)) ?? [])
 
         var folders: [String: (name: String, source: CommandLineToolInstall.Source, shims: [URL], kept: [URL])] = [:]
 
         for entry in catalog.entries {
             guard let folder = catalog.url(for: entry.folder, home: home),
-                  isRealFolder(folder, home: home) else { continue }
+                  isRealFolder(folder, home: home),
+                  !holdsRepository(folder) else { continue }
             let folderPath = folder.standardizedFileURL.path
             let listed = Set(entry.shims.compactMap { catalog.url(for: $0, home: home)?.standardizedFileURL.path })
             let shims = leads
@@ -115,7 +124,9 @@ nonisolated enum CommandLineToolScanPolicy {
         }
 
         for (shim, lead) in leads {
-            guard let name = pairedTopLevelName(lead, homePath: homePath, denied: denied) else { continue }
+            guard let name = pairedTopLevelName(lead, shimName: shim.lastPathComponent,
+                                                homePath: homePath, denied: denied),
+                  homeNames.contains(name) else { continue }
             let folder = home.appendingPathComponent(name, isDirectory: true)
             let folderPath = folder.standardizedFileURL.path
             if var existing = folders[folderPath] {
@@ -123,15 +134,18 @@ nonisolated enum CommandLineToolScanPolicy {
                 folders[folderPath] = existing
                 continue
             }
-            guard isRealFolder(folder, home: home) else { continue }
+            guard isRealFolder(folder, home: home), !holdsRepository(folder) else { continue }
             folders[folderPath] = (String(name.dropFirst()), .shim, [shim], [])
         }
 
         // A folder that holds a model store is an app's, whatever points into it.
         let modelStores = AIModelScanPolicy.allRoots(home: home, environment: environment)
-            .map(\.standardizedFileURL.path)
+            .map { $0.standardizedFileURL.path.lowercased() }
         return folders
-            .filter { path, _ in !modelStores.contains { $0 == path || $0.hasPrefix(path + "/") } }
+            .filter { path, _ in
+                let lower = path.lowercased()
+                return !modelStores.contains { $0 == lower || $0.hasPrefix(lower + "/") }
+            }
             .map { path, value in
                 let folder = URL(fileURLWithPath: path, isDirectory: true)
                 return CommandLineToolInstall(
@@ -144,6 +158,12 @@ nonisolated enum CommandLineToolScanPolicy {
                 )
             }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// Whether the folder is a git checkout, such as a dotfiles repo. It can
+    /// hold work that exists nowhere else, so it is never a tool install.
+    static func holdsRepository(_ folder: URL) -> Bool {
+        (try? FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent(".git").path)) != nil
     }
 
     /// Each shim directly inside `~/.local/bin` and what it leads to. Empty when
@@ -163,17 +183,16 @@ nonisolated enum CommandLineToolScanPolicy {
             }
     }
 
-    /// Where one shim leads: the targets of its symlink chain, or the absolute
-    /// paths its launcher script names. Nil for anything else, such as a
-    /// compiled binary.
+    /// Where one shim leads: the targets of its symlink chain, or the paths
+    /// its launcher script names. Nil for anything else, such as a compiled
+    /// binary, and for a link whose target is gone.
     static func shimLead(at shim: URL, home: URL) -> ShimLead? {
         let fm = FileManager.default
         var current = shim.standardizedFileURL.path
         var hops: [String] = []
         for _ in 0..<maxLinkHops {
             guard let type = (try? fm.attributesOfItem(atPath: current))?[.type] as? FileAttributeType else {
-                // A link to something gone still names where it pointed.
-                return hops.isEmpty ? nil : ShimLead(paths: hops, isScript: false)
+                return nil
             }
             if type == .typeSymbolicLink {
                 guard let destination = try? fm.destinationOfSymbolicLink(atPath: current) else { return nil }
@@ -184,19 +203,21 @@ nonisolated enum CommandLineToolScanPolicy {
                 hops.append(current)
                 continue
             }
+            guard type == .typeRegular else { return nil }
             if hops.isEmpty {
-                guard type == .typeRegular else { return nil }
-                return scriptPaths(at: current, home: home).map { ShimLead(paths: $0, isScript: true) }
+                return scriptLead(at: current, home: home)
             }
-            return ShimLead(paths: hops, isScript: false)
+            return ShimLead(paths: hops, isScript: false, program: isExecutableFile(current) ? current : nil)
         }
         return nil
     }
 
-    /// Every absolute path a short launcher script names after its `#!` line,
-    /// with `$HOME`, `${HOME}` and `~` expanded. Nil when the file is not a
-    /// small UTF-8 script.
-    static func scriptPaths(at path: String, home: URL) -> [String]? {
+    /// The absolute paths a short launcher script names after its `#!` line,
+    /// with `$HOME`, `${HOME}` and `~` expanded, and the program it runs: the
+    /// first path that is not a value given to a variable or an option. After
+    /// a system interpreter, the script it hands to counts. Nil when the file
+    /// is not a small UTF-8 script.
+    static func scriptLead(at path: String, home: URL) -> ShimLead? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
         guard let data = try? handle.read(upToCount: maxScriptBytes + 1),
@@ -205,67 +226,124 @@ nonisolated enum CommandLineToolScanPolicy {
               text.hasPrefix("#!") else { return nil }
         let homePath = home.standardizedFileURL.path
         let body = text.split(separator: "\n", omittingEmptySubsequences: false).dropFirst().joined(separator: "\n")
-        let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'`;=():|&<>"))
-        var paths: [String] = []
-        for token in body.components(separatedBy: separators) where !token.isEmpty {
-            let path: String
+        let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'`;():|&<>"))
+
+        func expanded(_ token: Substring) -> String? {
+            let raw: String
             if token.hasPrefix("$HOME/") {
-                path = homePath + token.dropFirst("$HOME".count)
+                raw = homePath + token.dropFirst("$HOME".count)
             } else if token.hasPrefix("${HOME}/") {
-                path = homePath + token.dropFirst("${HOME}".count)
+                raw = homePath + token.dropFirst("${HOME}".count)
             } else if token.hasPrefix("~/") {
-                path = homePath + token.dropFirst(1)
+                raw = homePath + token.dropFirst(1)
             } else if token.hasPrefix("/") {
-                path = token
+                raw = String(token)
             } else {
+                return nil
+            }
+            return URL(fileURLWithPath: raw).standardizedFileURL.path
+        }
+
+        var paths: [String] = []
+        var program: String?
+        var afterInterpreter = false
+        // A quoted value (`NAME="$HOME/.x"`) splits from its `NAME=`.
+        var nextIsValue = false
+        for token in body.components(separatedBy: separators) where !token.isEmpty {
+            // `NAME=value` and `--option=value` name data, never the program.
+            if let equals = token.firstIndex(of: "=") {
+                let value = token[token.index(after: equals)...]
+                nextIsValue = value.isEmpty
+                if let path = expanded(value) { paths.append(path) }
                 continue
             }
-            paths.append(URL(fileURLWithPath: path).standardizedFileURL.path)
+            if nextIsValue {
+                nextIsValue = false
+                if let path = expanded(token[...]) { paths.append(path) }
+                continue
+            }
+            guard let path = expanded(token[...]) else { continue }
+            paths.append(path)
+            guard program == nil else { continue }
+            if isSystemPath(path) {
+                afterInterpreter = true
+                continue
+            }
+            let runnable = afterInterpreter ? isRegularFile(path) : isExecutableFile(path)
+            if runnable { program = path }
         }
-        return paths
+        return ShimLead(paths: paths, isScript: true, program: program)
     }
 
-    /// The one top-level `~/.<tool>` folder a shim leads into, or nil. Every
-    /// path must sit in that same folder; a script may also name the system
-    /// interpreters. A folder that is shared or an app's never pairs, and
+    /// The one top-level `~/.<tool>` folder a shim leads into, or nil.
+    ///
+    /// It takes positive evidence: the program the shim runs is on disk inside
+    /// that folder, the shim is named after the folder (`hermes` and
+    /// `hermes-acp` for `~/.hermes`), and every path the shim names sits in that
+    /// same folder (a script may also name the system interpreters). A folder
+    /// that is shared or an app's never pairs, compared without case, and
     /// neither does a target inside an app bundle.
-    static func pairedTopLevelName(_ lead: ShimLead, homePath: String, denied: Set<String>) -> String? {
+    static func pairedTopLevelName(
+        _ lead: ShimLead,
+        shimName: String,
+        homePath: String,
+        denied: Set<String>
+    ) -> String? {
+        guard let program = lead.program else { return nil }
         var names = Set<String>()
-        for path in lead.paths {
-            if lead.isScript, systemPathPrefixes.contains(where: { path.hasPrefix($0) || path + "/" == $0 }) { continue }
+        for path in lead.paths + [program] {
+            if lead.isScript, isSystemPath(path) { continue }
             guard path.hasPrefix(homePath + "/."), !path.contains(".app/"), !path.hasSuffix(".app") else { return nil }
             guard let first = path.dropFirst(homePath.count + 1).split(separator: "/").first else { return nil }
             names.insert(String(first))
         }
-        guard names.count == 1, let name = names.first, name.count > 1, !denied.contains(name) else { return nil }
+        guard names.count == 1, let name = names.first, name.count > 1,
+              !denied.contains(name.lowercased()),
+              program.hasPrefix(homePath + "/" + name + "/") else { return nil }
+        let tool = String(name.dropFirst()).lowercased()
+        let shim = shimName.lowercased()
+        guard shim == tool || shim.hasPrefix(tool + "-") else { return nil }
         return name
     }
 
-    /// Whether every path a shim leads to sits inside `folder`. A script may
-    /// also name the system interpreters.
+    /// Whether the program a shim runs, and every path it names, sit inside
+    /// `folder`. A script may also name the system interpreters.
     static func leadsOnlyInto(_ lead: ShimLead, folder: String) -> Bool {
-        var sawFolder = false
+        guard let program = lead.program, program.hasPrefix(folder + "/") else { return false }
         for path in lead.paths {
-            if lead.isScript, systemPathPrefixes.contains(where: { path.hasPrefix($0) || path + "/" == $0 }) { continue }
+            if lead.isScript, isSystemPath(path) { continue }
             guard path == folder || path.hasPrefix(folder + "/"), !path.contains(".app/") else { return false }
-            sawFolder = true
         }
-        return sawFolder
+        return !program.contains(".app/")
+    }
+
+    private static func isSystemPath(_ path: String) -> Bool {
+        systemPathPrefixes.contains { path.hasPrefix($0) || path + "/" == $0 }
+    }
+
+    private static func isRegularFile(_ path: String) -> Bool {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.type] as? FileAttributeType == .typeRegular
+    }
+
+    private static func isExecutableFile(_ path: String) -> Bool {
+        isRegularFile(path) && FileManager.default.isExecutableFile(atPath: path)
     }
 
     /// Top-level names that never pair: the shared list, and the first part of
     /// every folder the app catalog names, so `~/.gemini` and `~/.antigravity`
     /// are never a tool's.
     static func deniedTopLevelNames(appCatalog: AppDotFolderCatalog) -> Set<String> {
-        var names = Set(sharedFolders.compactMap { $0.split(separator: "/").first.map(String.init) })
+        var names = Set(sharedFolders.compactMap { $0.split(separator: "/").first.map { $0.lowercased() } })
         for folder in appCatalog.entries.flatMap(\.folders) {
-            if let first = folder.dropFirst(2).split(separator: "/").first { names.insert(String(first)) }
+            if let first = folder.dropFirst(2).split(separator: "/").first { names.insert(first.lowercased()) }
         }
         return names
     }
 
-    /// Jobs in `~/Library/LaunchAgents` whose program, or any argument naming
-    /// a path, sits inside `folder`.
+    /// Jobs in `~/Library/LaunchAgents` that start a program from `folder`:
+    /// `Program`, or the first of `ProgramArguments`, or the script a system
+    /// interpreter there is handed. A job that only names the folder as data,
+    /// such as a backup of `~/.hermes/sessions`, is not the tool's.
     static func launchAgents(startingFrom folder: URL, home: URL) -> [LaunchAgentJob] {
         let root = home.appendingPathComponent("Library/LaunchAgents", isDirectory: true)
         let folderPath = folder.standardizedFileURL.path
@@ -279,15 +357,23 @@ nonisolated enum CommandLineToolScanPolicy {
                         == .typeRegular,
                       let contents = NSDictionary(contentsOf: plist) as? [String: Any],
                       let label = contents["Label"] as? String, !label.isEmpty else { return nil }
-                var programs: [String] = []
-                if let program = contents["Program"] as? String { programs.append(program) }
-                if let arguments = contents["ProgramArguments"] as? [String] { programs.append(contentsOf: arguments) }
-                let starts = programs.contains { argument in
-                    argument.hasPrefix("/")
-                        && URL(fileURLWithPath: argument).standardizedFileURL.path.hasPrefix(folderPath + "/")
-                }
+                guard let program = startedProgram(contents) else { return nil }
+                let starts = program.hasPrefix("/")
+                    && URL(fileURLWithPath: program).standardizedFileURL.path.hasPrefix(folderPath + "/")
                 return starts ? LaunchAgentJob(label: label, plist: plist) : nil
             }
+    }
+
+    /// The program a job plist starts. When that is a system interpreter, the
+    /// script it runs instead; an option such as `-c` names no file.
+    static func startedProgram(_ plist: [String: Any]) -> String? {
+        let arguments = plist["ProgramArguments"] as? [String] ?? []
+        let first = (plist["Program"] as? String) ?? arguments.first
+        guard let first else { return nil }
+        guard isSystemPath(first) else { return first }
+        // With `Program` set, `ProgramArguments[0]` is only argv[0] either way.
+        guard let script = arguments.dropFirst().first, !script.hasPrefix("-") else { return nil }
+        return script
     }
 
     // MARK: Settings

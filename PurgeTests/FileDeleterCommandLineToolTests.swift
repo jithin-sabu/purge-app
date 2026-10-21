@@ -19,10 +19,13 @@ struct FileDeleterCommandLineToolTests {
         try fm.createDirectory(at: bin, withIntermediateDirectories: true)
         try fm.createDirectory(at: folder.appendingPathComponent("bin"), withIntermediateDirectories: true)
         try fm.createDirectory(at: stray, withIntermediateDirectories: true)
-        try Data("#!/bin/sh\necho\n".utf8).write(to: folder.appendingPathComponent("bin/tool"))
-        let shim = bin.appendingPathComponent("tool")
-        try fm.createSymbolicLink(atPath: shim.path, withDestinationPath: folder.appendingPathComponent("bin/tool").path)
-        let inside = folder.appendingPathComponent("bin/tool")
+        let program = folder.appendingPathComponent("bin/purgetest-cli")
+        try Data("#!/bin/sh\necho\n".utf8).write(to: program)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        // Named after its folder, as the pairing rule requires.
+        let shim = bin.appendingPathComponent("purgetest-cli")
+        try fm.createSymbolicLink(atPath: shim.path, withDestinationPath: program.path)
+        let inside = program
 
         let trash = FakeTrash()
         let report = try await FileDeleter(home: home, trash: trash.trash)

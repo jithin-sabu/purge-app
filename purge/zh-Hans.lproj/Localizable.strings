@@ -1239,7 +1239,6 @@
 "Purge couldn't start %@." = "Purge 无法启动 %@。";
 "Purge couldn't stop the background job %@: %@" = "Purge 无法停止后台任务 %1$@：%2$@";
 "Purge stops the background job %@ first." = "Purge 会先停止后台任务 %@。";
-"Quit %@ first. It is using files in this folder." = "请先退出 %@，它正在使用此文件夹中的文件。";
 "Remove %lld command-line tools?" = "要移除 %lld 个命令行工具吗？";
 "Remove %@?" = "要移除 %@ 吗？";
 "Stays: %@" = "保留：%@";
@@ -1272,3 +1271,8 @@
 "Tools a package manager installed are removed by that manager, with its own checks. It deletes them permanently. They aren't moved to the Trash." = "由软件包管理器安装的工具会由该管理器按自己的检查移除。它会永久删除这些工具，不会移到废纸篓。";
 "%lld · %@" = "%1$lld · %2$@";
 "%lld not removed" = "%lld 项未移除";
+"Quit %@ first. It is using files Purge is about to remove." = "请先退出 %@，它正在使用 Purge 即将移除的文件。";
+"Quit %@ first. They are using files Purge is about to remove." = "请先退出 %@，它们正在使用 Purge 即将移除的文件。";
+"Purge started the background jobs it had stopped again." = "Purge 已重新启动它之前停止的后台任务。";
+"Purge couldn't start %@ again. It starts again when you next log in." = "Purge 无法重新启动 %@。它会在你下次登录时再次启动。";
+"Purge couldn't start %@ again. They start again when you next log in." = "Purge 无法重新启动 %@。它们会在你下次登录时再次启动。";

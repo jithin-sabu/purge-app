@@ -31,6 +31,12 @@ nonisolated enum LaunchAgentStopper {
         return .failed(message.isEmpty ? String(localized: "launchctl stopped with an error.") : message)
     }
 
+    /// Starts a job Purge stopped again, from its plist, when the removal it
+    /// was stopped for did not go ahead. True when launchd took it.
+    static func start(plist: URL, uid: uid_t = getuid(), runner: Runner = liveRunner) -> Bool {
+        runner(launchctlPath, ["bootstrap", "gui/\(uid)", plist.path])?.succeeded == true
+    }
+
     static let liveRunner: Runner = { path, arguments in
         ProcessRunner.run(executablePath: path, arguments: arguments, timeout: 15)
     }
