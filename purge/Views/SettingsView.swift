@@ -24,8 +24,9 @@ struct SettingsView: View {
     @State private var loginItemFailure: LoginItemFailure?
     @State private var isRunningScheduledCleanNow = false
     @State private var scheduledCleanNowMessage: String?
-    @State private var isCleaningHistoryExpanded = false
     @State private var showClearHistoryConfirmation = false
+    @State private var showExcludedFoldersSheet = false
+    @State private var showCleaningHistorySheet = false
     @State private var showCustomIntervalSheet = false
     @State private var selectedHistoryEntry: CleanupHistoryEntry?
     /// Session cache of on-disk sizes for excluded paths, keyed by path. No entry
@@ -41,17 +42,14 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                // Four groups, one line per setting. The longer explanations sit
+                // behind an info button beside each title, and the two lists
+                // (exclusions, history) open in a sheet.
                 VStack(alignment: .leading, spacing: 18) {
-                    startupSection
-                    finderSection
-                    deletedAppsSection
-                    protectedAppRemovalSection
-                    appearanceSection
-                    cleaningScheduleSection
-                    devToolsSection
-                    excludedAppsSection
-                    updatesSection
-                    cleaningHistorySection
+                    generalGroup
+                    cleaningGroup
+                    uninstallingGroup
+                    updatesAndHistoryGroup
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -75,25 +73,11 @@ struct SettingsView: View {
             clearLoginItemFailureIfResolved()
             helper.refresh()
         }
-        .sheet(item: $selectedHistoryEntry) { entry in
-            CleanupHistoryDetailView(entry: entry)
+        .sheet(isPresented: $showExcludedFoldersSheet) {
+            excludedFoldersSheet
         }
-        .confirmationDialog(
-            "Clear cleaning history?",
-            isPresented: $showClearHistoryConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Clear history", role: .destructive) {
-                history.clear()
-                CleanupLedgerStore.shared.clear(
-                    keepingTotal: store.totalMovedToTrashBytes,
-                    firstSeenAt: UserDefaults.standard.object(forKey: FirstRunGate.firstSeenAtKey) as? Date
-                )
-                isCleaningHistoryExpanded = false
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes all saved cleanup records from this Mac. It cannot be undone.")
+        .sheet(isPresented: $showCleaningHistorySheet) {
+            cleaningHistorySheet
         }
         .onChange(of: devToolsStalenessThresholdRaw) { _ in
             // Through the queue, so it waits its turn behind a running scan.
@@ -129,142 +113,10 @@ struct SettingsView: View {
         return .off
     }
 
-    private var protectedAppRemovalSection: some View {
-        settingsSection("Protected App Removal") {
-            // A switch, like every other setting, so the control never changes shape
-            // between states. Turning it on registers the helper (which then waits on
-            // approval in System Settings); turning it off unregisters it.
-            settingsToggleRow(
-                title: String(localized: "Remove admin-locked apps without a password"),
-                caption: helperCaption,
-                isOn: helperEnabledBinding
-            )
+    // MARK: - General
 
-            settingsSectionDivider
-
-            // One status line that always sits here, so the message and its one action
-            // (Open System Settings, when approval is pending) stay in a fixed place
-            // rather than moving around beside the control.
-            helperStatusCard
-                .padding(16)
-        }
-    }
-
-    private var helperCaption: String {
-        String(localized: """
-        Some apps are installed under an administrator and can't be moved to the Trash on their \
-        own, and neither can the files a finished macOS update leaves behind. Purge asks you to \
-        enable its secure removal helper only when something needs it. Items still go to the \
-        Trash, and you can turn it off here at any time.
-        """)
-    }
-
-    /// The switch reads on for both `.on` and `.awaitingApproval`: once the user asks
-    /// for the helper, its intent stays on while System Settings approval is pending,
-    /// and turning the switch back off during that wait cancels the request.
-    private var helperEnabledBinding: Binding<Bool> {
-        Binding(
-            get: { helper.isEnabled || helper.needsApproval },
-            set: { helper.setEnabled($0) }
-        )
-    }
-
-    private var helperStatusCard: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: helperStatusIcon)
-                .font(.system(size: 13, weight: .medium))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(helperStatusTint)
-                .frame(width: 16, alignment: .center)
-                .padding(.top, 1)
-                .accessibilityHidden(true)
-
-            Text(helperStatusMessage)
-                .font(scheduleStatusSecondaryFont)
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let action = helperStatusAction {
-                Button(LocalizedStringKey(action.title), action: action.perform)
-                    .buttonStyle(.purge(.secondary, size: .small))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.easeInOut(duration: 0.2), value: helperPhase)
-    }
-
-    private var helperStatusIcon: String {
-        switch helperPhase {
-        case .on: return "checkmark.seal.fill"
-        case .awaitingApproval, .failed: return "exclamationmark.triangle.fill"
-        case .off: return "lock"
-        }
-    }
-
-    private var helperStatusTint: Color {
-        switch helperPhase {
-        case .on: return AppColors.statusSafeText
-        case .awaitingApproval, .failed: return AppColors.statusCheckText
-        case .off: return AppColors.textSecondary
-        }
-    }
-
-    private var helperStatusMessage: String {
-        switch helperPhase {
-        case .on:
-            return String(localized: "On. Admin-locked apps can be moved to the Trash without a password.")
-        case .awaitingApproval:
-            return String(localized: "Approval is still needed in System Settings.")
-        case .failed:
-            return String(localized: "Setup didn't complete. Turn it on again to retry.")
-        case .off:
-            return String(localized: "Off. Purge will ask for approval the first time an app needs it.")
-        }
-    }
-
-    /// The one inline action the status line ever shows. Only pending approval needs a
-    /// button the switch can't stand in for; every other state leaves this nil so the
-    /// row keeps the same shape.
-    private var helperStatusAction: (title: String, perform: () -> Void)? {
-        switch helperPhase {
-        case .awaitingApproval:
-            return ("Open System Settings", { helper.openLoginItemsSettings() })
-        case .on, .failed, .off:
-            return nil
-        }
-    }
-
-    private var appearanceSection: some View {
-        settingsSection("Appearance") {
-            settingsControlRow(
-                title: String(localized: "Theme"),
-                caption: String(localized: "Choose a light or dark look, or match your system setting.")
-            ) {
-                appearanceOptions
-            }
-        }
-    }
-
-    private var appearanceOptions: some View {
-        HStack(alignment: .top, spacing: 16) {
-            ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                AppearanceOptionButton(
-                    mode: mode,
-                    isSelected: currentAppearanceMode == mode
-                ) {
-                    appearanceModeRaw = mode.rawValue
-                }
-            }
-        }
-    }
-
-    private var currentAppearanceMode: AppearanceMode {
-        AppearanceMode(rawValue: appearanceModeRaw) ?? .system
-    }
-
-    private var startupSection: some View {
-        settingsSection("Startup") {
+    private var generalGroup: some View {
+        settingsGroup("General") {
             settingsToggleRow(
                 title: String(localized: "Keep Purge in the menu bar"),
                 caption: menuBarModeCaption,
@@ -287,7 +139,7 @@ struct SettingsView: View {
 
                     settingsToggleRow(
                         title: String(localized: "Launch Purge at login"),
-                        caption: String(localized: "Purge starts with your Mac and waits in the menu bar. No window opens until you click the icon."),
+                        caption: String(localized: "Starts quietly in the menu bar."),
                         warning: loginItemFailure?.message,
                         isOn: launchAtLoginBinding
                     )
@@ -296,15 +148,36 @@ struct SettingsView: View {
 
                     settingsToggleRow(
                         title: String(localized: "Hide Dock icon"),
-                        caption: String(localized: """
+                        // Only true while the icon is hidden: with it shown, the app
+                        // menu is back and ⌘Q quits.
+                        caption: startup.hidesDockIcon
+                            ? String(localized: "Quit from the menu bar, since ⌘Q won't work.")
+                            : nil,
+                        info: String(localized: """
                             Purge runs from the menu bar only. Click the menu bar icon to open \
                             this window again. The app menu is gone while the Dock icon is \
                             hidden, so ⌘Q won't quit. Use Quit in the menu bar dropdown.
                             """),
+                        captionAnimatesTextChanges: true,
                         isOn: hideDockIconBinding
                     )
                 }
                 .transition(.opacity)
+            }
+
+            settingsSectionDivider
+
+            settingsControlRow(title: String(localized: "Appearance")) {
+                HStack(alignment: .top, spacing: 16) {
+                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                        AppearanceOptionButton(
+                            mode: mode,
+                            isSelected: currentAppearanceMode == mode
+                        ) {
+                            appearanceModeRaw = mode.rawValue
+                        }
+                    }
+                }
             }
         }
         .animation(scheduleLayoutAnimation, value: startup.showsMenuBarIcon)
@@ -312,193 +185,37 @@ struct SettingsView: View {
 
     private var menuBarModeCaption: String {
         startup.showsMenuBarIcon
-            ? String(localized: "Purge keeps running after you close the window, so you can scan and clean from the menu bar.")
-            : String(localized: "Purge opens when you need it and quits when you close the window.")
+            ? String(localized: "Keeps running after you close the window.")
+            : String(localized: "Quits when you close the window.")
     }
 
-    private var launchAtLoginBinding: Binding<Bool> {
-        Binding(
-            get: { startup.launchesAtLogin },
-            set: { newValue in
-                loginItemFailure = startup.setLaunchesAtLogin(newValue)
-                    ? nil
-                    : (newValue ? .enable : .disable)
-            }
-        )
-    }
+    // MARK: - Cleaning
 
-    /// The warning outlives the attempt that caused it, so it has to go once the
-    /// user has fixed things in System Settings, or it sits under a switch that
-    /// now shows the state they asked for.
-    private func clearLoginItemFailureIfResolved() {
-        switch loginItemFailure {
-        case .enable where startup.launchesAtLogin, .disable where !startup.launchesAtLogin:
-            loginItemFailure = nil
-        default:
-            break
-        }
-    }
+    private var cleaningGroup: some View {
+        settingsGroup("Cleaning") {
+            TimelineView(.periodic(from: Date(), by: 60)) { context in
+                settingsControlRow(
+                    title: String(localized: "Clean automatically"),
+                    caption: autoCleanCaption(referenceDate: context.date),
+                    info: scheduleSummary,
+                    animatesCaptionChanges: true
+                ) {
+                    HStack(spacing: AppStyle.Spacing.small) {
+                        SettingsMenuPicker(
+                            selection: frequencySelectionBinding,
+                            options: ScheduledCleaningFrequency.allCases,
+                            optionLabel: \.displayName,
+                            accessibilityTitle: String(localized: "How often")
+                        )
+                        .disabled(!prefs.isEnabled)
 
-    private var hideDockIconBinding: Binding<Bool> {
-        Binding(
-            get: { startup.hidesDockIcon },
-            set: { startup.setHidesDockIcon($0) }
-        )
-    }
-
-    private var finderSection: some View {
-        settingsSection("Finder") {
-            settingsToggleRow(
-                title: String(localized: "Uninstall with Purge in Finder's right-click menu"),
-                caption: finderServiceCaption,
-                warning: finderService.flushFailed ? finderServiceFlushWarning : nil,
-                isOn: Binding(
-                    get: { finderService.isEnabled },
-                    set: { enabled in Task { await finderService.setEnabled(enabled) } }
-                )
-            )
-            .disabled(finderService.isApplying)
-        }
-        // The same switch lives in System Settings, so read it again each time
-        // this page comes into view.
-        .onAppear { finderService.refresh() }
-    }
-
-    /// The setting is saved, but Finder reads it through a cache Purge could
-    /// not clear, so the menu lags until macOS rebuilds it at login.
-    private var finderServiceFlushWarning: String {
-        String(localized: "Saved, but Finder may keep showing the old state until you log out and back in.")
-    }
-
-    private var finderServiceCaption: String {
-        String(localized: """
-        Right-click an app in Finder and choose Uninstall with Purge. Purge opens \
-        with that app and everything it left behind, ready to review. macOS keeps \
-        this off until you turn it on here, or under System Settings > Keyboard > \
-        Keyboard Shortcuts > Services. Dropping an app on Purge's Dock icon does \
-        the same and needs no setup.
-        """)
-    }
-
-    private var deletedAppsSection: some View {
-        settingsSection("Deleted Apps") {
-            settingsToggleRow(
-                title: String(localized: "Review leftovers when an app is deleted"),
-                caption: deletedAppsCaption,
-                isOn: Binding(
-                    get: { removedApps.isEnabled },
-                    set: { removedApps.setEnabled($0) }
-                )
-            )
-
-            settingsSectionDivider
-
-            // Like the helper's, one status line that always sits here. A watcher
-            // macOS blocked or that stopped misses every removal in silence, so
-            // this says so, with the one action that fixes it.
-            deletedAppsStatusCard
-                .padding(16)
-        }
-        .onAppear { removedApps.refreshAgentStatus() }
-    }
-
-    private var deletedAppsCaption: String {
-        String(localized: """
-        When an app leaves Applications, like dragging it to the Trash in Finder, \
-        Purge opens with the files it left behind, even if Purge was quit. Nothing \
-        moves until you confirm. A small background watcher stays on while this is \
-        enabled; you can turn it off here at any time.
-        """)
-    }
-
-    private var deletedAppsStatusCard: some View {
-        let health = removedApps.watcherHealth
-        return HStack(alignment: .top, spacing: 8) {
-            Group {
-                if health == .checking || removedApps.isRestartingWatcher {
-                    ProgressView()
-                        .controlSize(.mini)
-                } else {
-                    Image(systemName: deletedAppsStatusIcon(health))
-                        .font(.system(size: 13, weight: .medium))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(deletedAppsStatusTint(health))
+                        Toggle(String(localized: "Clean automatically"), isOn: autoCleanEnabledBinding)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .tint(AppColors.statusSafeText)
+                    }
                 }
             }
-            .frame(width: 16, alignment: .center)
-            .padding(.top, 1)
-            .accessibilityHidden(true)
-
-            Text(deletedAppsStatusMessage(health))
-                .font(scheduleStatusSecondaryFont)
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let fixTitle = health.fixTitle {
-                Button(LocalizedStringKey(removedApps.isRestartingWatcher ? "Restarting…" : fixTitle)) {
-                    removedApps.fixWatcher()
-                }
-                .buttonStyle(.purge(.secondary, size: .small))
-                .disabled(removedApps.isRestartingWatcher)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.easeInOut(duration: 0.2), value: health)
-    }
-
-    private func deletedAppsStatusIcon(_ health: WatcherHealth) -> String {
-        switch health {
-        case .running: return "checkmark.seal.fill"
-        case .needsApproval, .notRunning, .failedToStart: return "exclamationmark.triangle.fill"
-        case .off, .checking: return "eye.slash"
-        }
-    }
-
-    private func deletedAppsStatusTint(_ health: WatcherHealth) -> Color {
-        switch health {
-        case .running: return AppColors.statusSafeText
-        case .needsApproval, .notRunning, .failedToStart: return AppColors.statusCheckText
-        case .off, .checking: return AppColors.textSecondary
-        }
-    }
-
-    private func deletedAppsStatusMessage(_ health: WatcherHealth) -> String {
-        switch health {
-        case .off:
-            return String(localized: "Off. Apps deleted outside Purge are not noticed.")
-        case .checking:
-            return String(localized: "Checking the background watcher.")
-        case .running:
-            return String(localized: "On. Purge is watching for deleted apps.")
-        case .notRunning:
-            // A restart that does not stick means something outside Purge stops
-            // the watcher, so point at the switch macOS keeps for it.
-            return (health.problemMessage ?? "")
-                + String(localized: " If it stops again, check that Purge is switched on under Login Items in System Settings.")
-        case .needsApproval, .failedToStart:
-            return health.problemMessage ?? ""
-        }
-    }
-
-    private var cleaningScheduleSection: some View {
-        settingsSection("Cleaning Schedule") {
-            settingsToggleRow(
-                title: String(localized: "Run automatic cleaning"),
-                caption: scheduleSummary,
-                captionAnimatesTextChanges: true,
-                isOn: autoCleanEnabledBinding
-            )
-
-            settingsSectionDivider
-
-            settingsPickerRow(
-                title: String(localized: "How often"),
-                selection: frequencySelectionBinding,
-                options: ScheduledCleaningFrequency.allCases,
-                optionLabel: \.displayName
-            )
-            .disabled(!prefs.isEnabled)
             .sheet(isPresented: $showCustomIntervalSheet) {
                 CustomCleaningIntervalSheet(
                     initialAmount: prefs.customIntervalAmount,
@@ -513,74 +230,183 @@ struct SettingsView: View {
                 )
             }
 
-            settingsSectionDivider
-
-            TimelineView(.periodic(from: Date(), by: 60)) { context in
-                ScheduleStatusAnimatedHeight(
-                    reduceMotion: reduceMotion,
-                    animation: scheduleLayoutAnimation
-                ) {
-                    cleaningScheduleStatusCard(referenceDate: context.date)
-                }
-                .padding(16)
-            }
-
             if prefs.isEnabled && developerModeEnabled {
                 settingsSectionDivider
 
                 runScheduledCleanNowRow
             }
+
+            settingsSectionDivider
+
+            settingsPickerRow(
+                title: String(localized: "Projects count as stale after"),
+                info: currentDevToolsStalenessOption.description,
+                selection: devToolsStalenessSelectionBinding,
+                options: DevToolsStalenessOption.allCases,
+                optionLabel: \.label
+            )
+
+            settingsSectionDivider
+
+            settingsLinkRow(
+                title: String(localized: "Excluded folders"),
+                value: excludedFoldersSummary
+            ) {
+                showExcludedFoldersSheet = true
+            }
         }
     }
 
-    private var updatesSection: some View {
-        settingsSection("Updates") {
+    /// One line: what it does, and when it next runs.
+    private func autoCleanCaption(referenceDate: Date) -> String {
+        guard prefs.isEnabled else {
+            return String(localized: "Moves Safe items to the Trash on a schedule.")
+        }
+        let next = nextCleanDisplay(referenceDate: referenceDate).primary
+        return String(localized: "Moves Safe items to the Trash. Next: \(next).")
+    }
+
+    private var excludedFoldersSummary: String {
+        let count = excludedEntries.count
+        switch count {
+        case 0: return String(localized: "None")
+        case 1: return String(localized: "1 folder")
+        default: return String(localized: "\(count) folders")
+        }
+    }
+
+    // MARK: - Uninstalling
+
+    private var uninstallingGroup: some View {
+        settingsGroup("Uninstalling") {
+            settingsToggleRow(
+                title: String(localized: "Uninstall from Finder's right-click menu"),
+                info: finderServiceCaption,
+                warning: finderService.flushFailed ? finderServiceFlushWarning : nil,
+                isToggleDisabled: finderService.isApplying,
+                isOn: Binding(
+                    get: { finderService.isEnabled },
+                    set: { enabled in Task { await finderService.setEnabled(enabled) } }
+                )
+            )
+            // The same switch lives in System Settings, so read it again each time
+            // this page comes into view.
+            .onAppear { finderService.refresh() }
+
+            settingsSectionDivider
+
+            // A watcher macOS blocked or that stopped misses every removal in
+            // silence, so its state shows under the title, with the one fix.
+            settingsToggleRow(
+                title: String(localized: "Review leftovers when an app is deleted"),
+                info: deletedAppsCaption,
+                status: deletedAppsStatus,
+                isOn: Binding(
+                    get: { removedApps.isEnabled },
+                    set: { removedApps.setEnabled($0) }
+                )
+            )
+            .onAppear { removedApps.refreshAgentStatus() }
+
+            settingsSectionDivider
+
+            // A switch, like every other setting, so the control never changes shape
+            // between states. Turning it on registers the helper (which then waits on
+            // approval in System Settings); turning it off unregisters it.
+            settingsToggleRow(
+                title: String(localized: "Remove admin-locked apps without a password"),
+                info: helperCaption,
+                status: helperStatus,
+                isOn: helperEnabledBinding
+            )
+        }
+    }
+
+    private var deletedAppsStatus: SettingsRowStatus? {
+        // The switch already says on or off; a line only appears when the
+        // watcher needs a fix.
+        let health = removedApps.watcherHealth
+        switch health {
+        case .off, .checking, .running:
+            return nil
+        case .needsApproval, .notRunning, .failedToStart:
+            return SettingsRowStatus(
+                text: deletedAppsStatusMessage(health),
+                tint: AppColors.statusCheckText,
+                showsProgress: removedApps.isRestartingWatcher,
+                actionTitle: health.fixTitle.map { removedApps.isRestartingWatcher ? String(localized: "Restarting…") : $0 },
+                isActionDisabled: removedApps.isRestartingWatcher,
+                action: { removedApps.fixWatcher() }
+            )
+        }
+    }
+
+    private var helperStatus: SettingsRowStatus? {
+        // As for the watcher: no line while all is well.
+        switch helperPhase {
+        case .off, .on:
+            return nil
+        case .awaitingApproval:
+            return SettingsRowStatus(
+                text: helperStatusMessage,
+                tint: AppColors.statusCheckText,
+                actionTitle: String(localized: "Open System Settings"),
+                action: { helper.openLoginItemsSettings() }
+            )
+        case .failed:
+            return SettingsRowStatus(text: helperStatusMessage, tint: AppColors.statusCheckText)
+        }
+    }
+
+    // MARK: - Updates and history
+
+    private var updatesAndHistoryGroup: some View {
+        settingsGroup("Updates and History") {
             settingsToggleRow(
                 title: String(localized: "Check for updates automatically"),
-                caption: updatesSummary,
+                info: updatesSummary,
                 isOn: automaticUpdateChecksBinding
             )
 
             settingsSectionDivider
 
             settingsToggleRow(
-                title: String(localized: "Download and install updates automatically"),
-                caption: automaticInstallSummary,
+                title: String(localized: "Install updates automatically"),
+                info: automaticInstallSummary,
+                isToggleDisabled: !updater.allowsAutomaticUpdates,
                 isOn: automaticUpdateDownloadsBinding
             )
-            .disabled(!updater.allowsAutomaticUpdates)
+
+            settingsSectionDivider
+
+            // Ticks each minute so "Today" turns into "Yesterday" past midnight.
+            TimelineView(.periodic(from: Date(), by: 60)) { context in
+                settingsLinkRow(
+                    title: String(localized: "Cleaning history"),
+                    value: lastCleanSummary(referenceDate: context.date),
+                    valueIsFigure: true
+                ) {
+                    showCleaningHistorySheet = true
+                }
+            }
         }
     }
 
-    private var updatesSummary: String {
-        String(localized: """
-        Purge checks once a day. When automatic installs are off, a new version opens the \
-        update window. Every download is signature-checked.
-        """)
-    }
-
-    private var automaticInstallSummary: String {
-        String(localized: """
-        New versions download in the background and install when Purge quits, or right away \
-        with Restart to Update in the Purge menu. When this is off, nothing is installed \
-        without your confirmation.
-        """)
-    }
-
-    private var automaticUpdateChecksBinding: Binding<Bool> {
-        Binding(
-            get: { updater.automaticallyChecksForUpdates },
-            set: { updater.setAutomaticallyChecksForUpdates($0) }
-        )
-    }
-
-    /// Shows off while checks are off, since Sparkle won't download then even
-    /// if the setting underneath is still on.
-    private var automaticUpdateDownloadsBinding: Binding<Bool> {
-        Binding(
-            get: { updater.allowsAutomaticUpdates && updater.automaticallyDownloadsUpdates },
-            set: { updater.setAutomaticallyDownloadsUpdates($0) }
-        )
+    /// The same figure the History sheet shows for the entry: trashed plus
+    /// permanently deleted bytes, or the measured gain for the Apple Intelligence
+    /// models, which move nothing to the Trash.
+    private func lastCleanSummary(referenceDate: Date) -> String {
+        guard let latest = history.archive.entries.first else {
+            return String(localized: "None yet")
+        }
+        let relative = relativeDateText(for: latest.date, referenceDate: referenceDate)
+        let removedNothing = latest.kind != .appleIntelligenceModels
+            && latest.bytesMovedToTrash + latest.bytesDeletedPermanently == 0
+        guard !removedNothing else {
+            return String(localized: "Last: nothing moved, \(relative)")
+        }
+        let figure = CleanupHistorySummaryRow(entry: latest).primaryFigure
+        return String(localized: "Last: \(figure), \(relative)")
     }
 
     /// Verification affordance: runs the real scheduled-clean pipeline now (same
@@ -589,10 +415,7 @@ struct SettingsView: View {
     private var runScheduledCleanNowRow: some View {
         settingsControlRow(
             title: String(localized: "Test the schedule"),
-            caption: String(localized: """
-                Run a scheduled clean right now to confirm it works. It uses the same safe \
-                rules above and counts as this period's clean.
-                """)
+            caption: String(localized: "Runs a scheduled clean now. It counts as this period's clean.")
         ) {
             runScheduledCleanNowButton
         }
@@ -646,29 +469,70 @@ struct SettingsView: View {
         return String(localized: "Moved \(summary.deletedCount) \(noun) to Trash, about \(formatBytes(summary.bytesMovedToTrash)). Empty the trash to reclaim the space.")
     }
 
+    // MARK: - Sheets
+
+    /// Scans skip these folders and everything inside them. Purely subtractive:
+    /// un-excluding only restores eligibility when the path still passes the normal
+    /// allowlist gate.
+    var excludedFoldersSheet: some View {
+        settingsSheet(
+            title: String(localized: "Excluded folders"),
+            caption: String(localized: "Scans skip these folders and everything inside them. You can also right-click a scan result and choose Exclude from scans."),
+            onDone: { showExcludedFoldersSheet = false }
+        ) {
+            Button(action: chooseFoldersToExclude) {
+                Label("Add folder\u{2026}", systemImage: "folder.badge.plus")
+            }
+            .buttonStyle(.purge(.secondary))
+        } content: {
+            let entries = excludedEntries
+            settingsSectionCard {
+                if entries.isEmpty {
+                    Text("Nothing excluded")
+                        .font(scheduleStatusPrimaryFont)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .padding(16)
+                } else {
+                    ForEach(Array(entries.enumerated()), id: \.element.path) { index, entry in
+                        if index > 0 {
+                            settingsSectionDivider
+                        }
+                        excludedPathRow(entry: entry)
+                    }
+
+                    settingsSectionDivider
+
+                    excludedTotalRow(entries: entries)
+                }
+            }
+        }
+    }
+
     /// Recent cleanup activity, so scheduled cleans are visible in the app instead
     /// of only in a passing notification.
-    private var cleaningHistorySection: some View {
-        // The only header-level control in Settings: it acts on the whole list
-        // below, not on a single setting, so it can't live on a row.
-        settingsSection("Cleaning History") {
-            // Quiet: it sits in a section header and asks for confirmation before
-            // anything happens, so it shouldn't pull the eye like a row's control.
+    var cleaningHistorySheet: some View {
+        settingsSheet(
+            title: String(localized: "Cleaning history"),
+            caption: nil,
+            onDone: { showCleaningHistorySheet = false }
+        ) {
+            // Quiet: it asks for confirmation before anything happens, so it
+            // shouldn't pull the eye from Done.
             Button("Clear history") {
                 showClearHistoryConfirmation = true
             }
             .buttonStyle(.purge(.quiet, size: .small))
             .disabled(history.archive.entries.isEmpty)
         } content: {
-            Group {
-                if displayedHistoryEntries.isEmpty {
+            settingsSectionCard {
+                if history.archive.entries.isEmpty {
                     Text("No cleans recorded yet. Automatic and manual cleans will show up here.")
                         .font(scheduleStatusSecondaryFont)
                         .foregroundStyle(AppColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(16)
                 } else {
-                    ForEach(Array(displayedHistoryEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(history.archive.entries.enumerated()), id: \.element.id) { index, entry in
                         if index > 0 {
                             settingsSectionDivider
                         }
@@ -681,100 +545,211 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                     }
-
-                    if hasMoreHistoryEntries {
-                        settingsSectionDivider
-
-                        Button {
-                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
-                                isCleaningHistoryExpanded.toggle()
-                            }
-                        } label: {
-                            cleaningHistoryExpandRow
-                        }
-                        .buttonStyle(.plain)
-                    }
                 }
             }
         }
-    }
-
-    private var displayedHistoryEntries: [CleanupHistoryEntry] {
-        if isCleaningHistoryExpanded {
-            history.archive.entries
-        } else {
-            Array(history.archive.entries.prefix(6))
+        .sheet(item: $selectedHistoryEntry) { entry in
+            CleanupHistoryDetailView(entry: entry)
         }
-    }
-
-    private var hasMoreHistoryEntries: Bool {
-        history.archive.entries.count > 6
-    }
-
-    private var cleaningHistoryExpandRow: some View {
-        HStack(spacing: 10) {
-            Text(isCleaningHistoryExpanded ? LocalizedStringKey("Show less") : LocalizedStringKey("Show all"))
-                .font(AppStyle.Typography.body)
-                .foregroundStyle(AppColors.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Image(systemName: isCleaningHistoryExpanded ? "chevron.up" : "chevron.down")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppColors.textTertiary)
-                .frame(width: 12)
-        }
-        .padding(.horizontal, 16)
-        .frame(height: AppStyle.Row.compactHeight)
-        .contentShape(Rectangle())
-    }
-
-    private var devToolsSection: some View {
-        settingsSection("Developer Projects") {
-            settingsPickerRow(
-                title: String(localized: "Consider stale after"),
-                caption: currentDevToolsStalenessOption.description,
-                selection: devToolsStalenessSelectionBinding,
-                options: DevToolsStalenessOption.allCases,
-                optionLabel: \.label
-            )
-        }
-    }
-
-    /// Settings section for scan exclusions. Purely subtractive: un-excluding only restores
-    /// eligibility when the path still passes the normal allowlist gate.
-    private var excludedAppsSection: some View {
-        settingsSection("Excluded from scans") {
-            settingsControlRow(
-                title: String(localized: "Excluded paths"),
-                caption: String(localized: "Scans skip these files and folders and everything inside them. Add a folder here, or right-click any scan result and choose Exclude from scans.")
-            ) {
-                Button(action: chooseFoldersToExclude) {
-                    Label("Add folder\u{2026}", systemImage: "folder.badge.plus")
-                }
-                .buttonStyle(.purge(.secondary))
+        .confirmationDialog(
+            "Clear cleaning history?",
+            isPresented: $showClearHistoryConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear history", role: .destructive) {
+                history.clear()
+                CleanupLedgerStore.shared.clear(
+                    keepingTotal: store.totalMovedToTrashBytes,
+                    firstSeenAt: UserDefaults.standard.object(forKey: FirstRunGate.firstSeenAtKey) as? Date
+                )
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all saved cleanup records from this Mac. It cannot be undone.")
+        }
+    }
 
-            let entries = excludedEntries
+    /// A titled sheet with a scrolling list, an action at the top, and Done.
+    private func settingsSheet<Action: View, Content: View>(
+        title: String,
+        caption: String?,
+        onDone: @escaping () -> Void,
+        @ViewBuilder action: () -> Action,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+                HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+                    Text(LocalizedStringKey(title))
+                        .font(AppStyle.Typography.sectionTitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-            if entries.isEmpty {
-                settingsSectionDivider
-
-                Text("Nothing excluded")
-                    .font(scheduleStatusPrimaryFont)
-                    .foregroundStyle(AppColors.textSecondary)
-                    .padding(16)
-            } else {
-                ForEach(entries, id: \.path) { entry in
-                    settingsSectionDivider
-
-                    excludedPathRow(entry: entry)
+                    action()
                 }
 
-                settingsSectionDivider
+                // Full width under the title row, so it isn't squeezed beside
+                // the button.
+                if let caption {
+                    Text(LocalizedStringKey(caption))
+                        .settingsCaption()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
 
-                excludedTotalRow(entries: entries)
+            ScrollView {
+                content()
+            }
+
+            HStack {
+                Spacer()
+                Button("Done", action: onDone)
+                    .buttonStyle(.purge(.primary))
+                    .keyboardShortcut(.defaultAction)
             }
         }
+        .padding(AppStyle.Spacing.large)
+        .frame(width: 560, height: 480)
+        .background(AppColors.surfaceBase)
+    }
+
+    private var helperCaption: String {
+        String(localized: """
+        Some apps are installed under an administrator and can't be moved to the Trash on their \
+        own, and neither can the files a finished macOS update leaves behind. Purge asks you to \
+        enable its secure removal helper only when something needs it. Items still go to the \
+        Trash, and you can turn it off here at any time.
+        """)
+    }
+
+    /// The switch reads on for both `.on` and `.awaitingApproval`: once the user asks
+    /// for the helper, its intent stays on while System Settings approval is pending,
+    /// and turning the switch back off during that wait cancels the request.
+    private var helperEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { helper.isEnabled || helper.needsApproval },
+            set: { helper.setEnabled($0) }
+        )
+    }
+
+    private var helperStatusMessage: String {
+        switch helperPhase {
+        case .on:
+            return String(localized: "On. Admin-locked apps can be moved to the Trash without a password.")
+        case .awaitingApproval:
+            return String(localized: "Approval is still needed in System Settings.")
+        case .failed:
+            return String(localized: "Setup didn't complete. Turn it on again to retry.")
+        case .off:
+            return String(localized: "Off. Purge will ask for approval the first time an app needs it.")
+        }
+    }
+
+    private var currentAppearanceMode: AppearanceMode {
+        AppearanceMode(rawValue: appearanceModeRaw) ?? .system
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { startup.launchesAtLogin },
+            set: { newValue in
+                loginItemFailure = startup.setLaunchesAtLogin(newValue)
+                    ? nil
+                    : (newValue ? .enable : .disable)
+            }
+        )
+    }
+
+    /// The warning outlives the attempt that caused it, so it has to go once the
+    /// user has fixed things in System Settings, or it sits under a switch that
+    /// now shows the state they asked for.
+    private func clearLoginItemFailureIfResolved() {
+        switch loginItemFailure {
+        case .enable where startup.launchesAtLogin, .disable where !startup.launchesAtLogin:
+            loginItemFailure = nil
+        default:
+            break
+        }
+    }
+
+    private var hideDockIconBinding: Binding<Bool> {
+        Binding(
+            get: { startup.hidesDockIcon },
+            set: { startup.setHidesDockIcon($0) }
+        )
+    }
+
+    /// The setting is saved, but Finder reads it through a cache Purge could
+    /// not clear, so the menu lags until macOS rebuilds it at login.
+    private var finderServiceFlushWarning: String {
+        String(localized: "Saved, but Finder may keep showing the old state until you log out and back in.")
+    }
+
+    private var finderServiceCaption: String {
+        String(localized: """
+        Right-click an app in Finder and choose Uninstall with Purge. Purge opens \
+        with that app and everything it left behind, ready to review. macOS keeps \
+        this off until you turn it on here, or under System Settings > Keyboard > \
+        Keyboard Shortcuts > Services. Dropping an app on Purge's Dock icon does \
+        the same and needs no setup.
+        """)
+    }
+
+    private var deletedAppsCaption: String {
+        String(localized: """
+        When an app leaves Applications, like dragging it to the Trash in Finder, \
+        Purge opens with the files it left behind, even if Purge was quit. Nothing \
+        moves until you confirm. A small background watcher stays on while this is \
+        enabled; you can turn it off here at any time.
+        """)
+    }
+
+    private func deletedAppsStatusMessage(_ health: WatcherHealth) -> String {
+        switch health {
+        case .off:
+            return String(localized: "Off. Apps deleted outside Purge are not noticed.")
+        case .checking:
+            return String(localized: "Checking the background watcher.")
+        case .running:
+            return String(localized: "On. Purge is watching for deleted apps.")
+        case .notRunning:
+            // A restart that does not stick means something outside Purge stops
+            // the watcher, so point at the switch macOS keeps for it.
+            return (health.problemMessage ?? "")
+                + String(localized: " If it stops again, check that Purge is switched on under Login Items in System Settings.")
+        case .needsApproval, .failedToStart:
+            return health.problemMessage ?? ""
+        }
+    }
+
+    private var updatesSummary: String {
+        String(localized: """
+        Purge checks once a day. When automatic installs are off, a new version opens the \
+        update window. Every download is signature-checked.
+        """)
+    }
+
+    private var automaticInstallSummary: String {
+        String(localized: """
+        New versions download in the background and install when Purge quits, or right away \
+        with Restart to Update in the Purge menu. When this is off, nothing is installed \
+        without your confirmation.
+        """)
+    }
+
+    private var automaticUpdateChecksBinding: Binding<Bool> {
+        Binding(
+            get: { updater.automaticallyChecksForUpdates },
+            set: { updater.setAutomaticallyChecksForUpdates($0) }
+        )
+    }
+
+    /// Shows off while checks are off, since Sparkle won't download then even
+    /// if the setting underneath is still on.
+    private var automaticUpdateDownloadsBinding: Binding<Bool> {
+        Binding(
+            get: { updater.allowsAutomaticUpdates && updater.automaticallyDownloadsUpdates },
+            set: { updater.setAutomaticallyDownloadsUpdates($0) }
+        )
     }
 
     private var excludedEntries: [ExcludedPathEntry] {
@@ -903,33 +878,20 @@ struct SettingsView: View {
 
     // MARK: - Shared settings layout
     //
-    // Every section in Settings speaks the same language: a plain headline above a
-    // card, and inside the card one row per setting — title, optional caption
-    // underneath, control on the trailing edge. Section headers never carry a
-    // setting's own control (the only exception is Cleaning History's "Clear
-    // history", which acts on the whole list rather than on one setting).
+    // Settings is four groups. Each is a small label above a card, and inside the
+    // card one row per setting: title (with an info button when there is more to
+    // say), at most one short caption or status line, control on the trailing edge.
 
-    private func settingsSection<Content: View>(
+    private func settingsGroup<Content: View>(
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        settingsSection(title, accessory: { EmptyView() }, content: content)
-    }
-
-    private func settingsSection<Accessory: View, Content: View>(
-        _ title: String,
-        @ViewBuilder accessory: () -> Accessory,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center) {
-                Text(LocalizedStringKey(title))
-                    .font(AppStyle.Typography.headline)
-
-                Spacer(minLength: 12)
-
-                accessory()
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(LocalizedStringKey(title))
+                .font(AppStyle.Typography.metadataEmphasis)
+                .foregroundStyle(AppColors.textSecondary)
+                .padding(.horizontal, AppStyle.Spacing.xxSmall)
+                .accessibilityAddTraits(.isHeader)
 
             settingsSectionCard(content: content)
         }
@@ -939,11 +901,18 @@ struct SettingsView: View {
     private func settingsRowLabel(
         title: String,
         caption: String?,
+        info: String? = nil,
         warning: String? = nil,
+        status: SettingsRowStatus? = nil,
         animatesCaptionChanges: Bool = false
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(LocalizedStringKey(title))
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
+                Text(LocalizedStringKey(title))
+                if let info {
+                    SettingsInfoButton(text: info, title: title)
+                }
+            }
 
             if let caption {
                 Text(LocalizedStringKey(caption))
@@ -952,56 +921,77 @@ struct SettingsView: View {
                     .animation(animatesCaptionChanges ? scheduleTextAnimation : nil, value: caption)
             }
 
+            if let status {
+                SettingsStatusLine(status: status)
+            }
+
             if let warning {
                 Text(LocalizedStringKey(warning))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.statusCheckText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.2), value: status)
     }
 
     private func settingsToggleRow(
         title: String,
         caption: String? = nil,
+        info: String? = nil,
         warning: String? = nil,
+        status: SettingsRowStatus? = nil,
         captionAnimatesTextChanges: Bool = false,
+        isToggleDisabled: Bool = false,
         isOn: Binding<Bool>
     ) -> some View {
-        Toggle(isOn: isOn) {
+        HStack(alignment: .center, spacing: 16) {
             settingsRowLabel(
                 title: title,
                 caption: caption,
+                info: info,
                 warning: warning,
+                status: status,
                 animatesCaptionChanges: captionAnimatesTextChanges
             )
+
+            // Only the switch is disabled, so the info button can still explain why.
+            Toggle(LocalizedStringKey(title), isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(AppColors.statusSafeText)
+                .disabled(isToggleDisabled)
         }
-        .toggleStyle(.switch)
-        .tint(AppColors.statusSafeText)
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     private func settingsControlRow<Control: View>(
         title: String,
         caption: String? = nil,
+        info: String? = nil,
+        animatesCaptionChanges: Bool = false,
         @ViewBuilder control: () -> Control
     ) -> some View {
         HStack(alignment: .center, spacing: 16) {
-            settingsRowLabel(title: title, caption: caption)
+            settingsRowLabel(title: title, caption: caption, info: info, animatesCaptionChanges: animatesCaptionChanges)
 
             control()
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     private func settingsPickerRow<Option: Hashable>(
         title: String,
         caption: String? = nil,
+        info: String? = nil,
         selection: Binding<Option>,
         options: [Option],
         optionLabel: @escaping (Option) -> String
     ) -> some View {
-        settingsControlRow(title: title, caption: caption) {
+        settingsControlRow(title: title, caption: caption, info: info) {
             SettingsMenuPicker(
                 selection: selection,
                 options: options,
@@ -1011,98 +1001,35 @@ struct SettingsView: View {
         }
     }
 
-    private func cleaningScheduleStatusCard(referenceDate: Date) -> some View {
-        Group {
-            if prefs.isEnabled {
-                nextCleanStatusRow(referenceDate: referenceDate)
-            } else {
-                autoCleanDisabledStatus
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .transition(scheduleStatusTransition)
-        .animation(scheduleLayoutAnimation, value: prefs.isEnabled)
-        .animation(scheduleLayoutAnimation, value: nextScheduledCleanDate.timeIntervalSinceReferenceDate)
-    }
+    /// A row that opens a sheet: title, a short summary, and a chevron.
+    private func settingsLinkRow(
+        title: String,
+        value: String,
+        valueIsFigure: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+                Text(LocalizedStringKey(title))
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-    private var autoCleanDisabledStatus: some View {
-        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
-            Text("Auto-clean is off. Turn it on to keep your Mac clean automatically.")
-                .font(scheduleStatusSecondaryFont)
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button("Enable", action: enableAutoClean)
-                .buttonStyle(.purge(.secondary, size: .small))
-        }
-    }
-
-    private func nextCleanStatusRow(referenceDate: Date) -> some View {
-        let isDueToday = Calendar.current.isDate(nextScheduledCleanDate, inSameDayAs: referenceDate)
-        let display = nextCleanDisplay(referenceDate: referenceDate)
-
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 13, weight: .medium))
+                Text(value)
+                    .font(valueIsFigure ? scheduleStatusSecondaryFont.numbers : scheduleStatusSecondaryFont)
                     .foregroundStyle(AppColors.textSecondary)
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 16, alignment: .center)
-                    .padding(.top, 1)
-                    .accessibilityHidden(true)
+                    .monospacedDigit()
+                    .lineLimit(1)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    scheduleStatusLabel("Next clean", showsDueDot: isDueToday)
-
-                    Text(display.primary)
-                        .font(scheduleStatusPrimaryFont)
-                        .foregroundStyle(AppColors.textPrimary)
-                        .contentTransition(scheduleTextTransition)
-                        .animation(scheduleTextAnimation, value: display.primary)
-
-                    if let secondary = display.secondary {
-                        Text(secondary)
-                            .font(scheduleStatusTertiaryFont)
-                            .foregroundStyle(AppColors.textTertiary)
-                            .contentTransition(scheduleTextTransition)
-                            .animation(scheduleTextAnimation, value: secondary)
-                    }
-                }
-            }
-
-            lastCleanStatusRow(referenceDate: referenceDate)
-        }
-    }
-
-    private func lastCleanStatusRow(referenceDate: Date) -> some View {
-        Text(lastCleanSummaryText(referenceDate: referenceDate))
-            .settingsCaption()
-    }
-
-    private func lastCleanSummaryText(referenceDate: Date) -> String {
-        guard let outcome = registrar.lastOutcome else {
-            return String(localized: "Last clean: no scheduled clean has run yet.")
-        }
-        let relative = relativeDateText(for: outcome.date, referenceDate: referenceDate)
-        guard outcome.deletedCount > 0 else {
-            return String(localized: "Last clean: nothing safe to clean, \(relative).")
-        }
-        return String(localized: "Last clean: \(formatBytes(outcome.bytesMovedToTrash)) moved to trash, \(relative).")
-    }
-
-    private func scheduleStatusLabel(_ title: String, showsDueDot: Bool = false) -> some View {
-        HStack(spacing: 5) {
-            Text(LocalizedStringKey(title))
-                .font(scheduleStatusLabelFont)
-                .foregroundStyle(AppColors.textSecondary)
-
-            if showsDueDot {
-                Circle()
-                    .fill(AppColors.textPrimary)
-                    .frame(width: 5, height: 5)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppColors.textTertiary)
                     .accessibilityHidden(true)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title), \(value)")
     }
 
     private var settingsHorizontalContentInset: CGFloat { AppDetailPageLayout.horizontalInset }
@@ -1170,20 +1097,12 @@ struct SettingsView: View {
         ScheduledCleaningRegistrar.shared.nextCleanDate()
     }
 
-    private var scheduleStatusLabelFont: Font {
-        AppStyle.Typography.metadataEmphasis
-    }
-
     private var scheduleStatusPrimaryFont: Font {
         AppStyle.Typography.body
     }
 
     private var scheduleStatusSecondaryFont: Font {
         AppStyle.Typography.callout
-    }
-
-    private var scheduleStatusTertiaryFont: Font {
-        AppStyle.Typography.metadata
     }
 
     private var scheduleTextTransition: ContentTransition {
@@ -1196,16 +1115,6 @@ struct SettingsView: View {
 
     private var scheduleLayoutAnimation: Animation? {
         reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.9)
-    }
-
-    private var scheduleStatusTransition: AnyTransition {
-        if reduceMotion {
-            return .opacity
-        }
-        return .modifier(
-            active: ScheduleStatusBlurTransition(blur: 8, opacity: 0),
-            identity: ScheduleStatusBlurTransition(blur: 0, opacity: 1)
-        )
     }
 
     private var autoCleanEnabledBinding: Binding<Bool> {
@@ -1231,10 +1140,6 @@ struct SettingsView: View {
                 }
             }
         )
-    }
-
-    private func enableAutoClean() {
-        Task { await prefs.setEnabled(true, animation: scheduleLayoutAnimation) }
     }
 
     /// Two complementary descriptions of the next-clean date: a prominent line and a
@@ -1334,6 +1239,43 @@ private struct SettingsPickerButtonStyle: ButtonStyle {
     }
 }
 
+private enum ScheduleStatusHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private extension ScheduledCleaningFrequency {
+    func everyPhrase(customAmount: Int, customUnit: CustomCleaningIntervalUnit) -> String {
+        switch self {
+        case .weekly:
+            return String(localized: "Every week")
+        case .monthly:
+            return String(localized: "Every month")
+        case .quarterly:
+            return String(localized: "Every 3 months")
+        case .custom:
+            return customUnit.everyPhrase(amount: customAmount)
+        }
+    }
+
+}
+
+/// Which way a login item change failed, so the warning names the right action.
+private enum LoginItemFailure {
+    case enable
+    case disable
+
+    var message: String {
+        switch self {
+        case .enable: String(localized: "Couldn't turn this on. Check Login Items in System Settings.")
+        case .disable: String(localized: "Couldn't turn this off. Check Login Items in System Settings.")
+        }
+    }
+}
+
 private struct AppearanceOptionButton: View {
     let mode: AppearanceMode
     let isSelected: Bool
@@ -1377,83 +1319,80 @@ private struct AppearanceOptionButton: View {
     }
 }
 
-private struct ScheduleStatusBlurTransition: ViewModifier {
-    let blur: CGFloat
-    let opacity: Double
 
-    func body(content: Content) -> some View {
-        content
-            .blur(radius: blur)
-            .opacity(opacity)
+/// A row's one status line: what state the feature is in, and the one fix when
+/// something is wrong.
+struct SettingsRowStatus: Equatable {
+    let text: String
+    let tint: Color
+    var showsProgress = false
+    var actionTitle: String?
+    var isActionDisabled = false
+    var action: (() -> Void)?
+
+    static func == (lhs: SettingsRowStatus, rhs: SettingsRowStatus) -> Bool {
+        lhs.text == rhs.text && lhs.tint == rhs.tint && lhs.showsProgress == rhs.showsProgress
+            && lhs.actionTitle == rhs.actionTitle && lhs.isActionDisabled == rhs.isActionDisabled
     }
 }
 
-private enum ScheduleStatusHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct ScheduleStatusAnimatedHeight<Content: View>: View {
-    let reduceMotion: Bool
-    let animation: Animation?
-    @ViewBuilder var content: () -> Content
-    @State private var height: CGFloat?
+struct SettingsStatusLine: View {
+    let status: SettingsRowStatus
 
     var body: some View {
-        content()
-            .background {
-                GeometryReader { proxy in
-                    Color.clear
-                        .preference(key: ScheduleStatusHeightKey.self, value: proxy.size.height)
-                }
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if status.showsProgress {
+                ProgressView()
+                    .controlSize(.mini)
+                    .accessibilityHidden(true)
             }
-            .onPreferenceChange(ScheduleStatusHeightKey.self) { newHeight in
-                guard newHeight > 0 else { return }
-                if height == nil {
-                    height = newHeight
-                } else if abs((height ?? 0) - newHeight) > 0.5 {
-                    if let animation, !reduceMotion {
-                        withAnimation(animation) {
-                            height = newHeight
-                        }
-                    } else {
-                        height = newHeight
-                    }
-                }
+            Text(LocalizedStringKey(status.text))
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(status.tint)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let title = status.actionTitle, let action = status.action {
+                Button(LocalizedStringKey(title), action: action)
+                    .buttonStyle(.purge(.secondary, size: .small))
+                    .disabled(status.isActionDisabled)
             }
-            .frame(height: height, alignment: .top)
-            .clipped()
+        }
     }
 }
 
-private extension ScheduledCleaningFrequency {
-    func everyPhrase(customAmount: Int, customUnit: CustomCleaningIntervalUnit) -> String {
-        switch self {
-        case .weekly:
-            return String(localized: "Every week")
-        case .monthly:
-            return String(localized: "Every month")
-        case .quarterly:
-            return String(localized: "Every 3 months")
-        case .custom:
-            return customUnit.everyPhrase(amount: customAmount)
+/// The small (i) beside a setting's title. The full explanation lives here, so
+/// the row itself stays one line.
+private struct SettingsInfoButton: View {
+    let text: String
+    let title: String
+    @State private var isShowing = false
+
+    var body: some View {
+        Button {
+            isShowing.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12))
+                .foregroundStyle(AppColors.textTertiary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "More about \(title)"))
+        .popover(isPresented: $isShowing, arrowEdge: .bottom) {
+            SettingsInfoPopover(text: text)
         }
     }
-
 }
 
-/// Which way a login item change failed, so the warning names the right action.
-private enum LoginItemFailure {
-    case enable
-    case disable
+struct SettingsInfoPopover: View {
+    let text: String
 
-    var message: String {
-        switch self {
-        case .enable: String(localized: "Couldn't turn this on. Check Login Items in System Settings.")
-        case .disable: String(localized: "Couldn't turn this off. Check Login Items in System Settings.")
-        }
+    var body: some View {
+        Text(LocalizedStringKey(text))
+            .font(AppStyle.Typography.callout)
+            .foregroundStyle(AppColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: 300, alignment: .leading)
+            .padding(AppStyle.Spacing.medium)
     }
 }

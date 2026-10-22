@@ -83,7 +83,7 @@ struct ScanWaitCopy {
     }
 }
 
-/// The middle of a scan tab before its first results: a clock with moving hands
+/// The middle of a scan tab before its first results: the system spinner
 /// while it waits its turn (and, on Dev Tools, a ring turning around the tab's
 /// icon while it scans), what is happening, and why. No
 /// controls, since there is nothing to act on yet.
@@ -111,10 +111,6 @@ struct ScanStatusPlaceholder: View {
             Text(detail)
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
-            if case .waiting = shown {
-                WaitingDots()
-                    .accessibilityHidden(true)
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 24)
@@ -127,7 +123,8 @@ struct ScanStatusPlaceholder: View {
         case .scanning:
             ScanningRing(symbol: copy.scanning?.symbol ?? "magnifyingglass")
         case .waiting:
-            WaitingClock()
+            ProgressView()
+                .controlSize(.large)
         case .notScanned:
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 38))
@@ -188,56 +185,5 @@ private struct ScanningRing: View {
         let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: Self.period) / Self.period
         let eased = phase < 0.5 ? 2 * phase * phase : 1 - pow(-2 * phase + 2, 2) / 2
         return (0.35 * phase + 0.65 * eased) * 360
-    }
-}
-
-/// A clock whose hands keep turning while the tab waits its turn: the long hand
-/// in 6 seconds, the short one in 36. Still with Reduce Motion.
-private struct WaitingClock: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(paused: reduceMotion)) { context in
-            let seconds = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
-            ZStack {
-                Circle()
-                    .stroke(AppColors.textSecondary, lineWidth: 2.5)
-                    .padding(10)
-                hand(length: 15, degrees: 90 + seconds.truncatingRemainder(dividingBy: 6) / 6 * 360)
-                hand(length: 10, degrees: seconds.truncatingRemainder(dividingBy: 36) / 36 * 360)
-            }
-        }
-    }
-
-    private func hand(length: CGFloat, degrees: Double) -> some View {
-        Capsule()
-            .fill(AppColors.textSecondary)
-            .frame(width: 2.5, height: length)
-            .offset(y: -length / 2)
-            .rotationEffect(.degrees(degrees))
-    }
-}
-
-/// Three dots that pulse in turn under the waiting title.
-private struct WaitingDots: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(paused: reduceMotion)) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 6) {
-                ForEach(0..<3, id: \.self) { index in
-                    Circle()
-                        .fill(AppColors.textSecondary)
-                        .frame(width: 5, height: 5)
-                        .opacity(reduceMotion ? 0.6 : opacity(at: time, index: index))
-                }
-            }
-        }
-    }
-
-    private func opacity(at time: TimeInterval, index: Int) -> Double {
-        let phase = (time / 1.2 - Double(index) * 0.17) * 2 * .pi
-        return 0.25 + 0.75 * (0.5 + 0.5 * sin(phase))
     }
 }
