@@ -558,10 +558,21 @@ final class ApplicationsFolderWatcher {
                 continue
             }
             if let device = RemovedAppWatchPolicy.deviceNumber(atPath: rootPath) {
-                result.roots[rootPath] = Index.RootLocation(
-                    device: device,
-                    resolvedPath: RemovedAppWatchPolicy.resolvedPath(rootPath)
-                )
+                if let known = previous.roots[rootPath], known.device != device {
+                    // Another volume is at this path now: the drive mounted on
+                    // this folder was ejected, leaving the empty folder it was
+                    // mounted on, or a different drive was mounted. Nothing on
+                    // the previous one was removed, so its entries stay beside
+                    // whatever is here, and its location is kept so that the
+                    // drive's return is recognized.
+                    keepPreviousEntries(under: rootPath)
+                    result.roots[rootPath] = known
+                } else {
+                    result.roots[rootPath] = Index.RootLocation(
+                        device: device,
+                        resolvedPath: RemovedAppWatchPolicy.resolvedPath(rootPath)
+                    )
+                }
             }
             guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
                 keepPreviousEntries(under: rootPath)
