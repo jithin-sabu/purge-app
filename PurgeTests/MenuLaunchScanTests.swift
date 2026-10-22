@@ -39,20 +39,29 @@ struct MenuLaunchScanTests {
         fake.cleanUp()
     }
 
-    /// A scan the window ran first is the launch scan: opening the menu after it
-    /// shows those results and starts no second scan.
+    /// A scan the window ran first is the launch scan: the model settles on its
+    /// results by itself, and opening the menu after it shows them at once and
+    /// starts no second scan. The scan is held open past the model's 200 ms
+    /// debounce, so the model sees it in flight the way it sees a real one.
     @Test("A scan the window ran first counts as the launch scan")
     func windowScanCountsAsLaunchScan() async {
         let fake = FakeScans()
+        fake.holdsGeneral = true
         let store = fake.makeStore()
         let model = MenuViewModel()
         model.attach(store: store, scansAtLaunch: false)
 
         store.requestScan(.cachesAndDevTools)
+        #expect(await Self.eventually { store.isScanningAll })
+        try? await Task.sleep(for: .milliseconds(400))
+        fake.finishHeldGeneral()
         #expect(await Self.eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
+        #expect(await Self.eventually { model.state != .checking })
 
         model.menuDidOpen()
-        #expect(await Self.eventually { model.state != .checking })
+        // Had the skipped scan still been pending, this open would have gone back
+        // to checking and started a scan of its own.
+        #expect(model.state != .checking)
         try? await Task.sleep(for: .milliseconds(300))
         #expect(fake.generalAccesses.count == 1)
         fake.cleanUp()

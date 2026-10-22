@@ -209,6 +209,36 @@ nonisolated enum RemovedAppWatchPolicy {
         return UInt64(info.st_ino)
     }
 
+    /// The device number of the volume holding the item at `path`, following a
+    /// symlink, so a `~/Applications` that points at an external drive reports
+    /// that drive.
+    static func deviceNumber(atPath path: String) -> Int64? {
+        var info = stat()
+        guard stat(path, &info) == 0 else { return nil }
+        return Int64(info.st_dev)
+    }
+
+    /// The nearest ancestor of `path` that exists, `/` at the latest. For a root
+    /// on an ejected drive that is `/Volumes`, which is where the drive comes back.
+    static func nearestExistingAncestor(ofPath path: String) -> String {
+        var current = (path as NSString).deletingLastPathComponent
+        while current != "/", !current.isEmpty, !FileManager.default.fileExists(atPath: current) {
+            current = (current as NSString).deletingLastPathComponent
+        }
+        return current.isEmpty ? "/" : current
+    }
+
+    /// Whether a root no longer at its path went with its volume (ejected,
+    /// unplugged) rather than being renamed or deleted on one still mounted.
+    /// `rootDevice` is the device the root was on when it was last listed, and
+    /// `ancestorDevice` that of its nearest ancestor still there: the same device
+    /// means the volume is mounted and the root itself is gone. Nothing on a
+    /// volume that went away was removed, so its bundles must not be reported.
+    static func rootVolumeIsGone(rootDevice: Int64?, ancestorDevice: Int64?) -> Bool {
+        guard let rootDevice, let ancestorDevice else { return false }
+        return rootDevice != ancestorDevice
+    }
+
     /// Classifies a departure from the path a handle on the bundle reports now.
     /// A handle on a deleted item still reports its last path, so the item there
     /// only counts when it is the same file (`fileNumber`); a path that is empty

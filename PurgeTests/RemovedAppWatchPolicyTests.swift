@@ -219,6 +219,21 @@ struct RemovedAppWatchPolicyTests {
         #expect(scheduled.reduce(Duration.zero, +) == .seconds(302))
     }
 
+    /// A root gone from its path went with its volume only when the nearest
+    /// ancestor still there sits on another device. On the same device the root
+    /// itself was renamed or deleted, and its bundles are departures to classify.
+    @Test("A missing root counts as gone with its volume only on another device")
+    func missingRootIsGoneWithItsVolumeOnlyOnAnotherDevice() {
+        #expect(RemovedAppWatchPolicy.rootVolumeIsGone(rootDevice: 7, ancestorDevice: 3))
+        #expect(!RemovedAppWatchPolicy.rootVolumeIsGone(rootDevice: 7, ancestorDevice: 7))
+        #expect(!RemovedAppWatchPolicy.rootVolumeIsGone(rootDevice: nil, ancestorDevice: 3))
+        #expect(!RemovedAppWatchPolicy.rootVolumeIsGone(rootDevice: 7, ancestorDevice: nil))
+        #expect(RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: "/Volumes/Gone/Applications") == "/Volumes")
+        #expect(RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: "/Applications") == "/")
+        #expect(RemovedAppWatchPolicy.deviceNumber(atPath: "/") != nil)
+        #expect(RemovedAppWatchPolicy.deviceNumber(atPath: "/Volumes/Gone/Applications") == nil)
+    }
+
     @Test
     func followDecisionReportsDeletionsOnceQuietAndDropsMovesAndReturns() {
         let timing = RemovedAppWatchPolicy.FollowTiming.standard
@@ -908,6 +923,96 @@ struct ApplicationsFolderWatcherTests {
         }
         #expect(watcher.index.bundleIDs.contains("com.google.chrome"))
         #expect(indexes.last?.apps.values.first?.name == "Google Chrome")
+    }
+
+    /// A root deleted on a volume still mounted lists as empty, so its bundles
+    /// are departures. One last seen on another device went with its volume (a
+    /// drive ejected or unplugged): nothing in it was removed, so it keeps its
+    /// entries, as a root that cannot be listed does. Reporting them would offer
+    /// one review per app, settings ticked, for apps still installed (#177).
+    @Test
+    func missingRootKeepsItsEntriesOnlyWhenItsVolumeIsGone() throws {
+        let root = try makeRoot()
+        defer { try? fm.removeItem(at: root) }
+        try makeBundle(in: root, name: "Alpha", bundleID: "com.test.alpha")
+        let rootPath = root.standardizedFileURL.path
+        let before = ApplicationsFolderWatcher.index(roots: [root], reusing: .init())
+        let device = try #require(before.rootDevices[rootPath])
+
+        try fm.removeItem(at: root)
+        let deleted = ApplicationsFolderWatcher.index(roots: [root], reusing: before)
+        #expect(deleted.apps.isEmpty)
+        #expect(deleted.rootDevices[rootPath] == nil)
+
+        var ejected = before
+        ejected.rootDevices[rootPath] = device + 1
+        let kept = ApplicationsFolderWatcher.index(roots: [root], reusing: ejected)
+        #expect(kept.bundleIDs == ["com.test.alpha"])
+        #expect(kept.fileNumbers == before.fileNumbers)
+        #expect(kept.rootDevices[rootPath] == device + 1)
+    }
+
+    /// With destination tracking (the background agent), a root renamed away
+    /// and put back reports nothing: each bundle's handle finds it still on
+    /// disk, so it is a move, followed until it is back or the window ends (#177).
+    @Test(.timeLimit(.minutes(1)))
+    func aRootRenamedAwayAndBackReportsNothingWhenDestinationsAreTracked() async throws {
+        let parent = try makeRoot()
+        defer { try? fm.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Applications", isDirectory: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try makeBundle(in: root, name: "Alpha", bundleID: "com.test.alpha")
+        try makeBundle(in: root, name: "Beta", bundleID: "com.test.beta")
+
+        let timing = RemovedAppWatchPolicy.FollowTiming(
+            quietPeriod: .milliseconds(500),
+            maxDeletedWait: .seconds(5),
+            movedFollowWindow: .seconds(2),
+            pollInterval: .milliseconds(50)
+        )
+        let watcher = ApplicationsFolderWatcher(roots: [root], tracksDestinations: true, timing: timing)
+        var departures: [ApplicationsFolderWatcher.Departure] = []
+        var indexes: [ApplicationsFolderWatcher.Index] = []
+        watcher.onDeparture = { departures.append($0) }
+        watcher.onChange = { indexes.append($0) }
+        watcher.start()
+        defer { watcher.stop() }
+
+        for _ in 0..<50 where watcher.installedApps.count < 2 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        #expect(watcher.installedApps.count == 2)
+        var isLive = false
+        for attempt in 0..<20 where !isLive {
+            let probeID = "com.test.probe\(attempt)"
+            _ = try makeBundle(in: root, name: "Probe\(attempt)", bundleID: probeID)
+            for _ in 0..<25 where !isLive {
+                try await Task.sleep(nanoseconds: 20_000_000)
+                isLive = indexes.contains { $0.bundleIDs.contains(probeID) }
+            }
+        }
+        try #require(isLive)
+
+        let aside = parent.appendingPathComponent("Applications (old)", isDirectory: true)
+        try fm.moveItem(at: root, to: aside)
+        for _ in 0..<250 where !watcher.installedApps.isEmpty {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(watcher.installedApps.isEmpty)
+        #expect(watcher.isFollowing)
+
+        // Put back inside the follow window: the bundles are where they were, so
+        // the follows drop, and the root is watched and listed again.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        try fm.moveItem(at: aside, to: root)
+        let both: Set<String> = ["com.test.alpha", "com.test.beta"]
+        for _ in 0..<250 where !watcher.index.bundleIDs.isSuperset(of: both) {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(watcher.index.bundleIDs.isSuperset(of: both))
+        try await Task.sleep(nanoseconds: 2_500_000_000)
+        #expect(departures.isEmpty)
+        #expect(!watcher.isFollowing)
     }
 }
 

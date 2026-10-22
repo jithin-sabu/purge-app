@@ -34,6 +34,10 @@ final class ApplicationsFolderWatcher {
     nonisolated struct Index: Sendable {
         var apps: [String: InstalledApp] = [:]
         var fileNumbers: [String: UInt64] = [:]
+        /// The device each root was on when it was last listed, keyed by root
+        /// path, so a root whose volume was ejected can be told from one that
+        /// was renamed or deleted (`index(roots:reusing:)`).
+        var rootDevices: [String: Int64] = [:]
 
         /// Lowercased identifiers of every bundle in the index.
         var bundleIDs: Set<String> {
@@ -77,6 +81,9 @@ final class ApplicationsFolderWatcher {
     /// Reads the bundles with no identifier yet again, on `RemovedAppWatchPolicy.incompleteRecheckDelay`.
     private var recheckTask: Task<Void, Never>?
     private var incompleteRechecks = 0
+    /// The bundles without an identifier at the last check, so one not seen
+    /// before starts the short delays over, whatever an earlier one used up.
+    private var unreadKeys: Set<String> = []
     /// Watches the parent of each root that did not exist at start, so a
     /// `~/Applications` created later is picked up without watching all of home.
     private var parentSources: [DispatchSourceFileSystemObject] = []
@@ -140,6 +147,7 @@ final class ApplicationsFolderWatcher {
         recheckTask?.cancel()
         recheckTask = nil
         incompleteRechecks = 0
+        unreadKeys.removeAll()
         // Each follow task closes the handle it owns when it wakes cancelled.
         followTasks.values.forEach { $0.cancel() }
         followTasks.removeAll()
@@ -200,7 +208,9 @@ final class ApplicationsFolderWatcher {
         let missing = rootPaths.filter { !watched.contains($0) }
         let current = generation
         for root in missing {
-            let parent = (root as NSString).deletingLastPathComponent
+            // The nearest ancestor there is: the parent for a `~/Applications`
+            // not made yet, `/Volumes` for a root on a drive that was ejected.
+            let parent = RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: root)
             let descriptor = open(parent, O_EVTONLY)
             guard descriptor >= 0 else { continue }
             let source = DispatchSource.makeFileSystemObjectSource(
@@ -241,15 +251,21 @@ final class ApplicationsFolderWatcher {
         if flags.contains(where: { $0 & FSEventStreamEventFlags(kFSEventStreamEventFlagRootChanged) != 0 }) {
             reopenStreamAfterRootChange()
         }
+        // A bundle that just arrived must not wait out a read scheduled for an
+        // earlier one, which can be a minute away: the re-list schedules afresh.
+        recheckTask?.cancel()
+        recheckTask = nil
         incompleteRechecks = 0
         scheduleRescan()
     }
 
     /// A root was moved, deleted, or put back. The stream stays on the path it
     /// was given, so it is opened again on the roots that exist now, and the
-    /// parent of one that is gone is watched for its return. The re-list that
-    /// follows reports what the missing root held as departed. Not inside the
-    /// callback that delivered the event, where the stream is still in use.
+    /// nearest ancestor of one that is gone is watched for its return. The
+    /// re-list that follows lists a root removed on its volume as empty, and
+    /// keeps the entries of one whose volume is gone (`index(roots:reusing:)`).
+    /// Not inside the callback that delivered the event, where the stream is
+    /// still in use.
     private func reopenStreamAfterRootChange() {
         let current = generation
         DispatchQueue.main.async { [weak self] in
@@ -294,26 +310,36 @@ final class ApplicationsFolderWatcher {
     /// plist is read again on `RemovedAppWatchPolicy.incompleteRecheckDelay`, for
     /// about five minutes. Only the bundles without an identifier are read: this
     /// used to re-list both roots, every depth, every two seconds for the whole
-    /// five minutes (#177). A bundle that leaves meanwhile is an event of its own.
+    /// five minutes (#177). A bundle that leaves meanwhile is an event of its own,
+    /// and so is one arriving: `handle` drops a read still waiting, and the
+    /// re-list schedules a new one at once.
     private func recheckIfIncomplete(_ snapshot: Index) {
-        let unread = snapshot.apps.filter { $0.value.bundleID == nil }.map(\.key)
+        let unread = Set(snapshot.apps.filter { $0.value.bundleID == nil }.map(\.key))
+        defer { unreadKeys = unread }
         guard !unread.isEmpty else {
             incompleteRechecks = 0
             return
         }
+        if !unread.isSubset(of: unreadKeys) { incompleteRechecks = 0 }
         guard recheckTask == nil else { return }
         incompleteRechecks += 1
         guard let delay = RemovedAppWatchPolicy.incompleteRecheckDelay(attempt: incompleteRechecks) else { return }
         let current = generation
         recheckTask = Task { [weak self] in
             try? await Task.sleep(for: delay)
-            guard let self, self.generation == current else { return }
+            guard !Task.isCancelled, let self, self.generation == current else { return }
             self.recheckTask = nil
+            // From the index as it is now, not as it was when this was scheduled.
+            let unread = self.index.apps.filter { $0.value.bundleID == nil }.map(\.key)
+            let numbers = self.index.fileNumbers
             let reread = await Self.rereadOffMain(paths: unread)
-            guard self.generation == current else { return }
+            guard !Task.isCancelled, self.generation == current else { return }
             var updated = self.index
             var changed = false
-            for (key, app) in reread where updated.apps[key] != nil && app.bundleID != nil {
+            // Only onto the entry the read was for: a bundle swapped in place
+            // meanwhile has a new file number, and the re-list read it itself.
+            for (key, app) in reread
+            where app.bundleID != nil && updated.apps[key]?.bundleID == nil && updated.fileNumbers[key] == numbers[key] {
                 updated.apps[key] = app
                 changed = true
             }
@@ -460,10 +486,22 @@ final class ApplicationsFolderWatcher {
     /// bundle an updater swapped in place, or one first read mid-copy, is read
     /// again rather than described by what was there before. A root that exists but cannot be
     /// listed keeps its previous entries: a failed read must not look like every
-    /// app in it was deleted.
+    /// app in it was deleted. So does a root that is gone with its volume (a
+    /// drive ejected or unplugged): nothing in it was removed, and reporting
+    /// every app on it would offer one review per app, with their settings
+    /// ticked, for apps still installed (#177). A root renamed or deleted on a
+    /// volume still mounted lists as empty; a tracked bundle's handle then says
+    /// whether it was moved, trashed, or deleted.
     nonisolated static func index(roots: [URL], reusing previous: Index) -> Index {
         let fm = FileManager.default
         var result = Index()
+
+        func keepPreviousEntries(under rootPath: String) {
+            for (key, app) in previous.apps where key.hasPrefix(rootPath + "/") {
+                result.apps[key] = app
+                result.fileNumbers[key] = previous.fileNumbers[key]
+            }
+        }
 
         func consider(_ url: URL) {
             guard url.pathExtension == "app" else { return }
@@ -486,12 +524,22 @@ final class ApplicationsFolderWatcher {
 
         for root in roots {
             let rootPath = root.standardizedFileURL.path
-            guard fm.fileExists(atPath: rootPath) else { continue }
-            guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
-                for (key, app) in previous.apps where key.hasPrefix(rootPath + "/") {
-                    result.apps[key] = app
-                    result.fileNumbers[key] = previous.fileNumbers[key]
+            guard fm.fileExists(atPath: rootPath) else {
+                if let device = previous.rootDevices[rootPath],
+                   RemovedAppWatchPolicy.rootVolumeIsGone(
+                       rootDevice: device,
+                       ancestorDevice: RemovedAppWatchPolicy.deviceNumber(
+                           atPath: RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: rootPath)
+                       )
+                   ) {
+                    keepPreviousEntries(under: rootPath)
+                    result.rootDevices[rootPath] = device
                 }
+                continue
+            }
+            result.rootDevices[rootPath] = RemovedAppWatchPolicy.deviceNumber(atPath: rootPath)
+            guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
+                keepPreviousEntries(under: rootPath)
                 continue
             }
             bundles.forEach(consider)

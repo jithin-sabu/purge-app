@@ -485,7 +485,11 @@ final class RemovedAppMonitor: ObservableObject {
             guard let self else { return }
             self.drainTask = nil
             if self.isEnabled {
-                for entry in checked {
+                // Read again here, on the main actor: a review dismissed while
+                // the check ran has discarded its record, and the check's copy of
+                // it must not open that review a second time.
+                let stillPending = Set(RemovedAppHandoff.pending().map(\.path))
+                for entry in checked where stillPending.contains(entry.record.path) {
                     if entry.stillRemoved {
                         self.enqueue(entry.record)
                     } else {
@@ -725,6 +729,10 @@ final class RemovedAppMonitor: ObservableObject {
     }
 
     private func closeWindowIfOpenedForReview() {
+        // A review on screen, or its clean, keeps the window: `finishReview`
+        // comes back here once it is over. A watcher URL arriving after the
+        // setting was switched off must not quit under an open sheet.
+        guard phase == .idle else { return }
         defer { openedWindowForReview = false }
         guard openedWindowForReview, let store else { return }
         guard store.errorMessage == nil else {
