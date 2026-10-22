@@ -475,10 +475,8 @@ final class PurgeStore: ObservableObject {
 
     private let cacheScanner: CacheScanner
     private let devScanner: DevScanner
-    /// Access and scan results for App Caches and Dev Tools. `live` outside tests.
+    /// Access and scan results for App Caches, Dev Tools and Large Files. `live` outside tests.
     let scanSources: ScanSources
-    private let largeFileScanner = LargeFileScanner()
-    private let aiModelScanner = AIModelScanner()
     private let uninstallScanner = AppUninstallScanner()
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
@@ -562,6 +560,8 @@ final class PurgeStore: ObservableObject {
                 cacheScanner: cacheScanner,
                 devScanner: devScanner,
                 gitChecker: gitChecker,
+                largeFileScanner: LargeFileScanner(),
+                aiModelScanner: AIModelScanner(),
                 everythingElseMeasurer: EverythingElseMeasurer()
             )
         self.defaults = defaults
@@ -1676,6 +1676,11 @@ final class PurgeStore: ObservableObject {
         largeFileScanGeneration += 1
         let generation = largeFileScanGeneration
         isScanningLargeFiles = true
+        // Cleared for every scan, finished again only by a stream that ran to the
+        // end. A rescan that Stop cuts short then reads as unfinished: the Overview
+        // does not count its partial list, the saved record keeps the last full
+        // figures, and opening the tab scans again (#180).
+        hasCompletedLargeFileScan = false
         largeFiles = []
         largeFileScanSummary = nil
         largeFileSelection.ids.removeAll()
@@ -1722,8 +1727,8 @@ final class PurgeStore: ObservableObject {
         // return cancels it. Models live outside the walked folders, so the
         // exclusion check is per row.
         let access: ScanAccess = hasFullDiskAccess ? .full : .limited
-        let looseWeights = aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: access, pass: .looseWeights)
-        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: access, pass: .knownStores) {
+        let looseWeights = scanSources.aiModels(minBytes, staleDays, access, .looseWeights)
+        for await model in scanSources.aiModels(minBytes, staleDays, access, .knownStores) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
             guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
             collected.append(model)
@@ -1731,7 +1736,7 @@ final class PurgeStore: ObservableObject {
         publish()
 
         var summary: LargeFileScanSummary?
-        for await event in largeFileScanner.scanEvents(minBytes: minBytes, staleDays: staleDays) {
+        for await event in scanSources.largeFiles(minBytes, staleDays) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
             switch event {
             case .file(let file):
