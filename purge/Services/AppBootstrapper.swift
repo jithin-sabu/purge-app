@@ -16,9 +16,16 @@ enum AppBootstrapper {
     private static var hasBootstrapped = false
 
     /// Idempotent: safe to call from more than one launch path.
+    ///
+    /// Does nothing in the unit-test host (#181). It shares the user's real
+    /// defaults and files, so the launch scan would walk the real disk, the
+    /// registrar would rewrite the real reminders, and the quit guard and
+    /// Shortcuts list would act on a test run. A test that needs one of these
+    /// attaches it to throwaway defaults itself.
     static func bootstrapOnce() {
         guard !hasBootstrapped else { return }
         hasBootstrapped = true
+        guard runsAtLaunch(environment: ProcessInfo.processInfo.environment) else { return }
 
         let env = AppEnvironment.self
 
@@ -68,5 +75,11 @@ enum AppBootstrapper {
             await PrivilegedHelperManager.shared.reconcileVersion()
             helperPreferences.refresh()
         }
+    }
+
+    /// False only in the unit-test host. A build run from Xcode is a real launch
+    /// and bootstraps like an installed one.
+    nonisolated static func runsAtLaunch(environment: [String: String]) -> Bool {
+        !TestHost.isActive(environment: environment)
     }
 }
