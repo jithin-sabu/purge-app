@@ -11,6 +11,48 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-10-22: A project in use stayed listed under its other spelling
+
+**Found internally** in a code audit ([#175](https://github.com/jithin-sabu/purge-app/issues/175)), no report. **Fixed:** not yet released. **Affected:** v1.7.1 to v1.12.0.
+
+### What happened
+
+Dev Tools looks for projects in a list of folders that names both spellings of
+many of them, such as `~/Developer` and `~/developer`. The default Mac volume
+ignores case, so both spellings open the same folder. Purge walked it twice and
+listed every project in it twice, with its size counted twice.
+
+A project someone is using right now is hidden: Purge reads the working folder
+of every running process and hides any project one of them sits in. That check
+compared paths letter by letter. A Terminal in `~/Developer/app` hid
+`~/Developer/app` but not `~/developer/app`, so the second copy stayed listed.
+If the project had not been edited within "Consider stale after", or Show all
+was on, its folders were Safe to Clean, and Clean Safe Items or a scheduled
+clean could move them to the Trash.
+
+### Who was affected
+
+Nobody reported a loss. Anyone with a project in one of the doubled folders
+that had a Terminal or a dev server running in it, but no recent edits, was
+exposed. The folders went to the Trash, so they could be put back or rebuilt
+with the project's install command.
+
+### What changed
+
+Each folder is walked once and each project is listed once. Folders are
+compared by the identity the file system gives them, not by spelling, and the
+first spelling in the list is kept. The in-use check now ignores case, as the
+volume does. On a case-sensitive volume that only errs toward hiding a project.
+
+### What would have caught it earlier
+
+`otherCapitalisation` in
+[`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift)
+checks that a process under another capitalisation hides the project, and
+[`PurgeTests/ProjectDiscoveryDedupeTests.swift`](../PurgeTests/ProjectDiscoveryDedupeTests.swift)
+checks that two spellings, or a link and its target, give one project. The
+earlier tests spelled every path one way, so none of them could see two.
+
 ## 2026-10-16: Leftovers offered an installed OrbStack's Docker data
 
 **Reported** by @vim-diesel ([#197](https://github.com/jithin-sabu/purge-app/issues/197)). **Fixed:** [#199](https://github.com/jithin-sabu/purge-app/pull/199), shipped in v1.11.1 (2026-10-17). **Affected:** v1.5.2 to v1.11.0.
