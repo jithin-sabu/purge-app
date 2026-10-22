@@ -664,7 +664,8 @@ struct ContentView: View {
             if store.isAwaitingFirstDevToolsScan {
                 let isScanning = store.isScanningDeveloper || store.isScanningAll
                 return ScanStatusPlaceholder.subtitle(
-                    for: store.scanWaitStatus(for: .cachesAndDevTools, isScanning: isScanning)
+                    for: store.scanWaitStatus(for: .cachesAndDevTools, isScanning: isScanning),
+                    copy: .devTools
                 )
             }
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
@@ -716,7 +717,8 @@ struct ContentView: View {
     private var largeFilesPageSubtitle: String {
         if store.isAwaitingFirstLargeFileScan {
             return ScanStatusPlaceholder.subtitle(
-                for: store.scanWaitStatus(for: .largeFiles, isScanning: store.isScanningLargeFiles)
+                for: store.scanWaitStatus(for: .largeFiles, isScanning: store.isScanningLargeFiles),
+                copy: .largeFiles
             )
         }
         // An empty result after a finished scan is a statement, not a count of
@@ -763,7 +765,8 @@ struct ContentView: View {
 
         if store.installedApps.isEmpty, !store.hasCompletedInstalledAppsScan {
             return ScanStatusPlaceholder.subtitle(
-                for: store.scanWaitStatus(for: .apps, isScanning: store.isScanningInstalledApps)
+                for: store.scanWaitStatus(for: .apps, isScanning: store.isScanningInstalledApps),
+                copy: .apps
             )
         }
         guard !store.installedApps.isEmpty else { return nil }

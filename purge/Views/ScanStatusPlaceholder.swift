@@ -34,58 +34,73 @@ extension PurgeStore {
 
 /// The words each scan tab uses for its wait states.
 struct ScanWaitCopy {
-    /// The symbol the scanning ring turns around: the tab's own icon.
-    let symbol: String
-    let scanningTitle: String
-    let scanningDetail: String
+    /// What a tab shows while its own scan runs with nothing listed yet.
+    struct Scanning {
+        /// The symbol the scanning ring turns around: the tab's own icon.
+        let symbol: String
+        let title: String
+        let detail: String
+    }
+
+    /// Nil for a tab whose scan lists its first results as soon as it starts
+    /// (Large Files, the uninstaller): there the scanning state would only
+    /// flash, so the tab keeps its waiting state until rows arrive.
+    let scanning: Scanning?
     let waitingTitle: String
     let notScannedTitle: String
     let notScannedDetail: String
 
     static let largeFiles = ScanWaitCopy(
-        symbol: "tray.full",
-        scanningTitle: String(localized: "Looking for large files"),
-        scanningDetail: String(localized: "Purge is checking the files in your home folder. This can take a minute."),
+        scanning: nil,
         waitingTitle: String(localized: "Waiting to look for large files"),
         notScannedTitle: String(localized: "Large files not scanned yet"),
         notScannedDetail: String(localized: "Use Scan to look for large files.")
     )
 
     static let apps = ScanWaitCopy(
-        // Not the sidebar's trash can: this is the list of apps being found.
-        symbol: "app",
-        scanningTitle: String(localized: "Finding your apps"),
-        scanningDetail: String(localized: "Purge is checking Applications and your home Applications folder."),
+        scanning: nil,
         waitingTitle: String(localized: "Waiting to find your apps"),
         notScannedTitle: String(localized: "Apps not scanned yet"),
         notScannedDetail: String(localized: "Use Rescan to find your apps.")
     )
 
     static let devTools = ScanWaitCopy(
-        symbol: "hammer",
-        scanningTitle: String(localized: "Looking for developer folders"),
-        scanningDetail: String(localized: "Purge is checking tool caches, simulators, and your projects."),
+        scanning: Scanning(
+            symbol: "hammer",
+            title: String(localized: "Looking for developer folders"),
+            detail: String(localized: "Purge is checking tool caches, simulators, and your projects.")
+        ),
         waitingTitle: String(localized: "Waiting to look for developer folders"),
         notScannedTitle: String(localized: "Dev Tools not scanned yet"),
         notScannedDetail: String(localized: "Use Scan to look for developer folders.")
     )
+
+    /// The state the tab shows: a tab with no scanning state keeps waiting
+    /// while its own scan starts.
+    func shown(_ status: ScanWaitStatus) -> ScanWaitStatus {
+        if status == .scanning, scanning == nil { return .waiting(behind: nil) }
+        return status
+    }
 }
 
-/// The middle of a scan tab before its first results: a ring turning around the
-/// tab's icon or a clock with moving hands, what is happening, and why. No
+/// The middle of a scan tab before its first results: a clock with moving hands
+/// while it waits its turn (and, on Dev Tools, a ring turning around the tab's
+/// icon while it scans), what is happening, and why. No
 /// controls, since there is nothing to act on yet.
 struct ScanStatusPlaceholder: View {
     let status: ScanWaitStatus
     let copy: ScanWaitCopy
 
     /// The page subtitle while the tab waits, in place of a count of nothing.
-    static func subtitle(for status: ScanWaitStatus) -> String {
-        switch status {
+    static func subtitle(for status: ScanWaitStatus, copy: ScanWaitCopy) -> String {
+        switch copy.shown(status) {
         case .scanning: return String(localized: "Scanning…")
         case .waiting: return ScanQueueLabels.queued
         case .notScanned: return String(localized: "Not scanned yet")
         }
     }
+
+    private var shown: ScanWaitStatus { copy.shown(status) }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -96,7 +111,7 @@ struct ScanStatusPlaceholder: View {
             Text(detail)
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
-            if case .waiting = status {
+            if case .waiting = shown {
                 WaitingDots()
                     .accessibilityHidden(true)
             }
@@ -108,9 +123,9 @@ struct ScanStatusPlaceholder: View {
 
     @ViewBuilder
     private var symbol: some View {
-        switch status {
+        switch shown {
         case .scanning:
-            ScanningRing(symbol: copy.symbol)
+            ScanningRing(symbol: copy.scanning?.symbol ?? "magnifyingglass")
         case .waiting:
             WaitingClock()
         case .notScanned:
@@ -121,17 +136,17 @@ struct ScanStatusPlaceholder: View {
     }
 
     private var title: String {
-        switch status {
-        case .scanning: return copy.scanningTitle
+        switch shown {
+        case .scanning: return copy.scanning?.title ?? copy.waitingTitle
         case .waiting: return copy.waitingTitle
         case .notScanned: return copy.notScannedTitle
         }
     }
 
     private var detail: String {
-        switch status {
+        switch shown {
         case .scanning:
-            return copy.scanningDetail
+            return copy.scanning?.detail ?? ""
         case .waiting(let behind):
             guard let behind else { return String(localized: "Starts in a moment.") }
             let name = behind.displayName

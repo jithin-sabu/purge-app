@@ -1273,13 +1273,9 @@
 "Purge started the background jobs it had stopped again." = "Purge 已重新启动它之前停止的后台任务。";
 "Purge couldn't start %@ again. It starts again when you next log in." = "Purge 无法重新启动 %@。它会在你下次登录时再次启动。";
 "Purge couldn't start %@ again. They start again when you next log in." = "Purge 无法重新启动 %@。它们会在你下次登录时再次启动。";
-"Looking for large files" = "正在查找大文件";
-"Purge is checking the files in your home folder. This can take a minute." = "Purge 正在检查你的个人主文件夹中的文件，这可能需要一分钟。";
 "Waiting to look for large files" = "等待查找大文件";
 "Large files not scanned yet" = "尚未扫描大文件";
 "Use Scan to look for large files." = "点按“扫描”来查找大文件。";
-"Finding your apps" = "正在查找你的应用";
-"Purge is checking Applications and your home Applications folder." = "Purge 正在检查系统和个人主文件夹中的“应用程序”文件夹。";
 "Waiting to find your apps" = "等待查找你的应用";
 "Apps not scanned yet" = "尚未扫描应用";
 "Use Rescan to find your apps." = "点按“重新扫描”来查找你的应用。";
