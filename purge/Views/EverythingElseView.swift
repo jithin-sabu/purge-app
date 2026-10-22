@@ -1075,7 +1075,7 @@ private struct EverythingElseGlass: View {
         switch phase {
         case .waiting:
             guard let runningStep, runningStep != .everythingElse else { return String(localized: "Starting…") }
-            return String(localized: "Waiting for \(OverviewScanButton.name(for: runningStep))")
+            return String(localized: "Waiting for \(runningStep.displayName)")
         case .measuring:
             guard let current = measurement?.currentRoot else { return String(localized: "Measuring…") }
             return String(localized: "Measuring \(EverythingElseStyle.name(current.group))")

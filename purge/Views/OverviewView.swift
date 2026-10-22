@@ -1012,16 +1012,12 @@ struct OverviewDiskBar: View {
     }
 }
 
-// MARK: - Header button
+// MARK: - Scan step names
 
-/// Scan Everything, or Stop while the queue runs. A running App Caches and Dev Tools
-/// step always finishes (it takes seconds), so once only that is left the button just
-/// shows it is scanning.
-struct OverviewScanButton: View {
-    @EnvironmentObject private var store: PurgeStore
-
-    static func name(for step: ScanStep) -> String {
-        switch step {
+extension ScanStep {
+    /// How the Overview and the scan tabs name a step in "Scanning …" text.
+    var displayName: String {
+        switch self {
         case .cachesAndDevTools: return String(localized: "App Caches and Dev Tools")
         case .largeFiles: return String(localized: "Large Files")
         case .apps: return String(localized: "installed apps")
@@ -1030,112 +1026,13 @@ struct OverviewScanButton: View {
         case .commandLineTools: return String(localized: "command-line tools")
         }
     }
-
-    private var queue: ScanQueueState { store.scanQueue }
-
-    private var isFinishingCacheScan: Bool {
-        // A queued Everything else walk is not a category scan still to come.
-        (queue.active == .cachesAndDevTools && !queue.pending.contains { $0 != .everythingElse })
-            || (!queue.isRunningCategoryScan && store.isScanningAll)
-    }
-
-    var body: some View {
-        Button {
-            if queue.isRunningCategoryScan {
-                store.stopScans()
-            } else {
-                store.scanEverything()
-            }
-        } label: {
-            CleaningButtonLabel(
-                title: title,
-                systemImage: systemImage,
-                isCleaning: isFinishingCacheScan
-            )
-        }
-        .buttonStyle(.purge(.secondary))
-        .keyboardShortcut("r", modifiers: [.command])
-        .disabled(isFinishingCacheScan || store.isDeleting)
-        .help(queue.isRunningCategoryScan ? LocalizedStringKey("Stop scanning") : LocalizedStringKey("Scan App Caches, Dev Tools, Large Files and apps, one after another"))
-    }
-
-    private var title: String {
-        if isFinishingCacheScan { return String(localized: "Scanning...") }
-        return queue.isRunningCategoryScan ? String(localized: "Stop") : String(localized: "Scan Everything")
-    }
-
-    private var systemImage: String? {
-        if isFinishingCacheScan { return nil }
-        return queue.isRunningCategoryScan ? "stop.fill" : "arrow.clockwise"
-    }
 }
 
 // MARK: - Clean safe items
 
-/// Moves every safe App Caches and Dev Tools item to the Trash, after a short
-/// confirmation: the same set the menu bar and the scheduled clean move. The tabs'
-/// Clean Selected is for picking by hand; this is the one click for the safe part.
-/// Hidden when there is nothing safe to clean.
-///
-/// The title carries no size on purpose. Beside the category totals on this page a
-/// smaller figure reads as a mistake; the popover gives the amount next to the
-/// total it comes from.
-struct OverviewCleanSafeButton: View {
-    @EnvironmentObject private var store: PurgeStore
-    @EnvironmentObject private var diskStore: DiskSummaryStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isConfirming = false
-
-    private var bytes: Int64 { store.safeRecoverableBytes }
-    private var isCleaning: Bool { store.isInteractiveSafeCleanupInProgress }
-
-    /// The figure moves while either scan runs, so the button waits for both.
-    private var isReady: Bool {
-        store.isSettled(.appCaches) && store.isSettled(.devTools)
-    }
-
-    var body: some View {
-        if bytes > 0 || isCleaning {
-            Button {
-                isConfirming = true
-            } label: {
-                CleaningButtonLabel(
-                    title: isCleaning ? "Cleaning..." : "Clean Safe Items",
-                    // The same glyph as Clean Selected and Uninstall on the other tabs.
-                    systemImage: isCleaning ? nil : "trash.fill",
-                    isCleaning: isCleaning
-                )
-            }
-            .buttonStyle(.purge(.primary))
-            .disabled(!isReady || store.isDeleting || isCleaning)
-            .help(isReady
-                ? LocalizedStringKey("Move every Safe item in App Caches and Dev Tools to the Trash")
-                : LocalizedStringKey("Waiting for App Caches and Dev Tools to finish scanning"))
-            .popover(isPresented: $isConfirming, arrowEdge: .bottom) {
-                OverviewCleanSafeConfirmation(
-                    breakdown: store.overviewBreakdown(
-                        totalBytes: diskStore.totalDiskBytes,
-                        freeBytes: diskStore.freeDiskBytes
-                    ),
-                    onCancel: { isConfirming = false },
-                    onConfirm: {
-                        isConfirming = false
-                        store.cleanSafeItemsFromOverview(reduceMotion: reduceMotion)
-                    },
-                    onReview: { category in
-                        isConfirming = false
-                        store.openFromOverview(category)
-                    }
-                )
-                .environmentObject(store)
-            }
-        }
-    }
-}
-
-/// What the Clean button will move, by tab, with a way to look first. Review opens
+/// What Clean Safe Items (in `PageHeaderActionBar`) will move, by tab, with a way to look first. Review opens
 /// the tab on its Safe list with exactly these items selected.
-private struct OverviewCleanSafeConfirmation: View {
+struct OverviewCleanSafeConfirmation: View {
     @EnvironmentObject private var store: PurgeStore
     /// The Overview's own figures, so each "of" total matches its row.
     let breakdown: OverviewBreakdown

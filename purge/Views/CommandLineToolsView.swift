@@ -19,11 +19,7 @@ struct CommandLineToolsSection: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     if !standalone.isEmpty {
-                        sectionHeader(
-                            String(localized: "Installed by a script"),
-                            count: standalone.count,
-                            bytes: standalone.reduce(Int64(0)) { $0 + $1.sizeBytes }
-                        )
+                        UninstallSectionHeader(title: String(localized: "Installed by a script"))
                         ForEach(standalone) { tool in
                             CommandLineToolRow(
                                 name: tool.name,
@@ -37,11 +33,7 @@ struct CommandLineToolsSection: View {
                         }
                     }
                     if !managed.isEmpty {
-                        sectionHeader(
-                            String(localized: "Installed by a package manager"),
-                            count: managed.count,
-                            bytes: managed.reduce(Int64(0)) { $0 + $1.sizeBytes }
-                        )
+                        UninstallSectionHeader(title: String(localized: "Installed by a package manager"))
                         .padding(.top, standalone.isEmpty ? 0 : AppStyle.Spacing.small)
                         ForEach(managed) { tool in
                             CommandLineToolRow(
@@ -103,23 +95,6 @@ struct CommandLineToolsSection: View {
             Spacer()
         }
         .scanTabSelectAllRowLayout()
-    }
-
-    private func sectionHeader(_ title: String, count: Int, bytes: Int64) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .font(AppStyle.Typography.headline)
-                .foregroundStyle(AppColors.textPrimary)
-            Spacer()
-            Text("\(count) · \(formatBytes(bytes))")
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(AppColors.textTertiary)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, AppStyle.Spacing.xxSmall)
-        .padding(.bottom, AppStyle.Spacing.xxSmall)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
     }
 }
 

@@ -101,7 +101,7 @@ struct ScanResultRow: View {
     }
 
     private var explanationLineLimit: Int {
-        usesCompactExplanation ? 1 : 3
+        usesCompactExplanation ? 1 : 2
     }
 
     private var rowVerticalPadding: CGFloat {
@@ -295,15 +295,18 @@ struct ScanResultRow: View {
                 .truncationMode(.tail)
                 .font(AppStyle.Typography.metadata)
                 .foregroundStyle(AppColors.textSecondary)
-                .frame(
-                    minHeight: explanationMinHeight,
-                    alignment: usesCompactExplanation ? .leading : .topLeading
-                )
 
             if hasExtraBadges {
                 badgesRow
             }
         }
+        // Reserve the placeholder's height on the whole column, not the explanation,
+        // so a one-line explanation centres with the title instead of leaving a gap below.
+        .frame(minHeight: textColumnMinHeight, alignment: .leading)
+    }
+
+    private var textColumnMinHeight: CGFloat {
+        ScanResultRow.headlineOneLineHeight + 4 + explanationMinHeight
     }
 
     private var rowPlaceholderTextColumn: some View {

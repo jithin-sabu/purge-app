@@ -83,6 +83,7 @@ Every `.font(...)` on text uses `AppStyle.Typography`, adding `.weight(...)` for
 | `callout` | 12 regular | Helper text, small buttons |
 | `metadata` / `metadataEmphasis` | 11 regular / medium | Sizes, dates, paths |
 | `micro` | 10 semibold | Badges, count pills |
+| `iconLabel` | 8 semibold | File-type labels over a row icon |
 
 SF Rounded is for result numbers and titles only. Size numbers use `.monospacedDigit()`.
 

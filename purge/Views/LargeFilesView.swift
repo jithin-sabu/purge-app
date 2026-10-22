@@ -184,7 +184,9 @@ struct LargeFilesView: View {
                 }
             }
 
-            controlsChrome
+            if !isAwaitingFirstScan {
+                controlsChrome
+            }
             listStack
         }
     }
@@ -194,10 +196,23 @@ struct LargeFilesView: View {
         // list cuts off cleanly at its own edge with no scroll-edge blur, matching
         // the App Uninstaller tab.
         VStack(spacing: 0) {
-            controlsChrome
-            selectAllRowChrome
+            if !isAwaitingFirstScan {
+                controlsChrome
+                selectAllRowChrome
+            }
             listStack
         }
+    }
+
+    /// No scan has finished this session and nothing has streamed in yet: the
+    /// filters, search and Select All have nothing to act on, so the tab shows
+    /// only its status.
+    private var isAwaitingFirstScan: Bool {
+        store.isAwaitingFirstLargeFileScan
+    }
+
+    private var scanWaitStatus: ScanWaitStatus {
+        store.scanWaitStatus(for: .largeFiles, isScanning: isLoading)
     }
 
     private var headerActions: some View {
@@ -385,8 +400,8 @@ struct LargeFilesView: View {
     @ViewBuilder
     private var listOrPlaceholder: some View {
         if store.largeFiles.isEmpty {
-            if isLoading {
-                scanningPlaceholder
+            if isAwaitingFirstScan || scanWaitStatus == .scanning {
+                ScanStatusPlaceholder(status: scanWaitStatus, copy: .largeFiles)
             } else {
                 emptyState
             }
@@ -588,13 +603,6 @@ struct LargeFilesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 24)
-    }
-
-    private var scanningPlaceholder: some View {
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Scanning large files")
     }
 
     private func toggleSelection(forFileID id: String) {
@@ -1280,25 +1288,28 @@ private struct LargeFileThumbnailIcon: View {
             }
     }
 
-    /// The label sits over the icon at its natural width, so a long extension
-    /// (`.prlupd-part`, `.crdownload`) would spill onto the checkbox. Five
-    /// characters fit; anything longer is cut short.
+    /// The label sits over the icon and must stay inside it, or a long extension
+    /// (`.mlmodelc`, `.crdownload`) spills onto the checkbox. Four characters
+    /// fit; anything longer is cut short.
     private var extensionLabel: String {
-        fileExtension.count > 5 ? ".\(fileExtension.prefix(4))…" : ".\(fileExtension)"
+        fileExtension.count > 4 ? ".\(fileExtension.prefix(3))…" : ".\(fileExtension)"
     }
 
     @ViewBuilder
     private var extensionBadge: some View {
         if !fileExtension.isEmpty {
             Text(verbatim: extensionLabel)
-                .font(AppStyle.Typography.micro)
+                .font(AppStyle.Typography.iconLabel)
                 .lineLimit(1)
+                // A wide glyph run (`.www…`) shrinks a little rather than spill.
+                .minimumScaleFactor(0.8)
                 .foregroundStyle(AppColors.textSecondary)
                 .padding(.horizontal, 3)
                 .padding(.vertical, 1)
                 .background(Capsule(style: .continuous).fill(.regularMaterial))
                 .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 0.5))
-                .fixedSize()
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: slotSize, alignment: .trailing)
         }
     }
 
@@ -1322,43 +1333,6 @@ private struct LargeFileThumbnailIcon: View {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
             thumbnail = image
         }
-    }
-}
-
-struct LargeFilesHeaderActions: View {
-    @EnvironmentObject private var store: PurgeStore
-
-    private var isQueued: Bool {
-        !store.isScanningLargeFiles && store.isScanQueued(.largeFiles)
-    }
-
-    private var isBusy: Bool {
-        store.isScanningLargeFiles || isQueued
-    }
-
-    private var scanTitle: String {
-        if isQueued { return ScanQueueLabels.queued }
-        return store.isScanningLargeFiles ? "Scanning..." : String(localized: "Scan")
-    }
-
-    var body: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            Button {
-                store.requestScan(.largeFiles)
-            } label: {
-                CleaningButtonLabel(
-                    title: scanTitle,
-                    systemImage: isBusy ? nil : "arrow.clockwise",
-                    isCleaning: isBusy
-                )
-            }
-            .buttonStyle(.purge(.secondary))
-            .disabled(isBusy)
-            .keyboardShortcut("r", modifiers: [.command])
-
-            LargeFileDeleteButton(selection: store.largeFileSelection)
-        }
-        .fixedSize()
     }
 }
 

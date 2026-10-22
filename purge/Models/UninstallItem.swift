@@ -112,6 +112,32 @@ nonisolated enum MatchReason: Hashable {
         }
     }
 
+    /// Leftovers list one section per reason, strongest link first, so the
+    /// reason is said once in the header instead of on every row.
+    var leftoverSectionRank: Int {
+        switch self {
+        case .appBundle: return 0
+        case .bundleID: return 1
+        case .groupID: return 2
+        case .ownerLedger: return 3
+        case .dotFolderCatalog: return 4
+        case .libraryCrossEvidence: return 5
+        case .appName: return 6
+        }
+    }
+
+    var leftoverSectionTitle: String {
+        switch self {
+        case .appBundle: return String(localized: "Applications")
+        case .bundleID: return String(localized: "Matched by bundle identifier")
+        case .groupID: return String(localized: "Matched by app group")
+        case .ownerLedger: return String(localized: "Seen in use while the app was installed")
+        case .dotFolderCatalog: return String(localized: "Hidden folders the app is known to keep")
+        case .libraryCrossEvidence: return String(localized: "Named like a Preferences or Caches identifier")
+        case .appName: return String(localized: "Matched by name, check each one belongs to the app")
+        }
+    }
+
     var rowNote: String {
         switch self {
         case .appBundle: return String(localized: "The application itself")
