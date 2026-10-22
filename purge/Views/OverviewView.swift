@@ -81,16 +81,16 @@ struct OverviewView: View {
     private func diskSummary(_ breakdown: OverviewBreakdown) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
             Text("\(formatStorageBytes(breakdown.usedBytes)) used")
-                .font(AppStyle.Typography.title.weight(.bold))
+                .font(AppStyle.Typography.title.weight(.bold).numbers)
                 .overviewNumberTransition(breakdown.usedBytes, reduceMotion: reduceMotion)
             Text("of \(formatStorageBytes(breakdown.totalBytes))")
-                .font(AppStyle.Typography.rowTitle)
+                .font(AppStyle.Typography.rowTitle.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .overviewNumberTransition(breakdown.totalBytes, reduceMotion: reduceMotion)
             Spacer(minLength: AppStyle.Spacing.small)
             // Right end, above the free part of the bar.
             Text("\(formatStorageBytes(breakdown.freeBytes)) free")
-                .font(AppStyle.Typography.rowTitle)
+                .font(AppStyle.Typography.rowTitle.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .overviewNumberTransition(breakdown.freeBytes, reduceMotion: reduceMotion)
         }
@@ -343,11 +343,11 @@ private struct OverviewCategoryRow: View {
         default:
             HStack(spacing: AppStyle.Spacing.small) {
                 Text(OverviewCategoryStyle.shareText(share))
-                    .font(AppStyle.Typography.metadata)
+                    .font(AppStyle.Typography.metadata.numbers)
                     .foregroundStyle(AppColors.textTertiary)
                     .overviewNumberTransition(share, reduceMotion: reduceMotion)
                 Text(formatStorageBytes(bytes))
-                    .font(AppStyle.Typography.sectionTitle)
+                    .font(AppStyle.Typography.sectionTitle.numbers)
                     .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                     .foregroundStyle(isRecorded ? AppColors.textSecondary : AppColors.textPrimary)
                     .frame(minWidth: 64, alignment: .trailing)
@@ -541,11 +541,11 @@ struct OverviewPlainRow: View {
             }
             Spacer(minLength: AppStyle.Spacing.small)
             Text(OverviewCategoryStyle.shareText(share))
-                .font(AppStyle.Typography.metadata)
+                .font(AppStyle.Typography.metadata.numbers)
                 .foregroundStyle(AppColors.textTertiary)
                 .overviewNumberTransition(share, reduceMotion: reduceMotion)
             Text(formatStorageBytes(bytes))
-                .font(AppStyle.Typography.sectionTitle)
+                .font(AppStyle.Typography.sectionTitle.numbers)
                 .overviewNumberTransition(bytes, reduceMotion: reduceMotion)
                 .frame(minWidth: 64, alignment: .trailing)
         }
@@ -1046,7 +1046,7 @@ struct OverviewCleanSafeConfirmation: View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text("Move \(formatBytes(store.safeRecoverableBytes)) to the Trash?")
-                    .font(AppStyle.Typography.sectionTitle)
+                    .font(AppStyle.Typography.sectionTitle.numbers)
                     .foregroundStyle(AppColors.textPrimary)
                 Text("Only items marked Safe. They rebuild when needed, and you can put anything back from the Trash.")
                     .font(AppStyle.Typography.callout)
@@ -1090,7 +1090,7 @@ struct OverviewCleanSafeConfirmation: View {
             Spacer(minLength: AppStyle.Spacing.small)
             (Text(formatBytes(bytes)).foregroundColor(AppColors.textPrimary)
                 + Text(" of \(formatStorageBytes(breakdown.bytes(for: category)))"))
-                .font(AppStyle.Typography.body)
+                .font(AppStyle.Typography.body.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
                 .lineLimit(1)

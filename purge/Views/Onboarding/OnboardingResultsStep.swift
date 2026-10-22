@@ -166,7 +166,7 @@ struct OnboardingResultsStep: View {
       VStack(alignment: .center, spacing: 32) {
         VStack(alignment: .center, spacing: 0) {
           Text(formatBytes(totalBytes))
-            .font(AppStyle.Typography.display)
+            .font(AppStyle.Typography.display.numbers)
             .monospacedDigit()
             .multilineTextAlignment(.center)
             .accessibilityLabel("\(formatBytes(totalBytes)) ready to clean")

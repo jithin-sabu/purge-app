@@ -835,7 +835,7 @@ struct SettingsView: View {
 
     private func excludedSizeText(_ text: String) -> some View {
         Text(text)
-            .font(scheduleStatusSecondaryFont)
+            .font(scheduleStatusSecondaryFont.numbers)
             .foregroundStyle(AppColors.textSecondary)
             .monospacedDigit()
     }
@@ -852,7 +852,7 @@ struct SettingsView: View {
             if total.isComplete {
                 // A folder `du` couldn't read makes the sum a floor, not a total.
                 Text(total.hasUnmeasured ? String(localized: "At least \(formatBytes(total.bytes))") : formatBytes(total.bytes))
-                    .font(scheduleStatusPrimaryFont)
+                    .font(scheduleStatusPrimaryFont.numbers)
                     .foregroundStyle(AppColors.textPrimary)
                     .monospacedDigit()
             } else {

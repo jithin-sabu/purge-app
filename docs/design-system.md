@@ -70,22 +70,24 @@ Rules:
 
 Every `.font(...)` on text uses `AppStyle.Typography`, adding `.weight(...)` for emphasis. SF Symbols may still size their glyph with `.system(size:)`.
 
+Text is set in [Onest](https://github.com/googlefonts/onest), bundled as `purge/Resources/Fonts/OnestText.ttf` under the SIL Open Font License (`Onest-OFL.txt`). The bundled copy has its digits removed, so a number inside ordinary text, such as "Last used 6 months ago", is drawn by the system font.
+
 | Style | Spec | Use for |
 | --- | --- | --- |
-| `display` | 56 bold, rounded | Freed bytes on the celebration |
-| `displaySmall` | 36 bold, rounded | Large totals |
-| `title` | 26 semibold, rounded | Onboarding and empty-state headings |
-| `pageTitle` | 20 semibold, rounded | Page headers |
-| `sectionTitle` | 15 semibold | Sheet titles, card headers, large buttons |
-| `headline` | 13 semibold | Group headers, regular buttons |
-| `body` | 13 regular | Paragraphs, labels |
-| `rowTitle` | 13 medium | List rows, menu rows |
-| `callout` | 12 regular | Helper text, small buttons |
-| `metadata` / `metadataEmphasis` | 11 regular / medium | Sizes, dates, paths |
-| `micro` | 10 semibold | Badges, count pills |
-| `iconLabel` | 8 semibold | File-type labels over a row icon |
+| `display` | SF Rounded 56 bold | Freed bytes on the celebration |
+| `displaySmall` | SF Rounded 36 bold | Large totals |
+| `title` | Onest 26 semibold | Onboarding and empty-state headings |
+| `pageTitle` | Onest 20 semibold | Page headers |
+| `sectionTitle` | Onest 15 semibold | Sheet titles, card headers, large buttons |
+| `headline` | Onest 13 semibold | Group headers, regular buttons |
+| `body` | Onest 13 regular | Paragraphs, labels |
+| `rowTitle` | Onest 13 medium | List rows, menu rows |
+| `callout` | Onest 12 regular | Helper text, small buttons |
+| `metadata` / `metadataEmphasis` | Onest 11 regular / medium | Sizes, dates, paths |
+| `micro` | Onest 10 semibold | Badges, count pills |
+| `iconLabel` | Onest 8 semibold | File-type labels over a row icon |
 
-SF Rounded is for result numbers and titles only. Size numbers use `.monospacedDigit()`.
+Sizes, units and percentages are set in SF Rounded: add `.numbers` to the style, as in `.font(AppStyle.Typography.metadata.numbers)`, and keep `.monospacedDigit()` so figures don't shift as they change. When a line is mostly a figure, such as "285.9 GB used of 494.4 GB", the whole line takes `.numbers`.
 
 ## Shape and spacing
 

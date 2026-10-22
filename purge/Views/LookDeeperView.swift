@@ -150,7 +150,7 @@ struct LookDeeperView: View {
       if findings.isWorthLeadingWith {
         VStack(spacing: 0) {
           Text(formatBytes(findings.bytes))
-            .font(AppStyle.Typography.display)
+            .font(AppStyle.Typography.display.numbers)
             .monospacedDigit()
           Text("more to clean, from places that were locked")
             .font(AppStyle.Typography.sectionTitle.weight(.medium))

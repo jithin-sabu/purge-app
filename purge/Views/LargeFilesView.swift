@@ -1093,7 +1093,7 @@ private struct LargeFileRow: View {
             Spacer(minLength: 12)
 
             Text(file.formattedSize)
-                .font(AppStyle.Typography.metadata.weight(.medium))
+                .font(AppStyle.Typography.metadata.weight(.medium).numbers)
                 .foregroundStyle(AppColors.textPrimary)
                 .monospacedDigit()
         }
@@ -1406,7 +1406,7 @@ struct LargeFileDeletionConfirmSheet: View {
 
             HStack(spacing: AppStyle.Spacing.small) {
                 Text("Freeing \(formatBytes(totalBytes))")
-                    .font(AppStyle.Typography.metadataEmphasis)
+                    .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
 
                 Spacer()
@@ -1465,7 +1465,7 @@ struct LargeFileDeletionConfirmSheet: View {
             Spacer(minLength: AppStyle.Spacing.xSmall)
 
             Text(file.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
         }
@@ -1634,7 +1634,7 @@ struct DuplicateCleanupSheet: View {
                     .truncationMode(.middle)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
                 Text("\(formatBytes(set.copies.first?.sizeBytes ?? 0)) each")
-                    .font(AppStyle.Typography.metadata)
+                    .font(AppStyle.Typography.metadata.numbers)
                     .foregroundStyle(AppColors.textSecondary)
             }
             .padding(.horizontal, AppStyle.Spacing.small)

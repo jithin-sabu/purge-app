@@ -170,7 +170,7 @@ struct AboutView: View {
                 .accessibilityHidden(true)
 
             Text(formatBytes(store.totalMovedToTrashBytes))
-                .font(AppStyle.Typography.displaySmall)
+                .font(AppStyle.Typography.displaySmall.numbers)
                 .monospacedDigit()
                 .multilineTextAlignment(.center)
                 .accessibilityLabel("Lifetime moved to trash, \(formatBytes(store.totalMovedToTrashBytes))")

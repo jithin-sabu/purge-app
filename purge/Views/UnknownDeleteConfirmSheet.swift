@@ -51,7 +51,7 @@ struct UnknownDeleteConfirmSheet: View {
 
             HStack(spacing: AppStyle.Spacing.small) {
                 Text("Freeing \(formatBytes(totalBytes))")
-                    .font(AppStyle.Typography.metadataEmphasis)
+                    .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
 
                 Spacer()
@@ -99,7 +99,7 @@ struct UnknownDeleteConfirmSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(item.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
         }

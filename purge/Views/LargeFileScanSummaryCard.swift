@@ -81,7 +81,7 @@ struct LargeFileScanSummaryCard: View {
                     .foregroundStyle(AppColors.textPrimary)
                 Spacer(minLength: AppStyle.Spacing.xSmall)
                 Text(Self.countText(count: totalCount, bytes: totalBytes))
-                    .font(AppStyle.Typography.callout)
+                    .font(AppStyle.Typography.callout.numbers)
                     .foregroundStyle(AppColors.textSecondary)
                     .monospacedDigit()
             }
@@ -173,7 +173,7 @@ struct LargeFileScanSummaryCard: View {
             .lineLimit(1)
             Spacer(minLength: AppStyle.Spacing.xSmall)
             Text(value)
-                .font(AppStyle.Typography.callout)
+                .font(AppStyle.Typography.callout.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
                 .lineLimit(1)

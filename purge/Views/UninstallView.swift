@@ -469,7 +469,7 @@ struct UninstallView: View {
                 .font(AppStyle.Typography.body.weight(.medium))
             if let count {
                 Text("\(count)")
-                    .font(AppStyle.Typography.metadata)
+                    .font(AppStyle.Typography.metadata.numbers)
                     .monospacedDigit()
                     .foregroundStyle(isOn ? AppColors.textSecondary : AppColors.textTertiary)
                     .contentTransition(reduceMotion ? .identity : .numericText())
@@ -820,7 +820,7 @@ private struct UninstallItemRow: View {
             Spacer(minLength: AppStyle.Spacing.xSmall)
 
             Text(item.formattedSize)
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
         }
@@ -930,7 +930,7 @@ private struct AppListRow: View {
             }
 
             Text(isSizePending ? "…" : formatBytes(totalBytes))
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
                 .contentTransition(.numericText())
@@ -1036,7 +1036,7 @@ private struct AppTile: View {
                     .truncationMode(.middle)
 
                 Text(isSizePending ? "…" : formatBytes(totalBytes))
-                    .font(AppStyle.Typography.metadata)
+                    .font(AppStyle.Typography.metadata.numbers)
                     .foregroundStyle(AppColors.textSecondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -1191,7 +1191,7 @@ struct UninstallReviewSheet: View {
                 }
                 Spacer()
                 Text(formatBytes(appPlan.wrappedValue.selectedBytes))
-                    .font(AppStyle.Typography.metadataEmphasis)
+                    .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
                     .monospacedDigit()
             }
@@ -1228,7 +1228,7 @@ struct UninstallReviewSheet: View {
     private var footer: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
 
             Spacer()
@@ -1304,7 +1304,7 @@ struct OrphanReviewSheet: View {
     private var footer: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
 
             Spacer()
@@ -1395,7 +1395,7 @@ struct RemovedAppLeftoverSheet: View {
     private var footer: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
 
             Spacer()

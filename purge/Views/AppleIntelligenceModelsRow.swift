@@ -259,7 +259,7 @@ struct AppleIntelligenceBreakdown: View {
                 .foregroundStyle(AppColors.textPrimary)
             Spacer(minLength: AppStyle.Spacing.small)
             Text(value)
-                .font(emphasized ? AppStyle.Typography.callout.weight(.semibold) : AppStyle.Typography.callout)
+                .font((emphasized ? AppStyle.Typography.callout.weight(.semibold) : AppStyle.Typography.callout).numbers)
                 .foregroundStyle(emphasized ? AppColors.textPrimary : AppColors.textSecondary)
                 .monospacedDigit()
         }

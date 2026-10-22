@@ -148,7 +148,7 @@ struct SettingsGuideView: View {
                 ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
                     HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
                         Text("\(index + 1).")
-                            .font(AppStyle.Typography.callout.weight(.semibold))
+                            .font(AppStyle.Typography.callout.weight(.semibold).numbers)
                             .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
                         Text(step)

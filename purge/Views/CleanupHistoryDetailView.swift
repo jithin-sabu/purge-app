@@ -131,7 +131,7 @@ struct CleanupHistoryDetailView: View {
 
             if item.sizeBytes > 0 {
                 Text(formatBytes(item.sizeBytes))
-                    .font(AppStyle.Typography.rowTitle)
+                    .font(AppStyle.Typography.rowTitle.numbers)
                     .foregroundStyle(AppColors.textSecondary)
             }
         }

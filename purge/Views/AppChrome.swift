@@ -148,7 +148,7 @@ struct AppSectionPageHeader<Trailing: View>: View {
 
                 if let subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(AppStyle.Typography.metadata)
+                        .font(AppStyle.Typography.metadata.numbers)
                         .foregroundStyle(AppColors.textSecondary)
                         .monospacedDigit()
                         .contentTransition(reduceMotion ? .identity : .numericText())
@@ -460,6 +460,7 @@ struct AnimatedDeleteActionLabel: View {
             HStack(spacing: 0) {
                 Text(" (")
                 Text(formatBytes(selectedBytes))
+                    .font(AppStyle.Typography.headline.numbers)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
                 Text(")")
@@ -597,7 +598,7 @@ struct SafeCleanupCelebrationOverlay: View {
 
                     VStack(spacing: AppStyle.Spacing.small) {
                         Text(formatBytes(displayedBytes))
-                            .font(AppStyle.Typography.display)
+                            .font(AppStyle.Typography.display.numbers)
                             .foregroundStyle(AppColors.textPrimary)
                             .monospacedDigit()
                             .contentTransition(reduceMotion ? .identity : .numericText())
@@ -1054,7 +1055,7 @@ private struct SupportNudgeCard: View {
                 .accessibilityHidden(true)
 
             Text("Over \(formatBytes(milestoneBytes)) cleaned up with Purge")
-                .font(AppStyle.Typography.rowTitle)
+                .font(AppStyle.Typography.rowTitle.numbers)
                 .foregroundStyle(AppColors.textPrimary)
 
             Text("·")
@@ -1854,7 +1855,7 @@ struct AppNavRow: View {
             EmptyView()
         case .value(let text, let isDimmed):
             Text(LocalizedStringKey(text))
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .monospacedDigit()
                 .foregroundStyle(isDimmed ? AppColors.textTertiary.opacity(0.5) : AppColors.textTertiary)
                 .lineLimit(1)

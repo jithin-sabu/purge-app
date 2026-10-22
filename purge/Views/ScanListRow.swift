@@ -67,7 +67,7 @@ struct ScanListRow<Footer: View>: View {
                 } loaded: {
                     VStack(alignment: .trailing, spacing: 8) {
                         Text(formattedSize)
-                            .font(AppStyle.Typography.metadata)
+                            .font(AppStyle.Typography.metadata.numbers)
                             .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
 

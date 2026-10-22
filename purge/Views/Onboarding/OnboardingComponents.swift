@@ -216,7 +216,7 @@ struct OnboardingResultsCategoryRow: View {
       Spacer(minLength: AppStyle.Spacing.xxSmall)
 
       Text(formattedSize)
-        .font(AppStyle.Typography.callout)
+        .font(AppStyle.Typography.callout.numbers)
         .foregroundStyle(AppColors.textSecondary)
         .monospacedDigit()
         .frame(width: Self.sizeColumnWidth, alignment: .trailing)
