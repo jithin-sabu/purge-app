@@ -1074,6 +1074,38 @@ nonisolated final class DevScanner {
 
     private static let maxDirectoryEntriesBeforeSkip = 2000
 
+    /// Whether a root still needs walking to `depth`. `~/Developer` and `~/developer`
+    /// are one folder on the default case-insensitive volume, and a root can be a
+    /// link to another, so a folder already walked as deep is skipped, and the first
+    /// spelling listed is the one walked (#175). A root that links to home still gets
+    /// the deeper walk home itself never has. A root whose identity can't be read is
+    /// walked, as before.
+    nonisolated static func shouldWalk(
+        _ root: URL,
+        toDepth depth: Int,
+        walkedDepths: inout [FileIdentity: Int]
+    ) -> Bool {
+        guard let identity = FileIdentity(path: root.path) else { return true }
+        if let walked = walkedDepths[identity], walked >= depth { return false }
+        walkedDepths[identity] = depth
+        return true
+    }
+
+    /// Keeps the first of each project found more than once: by path, then by file
+    /// identity, since two spellings can name one folder. The home walk and a root
+    /// can reach a project as `~/developer/app` and `~/Developer/app`, and a root
+    /// that links into another reaches its projects twice (#175). A project whose
+    /// identity can't be read is kept, as before.
+    nonisolated static func firstOfEachProject(_ roots: [(URL, [ProjectType])]) -> [(URL, [ProjectType])] {
+        var seenPaths = Set<String>()
+        var seenFolders = Set<FileIdentity>()
+        return roots.filter { root in
+            guard seenPaths.insert(root.0.path).inserted else { return false }
+            guard let identity = FileIdentity(path: root.0.path) else { return true }
+            return seenFolders.insert(identity).inserted
+        }
+    }
+
     private func discoverProjects(
         access: ScanAccess,
         maxDepth: Int = 4,
@@ -1246,6 +1278,7 @@ nonisolated final class DevScanner {
             }
         }
 
+        var walkedDepths: [FileIdentity: Int] = [:]
         for root in roots {
             // A limited scan resolves the root with `readlink` alone first, so a
             // root that is a link into a protected folder is never opened.
@@ -1261,17 +1294,12 @@ nonisolated final class DevScanner {
             // to avoid scanning deep into personal folders like Documents recursively
             // since those are already covered by their own dedicated root entries above
             let effectiveMaxDepth = (root.path == home.path) ? 1 : maxDepth
+            // After the checks above, since `stat` follows a link.
+            guard Self.shouldWalk(root, toDepth: effectiveMaxDepth, walkedDepths: &walkedDepths) else { continue }
             walk(directory: root, realPath: realRoot, depth: 0, maxDepth: effectiveMaxDepth)
         }
 
-        // Deduplicate by project root path, keeping the first occurrence
-        var seen = Set<String>()
-        discoveredRoots = discoveredRoots.filter { root in
-            guard !seen.contains(root.0.path) else { return false }
-            seen.insert(root.0.path)
-            return true
-        }
-
+        discoveredRoots = Self.firstOfEachProject(discoveredRoots)
         discoveredRoots.sort { $0.0.path.count < $1.0.path.count }
 
         ScanPhaseTiming.finish(

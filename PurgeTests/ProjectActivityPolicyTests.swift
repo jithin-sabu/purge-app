@@ -276,6 +276,16 @@ struct ProjectInUseTests {
         #expect(!inUse(fixture.url("project"), cwds: [fixture.url("project-2").path]))
     }
 
+    @Test("a process in the project under another capitalisation counts (#175)")
+    func otherCapitalisation() throws {
+        let fixture = try ActivityFixture(folders: ["Project/src"])
+        defer { fixture.cleanUp() }
+        let project = fixture.url("Project")
+        #expect(inUse(project, cwds: [fixture.url("project").path]))
+        #expect(inUse(project, cwds: [fixture.url("PROJECT/src").path]))
+        #expect(!inUse(project, cwds: [fixture.url("project-2").path]))
+    }
+
     @Test("a project reached through a link matches a process in its real folder")
     func resolvedSpelling() throws {
         let fixture = try ActivityFixture(folders: ["real"])
