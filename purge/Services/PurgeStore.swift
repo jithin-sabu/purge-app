@@ -475,10 +475,8 @@ final class PurgeStore: ObservableObject {
 
     private let cacheScanner: CacheScanner
     private let devScanner: DevScanner
-    /// Access and scan results for App Caches and Dev Tools. `live` outside tests.
+    /// Access and scan results for App Caches, Dev Tools and Large Files. `live` outside tests.
     let scanSources: ScanSources
-    private let largeFileScanner = LargeFileScanner()
-    private let aiModelScanner = AIModelScanner()
     private let uninstallScanner = AppUninstallScanner()
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
@@ -510,6 +508,9 @@ final class PurgeStore: ObservableObject {
     private var scanGeneration = 0
     private var largeFileScanGeneration = 0
     private var hasCompletedLargeFileScan = false
+    /// The rows the saved Large Files record counted, by id, from the last scan this
+    /// session that ran to the end. Empty while the record is from an earlier launch.
+    private var recordedLargeFileSizes: [String: Int64] = [:]
     private var installedAppsScanGeneration = 0
     private var orphanScanGeneration = 0
     private var commandLineToolScanGeneration = 0
@@ -562,6 +563,8 @@ final class PurgeStore: ObservableObject {
                 cacheScanner: cacheScanner,
                 devScanner: devScanner,
                 gitChecker: gitChecker,
+                largeFileScanner: LargeFileScanner(),
+                aiModelScanner: AIModelScanner(),
                 everythingElseMeasurer: EverythingElseMeasurer()
             )
         self.defaults = defaults
@@ -1676,6 +1679,11 @@ final class PurgeStore: ObservableObject {
         largeFileScanGeneration += 1
         let generation = largeFileScanGeneration
         isScanningLargeFiles = true
+        // Cleared for every scan, finished again only by a stream that ran to the
+        // end. A rescan that Stop cuts short then reads as unfinished: the Overview
+        // does not count its partial list, the saved record keeps the last full
+        // figures, and opening the tab scans again (#180).
+        hasCompletedLargeFileScan = false
         largeFiles = []
         largeFileScanSummary = nil
         largeFileSelection.ids.removeAll()
@@ -1722,8 +1730,8 @@ final class PurgeStore: ObservableObject {
         // return cancels it. Models live outside the walked folders, so the
         // exclusion check is per row.
         let access: ScanAccess = hasFullDiskAccess ? .full : .limited
-        let looseWeights = aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: access, pass: .looseWeights)
-        for await model in aiModelScanner.scanStream(minBytes: minBytes, staleDays: staleDays, access: access, pass: .knownStores) {
+        let looseWeights = scanSources.aiModels(minBytes, staleDays, access, .looseWeights)
+        for await model in scanSources.aiModels(minBytes, staleDays, access, .knownStores) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
             guard !ExcludedPathsStore.isExcluded(model.path) else { continue }
             collected.append(model)
@@ -1731,7 +1739,7 @@ final class PurgeStore: ObservableObject {
         publish()
 
         var summary: LargeFileScanSummary?
-        for await event in largeFileScanner.scanEvents(minBytes: minBytes, staleDays: staleDays) {
+        for await event in scanSources.largeFiles(minBytes, staleDays) {
             guard largeFileScanGeneration == generation, !Task.isCancelled else { return }
             switch event {
             case .file(let file):
@@ -1757,6 +1765,7 @@ final class PurgeStore: ObservableObject {
         largeFileScanSummary = summary
         hasCompletedLargeFileScan = true
         stampScanRecords([.largeFiles])
+        recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, $0.sizeBytes) }, uniquingKeysWith: { first, _ in first })
         startDuplicateScan(for: largeFiles, generation: generation)
     }
 
@@ -1934,16 +1943,7 @@ final class PurgeStore: ObservableObject {
             // later scan could never surface it again. Rows that deleted
             // partially stay listed and stay selected, so a retry can finish the
             // job (the already-trashed manifest is skipped as non-existent).
-            let clearedRowIDs = Set(
-                largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) }.map(\.id)
-            )
-            withAnimation(.easeInOut(duration: 0.2)) {
-                largeFiles.removeAll { clearedRowIDs.contains($0.id) }
-            }
-            largeFileSelection.ids.subtract(clearedRowIDs)
-            // A group of two that just lost a member is no longer a duplicate;
-            // leaving the survivor badged "2 copies" would misdescribe the disk.
-            largeFileDuplicates.removeFiles(ids: clearedRowIDs)
+            removeClearedLargeFileRows(largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) })
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,
@@ -1957,6 +1957,33 @@ final class PurgeStore: ObservableObject {
             manualDeletionSession = nil
             errorMessage = String(localized: "Unable to delete the selected files. Please try again.")
         }
+    }
+
+    /// Takes rows whose files are now in the Trash off the tab. While the area is
+    /// settled, `categoryInputsDidChange` brings the saved record in step with the
+    /// rows left. A stopped rescan leaves the area unsettled with its partial rows
+    /// still listed (#180), and the Overview shows the saved record meanwhile, so
+    /// the trashed rows come off that record here or it would keep counting bytes
+    /// that are gone until the next full scan.
+    ///
+    /// Only rows the record counted come off it, at the size it counted them. A row
+    /// the stopped rescan was first to find was never in the record, and taking it
+    /// off would leave the figure too low. When the record is from an earlier launch,
+    /// nothing is known about its rows and it is left alone.
+    func removeClearedLargeFileRows(_ rows: [LargeFile]) {
+        let ids = Set(rows.map(\.id))
+        withAnimation(.easeInOut(duration: 0.2)) {
+            largeFiles.removeAll { ids.contains($0.id) }
+        }
+        largeFileSelection.ids.subtract(ids)
+        // A group of two that just lost a member is no longer a duplicate;
+        // leaving the survivor badged "2 copies" would misdescribe the disk.
+        largeFileDuplicates.removeFiles(ids: ids)
+        let recordedSizes = ids.compactMap { recordedLargeFileSizes.removeValue(forKey: $0) }
+        guard !isSettled(.largeFiles), !recordedSizes.isEmpty, var record = scanRecords[.largeFiles] else { return }
+        record.bytes = max(0, record.bytes - recordedSizes.reduce(0, +))
+        record.count = max(0, record.count - recordedSizes.count)
+        saveScanRecord(record, for: .largeFiles)
     }
 
     // MARK: - Uninstaller (issue #45)

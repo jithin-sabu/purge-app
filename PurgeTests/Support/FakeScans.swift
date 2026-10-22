@@ -14,6 +14,7 @@ final class FakeScans {
     var holdsGeneral = false
     var holdsDeveloper = false
     var holdsProjects = false
+    var holdsLargeFiles = false
     var holdsGitStatus = false
     var holdsFullAccessSteps = false
     var holdsEverythingElse = false
@@ -28,6 +29,11 @@ final class FakeScans {
     /// Yielded by project discovery as soon as it starts. A held discovery then
     /// stays open until it is let go.
     var projectEvents: [DeveloperScanEvent] = []
+    /// Yielded by a Large Files walk as soon as it starts. A held walk then stays
+    /// open until it is let go; one that is not held ends with `.finished`.
+    var largeFileEvents: [LargeFileScanEvent] = []
+    /// How many Large Files walks have started. The AI model passes list nothing.
+    private(set) var largeFileScanCount = 0
     /// What the git status check answers, by standardized path, once it returns.
     /// A path with no answer comes back clean, as a folder outside any repository does.
     var gitAnswers: [String: GitWorktreeStatus] = [:]
@@ -46,6 +52,7 @@ final class FakeScans {
     private var heldGeneral: [AsyncStream<CacheScanEvent>.Continuation] = []
     private var heldDeveloper: [AsyncStream<DeveloperScanEvent>.Continuation] = []
     private var heldProjects: [AsyncStream<DeveloperScanEvent>.Continuation] = []
+    private var heldLargeFiles: [AsyncStream<LargeFileScanEvent>.Continuation] = []
     private var heldGitStatus: [CheckedContinuation<Void, Never>] = []
     private var heldSteps: [CheckedContinuation<Void, Never>] = []
     private var heldEverythingElse: [AsyncStream<EverythingElseMeasureEvent>.Continuation] = []
@@ -78,6 +85,16 @@ final class FakeScans {
         held.forEach { $0.finish() }
     }
 
+    /// Lets every held Large Files walk run to its end.
+    func finishHeldLargeFiles() {
+        let held = heldLargeFiles
+        heldLargeFiles = []
+        for continuation in held {
+            continuation.yield(.finished(LargeFileScanSummary(minBytes: 0)))
+            continuation.finish()
+        }
+    }
+
     /// Sends more events to a held Everything else walk.
     func yieldEverythingElse(_ events: [EverythingElseMeasureEvent]) {
         for continuation in heldEverythingElse {
@@ -104,6 +121,7 @@ final class FakeScans {
         holdsGeneral = false
         holdsDeveloper = false
         holdsProjects = false
+        holdsLargeFiles = false
         holdsGitStatus = false
         holdsFullAccessSteps = false
         holdsEverythingElse = false
@@ -111,6 +129,7 @@ final class FakeScans {
         finishHeldGeneral()
         heldDeveloper.forEach { $0.finish() }
         finishHeldProjects()
+        finishHeldLargeFiles()
         finishHeldGitStatus()
         finishHeldSteps()
         suite.remove()
@@ -150,6 +169,24 @@ final class FakeScans {
                 } else {
                     continuation.finish()
                 }
+                return stream
+            },
+            largeFiles: { minBytes, _ in
+                self.largeFileScanCount += 1
+                self.events.append("largeFiles")
+                let (stream, continuation) = AsyncStream<LargeFileScanEvent>.makeStream()
+                self.largeFileEvents.forEach { continuation.yield($0) }
+                if self.holdsLargeFiles {
+                    self.heldLargeFiles.append(continuation)
+                } else {
+                    continuation.yield(.finished(LargeFileScanSummary(minBytes: minBytes)))
+                    continuation.finish()
+                }
+                return stream
+            },
+            aiModels: { _, _, _, _ in
+                let (stream, continuation) = AsyncStream<LargeFile>.makeStream()
+                continuation.finish()
                 return stream
             },
             fullAccessStep: { step, _ in

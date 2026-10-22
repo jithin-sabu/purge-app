@@ -14,6 +14,10 @@ struct ScanSources {
     var developer: (ScanAccess) -> AsyncStream<DeveloperScanEvent>
     /// Project discovery, which carries Dev Tools on after `developer` ends.
     var projects: (ScanAccess) -> AsyncStream<DeveloperScanEvent>
+    /// The Large Files walk, with its size and age thresholds. Ends with `.finished`.
+    var largeFiles: (_ minBytes: Int64, _ staleDays: Int) -> AsyncStream<LargeFileScanEvent>
+    /// The AI model rows Large Files lists ahead of and beside the walk (#157).
+    var aiModels: (_ minBytes: Int64, _ staleDays: Int, ScanAccess, AIModelScanner.Pass) -> AsyncStream<LargeFile>
     /// Runs a Large Files, apps or leftovers step for the queue. Nil runs the real scan.
     var fullAccessStep: ((ScanStep, _ forced: Bool) async -> Void)?
     /// The Everything else walk (#220), with the access it may read with.
@@ -29,6 +33,8 @@ struct ScanSources {
         cacheScanner: CacheScanner,
         devScanner: DevScanner,
         gitChecker: GitStatusChecker,
+        largeFileScanner: LargeFileScanner,
+        aiModelScanner: AIModelScanner,
         everythingElseMeasurer: EverythingElseMeasurer
     ) -> ScanSources {
         ScanSources(
@@ -36,6 +42,8 @@ struct ScanSources {
             general: { cacheScanner.scanGeneralStream(access: $0) },
             developer: { devScanner.scanDevToolsStream(access: $0) },
             projects: { devScanner.discoverProjectsStream(access: $0) },
+            largeFiles: { largeFileScanner.scanEvents(minBytes: $0, staleDays: $1) },
+            aiModels: { aiModelScanner.scanStream(minBytes: $0, staleDays: $1, access: $2, pass: $3) },
             fullAccessStep: nil,
             everythingElse: { everythingElseMeasurer.measureStream(access: $0) },
             commandLineTools: { await CommandLineToolScanner().scan() },
