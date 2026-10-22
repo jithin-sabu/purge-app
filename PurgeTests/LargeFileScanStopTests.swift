@@ -9,6 +9,7 @@ import Testing
 @Suite("A stopped Large Files scan does not count as finished")
 struct LargeFileScanStopTests {
 
+    /// Stop during the first scan of a session: nothing finished, so nothing is recorded.
     @Test
     func aFirstScanStoppedMidStreamWritesNoRecord() async {
         let fake = FakeScans()
@@ -113,6 +114,45 @@ struct LargeFileScanStopTests {
         #expect(ScanRecordStore(defaults: fake.defaults).record(for: .largeFiles) == adjusted)
     }
 
+    /// A stopped rescan can list a row the last full scan never saw. The saved record
+    /// never counted it, so trashing it must leave the record alone, while a row the
+    /// record did count still comes off at the size it was counted.
+    @Test
+    func aRowTheRecordNeverCountedLeavesTheRecordAlone() async {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        let takes = (0..<25).map { file("/Users/someone/Movies/take-\($0).mov", bytes: 100_000_000 + Int64($0)) }
+        let takeBytes = takes.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        fake.largeFileEvents = takes.map { .file($0) }
+        let store = fake.makeStore()
+
+        await store.scanLargeFiles()
+        let finished = store.scanRecords[.largeFiles]
+        #expect(finished?.bytes == takeBytes)
+
+        // The rescan finds a new file first, then 24 of the old rows, and is stopped
+        // once those 25 are published.
+        let newFile = file("/Users/someone/Downloads/new-take.mov", bytes: 5_000_000_000)
+        fake.holdsLargeFiles = true
+        fake.largeFileEvents = [LargeFileScanEvent.file(newFile)] + takes.prefix(24).map { LargeFileScanEvent.file($0) }
+        let rescan = Task { await store.scanLargeFiles() }
+        #expect(await eventually { fake.largeFileScanCount == 2 && store.largeFiles.count == 25 })
+        rescan.cancel()
+        await rescan.value
+        #expect(!store.isSettled(.largeFiles))
+
+        store.removeClearedLargeFileRows([newFile])
+        #expect(store.largeFiles.count == 24)
+        #expect(store.scanRecords[.largeFiles] == finished)
+
+        store.removeClearedLargeFileRows([takes[0]])
+        #expect(store.largeFiles.count == 23)
+        #expect(store.scanRecords[.largeFiles]?.bytes == takeBytes - takes[0].sizeBytes)
+        #expect(store.scanRecords[.largeFiles]?.count == 24)
+    }
+
+    /// A video row at `path`. Nothing exists at the path, so nothing could ever move.
     private func file(_ path: String, bytes: Int64) -> LargeFile {
         LargeFile(path: URL(fileURLWithPath: path), sizeBytes: bytes, lastUsed: Date(), category: .video)
     }

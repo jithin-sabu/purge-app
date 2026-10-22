@@ -508,6 +508,9 @@ final class PurgeStore: ObservableObject {
     private var scanGeneration = 0
     private var largeFileScanGeneration = 0
     private var hasCompletedLargeFileScan = false
+    /// The rows the saved Large Files record counted, by id, from the last scan this
+    /// session that ran to the end. Empty while the record is from an earlier launch.
+    private var recordedLargeFileSizes: [String: Int64] = [:]
     private var installedAppsScanGeneration = 0
     private var orphanScanGeneration = 0
     private var commandLineToolScanGeneration = 0
@@ -1762,6 +1765,7 @@ final class PurgeStore: ObservableObject {
         largeFileScanSummary = summary
         hasCompletedLargeFileScan = true
         stampScanRecords([.largeFiles])
+        recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, $0.sizeBytes) }, uniquingKeysWith: { first, _ in first })
         startDuplicateScan(for: largeFiles, generation: generation)
     }
 
@@ -1961,6 +1965,11 @@ final class PurgeStore: ObservableObject {
     /// still listed (#180), and the Overview shows the saved record meanwhile, so
     /// the trashed rows come off that record here or it would keep counting bytes
     /// that are gone until the next full scan.
+    ///
+    /// Only rows the record counted come off it, at the size it counted them. A row
+    /// the stopped rescan was first to find was never in the record, and taking it
+    /// off would leave the figure too low. When the record is from an earlier launch,
+    /// nothing is known about its rows and it is left alone.
     func removeClearedLargeFileRows(_ rows: [LargeFile]) {
         let ids = Set(rows.map(\.id))
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -1970,9 +1979,10 @@ final class PurgeStore: ObservableObject {
         // A group of two that just lost a member is no longer a duplicate;
         // leaving the survivor badged "2 copies" would misdescribe the disk.
         largeFileDuplicates.removeFiles(ids: ids)
-        guard !isSettled(.largeFiles), var record = scanRecords[.largeFiles] else { return }
-        record.bytes = max(0, record.bytes - rows.reduce(Int64(0)) { $0 + $1.sizeBytes })
-        record.count = max(0, record.count - rows.count)
+        let recordedSizes = ids.compactMap { recordedLargeFileSizes.removeValue(forKey: $0) }
+        guard !isSettled(.largeFiles), !recordedSizes.isEmpty, var record = scanRecords[.largeFiles] else { return }
+        record.bytes = max(0, record.bytes - recordedSizes.reduce(0, +))
+        record.count = max(0, record.count - recordedSizes.count)
         saveScanRecord(record, for: .largeFiles)
     }
 
