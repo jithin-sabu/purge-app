@@ -1,4 +1,5 @@
 import Foundation
+import ServiceManagement
 import Testing
 @testable import Purge
 
@@ -8,11 +9,26 @@ struct StartupPreferenceStoreTests {
 
     private let suite = ThrowawayDefaults()
 
+    /// The switch keeps showing what macOS will do: only an enabled item launches
+    /// Purge at login. The check that leaving the menu bar runs counts an item
+    /// still awaiting approval as well, since that one is removable (#177).
+    @Test("A login item awaiting approval is a login item, though not an enabled one")
+    func loginItemAwaitingApprovalStillCounts() {
+        #expect(LoginItemRegistrar.hasLoginItem(status: .enabled))
+        #expect(LoginItemRegistrar.hasLoginItem(status: .requiresApproval))
+        #expect(!LoginItemRegistrar.hasLoginItem(status: .notRegistered))
+        #expect(!LoginItemRegistrar.hasLoginItem(status: .notFound))
+    }
+
     private final class FakeLoginItem: LoginItemControlling {
         var isRegistered = false
+        /// Registered, but macOS is still waiting for the user to approve it.
+        var awaitsApproval = false
         var registerSucceeds = true
         var unregisterSucceeds = true
         private(set) var unregisterCount = 0
+
+        var isRegisteredOrAwaitingApproval: Bool { isRegistered || awaitsApproval }
 
         @discardableResult
         func register() -> Bool {
@@ -25,6 +41,7 @@ struct StartupPreferenceStoreTests {
             unregisterCount += 1
             guard unregisterSucceeds else { return }
             isRegistered = false
+            awaitsApproval = false
         }
     }
 
@@ -198,6 +215,30 @@ struct StartupPreferenceStoreTests {
         #expect(policy.applied == [false])
         #expect(!store.launchesAtLogin)
         #expect(loginItem.unregisterCount == 1)
+    }
+
+    /// An item macOS is still waiting to approve launches nothing, so the switch
+    /// shows Off, but it is a login item all the same: left behind on leaving the
+    /// menu bar, it would open a window at every login once approved (#177).
+    @Test("Leaving the menu bar also removes a login item awaiting approval")
+    func leavingTheMenuBarRemovesAnItemAwaitingApproval() {
+        let defaults = suite.defaults
+        defaults.set(true, forKey: "startup.showMenuBarIcon")
+        let loginItem = FakeLoginItem()
+        loginItem.awaitsApproval = true
+
+        let store = StartupPreferenceStore(
+            userDefaults: defaults,
+            loginItem: loginItem,
+            applyDockPolicy: { _ in }
+        )
+        #expect(!store.launchesAtLogin)
+
+        store.setShowsMenuBarIcon(false)
+
+        #expect(!store.showsMenuBarIcon)
+        #expect(loginItem.unregisterCount == 1)
+        #expect(!loginItem.isRegisteredOrAwaitingApproval)
     }
 
     /// Picks up a login item added in System Settings since the store last looked.

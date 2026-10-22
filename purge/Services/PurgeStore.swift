@@ -824,13 +824,27 @@ final class PurgeStore: ObservableObject {
     /// review closes with an alert, and `RemovedAppMonitor` reads this flag as the
     /// sheet closes to put the review back at the front of its queue, so it opens
     /// again once the clean ends. A review dismissed that way can't be reopened
-    /// by hand: its handoff record was discarded when it was first shown (#173).
+    /// by hand, so the monitor keeps its handoff record until the second showing
+    /// is over (#173).
     private(set) var removedAppReviewHeldForAnotherClean = false
 
     /// Reads and clears `removedAppReviewHeldForAnotherClean`.
     func takeRemovedAppReviewHeldForAnotherClean() -> Bool {
         defer { removedAppReviewHeldForAnotherClean = false }
         return removedAppReviewHeldForAnotherClean
+    }
+
+    /// Set when the last leftover clean failed as a whole, before anything was
+    /// reported, and its alert asked to try again. A removed-app review is the
+    /// one leftover clean that can't be tried again by hand, so
+    /// `RemovedAppMonitor` reads this as the session clears and shows the
+    /// review again once the alert is dismissed (#177).
+    private(set) var leftoverCleanupFailed = false
+
+    /// Reads and clears `leftoverCleanupFailed`.
+    func takeLeftoverCleanupFailure() -> Bool {
+        defer { leftoverCleanupFailed = false }
+        return leftoverCleanupFailed
     }
 
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
@@ -2348,6 +2362,7 @@ final class PurgeStore: ObservableObject {
 
         isDeleting = true
         errorMessage = nil
+        leftoverCleanupFailed = false
         defer {
             isDeleting = false
             progressPoller.cancel()
@@ -2387,6 +2402,8 @@ final class PurgeStore: ObservableObject {
             if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
             recordCleanup(report, trigger: .manual, source: .leftovers)
         } catch {
+            // Before the session clears: the monitor reads this as it does.
+            leftoverCleanupFailed = true
             manualDeletionSession = nil
             errorMessage = String(localized: "Unable to remove the selected leftovers. Please try again.")
         }

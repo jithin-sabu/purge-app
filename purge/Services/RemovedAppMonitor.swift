@@ -70,7 +70,17 @@ final class RemovedAppMonitor: ObservableObject {
     /// A review's quit that waits for a clean the user started beside it. Set by
     /// `closeWindowIfOpenedForReview`, acted on when `isDeleting` clears (#173).
     private var quitsOnceCleanEnds = false
-    private var retryTask: Task<Void, Never>?
+    /// Runs the queue again when the store changes while a review waits for the
+    /// window. Replaces a poll that ran every two seconds for as long as the
+    /// window stayed busy (#177).
+    private var windowWaiter: AnyCancellable?
+    /// True once the window was shown for a summary or alert left in it, so a
+    /// review blocked by it is not shown twice.
+    private var revealedForBlockedReview = false
+    /// Register and unregister run one after another: turning the watcher off
+    /// and on again quickly used to register it, then let the earlier unregister
+    /// land on top, with Health still saying Running (#177).
+    private var agentTask: Task<Void, Never>?
     private var drainTask: Task<Void, Never>?
     private var needsAnotherDrain = false
     /// Runs only while a review is queued or open, to withdraw it if the app returns.
@@ -177,6 +187,7 @@ final class RemovedAppMonitor: ObservableObject {
             drainPendingRemovals()
         } else {
             updateHealth()
+            stopWatchingWhileOff()
         }
     }
 
@@ -190,11 +201,17 @@ final class RemovedAppMonitor: ObservableObject {
         }
         if enabled {
             agentAnswered = nil
-            reconcileAgentRegistration()
-            // macOS asks for approval in System Settings; take the user there
-            // rather than leave them to find the reason in a caption.
-            if watcherHealth == .needsApproval {
-                openLoginItemsSettings()
+            // Shown until the registration runs; it may wait for an unregister
+            // that is still in flight.
+            watcherHealth = .checking
+            runAgentWork { [weak self] in
+                guard let self, self.isEnabled else { return }
+                self.reconcileAgentRegistration()
+                // macOS asks for approval in System Settings; take the user there
+                // rather than leave them to find the reason in a caption.
+                if self.watcherHealth == .needsApproval {
+                    self.openLoginItemsSettings()
+                }
             }
         } else {
             probeTask?.cancel()
@@ -204,12 +221,46 @@ final class RemovedAppMonitor: ObservableObject {
             updateHealth()
             unregisterAgent()
             queue.removeAll()
+            stopWaitingForWindow()
             RemovedAppHandoff.clearPending()
             if phase == .preparing {
                 phase = .idle
                 current = nil
             }
             updatePresenceWatch()
+        }
+    }
+
+    /// Off means off. An agent macOS still lists while the setting is off (an
+    /// unregister that failed, or defaults reset under it) kept starting Purge
+    /// windowless after every removal, and that Purge never quit: with the setting
+    /// off nothing drained the records, so nothing closed the window either, while
+    /// Settings said Off (#177). The agent is unregistered, its records dropped,
+    /// and a Purge it started goes away again.
+    private func stopWatchingWhileOff() {
+        guard !isEnabled, managesLiveAgent else { return }
+        RemovedAppHandoff.clearPending()
+        runAgentWork { [weak self] in
+            guard let self, !self.isEnabled else { return }
+            // Read here rather than on the launch path: the status is a call out
+            // to launchd, and most launches have nothing to undo.
+            guard Self.shouldUnregisterAgent(isEnabled: self.isEnabled, status: self.agentService.status) else { return }
+            try? await self.agentService.unregister()
+        }
+        // Once launch has finished: the quit must not run inside
+        // `applicationDidFinishLaunching`.
+        onNextRunloopTurn { [weak self] in self?.closeWindowIfOpenedForReview() }
+    }
+
+    /// Whether an agent macOS lists should be unregistered: only while the setting
+    /// is off. One awaiting approval counts, since approving it later would start
+    /// a watcher nobody asked for.
+    nonisolated static func shouldUnregisterAgent(isEnabled: Bool, status: SMAppService.Status) -> Bool {
+        guard !isEnabled else { return false }
+        switch status {
+        case .enabled, .requiresApproval: return true
+        case .notRegistered, .notFound: return false
+        @unknown default: return false
         }
     }
 
@@ -235,17 +286,18 @@ final class RemovedAppMonitor: ObservableObject {
         isRestartingWatcher = true
         probeTask?.cancel()
         probeTask = nil
-        Task {
-            try? await agentService.unregister()
-            guard isEnabled else {
-                isRestartingWatcher = false
+        runAgentWork { [weak self] in
+            guard let self else { return }
+            try? await self.agentService.unregister()
+            guard self.isEnabled else {
+                self.isRestartingWatcher = false
                 return
             }
-            agentAnswered = nil
-            reconcileAgentRegistration()
-            if watcherHealth == .needsApproval {
-                isRestartingWatcher = false
-                openLoginItemsSettings()
+            self.agentAnswered = nil
+            self.reconcileAgentRegistration()
+            if self.watcherHealth == .needsApproval {
+                self.isRestartingWatcher = false
+                self.openLoginItemsSettings()
             }
         }
     }
@@ -275,6 +327,11 @@ final class RemovedAppMonitor: ObservableObject {
         guard url.scheme == "purge" else { return }
         let host = url.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard host == "removed-apps" else { return }
+        guard isEnabled else {
+            // Opened by an agent that should not be running.
+            stopWatchingWhileOff()
+            return
+        }
         drainPendingRemovals()
     }
 
@@ -308,14 +365,26 @@ final class RemovedAppMonitor: ObservableObject {
     }
 
     private func unregisterAgent() {
-        Task {
+        runAgentWork { [weak self] in
+            // Turned on again before this ran: the agent stays as it is, and the
+            // registration queued behind this finds it already there.
+            guard let self, !self.isEnabled else { return }
             do {
-                try await agentService.unregister()
-                lastRegistrationFailed = false
+                try await self.agentService.unregister()
+                self.lastRegistrationFailed = false
             } catch {
-                lastRegistrationFailed = true
+                self.lastRegistrationFailed = true
             }
-            updateHealth()
+            self.updateHealth()
+        }
+    }
+
+    /// Runs `work` once every register or unregister asked for before it is done.
+    private func runAgentWork(_ work: @escaping @MainActor () async -> Void) {
+        let previous = agentTask
+        agentTask = Task { @MainActor in
+            await previous?.value
+            await work()
         }
     }
 
@@ -402,8 +471,9 @@ final class RemovedAppMonitor: ObservableObject {
     // MARK: Queue
 
     /// Reads waiting records without deleting them and checks each off the main
-    /// thread. A record stays on disk until its review starts, or until it is
-    /// decided not to be a removal, so quitting here does not lose it.
+    /// thread. A record stays on disk until its review has been dismissed or its
+    /// clean is done (`finishReview`), or until it is decided not to be a removal,
+    /// so quitting before then does not lose it.
     private func drainPendingRemovals() {
         guard isEnabled, managesLiveAgent else { return }
         guard drainTask == nil else {
@@ -415,7 +485,11 @@ final class RemovedAppMonitor: ObservableObject {
             guard let self else { return }
             self.drainTask = nil
             if self.isEnabled {
-                for entry in checked {
+                // Read again here, on the main actor: a review dismissed while
+                // the check ran has discarded its record, and the check's copy of
+                // it must not open that review a second time.
+                let stillPending = Set(RemovedAppHandoff.pending().map(\.path))
+                for entry in checked where stillPending.contains(entry.record.path) {
                     if entry.stillRemoved {
                         self.enqueue(entry.record)
                     } else {
@@ -442,19 +516,24 @@ final class RemovedAppMonitor: ObservableObject {
         store?.forgetRemovedApp(at: app.bundleURL)
         guard !queue.contains(where: { $0.app.id == app.id }), current?.app.id != app.id else { return }
         queue.append(Pending(app: app, fileNumber: record.fileNumber))
+        // A new removal is a new reason to show what blocks its review.
+        revealedForBlockedReview = false
         updatePresenceWatch()
     }
 
     private func processQueue() {
         defer { updatePresenceWatch() }
-        guard phase == .idle, let store, !queue.isEmpty else { return }
+        guard phase == .idle, let store, !queue.isEmpty else {
+            stopWaitingForWindow()
+            return
+        }
         // Keep the queue. Onboarding finishing or Full Disk Access being granted
         // calls back into here.
         guard FirstRunGate.hasCompletedOnboarding else { return }
         // Closing it runs the queue again (see `attach`).
         guard !store.isLookDeeperPresented else { return }
         guard !store.isShowingReviewOrCleaning else {
-            scheduleRetry()
+            waitForWindow(in: store)
             return
         }
         if !store.hasFullDiskAccess {
@@ -465,8 +544,11 @@ final class RemovedAppMonitor: ObservableObject {
             }
         }
 
+        stopWaitingForWindow()
         let next = queue.removeFirst()
-        RemovedAppHandoff.discard(path: next.app.id)
+        // Its record stays on disk until the review is over (`finishReview`), so
+        // a Purge quit while the review waits for the window, or while it is up,
+        // shows it again at the next launch.
         phase = .preparing
         current = next
         Task {
@@ -488,22 +570,40 @@ final class RemovedAppMonitor: ObservableObject {
                 phase = .idle
                 current = nil
                 queue.insert(next, at: 0)
-                scheduleRetry()
+                waitForWindow(in: store)
                 return
             }
             present(plan, in: store)
         }
     }
 
-    /// Waits out another sheet or clean. Cheap: `processQueue` only reads flags
-    /// until the window is free.
-    private func scheduleRetry() {
-        guard retryTask == nil else { return }
-        retryTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            self?.retryTask = nil
-            self?.processQueue()
+    /// Waits for the window to be free. The store's next change runs the queue
+    /// again, at most once a second, and nothing runs while nothing changes. A
+    /// summary or alert left in a closed window never changes on its own, so the
+    /// window is shown once for it: the user dismisses it, and the review follows.
+    /// A clean with no window (scheduled, or from the menu bar) is waited out
+    /// instead; its end is a change. A poll used to run every two seconds for as
+    /// long as the window stayed busy, and never showed the window (#177).
+    private func waitForWindow(in store: PurgeStore) {
+        if windowWaiter == nil {
+            windowWaiter = store.objectWillChange
+                .throttle(for: .seconds(1), scheduler: RunLoop.main, latest: true)
+                .sink { [weak self] _ in
+                    // `objectWillChange` fires before the value changes.
+                    onNextRunloopTurn { self?.processQueue() }
+                }
         }
+        guard !revealedForBlockedReview, !store.isAnyCleanInProgress, !Self.appWindowIsOnScreen else { return }
+        revealedForBlockedReview = true
+        // Closed again with the review once it is over, like a window opened for
+        // the review itself.
+        openedWindowForReview = true
+        AppWindowPresenter.reveal()
+    }
+
+    private func stopWaitingForWindow() {
+        windowWaiter = nil
+        revealedForBlockedReview = false
     }
 
     private func present(_ plan: RemovedAppLeftoverPlan, in store: PurgeStore) {
@@ -579,7 +679,7 @@ final class RemovedAppMonitor: ObservableObject {
             // queue: `processQueue` waits for that clean and the alert, then shows
             // the review again with the leftovers as they are then.
             queue.insert(current, at: 0)
-            finishReview()
+            finishReview(keepingRecord: true)
         } else {
             finishReview()
         }
@@ -587,10 +687,27 @@ final class RemovedAppMonitor: ObservableObject {
 
     private func cleanupSummaryClosed() {
         guard phase == .cleaning else { return }
+        if store?.takeLeftoverCleanupFailure() == true, let current {
+            // The clean failed as a whole, and its alert says to try again, which
+            // only this monitor can offer: back to the front of the queue with
+            // its record, to open again once the alert is dismissed. Dismissing
+            // the review then is what ends it.
+            queue.insert(current, at: 0)
+            finishReview(keepingRecord: true)
+            return
+        }
         finishReview()
     }
 
-    private func finishReview() {
+    /// Ends the review of `current`. Its record goes here, once the review has
+    /// been dismissed or cleaned, or decided against, and not before: a record
+    /// discarded as the review was built was lost whenever Purge quit while the
+    /// review still waited for the window (#177). A review put back in the queue
+    /// keeps its record.
+    private func finishReview(keepingRecord: Bool = false) {
+        if !keepingRecord, let current {
+            RemovedAppHandoff.discard(path: current.app.id)
+        }
         phase = .idle
         current = nil
         if queue.isEmpty {
@@ -621,8 +738,20 @@ final class RemovedAppMonitor: ObservableObject {
     }
 
     private func closeWindowIfOpenedForReview() {
+        // A review on screen, or its clean, keeps the window: `finishReview`
+        // comes back here once it is over. A watcher URL arriving after the
+        // setting was switched off must not quit under an open sheet.
+        guard phase == .idle else { return }
         defer { openedWindowForReview = false }
-        guard openedWindowForReview, let store, store.errorMessage == nil else { return }
+        guard openedWindowForReview, let store else { return }
+        guard store.errorMessage == nil else {
+            // The alert needs the window, so both stay. The window is the user's
+            // from here, as after `userOpenedWindow`: a quit kept for a later
+            // review would end a Purge they went on using (#177).
+            quitsWhenDone = false
+            quitsOnceCleanEnds = false
+            return
+        }
         if let window = MainWindowLocator.appWindow(in: NSApp.windows) {
             WindowCloseQuitter.closeWithoutQuitting(window)
         }

@@ -54,6 +54,9 @@ final class MenuViewModel: ObservableObject {
     /// True once `isScanningAll` has been observed high, so the subscription
     /// only settles state on real completions, not on the initial `false`.
     private var storeScanWasInFlight = false
+    /// True when `attach` skipped the launch scan. The first menu open runs it,
+    /// unless a scan started elsewhere first.
+    private var launchScanPending = false
 
     /// True while a scan or clean is in flight; gates re-entrant scans/cleans.
     var isBusy: Bool {
@@ -65,14 +68,23 @@ final class MenuViewModel: ObservableObject {
 
     /// Wires up the store and performs the one-time launch scan + wake observer.
     /// Idempotent: safe to call from multiple lifecycle hooks.
-    func attach(store: PurgeStore) {
+    ///
+    /// `scansAtLaunch` is false when the deleted-apps watcher started Purge
+    /// windowless: that Purge shows one review and quits again, so a full App
+    /// Caches and Dev Tools scan would only walk the disk for seconds of life.
+    /// The scan then waits for the first menu open, or for the window (#177).
+    func attach(store: PurgeStore, scansAtLaunch: Bool = true) {
         guard !hasAttached else { return }
         hasAttached = true
         self.store = store
         registerWakeObserver()
         observeStoreScans(store)
-        // Scan on app launch.
-        runScan(forced: true)
+        if scansAtLaunch {
+            // Scan on app launch.
+            runScan(forced: true)
+        } else {
+            launchScanPending = true
+        }
     }
 
     /// `PurgeStore.scanAll` cancels-and-restarts any in-flight scan, so the
@@ -92,6 +104,8 @@ final class MenuViewModel: ObservableObject {
                 guard let self else { return }
                 if isScanning {
                     storeScanWasInFlight = true
+                    // The window's own launch scan counts as the one this skipped.
+                    launchScanPending = false
                     return
                 }
                 guard storeScanWasInFlight else { return }
@@ -146,12 +160,25 @@ final class MenuViewModel: ObservableObject {
         // queue — opening the menu inside that window (or holding it open
         // through completion) leaves state stuck at `.checking` even though
         // the store already has results. Resolve synchronously off the store
-        // so opening always shows a finished scan immediately.
+        // so opening always shows a finished scan immediately. Results from
+        // this session only: `lastScanCompletedAt` outlives the launch, and a
+        // launch that skipped its scan has nothing to show until one runs (#177).
         if case .checking = state,
            !store.isScanningAll,
            activeWorkTask == nil, backgroundRefreshTask == nil,
-           store.lastScanCompletedAt != nil {
+           store.hasSessionResults(for: .cachesAndDevTools) {
+            // A scan the window ran is the launch scan this skipped, even one
+            // over too quickly for the debounced sink to see it start.
+            launchScanPending = false
             resolveAfterScan(animated: false)
+        }
+        // A launch that skipped its scan: the first open runs it, as the launch
+        // would have, so the menu never settles on numbers no scan produced.
+        // While a clean runs no scan can start, and checking is the cold state
+        // until the next open.
+        if launchScanPending {
+            runScan(forced: true)
+            return
         }
         guard !isBusy else { return }
         guard hasSessionScan, let scannedAt = store.lastScanCompletedAt else {
@@ -240,6 +267,7 @@ final class MenuViewModel: ObservableObject {
         if store.isDeleting { return }
         if isBusy, !forced { return }
 
+        launchScanPending = false
         cancelBackgroundRefresh()
         activeWorkTask?.cancel()
         // Only animate a real change. Wrapping the cold `.checking -> .checking`

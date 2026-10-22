@@ -90,6 +90,16 @@ nonisolated enum RemovedAppWatchPolicy {
     /// review about an app removed more than a week ago would read as a bug.
     static let recordLifetime: TimeInterval = 7 * 24 * 60 * 60
 
+    /// How long to wait before reading a bundle with no identifier yet for the
+    /// `attempt`th time (from 1), or nil once it has been read enough. Doubles
+    /// from two seconds to a minute, then stays there: nine reads over about
+    /// five minutes, where 150 full listings used to run (#177). A copy that
+    /// lands in the first seconds is still read within seconds.
+    static func incompleteRecheckDelay(attempt: Int) -> Duration? {
+        guard attempt >= 1, attempt <= 9 else { return nil }
+        return .seconds(min(60, 2 << (attempt - 1)))
+    }
+
     /// FSEvents can report `/Applications` by its data-volume path, and directory
     /// events carry a trailing slash. Both are folded away so paths compare equal to
     /// the roots `AppUninstallScanPolicy` hands out.
@@ -197,6 +207,45 @@ nonisolated enum RemovedAppWatchPolicy {
         var info = stat()
         guard lstat(path, &info) == 0 else { return nil }
         return UInt64(info.st_ino)
+    }
+
+    /// The device number of the volume holding the item at `path`, following a
+    /// symlink, so a `~/Applications` that points at an external drive reports
+    /// that drive.
+    static func deviceNumber(atPath path: String) -> Int64? {
+        var info = stat()
+        guard stat(path, &info) == 0 else { return nil }
+        return Int64(info.st_dev)
+    }
+
+    /// `path` with every symlink resolved, or `path` itself when it cannot be
+    /// resolved (nothing there). `realpath`, which keeps `/private` on `/var` and
+    /// `/tmp` paths, rather than `resolvingSymlinksInPath()`, which drops it.
+    static func resolvedPath(_ path: String) -> String {
+        guard let real = realpath(path, nil) else { return path }
+        defer { free(real) }
+        return String(cString: real)
+    }
+
+    /// The nearest ancestor of `path` that exists, `/` at the latest. For a root
+    /// on an ejected drive that is `/Volumes`, which is where the drive comes back.
+    static func nearestExistingAncestor(ofPath path: String) -> String {
+        var current = (path as NSString).deletingLastPathComponent
+        while current != "/", !current.isEmpty, !FileManager.default.fileExists(atPath: current) {
+            current = (current as NSString).deletingLastPathComponent
+        }
+        return current.isEmpty ? "/" : current
+    }
+
+    /// Whether a root no longer at its path went with its volume (ejected,
+    /// unplugged) rather than being renamed or deleted on one still mounted.
+    /// `rootDevice` is the device the root was on when it was last listed, and
+    /// `ancestorDevice` that of its nearest ancestor still there: the same device
+    /// means the volume is mounted and the root itself is gone. Nothing on a
+    /// volume that went away was removed, so its bundles must not be reported.
+    static func rootVolumeIsGone(rootDevice: Int64?, ancestorDevice: Int64?) -> Bool {
+        guard let rootDevice, let ancestorDevice else { return false }
+        return rootDevice != ancestorDevice
     }
 
     /// Classifies a departure from the path a handle on the bundle reports now.
