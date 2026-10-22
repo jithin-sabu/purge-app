@@ -1939,16 +1939,7 @@ final class PurgeStore: ObservableObject {
             // later scan could never surface it again. Rows that deleted
             // partially stay listed and stay selected, so a retry can finish the
             // job (the already-trashed manifest is skipped as non-existent).
-            let clearedRowIDs = Set(
-                largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) }.map(\.id)
-            )
-            withAnimation(.easeInOut(duration: 0.2)) {
-                largeFiles.removeAll { clearedRowIDs.contains($0.id) }
-            }
-            largeFileSelection.ids.subtract(clearedRowIDs)
-            // A group of two that just lost a member is no longer a duplicate;
-            // leaving the survivor badged "2 copies" would misdescribe the disk.
-            largeFileDuplicates.removeFiles(ids: clearedRowIDs)
+            removeClearedLargeFileRows(largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) })
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,
@@ -1962,6 +1953,27 @@ final class PurgeStore: ObservableObject {
             manualDeletionSession = nil
             errorMessage = String(localized: "Unable to delete the selected files. Please try again.")
         }
+    }
+
+    /// Takes rows whose files are now in the Trash off the tab. While the area is
+    /// settled, `categoryInputsDidChange` brings the saved record in step with the
+    /// rows left. A stopped rescan leaves the area unsettled with its partial rows
+    /// still listed (#180), and the Overview shows the saved record meanwhile, so
+    /// the trashed rows come off that record here or it would keep counting bytes
+    /// that are gone until the next full scan.
+    func removeClearedLargeFileRows(_ rows: [LargeFile]) {
+        let ids = Set(rows.map(\.id))
+        withAnimation(.easeInOut(duration: 0.2)) {
+            largeFiles.removeAll { ids.contains($0.id) }
+        }
+        largeFileSelection.ids.subtract(ids)
+        // A group of two that just lost a member is no longer a duplicate;
+        // leaving the survivor badged "2 copies" would misdescribe the disk.
+        largeFileDuplicates.removeFiles(ids: ids)
+        guard !isSettled(.largeFiles), var record = scanRecords[.largeFiles] else { return }
+        record.bytes = max(0, record.bytes - rows.reduce(Int64(0)) { $0 + $1.sizeBytes })
+        record.count = max(0, record.count - rows.count)
+        saveScanRecord(record, for: .largeFiles)
     }
 
     // MARK: - Uninstaller (issue #45)

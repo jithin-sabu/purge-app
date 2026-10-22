@@ -71,6 +71,45 @@ struct LargeFileScanStopTests {
         #expect(store.scanRecords[.largeFiles]?.bytes == 1_000_000)
     }
 
+    /// Stop leaves the rows a rescan had listed so far on the tab, and the Overview
+    /// shows the saved record until a full scan ends. A row trashed from that list
+    /// must come off the record, or it would count bytes that are in the Trash.
+    @Test
+    func aRowTrashedAfterAStoppedRescanComesOffTheSavedRecord() async {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        // Distinct sizes, so the duplicate check after the full scan has nothing to hash.
+        let clips = (0..<25).map { file("/Users/someone/Movies/clip-\($0).mov", bytes: 100_000_000 + Int64($0)) }
+        let clipBytes = clips.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        fake.largeFileEvents = clips.map { .file($0) }
+        let store = fake.makeStore()
+
+        await store.scanLargeFiles()
+        let finished = store.scanRecords[.largeFiles]
+        #expect(finished?.bytes == clipBytes)
+        #expect(finished?.count == 25)
+
+        // The rescan lists the same rows (published once 25 have arrived) and is stopped.
+        fake.holdsLargeFiles = true
+        let rescan = Task { await store.scanLargeFiles() }
+        #expect(await eventually { store.largeFiles.count == 25 })
+        rescan.cancel()
+        await rescan.value
+        #expect(store.largeFiles.count == 25)
+        #expect(!store.isSettled(.largeFiles))
+
+        store.removeClearedLargeFileRows([clips[0]])
+
+        #expect(store.largeFiles.count == 24)
+        #expect(!store.largeFiles.contains { $0.id == clips[0].id })
+        let adjusted = store.scanRecords[.largeFiles]
+        #expect(adjusted?.bytes == clipBytes - clips[0].sizeBytes)
+        #expect(adjusted?.count == 24)
+        #expect(adjusted?.completedAt == finished?.completedAt)
+        #expect(ScanRecordStore(defaults: fake.defaults).record(for: .largeFiles) == adjusted)
+    }
+
     private func file(_ path: String, bytes: Int64) -> LargeFile {
         LargeFile(path: URL(fileURLWithPath: path), sizeBytes: bytes, lastUsed: Date(), category: .video)
     }
