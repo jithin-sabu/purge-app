@@ -78,8 +78,8 @@ nonisolated enum RemovedAppHandoff {
         loadPending(now: now).map(\.record)
     }
 
-    /// Removes every pending record for `path`. Called once a removal has been
-    /// shown, or once it has been decided not to be a removal.
+    /// Removes every pending record for `path`. Called once a removal's review is
+    /// over, or once it has been decided not to be a removal.
     static func discard(path: String) {
         let key = URL(fileURLWithPath: path).standardizedFileURL.path
         for entry in loadPending(now: Date())

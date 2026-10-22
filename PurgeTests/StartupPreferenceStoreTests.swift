@@ -1,4 +1,5 @@
 import Foundation
+import ServiceManagement
 import Testing
 @testable import Purge
 
@@ -7,6 +8,17 @@ import Testing
 struct StartupPreferenceStoreTests {
 
     private let suite = ThrowawayDefaults()
+
+    /// Leaving the menu bar removes the login item, and one macOS is still
+    /// waiting to approve is a login item too: left behind, it would open a window
+    /// at every login once approved (#177).
+    @Test("A login item awaiting approval counts as registered")
+    func loginItemAwaitingApprovalCountsAsRegistered() {
+        #expect(LoginItemRegistrar.hasLoginItem(status: .enabled))
+        #expect(LoginItemRegistrar.hasLoginItem(status: .requiresApproval))
+        #expect(!LoginItemRegistrar.hasLoginItem(status: .notRegistered))
+        #expect(!LoginItemRegistrar.hasLoginItem(status: .notFound))
+    }
 
     private final class FakeLoginItem: LoginItemControlling {
         var isRegistered = false

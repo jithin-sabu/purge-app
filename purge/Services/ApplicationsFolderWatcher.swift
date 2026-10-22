@@ -74,7 +74,7 @@ final class ApplicationsFolderWatcher {
     private var followTasks: [String: Task<Void, Never>] = [:]
     private var stream: FSEventStreamRef?
     private var rescanTask: Task<Void, Never>?
-    /// Re-lists the roots while a bundle has no readable identifier yet.
+    /// Reads the bundles with no identifier yet again, on `RemovedAppWatchPolicy.incompleteRecheckDelay`.
     private var recheckTask: Task<Void, Never>?
     private var incompleteRechecks = 0
     /// Watches the parent of each root that did not exist at start, so a
@@ -165,7 +165,10 @@ final class ApplicationsFolderWatcher {
         // `NoDefer` delivers the first event of a quiet spell at once, so a drag to
         // the Trash is still reported the moment it happens. The latency then only
         // batches the flood of directory events an update writes inside a bundle,
-        // instead of waking this process for each one.
+        // instead of waking this process for each one. `WatchRoot` reports a root
+        // itself being moved or deleted (`RootChanged`); without it `handle` was
+        // checking for an event that never came, and a root that went away kept
+        // being watched at its old path (#177).
         guard let stream = FSEventStreamCreate(
             kCFAllocatorDefault,
             applicationsFolderWatcherCallback,
@@ -173,7 +176,9 @@ final class ApplicationsFolderWatcher {
             watched as CFArray,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             0.3,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagNoDefer)
+            FSEventStreamCreateFlags(
+                kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot
+            )
         ) else { return }
         FSEventStreamSetDispatchQueue(stream, DispatchQueue.main)
         FSEventStreamStart(stream)
@@ -233,8 +238,27 @@ final class ApplicationsFolderWatcher {
             RemovedAppWatchPolicy.isRelevantChange(atPath: $0, roots: rootPaths)
         }
         guard mustRescan || relevant else { return }
+        if flags.contains(where: { $0 & FSEventStreamEventFlags(kFSEventStreamEventFlagRootChanged) != 0 }) {
+            reopenStreamAfterRootChange()
+        }
         incompleteRechecks = 0
         scheduleRescan()
+    }
+
+    /// A root was moved, deleted, or put back. The stream stays on the path it
+    /// was given, so it is opened again on the roots that exist now, and the
+    /// parent of one that is gone is watched for its return. The re-list that
+    /// follows reports what the missing root held as departed. Not inside the
+    /// callback that delivered the event, where the stream is still in use.
+    private func reopenStreamAfterRootChange() {
+        let current = generation
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.generation == current else { return }
+                self.closeStream()
+                self.openStream()
+            }
+        }
     }
 
     /// Coalesces a burst of events (a Finder move reports source and destination
@@ -266,23 +290,49 @@ final class ApplicationsFolderWatcher {
     /// A bundle being copied in (dragged from a disk image, extracted from an
     /// archive) appears before its `Info.plist` does. Nothing near the top of the
     /// roots changes when the plist lands, so no event would ever say to read it
-    /// again, and a later removal would be dropped for having no identifier. The
-    /// roots are listed again every two seconds, for up to five minutes, until
-    /// every bundle can be read. Only unreadable entries are read again.
+    /// again, and a later removal would be dropped for having no identifier. Its
+    /// plist is read again on `RemovedAppWatchPolicy.incompleteRecheckDelay`, for
+    /// about five minutes. Only the bundles without an identifier are read: this
+    /// used to re-list both roots, every depth, every two seconds for the whole
+    /// five minutes (#177). A bundle that leaves meanwhile is an event of its own.
     private func recheckIfIncomplete(_ snapshot: Index) {
-        guard snapshot.apps.values.contains(where: { $0.bundleID == nil }) else {
+        let unread = snapshot.apps.filter { $0.value.bundleID == nil }.map(\.key)
+        guard !unread.isEmpty else {
             incompleteRechecks = 0
             return
         }
-        guard recheckTask == nil, incompleteRechecks < 150 else { return }
+        guard recheckTask == nil else { return }
         incompleteRechecks += 1
+        guard let delay = RemovedAppWatchPolicy.incompleteRecheckDelay(attempt: incompleteRechecks) else { return }
         let current = generation
         recheckTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: delay)
             guard let self, self.generation == current else { return }
             self.recheckTask = nil
-            self.scheduleRescan()
+            let reread = await Self.rereadOffMain(paths: unread)
+            guard self.generation == current else { return }
+            var updated = self.index
+            var changed = false
+            for (key, app) in reread where updated.apps[key] != nil && app.bundleID != nil {
+                updated.apps[key] = app
+                changed = true
+            }
+            if changed {
+                self.index = updated
+                self.onChange?(updated)
+            }
+            self.recheckIfIncomplete(updated)
         }
+    }
+
+    /// `Info.plist` again for each bundle at `paths` that is still there.
+    private nonisolated static func rereadOffMain(paths: [String]) async -> [String: InstalledApp] {
+        await Task.detached(priority: .utility) {
+            paths.reduce(into: [String: InstalledApp]()) { result, key in
+                guard FileManager.default.fileExists(atPath: key) else { return }
+                result[key] = readApp(at: URL(fileURLWithPath: key, isDirectory: true))
+            }
+        }.value
     }
 
     // MARK: Departures

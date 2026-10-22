@@ -26,7 +26,11 @@ enum AppBootstrapper {
         // `DiskSummaryRefreshModifier` refreshes again when the window appears.
         // A third read would put the expensive APFS capacity key on the path to
         // first paint for a value that cannot have changed since init.
-        env.menuModel.attach(store: env.store)
+        //
+        // A Purge the deleted-apps watcher started windowless shows one review
+        // and quits, so it skips the launch scan (#177). The menu bar scans on
+        // its first open instead, and a window the user opens scans as usual.
+        env.menuModel.attach(store: env.store, scansAtLaunch: !RemovedAppMonitor.startsWindowless)
         MenuScanNotifier.configure()
         ScheduledNotificationPresentationDelegate.shared.onCleanAction = { [weak menuModel = env.menuModel] in
             menuModel?.performCleanFromNotification()

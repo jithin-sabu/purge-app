@@ -824,7 +824,8 @@ final class PurgeStore: ObservableObject {
     /// review closes with an alert, and `RemovedAppMonitor` reads this flag as the
     /// sheet closes to put the review back at the front of its queue, so it opens
     /// again once the clean ends. A review dismissed that way can't be reopened
-    /// by hand: its handoff record was discarded when it was first shown (#173).
+    /// by hand, so the monitor keeps its handoff record until the second showing
+    /// is over (#173).
     private(set) var removedAppReviewHeldForAnotherClean = false
 
     /// Reads and clears `removedAppReviewHeldForAnotherClean`.

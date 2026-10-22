@@ -203,6 +203,22 @@ struct RemovedAppWatchPolicyTests {
         #expect(landed.apps[key]?.name == "Google Chrome")
     }
 
+    /// Reading a bundle again used to mean listing both roots every two seconds
+    /// for five minutes (#177). The reads now back off, from seconds to a minute,
+    /// and stop after about five minutes in all.
+    @Test("A bundle with no identifier is read again on a backoff, for about five minutes")
+    func incompleteRecheckBacksOff() {
+        let delays = (1...12).map { RemovedAppWatchPolicy.incompleteRecheckDelay(attempt: $0) }
+        let scheduled = delays.compactMap { $0 }
+        #expect(scheduled == [
+            .seconds(2), .seconds(4), .seconds(8), .seconds(16), .seconds(32),
+            .seconds(60), .seconds(60), .seconds(60), .seconds(60),
+        ])
+        #expect(delays.dropFirst(9).allSatisfy { $0 == nil })
+        #expect(RemovedAppWatchPolicy.incompleteRecheckDelay(attempt: 0) == nil)
+        #expect(scheduled.reduce(Duration.zero, +) == .seconds(302))
+    }
+
     @Test
     func followDecisionReportsDeletionsOnceQuietAndDropsMovesAndReturns() {
         let timing = RemovedAppWatchPolicy.FollowTiming.standard
@@ -392,6 +408,21 @@ struct RemovedAppWatchPolicyTests {
         ) == .off)
         let fine: [WatcherHealth] = [.off, .checking, .running]
         #expect(!fine.contains { $0.needsAttention })
+    }
+
+    // MARK: Switching off
+
+    /// An agent macOS still listed while the setting was off started Purge after
+    /// every removal, with Settings saying Off (#177). One awaiting approval
+    /// counts too: approved later, it would start a watcher nobody asked for.
+    @Test("An agent still listed while the watcher is off is unregistered")
+    func agentListedWhileOffIsUnregistered() {
+        #expect(RemovedAppMonitor.shouldUnregisterAgent(isEnabled: false, status: .enabled))
+        #expect(RemovedAppMonitor.shouldUnregisterAgent(isEnabled: false, status: .requiresApproval))
+        #expect(!RemovedAppMonitor.shouldUnregisterAgent(isEnabled: false, status: .notRegistered))
+        #expect(!RemovedAppMonitor.shouldUnregisterAgent(isEnabled: false, status: .notFound))
+        #expect(!RemovedAppMonitor.shouldUnregisterAgent(isEnabled: true, status: .enabled))
+        #expect(!RemovedAppMonitor.shouldUnregisterAgent(isEnabled: true, status: .requiresApproval))
     }
 
     // MARK: Agent updates
@@ -797,6 +828,86 @@ struct ApplicationsFolderWatcherTests {
         try await Task.sleep(nanoseconds: 2_200_000_000)
         #expect(reported("com.test.moved") == nil)
         #expect(reported("com.test.upgraded") == nil)
+    }
+
+    /// A root that is moved away is noticed, and watched again when it comes
+    /// back. The stream was created without `WatchRoot`, so the `RootChanged`
+    /// event `handle` looked for never came: a renamed `~/Applications` kept its
+    /// stale index, and nothing in it was ever reported again (#177).
+    @Test(.timeLimit(.minutes(1)))
+    func aMovedRootIsNoticedAndWatchedAgainWhenItReturns() async throws {
+        let parent = try makeRoot()
+        defer { try? fm.removeItem(at: parent) }
+        let root = parent.appendingPathComponent("Applications", isDirectory: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try makeBundle(in: root, name: "Alpha", bundleID: "com.test.alpha")
+
+        let watcher = ApplicationsFolderWatcher(roots: [root])
+        var indexes: [ApplicationsFolderWatcher.Index] = []
+        watcher.onChange = { indexes.append($0) }
+        watcher.start()
+        defer { watcher.stop() }
+
+        for _ in 0..<50 where watcher.installedApps.isEmpty {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        #expect(watcher.installedApps.count == 1)
+        // As above: the stream only reports changes made once it is running.
+        var isLive = false
+        for attempt in 0..<20 where !isLive {
+            let probeID = "com.test.probe\(attempt)"
+            _ = try makeBundle(in: root, name: "Probe\(attempt)", bundleID: probeID)
+            for _ in 0..<25 where !isLive {
+                try await Task.sleep(nanoseconds: 20_000_000)
+                isLive = indexes.contains { $0.bundleIDs.contains(probeID) }
+            }
+        }
+        try #require(isLive)
+
+        let aside = parent.appendingPathComponent("Applications (old)", isDirectory: true)
+        try fm.moveItem(at: root, to: aside)
+        for _ in 0..<250 where !watcher.installedApps.isEmpty {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(watcher.installedApps.isEmpty)
+
+        try fm.moveItem(at: aside, to: root)
+        for _ in 0..<250 where !watcher.index.bundleIDs.contains("com.test.alpha") {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(watcher.index.bundleIDs.contains("com.test.alpha"))
+    }
+
+    /// A bundle indexed before its `Info.plist` landed gets its identifier from a
+    /// later read of that bundle alone: nothing near the top of the root changes
+    /// when the plist arrives, so no event reports it (#177).
+    @Test(.timeLimit(.minutes(1)))
+    func aBundleReadMidCopyGetsItsIdentifierLater() async throws {
+        let root = try makeRoot()
+        defer { try? fm.removeItem(at: root) }
+        let contents = root.appendingPathComponent("Chrome.app/Contents", isDirectory: true)
+        try fm.createDirectory(at: contents, withIntermediateDirectories: true)
+
+        let watcher = ApplicationsFolderWatcher(roots: [root])
+        var indexes: [ApplicationsFolderWatcher.Index] = []
+        watcher.onChange = { indexes.append($0) }
+        watcher.start()
+        defer { watcher.stop() }
+
+        for _ in 0..<50 where watcher.installedApps.isEmpty {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        #expect(watcher.installedApps.count == 1)
+        #expect(watcher.installedApps.first?.bundleID == nil)
+
+        let plist: NSDictionary = ["CFBundleIdentifier": "com.google.Chrome", "CFBundleName": "Google Chrome"]
+        try plist.write(to: contents.appendingPathComponent("Info.plist"))
+        // The first read again comes two seconds after the index.
+        for _ in 0..<500 where !watcher.index.bundleIDs.contains("com.google.chrome") {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(watcher.index.bundleIDs.contains("com.google.chrome"))
+        #expect(indexes.last?.apps.values.first?.name == "Google Chrome")
     }
 }
 

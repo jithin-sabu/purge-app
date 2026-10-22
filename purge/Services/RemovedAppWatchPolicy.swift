@@ -90,6 +90,16 @@ nonisolated enum RemovedAppWatchPolicy {
     /// review about an app removed more than a week ago would read as a bug.
     static let recordLifetime: TimeInterval = 7 * 24 * 60 * 60
 
+    /// How long to wait before reading a bundle with no identifier yet for the
+    /// `attempt`th time (from 1), or nil once it has been read enough. Doubles
+    /// from two seconds to a minute, then stays there: nine reads over about
+    /// five minutes, where 150 full listings used to run (#177). A copy that
+    /// lands in the first seconds is still read within seconds.
+    static func incompleteRecheckDelay(attempt: Int) -> Duration? {
+        guard attempt >= 1, attempt <= 9 else { return nil }
+        return .seconds(min(60, 2 << (attempt - 1)))
+    }
+
     /// FSEvents can report `/Applications` by its data-volume path, and directory
     /// events carry a trailing slash. Both are folded away so paths compare equal to
     /// the roots `AppUninstallScanPolicy` hands out.
