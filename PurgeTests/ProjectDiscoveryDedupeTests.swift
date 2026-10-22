@@ -28,6 +28,10 @@ struct ProjectDiscoveryDedupeTests {
         let lower = home.appendingPathComponent("developer/app", isDirectory: true)
 
         #expect(kept([upper, lower]) == [upper.path])
+
+        var walked: [FileIdentity: Int] = [:]
+        #expect(DevScanner.shouldWalk(upper.deletingLastPathComponent(), toDepth: 4, walkedDepths: &walked))
+        #expect(!DevScanner.shouldWalk(lower.deletingLastPathComponent(), toDepth: 4, walkedDepths: &walked))
     }
 
     @Test("a root that links into another reaches the same project once")
@@ -66,6 +70,45 @@ struct ProjectDiscoveryDedupeTests {
         let alsoGone = home.appendingPathComponent("also-gone/app", isDirectory: true)
 
         #expect(kept([gone, gone, alsoGone]) == [gone.path, alsoGone.path])
+    }
+
+    @Test("a root that links to a folder already walked as deep is skipped")
+    func linkedRootSkipped() throws {
+        let home = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let developer = home.appendingPathComponent("Developer", isDirectory: true)
+        try FileManager.default.createDirectory(at: developer, withIntermediateDirectories: true)
+        let code = home.appendingPathComponent("code", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: code, withDestinationURL: developer)
+
+        var walked: [FileIdentity: Int] = [:]
+        #expect(DevScanner.shouldWalk(developer, toDepth: 4, walkedDepths: &walked))
+        #expect(!DevScanner.shouldWalk(code, toDepth: 4, walkedDepths: &walked))
+    }
+
+    @Test("a root that links to home still gets the deeper walk, once")
+    func linkToHomeWalkedDeeper() throws {
+        let home = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let dev = home.appendingPathComponent("dev", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: dev, withDestinationURL: home)
+
+        var walked: [FileIdentity: Int] = [:]
+        #expect(DevScanner.shouldWalk(home, toDepth: 1, walkedDepths: &walked))
+        #expect(DevScanner.shouldWalk(dev, toDepth: 4, walkedDepths: &walked))
+        #expect(!DevScanner.shouldWalk(dev, toDepth: 4, walkedDepths: &walked))
+        #expect(!DevScanner.shouldWalk(home, toDepth: 1, walkedDepths: &walked))
+    }
+
+    @Test("a root whose identity can't be read is walked, as before")
+    func unreadableRootWalked() throws {
+        let home = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let gone = home.appendingPathComponent("gone", isDirectory: true)
+
+        var walked: [FileIdentity: Int] = [:]
+        #expect(DevScanner.shouldWalk(gone, toDepth: 4, walkedDepths: &walked))
+        #expect(DevScanner.shouldWalk(gone, toDepth: 4, walkedDepths: &walked))
     }
 
     private func makeTemporaryDirectory() throws -> URL {

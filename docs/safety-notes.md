@@ -39,10 +39,11 @@ with the project's install command.
 
 ### What changed
 
-Each folder is walked once and each project is listed once. Folders are
-compared by the identity the file system gives them, not by spelling, and the
-first spelling in the list is kept. The in-use check now ignores case, as the
-volume does. On a case-sensitive volume that only errs toward hiding a project.
+Each project is listed once, and a folder already walked as deep is not walked
+again. Folders are compared by the identity the file system gives them, not by
+spelling, and the first spelling in the list is kept. The in-use check now
+ignores case, as the volume does. On a case-sensitive volume that only errs
+toward hiding a project.
 
 ### What would have caught it earlier
 
@@ -50,8 +51,9 @@ volume does. On a case-sensitive volume that only errs toward hiding a project.
 [`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift)
 checks that a process under another capitalisation hides the project, and
 [`PurgeTests/ProjectDiscoveryDedupeTests.swift`](../PurgeTests/ProjectDiscoveryDedupeTests.swift)
-checks that two spellings, or a link and its target, give one project. The
-earlier tests spelled every path one way, so none of them could see two.
+checks that two spellings, or a link and its target, give one project and one
+walk. The earlier tests spelled every path one way, so none of them could see
+two.
 
 ## 2026-10-16: Leftovers offered an installed OrbStack's Docker data
 

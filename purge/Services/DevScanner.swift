@@ -1074,6 +1074,23 @@ nonisolated final class DevScanner {
 
     private static let maxDirectoryEntriesBeforeSkip = 2000
 
+    /// Whether a root still needs walking to `depth`. `~/Developer` and `~/developer`
+    /// are one folder on the default case-insensitive volume, and a root can be a
+    /// link to another, so a folder already walked as deep is skipped, and the first
+    /// spelling listed is the one walked (#175). A root that links to home still gets
+    /// the deeper walk home itself never has. A root whose identity can't be read is
+    /// walked, as before.
+    nonisolated static func shouldWalk(
+        _ root: URL,
+        toDepth depth: Int,
+        walkedDepths: inout [FileIdentity: Int]
+    ) -> Bool {
+        guard let identity = FileIdentity(path: root.path) else { return true }
+        if let walked = walkedDepths[identity], walked >= depth { return false }
+        walkedDepths[identity] = depth
+        return true
+    }
+
     /// Keeps the first of each project found more than once: by path, then by file
     /// identity, since two spellings can name one folder. The home walk and a root
     /// can reach a project as `~/developer/app` and `~/Developer/app`, and a root
@@ -1261,7 +1278,7 @@ nonisolated final class DevScanner {
             }
         }
 
-        var walkedRoots = Set<FileIdentity>()
+        var walkedDepths: [FileIdentity: Int] = [:]
         for root in roots {
             // A limited scan resolves the root with `readlink` alone first, so a
             // root that is a link into a protected folder is never opened.
@@ -1273,15 +1290,12 @@ nonisolated final class DevScanner {
                 realRoot = nil
             }
             guard fm.fileExists(atPath: root.path) else { continue }
-            // `~/Developer` and `~/developer` are one folder on the default
-            // case-insensitive volume, and a root can be a link to another, so each
-            // folder is walked once, under the first spelling listed (#175). Read
-            // after the checks above, since `stat` follows a link.
-            if let identity = FileIdentity(path: root.path), !walkedRoots.insert(identity).inserted { continue }
             // When the root is the home directory itself, limit to depth 1
             // to avoid scanning deep into personal folders like Documents recursively
             // since those are already covered by their own dedicated root entries above
             let effectiveMaxDepth = (root.path == home.path) ? 1 : maxDepth
+            // After the checks above, since `stat` follows a link.
+            guard Self.shouldWalk(root, toDepth: effectiveMaxDepth, walkedDepths: &walkedDepths) else { continue }
             walk(directory: root, realPath: realRoot, depth: 0, maxDepth: effectiveMaxDepth)
         }
 
