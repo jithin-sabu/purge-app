@@ -90,12 +90,15 @@ struct LargeFileScanStopTests {
         #expect(finished?.bytes == clipBytes)
         #expect(finished?.count == 25)
 
-        // The rescan lists the same rows (published once 25 have arrived) and is stopped.
+        // The rescan lists the same rows again (published once 25 have arrived) and
+        // is stopped. The first scan's rows are on the tab until the rescan clears
+        // them, so wait for the rescan's walk to have started as well.
         fake.holdsLargeFiles = true
         let rescan = Task { await store.scanLargeFiles() }
-        #expect(await eventually { store.largeFiles.count == 25 })
+        #expect(await eventually { fake.largeFileScanCount == 2 && store.largeFiles.count == 25 })
         rescan.cancel()
         await rescan.value
+        #expect(fake.largeFileScanCount == 2)
         #expect(store.largeFiles.count == 25)
         #expect(!store.isSettled(.largeFiles))
 
