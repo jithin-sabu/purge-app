@@ -32,12 +32,22 @@ final class ApplicationsFolderWatcher {
     /// Every bundle in the app roots, keyed by standardized path, with the file
     /// number each was indexed under.
     nonisolated struct Index: Sendable {
+        /// Where a root was when it was last listed.
+        nonisolated struct RootLocation: Sendable, Equatable {
+            /// The device of the volume holding it.
+            var device: Int64
+            /// Its path with symlinks resolved: for a `~/Applications` that points
+            /// at a drive, the folder on that drive. A root gone from its path is
+            /// classified by what is left around this path, not around the link.
+            var resolvedPath: String
+        }
+
         var apps: [String: InstalledApp] = [:]
         var fileNumbers: [String: UInt64] = [:]
-        /// The device each root was on when it was last listed, keyed by root
-        /// path, so a root whose volume was ejected can be told from one that
-        /// was renamed or deleted (`index(roots:reusing:)`).
-        var rootDevices: [String: Int64] = [:]
+        /// Each root's location, keyed by root path, so a root whose volume was
+        /// ejected can be told from one that was renamed or deleted
+        /// (`index(roots:reusing:)`).
+        var roots: [String: RootLocation] = [:]
 
         /// Lowercased identifiers of every bundle in the index.
         var bundleIDs: Set<String> {
@@ -220,11 +230,18 @@ final class ApplicationsFolderWatcher {
             )
             source.setEventHandler { [weak self] in
                 MainActor.assumeIsolated {
-                    guard let self, self.generation == current,
-                          FileManager.default.fileExists(atPath: root) else { return }
-                    self.closeStream()
-                    self.openStream()
-                    self.scheduleRescan()
+                    guard let self, self.generation == current else { return }
+                    if FileManager.default.fileExists(atPath: root) {
+                        self.closeStream()
+                        self.openStream()
+                        self.scheduleRescan()
+                    } else if RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: root) != parent {
+                        // The way to the root changed without the root itself
+                        // appearing: a drive mounted that has no such folder yet.
+                        // Watch from the nearest ancestor there is now, or the
+                        // folder's arrival inside it would never be seen.
+                        self.watchParentsOfMissingRoots(watched: watched)
+                    }
                 }
             }
             source.setCancelHandler { close(descriptor) }
@@ -525,19 +542,27 @@ final class ApplicationsFolderWatcher {
         for root in roots {
             let rootPath = root.standardizedFileURL.path
             guard fm.fileExists(atPath: rootPath) else {
-                if let device = previous.rootDevices[rootPath],
+                // Around the resolved path: a symlink's own parent (the home
+                // folder, for `~/Applications`) says nothing about the drive the
+                // link pointed into.
+                if let location = previous.roots[rootPath],
                    RemovedAppWatchPolicy.rootVolumeIsGone(
-                       rootDevice: device,
+                       rootDevice: location.device,
                        ancestorDevice: RemovedAppWatchPolicy.deviceNumber(
-                           atPath: RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: rootPath)
+                           atPath: RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: location.resolvedPath)
                        )
                    ) {
                     keepPreviousEntries(under: rootPath)
-                    result.rootDevices[rootPath] = device
+                    result.roots[rootPath] = location
                 }
                 continue
             }
-            result.rootDevices[rootPath] = RemovedAppWatchPolicy.deviceNumber(atPath: rootPath)
+            if let device = RemovedAppWatchPolicy.deviceNumber(atPath: rootPath) {
+                result.roots[rootPath] = Index.RootLocation(
+                    device: device,
+                    resolvedPath: RemovedAppWatchPolicy.resolvedPath(rootPath)
+                )
+            }
             guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
                 keepPreviousEntries(under: rootPath)
                 continue

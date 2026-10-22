@@ -218,6 +218,15 @@ nonisolated enum RemovedAppWatchPolicy {
         return Int64(info.st_dev)
     }
 
+    /// `path` with every symlink resolved, or `path` itself when it cannot be
+    /// resolved (nothing there). `realpath`, which keeps `/private` on `/var` and
+    /// `/tmp` paths, rather than `resolvingSymlinksInPath()`, which drops it.
+    static func resolvedPath(_ path: String) -> String {
+        guard let real = realpath(path, nil) else { return path }
+        defer { free(real) }
+        return String(cString: real)
+    }
+
     /// The nearest ancestor of `path` that exists, `/` at the latest. For a root
     /// on an ejected drive that is `/Volumes`, which is where the drive comes back.
     static func nearestExistingAncestor(ofPath path: String) -> String {

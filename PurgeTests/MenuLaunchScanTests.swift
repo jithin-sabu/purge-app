@@ -52,7 +52,9 @@ struct MenuLaunchScanTests {
         model.attach(store: store, scansAtLaunch: false)
 
         store.requestScan(.cachesAndDevTools)
-        #expect(await Self.eventually { store.isScanningAll })
+        // Held once the scan has reached the fake, so the release below has
+        // something to release.
+        #expect(await Self.eventually { fake.generalAccesses.count == 1 })
         try? await Task.sleep(for: .milliseconds(400))
         fake.finishHeldGeneral()
         #expect(await Self.eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })

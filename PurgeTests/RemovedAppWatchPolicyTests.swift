@@ -228,10 +228,14 @@ struct RemovedAppWatchPolicyTests {
         #expect(!RemovedAppWatchPolicy.rootVolumeIsGone(rootDevice: 7, ancestorDevice: 7))
         #expect(!RemovedAppWatchPolicy.rootVolumeIsGone(rootDevice: nil, ancestorDevice: 3))
         #expect(!RemovedAppWatchPolicy.rootVolumeIsGone(rootDevice: 7, ancestorDevice: nil))
-        #expect(RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: "/Volumes/Gone/Applications") == "/Volumes")
+        // A path nothing else on this Mac could hold, two levels under the
+        // temporary folder.
+        let temporary = FileManager.default.temporaryDirectory
+        let missing = temporary.appendingPathComponent("purge-missing-\(UUID().uuidString)/Applications", isDirectory: true)
+        #expect(RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: missing.path) == temporary.path)
         #expect(RemovedAppWatchPolicy.nearestExistingAncestor(ofPath: "/Applications") == "/")
         #expect(RemovedAppWatchPolicy.deviceNumber(atPath: "/") != nil)
-        #expect(RemovedAppWatchPolicy.deviceNumber(atPath: "/Volumes/Gone/Applications") == nil)
+        #expect(RemovedAppWatchPolicy.deviceNumber(atPath: missing.path) == nil)
     }
 
     @Test
@@ -937,19 +941,45 @@ struct ApplicationsFolderWatcherTests {
         try makeBundle(in: root, name: "Alpha", bundleID: "com.test.alpha")
         let rootPath = root.standardizedFileURL.path
         let before = ApplicationsFolderWatcher.index(roots: [root], reusing: .init())
-        let device = try #require(before.rootDevices[rootPath])
+        let location = try #require(before.roots[rootPath])
+        #expect(location.resolvedPath == RemovedAppWatchPolicy.resolvedPath(rootPath))
 
         try fm.removeItem(at: root)
         let deleted = ApplicationsFolderWatcher.index(roots: [root], reusing: before)
         #expect(deleted.apps.isEmpty)
-        #expect(deleted.rootDevices[rootPath] == nil)
+        #expect(deleted.roots[rootPath] == nil)
 
         var ejected = before
-        ejected.rootDevices[rootPath] = device + 1
+        ejected.roots[rootPath] = .init(device: location.device + 1, resolvedPath: location.resolvedPath)
         let kept = ApplicationsFolderWatcher.index(roots: [root], reusing: ejected)
         #expect(kept.bundleIDs == ["com.test.alpha"])
         #expect(kept.fileNumbers == before.fileNumbers)
-        #expect(kept.rootDevices[rootPath] == device + 1)
+        #expect(kept.roots[rootPath] == ejected.roots[rootPath])
+    }
+
+    /// A root reached through a symlink is placed where it really is. Its target
+    /// deleted on a volume still mounted lists as empty, judged by the target's
+    /// own parent: the link's parent (the home folder, for a `~/Applications`
+    /// that points at a drive) sits on another device and would say the drive
+    /// was ejected.
+    @Test
+    func missingSymlinkTargetIsClassifiedOnItsOwnVolume() throws {
+        let folder = try makeRoot()
+        defer { try? fm.removeItem(at: folder) }
+        let target = folder.appendingPathComponent("Target", isDirectory: true)
+        try fm.createDirectory(at: target, withIntermediateDirectories: true)
+        try makeBundle(in: target, name: "Alpha", bundleID: "com.test.alpha")
+        let link = folder.appendingPathComponent("Applications", isDirectory: true)
+        try fm.createSymbolicLink(at: link, withDestinationURL: target)
+        let linkPath = link.standardizedFileURL.path
+
+        let before = ApplicationsFolderWatcher.index(roots: [link], reusing: .init())
+        #expect(before.bundleIDs == ["com.test.alpha"])
+        #expect(before.roots[linkPath]?.resolvedPath == RemovedAppWatchPolicy.resolvedPath(target.path))
+
+        try fm.removeItem(at: target)
+        let gone = ApplicationsFolderWatcher.index(roots: [link], reusing: before)
+        #expect(gone.apps.isEmpty)
     }
 
     /// With destination tracking (the background agent), a root renamed away
