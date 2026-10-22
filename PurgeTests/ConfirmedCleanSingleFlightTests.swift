@@ -160,6 +160,19 @@ struct ConfirmedCleanSingleFlightTests {
 
         #expect(!store.takeRemovedAppReviewHeldForAnotherClean())
     }
+
+    /// A leftover clean that never failed reads as such, so the monitor ends the
+    /// review after a summary rather than showing it again (#177). The failure
+    /// itself needs the deleter to throw, which the store's own deleter does not
+    /// do on demand.
+    @Test("A leftover clean that did not fail is not offered again")
+    func leftoverCleanupFailureNotReportedWhenNoneHappened() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+
+        #expect(!store.takeLeftoverCleanupFailure())
+    }
 }
 
 /// Waits for `condition`, giving up after about two seconds. The confirm sheet

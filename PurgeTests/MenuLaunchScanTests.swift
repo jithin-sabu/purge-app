@@ -69,6 +69,27 @@ struct MenuLaunchScanTests {
         fake.cleanUp()
     }
 
+    /// A window scan over before the model's debounce could see it start still
+    /// counts: the open finds the session's results and shows them at once,
+    /// without going back to checking or scanning again.
+    @Test("A quick window scan the sink missed still counts as the launch scan")
+    func quickWindowScanCountsAsLaunchScan() async {
+        let fake = FakeScans()
+        let store = fake.makeStore()
+        let model = MenuViewModel()
+        model.attach(store: store, scansAtLaunch: false)
+
+        store.requestScan(.cachesAndDevTools)
+        #expect(await Self.eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
+
+        model.menuDidOpen()
+        #expect(model.state != .checking)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(model.state != .checking)
+        #expect(fake.generalAccesses.count == 1)
+        fake.cleanUp()
+    }
+
     /// Counts only the time this loop was running, as `IntentRouterTests` does:
     /// on CI the test host can stall with every suite waiting.
     private static func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {

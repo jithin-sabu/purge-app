@@ -687,6 +687,15 @@ final class RemovedAppMonitor: ObservableObject {
 
     private func cleanupSummaryClosed() {
         guard phase == .cleaning else { return }
+        if store?.takeLeftoverCleanupFailure() == true, let current {
+            // The clean failed as a whole, and its alert says to try again, which
+            // only this monitor can offer: back to the front of the queue with
+            // its record, to open again once the alert is dismissed. Dismissing
+            // the review then is what ends it.
+            queue.insert(current, at: 0)
+            finishReview(keepingRecord: true)
+            return
+        }
         finishReview()
     }
 

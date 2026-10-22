@@ -155,23 +155,30 @@ final class MenuViewModel: ObservableObject {
     /// Only falls back to a blocking scan when there is nothing to show yet.
     func menuDidOpen() {
         guard let store else { return }
-        // A launch that skipped its scan: the first open runs it, as the launch
-        // would have, so the menu never settles on numbers no scan produced.
-        if launchScanPending {
-            runScan(forced: true)
-            return
-        }
         // A finished scan can be invisible here: completion arrives via a
         // debounced sink on RunLoop.main, and menu tracking stalls the main
         // queue — opening the menu inside that window (or holding it open
         // through completion) leaves state stuck at `.checking` even though
         // the store already has results. Resolve synchronously off the store
-        // so opening always shows a finished scan immediately.
+        // so opening always shows a finished scan immediately. Results from
+        // this session only: `lastScanCompletedAt` outlives the launch, and a
+        // launch that skipped its scan has nothing to show until one runs (#177).
         if case .checking = state,
            !store.isScanningAll,
            activeWorkTask == nil, backgroundRefreshTask == nil,
-           store.lastScanCompletedAt != nil {
+           store.hasSessionResults(for: .cachesAndDevTools) {
+            // A scan the window ran is the launch scan this skipped, even one
+            // over too quickly for the debounced sink to see it start.
+            launchScanPending = false
             resolveAfterScan(animated: false)
+        }
+        // A launch that skipped its scan: the first open runs it, as the launch
+        // would have, so the menu never settles on numbers no scan produced.
+        // While a clean runs no scan can start, and checking is the cold state
+        // until the next open.
+        if launchScanPending {
+            runScan(forced: true)
+            return
         }
         guard !isBusy else { return }
         guard hasSessionScan, let scannedAt = store.lastScanCompletedAt else {

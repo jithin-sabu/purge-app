@@ -834,6 +834,19 @@ final class PurgeStore: ObservableObject {
         return removedAppReviewHeldForAnotherClean
     }
 
+    /// Set when the last leftover clean failed as a whole, before anything was
+    /// reported, and its alert asked to try again. A removed-app review is the
+    /// one leftover clean that can't be tried again by hand, so
+    /// `RemovedAppMonitor` reads this as the session clears and shows the
+    /// review again once the alert is dismissed (#177).
+    private(set) var leftoverCleanupFailed = false
+
+    /// Reads and clears `leftoverCleanupFailed`.
+    func takeLeftoverCleanupFailure() -> Bool {
+        defer { leftoverCleanupFailed = false }
+        return leftoverCleanupFailed
+    }
+
     /// Paths that match the safety, git, and lockfile rules used by safe cleanup
     /// (manual and scheduled — both clean the same set).
     ///
@@ -2349,6 +2362,7 @@ final class PurgeStore: ObservableObject {
 
         isDeleting = true
         errorMessage = nil
+        leftoverCleanupFailed = false
         defer {
             isDeleting = false
             progressPoller.cancel()
@@ -2388,6 +2402,8 @@ final class PurgeStore: ObservableObject {
             if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
             recordCleanup(report, trigger: .manual, source: .leftovers)
         } catch {
+            // Before the session clears: the monitor reads this as it does.
+            leftoverCleanupFailed = true
             manualDeletionSession = nil
             errorMessage = String(localized: "Unable to remove the selected leftovers. Please try again.")
         }
