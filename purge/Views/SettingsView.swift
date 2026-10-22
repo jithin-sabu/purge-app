@@ -148,12 +148,17 @@ struct SettingsView: View {
 
                     settingsToggleRow(
                         title: String(localized: "Hide Dock icon"),
-                        caption: String(localized: "Quit from the menu bar, since ⌘Q won't work."),
+                        // Only true while the icon is hidden: with it shown, the app
+                        // menu is back and ⌘Q quits.
+                        caption: startup.hidesDockIcon
+                            ? String(localized: "Quit from the menu bar, since ⌘Q won't work.")
+                            : nil,
                         info: String(localized: """
                             Purge runs from the menu bar only. Click the menu bar icon to open \
                             this window again. The app menu is gone while the Dock icon is \
                             hidden, so ⌘Q won't quit. Use Quit in the menu bar dropdown.
                             """),
+                        captionAnimatesTextChanges: true,
                         isOn: hideDockIconBinding
                     )
                 }
@@ -278,12 +283,12 @@ struct SettingsView: View {
                 title: String(localized: "Uninstall from Finder's right-click menu"),
                 info: finderServiceCaption,
                 warning: finderService.flushFailed ? finderServiceFlushWarning : nil,
+                isToggleDisabled: finderService.isApplying,
                 isOn: Binding(
                     get: { finderService.isEnabled },
                     set: { enabled in Task { await finderService.setEnabled(enabled) } }
                 )
             )
-            .disabled(finderService.isApplying)
             // The same switch lives in System Settings, so read it again each time
             // this page comes into view.
             .onAppear { finderService.refresh() }
@@ -368,31 +373,40 @@ struct SettingsView: View {
             settingsToggleRow(
                 title: String(localized: "Install updates automatically"),
                 info: automaticInstallSummary,
+                isToggleDisabled: !updater.allowsAutomaticUpdates,
                 isOn: automaticUpdateDownloadsBinding
             )
-            .disabled(!updater.allowsAutomaticUpdates)
 
             settingsSectionDivider
 
-            settingsLinkRow(
-                title: String(localized: "Cleaning history"),
-                value: lastCleanSummary,
-                valueIsFigure: true
-            ) {
-                showCleaningHistorySheet = true
+            // Ticks each minute so "Today" turns into "Yesterday" past midnight.
+            TimelineView(.periodic(from: Date(), by: 60)) { context in
+                settingsLinkRow(
+                    title: String(localized: "Cleaning history"),
+                    value: lastCleanSummary(referenceDate: context.date),
+                    valueIsFigure: true
+                ) {
+                    showCleaningHistorySheet = true
+                }
             }
         }
     }
 
-    private var lastCleanSummary: String {
+    /// The same figure the History sheet shows for the entry: trashed plus
+    /// permanently deleted bytes, or the measured gain for the Apple Intelligence
+    /// models, which move nothing to the Trash.
+    private func lastCleanSummary(referenceDate: Date) -> String {
         guard let latest = history.archive.entries.first else {
             return String(localized: "None yet")
         }
-        let relative = relativeDateText(for: latest.date, referenceDate: Date())
-        guard latest.bytesMovedToTrash > 0 else {
+        let relative = relativeDateText(for: latest.date, referenceDate: referenceDate)
+        let removedNothing = latest.kind != .appleIntelligenceModels
+            && latest.bytesMovedToTrash + latest.bytesDeletedPermanently == 0
+        guard !removedNothing else {
             return String(localized: "Last: nothing moved, \(relative)")
         }
-        return String(localized: "Last: \(formatBytes(latest.bytesMovedToTrash)), \(relative)")
+        let figure = CleanupHistorySummaryRow(entry: latest).primaryFigure
+        return String(localized: "Last: \(figure), \(relative)")
     }
 
     /// Verification affordance: runs the real scheduled-clean pipeline now (same
@@ -460,7 +474,7 @@ struct SettingsView: View {
     /// Scans skip these folders and everything inside them. Purely subtractive:
     /// un-excluding only restores eligibility when the path still passes the normal
     /// allowlist gate.
-    private var excludedFoldersSheet: some View {
+    var excludedFoldersSheet: some View {
         settingsSheet(
             title: String(localized: "Excluded folders"),
             caption: String(localized: "Scans skip these folders and everything inside them. You can also right-click a scan result and choose Exclude from scans."),
@@ -496,7 +510,7 @@ struct SettingsView: View {
 
     /// Recent cleanup activity, so scheduled cleans are visible in the app instead
     /// of only in a passing notification.
-    private var cleaningHistorySheet: some View {
+    var cleaningHistorySheet: some View {
         settingsSheet(
             title: String(localized: "Cleaning history"),
             caption: nil,
@@ -929,6 +943,7 @@ struct SettingsView: View {
         warning: String? = nil,
         status: SettingsRowStatus? = nil,
         captionAnimatesTextChanges: Bool = false,
+        isToggleDisabled: Bool = false,
         isOn: Binding<Bool>
     ) -> some View {
         HStack(alignment: .center, spacing: 16) {
@@ -941,10 +956,12 @@ struct SettingsView: View {
                 animatesCaptionChanges: captionAnimatesTextChanges
             )
 
+            // Only the switch is disabled, so the info button can still explain why.
             Toggle(LocalizedStringKey(title), isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .tint(AppColors.statusSafeText)
+                .disabled(isToggleDisabled)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -1319,7 +1336,7 @@ struct SettingsRowStatus: Equatable {
     }
 }
 
-private struct SettingsStatusLine: View {
+struct SettingsStatusLine: View {
     let status: SettingsRowStatus
 
     var body: some View {
@@ -1362,12 +1379,20 @@ private struct SettingsInfoButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(String(localized: "More about \(title)"))
         .popover(isPresented: $isShowing, arrowEdge: .bottom) {
-            Text(LocalizedStringKey(text))
-                .font(AppStyle.Typography.callout)
-                .foregroundStyle(AppColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(width: 300, alignment: .leading)
-                .padding(AppStyle.Spacing.medium)
+            SettingsInfoPopover(text: text)
         }
+    }
+}
+
+struct SettingsInfoPopover: View {
+    let text: String
+
+    var body: some View {
+        Text(LocalizedStringKey(text))
+            .font(AppStyle.Typography.callout)
+            .foregroundStyle(AppColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: 300, alignment: .leading)
+            .padding(AppStyle.Spacing.medium)
     }
 }
