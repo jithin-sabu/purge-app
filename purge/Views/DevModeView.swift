@@ -1146,7 +1146,7 @@ struct DevToolsView<PageHeader: View>: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Text(formatBytes(visibleGroupByteTotal(groupID: group.id)))
-                            .font(AppStyle.Typography.rowTitle)
+                            .font(AppStyle.Typography.rowTitle.numbers)
                             .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
                         projectBadge(level: projectLevel(groupIndex: currentGroupIndex))

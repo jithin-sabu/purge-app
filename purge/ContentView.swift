@@ -996,7 +996,7 @@ struct SidebarSummaryView: View {
         case .readable where trashStore.trashBytes <= 0:
             Text("Trash is empty").foregroundStyle(AppColors.textSecondary)
         case .readable:
-            (Text(formatBytes(trashStore.trashBytes)).foregroundColor(AppColors.textPrimary).fontWeight(.semibold)
+            (Text(formatBytes(trashStore.trashBytes)).foregroundColor(AppColors.textPrimary).font(AppStyle.Typography.callout.weight(.semibold).numbers)
                 + Text(" in Trash").foregroundColor(AppColors.textSecondary))
                 .monospacedDigit()
                 .contentTransition(reduceMotion ? .identity : .numericText())

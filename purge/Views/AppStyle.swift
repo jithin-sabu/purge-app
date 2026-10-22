@@ -1,3 +1,5 @@
+import AppKit
+import CoreText
 import SwiftUI
 
 enum AppStyle {
@@ -67,24 +69,24 @@ enum AppStyle {
         /// Large totals: Overview, onboarding results.
         static let displaySmall = Font.system(size: 36, weight: .bold, design: .rounded)
         /// Onboarding and empty-state headings.
-        static let title = Font.system(size: 26, weight: .semibold, design: .rounded)
-        static let pageTitle = Font.system(size: 20, weight: .semibold, design: .rounded)
+        static let title = AppFonts.onest(size: 26, weight: .semibold)
+        static let pageTitle = AppFonts.onest(size: 20, weight: .semibold)
         /// Sheet titles, card headers, large buttons.
-        static let sectionTitle = Font.system(size: 15, weight: .semibold)
+        static let sectionTitle = AppFonts.onest(size: 15, weight: .semibold)
         /// Group headers, emphasis, regular buttons.
-        static let headline = Font.system(size: 13, weight: .semibold)
-        static let body = Font.system(size: 13)
+        static let headline = AppFonts.onest(size: 13, weight: .semibold)
+        static let body = AppFonts.onest(size: 13)
         /// List row titles, menu rows.
-        static let rowTitle = Font.system(size: 13, weight: .medium)
+        static let rowTitle = AppFonts.onest(size: 13, weight: .medium)
         /// Helper text under controls, small buttons.
-        static let callout = Font.system(size: 12)
+        static let callout = AppFonts.onest(size: 12)
         /// Sizes, dates, paths.
-        static let metadata = Font.system(size: 11)
-        static let metadataEmphasis = Font.system(size: 11, weight: .medium)
+        static let metadata = AppFonts.onest(size: 11)
+        static let metadataEmphasis = AppFonts.onest(size: 11, weight: .medium)
         /// Badges and count pills.
-        static let micro = Font.system(size: 10, weight: .semibold)
+        static let micro = AppFonts.onest(size: 10, weight: .semibold)
         /// File-type labels laid over a 28pt icon, where `micro` is too wide.
-        static let iconLabel = Font.system(size: 8, weight: .semibold)
+        static let iconLabel = AppFonts.onest(size: 8, weight: .semibold)
     }
 }
 
@@ -107,5 +109,51 @@ struct InsetCardDivider: View {
             .fill(AppColors.borderSubtle)
             .frame(height: 0.5)
             .padding(.horizontal, horizontalInset)
+    }
+}
+
+/// Onest for text, SF Rounded for figures.
+///
+/// `Resources/Fonts/OnestText.ttf` is Onest (SIL Open Font License, see
+/// `Onest-OFL.txt`) with its ten digits removed, so a digit inside ordinary text
+/// falls back to the system font. It is registered for this process, which lets
+/// SwiftUI's own `.weight(_:)` drive the variable weight axis. Text that shows
+/// sizes, units or percentages uses `Font.numbers` instead.
+enum AppFonts {
+    private static let isRegistered: Bool = {
+        guard let url = Bundle.main.url(forResource: "OnestText", withExtension: "ttf") else { return false }
+        var error: Unmanaged<CFError>?
+        return CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
+    }()
+
+    private static var specs: [Font: (size: CGFloat, weight: Font.Weight)] = [:]
+    private static let weights: [Font.Weight] = [.ultraLight, .thin, .light, .regular, .medium, .semibold, .bold, .heavy, .black]
+
+    static func onest(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        // Without the font file, fall back to the system font, not a missing face.
+        let font = isRegistered
+            ? Font.custom("Onest", size: size).weight(weight)
+            : Font.system(size: size, weight: weight)
+        specs[font] = (size, weight)
+        // Call sites adjust a style with `.weight(_:)`; remember those too so
+        // `.numbers` finds them.
+        for variant in weights {
+            specs[font.weight(variant)] = (size, variant)
+        }
+        return font
+    }
+
+    /// SF Rounded at an Onest style's size and weight, for numbers.
+    static func roundedNumbers(matching font: Font?) -> Font? {
+        guard let font, let spec = specs[font] else { return nil }
+        return .system(size: spec.size, weight: spec.weight, design: .rounded)
+    }
+}
+
+extension Font {
+    /// SF Rounded at this Onest style's size and weight, for sizes, units and
+    /// percentages. System styles, such as `display`, come back unchanged.
+    var numbers: Font {
+        AppFonts.roundedNumbers(matching: self) ?? self
     }
 }

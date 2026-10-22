@@ -376,6 +376,7 @@ struct MorphingActionLabel: View {
                     HStack(spacing: 0) {
                         Text(" (")
                         Text(formatBytes(bytes))
+                            .font(AppStyle.Typography.headline.numbers)
                             .monospacedDigit()
                             .contentTransition(reduceMotion ? .identity : .numericText())
                         Text(")")

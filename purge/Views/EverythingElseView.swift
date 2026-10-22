@@ -161,11 +161,11 @@ struct OverviewEverythingElseRow: View {
             }
             Spacer(minLength: AppStyle.Spacing.small)
             Text(OverviewCategoryStyle.shareText(breakdown.share(of: breakdown.everythingElseBytes)))
-                .font(AppStyle.Typography.metadata)
+                .font(AppStyle.Typography.metadata.numbers)
                 .foregroundStyle(AppColors.textTertiary)
                 .overviewNumberTransition(breakdown.everythingElseBytes, reduceMotion: reduceMotion)
             Text(formatStorageBytes(breakdown.everythingElseBytes))
-                .font(AppStyle.Typography.sectionTitle)
+                .font(AppStyle.Typography.sectionTitle.numbers)
                 .overviewNumberTransition(breakdown.everythingElseBytes, reduceMotion: reduceMotion)
                 .frame(minWidth: 64, alignment: .trailing)
         }
@@ -299,7 +299,7 @@ struct EverythingElseView: View {
                             .lineLimit(1)
                     }
                     Text(bytes.map(formatStorageBytes) ?? "—")
-                        .font(AppStyle.Typography.pageTitle)
+                        .font(AppStyle.Typography.pageTitle.numbers)
                         .foregroundStyle(bytes == nil ? AppColors.textTertiary : AppColors.textPrimary)
                         .monospacedDigit()
                         .overviewNumberTransition(bytes ?? 0, reduceMotion: reduceMotion)
@@ -392,7 +392,7 @@ private struct EverythingElseStatusLine: View {
     var body: some View {
         if phase == .measuring, let measurement, !measurement.plannedGroups.isEmpty {
             Text("\(measurement.finishedGroupCount) of \(measurement.plannedGroups.count) groups")
-                .font(AppStyle.Typography.callout)
+                .font(AppStyle.Typography.callout.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
         }
@@ -844,7 +844,7 @@ private struct EverythingElseNestedMap: View {
                             .lineLimit(titleLines)
                         if showsSize {
                             Text(formatStorageBytes(item.bytes))
-                                .font(AppStyle.Typography.metadata)
+                                .font(AppStyle.Typography.metadata.numbers)
                                 .monospacedDigit()
                                 .lineLimit(1)
                                 .opacity(0.75)
@@ -909,7 +909,7 @@ private struct EverythingElseNestedMap: View {
                     .font(AppStyle.Typography.headline)
                     .lineLimit(1)
                 Text(formatStorageBytes(item.bytes))
-                    .font(AppStyle.Typography.metadata)
+                    .font(AppStyle.Typography.metadata.numbers)
                     .monospacedDigit()
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -1299,7 +1299,7 @@ private struct EverythingElseDetail: View {
                     .lineLimit(2)
                 Spacer(minLength: AppStyle.Spacing.small)
                 Text(formatStorageBytes(bytes))
-                    .font(AppStyle.Typography.headline)
+                    .font(AppStyle.Typography.headline.numbers)
                     .foregroundStyle(AppColors.textSecondary)
                     .monospacedDigit()
             }
@@ -1419,7 +1419,7 @@ private struct EverythingElseDetail: View {
                             .truncationMode(.middle)
                         Spacer(minLength: AppStyle.Spacing.small)
                         Text(formatStorageBytes(folder.bytes))
-                            .font(AppStyle.Typography.metadata)
+                            .font(AppStyle.Typography.metadata.numbers)
                             .foregroundStyle(AppColors.textSecondary)
                             .monospacedDigit()
                         Button {

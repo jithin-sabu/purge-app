@@ -253,7 +253,7 @@ struct DeletionConfirmSheet: View {
 
                 VStack(alignment: .trailing, spacing: AppStyle.Spacing.xxSmall) {
                     Text(item.formattedSize)
-                        .font(AppStyle.Typography.metadataEmphasis)
+                        .font(AppStyle.Typography.metadataEmphasis.numbers)
                         .foregroundStyle(AppColors.textSecondary)
                         .monospacedDigit()
                     safetyTag(for: item.safetyInfo.level)
@@ -310,7 +310,7 @@ struct DeletionConfirmSheet: View {
     private func footer(primaryTitle: String) -> some View {
         HStack(spacing: AppStyle.Spacing.small) {
             Text("Freeing \(formatBytes(totalBytes))")
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
 
             Spacer()

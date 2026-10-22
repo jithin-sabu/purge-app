@@ -153,7 +153,7 @@ private struct CommandLineToolRow: View {
             Spacer(minLength: AppStyle.Spacing.xSmall)
 
             Text(formatBytes(sizeBytes))
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
         }
@@ -301,7 +301,7 @@ struct CommandLineToolReviewSheet: View {
             Spacer()
             statusView(state)
             Text(formatBytes(bytes))
-                .font(AppStyle.Typography.metadataEmphasis)
+                .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
         }
@@ -442,7 +442,7 @@ struct CommandLineToolReviewSheet: View {
             switch plan.phase {
             case .review, .checking:
                 Text("Freeing \(formatBytes(plan.totalBytes))")
-                    .font(AppStyle.Typography.metadataEmphasis)
+                    .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
                 Spacer()
                 Button("Cancel", action: onClose)

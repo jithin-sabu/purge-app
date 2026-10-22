@@ -350,7 +350,7 @@ struct ScanResultRow: View {
         } loaded: {
             VStack(alignment: .trailing, spacing: 8) {
                 Text(formattedSize)
-                    .font(AppStyle.Typography.metadata.weight(.medium))
+                    .font(AppStyle.Typography.metadata.weight(.medium).numbers)
                     .foregroundStyle(AppColors.textPrimary)
                     .monospacedDigit()
 

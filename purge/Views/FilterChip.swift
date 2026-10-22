@@ -72,7 +72,7 @@ struct FilterChip: View {
                     .accessibilityHidden(true)
             } else if let count {
                 Text("\(count)")
-                    .font(AppStyle.Typography.rowTitle)
+                    .font(AppStyle.Typography.rowTitle.numbers)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .foregroundStyle(countColor)
