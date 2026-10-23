@@ -72,22 +72,24 @@ Every `.font(...)` on text uses `AppStyle.Typography`, adding `.weight(...)` for
 
 Text is set in [Onest](https://github.com/googlefonts/onest), bundled as `purge/Resources/Fonts/OnestText.ttf` under the SIL Open Font License (`Onest-OFL.txt`). The bundled copy has its digits removed, so a number inside ordinary text, such as "Last used 6 months ago", is drawn by the system font.
 
-| Style | Spec | Use for |
-| --- | --- | --- |
-| `display` | SF Rounded 56 bold | Freed bytes on the celebration |
-| `displaySmall` | SF Rounded 36 bold | Large totals |
-| `title` | Onest 26 semibold | Onboarding and empty-state headings |
-| `pageTitle` | Onest 20 semibold | Page headers |
-| `sectionTitle` | Onest 15 semibold | Sheet titles, card headers, large buttons |
-| `headline` | Onest 13 semibold | Group headers, regular buttons |
-| `body` | Onest 13 regular | Paragraphs, labels |
-| `rowTitle` | Onest 13 medium | List rows, menu rows |
-| `callout` | Onest 12 regular | Helper text, small buttons |
-| `metadata` / `metadataEmphasis` | Onest 11 regular / medium | Sizes, dates, paths |
-| `micro` | Onest 10 semibold | Badges, count pills |
-| `iconLabel` | Onest 8 semibold | File-type labels over a row icon |
+| Style | Spec | Tracking | Use for |
+| --- | --- | --- | --- |
+| `display` | SF Rounded 56 bold | 0 | Freed bytes on the celebration |
+| `displaySmall` | SF Rounded 36 bold | 0 | Large totals |
+| `title` | Onest 26 semibold | 0 | Onboarding and empty-state headings |
+| `pageTitle` | Onest 20 semibold | 0 | Page headers |
+| `sectionTitle` | Onest 15 semibold | +0.1 | Sheet titles, card headers, large buttons |
+| `headline` | Onest 13 semibold | +0.15 | Group headers, regular buttons |
+| `body` | Onest 13 regular | +0.15 | Paragraphs, labels |
+| `rowTitle` | Onest 13 medium | +0.15 | List rows, menu rows |
+| `callout` | Onest 12 regular | +0.25 | Helper text, small buttons |
+| `metadata` / `metadataEmphasis` | Onest 11 regular / medium | +0.3 | Sizes, dates, paths |
+| `micro` | Onest 10 semibold | +0.4 | Badges, count pills |
+| `iconLabel` | Onest 8 semibold | +0.45 | File-type labels over a row icon |
 
-Sizes, units and percentages are set in SF Rounded: add `.numbers` to the style, as in `.font(AppStyle.Typography.metadata.numbers)`, and keep `.monospacedDigit()` so figures don't shift as they change. When a line is mostly a figure, such as "285.9 GB used of 494.4 GB", the whole line takes `.numbers`.
+Tracking is letter spacing in points, and each style carries its own. Onest has no optical sizes, so small text gets a little air and text from 20 pt up gets none. SF Rounded adjusts itself at every size and takes none. `.font(style)` sets the font and the tracking together; never add `.tracking` or `.kerning` to a view, the design lint fails on it.
+
+Sizes, units and percentages are set in SF Rounded: add `.numbers` to the style, as in `.font(AppStyle.Typography.metadata.numbers)`, and keep `.monospacedDigit()` so figures don't shift as they change. When a line is mostly a figure, such as "285.9 GB used of 494.4 GB", the whole line takes `.numbers`. Paths and commands take `.monospaced()`, the system monospaced font at the style's size.
 
 ## Shape and spacing
 
