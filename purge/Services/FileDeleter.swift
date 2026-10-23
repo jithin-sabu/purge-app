@@ -183,6 +183,7 @@ nonisolated final class FileDeleter: Sendable {
         var bytesRemovedDirectly: Int64 = 0
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
+        var fullDiskAccess: Bool?
         var skippedItems: [SkippedDeletionItem] = []
         var ownershipWarningPaths: [String] = []
         var installLeftovers: [URL] = []
@@ -285,7 +286,8 @@ nonisolated final class FileDeleter: Sendable {
                                     error: error,
                                     displayName: contentURL.lastPathComponent,
                                     sizeBytes: entryBytes,
-                                    failedItems: &failedItems
+                                    failedItems: &failedItems,
+                                    fullDiskAccess: &fullDiskAccess
                                 )
                             }
                         }
@@ -345,7 +347,8 @@ nonisolated final class FileDeleter: Sendable {
                             error: error,
                             displayName: friendlyTitle,
                             sizeBytes: size,
-                            failedItems: &failedItems
+                            failedItems: &failedItems,
+                            fullDiskAccess: &fullDiskAccess
                         )
                     }
                 }
@@ -469,6 +472,7 @@ nonisolated final class FileDeleter: Sendable {
         var bytesMovedToTrash: Int64 = 0
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
+        var fullDiskAccess: Bool?
         var skippedItems: [SkippedDeletionItem] = []
         var ownershipWarningPaths: [String] = []
         let volumeURL = home
@@ -515,7 +519,8 @@ nonisolated final class FileDeleter: Sendable {
                     error: error,
                     displayName: friendlyTitle,
                     sizeBytes: size,
-                    failedItems: &failedItems
+                    failedItems: &failedItems,
+                    fullDiskAccess: &fullDiskAccess
                 )
             }
         }
@@ -836,17 +841,27 @@ nonisolated final class FileDeleter: Sendable {
         return .success(report.bytesMovedToTrash + report.bytesRemovedDirectly)
     }
 
+    /// Probes Full Disk Access the first time a run needs to know, then reuses the
+    /// answer. A folder whose contents all fail used to probe once per entry (#190).
+    private static func fullDiskAccess(cachedIn cached: inout Bool?) -> Bool {
+        if let cached { return cached }
+        let granted = PermissionChecker().hasFullDiskAccess()
+        cached = granted
+        return granted
+    }
+
     private func recordDeletionFailure(
         path: String,
         error: Error,
         displayName: String?,
         sizeBytes: Int64,
-        failedItems: inout [FailedDeletionItem]
+        failedItems: inout [FailedDeletionItem],
+        fullDiskAccess: inout Bool?
     ) {
         guard let reason = CleanFailureReason.resolved(
             from: error,
             path: path,
-            fullDiskAccessGranted: PermissionChecker().hasFullDiskAccess()
+            fullDiskAccessGranted: Self.fullDiskAccess(cachedIn: &fullDiskAccess)
         ) else {
             NSLog("Purge: item already gone, skipping %@", path)
             return

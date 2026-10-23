@@ -188,13 +188,16 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     /// protection when the file — or the directory holding it — really is
     /// immutable or SIP-marked. Anything else is honestly unknown, and offering
     /// a retry beats inventing a cause.
+    ///
+    /// `fullDiskAccessGranted` probes the disk, so it is only asked for a
+    /// permission error.
     static func resolved(
         from error: Error,
         path: String,
-        fullDiskAccessGranted: Bool
+        fullDiskAccessGranted: @autoclosure () -> Bool
     ) -> CleanFailureReason? {
         guard let reason = from(error: error) else { return nil }
-        guard fullDiskAccessGranted, reason == .needsFullDiskAccess else { return reason }
+        guard reason == .needsFullDiskAccess, fullDiskAccessGranted() else { return reason }
         return FileProtection.blocksRemoval(URL(fileURLWithPath: path)) ? .systemProtected : .unknown
     }
 
