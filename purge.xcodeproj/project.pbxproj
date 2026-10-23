@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AB143A00000000000000B001 /* AppBundleReach.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB143A00000000000000F001 /* AppBundleReach.swift */; };
+		AB143A00000000000000B002 /* AppBundleReach.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB143A00000000000000F001 /* AppBundleReach.swift */; };
 		122233445566778899AABBCC /* PurgeWatchMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6D7E8F901A2B3C4D5E6F70 /* PurgeWatchMain.swift */; };
 		2333445566778899AABBCCDD /* ApplicationsFolderWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01D2E3F405162738495A6B7 /* ApplicationsFolderWatcher.swift */; };
 		293A4B5C6D7E8F901A2B3C4D /* io.getpurge.watch in Embed Watch Agent */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* io.getpurge.watch */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -24,14 +26,12 @@
 		7F6476365B8C1DBD1473E899 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818D84C8D5D21B95ABA44BDA /* main.swift */; };
 		82ABE8E4B27CCE67F4AF5EA2 /* PurgeHelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C4796D7FF373363BCFFB9D /* PurgeHelperProtocol.swift */; };
 		957945A658563B63C6ADC1D7 /* HelperSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A21D7856EC3D4A4B450ABCB /* HelperSupport.swift */; };
+		AB127A00000000000000B001 /* MacOSInstallLeftovers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB127A00000000000000F001 /* MacOSInstallLeftovers.swift */; };
+		D4437D8BF273B9C7C9FC5A96 /* io.getpurge.helper in Embed Privileged Helper */ = {isa = PBXBuildFile; fileRef = 23866D74E1EC150691D3E969 /* io.getpurge.helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		ED195DD5938B9599AB353C08 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 49C4D8E8868801EE41EAE019 /* Cocoa.framework */; };
 		AA10C0DE0001000000000005 /* PurgeAssetWorkerMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10C0DE0001000000000002 /* PurgeAssetWorkerMain.swift */; };
 		AA10C0DE0001000000000006 /* UnifiedAssetCalls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10C0DE0001000000000003 /* UnifiedAssetCalls.swift */; };
 		AA10C0DE0001000000000007 /* io.getpurge.assetworker in Embed Asset Worker */ = {isa = PBXBuildFile; fileRef = AA10C0DE0001000000000001 /* io.getpurge.assetworker */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		AB127A00000000000000B001 /* MacOSInstallLeftovers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB127A00000000000000F001 /* MacOSInstallLeftovers.swift */; };
-		AB143A00000000000000B001 /* AppBundleReach.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB143A00000000000000F001 /* AppBundleReach.swift */; };
-		AB143A00000000000000B002 /* AppBundleReach.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB143A00000000000000F001 /* AppBundleReach.swift */; };
-		D4437D8BF273B9C7C9FC5A96 /* io.getpurge.helper in Embed Privileged Helper */ = {isa = PBXBuildFile; fileRef = 23866D74E1EC150691D3E969 /* io.getpurge.helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		ED195DD5938B9599AB353C08 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 49C4D8E8868801EE41EAE019 /* Cocoa.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,13 +41,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 5AF380442FAA15E4001693A0;
 			remoteInfo = purge;
-		};
-		AA10C0DE000100000000000D /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 5AF3803D2FAA15E4001693A0 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AA10C0DE000100000000000B;
-			remoteInfo = PurgeAssetWorker;
 		};
 		BEC6A906754B93D2333C86AB /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -62,6 +55,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = B2C3D4E5F60718293A4B5C6D;
 			remoteInfo = PurgeWatch;
+		};
+		AA10C0DE000100000000000D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5AF3803D2FAA15E4001693A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA10C0DE000100000000000B;
+			remoteInfo = PurgeAssetWorker;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -124,6 +124,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AB143A00000000000000F001 /* AppBundleReach.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppBundleReach.swift; path = purge/Services/AppBundleReach.swift; sourceTree = SOURCE_ROOT; };
 		012132435465768798A9BACB /* ByteFormatter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ByteFormatter.swift; path = purge/Utilities/ByteFormatter.swift; sourceTree = SOURCE_ROOT; };
 		23866D74E1EC150691D3E969 /* io.getpurge.helper */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = file; path = io.getpurge.helper; sourceTree = BUILT_PRODUCTS_DIR; };
 		49C4D8E8868801EE41EAE019 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
@@ -135,22 +136,21 @@
 		7E8F901A2B3C4D5E6F708192 /* io.getpurge.watch.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = io.getpurge.watch.plist; sourceTree = "<group>"; };
 		818D84C8D5D21B95ABA44BDA /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		86D564549D65B3EC84798D9F /* HelperListenerDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperListenerDelegate.swift; sourceTree = "<group>"; };
-		8A21D7856EC3D4A4B450ABCB /* HelperSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HelperSupport.swift; path = purge/PrivilegedHelper/HelperSupport.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5C /* io.getpurge.watch */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = file; path = io.getpurge.watch; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA10C0DE0001000000000001 /* io.getpurge.assetworker */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = file; path = io.getpurge.assetworker; sourceTree = BUILT_PRODUCTS_DIR; };
-		AA10C0DE0001000000000002 /* PurgeAssetWorkerMain.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PurgeAssetWorkerMain.swift; sourceTree = "<group>"; };
-		AA10C0DE0001000000000003 /* UnifiedAssetCalls.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UnifiedAssetCalls.swift; sourceTree = "<group>"; };
-		AA10C0DE0001000000000004 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		AB127A00000000000000F001 /* MacOSInstallLeftovers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MacOSInstallLeftovers.swift; path = purge/PrivilegedHelper/MacOSInstallLeftovers.swift; sourceTree = "<group>"; };
-		AB143A00000000000000F001 /* AppBundleReach.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppBundleReach.swift; path = purge/Services/AppBundleReach.swift; sourceTree = SOURCE_ROOT; };
 		BEA85A6094291A6BEC3B68F5 /* HelperService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HelperService.swift; sourceTree = "<group>"; };
 		C01D2E3F405162738495A6B7 /* ApplicationsFolderWatcher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ApplicationsFolderWatcher.swift; path = purge/Services/ApplicationsFolderWatcher.swift; sourceTree = SOURCE_ROOT; };
 		CF5E4BD24C3225025049005F /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D01E2F30415263748596A7B8 /* RemovedAppWatchPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemovedAppWatchPolicy.swift; path = purge/Services/RemovedAppWatchPolicy.swift; sourceTree = SOURCE_ROOT; };
 		D4EC98BBF7E30D5C32FFB67D /* io.getpurge.helper.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = io.getpurge.helper.plist; sourceTree = "<group>"; };
 		D7C4796D7FF373363BCFFB9D /* PurgeHelperProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PurgeHelperProtocol.swift; path = purge/PrivilegedHelper/PurgeHelperProtocol.swift; sourceTree = "<group>"; };
+		8A21D7856EC3D4A4B450ABCB /* HelperSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HelperSupport.swift; path = purge/PrivilegedHelper/HelperSupport.swift; sourceTree = "<group>"; };
+		AB127A00000000000000F001 /* MacOSInstallLeftovers.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MacOSInstallLeftovers.swift; path = purge/PrivilegedHelper/MacOSInstallLeftovers.swift; sourceTree = "<group>"; };
 		E01F2031425364758697A8B9 /* RemovedAppHandoff.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemovedAppHandoff.swift; path = purge/Services/RemovedAppHandoff.swift; sourceTree = SOURCE_ROOT; };
 		F0102132435465768798A9BA /* InstalledApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstalledApp.swift; path = purge/Models/InstalledApp.swift; sourceTree = SOURCE_ROOT; };
+		AA10C0DE0001000000000001 /* io.getpurge.assetworker */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = file; path = io.getpurge.assetworker; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA10C0DE0001000000000002 /* PurgeAssetWorkerMain.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PurgeAssetWorkerMain.swift; sourceTree = "<group>"; };
+		AA10C0DE0001000000000003 /* UnifiedAssetCalls.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UnifiedAssetCalls.swift; sourceTree = "<group>"; };
+		AA10C0DE0001000000000004 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -203,18 +203,18 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		AA10C0DE000100000000000A /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		D4E5F60718293A4B5C6D7E8F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				788899AABBCCDDEEFF001122 /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA10C0DE000100000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -286,16 +286,6 @@
 			path = PurgeWatch;
 			sourceTree = "<group>";
 		};
-		AA10C0DE0001000000000008 /* PurgeAssetWorker */ = {
-			isa = PBXGroup;
-			children = (
-				AA10C0DE0001000000000002 /* PurgeAssetWorkerMain.swift */,
-				AA10C0DE0001000000000003 /* UnifiedAssetCalls.swift */,
-				AA10C0DE0001000000000004 /* Info.plist */,
-			);
-			path = PurgeAssetWorker;
-			sourceTree = "<group>";
-		};
 		D188643A9C26437F21EF56C8 /* OS X */ = {
 			isa = PBXGroup;
 			children = (
@@ -310,6 +300,16 @@
 				D188643A9C26437F21EF56C8 /* OS X */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		AA10C0DE0001000000000008 /* PurgeAssetWorker */ = {
+			isa = PBXGroup;
+			children = (
+				AA10C0DE0001000000000002 /* PurgeAssetWorkerMain.swift */,
+				AA10C0DE0001000000000003 /* UnifiedAssetCalls.swift */,
+				AA10C0DE0001000000000004 /* Info.plist */,
+			);
+			path = PurgeAssetWorker;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -383,22 +383,6 @@
 			productReference = 23866D74E1EC150691D3E969 /* io.getpurge.helper */;
 			productType = "com.apple.product-type.tool";
 		};
-		AA10C0DE000100000000000B /* PurgeAssetWorker */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = AA10C0DE0001000000000011 /* Build configuration list for PBXNativeTarget "PurgeAssetWorker" */;
-			buildPhases = (
-				AA10C0DE0001000000000009 /* Sources */,
-				AA10C0DE000100000000000A /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = PurgeAssetWorker;
-			productName = io.getpurge.assetworker;
-			productReference = AA10C0DE0001000000000001 /* io.getpurge.assetworker */;
-			productType = "com.apple.product-type.tool";
-		};
 		B2C3D4E5F60718293A4B5C6D /* PurgeWatch */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B01C2D3E4F5061728394A5B6 /* Build configuration list for PBXNativeTarget "PurgeWatch" */;
@@ -413,6 +397,22 @@
 			name = PurgeWatch;
 			productName = io.getpurge.watch;
 			productReference = A1B2C3D4E5F60718293A4B5C /* io.getpurge.watch */;
+			productType = "com.apple.product-type.tool";
+		};
+		AA10C0DE000100000000000B /* PurgeAssetWorker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA10C0DE0001000000000011 /* Build configuration list for PBXNativeTarget "PurgeAssetWorker" */;
+			buildPhases = (
+				AA10C0DE0001000000000009 /* Sources */,
+				AA10C0DE000100000000000A /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PurgeAssetWorker;
+			productName = io.getpurge.assetworker;
+			productReference = AA10C0DE0001000000000001 /* io.getpurge.assetworker */;
 			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
@@ -522,15 +522,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		AA10C0DE0001000000000009 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				AA10C0DE0001000000000005 /* PurgeAssetWorkerMain.swift in Sources */,
-				AA10C0DE0001000000000006 /* UnifiedAssetCalls.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		C3D4E5F60718293A4B5C6D7E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -542,6 +533,15 @@
 				455566778899AABBCCDDEEFF /* RemovedAppHandoff.swift in Sources */,
 				5666778899AABBCCDDEEFF00 /* InstalledApp.swift in Sources */,
 				67778899AABBCCDDEEFF0011 /* ByteFormatter.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA10C0DE0001000000000009 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA10C0DE0001000000000005 /* PurgeAssetWorkerMain.swift in Sources */,
+				AA10C0DE0001000000000006 /* UnifiedAssetCalls.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -559,17 +559,17 @@
 			target = 6647C3899C82D58912C86622 /* PurgeHelper */;
 			targetProxy = BEC6A906754B93D2333C86AB /* PBXContainerItemProxy */;
 		};
-		AA10C0DE000100000000000E /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = PurgeAssetWorker;
-			target = AA10C0DE000100000000000B /* PurgeAssetWorker */;
-			targetProxy = AA10C0DE000100000000000D /* PBXContainerItemProxy */;
-		};
 		F60718293A4B5C6D7E8F901A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = PurgeWatch;
 			target = B2C3D4E5F60718293A4B5C6D /* PurgeWatch */;
 			targetProxy = E5F60718293A4B5C6D7E8F90 /* PBXContainerItemProxy */;
+		};
+		AA10C0DE000100000000000E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PurgeAssetWorker;
+			target = AA10C0DE000100000000000B /* PurgeAssetWorker */;
+			targetProxy = AA10C0DE000100000000000D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -894,50 +894,6 @@
 			};
 			name = Release;
 		};
-		AA10C0DE000100000000000F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
-				CODE_SIGN_STYLE = Manual;
-				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = PurgeAssetWorker/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited)";
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.assetworker;
-				PRODUCT_NAME = io.getpurge.assetworker;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = Debug;
-		};
-		AA10C0DE0001000000000010 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
-				CODE_SIGN_STYLE = Manual;
-				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = PurgeAssetWorker/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited)";
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.assetworker;
-				PRODUCT_NAME = io.getpurge.assetworker;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = Release;
-		};
 		AB0583FE69D60244D63BD842 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -975,6 +931,50 @@
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.helper;
 				PRODUCT_NAME = io.getpurge.helper;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AA10C0DE000100000000000F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PurgeAssetWorker/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited)";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.assetworker;
+				PRODUCT_NAME = io.getpurge.assetworker;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA10C0DE0001000000000010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = BX83ZBV95B;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PurgeAssetWorker/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited)";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.getpurge.assetworker;
+				PRODUCT_NAME = io.getpurge.assetworker;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -1021,20 +1021,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AA10C0DE0001000000000011 /* Build configuration list for PBXNativeTarget "PurgeAssetWorker" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				AA10C0DE000100000000000F /* Debug */,
-				AA10C0DE0001000000000010 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		B01C2D3E4F5061728394A5B6 /* Build configuration list for PBXNativeTarget "PurgeWatch" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A01B2C3D4E5F60718293A4B5 /* Release */,
 				901A2B3C4D5E6F708192A3B4 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA10C0DE0001000000000011 /* Build configuration list for PBXNativeTarget "PurgeAssetWorker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA10C0DE000100000000000F /* Debug */,
+				AA10C0DE0001000000000010 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
