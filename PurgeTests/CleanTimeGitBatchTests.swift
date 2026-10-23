@@ -70,6 +70,26 @@ struct CleanTimeGitBatchTests {
         store.dismissDeletionSheet()
     }
 
+    /// Clean Safe Items and scheduled cleans move only what git answered clean for.
+    /// The answers now come from one batch, so a path missing from it must not count
+    /// as clean.
+    @Test func safeCleanTakesOnlyCleanAnswers() {
+        let base = URL(fileURLWithPath: "/private/tmp/purge-git-filter-test", isDirectory: true)
+        let clean = candidate(base.appendingPathComponent("clean/notes", isDirectory: true))
+        let dirty = candidate(base.appendingPathComponent("dirty/notes", isDirectory: true))
+        let unknown = candidate(base.appendingPathComponent("unknown/notes", isDirectory: true))
+        let unanswered = candidate(base.appendingPathComponent("unanswered/notes", isDirectory: true))
+        let statuses: [String: GitWorktreeStatus] = [
+            clean.path.standardizedFileURL.path: .clean,
+            dirty.path.standardizedFileURL.path: .dirty,
+            unknown.path.standardizedFileURL.path: .unknown,
+        ]
+
+        let kept = PurgeStore.gitCleanCandidates([clean, dirty, unknown, unanswered], statuses: statuses)
+
+        #expect(kept.map(\.path) == [clean.path])
+    }
+
     /// A candidate that already knows its status is not asked again.
     @Test func knownStatusesAreKept() async throws {
         let parent = try makeRepositories(["alpha", "bravo"])

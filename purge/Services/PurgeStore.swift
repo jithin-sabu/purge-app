@@ -1027,6 +1027,15 @@ final class PurgeStore: ObservableObject {
         presentDeletionSheet(candidates: await resolvingUnknownGitStatus(candidates))
     }
 
+    /// The candidates Clean Safe Items and scheduled cleans may move: those whose git
+    /// check answered clean. Dirty, unknown and no answer at all are left alone.
+    static func gitCleanCandidates(
+        _ candidates: [DeletionCandidate],
+        statuses: [String: GitWorktreeStatus]
+    ) -> [DeletionCandidate] {
+        candidates.filter { statuses[$0.path.standardizedFileURL.path] == .clean }
+    }
+
     /// Fills in the git status of every candidate that has none, with one check for
     /// all of them. Asking one candidate at a time waited for each repository's
     /// `git status` in turn; the checker runs up to four at once (#190).
@@ -4157,10 +4166,7 @@ final class PurgeStore: ObservableObject {
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
-        for candidate in readable {
-            // No answer is not an answer of clean.
-            let git = gitStatuses[candidate.path.standardizedFileURL.path] ?? .unknown
-            guard git == .clean else { continue }
+        for candidate in Self.gitCleanCandidates(readable, statuses: gitStatuses) {
             let std = candidate.path.standardizedFileURL
             combined.append(std)
             pathToDisplayName[std.path] = candidate.title
