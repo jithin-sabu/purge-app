@@ -1268,51 +1268,52 @@ struct UninstallReviewSheet: View {
         let plan = appPlan.wrappedValue
         let bundleTicked = plan.bundleItem?.isSelected == true
         let isOn = plan.removesThroughHomebrew && bundleTicked
-        return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
-            Toggle(isOn: appPlan.removesThroughHomebrew) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: AppStyle.Spacing.xSmall) {
-                        Text("Remove through Homebrew")
-                            .font(AppStyle.Typography.rowTitle)
-                            .foregroundStyle(AppColors.textPrimary)
-                        if isOn {
-                            Text("Permanent")
-                                .font(AppStyle.Typography.metadataEmphasis)
-                                .foregroundStyle(AppColors.statusCheckText)
-                                .padding(.horizontal, AppStyle.Spacing.xSmall)
-                                .padding(.vertical, 2)
-                                .background(Capsule(style: .continuous).fill(AppColors.statusCheckFill))
-                        }
+        // The command tag sits on the title line and the line below runs the
+        // full width, so a narrow sheet never squeezes the text beside the tag.
+        return Toggle(isOn: appPlan.removesThroughHomebrew) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: AppStyle.Spacing.xSmall) {
+                    Text("Remove through Homebrew")
+                        .font(AppStyle.Typography.rowTitle)
+                        .foregroundStyle(AppColors.textPrimary)
+                    if isOn {
+                        Text("Permanent")
+                            .font(AppStyle.Typography.metadataEmphasis)
+                            .foregroundStyle(AppColors.statusCheckText)
+                            .padding(.horizontal, AppStyle.Spacing.xSmall)
+                            .padding(.vertical, 2)
+                            .background(Capsule(style: .continuous).fill(AppColors.statusCheckFill))
                     }
-                    if let note = Self.homebrewNote(for: plan) {
-                        Text(note)
-                            .font(AppStyle.Typography.metadata)
+                    Spacer(minLength: AppStyle.Spacing.xSmall)
+                    if let cask = plan.app.homebrewCask {
+                        Text(cask.command)
+                            .font(AppStyle.Typography.metadata.monospaced())
                             .foregroundStyle(AppColors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .padding(.horizontal, AppStyle.Spacing.xSmall)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                                    .fill(AppColors.surfaceCardHover)
+                            )
+                            .help(cask.command)
+                            // Reading the command must not flip the checkbox.
+                            .onTapGesture {}
                     }
                 }
+                if let note = Self.homebrewNote(for: plan) {
+                    Text(note)
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .toggleStyle(.checkbox)
-            .tint(AppColors.actionPrimary)
-            .disabled(!bundleTicked)
-
-            Spacer(minLength: AppStyle.Spacing.xSmall)
-
-            if let cask = plan.app.homebrewCask {
-                Text(cask.command)
-                    .font(AppStyle.Typography.metadata.monospaced())
-                    .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, AppStyle.Spacing.xSmall)
-                    .padding(.vertical, 3)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                            .fill(AppColors.surfaceCardHover)
-                    )
-                    .help(cask.command)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .toggleStyle(.checkbox)
+        .tint(AppColors.actionPrimary)
+        .disabled(!bundleTicked)
         .padding(.horizontal, AppStyle.Spacing.small)
         .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
