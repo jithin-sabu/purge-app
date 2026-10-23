@@ -127,11 +127,11 @@ struct HomebrewCaskUninstallStoreTests {
         #expect(watcherTold)
     }
 
-    /// With the sheet's toggle off, Homebrew never runs and the app takes the
-    /// Trash route, which the safety gate declines for a bundle outside the app
-    /// folders.
+    /// Move All to Trash hands back the plan with the Homebrew flag off, so
+    /// Homebrew never runs and the app takes the Trash route, which the safety
+    /// gate declines for a bundle outside the app folders.
     @Test
-    func theToggleOffNeverRunsHomebrew() async throws {
+    func moveAllToTrashNeverRunsHomebrew() async throws {
         let fixture = try makeFixture()
         defer { try? fm.removeItem(at: fixture.root) }
         let scans = FakeScans()

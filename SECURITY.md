@@ -31,7 +31,7 @@ patient, but safety reports get priority over everything else.
   Homebrew cask apps you tick for removal through their package manager are
   uninstalled by that manager (`brew uninstall`, `npm uninstall -g`, and so
   on), which deletes them permanently; the review sheet says so, and a cask
-  app has a toggle to take the Trash route instead. Docker Desktop's data
+  app has a Move All to Trash button to take the Trash route instead. Docker Desktop's data
   folder goes to the Trash. Purge does not run `docker system prune`.
 - **Allowlist-based deletion.** Only paths that match an explicit safety
   allowlist are ever eligible for cleanup. Anything not on the list is never

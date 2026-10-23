@@ -301,32 +301,37 @@ struct HomebrewCaskUninstallPlanTests {
     }
 
     @Test
-    func theSheetSaysWhatIsPermanent() {
+    func theSheetOffersTheChoiceAsTwoButtons() {
         let orb = app("OrbStack", cask: cask)
+        let keka = app("Keka", cask: HomebrewCask(token: "keka", prefix: cask.prefix))
         let plain = app("Plain", cask: nil)
-        let mixed = UninstallPlan(id: "m", apps: [UninstallAppPlan(app: orb, items: items(for: orb))])
-        let trashOnly = UninstallPlan(id: "t", apps: [UninstallAppPlan(app: plain, items: items(for: plain))])
-        let bundleOnly = UninstallPlan(id: "b", apps: [
-            UninstallAppPlan(app: orb, items: [items(for: orb)[0]])
-        ])
+        let one = UninstallPlan(id: "o", apps: [UninstallAppPlan(app: orb, items: items(for: orb))])
+        let two = UninstallPlan(id: "t", apps: [UninstallAppPlan(app: orb, items: items(for: orb)), UninstallAppPlan(app: keka, items: items(for: keka))])
+        let trashOnly = UninstallPlan(id: "p", apps: [UninstallAppPlan(app: plain, items: items(for: plain))])
+        let leftoversOnly = UninstallPlan(id: "l", apps: [UninstallAppPlan(app: orb, items: items(for: orb, bundleSelected: false))])
 
+        // No cask app, or a cask app whose bundle is unticked: one button, as before.
         #expect(UninstallReviewSheet.introText(for: trashOnly).contains("Nothing is deleted permanently"))
-        #expect(!UninstallReviewSheet.introText(for: mixed).contains("Nothing is deleted permanently"))
         #expect(UninstallReviewSheet.primaryButtonTitle(for: trashOnly) == "Move 2 to Trash")
-        #expect(UninstallReviewSheet.primaryButtonTitle(for: mixed) == "Remove 2 Items")
-        #expect(UninstallReviewSheet.primaryButtonTitle(for: bundleOnly) == "Delete 1 Permanently")
-        // The footer counts what cannot come back, next to the button.
-        #expect(UninstallReviewSheet.footerText(for: trashOnly) == "Freeing \(formatBytes(1_200))")
-        #expect(UninstallReviewSheet.footerText(for: mixed) == "Freeing \(formatBytes(1_200)) · 1 permanent, 1 to the Trash")
-        #expect(UninstallReviewSheet.footerText(for: bundleOnly) == "Freeing \(formatBytes(1_000)) · 1 permanent, 0 to the Trash")
+        #expect(UninstallReviewSheet.secondaryButtonTitle(for: trashOnly) == nil)
+        #expect(UninstallReviewSheet.primaryButtonTitle(for: leftoversOnly) == "Move 1 to Trash")
+        #expect(UninstallReviewSheet.secondaryButtonTitle(for: leftoversOnly) == nil)
 
-        let on = UninstallAppPlan(app: orb, items: items(for: orb))
-        var off = on
-        off.removesThroughHomebrew = false
-        #expect(UninstallReviewSheet.homebrewNote(for: on)?.contains("can't be put back") == true)
-        #expect(UninstallReviewSheet.homebrewNote(for: off)?.contains("moves to the Trash") == true)
-        #expect(UninstallReviewSheet.homebrewNote(for: UninstallAppPlan(app: plain, items: items(for: plain))) == nil)
-        // The command sits beside the toggle as a tag, so it must name the cask.
+        // A cask app with its bundle ticked: the intro names it and says what
+        // each button does, and the footer offers both.
+        #expect(UninstallReviewSheet.introText(for: one).hasPrefix("Homebrew installed OrbStack."))
+        #expect(UninstallReviewSheet.introText(for: one).contains("deletes the app permanently"))
+        #expect(UninstallReviewSheet.introText(for: two).hasPrefix("Homebrew installed OrbStack and Keka."))
+        #expect(UninstallReviewSheet.introText(for: two).contains("deletes those apps permanently"))
+        #expect(UninstallReviewSheet.primaryButtonTitle(for: one) == "Remove with Homebrew")
+        #expect(UninstallReviewSheet.secondaryButtonTitle(for: one) == "Move All to Trash")
+
+        // Each button hands back the plan with every app set the way it says.
+        let toTrash = UninstallReviewSheet.plan(two, removingThroughHomebrew: false)
+        #expect(toTrash.apps.allSatisfy { !$0.removesThroughHomebrew })
+        #expect(toTrash.permanentlyDeletedItems.isEmpty)
+        let viaHomebrew = UninstallReviewSheet.plan(two, removingThroughHomebrew: true)
+        #expect(viaHomebrew.permanentlyDeletedItems.map(\.path) == [orb.bundleURL, keka.bundleURL])
         #expect(cask.command == "brew uninstall --cask orbstack")
     }
 }

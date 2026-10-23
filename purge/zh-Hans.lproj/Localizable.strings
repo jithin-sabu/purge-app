@@ -1317,13 +1317,11 @@
 "More about %@" = "关于“%@”的更多信息";
 
 /* Homebrew cask apps in the uninstaller (#254) */
-"Remove %lld Items" = "移除 %lld 项";
-"Remove through Homebrew" = "通过 Homebrew 移除";
-"Permanent" = "永久删除";
-"Purge moves the items you keep ticked to the Trash, where you can put them back." = "Purge 会将仍被勾选的项目移到废纸篓，可随时恢复。";
-"The app can't be put back. Leftovers below still go to the Trash." = "该应用无法放回。下方的残留文件仍会移到废纸篓。";
-"The app moves to the Trash. Homebrew keeps listing %@ until you run the command yourself." = "应用将移到废纸篓。Homebrew 仍会列出 %@，直到你自行运行该命令。";
-"Freeing %@ · %lld permanent, %lld to the Trash" = "正在释放 %@ · %lld 项永久删除，%lld 项移到废纸篓";
+"Homebrew installed %@. Remove with Homebrew deletes the app permanently and Homebrew forgets it. Move All to Trash keeps it recoverable, but Homebrew still lists it. Ticked leftovers move to the Trash either way." = "Homebrew 安装了 %@。“通过 Homebrew 移除”会永久删除该应用，Homebrew 也不再记录它。“全部移到废纸篓”可以恢复，但 Homebrew 仍会列出它。勾选的残留文件无论如何都会移到废纸篓。";
+"Homebrew installed %@. Remove with Homebrew deletes those apps permanently and Homebrew forgets them. Move All to Trash keeps them recoverable, but Homebrew still lists them. Ticked leftovers move to the Trash either way." = "Homebrew 安装了 %@。“通过 Homebrew 移除”会永久删除这些应用，Homebrew 也不再记录它们。“全部移到废纸篓”可以恢复，但 Homebrew 仍会列出它们。勾选的残留文件无论如何都会移到废纸篓。";
+"Remove with Homebrew" = "通过 Homebrew 移除";
+"Move All to Trash" = "全部移到废纸篓";
+"Installed by Homebrew" = "由 Homebrew 安装";
 "%@ · Installed by Homebrew" = "%@ · 由 Homebrew 安装";
 "Homebrew no longer lists %@, so Purge moved it to the Trash instead." = "Homebrew 已不再列出 %@，因此 Purge 改为将其移到废纸篓。";
 "Homebrew removed %@ but reported a problem: %@" = "Homebrew 已移除 %@，但报告了一个问题：%@";
