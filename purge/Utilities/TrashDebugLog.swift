@@ -3,10 +3,10 @@ import Foundation
 /// Append-only diagnostic log for the trash-measurement pipeline, written to
 /// `~/Library/Application Support/io.getpurge.app/trash-debug.log`.
 ///
-/// Temporary instrumentation for chasing the "In Trash resets to zero after a clean"
-/// report: every watcher event, size pass, resolution, and published value lands here
-/// with timestamps, so a single reproduction pins which path published the zero.
-/// Remove once the bug is understood.
+/// Debug builds only. Added while chasing the "In Trash resets to zero after a clean"
+/// report and kept for the next Trash bug: every watcher event, size pass,
+/// resolution, and published value lands here with timestamps, so a single
+/// reproduction pins which path published a wrong figure.
 ///
 /// It lives in Purge's own Application Support folder — NOT `~/Library/Logs` — because
 /// `~/Library/Logs` is one of Purge's cleaning targets, and the first reproduction run
@@ -29,12 +29,15 @@ nonisolated enum TrashDebugLog {
 
     static let fileURL: URL = directoryURL.appendingPathComponent("trash-debug.log")
 
-    static func log(_ message: String) {
+    /// `message` is only built in a debug build. A plain `String` was built at every
+    /// call site in release too, file names and error descriptions included (#190).
+    static func log(_ message: @autoclosure () -> String) {
         // Debug-only: this instrumentation records trash filenames and raw filesystem
         // errors and never rotates, so it must not write in a shipped build. Compiled out
         // entirely in release rather than left to grow in the user's Application Support.
 #if DEBUG
         let now = Date()
+        let message = message()
         queue.async {
             let line = "\(formatter.string(from: now)) \(message)\n"
             guard let data = line.data(using: .utf8) else { return }
