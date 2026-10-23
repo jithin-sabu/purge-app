@@ -534,8 +534,7 @@ struct OverviewPlainRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(title))
                     .font(AppStyle.Typography.headline)
-                Text(LocalizedStringKey(detail))
-                    .font(AppStyle.Typography.callout)
+                Text(figures: detail, style: AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
             }
@@ -594,8 +593,7 @@ private struct OverviewSnapshotRow: View {
                         .font(AppStyle.Typography.headline)
                     infoButton
                 }
-                Text(LocalizedStringKey(detail))
-                    .font(AppStyle.Typography.callout)
+                Text(figures: detail, style: AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
             }

@@ -148,6 +148,21 @@ extension Text {
     func font(_ style: AppStyle.TextStyle) -> Text {
         self.font(style.font).tracking(style.tracking)
     }
+
+    /// `string` in `style`, with each figure and its unit, such as "4.71 GB",
+    /// "110" or "5 MB", in SF Rounded, so a sentence built around a number
+    /// shows it like the figures elsewhere on the page.
+    init(figures string: String, style: AppStyle.TextStyle) {
+        let figure = /[0-9][0-9.,]*(?:\s?(?:[KMGT]?B|%))?/
+        var text = Text(verbatim: "")
+        var index = string.startIndex
+        for match in string.matches(of: figure) {
+            text = text + Text(verbatim: String(string[index..<match.range.lowerBound])).font(style)
+            text = text + Text(verbatim: String(match.output)).font(style.numbers)
+            index = match.range.upperBound
+        }
+        self = text + Text(verbatim: String(string[index...])).font(style)
+    }
 }
 
 extension View {
