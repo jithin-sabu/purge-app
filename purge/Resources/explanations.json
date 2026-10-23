@@ -598,7 +598,7 @@
     "key": "parsecd",
     "display_name": "Siri Knowledge Engine",
     "tag": "safe",
-    "explanation": "Used by a background Apple service that helps Siri and Spotlight understand natural language. Safe to delete and rebuilt automatically.",
+    "explanation": "Used by a background Apple service that helps Siri and Spotlight understand natural language. Safe to delete; it is rebuilt automatically.",
     "bundle_ids": [
       "com.apple.parsecd"
     ],
@@ -1065,7 +1065,7 @@
     "key": "docker",
     "display_name": "Docker Desktop",
     "tag": "medium",
-    "explanation": "All images, containers and volumes with databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open, else quit Docker.",
+    "explanation": "All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker.",
     "bundle_ids": [
       "com.docker.docker"
     ],

@@ -153,7 +153,8 @@ extension Text {
     /// "110" or "5 MB", in SF Rounded, so a sentence built around a number
     /// shows it like the figures elsewhere on the page.
     init(figures string: String, style: AppStyle.TextStyle) {
-        let figure = /[0-9][0-9.,]*(?:\s?(?:[KMGT]?B|%))?/
+        // A separator counts only between digits, so "Removed 3, but" keeps its comma in Onest.
+        let figure = #/[0-9](?:[.,]?[0-9])*(?:\s?(?:[KMGT]?B|%))?/#
         var text = Text(verbatim: "")
         var index = string.startIndex
         for match in string.matches(of: figure) {

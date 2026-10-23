@@ -22,7 +22,7 @@
 
 /* blender */
 "Blender 3D App" = "Blender 3D 应用";
-"Temporary files Blender saves while you work. Safe to delete; Blender may take a little longer to start the next time you open it." = "Blender 这款 3D 设计应用保存的临时文件。可以安全删除，但下次打开 Blender 时，启动可能稍慢。";
+"Temporary files Blender saves while you work. Safe to delete; Blender may take a little longer to start the next time you open it." = "Blender 工作时保存的临时文件。可以安全删除，但下次打开 Blender 时启动可能稍慢。";
 
 /* checkpoint-nodejs */
 "Node.js Dev Tool" = "Node.js 开发工具";
@@ -66,7 +66,7 @@
 
 /* apple-media-services */
 "Apple Media Services" = "Apple 媒体服务";
-"Temporary data for the App Store, Apple TV and Apple Music. Safe to delete; these services rebuild it as needed." = "保存 App Store、Apple TV 和 Apple Music 等 Apple 媒体服务的临时数据。可以安全删除，这些服务会按需重建。";
+"Temporary data for the App Store, Apple TV and Apple Music. Safe to delete; these services rebuild it as needed." = "App Store、Apple TV 和 Apple Music 的临时数据。可以安全删除，这些服务会按需重建。";
 
 /* appstoreagent */
 "App Store Agent" = "App Store 后台代理";
@@ -86,7 +86,7 @@
 
 /* bird */
 "iCloud Drive Sync" = "iCloud 云盘同步";
-"Used by the service that keeps iCloud Drive in sync. Nothing is lost from iCloud, but your Mac re-checks and re-downloads file state afterwards." = "负责让 iCloud 云盘与 Mac 保持同步的服务使用的数据。iCloud 中的数据不会丢失，但 Mac 之后会重新检查并下载文件状态信息。";
+"Used by the service that keeps iCloud Drive in sync. Nothing is lost from iCloud, but your Mac re-checks and re-downloads file state afterwards." = "负责让 iCloud 云盘保持同步的服务使用的数据。iCloud 中的数据不会丢失，但 Mac 之后会重新检查并下载文件状态。";
 
 /* businessservicesd */
 "Apple Business Services" = "Apple 企业服务";
@@ -174,11 +174,11 @@
 
 /* parsecd */
 "Siri Knowledge Engine" = "Siri 知识引擎";
-"Used by a background Apple service that helps Siri and Spotlight understand natural language. Safe to delete and rebuilt automatically." = "帮助 Siri 和“聚焦”理解自然语言查询的 Apple 后台服务使用的数据。可以安全删除，会自动重建。";
+"Used by a background Apple service that helps Siri and Spotlight understand natural language. Safe to delete; it is rebuilt automatically." = "帮助 Siri 和“聚焦”理解自然语言的 Apple 后台服务使用的数据。可以安全删除，会自动重建。";
 
 /* passd */
 "Apple Wallet Passes" = "Apple 钱包凭证";
-"Temporary data for passes in Apple Wallet, such as boarding passes and loyalty cards. Safe to delete, but Wallet may need to re-sync them." = "Apple 钱包中登机牌、会员卡等凭证的临时数据。可以安全删除，但钱包可能需要重新同步凭证数据。";
+"Temporary data for passes in Apple Wallet, such as boarding passes and loyalty cards. Safe to delete, but Wallet may need to re-sync them." = "Apple 钱包中登机牌、会员卡等凭证的临时数据。可以安全删除，但钱包可能需要重新同步凭证。";
 
 /* proactive-eventtracker */
 "Siri Suggestions Data" = "Siri 建议数据";
@@ -310,7 +310,7 @@
 
 /* docker */
 "Docker Desktop" = "Docker Desktop";
-"All images, containers and volumes with databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open, else quit Docker." = "所有镜像、容器和卷。卷可能保存数据库，若要保留卷，请在 Docker 打开时运行 docker --context desktop-linux system prune。否则请先退出 Docker。";
+"All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker." = "所有镜像、容器和卷，其中部分卷保存着数据库。若要保留卷，请在 Docker 打开时运行 docker --context desktop-linux system prune，否则请先退出 Docker。";
 
 /* raycast */
 "Raycast Launcher" = "Raycast 启动器";
@@ -354,7 +354,7 @@
 
 /* image-cache */
 "Image Thumbnail Cache" = "图片缩略图缓存";
-"Saved image previews and thumbnails that speed up display in apps. Safe to delete; images load a little slower until the previews rebuild." = "保存的图片预览与缩略图，用于加快应用显示。可以安全删除；预览重建完成前，图片加载会稍慢。";
+"Saved image previews and thumbnails that speed up display in apps. Safe to delete; images load a little slower until the previews rebuild." = "用于加快应用显示的图片预览与缩略图。可以安全删除；预览重建完成前，图片加载会稍慢。";
 
 /* revenuecat */
 "RevenueCat Purchases" = "RevenueCat 购买服务";
@@ -442,7 +442,7 @@
 
 /* bun-cache */
 "Bun Package Cache" = "Bun 软件包缓存";
-"Packages downloaded by Bun, a JavaScript runtime and package manager. Safe to delete; they download again the next time you run bun install." = "Bun 下载并缓存的软件包。Bun 是快速的 JavaScript 运行时与软件包管理器。可以安全删除，下次运行 bun install 时会重新下载。";
+"Packages downloaded by Bun, a JavaScript runtime and package manager. Safe to delete; they download again the next time you run bun install." = "Bun（JavaScript 运行时与软件包管理器）下载的软件包。可以安全删除，下次运行 bun install 时会重新下载。";
 
 /* deno-cache */
 "Deno Module Cache" = "Deno 模块缓存";
@@ -514,7 +514,7 @@
 
 /* gradle-global-cache */
 "Gradle Dependency Cache" = "Gradle 依赖缓存";
-"Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow." = "Gradle 下载的代码库、构建缓存和 wrapper 版本。不会丢失内容，但下次构建需重新下载并重建，耗时较长且需要联网。";
+"Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow." = "Gradle 下载的代码库、构建缓存和 wrapper 版本。不会丢失内容，但下次构建需重新下载并重建，耗时较长。";
 
 /* cocoapods-cache */
 "CocoaPods Cache" = "CocoaPods 缓存";
@@ -674,7 +674,7 @@
 
 /* dropbox */
 "Dropbox" = "Dropbox 应用";
-"Temporary sync data stored by Dropbox. Your files are safe, but Dropbox re-verifies your whole synced folder afterwards, which can take a while." = "Dropbox 保存的临时同步数据。文件会保留，但 Dropbox 之后需重新验证整个同步文件夹；大型账户可能耗时较长。";
+"Temporary sync data stored by Dropbox. Your files are safe, but Dropbox re-verifies your whole synced folder afterwards, which can take a while." = "Dropbox 保存的临时同步数据。文件会保留，但 Dropbox 之后需重新验证整个同步文件夹，可能需要一些时间。";
 
 /* google-drive */
 "Google Drive" = "Google Drive 云端硬盘";
@@ -798,7 +798,7 @@
 
 /* apple-maps */
 "Apple Maps" = "Apple 地图";
-"Map tiles and location data stored by Apple Maps. Nothing is lost, but tiles download again as you use Maps, and offline maps need downloading again." = "Apple 地图保存的已下载地图图块与位置数据。不会丢失内容，但使用时地图需重新下载图块，离线地图也需要重新下载。";
+"Map tiles and location data stored by Apple Maps. Nothing is lost, but tiles download again as you use Maps, and offline maps need downloading again." = "Apple 地图保存的地图图块与位置数据。不会丢失内容，但使用时地图需重新下载图块，离线地图也需要重新下载。";
 
 /* apple-photos */
 "Apple Photos" = "Apple 照片";
@@ -890,7 +890,7 @@
 
 /* elixir-deps */
 "Elixir Dependencies" = "Elixir 依赖";
-"Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete; it downloads again on the next build." = "Mix 为 Elixir 或 Erlang 项目下载的依赖源代码。可以安全删除，下次构建时会重新下载，需要互联网连接。";
+"Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete; it downloads again on the next build." = "Mix 为 Elixir 或 Erlang 项目下载的依赖源代码。可以安全删除，下次构建时会重新下载。";
 
 /* hex-packages */
 "Hex Package Cache" = "Hex 软件包缓存";
@@ -1138,7 +1138,7 @@
 
 /* dart-analysis-cache */
 "Dart Analysis Cache" = "Dart 分析缓存";
-"Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "Dart 和 Flutter 语言服务器保存在 ~/.dartServer 中的分析结果，用于让编辑器更快打开项目。可以安全删除，分析器会在工作时重建。";
+"Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "Dart 和 Flutter 语言服务器保存在 ~/.dartServer 中的分析结果，用于更快打开项目。可以安全删除，分析器会重建。";
 
 /* hermes-agent-cache */
 "Hermes Agent Cache" = "Hermes 代理缓存";
