@@ -1247,6 +1247,9 @@ struct UninstallReviewSheet: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .monospacedDigit()
             }
+            // The same inset as the cards' contents, so the header's checkbox
+            // sits over the rows' checkboxes and its size over their sizes.
+            .padding(.horizontal, AppStyle.Spacing.small)
 
             ForEach(appPlan.items) { $item in
                 UninstallItemRow(
