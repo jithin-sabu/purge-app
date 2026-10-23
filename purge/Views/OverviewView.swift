@@ -315,9 +315,8 @@ private struct OverviewCategoryRow: View {
     /// While scanning, the text itself shimmers; a spinner beside it would come and
     /// go with every pass of the scan.
     private var statusLine: some View {
-        Text(statusText)
+        Text(figures: statusText, style: AppStyle.Typography.callout)
             .lineLimit(1)
-            .font(AppStyle.Typography.callout)
             .foregroundStyle(AppColors.textSecondary)
             .contentTransition(reduceMotion ? .identity : .numericText())
             .animation(reduceMotion ? nil : OverviewMotion.number, value: statusText)
