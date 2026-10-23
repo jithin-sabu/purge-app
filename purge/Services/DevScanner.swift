@@ -1213,88 +1213,28 @@ nonisolated final class DevScanner {
             }
         }
 
-        /// Markers that identify a project type by plain file existence. Types needing
-        /// more than a filename check (Xcode bundles, Gradle's nested `android/`
-        /// folder, extension globs) are handled separately below.
-        func listTypes(at directory: URL) -> [ProjectType] {
-            var result: Set<ProjectType> = []
-
-            func anyExists(_ names: [String]) -> Bool {
-                names.contains { fm.fileExists(atPath: directory.appendingPathComponent($0).path) }
-            }
-
-            let simpleMarkers: [(ProjectType, [String])] = [
-                (.node, ["package.json"]),
-                (.rust, ["Cargo.toml"]),
-                (.flutter, ["pubspec.yaml"]),
-                (.python, ["requirements.txt", "pyproject.toml", "tox.ini"]),
-                (.elixir, ["mix.exs"]),
-                (.swiftPackage, ["Package.swift"]),
-                (.maven, ["pom.xml"]),
-                (.sbt, ["build.sbt"]),
-                (.composer, ["composer.json"]),
-                (.bundler, ["Gemfile"]),
-                (.haskellStack, ["stack.yaml"]),
-                (.zig, ["build.zig"]),
-                (.ocamlDune, ["dune-project"]),
-                (.cmake, ["CMakeLists.txt"]),
-                (.godot, ["project.godot"]),
-                (.unity, ["ProjectSettings/ProjectVersion.txt"]),
-            ]
-            for (type, markers) in simpleMarkers where anyExists(markers) {
-                result.insert(type)
-            }
-
-            if hasGradleMarker(in: directory) {
-                // Every Gradle project has a `.gradle` folder, which this type owns.
-                result.insert(.androidGradle)
-                // `.gradleJVM` additionally offers the root `build/` folder and suggests
-                // `./gradlew build`. Android projects are excluded: their build output is
-                // per-module rather than at the root, and the row would duplicate the
-                // Gradle entry above under a label and command that do not fit.
-                let isAndroid = anyExists(["android/build.gradle", "android/build.gradle.kts"])
-                    || fm.fileExists(atPath: directory.appendingPathComponent("app/src/main/AndroidManifest.xml").path)
-                if !isAndroid, anyExists(["build.gradle", "build.gradle.kts"]) {
-                    result.insert(.gradleJVM)
-                }
-            }
-
-            if containsXcodeBundle(in: directory) {
-                result.insert(.xcode)
-            }
-
-            for type in extensionMarkedTypes(in: directory) {
-                result.insert(type)
-            }
-
-            return Array(result).sorted { String(describing: $0) < String(describing: $1) }
-        }
-
         let protectedRoots = ProtectedLocations.resolvedRootPaths(home: home)
 
         /// `realPath` is `directory` with its root's symlinks resolved, in a limited
         /// scan only; nil with full access, where nothing needs checking.
         func walk(directory: URL, realPath: String?, depth: Int, maxDepth: Int) {
-            guard depth <= maxDepth else { return }
+            // A newer scan replaced this one: stop rather than walk the rest of home.
+            guard depth <= maxDepth, !Task.isCancelled else { return }
             directoriesWalked += 1
 
-            let types = listTypes(at: directory)
+            // One listing serves the project markers and the walk below (#190).
+            let listing = try? fm.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey, .nameKey],
+                options: [.skipsPackageDescendants]
+            )
+
+            let types = Self.projectTypes(at: directory, listing: listing)
             if !types.isEmpty {
                 discoveredRoots.append((directory, types))
             }
 
-            guard depth < maxDepth else { return }
-
-            let entries: [URL]
-            do {
-                entries = try fm.contentsOfDirectory(
-                    at: directory,
-                    includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .nameKey],
-                    options: [.skipsPackageDescendants]
-                )
-            } catch {
-                return
-            }
+            guard depth < maxDepth, let entries = listing else { return }
 
             guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else { return }
 
@@ -1325,7 +1265,7 @@ nonisolated final class DevScanner {
         }
 
         var walkedDepths: [FileIdentity: Int] = [:]
-        for root in roots {
+        for root in roots where !Task.isCancelled {
             // A limited scan resolves the root with `readlink` alone first, so a
             // root that is a link into a protected folder is never opened.
             let realRoot: String?
@@ -1350,62 +1290,98 @@ nonisolated final class DevScanner {
         return (discoveredRoots, directoriesWalked)
     }
 
-    /// Project types identified by a file *extension* rather than an exact name.
-    /// One directory listing serves all of them, since listing is the expensive part.
-    private nonisolated static func extensionMarkedTypes(in directory: URL) -> [ProjectType] {
-        guard let children = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else {
-            return []
+    /// The project types a folder's markers name. `listing` is the folder's
+    /// entries, read once by the walk, or nil when it could not be listed.
+    ///
+    /// A marker is only checked on disk when the listing has an entry of that name,
+    /// compared without case as the volume compares it. `fileExists` then confirms
+    /// it, following a link, as it did when every marker was checked. A folder that
+    /// could not be listed is checked marker by marker, as before.
+    nonisolated static func projectTypes(at directory: URL, listing: [URL]?) -> [ProjectType] {
+        let fm = FileManager.default
+        let names = listing.map { Set($0.map { $0.lastPathComponent.lowercased() }) }
+
+        func exists(_ relative: String) -> Bool {
+            if let names {
+                let first = relative.prefix { $0 != "/" }.lowercased()
+                guard names.contains(first) else { return false }
+            }
+            return fm.fileExists(atPath: directory.appendingPathComponent(relative).path)
         }
 
-        var found: Set<ProjectType> = []
-        for child in children {
-            switch child.pathExtension.lowercased() {
-            case "csproj", "fsproj", "vbproj", "sln":
-                found.insert(.dotnet)
-            case "cabal":
-                found.insert(.haskellCabal)
-            case "tf":
-                found.insert(.terraform)
-            case "uproject":
-                found.insert(.unreal)
-            default:
-                continue
+        func anyExists(_ relatives: [String]) -> Bool {
+            relatives.contains(where: exists)
+        }
+
+        var result: Set<ProjectType> = []
+
+        // Markers that identify a project type by plain file existence.
+        let simpleMarkers: [(ProjectType, [String])] = [
+            (.node, ["package.json"]),
+            (.rust, ["Cargo.toml"]),
+            (.flutter, ["pubspec.yaml"]),
+            (.python, ["requirements.txt", "pyproject.toml", "tox.ini"]),
+            (.elixir, ["mix.exs"]),
+            (.swiftPackage, ["Package.swift"]),
+            (.maven, ["pom.xml"]),
+            (.sbt, ["build.sbt"]),
+            (.composer, ["composer.json"]),
+            (.bundler, ["Gemfile"]),
+            (.haskellStack, ["stack.yaml"]),
+            (.zig, ["build.zig"]),
+            (.ocamlDune, ["dune-project"]),
+            (.cmake, ["CMakeLists.txt"]),
+            (.godot, ["project.godot"]),
+            (.unity, ["ProjectSettings/ProjectVersion.txt"]),
+        ]
+        for (type, markers) in simpleMarkers where anyExists(markers) {
+            result.insert(type)
+        }
+
+        let hasGradleMarker = anyExists([
+            "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts",
+            "android/build.gradle", "android/build.gradle.kts",
+        ])
+        if hasGradleMarker {
+            // Every Gradle project has a `.gradle` folder, which this type owns.
+            result.insert(.androidGradle)
+            // `.gradleJVM` additionally offers the root `build/` folder and suggests
+            // `./gradlew build`. Android projects are excluded: their build output is
+            // per-module rather than at the root, and the row would duplicate the
+            // Gradle entry above under a label and command that do not fit.
+            let isAndroid = anyExists([
+                "android/build.gradle", "android/build.gradle.kts", "app/src/main/AndroidManifest.xml",
+            ])
+            if !isAndroid, anyExists(["build.gradle", "build.gradle.kts"]) {
+                result.insert(.gradleJVM)
             }
         }
-        return Array(found)
-    }
 
-    private nonisolated static func containsXcodeBundle(in directory: URL) -> Bool {
-        let fm = FileManager.default
-        guard let children = try? fm.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return false
+        // Xcode bundles and the types named by a file extension. These read names
+        // from the listing, leaving out hidden entries as the listings they
+        // replaced did.
+        if let listing {
+            for child in listing where (try? child.resourceValues(forKeys: [.isHiddenKey]).isHidden) != true {
+                let name = child.lastPathComponent
+                if name.hasSuffix(".xcodeproj") || name.hasSuffix(".xcworkspace") {
+                    result.insert(.xcode)
+                }
+                switch child.pathExtension.lowercased() {
+                case "csproj", "fsproj", "vbproj", "sln":
+                    result.insert(.dotnet)
+                case "cabal":
+                    result.insert(.haskellCabal)
+                case "tf":
+                    result.insert(.terraform)
+                case "uproject":
+                    result.insert(.unreal)
+                default:
+                    continue
+                }
+            }
         }
 
-        return children.contains { child in
-            let name = child.lastPathComponent
-            return name.hasSuffix(".xcodeproj") || name.hasSuffix(".xcworkspace")
-        }
-    }
-
-    private nonisolated static func hasGradleMarker(in directory: URL) -> Bool {
-        let fm = FileManager.default
-        if fm.fileExists(atPath: directory.appendingPathComponent("build.gradle").path)
-            || fm.fileExists(atPath: directory.appendingPathComponent("build.gradle.kts").path)
-            || fm.fileExists(atPath: directory.appendingPathComponent("settings.gradle").path)
-            || fm.fileExists(atPath: directory.appendingPathComponent("settings.gradle.kts").path) {
-            return true
-        }
-        let android = directory.appendingPathComponent("android", isDirectory: true)
-        return fm.fileExists(atPath: android.appendingPathComponent("build.gradle").path)
-            || fm.fileExists(atPath: android.appendingPathComponent("build.gradle.kts").path)
+        return Array(result).sorted { String(describing: $0) < String(describing: $1) }
     }
 
     private func buildProjectGroups(
