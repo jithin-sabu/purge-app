@@ -37,6 +37,15 @@ final class PrivilegedHelperManager: ObservableObject {
 
     var status: SMAppService.Status { service.status }
 
+    /// The same status, read off the main thread. Each read is an XPC round trip
+    /// to the system, about a millisecond, and approval polling makes 600 of them.
+    func statusOffMain() async -> SMAppService.Status {
+        let plistName = PurgeHelperConstants.daemonPlistName
+        return await Task.detached(priority: .utility) {
+            SMAppService.daemon(plistName: plistName).status
+        }.value
+    }
+
     /// Registers the daemon if it isn't already. A fresh registration lands in
     /// `.requiresApproval` until the user flips it on in System Settings, so this
     /// reports which of the two happened rather than pretending it is live.

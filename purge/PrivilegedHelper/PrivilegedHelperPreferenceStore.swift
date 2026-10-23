@@ -32,13 +32,21 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
     /// Re-reads the daemon status. Cheap; call it when the window returns to the
     /// foreground so a change made in System Settings is picked up.
     func refresh() {
-        let latest = manager.status
-        // Low-volume and only on refresh: lets us confirm from Console what the app
-        // actually reads after the user flips the switch, when a non-notarized dev
-        // build makes SMAppService status hard to trust.
-        NSLog("Purge: helper status = %ld", latest.rawValue)
-        status = latest
-        if status == .enabled { lastRegistrationFailed = false }
+        apply(manager.status)
+    }
+
+    /// Assigns only on a change: every assignment to a `@Published` property
+    /// re-renders every view observing the store, and approval polling refreshes
+    /// twice a second for up to five minutes (#190).
+    private func apply(_ latest: SMAppService.Status) {
+        if latest != status {
+            // Only on a change: lets us confirm from Console what the app actually
+            // reads after the user flips the switch, when a non-notarized dev build
+            // makes SMAppService status hard to trust.
+            NSLog("Purge: helper status = %ld", latest.rawValue)
+            status = latest
+        }
+        if status == .enabled, lastRegistrationFailed { lastRegistrationFailed = false }
     }
 
     /// The most recent state the user asked for. A request that is superseded before
@@ -95,7 +103,9 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
                     return
                 }
                 guard desiredEnabled == true else { return }
-                refresh()
+                let latest = await manager.statusOffMain()
+                guard desiredEnabled == true, !Task.isCancelled else { return }
+                apply(latest)
                 if isEnabled || !needsApproval { return }
             }
         }
