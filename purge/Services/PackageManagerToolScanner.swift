@@ -49,16 +49,23 @@ nonisolated enum PackageManagerToolScanner {
                 tools.append(tool(
                     .homebrew, name: name, locations: [folder], context: nil,
                     executable: executableIfPresent(brew),
-                    environment: environment(roots: roots, path: [prefix.appendingPathComponent("bin").path], extra: [
-                        "HOMEBREW_NO_AUTO_UPDATE": "1",
-                        "HOMEBREW_NO_ENV_HINTS": "1",
-                        "HOMEBREW_NO_INSTALL_CLEANUP": "1",
-                        "NONINTERACTIVE": "1"
-                    ])
+                    environment: homebrewEnvironment(prefix: prefix, home: roots.home)
                 ))
             }
         }
         return tools
+    }
+
+    /// What `brew` runs with: its own `bin` first on `PATH`, no auto-update, no
+    /// hints, no cleanup pass, and no prompts. Shared with the cask uninstall
+    /// (`HomebrewCaskCatalog`, #254).
+    static func homebrewEnvironment(prefix: URL, home: URL) -> [String: String] {
+        environment(roots: Roots(home: home, homebrewPrefixes: [prefix]), path: [prefix.appendingPathComponent("bin").path], extra: [
+            "HOMEBREW_NO_AUTO_UPDATE": "1",
+            "HOMEBREW_NO_ENV_HINTS": "1",
+            "HOMEBREW_NO_INSTALL_CLEANUP": "1",
+            "NONINTERACTIVE": "1"
+        ])
     }
 
     /// Whether any installed version's receipt says the user asked for it.

@@ -5,6 +5,9 @@ import Foundation
 /// does the removal; Purge moves no file for these.
 nonisolated enum PackageManager: String, CaseIterable, Sendable {
     case homebrew
+    /// A Homebrew cask, which is an app in Installed Apps (#254). Homebrew
+    /// deletes the app permanently; Purge's own leftover review follows.
+    case homebrewCask
     case npm
     case pipx
     case uv
@@ -12,7 +15,7 @@ nonisolated enum PackageManager: String, CaseIterable, Sendable {
 
     var displayName: String {
         switch self {
-        case .homebrew: return "Homebrew"
+        case .homebrew, .homebrewCask: return "Homebrew"
         case .npm: return "npm"
         case .pipx: return "pipx"
         case .uv: return "uv"
@@ -24,6 +27,7 @@ nonisolated enum PackageManager: String, CaseIterable, Sendable {
     var commandPrefix: [String] {
         switch self {
         case .homebrew: return ["brew", "uninstall", "--formula"]
+        case .homebrewCask: return ["brew", "uninstall", "--cask"]
         case .npm: return ["npm", "uninstall", "-g"]
         case .pipx: return ["pipx", "uninstall"]
         case .uv: return ["uv", "tool", "uninstall"]
@@ -37,7 +41,7 @@ nonisolated enum PackageManager: String, CaseIterable, Sendable {
     func isValidPackageName(_ name: String) -> Bool {
         let pattern: String
         switch self {
-        case .homebrew: pattern = #"^[a-z0-9][a-z0-9@+._-]*$"#
+        case .homebrew, .homebrewCask: pattern = #"^[a-z0-9][a-z0-9@+._-]*$"#
         case .npm: pattern = #"^(@[A-Za-z0-9][A-Za-z0-9._~-]*/)?[A-Za-z0-9][A-Za-z0-9._~-]*$"#
         case .pipx, .uv: pattern = #"^[A-Za-z0-9][A-Za-z0-9._-]*$"#
         case .cargo: pattern = #"^[A-Za-z0-9][A-Za-z0-9_-]*$"#

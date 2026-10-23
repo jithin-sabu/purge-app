@@ -690,6 +690,20 @@ struct SafeCleanupCelebrationOverlay: View {
                         .multilineTextAlignment(.center)
                     }
 
+                    // Homebrew refused a cask app and Purge trashed it instead
+                    // (#254): say so, in Homebrew's own last words.
+                    if session.phase == .complete {
+                        ForEach(session.notes, id: \.self) { note in
+                            Text(note)
+                                .font(AppStyle.Typography.metadata)
+                                .foregroundStyle(AppColors.textTertiary)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(6)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: 420)
+                        }
+                    }
+
                     Button(LocalizedStringKey(doneTitle), action: onDone)
                         .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
                     .keyboardShortcut(.defaultAction)

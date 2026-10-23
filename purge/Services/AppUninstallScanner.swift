@@ -18,12 +18,18 @@ nonisolated final class AppUninstallScanner {
     /// catalog in the app; tests hand in a small one.
     private let catalog: AppDotFolderCatalog
 
+    /// Where Homebrew's Caskrooms are looked for (#254). Tests hand in a
+    /// temporary prefix so the scan never reads this Mac's.
+    private let homebrewPrefixes: [URL]
+
     init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        catalog: AppDotFolderCatalog = .shared
+        catalog: AppDotFolderCatalog = .shared,
+        homebrewPrefixes: [URL] = HomebrewCaskCatalog.defaultPrefixes
     ) {
         self.home = home
         self.catalog = catalog
+        self.homebrewPrefixes = homebrewPrefixes
     }
 
     // MARK: Installed apps
@@ -31,17 +37,21 @@ nonisolated final class AppUninstallScanner {
     /// Streams the apps the uninstaller can act on. Bundles under `/System` and
     /// Purge itself are never emitted.
     func installedAppsStream() -> AsyncStream<InstalledApp> {
-        AsyncStream { continuation in
+        AsyncStream { [homebrewPrefixes] continuation in
             let task = Task.detached(priority: .userInitiated) {
-                Self.runInstalledAppsScan(continuation: continuation)
+                Self.runInstalledAppsScan(homebrewPrefixes: homebrewPrefixes, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    private static func runInstalledAppsScan(continuation: AsyncStream<InstalledApp>.Continuation) {
+    private static func runInstalledAppsScan(
+        homebrewPrefixes: [URL],
+        continuation: AsyncStream<InstalledApp>.Continuation
+    ) {
         let apps = discoverInstalledApps()
         let runningIDs = runningBundleIDs()
+        let casks = HomebrewCaskCatalog.installedCasks(prefixes: homebrewPrefixes)
 
         // Yield as soon as the bundle is identified. Spotlight's indexed size is
         // a cheap first figure so the list can paint without waiting on `du`;
@@ -57,7 +67,8 @@ nonisolated final class AppUninstallScanner {
                     bundleID: app.bundleID,
                     bundleSizeBytes: size,
                     isRunning: isRunning,
-                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: app.bundleURL)
+                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: app.bundleURL),
+                    homebrewCask: casks[app.bundleURL.standardizedFileURL.path]
                 )
             )
         }
