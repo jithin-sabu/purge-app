@@ -1277,28 +1277,34 @@ struct UninstallReviewSheet: View {
         appPlan.wrappedValue.toggleAllFromHeader()
     }
 
-    /// One button, or two when a cask app's bundle is ticked (#254). The
+    /// One button, or three when a cask app's bundle is ticked (#254). The
     /// choice is made here, not in a toggle, so each button hands back the
-    /// plan with every app set the way it says.
+    /// plan with every app set the way it says. Three buttons follow the
+    /// macOS alert order: the alternative on the far left, Cancel beside the
+    /// default, the default on the right. The size line goes when the three
+    /// need the room.
     private var footer: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
-                .font(AppStyle.Typography.metadataEmphasis.numbers)
-                .foregroundStyle(AppColors.textSecondary)
+        let secondary = Self.secondaryButtonTitle(for: plan)
+        return HStack(spacing: AppStyle.Spacing.small) {
+            if secondary == nil {
+                Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+                    .font(AppStyle.Typography.metadataEmphasis.numbers)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
 
             Spacer()
 
-            Button("Cancel", action: onCancel)
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
-
-            if let secondary = Self.secondaryButtonTitle(for: plan) {
+            if let secondary {
                 Button(secondary) {
                     onConfirm(Self.plan(plan, removingThroughHomebrew: false))
                 }
                 .buttonStyle(.purge(.secondary))
                 .disabled(plan.totalSelectedItems == 0)
             }
+
+            Button("Cancel", action: onCancel)
+                .buttonStyle(.purge(.secondary))
+                .keyboardShortcut(.cancelAction)
 
             Button(Self.primaryButtonTitle(for: plan)) {
                 onConfirm(Self.plan(plan, removingThroughHomebrew: true))
