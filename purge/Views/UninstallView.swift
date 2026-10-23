@@ -1279,10 +1279,9 @@ struct UninstallReviewSheet: View {
 
     /// One button, or three when a cask app's bundle is ticked (#254). The
     /// choice is made here, not in a toggle, so each button hands back the
-    /// plan with every app set the way it says. Three buttons follow the
-    /// macOS alert order: the alternative on the far left, Cancel beside the
-    /// default, the default on the right. The size line goes when the three
-    /// need the room.
+    /// plan with every app set the way it says. With three, Cancel takes the
+    /// far left where the size line was, and the two real choices sit together
+    /// on the right.
     private var footer: some View {
         let secondary = Self.secondaryButtonTitle(for: plan)
         return HStack(spacing: AppStyle.Spacing.small) {
@@ -1290,6 +1289,10 @@ struct UninstallReviewSheet: View {
                 Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
                     .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
+            } else {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.purge(.secondary))
+                    .keyboardShortcut(.cancelAction)
             }
 
             Spacer()
@@ -1300,11 +1303,11 @@ struct UninstallReviewSheet: View {
                 }
                 .buttonStyle(.purge(.secondary))
                 .disabled(plan.totalSelectedItems == 0)
+            } else {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.purge(.secondary))
+                    .keyboardShortcut(.cancelAction)
             }
-
-            Button("Cancel", action: onCancel)
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
 
             Button(Self.primaryButtonTitle(for: plan)) {
                 onConfirm(Self.plan(plan, removingThroughHomebrew: true))
