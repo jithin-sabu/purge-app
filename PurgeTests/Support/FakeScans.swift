@@ -58,8 +58,9 @@ final class FakeScans {
     private var heldEverythingElse: [AsyncStream<EverythingElseMeasureEvent>.Continuation] = []
     private let suite = ThrowawayDefaults()
 
-    func makeStore() -> PurgeStore {
-        let store = PurgeStore(defaults: defaults, scanSources: sources)
+    /// `gitChecker` is the one a clean asks before it moves anything.
+    func makeStore(gitChecker: GitStatusChecker = GitStatusChecker()) -> PurgeStore {
+        let store = PurgeStore(defaults: defaults, scanSources: sources, gitChecker: gitChecker)
         store.refreshPermission()
         return store
     }

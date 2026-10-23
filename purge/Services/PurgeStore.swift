@@ -564,11 +564,15 @@ final class PurgeStore: ObservableObject {
         totalMovedToTrashBytes > 0
     }
 
-    /// `defaults` and `scanSources` are for tests; the app uses the standard ones.
-    init(defaults: UserDefaults = .standard, scanSources: ScanSources? = nil) {
+    /// `defaults`, `scanSources` and `gitChecker` are for tests; the app uses the
+    /// standard ones.
+    init(
+        defaults: UserDefaults = .standard,
+        scanSources: ScanSources? = nil,
+        gitChecker: GitStatusChecker = GitStatusChecker()
+    ) {
         let cacheScanner = CacheScanner()
         let devScanner = DevScanner()
-        let gitChecker = GitStatusChecker()
         self.cacheScanner = cacheScanner
         self.devScanner = devScanner
         self.gitChecker = gitChecker
@@ -1020,11 +1024,21 @@ final class PurgeStore: ObservableObject {
         // The checker keeps the access of the last scan. Access may have been
         // turned off since, and `git status` in a git dir under Documents prompts.
         await gitChecker.setAccess(currentScanAccess())
+        presentDeletionSheet(candidates: await resolvingUnknownGitStatus(candidates))
+    }
+
+    /// Fills in the git status of every candidate that has none, with one check for
+    /// all of them. Asking one candidate at a time waited for each repository's
+    /// `git status` in turn; the checker runs up to four at once (#190).
+    private func resolvingUnknownGitStatus(_ candidates: [DeletionCandidate]) async -> [DeletionCandidate] {
         var resolved = candidates
-        for index in resolved.indices where resolved[index].gitStatus == .unknown {
-            resolved[index].gitStatus = await gitChecker.cleanupStatus(for: resolved[index].path)
+        let unknown = resolved.indices.filter { resolved[$0].gitStatus == .unknown }
+        guard !unknown.isEmpty else { return resolved }
+        let statuses = await gitChecker.cleanupStatuses(for: unknown.map { resolved[$0].path })
+        for index in unknown {
+            resolved[index].gitStatus = statuses[resolved[index].path.standardizedFileURL.path] ?? .clean
         }
-        presentDeletionSheet(candidates: resolved)
+        return resolved
     }
 
     func userConfirmedDeletionFromPrimarySheet() {
@@ -1637,10 +1651,7 @@ final class PurgeStore: ObservableObject {
         guard let payload = pendingUnknownDeletion else { return }
         pendingUnknownDeletion = nil
         await gitChecker.setAccess(currentScanAccess())
-        var resolved = payload.candidates
-        for idx in resolved.indices where resolved[idx].gitStatus == .unknown {
-            resolved[idx].gitStatus = await gitChecker.cleanupStatus(for: resolved[idx].path)
-        }
+        let resolved = await resolvingUnknownGitStatus(payload.candidates)
         if resolved.contains(where: { $0.safetyInfo.level == .unknown }) {
             highRiskDeletionStagingCandidates = resolved
             showHighRiskDeletionSecondConfirm = true
@@ -4133,17 +4144,22 @@ final class PurgeStore: ObservableObject {
         let access = currentScanAccess()
         await gitChecker.setAccess(access)
 
+        // Access can be turned off after a full scan. Moving something out of a
+        // protected folder without it would prompt, so it waits for access again.
+        // When cache rows are already listed this clean reuses them rather than
+        // rescanning, so a folder excluded since that scan is checked here.
+        let readable = syncCandidates.filter {
+            ProtectedLocations.isReadable($0.path, access: access) && !ExcludedPathsStore.isExcluded($0.path)
+        }
+        // One check for every candidate, so unrelated repositories overlap (#190).
+        let gitStatuses = await gitChecker.cleanupStatuses(for: readable.map(\.path))
+
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
-        for candidate in syncCandidates {
-            // Access can be turned off after a full scan. Moving something out of a
-            // protected folder without it would prompt, so it waits for access again.
-            guard ProtectedLocations.isReadable(candidate.path, access: access) else { continue }
-            // When cache rows are already listed this clean reuses them rather than
-            // rescanning, so a folder excluded since that scan is checked here.
-            guard !ExcludedPathsStore.isExcluded(candidate.path) else { continue }
-            let git = await gitChecker.cleanupStatus(for: candidate.path)
+        for candidate in readable {
+            // No answer is not an answer of clean.
+            let git = gitStatuses[candidate.path.standardizedFileURL.path] ?? .unknown
             guard git == .clean else { continue }
             let std = candidate.path.standardizedFileURL
             combined.append(std)
