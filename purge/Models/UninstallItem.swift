@@ -266,11 +266,37 @@ nonisolated struct RemovedAppLeftoverPlan: Identifiable, Hashable {
 nonisolated struct UninstallAppPlan: Identifiable, Hashable {
     let app: InstalledApp
     var items: [UninstallItem]
+    /// Whether Homebrew removes the bundle instead of Purge trashing it (#254).
+    /// Starts on for an app Homebrew installed as a cask, and the sheet's toggle
+    /// turns it off so the app moves to the Trash. Meaningless for any other app.
+    var removesThroughHomebrew: Bool
+
+    init(app: InstalledApp, items: [UninstallItem], removesThroughHomebrew: Bool? = nil) {
+        self.app = app
+        self.items = items
+        self.removesThroughHomebrew = removesThroughHomebrew ?? (app.homebrewCask != nil)
+    }
 
     var id: String { app.id }
 
     var selectedItems: [UninstallItem] { items.filter(\.isSelected) }
     var selectedBytes: Int64 { selectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+
+    var bundleItem: UninstallItem? { items.first { $0.category == .bundle } }
+
+    /// The cask Homebrew removes when this plan runs: the app's cask, with the
+    /// toggle on and the bundle ticked. Nil means the bundle goes to the Trash,
+    /// or stays.
+    var homebrewCask: HomebrewCask? {
+        guard removesThroughHomebrew, let cask = app.homebrewCask,
+              bundleItem?.isSelected == true else { return nil }
+        return cask
+    }
+
+    /// The bundle, when Homebrew deletes it permanently in this plan.
+    var permanentlyDeletedItem: UninstallItem? {
+        homebrewCask == nil ? nil : bundleItem
+    }
 
     /// What the per-app header checkbox shows.
     enum HeaderSelection {
@@ -316,6 +342,11 @@ nonisolated struct UninstallPlan: Identifiable, Hashable {
 
     var totalSelectedItems: Int { uniqueSelectedItems.count }
     var totalSelectedBytes: Int64 { uniqueSelectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }
+
+    /// The bundles Homebrew deletes permanently when this plan runs (#254).
+    /// Everything else ticked moves to the Trash.
+    var permanentlyDeletedItems: [UninstallItem] { apps.compactMap(\.permanentlyDeletedItem) }
+    var trashedItemCount: Int { totalSelectedItems - permanentlyDeletedItems.count }
 
     /// The checked items across every app, with any path selected under more than
     /// one app counted once. Two installs that share a bundle id (Xcode and

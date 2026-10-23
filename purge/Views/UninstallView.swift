@@ -771,6 +771,9 @@ private struct UninstallItemRow: View {
     /// Leftovers rows name only the folder the item sits in; the full path is
     /// in the tooltip and Reveal in Finder.
     var showsShortLocation = false
+    /// Set on a bundle Homebrew deletes permanently (#254), so the row says so
+    /// where the Trash is otherwise implied.
+    var isDeletedPermanently = false
 
     @State private var isContextMenuActive = false
 
@@ -807,6 +810,13 @@ private struct UninstallItemRow: View {
                         .foregroundStyle(AppColors.statusCheckText)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                }
+                if isDeletedPermanently {
+                    Text("Deleted permanently by Homebrew, not moved to the Trash")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.statusCheckText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 if let evidenceNote {
                     Text(evidenceNote)
@@ -890,6 +900,14 @@ private struct AppListRow: View {
     @State private var isHovering = false
     @State private var isContextMenuActive = false
 
+    /// The folder, plus who installed it when Homebrew did (#254), so the
+    /// review sheet's Homebrew choice is no surprise.
+    private var locationLine: String {
+        let folder = app.bundleURL.deletingLastPathComponent().path
+        guard app.homebrewCask != nil else { return folder }
+        return String(localized: "\(folder) · Installed by Homebrew")
+    }
+
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             // Same pattern as App Caches: a native checkbox for appearance, with
@@ -913,7 +931,7 @@ private struct AppListRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                Text(app.bundleURL.deletingLastPathComponent().path)
+                Text(locationLine)
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -1154,7 +1172,7 @@ struct UninstallReviewSheet: View {
                 .font(AppStyle.Typography.pageTitle)
                 .foregroundStyle(AppColors.textPrimary)
 
-            Text("Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted permanently, so you can put anything back if you change your mind.")
+            Text(Self.introText(for: plan))
                 .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1165,6 +1183,34 @@ struct UninstallReviewSheet: View {
         let count = plan.apps.count
         if count == 1 { return String(localized: "Uninstall \(plan.apps[0].app.name)?") }
         return String(localized: "Uninstall \(count) apps?")
+    }
+
+    /// The intro follows where the ticked items go. Only an app Homebrew removes
+    /// (#254) is deleted permanently; everything else still goes to the Trash.
+    static func introText(for plan: UninstallPlan) -> String {
+        if plan.permanentlyDeletedItems.isEmpty {
+            return String(localized: "Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted permanently, so you can put anything back if you change your mind.")
+        }
+        return String(localized: "Purge moves the items you keep ticked to the Trash, where you can put them back. An app removed through Homebrew is deleted permanently by Homebrew's own uninstall and can't be put back.")
+    }
+
+    /// Says what the button does: everything to the Trash, everything deleted
+    /// permanently, or both.
+    static func primaryButtonTitle(for plan: UninstallPlan) -> String {
+        let count = plan.totalSelectedItems
+        if plan.permanentlyDeletedItems.isEmpty { return String(localized: "Move \(count) to Trash") }
+        if plan.trashedItemCount == 0 { return String(localized: "Delete \(count) Permanently") }
+        return String(localized: "Remove \(count) Items")
+    }
+
+    /// The line under a cask app's name: what Homebrew does, or what happens
+    /// with the toggle off.
+    static func homebrewNote(for appPlan: UninstallAppPlan) -> String? {
+        guard let cask = appPlan.app.homebrewCask else { return nil }
+        if appPlan.removesThroughHomebrew {
+            return String(localized: "Homebrew installed this app as the cask \(cask.token). Purge runs \(cask.command), which deletes the app permanently. Its leftovers still move to the Trash.")
+        }
+        return String(localized: "The app moves to the Trash. Homebrew keeps listing \(cask.token) until you run \(cask.command) yourself.")
     }
 
     private func appSection(_ appPlan: Binding<UninstallAppPlan>) -> some View {
@@ -1196,6 +1242,10 @@ struct UninstallReviewSheet: View {
                     .monospacedDigit()
             }
 
+            if app.homebrewCask != nil {
+                homebrewRow(appPlan)
+            }
+
             ForEach(appPlan.items) { $item in
                 UninstallItemRow(
                     item: item,
@@ -1203,10 +1253,47 @@ struct UninstallReviewSheet: View {
                     // Locked off: while the other app is installed, the deletion
                     // pass holds this file back regardless, so the tick must not
                     // imply otherwise.
-                    isToggleDisabled: item.isKeptForOtherApp
+                    isToggleDisabled: item.isKeptForOtherApp,
+                    isDeletedPermanently: appPlan.wrappedValue.permanentlyDeletedItem?.id == item.id
                 )
             }
         }
+    }
+
+    /// A cask app's choice (#254): Homebrew's own uninstall, which deletes the
+    /// app permanently, or the Trash. Greyed out while the bundle is unticked,
+    /// because then nothing removes the app either way.
+    private func homebrewRow(_ appPlan: Binding<UninstallAppPlan>) -> some View {
+        let bundleTicked = appPlan.wrappedValue.bundleItem?.isSelected == true
+        return VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+            Toggle(isOn: appPlan.removesThroughHomebrew) {
+                Text("Remove through Homebrew")
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+            }
+            .toggleStyle(.checkbox)
+            .tint(AppColors.actionPrimary)
+            .disabled(!bundleTicked)
+            if let note = Self.homebrewNote(for: appPlan.wrappedValue) {
+                Text(note)
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(appPlan.wrappedValue.removesThroughHomebrew && bundleTicked
+                        ? AppColors.statusCheckText : AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+                .fill(AppColors.surfaceCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
+        )
+        .opacity(bundleTicked ? 1 : 0.6)
     }
 
     /// Tri-state over the rows the header ticks. Items kept for a surviving
@@ -1237,7 +1324,7 @@ struct UninstallReviewSheet: View {
                 .buttonStyle(.purge(.secondary))
                 .keyboardShortcut(.cancelAction)
 
-            Button("Move \(plan.totalSelectedItems) to Trash") {
+            Button(Self.primaryButtonTitle(for: plan)) {
                 onConfirm(plan)
             }
             .buttonStyle(.purge(.destructive))

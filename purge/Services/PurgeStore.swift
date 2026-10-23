@@ -477,6 +477,15 @@ final class PurgeStore: ObservableObject {
     private let devScanner: DevScanner
     /// Access and scan results for App Caches, Dev Tools and Large Files. `live` outside tests.
     let scanSources: ScanSources
+
+    /// Runs a package manager's own uninstall for one tool (#225) or cask app
+    /// (#254). Tests swap in a fake so no manager runs.
+    var packageManagerUninstall: (PackageManagerTool) async -> PackageManagerUninstaller.Outcome = {
+        await PackageManagerUninstaller.uninstall($0)
+    }
+    /// Where the cask gate re-reads Homebrew's Caskrooms before a removal
+    /// (#254). Tests point it at a temporary prefix.
+    var homebrewPrefixes: [URL] = HomebrewCaskCatalog.defaultPrefixes
     private let uninstallScanner = AppUninstallScanner()
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
@@ -2611,7 +2620,7 @@ final class PurgeStore: ObservableObject {
             }
             plan.states[tool.id] = .running
             publish()
-            switch await PackageManagerUninstaller.uninstall(tool) {
+            switch await packageManagerUninstall(tool) {
             case .removed:
                 plan.states[tool.id] = .removedByManager
                 bytesRemovedDirectly += tool.sizeBytes
@@ -2899,6 +2908,11 @@ final class PurgeStore: ObservableObject {
         let selectedByApp = plan.apps.map { ($0.app, $0.selectedItems) }.filter { !$0.1.isEmpty }
         guard !selectedByApp.isEmpty else { return }
         guard claimConfirmedCleanOrExplain() else { return }
+        // The apps Homebrew removes (#254), by app id. Only a cask app with the
+        // sheet's toggle on and its bundle ticked is here.
+        let homebrewCasks = Dictionary(uniqueKeysWithValues: plan.apps.compactMap { appPlan in
+            appPlan.homebrewCask.map { (appPlan.app.id, $0) }
+        })
 
         // Claim the deleting flag before the first suspension point below (the
         // quit wait). On the main actor an `await` is a chance for a second tap to
@@ -2981,18 +2995,76 @@ final class PurgeStore: ObservableObject {
 
         let engineStart = Date()
 
+        // Pass 0 — cask apps Homebrew removes (#254). Homebrew's own uninstall
+        // quits the app, runs the vendor's uninstall steps and deletes the bundle
+        // permanently; Purge deletes no file here. The gate re-reads the Caskroom
+        // link now, so a cask that no longer points at this bundle falls back to
+        // the Trash route below, as does any run Homebrew refuses. The watcher is
+        // told first, because Homebrew removes the bundle in place and the
+        // deleted-apps review would otherwise open on Purge's own removal.
+        var homebrewDeleted: [DeletedItem] = []
+        var homebrewBytes: Int64 = 0
+        var homebrewNotes: [String] = []
+        var homebrewGonePaths = Set<String>()
+        var trashBundleApps = bundleRemovingApps.filter { homebrewCasks[$0.app.id] == nil }
+        for entry in bundleRemovingApps {
+            guard let cask = homebrewCasks[entry.app.id] else { continue }
+            let bundlePath = entry.bundle.path.standardizedFileURL.path
+            guard HomebrewCaskCatalog.cask(owning: entry.bundle.path, prefixes: homebrewPrefixes) == cask else {
+                homebrewNotes.append(String(localized: "Homebrew no longer lists \(entry.app.name), so Purge moved it to the Trash instead."))
+                trashBundleApps.append(entry)
+                continue
+            }
+            RemovedAppMonitor.shared.noteRemovalByPurge(of: [entry.bundle.path])
+            let tool = HomebrewCaskCatalog.uninstallTool(for: cask, bundleURL: entry.bundle.path)
+            let outcome = await packageManagerUninstall(tool)
+            let bundleIsGone = !FileManager.default.fileExists(atPath: bundlePath)
+            func recordRemoved() {
+                homebrewDeleted.append(DeletedItem(
+                    path: bundlePath,
+                    sizeBytes: entry.bundle.sizeBytes,
+                    displayName: entry.app.name,
+                    movedToTrash: false
+                ))
+                homebrewBytes += entry.bundle.sizeBytes
+                homebrewGonePaths.insert(bundlePath)
+            }
+            switch outcome {
+            case .removed:
+                recordRemoved()
+            case .gone:
+                // Nothing to remove and nothing run: the app left between the sheet
+                // and now. Its leftovers can still go.
+                homebrewGonePaths.insert(bundlePath)
+            case .failed(let message):
+                if bundleIsGone {
+                    recordRemoved()
+                    homebrewNotes.append(String(localized: "Homebrew removed \(entry.app.name) but reported a problem: \(message)"))
+                } else {
+                    homebrewNotes.append(String(localized: "Homebrew couldn't remove \(entry.app.name), so Purge moved it to the Trash instead. Homebrew said: \(message)"))
+                    trashBundleApps.append(entry)
+                }
+            case .stillPresent:
+                homebrewNotes.append(String(localized: "Homebrew finished but \(entry.app.name) was still there, so Purge moved it to the Trash instead."))
+                trashBundleApps.append(entry)
+            case .managerMissing:
+                homebrewNotes.append(String(localized: "Purge couldn't find Homebrew, so it moved \(entry.app.name) to the Trash instead."))
+                trashBundleApps.append(entry)
+            }
+        }
+
         // Pass 1 — bundles first. A validated .app the user picked is always eligible
         // for the administrator helper: a managed bundle needs authorization to move
         // even when its parent directory (/Applications) is writable, so parent-dir
         // writability is the wrong test for the bundle itself.
         var bundleReport: DeletionReport?
-        var movedBundlePaths = Set<String>()
-        if !bundleRemovingApps.isEmpty {
+        var movedBundlePaths = homebrewGonePaths
+        if !trashBundleApps.isEmpty {
             var urls: [URL] = []
             var names: [String: String] = [:]
             var sizes: [String: Int64] = [:]
             var eligible = Set<String>()
-            for entry in bundleRemovingApps {
+            for entry in trashBundleApps {
                 let key = entry.bundle.path.standardizedFileURL.path
                 urls.append(entry.bundle.path)
                 names[key] = entry.app.name
@@ -3009,12 +3081,12 @@ final class PurgeStore: ObservableObject {
                     onProgress: { @Sendable event in progressBuffer.ingest(event) }
                 )
                 bundleReport = report
-                movedBundlePaths = Set(report.deletedItems.map {
+                movedBundlePaths.formUnion(report.deletedItems.map {
                     URL(fileURLWithPath: $0.path).standardizedFileURL.path
                 })
             } catch {
                 manualDeletionSession = nil
-                let names = bundleRemovingApps.map(\.app.name)
+                let names = trashBundleApps.map(\.app.name)
                 let label = names.count == 1 ? names[0] : String(localized: "the selected apps")
                 errorMessage = String(localized: "Unable to remove \(label). Please try again.")
                 return
@@ -3101,8 +3173,8 @@ final class PurgeStore: ObservableObject {
         let movedBytes = (bundleReport?.bytesMovedToTrash ?? 0) + (leftoverReport?.bytesMovedToTrash ?? 0)
         let report = DeletionReport(
             bytesMovedToTrash: movedBytes,
-            bytesRemovedDirectly: 0,
-            deletedItems: (bundleReport?.deletedItems ?? []) + (leftoverReport?.deletedItems ?? []),
+            bytesRemovedDirectly: homebrewBytes,
+            deletedItems: homebrewDeleted + (bundleReport?.deletedItems ?? []) + (leftoverReport?.deletedItems ?? []),
             failedItems: leftoverReport?.failedItems ?? [],
             skippedItems: leftoverReport?.skippedItems ?? [],
             capacityBefore: bundleReport?.capacityBefore ?? leftoverReport?.capacityBefore,
@@ -3116,9 +3188,10 @@ final class PurgeStore: ObservableObject {
 
         let deletedPaths = Set(report.deletedItems.map {
             URL(fileURLWithPath: $0.path).standardizedFileURL.path
-        })
-        // An app leaves the picker once its bundle is trashed. Its selection clears
-        // either way, so a partial failure doesn't leave a ghost tick.
+        }).union(homebrewGonePaths)
+        // An app leaves the picker once its bundle is trashed, or once Homebrew
+        // has removed it. Its selection clears either way, so a partial failure
+        // doesn't leave a ghost tick.
         for (app, _) in toDelete {
             selectedAppIDs.remove(app.id)
             if deletedPaths.contains(app.bundleURL.standardizedFileURL.path) {
@@ -3138,13 +3211,16 @@ final class PurgeStore: ObservableObject {
         }
 
         progressPoller.cancel()
+        // The total on the completion screen counts what Homebrew deleted too,
+        // as the main clean does for simulators; History keeps the two apart.
         liveSession.completeRun(
-            bytesMovedToTrash: report.bytesMovedToTrash,
+            bytesMovedToTrash: report.bytesMovedToTrash + report.bytesRemovedDirectly,
             elapsedSeconds: elapsedSeconds,
             failedItems: report.userVisibleFailures + heldFailures + keptSharedFailures,
             movedToTrashCount: report.movedToTrashCount
         )
         if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
+        homebrewNotes.forEach { liveSession.addNote($0) }
         recordCleanup(report, trigger: .manual, source: .uninstall)
 
         // Apps that declined to quit stay installed and selected, so the user can

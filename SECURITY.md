@@ -22,13 +22,17 @@ patient, but safety reports get priority over everything else.
 
 - **Trash by default.** Files and folders are moved to the macOS Trash, so
   you can put them back until you empty it yourself. Purge has no button that
-  empties the Trash. Three removals are for good. iOS simulators
+  empties the Trash. Four removals are for good. iOS simulators
   and simulator runtimes go through Xcode's `simctl`. Time Machine local
   snapshots go through `tmutil deletelocalsnapshots`; Purge asks first and
   keeps the newest snapshot and the one from your last backup. The Apple
   Intelligence models on macOS 27 are released through Apple's own asset
-  service and can be downloaded again; see below. Docker Desktop's data folder
-  goes to the Trash. Purge does not run `docker system prune`.
+  service and can be downloaded again; see below. Command-line tools and
+  Homebrew cask apps you tick for removal through their package manager are
+  uninstalled by that manager (`brew uninstall`, `npm uninstall -g`, and so
+  on), which deletes them permanently; the review sheet says so, and a cask
+  app has a toggle to take the Trash route instead. Docker Desktop's data
+  folder goes to the Trash. Purge does not run `docker system prune`.
 - **Allowlist-based deletion.** Only paths that match an explicit safety
   allowlist are ever eligible for cleanup. Anything not on the list is never
   touched.

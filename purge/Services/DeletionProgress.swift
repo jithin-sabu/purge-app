@@ -90,6 +90,13 @@ final class DeletionSession: ObservableObject, Identifiable {
     /// Raises the Trash-ownership note. Safe to call more than once.
     func noteTrashOwnershipWarning() { trashOwnershipWarning = true }
 
+    /// Plain lines the completion screen shows under the total: what Homebrew
+    /// said when it could not remove a cask app and Purge trashed it instead
+    /// (#254). Empty for every ordinary run.
+    @Published private(set) var notes: [String] = []
+
+    func addNote(_ note: String) { notes.append(note) }
+
     init(totalBytes: Int64, totalItems: Int, startedAt: Date = Date()) {
         self.totalBytes = totalBytes
         self.totalItems = totalItems

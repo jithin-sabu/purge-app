@@ -1315,3 +1315,17 @@
 "Last: nothing moved, %@" = "上次：未移动任何内容，%@";
 "Scans skip these folders and everything inside them. You can also right-click a scan result and choose Exclude from scans." = "扫描会跳过这些文件夹及其中的所有内容。也可以右键点按扫描结果，选择“从扫描中排除”。";
 "More about %@" = "关于“%@”的更多信息";
+
+/* Homebrew cask apps in the uninstaller (#254) */
+"Purge moves the items you keep ticked to the Trash, where you can put them back. An app removed through Homebrew is deleted permanently by Homebrew's own uninstall and can't be put back." = "Purge 会将仍被勾选的项目移到废纸篓，可随时恢复。通过 Homebrew 移除的应用会由 Homebrew 自带的卸载流程永久删除，无法放回。";
+"Remove %lld Items" = "移除 %lld 项";
+"Remove through Homebrew" = "通过 Homebrew 移除";
+"Homebrew installed this app as the cask %@. Purge runs %@, which deletes the app permanently. Its leftovers still move to the Trash." = "Homebrew 以 cask %@ 安装了此应用。Purge 会运行 %@，这会永久删除该应用。其残留文件仍会移到废纸篓。";
+"The app moves to the Trash. Homebrew keeps listing %@ until you run %@ yourself." = "应用将移到废纸篓。Homebrew 仍会列出 %@，直到你自行运行 %@。";
+"Deleted permanently by Homebrew, not moved to the Trash" = "由 Homebrew 永久删除，不会移到废纸篓";
+"%@ · Installed by Homebrew" = "%@ · 由 Homebrew 安装";
+"Homebrew no longer lists %@, so Purge moved it to the Trash instead." = "Homebrew 已不再列出 %@，因此 Purge 改为将其移到废纸篓。";
+"Homebrew removed %@ but reported a problem: %@" = "Homebrew 已移除 %@，但报告了一个问题：%@";
+"Homebrew couldn't remove %@, so Purge moved it to the Trash instead. Homebrew said: %@" = "Homebrew 无法移除 %@，因此 Purge 改为将其移到废纸篓。Homebrew 的输出：%@";
+"Homebrew finished but %@ was still there, so Purge moved it to the Trash instead." = "Homebrew 已运行完毕，但 %@ 仍然存在，因此 Purge 改为将其移到废纸篓。";
+"Purge couldn't find Homebrew, so it moved %@ to the Trash instead." = "Purge 找不到 Homebrew，因此改为将 %@ 移到废纸篓。";
