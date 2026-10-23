@@ -66,7 +66,7 @@
     "key": "blender",
     "display_name": "Blender 3D App",
     "tag": "safe",
-    "explanation": "These are temporary files saved by Blender, the 3D design application. Deleting them is safe but Blender may take a little longer to start up the next time you open it.",
+    "explanation": "Temporary files Blender saves while you work. Safe to delete; Blender may take a little longer to start the next time you open it.",
     "bundle_ids": [
       "org.blenderfoundation.blender"
     ],
@@ -216,7 +216,7 @@
     "key": "apple-media-services",
     "display_name": "Apple Media Services",
     "tag": "safe",
-    "explanation": "This stores temporary data for Apple's media services including the App Store, Apple TV, and Apple Music. Deleting it is safe and these services will rebuild it as needed.",
+    "explanation": "Temporary data for the App Store, Apple TV and Apple Music. Safe to delete; these services rebuild it as needed.",
     "bundle_ids": [
       "com.apple.AppleMediaServices"
     ],
@@ -288,7 +288,7 @@
     "key": "bird",
     "display_name": "iCloud Drive Sync",
     "tag": "medium",
-    "explanation": "This is used by the service that keeps iCloud Drive in sync with your Mac. Nothing is lost from iCloud, but your Mac will re-check and re-download file state afterwards.",
+    "explanation": "Used by the service that keeps iCloud Drive in sync. Nothing is lost from iCloud, but your Mac re-checks and re-downloads file state afterwards.",
     "bundle_ids": [
       "com.apple.bird"
     ],
@@ -598,7 +598,7 @@
     "key": "parsecd",
     "display_name": "Siri Knowledge Engine",
     "tag": "safe",
-    "explanation": "This is used by a background Apple service that helps Siri and Spotlight understand natural language queries. It is safe to delete and will be rebuilt automatically.",
+    "explanation": "Used by a background Apple service that helps Siri and Spotlight understand natural language. Safe to delete; it is rebuilt automatically.",
     "bundle_ids": [
       "com.apple.parsecd"
     ],
@@ -612,7 +612,7 @@
     "key": "passd",
     "display_name": "Apple Wallet Passes",
     "tag": "medium",
-    "explanation": "This stores temporary data for passes in your Apple Wallet, such as boarding passes and loyalty cards. Deleting it is safe but your Wallet may need to re-sync pass data.",
+    "explanation": "Temporary data for passes in Apple Wallet, such as boarding passes and loyalty cards. Safe to delete, but Wallet may need to re-sync them.",
     "bundle_ids": [
       "com.apple.passd"
     ],
@@ -1065,7 +1065,7 @@
     "key": "docker",
     "display_name": "Docker Desktop",
     "tag": "medium",
-    "explanation": "Every image, container and volume. To keep volumes, which can hold databases, run docker --context desktop-linux system prune while Docker is open. Else quit Docker.",
+    "explanation": "All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker.",
     "bundle_ids": [
       "com.docker.docker"
     ],
@@ -1213,7 +1213,7 @@
     "key": "image-cache",
     "display_name": "Image Thumbnail Cache",
     "tag": "safe",
-    "explanation": "This stores saved image previews and thumbnails to speed up display in apps. It is safe to delete and the images will simply load a little slower until the previews rebuild.",
+    "explanation": "Saved image previews and thumbnails that speed up display in apps. Safe to delete; images load a little slower until the previews rebuild.",
     "bundle_ids": [],
     "aliases": [
       "ImageCache"
@@ -1498,7 +1498,7 @@
     "key": "bun-cache",
     "display_name": "Bun Package Cache",
     "tag": "safe",
-    "explanation": "Cached packages downloaded by Bun, a fast JavaScript runtime and package manager. Safe to delete and will be re-downloaded the next time you run bun install.",
+    "explanation": "Packages downloaded by Bun, a JavaScript runtime and package manager. Safe to delete; they download again the next time you run bun install.",
     "bundle_ids": [],
     "aliases": [
       ".bun",
@@ -1738,7 +1738,7 @@
     "key": "gradle-global-cache",
     "display_name": "Gradle Dependency Cache",
     "tag": "medium",
-    "explanation": "Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow and needs a connection.",
+    "explanation": "Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow.",
     "bundle_ids": [],
     "aliases": [
       "Gradle Dependency Cache"
@@ -2303,7 +2303,7 @@
     "key": "dropbox",
     "display_name": "Dropbox",
     "tag": "medium",
-    "explanation": "Temporary sync data stored by Dropbox. Your files are safe, but Dropbox will re-verify your whole synced folder afterwards, which can take a long time on large accounts.",
+    "explanation": "Temporary sync data stored by Dropbox. Your files are safe, but Dropbox re-verifies your whole synced folder afterwards, which can take a while.",
     "bundle_ids": [
       "com.dropbox.DropboxMacFileHelper"
     ],
@@ -2771,7 +2771,7 @@
     "key": "apple-maps",
     "display_name": "Apple Maps",
     "tag": "medium",
-    "explanation": "Downloaded map tiles and location data stored by Apple Maps. Nothing is lost, but Maps re-downloads tiles as you use it and any offline maps need downloading again.",
+    "explanation": "Map tiles and location data stored by Apple Maps. Nothing is lost, but tiles download again as you use Maps, and offline maps need downloading again.",
     "bundle_ids": [
       "com.apple.Maps"
     ],
@@ -3061,7 +3061,7 @@
     "key": "elixir-deps",
     "display_name": "Elixir Dependencies",
     "tag": "safe",
-    "explanation": "Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete and re-downloaded on your next build, which needs an internet connection.",
+    "explanation": "Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete; it downloads again on the next build.",
     "bundle_ids": [],
     "aliases": [
       "elixir-deps"
@@ -3806,7 +3806,7 @@
     "key": "dart-analysis-cache",
     "display_name": "Dart Analysis Cache",
     "tag": "safe",
-    "explanation": "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so your editor opens projects faster. Safe to delete; the analyzer rebuilds them as you work.",
+    "explanation": "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them.",
     "bundle_ids": [],
     "aliases": [],
     "scope": "dev_tools",

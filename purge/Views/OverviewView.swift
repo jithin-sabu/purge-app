@@ -315,9 +315,8 @@ private struct OverviewCategoryRow: View {
     /// While scanning, the text itself shimmers; a spinner beside it would come and
     /// go with every pass of the scan.
     private var statusLine: some View {
-        Text(statusText)
+        Text(figures: statusText, style: AppStyle.Typography.callout)
             .lineLimit(1)
-            .font(AppStyle.Typography.callout)
             .foregroundStyle(AppColors.textSecondary)
             .contentTransition(reduceMotion ? .identity : .numericText())
             .animation(reduceMotion ? nil : OverviewMotion.number, value: statusText)
@@ -534,8 +533,7 @@ struct OverviewPlainRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(LocalizedStringKey(title))
                     .font(AppStyle.Typography.headline)
-                Text(LocalizedStringKey(detail))
-                    .font(AppStyle.Typography.callout)
+                Text(figures: detail, style: AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
             }
@@ -594,8 +592,7 @@ private struct OverviewSnapshotRow: View {
                         .font(AppStyle.Typography.headline)
                     infoButton
                 }
-                Text(LocalizedStringKey(detail))
-                    .font(AppStyle.Typography.callout)
+                Text(figures: detail, style: AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
             }
