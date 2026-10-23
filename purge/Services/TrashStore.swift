@@ -83,8 +83,16 @@ final class TrashStore: ObservableObject {
     private var debounceTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
-    /// Guards against a slow size pass overwriting a newer one.
-    private var latestPass = 0
+    /// The size passes in flight, one at a time. A refresh asked for while one runs
+    /// waits for one more pass after it, shared by everyone who asked meanwhile, so
+    /// `du` never walks the Trash twice at once (#190).
+    private var passTask: Task<Void, Never>?
+    /// Refreshes asked for, and how many of them a finished pass has answered. A
+    /// pass answers every request made before it started.
+    private var requestedPasses = 0
+    private var answeredPasses = 0
+    /// Numbers the passes in the debug log.
+    private var passNumber = 0
     /// Directories whose watcher could not start, so the retry on each pass logs once rather
     /// than on every attempt.
     private var loggedWatcherFailures: Set<URL> = []
@@ -169,25 +177,42 @@ final class TrashStore: ObservableObject {
     ///   permission denial means "unreadable"; anything else keeps the last good total.
     /// - A trash directory that does not exist (the iCloud one, with iCloud Drive off)
     ///   contributes nothing and must not be mistaken for either of the above.
+    ///
+    /// Returns once a pass that started after the call has landed.
     func refresh(trigger: String = "direct") async {
         guard !trashURLs.isEmpty else { return }
-        latestPass += 1
-        let pass = latestPass
+        requestedPasses += 1
+        let request = requestedPasses
         TrashDebugLog.log(
-            "pass=\(pass) start trigger=\(trigger) current access=\(access) trashBytes=\(trashBytes)"
+            "refresh requested trigger=\(trigger) running=\(passTask != nil) current access=\(access) trashBytes=\(trashBytes)"
         )
+        if passTask == nil {
+            passTask = Task { await runPasses() }
+        }
+        while answeredPasses < request, let passTask {
+            await passTask.value
+        }
+    }
+
+    private func runPasses() async {
+        while answeredPasses < requestedPasses {
+            let answering = requestedPasses
+            await measureOnce()
+            answeredPasses = answering
+        }
+        passTask = nil
+    }
+
+    private func measureOnce() async {
+        passNumber += 1
+        let pass = passNumber
+        TrashDebugLog.log("pass=\(pass) start")
 
         let urls = trashURLs
         let measureSizes = measureSizes
         let reading: TrashReading = await Task.detached(priority: .utility) {
             Self.readTrash(at: urls, pass: pass, measureSizes: measureSizes)
         }.value
-
-        // A newer pass started while `du` ran; its answer is the current one.
-        guard pass == latestPass else {
-            TrashDebugLog.log("pass=\(pass) DISCARDED (stale; latest=\(latestPass))")
-            return
-        }
 
         let resolution = Self.resolveMeasurement(reading)
         switch resolution {
