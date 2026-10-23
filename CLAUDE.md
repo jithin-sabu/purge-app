@@ -25,7 +25,7 @@ Cloud sessions run on Linux, so they can build no Swift code. Run the two Linux 
 
 - Open an issue first for anything bigger than a small fix.
 - Make one fix or one feature per PR, on a branch off `main`. PRs are squash-merged.
-- Write the PR title as a Conventional Commit with the issue number, for example `feat: warn when Large Files items sync to iCloud (#25)`. Types in use are feat, fix, docs, test, ci, refactor, and release.
+- Write the PR title as a Conventional Commit with the issue number, for example `feat: warn when Large Files items sync to iCloud (#25)`. Types in use are feat, fix, perf, docs, test, ci, refactor, and release.
 - Write commit bodies and PR descriptions in plain, short sentences, and give real numbers when you measured something.
 - For UI changes, add before and after screenshots in dark mode to `docs/screenshots/`. Light mode is not needed. Cover every scenario the change can produce and every screen it touches, including Cleanup History and any other place whose text changed.
 - Match the style of the file you edit.
