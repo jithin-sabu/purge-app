@@ -311,18 +311,23 @@ struct HomebrewCaskUninstallPlanTests {
         ])
 
         #expect(UninstallReviewSheet.introText(for: trashOnly).contains("Nothing is deleted permanently"))
-        #expect(UninstallReviewSheet.introText(for: mixed).contains("deleted permanently by Homebrew"))
+        #expect(!UninstallReviewSheet.introText(for: mixed).contains("Nothing is deleted permanently"))
         #expect(UninstallReviewSheet.primaryButtonTitle(for: trashOnly) == "Move 2 to Trash")
         #expect(UninstallReviewSheet.primaryButtonTitle(for: mixed) == "Remove 2 Items")
         #expect(UninstallReviewSheet.primaryButtonTitle(for: bundleOnly) == "Delete 1 Permanently")
+        // The footer counts what cannot come back, next to the button.
+        #expect(UninstallReviewSheet.footerText(for: trashOnly) == "Freeing \(formatBytes(1_200))")
+        #expect(UninstallReviewSheet.footerText(for: mixed) == "Freeing \(formatBytes(1_200)) · 1 permanent, 1 to the Trash")
+        #expect(UninstallReviewSheet.footerText(for: bundleOnly) == "Freeing \(formatBytes(1_000)) · 1 permanent, 0 to the Trash")
 
         let on = UninstallAppPlan(app: orb, items: items(for: orb))
         var off = on
         off.removesThroughHomebrew = false
-        #expect(UninstallReviewSheet.homebrewNote(for: on)?.contains("brew uninstall --cask orbstack") == true)
-        #expect(UninstallReviewSheet.homebrewNote(for: on)?.contains("permanently") == true)
+        #expect(UninstallReviewSheet.homebrewNote(for: on)?.contains("can't be put back") == true)
         #expect(UninstallReviewSheet.homebrewNote(for: off)?.contains("moves to the Trash") == true)
         #expect(UninstallReviewSheet.homebrewNote(for: UninstallAppPlan(app: plain, items: items(for: plain))) == nil)
+        // The command sits beside the toggle as a tag, so it must name the cask.
+        #expect(cask.command == "brew uninstall --cask orbstack")
     }
 }
 
