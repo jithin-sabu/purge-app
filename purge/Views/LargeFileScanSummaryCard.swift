@@ -264,7 +264,7 @@ struct LargeFileScanSummaryCard: View {
     }
 
     private var checkedList: String {
-        let names = summary.checkedRoots.map(\.lastPathComponent)
+        let names = summary.checkedRoots.map(LargeFileScanSummary.rootName)
         return ListFormatter.localizedString(byJoining: names)
     }
 

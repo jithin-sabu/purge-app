@@ -98,10 +98,23 @@ struct ContentView: View {
         }
         .sheet(isPresented: $store.showLargeFileDeletionSheet) {
             LargeFileDeletionConfirmSheet(
-                files: store.selectedLargeFiles,
+                files: store.selectedTrashableLargeFiles,
                 fullyConsumedDuplicateGroups: store.duplicateGroupsFullyConsumedBySelection,
                 onCancel: { store.dismissLargeFileDeletionSheet() },
                 onConfirm: { Task { await store.confirmLargeFileDeletion() } }
+            )
+        }
+        .sheet(item: $store.pendingRemoveDownload) { request in
+            RemoveDownloadConfirmSheet(
+                request: request,
+                onCancel: { store.dismissRemoveDownloads() },
+                onConfirm: { Task { await store.confirmRemoveDownloads() } }
+            )
+        }
+        .sheet(item: $store.removeDownloadResult) { report in
+            RemoveDownloadResultSheet(
+                report: report,
+                onDone: { store.dismissRemoveDownloadResult() }
             )
         }
         .sheet(item: $store.pendingDuplicateCleanup) { request in

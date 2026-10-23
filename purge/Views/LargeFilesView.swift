@@ -238,6 +238,13 @@ struct LargeFilesView: View {
                 thresholdMenu
                 ageMenu
                 Spacer(minLength: 12)
+                // Before macOS 26 this layout has no Select All bar, which is
+                // where Remove Download sits otherwise, so it goes here (#106).
+                if !usesExternalScrollContainer, store.hasRemovableDownloads, !isDuplicatesFilterActive {
+                    LargeFileRemoveDownloadButton(selection: store.largeFileSelection) {
+                        store.requestRemoveDownloads()
+                    }
+                }
                 LargeFileSearchField(query: $searchQuery)
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
@@ -382,6 +389,9 @@ struct LargeFilesView: View {
             onToggleAll: toggleSelectAll,
             onKeepOneOfEach: isDuplicatesFilterActive
                 ? { store.requestDuplicateCleanup() }
+                : nil,
+            onRemoveDownload: store.hasRemovableDownloads && !isDuplicatesFilterActive
+                ? { store.requestRemoveDownloads() }
                 : nil
         )
     }
@@ -475,7 +485,8 @@ struct LargeFilesView: View {
                         duplicateCopyCount: duplicateIndex.copyCount(forFileID: file.id),
                         onToggle: { toggleSelection(forFileID: file.id) },
                         onExclude: { store.excludeLargeFileFromScans(file) },
-                        onExcludeFolder: { store.excludeLargeFileFolderFromScans(file) }
+                        onExcludeFolder: { store.excludeLargeFileFolderFromScans(file) },
+                        onRemoveDownload: { store.requestRemoveDownloads(for: file) }
                     )
                     .listRowInsets(ScanListRowInsets.standard)
                     .listRowBackground(Color.clear)
@@ -678,6 +689,35 @@ private struct LargeFileDeleteButton: View {
     }
 }
 
+/// Remove Download for the selected iCloud files (#106). Counts only the rows
+/// it acts on, so a selection mixing local and synced files reads true. Its own
+/// view observing the selection, like the delete button, so a tick never
+/// re-renders the List.
+private struct LargeFileRemoveDownloadButton: View {
+    @EnvironmentObject private var store: PurgeStore
+    @ObservedObject var selection: LargeFileSelection
+    let action: () -> Void
+
+    var body: some View {
+        let files = store.selectedRemovableDownloads
+        let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        Button(action: action) {
+            Label(
+                files.isEmpty
+                    ? String(localized: "Remove Download")
+                    : String(localized: "Remove Download (\(formatBytes(bytes)))"),
+                systemImage: "icloud.and.arrow.up"
+            )
+            .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(.purge(.secondary))
+        .fixedSize()
+        .disabled(files.isEmpty || store.isDeleting)
+        .help("Free the space on this Mac and keep the selected files in iCloud Drive")
+        .accessibilityValue(files.isEmpty ? Text("No synced files selected") : Text("\(files.count) files selected"))
+    }
+}
+
 /// "Checking for duplicates…" status that sits at the end of the chips row while
 /// the hashing pass runs.
 ///
@@ -722,6 +762,9 @@ private struct LargeFileSelectAllBar: View {
     /// Shown only under the Duplicates filter: selects every copy but one per group
     /// and opens the delete confirmation. nil elsewhere.
     var onKeepOneOfEach: (() -> Void)?
+    /// Shown when the scan found a file whose iCloud download can be removed
+    /// (#106). nil otherwise, so a Mac without iCloud Drive never sees it.
+    var onRemoveDownload: (() -> Void)?
 
     private var state: SelectAllTriState {
         guard !visibleIDs.isEmpty else { return .none }
@@ -740,6 +783,10 @@ private struct LargeFileSelectAllBar: View {
             .disabled(visibleIDs.isEmpty)
 
             Spacer()
+
+            if let onRemoveDownload {
+                LargeFileRemoveDownloadButton(selection: selection, action: onRemoveDownload)
+            }
 
             if let onKeepOneOfEach {
                 // Sits with the sort control, not beside "Select All": both are
@@ -1011,6 +1058,9 @@ private struct LargeFileRow: View {
     let onToggle: () -> Void
     let onExclude: () -> Void
     let onExcludeFolder: () -> Void
+    /// Opens Remove Download for this file alone. Only offered when the scan
+    /// found its download removable (#106).
+    var onRemoveDownload: (() -> Void)?
 
     @State private var isContextMenuActive = false
 
@@ -1027,7 +1077,12 @@ private struct LargeFileRow: View {
 
     /// Built on right-click, not during `body` — see `ScanRowContextMenu.entries`.
     private func contextMenuEntries() -> [ScanRowMenuEntry] {
-        var entries: [ScanRowMenuEntry] = [.action(title: String(localized: "Exclude from scans"), handler: onExclude)]
+        var entries: [ScanRowMenuEntry] = []
+        if file.canRemoveDownload, let onRemoveDownload {
+            entries.append(.action(title: String(localized: "Remove Download…"), handler: onRemoveDownload))
+            entries.append(.separator)
+        }
+        entries.append(.action(title: String(localized: "Exclude from scans"), handler: onExclude))
         if canExcludeFolder {
             entries.append(.action(title: String(localized: "Exclude folder \u{201C}\(folderName)\u{201D} from scans"), handler: onExcludeFolder))
         }
@@ -1401,7 +1456,16 @@ struct LargeFileDeletionConfirmSheet: View {
             }
 
             if let iCloudWarning {
-                LargeFileCautionNote { Text(iCloudWarning) }
+                LargeFileCautionNote {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(iCloudWarning)
+                        // The other way to get the space back, named where the
+                        // user is about to take the drastic one (#106).
+                        if files.contains(where: \.canRemoveDownload) {
+                            Text("To free the space and keep files in iCloud, cancel and use Remove Download instead.")
+                        }
+                    }
+                }
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
@@ -1712,7 +1776,7 @@ struct DuplicateCleanupSheet: View {
 /// The cloud on a synced file, in the scan list and on both trash sheets. Gray,
 /// like Finder's: with Desktop & Documents syncing, most rows from those folders
 /// carry it, so it stays quiet.
-fileprivate struct LargeFileICloudMark: View {
+struct LargeFileICloudMark: View {
     var body: some View {
         Image(systemName: "icloud")
             .font(AppStyle.Typography.metadata)
@@ -1724,7 +1788,7 @@ fileprivate struct LargeFileICloudMark: View {
 
 /// The caution box on the large-file trash sheets: the all-copies note and the
 /// iCloud note. A warning, not a blocker.
-fileprivate struct LargeFileCautionNote<Content: View>: View {
+struct LargeFileCautionNote<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {

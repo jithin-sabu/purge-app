@@ -12,9 +12,14 @@ struct CleanupHistoryDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     summarySection
-                    if entry.kind == .appleIntelligenceModels {
+                    switch entry.kind {
+                    case .appleIntelligenceModels?:
                         itemsSection(String(localized: "Released"), items: entry.deletedItems)
-                    } else {
+                    case .iCloudDownloadsRemoved?:
+                        // Not "Moved to Trash": the files are where they were, as
+                        // cloud placeholders, and the Trash has nothing of them (#106).
+                        itemsSection(String(localized: "Removed from this Mac, still in iCloud Drive"), items: entry.deletedItems)
+                    case nil:
                         // Simulators and runtimes never reach the Trash, so they get
                         // their own list instead of sitting under "Moved to Trash" (#170).
                         let permanent = entry.permanentlyDeletedItems
@@ -120,7 +125,7 @@ struct CleanupHistoryDetailView: View {
                     .lineLimit(1)
 
                 if !isModelSet {
-                    Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
+                    Text(locationText(for: fileURL))
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.textTertiary)
                         .lineLimit(1)
@@ -152,7 +157,7 @@ struct CleanupHistoryDetailView: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(displayDirectoryPath(for: fileURL.deletingLastPathComponent()))
+                Text(locationText(for: fileURL))
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textTertiary)
                     .lineLimit(1)
@@ -160,6 +165,12 @@ struct CleanupHistoryDetailView: View {
 
             Spacer(minLength: 0)
         }
+    }
+
+    /// The item's folder, with iCloud Drive's own folder named as Finder names it.
+    private func locationText(for fileURL: URL) -> String {
+        let folder = fileURL.deletingLastPathComponent()
+        return LargeFile.iCloudDriveLocation(for: folder) ?? displayDirectoryPath(for: folder)
     }
 
     private func historySectionCard<Content: View>(

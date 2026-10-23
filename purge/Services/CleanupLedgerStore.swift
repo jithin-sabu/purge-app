@@ -228,6 +228,10 @@ final class CleanupLedgerStore {
                 return true
             case .appleIntelligenceModels?:
                 return false
+            // Nothing was cleaned: the files are still in iCloud, and the
+            // recap counts what went to the Trash.
+            case .iCloudDownloadsRemoved?:
+                return false
             }
         }
     }

@@ -47,6 +47,10 @@ nonisolated enum CleanupHistoryKind: String, Codable, Hashable {
     /// `deletedItems` holds one item per set with Apple's figure for it;
     /// `bytesReclaimedOnVolume` is what the volume gave back (#133).
     case appleIntelligenceModels
+    /// Downloads of iCloud files removed from this Mac (#106). Nothing went to
+    /// the Trash and every file is still in iCloud. `deletedItems` holds each
+    /// file with the space it freed here, measured.
+    case iCloudDownloadsRemoved
 }
 
 /// One persisted cleanup session (manual or scheduled).
@@ -85,12 +89,23 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
     }
 
     /// An ordinary clean's items, split by where they went (#170).
+    /// Empty for removed iCloud downloads, which neither went to the Trash nor
+    /// were deleted.
     var trashedItems: [CleanupHistoryDeletedItemDTO] {
-        deletedItems.filter(\.wentToTrash)
+        guard kind != .iCloudDownloadsRemoved else { return [] }
+        return deletedItems.filter(\.wentToTrash)
     }
 
     var permanentlyDeletedItems: [CleanupHistoryDeletedItemDTO] {
-        deletedItems.filter { !$0.wentToTrash }
+        guard kind != .iCloudDownloadsRemoved else { return [] }
+        return deletedItems.filter { !$0.wentToTrash }
+    }
+
+    /// Space the removed iCloud downloads freed on this Mac, measured per file.
+    /// Zero for every other kind of entry.
+    var bytesFreedByRemovedDownloads: Int64 {
+        guard kind == .iCloudDownloadsRemoved else { return 0 }
+        return deletedItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
     }
 
     /// The sizes the scan recorded for the items deleted permanently. Not in

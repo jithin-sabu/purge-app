@@ -198,6 +198,15 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// unbadged.
     let syncsWithICloud: Bool
 
+    /// False for a file found in iCloud Drive's own folder: Large Files offers
+    /// those for Remove Download only (#106). The delete gate refuses them too.
+    let canMoveToTrash: Bool
+
+    /// True when, at scan time, the file passed every `ICloudDownloadPolicy`
+    /// check. A hint for the buttons and the sheet only: the remover checks
+    /// again, from disk, right before it acts.
+    let canRemoveDownload: Bool
+
     /// What the row is when its size alone doesn't say: a restore image, a
     /// virtual machine, an unfinished download. Nil for everything else.
     let kind: LargeFileKind?
@@ -233,6 +242,8 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         sourceLabel: String? = nil,
         componentPaths: [URL]? = nil,
         syncsWithICloud: Bool = false,
+        canMoveToTrash: Bool = true,
+        canRemoveDownload: Bool = false,
         kind: LargeFileKind? = nil
     ) {
         self.path = path
@@ -244,6 +255,8 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         self.sourceLabel = sourceLabel
         self.componentPaths = (componentPaths ?? [path]).map(\.standardizedFileURL)
         self.syncsWithICloud = syncsWithICloud
+        self.canMoveToTrash = canMoveToTrash
+        self.canRemoveDownload = canRemoveDownload
         let kind = kind ?? LargeFileKind.kind(forExtension: path.pathExtension)
         self.kind = kind
         let standardized = path.standardizedFileURL
@@ -301,7 +314,22 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     var displayName: String { displayNameOverride ?? path.lastPathComponent }
     var formattedSize: String { formatBytes(sizeBytes) }
     var locationLabel: String {
-        sourceLabel ?? displayDirectoryPath(for: path.deletingLastPathComponent())
+        if let sourceLabel { return sourceLabel }
+        let folder = path.deletingLastPathComponent()
+        return Self.iCloudDriveLocation(for: folder) ?? displayDirectoryPath(for: folder)
+    }
+
+    /// "iCloud Drive/Projects" for a folder inside iCloud Drive's own folder,
+    /// which Finder shows as iCloud Drive. Nil anywhere else.
+    static func iCloudDriveLocation(
+        for folder: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> String? {
+        let root = LargeFileScanPolicy.iCloudDriveRoot(home: home).standardizedFileURL.path
+        let path = folder.standardizedFileURL.path
+        if path == root { return String(localized: "iCloud Drive") }
+        guard path.hasPrefix(root + "/") else { return nil }
+        return String(localized: "iCloud Drive") + "/" + path.dropFirst(root.count + 1)
     }
 }
 

@@ -19,11 +19,17 @@ nonisolated final class LargeFileScanner {
     /// accident. `installedApps` defaults to a LaunchServices lookup, and
     /// `isAppRunning` to the running-apps list. `home` decides where a Safari
     /// download bundle may sit; tests pass a temporary one.
+    ///
+    /// `iCloudDriveRoots` are walked like the home folders, but their rows are
+    /// offered for Remove Download only and an iCloud file there that can't
+    /// have its download removed is left off (#106). They default to iCloud
+    /// Drive's own folder, again only when `roots` is left to default.
     func scanStream(
         minBytes: Int64,
         staleDays: Int,
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
+        iCloudDriveRoots: [URL]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
         home: URL? = nil,
@@ -32,7 +38,8 @@ nonisolated final class LargeFileScanner {
     ) -> AsyncStream<LargeFile> {
         let events = scanEvents(
             minBytes: minBytes, staleDays: staleDays, roots: roots,
-            virtualMachineRoots: virtualMachineRoots, installedApps: installedApps,
+            virtualMachineRoots: virtualMachineRoots, iCloudDriveRoots: iCloudDriveRoots,
+            installedApps: installedApps,
             isAppRunning: isAppRunning, home: home, exclusions: exclusions, isExcluded: isExcluded
         )
         return AsyncStream { continuation in
@@ -54,6 +61,7 @@ nonisolated final class LargeFileScanner {
         staleDays: Int,
         roots: [URL]? = nil,
         virtualMachineRoots: [URL]? = nil,
+        iCloudDriveRoots: [URL]? = nil,
         installedApps: Set<VirtualMachineApp>? = nil,
         isAppRunning: (@Sendable (String) -> Bool)? = nil,
         home: URL? = nil,
@@ -64,10 +72,13 @@ nonisolated final class LargeFileScanner {
             let task = Task.detached(priority: .userInitiated) {
                 let home = home ?? FileManager.default.homeDirectoryForCurrentUser
                 var walks = (roots ?? LargeFileScanPolicy.scanRoots(home: home))
-                    .map { (root: $0, bundlesOnly: false) }
+                    .map { Walk(root: $0, bundlesOnly: false, downloadOnly: false) }
+                let driveRoots = iCloudDriveRoots
+                    ?? (roots == nil ? [LargeFileScanPolicy.iCloudDriveRoot(home: home)] : [])
+                walks += driveRoots.map { Walk(root: $0, bundlesOnly: false, downloadOnly: true) }
                 let vmRoots = virtualMachineRoots
                     ?? (roots == nil ? LargeFileScanPolicy.virtualMachineRoots(home: home) : [])
-                walks += vmRoots.map { (root: $0, bundlesOnly: true) }
+                walks += vmRoots.map { Walk(root: $0, bundlesOnly: true, downloadOnly: false) }
                 await Self.run(
                     minBytes: minBytes,
                     staleDays: staleDays,
@@ -98,10 +109,19 @@ nonisolated final class LargeFileScanner {
         })
     }
 
+    /// One root and how it is walked. `bundlesOnly` lists VM bundles and
+    /// nothing else; `downloadOnly` lists files whose iCloud download can be
+    /// removed and offers nothing for the Trash.
+    private struct Walk {
+        let root: URL
+        let bundlesOnly: Bool
+        let downloadOnly: Bool
+    }
+
     private static func run(
         minBytes: Int64,
         staleDays: Int,
-        walks: [(root: URL, bundlesOnly: Bool)],
+        walks: [Walk],
         installedApps: Set<VirtualMachineApp>,
         isAppRunning: @Sendable (String) -> Bool,
         home: URL,
@@ -132,7 +152,9 @@ nonisolated final class LargeFileScanner {
             }
         )
 
-        for (root, bundlesOnly) in walks {
+        for walk in walks {
+            let root = walk.root
+            let bundlesOnly = walk.bundlesOnly
             if Task.isCancelled { break }
             guard fm.fileExists(atPath: root.path) else { continue }
             // Folders the user excluded are never entered, not just hidden from the
@@ -205,7 +227,8 @@ nonisolated final class LargeFileScanner {
                                 if let file = listed(
                                     fileURL, size: measured.bytes, lastUsed: measured.lastUsed,
                                     minBytes: minBytes, staleDays: staleDays, now: now,
-                                    installedApps: installedApps, isExcluded: isExcluded
+                                    installedApps: installedApps, isExcluded: isExcluded,
+                                    home: home, downloadOnly: walk.downloadOnly
                                 ) {
                                     continuation.yield(.file(file))
                                 }
@@ -272,7 +295,8 @@ nonisolated final class LargeFileScanner {
                         if let file = listed(
                             fileURL, size: size, lastUsed: max(accessed, modified),
                             minBytes: minBytes, staleDays: staleDays, now: now,
-                            installedApps: installedApps, isExcluded: isExcluded
+                            installedApps: installedApps, isExcluded: isExcluded,
+                            home: home, downloadOnly: walk.downloadOnly
                         ) {
                             continuation.yield(.file(file))
                         }
@@ -320,7 +344,9 @@ nonisolated final class LargeFileScanner {
         staleDays: Int,
         now: Date,
         installedApps: Set<VirtualMachineApp>,
-        isExcluded: (URL) -> Bool
+        isExcluded: (URL) -> Bool,
+        home: URL,
+        downloadOnly: Bool
     ) -> LargeFile? {
         guard size >= minBytes else { return nil }
         guard passesStaleFilter(lastUsed: lastUsed, staleDays: staleDays, now: now) else { return nil }
@@ -349,6 +375,13 @@ nonisolated final class LargeFileScanner {
             forKeys: [.isUbiquitousItemKey]
         ))?.isUbiquitousItem == true
 
+        // The same checks the remover runs before it acts, asked only of synced
+        // files that made the list. In iCloud Drive's own folder Remove Download
+        // is the only thing on offer, so a file that can't have it isn't listed.
+        let canRemoveDownload = syncsWithICloud
+            && ICloudDownloadPolicy.evaluate(fileURL, home: home, now: now).decision == .removable
+        if downloadOnly, !canRemoveDownload { return nil }
+
         var kind = LargeFileKind.kind(forExtension: fileURL.pathExtension)
         if case .virtualMachine(let app, _) = kind {
             kind = .virtualMachine(app, appInstalled: installedApps.contains(app))
@@ -360,6 +393,8 @@ nonisolated final class LargeFileScanner {
             lastUsed: lastUsed,
             category: LargeFileCategory.category(forExtension: fileURL.pathExtension),
             syncsWithICloud: syncsWithICloud,
+            canMoveToTrash: !downloadOnly,
+            canRemoveDownload: canRemoveDownload,
             kind: kind
         )
     }

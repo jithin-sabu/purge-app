@@ -103,6 +103,26 @@ final class CleanupHistoryStore: ObservableObject {
         persist()
     }
 
+    /// A Remove Download run (#106). Nothing went to the Trash: the items are the
+    /// files whose downloads went, each with the space it freed here, and the
+    /// skipped ones with why. Every file is still in iCloud.
+    func appendICloudDownloadRemoval(_ report: ICloudDownloadReport) {
+        let entry = CleanupHistoryEntry(
+            date: report.date,
+            trigger: .manual,
+            bytesMovedToTrash: 0,
+            deletedItems: report.removed.map {
+                CleanupHistoryDeletedItemDTO(path: $0.path, sizeBytes: $0.bytesFreed, movedToTrash: false)
+            },
+            skippedItems: report.skipped.map {
+                CleanupHistorySkippedItemDTO(path: $0.path, reason: $0.reasonKey, isUserVisible: true)
+            },
+            kind: .iCloudDownloadsRemoved
+        )
+        archive.append(entry, maxEntries: maxEntries)
+        persist()
+    }
+
     func clear() {
         archive.clear()
         persist()
