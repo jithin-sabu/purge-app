@@ -77,6 +77,8 @@ final class TrashStore: ObservableObject {
     private var trashBytesWhenBackgrounded: Int64?
 
     private let trashURLs: [URL]
+    /// Sizes the listed trash directories, keyed by path. Tests hand in a fake.
+    private let measureSizes: @Sendable ([URL]) -> [String: Int64]
     private var watchers: [URL: DirectoryWatcher] = [:]
     private var debounceTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
@@ -102,8 +104,12 @@ final class TrashStore: ObservableObject {
     /// cannot leave a stale number on screen for as long as the window stays frontmost.
     private static let activePollInterval = Duration.seconds(30)
 
-    init() {
-        trashURLs = Self.trashDirectories()
+    init(
+        trashURLs: [URL] = TrashStore.trashDirectories(),
+        measureSizes: @escaping @Sendable ([URL]) -> [String: Int64] = { FolderSizing.directorySizes(at: $0) }
+    ) {
+        self.trashURLs = trashURLs
+        self.measureSizes = measureSizes
         TrashDebugLog.log(
             "=== TrashStore init pid=\(ProcessInfo.processInfo.processIdentifier) "
             + "trashURLs=\(trashURLs.map(\.path).joined(separator: " | ")) ==="
@@ -172,8 +178,9 @@ final class TrashStore: ObservableObject {
         )
 
         let urls = trashURLs
+        let measureSizes = measureSizes
         let reading: TrashReading = await Task.detached(priority: .utility) {
-            Self.readTrash(at: urls, pass: pass)
+            Self.readTrash(at: urls, pass: pass, measureSizes: measureSizes)
         }.value
 
         // A newer pass started while `du` ran; its answer is the current one.
@@ -213,7 +220,11 @@ final class TrashStore: ObservableObject {
     /// Looks at every trash directory and folds the results into one reading, off the main
     /// actor. Sizes them in a single `du` invocation, so the cost does not scale with the
     /// number of directories.
-    nonisolated private static func readTrash(at trashURLs: [URL], pass: Int) -> TrashReading {
+    nonisolated private static func readTrash(
+        at trashURLs: [URL],
+        pass: Int,
+        measureSizes: @Sendable ([URL]) -> [String: Int64]
+    ) -> TrashReading {
         var listings: [(url: URL, listing: LocationListing)] = []
         for url in trashURLs {
             listings.append((url, listing(at: url, pass: pass)))
@@ -224,7 +235,7 @@ final class TrashStore: ObservableObject {
             return entry.url
         }
         let duStart = Date()
-        let measured = toMeasure.isEmpty ? [:] : FolderSizing.directorySizes(at: toMeasure)
+        let measured = toMeasure.isEmpty ? [:] : measureSizes(toMeasure)
         if !toMeasure.isEmpty {
             TrashDebugLog.log(
                 "pass=\(pass) du measured "

@@ -1112,7 +1112,45 @@ nonisolated final class DevScanner {
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
     ) async -> [ProjectGroup] {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let roots = [
+        let walkStart = Date()
+        let (discoveredRoots, directoriesWalked) = Self.findProjectRoots(
+            in: Self.projectSearchRoots(home: home),
+            home: home,
+            access: access,
+            maxDepth: maxDepth
+        )
+
+        ScanPhaseTiming.finish(
+            "discoverProjects walk",
+            since: walkStart,
+            detail: "walked \(directoriesWalked) directories, found \(discoveredRoots.count) project roots"
+        )
+
+        /// Build artifact list per root (expensive sizing runs concurrently).
+        let sizingStart = Date()
+        let filter = ProjectListingFilter(
+            staleDays: DevToolsStalenessOption.currentThresholdDays(),
+            now: Date(),
+            live: .current()
+        )
+        let (groups, artifactsSized) = await buildProjectGroups(
+            for: discoveredRoots,
+            access: access,
+            filter: filter,
+            continuation: continuation
+        )
+        ScanPhaseTiming.finish(
+            "project artifact sizing",
+            since: sizingStart,
+            detail: "\(artifactsSized) artifacts sized, \(groups.count) project groups"
+        )
+        return groups
+    }
+
+    /// The folders project discovery starts from. Home itself is walked one level
+    /// deep; the rest to `maxDepth`.
+    nonisolated static func projectSearchRoots(home: URL) -> [URL] {
+        [
             home,
             home.appendingPathComponent("Developer", isDirectory: true),
             home.appendingPathComponent("developer", isDirectory: true),
@@ -1146,8 +1184,16 @@ nonisolated final class DevScanner {
             home.appendingPathComponent("apps", isDirectory: true),
             home.appendingPathComponent("Apps", isDirectory: true),
         ]
+    }
 
-        let walkStart = Date()
+    /// Walks `roots` for project markers and returns each project root once,
+    /// shallowest first, with how many directories the walk visited.
+    nonisolated static func findProjectRoots(
+        in roots: [URL],
+        home: URL,
+        access: ScanAccess,
+        maxDepth: Int = 4
+    ) -> (roots: [(URL, [ProjectType])], directoriesWalked: Int) {
         let fm = FileManager.default
         var discoveredRoots: [(URL, [ProjectType])] = []
         var directoriesWalked = 0
@@ -1301,37 +1347,12 @@ nonisolated final class DevScanner {
 
         discoveredRoots = Self.firstOfEachProject(discoveredRoots)
         discoveredRoots.sort { $0.0.path.count < $1.0.path.count }
-
-        ScanPhaseTiming.finish(
-            "discoverProjects walk",
-            since: walkStart,
-            detail: "walked \(directoriesWalked) directories, found \(discoveredRoots.count) project roots"
-        )
-
-        /// Build artifact list per root (expensive sizing runs concurrently).
-        let sizingStart = Date()
-        let filter = ProjectListingFilter(
-            staleDays: DevToolsStalenessOption.currentThresholdDays(),
-            now: Date(),
-            live: .current()
-        )
-        let (groups, artifactsSized) = await buildProjectGroups(
-            for: discoveredRoots,
-            access: access,
-            filter: filter,
-            continuation: continuation
-        )
-        ScanPhaseTiming.finish(
-            "project artifact sizing",
-            since: sizingStart,
-            detail: "\(artifactsSized) artifacts sized, \(groups.count) project groups"
-        )
-        return groups
+        return (discoveredRoots, directoriesWalked)
     }
 
     /// Project types identified by a file *extension* rather than an exact name.
     /// One directory listing serves all of them, since listing is the expensive part.
-    private func extensionMarkedTypes(in directory: URL) -> [ProjectType] {
+    private nonisolated static func extensionMarkedTypes(in directory: URL) -> [ProjectType] {
         guard let children = try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil,
@@ -1358,7 +1379,7 @@ nonisolated final class DevScanner {
         return Array(found)
     }
 
-    private func containsXcodeBundle(in directory: URL) -> Bool {
+    private nonisolated static func containsXcodeBundle(in directory: URL) -> Bool {
         let fm = FileManager.default
         guard let children = try? fm.contentsOfDirectory(
             at: directory,
@@ -1374,7 +1395,7 @@ nonisolated final class DevScanner {
         }
     }
 
-    private func hasGradleMarker(in directory: URL) -> Bool {
+    private nonisolated static func hasGradleMarker(in directory: URL) -> Bool {
         let fm = FileManager.default
         if fm.fileExists(atPath: directory.appendingPathComponent("build.gradle").path)
             || fm.fileExists(atPath: directory.appendingPathComponent("build.gradle.kts").path)
