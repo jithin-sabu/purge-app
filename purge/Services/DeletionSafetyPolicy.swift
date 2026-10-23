@@ -483,6 +483,12 @@ enum DeletionSafetyPolicy {
         let verdict = !requiresAdminPrivileges(for: url) && evaluate(url) == .allow
 
         offeredForCleanupLock.lock()
+        // A scan looks at a few thousand paths, and the cache only needs to outlast
+        // one. It used to keep every path it ever saw (#190); now it starts over when
+        // full, which costs one re-evaluation of each path still on screen.
+        if offeredForCleanupCache.count >= offeredForCleanupCacheLimit {
+            offeredForCleanupCache.removeAll(keepingCapacity: true)
+        }
         offeredForCleanupCache[key] = verdict
         offeredForCleanupLock.unlock()
         return verdict
@@ -490,6 +496,14 @@ enum DeletionSafetyPolicy {
 
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]
     private nonisolated static let offeredForCleanupLock = NSLock()
+    nonisolated static let offeredForCleanupCacheLimit = 20_000
+
+    /// How many verdicts are cached. For tests.
+    nonisolated static var offeredForCleanupCacheCount: Int {
+        offeredForCleanupLock.lock()
+        defer { offeredForCleanupLock.unlock() }
+        return offeredForCleanupCache.count
+    }
 
     nonisolated static func filterCacheItems(_ items: [CacheItem]) -> [CacheItem] {
         items.compactMap(filterCacheItem)

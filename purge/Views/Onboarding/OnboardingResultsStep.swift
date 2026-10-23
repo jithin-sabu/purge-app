@@ -26,10 +26,19 @@ extension PurgeStore {
     var systemJunkBytes: Int64 = 0
     var devArtifactBytes: Int64 = 0
 
+    // One pass over the cache rows, by the paths each row stored when it was
+    // made. Searching every row's folders for every candidate, standardizing both
+    // paths each time, took about 900 ms for 300 rows of two folders (#190). The
+    // first row that holds a path wins, as the search did.
+    var cacheItemByPath: [String: CacheItem] = [:]
+    for item in cacheItems {
+      for path in item.standardizedPaths where cacheItemByPath[path] == nil {
+        cacheItemByPath[path] = item
+      }
+    }
+
     for candidate in candidates {
-      if let item = cacheItems.first(where: { cacheItem in
-        cacheItem.locations.contains { $0.path.standardizedFileURL.path == candidate.path.standardizedFileURL.path }
-      }) {
+      if let item = cacheItemByPath[candidate.path.standardizedFileURL.path] {
         if Self.isBrowserCacheItem(item) {
           browserBytes += candidate.sizeBytes
         } else if Self.isSystemJunkCacheItem(item) {

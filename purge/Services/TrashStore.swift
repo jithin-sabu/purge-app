@@ -77,12 +77,22 @@ final class TrashStore: ObservableObject {
     private var trashBytesWhenBackgrounded: Int64?
 
     private let trashURLs: [URL]
+    /// Sizes the listed trash directories, keyed by path. Tests hand in a fake.
+    private let measureSizes: @Sendable ([URL]) -> [String: Int64]
     private var watchers: [URL: DirectoryWatcher] = [:]
     private var debounceTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
-    /// Guards against a slow size pass overwriting a newer one.
-    private var latestPass = 0
+    /// The size passes in flight, one at a time. A refresh asked for while one runs
+    /// waits for one more pass after it, shared by everyone who asked meanwhile, so
+    /// `du` never walks the Trash twice at once (#190).
+    private var passTask: Task<Void, Never>?
+    /// Refreshes asked for, and how many of them a finished pass has answered. A
+    /// pass answers every request made before it started.
+    private var requestedPasses = 0
+    private var answeredPasses = 0
+    /// Numbers the passes in the debug log.
+    private var passNumber = 0
     /// Directories whose watcher could not start, so the retry on each pass logs once rather
     /// than on every attempt.
     private var loggedWatcherFailures: Set<URL> = []
@@ -102,8 +112,12 @@ final class TrashStore: ObservableObject {
     /// cannot leave a stale number on screen for as long as the window stays frontmost.
     private static let activePollInterval = Duration.seconds(30)
 
-    init() {
-        trashURLs = Self.trashDirectories()
+    init(
+        trashURLs: [URL] = TrashStore.trashDirectories(),
+        measureSizes: @escaping @Sendable ([URL]) -> [String: Int64] = { FolderSizing.directorySizes(at: $0) }
+    ) {
+        self.trashURLs = trashURLs
+        self.measureSizes = measureSizes
         TrashDebugLog.log(
             "=== TrashStore init pid=\(ProcessInfo.processInfo.processIdentifier) "
             + "trashURLs=\(trashURLs.map(\.path).joined(separator: " | ")) ==="
@@ -163,24 +177,42 @@ final class TrashStore: ObservableObject {
     ///   permission denial means "unreadable"; anything else keeps the last good total.
     /// - A trash directory that does not exist (the iCloud one, with iCloud Drive off)
     ///   contributes nothing and must not be mistaken for either of the above.
+    ///
+    /// Returns once a pass that started after the call has landed.
     func refresh(trigger: String = "direct") async {
         guard !trashURLs.isEmpty else { return }
-        latestPass += 1
-        let pass = latestPass
+        requestedPasses += 1
+        let request = requestedPasses
         TrashDebugLog.log(
-            "pass=\(pass) start trigger=\(trigger) current access=\(access) trashBytes=\(trashBytes)"
+            "refresh requested trigger=\(trigger) running=\(passTask != nil) current access=\(access) trashBytes=\(trashBytes)"
         )
+        if passTask == nil {
+            passTask = Task { await runPasses() }
+        }
+        while answeredPasses < request, let passTask {
+            await passTask.value
+        }
+    }
+
+    private func runPasses() async {
+        while answeredPasses < requestedPasses {
+            let answering = requestedPasses
+            await measureOnce()
+            answeredPasses = answering
+        }
+        passTask = nil
+    }
+
+    private func measureOnce() async {
+        passNumber += 1
+        let pass = passNumber
+        TrashDebugLog.log("pass=\(pass) start")
 
         let urls = trashURLs
+        let measureSizes = measureSizes
         let reading: TrashReading = await Task.detached(priority: .utility) {
-            Self.readTrash(at: urls, pass: pass)
+            Self.readTrash(at: urls, pass: pass, measureSizes: measureSizes)
         }.value
-
-        // A newer pass started while `du` ran; its answer is the current one.
-        guard pass == latestPass else {
-            TrashDebugLog.log("pass=\(pass) DISCARDED (stale; latest=\(latestPass))")
-            return
-        }
 
         let resolution = Self.resolveMeasurement(reading)
         switch resolution {
@@ -213,7 +245,11 @@ final class TrashStore: ObservableObject {
     /// Looks at every trash directory and folds the results into one reading, off the main
     /// actor. Sizes them in a single `du` invocation, so the cost does not scale with the
     /// number of directories.
-    nonisolated private static func readTrash(at trashURLs: [URL], pass: Int) -> TrashReading {
+    nonisolated private static func readTrash(
+        at trashURLs: [URL],
+        pass: Int,
+        measureSizes: @Sendable ([URL]) -> [String: Int64]
+    ) -> TrashReading {
         var listings: [(url: URL, listing: LocationListing)] = []
         for url in trashURLs {
             listings.append((url, listing(at: url, pass: pass)))
@@ -224,7 +260,7 @@ final class TrashStore: ObservableObject {
             return entry.url
         }
         let duStart = Date()
-        let measured = toMeasure.isEmpty ? [:] : FolderSizing.directorySizes(at: toMeasure)
+        let measured = toMeasure.isEmpty ? [:] : measureSizes(toMeasure)
         if !toMeasure.isEmpty {
             TrashDebugLog.log(
                 "pass=\(pass) du measured "

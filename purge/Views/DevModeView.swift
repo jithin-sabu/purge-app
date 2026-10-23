@@ -101,18 +101,18 @@ struct DevToolsView<PageHeader: View>: View {
         SortOption(rawValue: sortRaw) ?? .sizeDesc
     }
 
-    private func artifactVisible(_ info: SafetyInfo) -> Bool {
-        currentSafetyFilter.matches(info)
-    }
-
-    private func groupHasVisibleArtifacts(_ group: ProjectGroup) -> Bool {
+    /// Each pass reads the filter once and hands it down. `currentSafetyFilter`
+    /// goes through `@AppStorage`, and reading it per row made every Dev Tools
+    /// render read it thousands of times (#190).
+    private func groupHasVisibleArtifacts(_ group: ProjectGroup, filter: SafetyFilter) -> Bool {
         group.artifacts.contains {
-            artifactVisible($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
+            filter.matches($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
         }
     }
 
     private func filteredProjectGroupIndices() -> [Int] {
-        store.projectGroups.indices.filter { groupHasVisibleArtifacts(store.projectGroups[$0]) }
+        let filter = currentSafetyFilter
+        return store.projectGroups.indices.filter { groupHasVisibleArtifacts(store.projectGroups[$0], filter: filter) }
     }
 
     private func sortedProjectGroupIndices() -> [Int] {
@@ -142,14 +142,15 @@ struct DevToolsView<PageHeader: View>: View {
         Array(store.devTools.indices)
     }
 
-    private func standardToolVisible(_ index: Int) -> Bool {
+    private func standardToolVisible(_ index: Int, filter: SafetyFilter) -> Bool {
         guard store.devTools[index].isDetected else { return false }
-        return artifactVisible(store.devTools[index].safetyInfo)
+        return filter.matches(store.devTools[index].safetyInfo)
             && !store.isVisuallyRemovedBySafeCleanup(store.devTools[index])
     }
 
     private func filteredStandardToolIndices() -> [Int] {
-        standardToolIndices().filter { standardToolVisible($0) }
+        let filter = currentSafetyFilter
+        return standardToolIndices().filter { standardToolVisible($0, filter: filter) }
     }
 
     private func sortedStandardToolIndices() -> [Int] {
@@ -172,17 +173,20 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var simulatorSectionVisible: Bool {
-        store.simulatorDevices.contains { artifactVisible($0.safetyInfo) }
+        let filter = currentSafetyFilter
+        return store.simulatorDevices.contains { filter.matches($0.safetyInfo) }
             || !visibleRunningSimulators.isEmpty
     }
 
     /// Booted simulators, shown under the ones that can be removed.
     private var visibleRunningSimulators: [SimulatorDevice] {
-        store.runningSimulatorDevices.filter { artifactVisible($0.safetyInfo) }
+        let filter = currentSafetyFilter
+        return store.runningSimulatorDevices.filter { filter.matches($0.safetyInfo) }
     }
 
     private func visibleSimulatorIndices() -> [Int] {
-        store.simulatorDevices.indices.filter { artifactVisible(store.simulatorDevices[$0].safetyInfo) }
+        let filter = currentSafetyFilter
+        return store.simulatorDevices.indices.filter { filter.matches(store.simulatorDevices[$0].safetyInfo) }
     }
 
     private func sortedVisibleSimulatorIndices() -> [Int] {
@@ -209,11 +213,13 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var runtimeSectionVisible: Bool {
-        store.simulatorRuntimes.contains { artifactVisible($0.safetyInfo) }
+        let filter = currentSafetyFilter
+        return store.simulatorRuntimes.contains { filter.matches($0.safetyInfo) }
     }
 
     private func visibleRuntimeIndices() -> [Int] {
-        store.simulatorRuntimes.indices.filter { artifactVisible(store.simulatorRuntimes[$0].safetyInfo) }
+        let filter = currentSafetyFilter
+        return store.simulatorRuntimes.indices.filter { filter.matches(store.simulatorRuntimes[$0].safetyInfo) }
     }
 
     private func sortedVisibleRuntimeIndices() -> [Int] {
@@ -317,9 +323,10 @@ struct DevToolsView<PageHeader: View>: View {
         // but a stale index must degrade to an empty result rather than trap.
         guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
+        let filter = currentSafetyFilter
         return g.artifacts.indices.filter { ai in
             let art = g.artifacts[ai]
-            guard artifactVisible(art.safetyInfo) else { return false }
+            guard filter.matches(art.safetyInfo) else { return false }
             return isEligibleForManualBulkSelection(art.safetyInfo)
         }
     }
@@ -359,8 +366,9 @@ struct DevToolsView<PageHeader: View>: View {
     private func sortedVisibleArtifactIndices(forGroup gi: Int) -> [Int] {
         guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
+        let filter = currentSafetyFilter
         let raw = g.artifacts.indices.filter {
-            artifactVisible(g.artifacts[$0].safetyInfo)
+            filter.matches(g.artifacts[$0].safetyInfo)
                 && !store.isVisuallyRemovedBySafeCleanup(g.artifacts[$0])
         }
         switch currentSort {
@@ -394,10 +402,11 @@ struct DevToolsView<PageHeader: View>: View {
 
     private func eligibleProjectArtifactPairs() -> [(Int, Int)] {
         var pairs: [(Int, Int)] = []
+        let filter = currentSafetyFilter
         for gi in filteredProjectGroupIndices() {
             for ai in store.projectGroups[gi].artifacts.indices {
                 let art = store.projectGroups[gi].artifacts[ai]
-                guard artifactVisible(art.safetyInfo) else { continue }
+                guard filter.matches(art.safetyInfo) else { continue }
                 guard !store.isVisuallyRemovedBySafeCleanup(art) else { continue }
                 guard isEligibleForManualBulkSelection(art.safetyInfo) else { continue }
                 pairs.append((gi, ai))
@@ -612,9 +621,10 @@ struct DevToolsView<PageHeader: View>: View {
         if runtimeSectionVisible {
             sum += runtimeSectionByteTotal()
         }
+        let filter = currentSafetyFilter
         for gi in filteredProjectGroupIndices() {
             let g = store.projectGroups[gi]
-            for ai in g.artifacts.indices where artifactVisible(g.artifacts[ai].safetyInfo)
+            for ai in g.artifacts.indices where filter.matches(g.artifacts[ai].safetyInfo)
                 && !store.isVisuallyRemovedBySafeCleanup(g.artifacts[ai]) {
                 sum += g.artifacts[ai].sizeBytes
             }

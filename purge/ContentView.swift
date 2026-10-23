@@ -283,9 +283,7 @@ struct ContentView: View {
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 350_000_000)
-            withAnimation(.easeInOut(duration: 0.6)) {
-                diskStore.refresh()
-            }
+            diskStore.refresh(animation: .easeInOut(duration: 0.6))
         }
     }
 
@@ -304,9 +302,7 @@ struct ContentView: View {
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 350_000_000)
-            withAnimation(.easeInOut(duration: 0.6)) {
-                diskStore.refresh()
-            }
+            diskStore.refresh(animation: .easeInOut(duration: 0.6))
         }
     }
 
@@ -902,7 +898,7 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
                     // Size the trash first: the free-space note is only interpretable
                     // alongside what the trash gave up.
                     await trashStore.refresh(trigger: "foreground-return")
-                    diskStore.refreshAfterForegroundReturn()
+                    await diskStore.refreshAfterForegroundReturn()
                 }
             }
             // The trash total moving is the signal that Purge (or Finder) just changed
