@@ -71,6 +71,35 @@ nonisolated enum HomebrewCaskCatalog {
         )
     }
 
+    /// Homebrew keeps the cask's download (`~/Library/Caches/Homebrew/downloads/
+    /// <sha>--Keka-1.6.8.dmg`) after `brew uninstall`, and a plain
+    /// `brew cleanup <token>` keeps a current-version download too: on this Mac
+    /// it removed nothing for an uninstalled cask, while `--scrub` offered its
+    /// 48 MB. Scoped to the token, scrub drops that cask's cached download and
+    /// otherwise only sweeps download files no cask references any more. It
+    /// runs after a removal Homebrew finished; the result is not shown, because
+    /// the app is already gone either way and the cache is Homebrew's to refill.
+    static let cleanupTimeout: TimeInterval = 120
+
+    static func cleanupArguments(for cask: HomebrewCask) -> [String] { ["cleanup", "--scrub", cask.token] }
+
+    @discardableResult
+    static func cleanup(
+        _ cask: HomebrewCask,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        runner: PackageManagerUninstaller.Runner = PackageManagerUninstaller.liveRunner
+    ) async -> Bool {
+        guard PackageManager.homebrewCask.isValidPackageName(cask.token),
+              FileManager.default.isExecutableFile(atPath: cask.brewExecutable.path) else { return false }
+        let output = await runner(
+            cask.brewExecutable.path,
+            cleanupArguments(for: cask),
+            PackageManagerToolScanner.homebrewEnvironment(prefix: cask.prefix, home: home)
+        )
+        guard let output, !output.timedOut, output.status == 0 else { return false }
+        return true
+    }
+
     /// The standardized paths of the `.app` bundles the links under one cask's
     /// version folders point at, when the bundle exists. Links are read, never
     /// followed into: a link to a folder that is not a bundle is ignored.

@@ -1208,7 +1208,7 @@ struct UninstallReviewSheet: View {
     static func homebrewNote(for appPlan: UninstallAppPlan) -> String? {
         guard let cask = appPlan.app.homebrewCask else { return nil }
         if appPlan.removesThroughHomebrew {
-            return String(localized: "Homebrew installed this app as the cask \(cask.token). Purge runs \(cask.command), which deletes the app permanently. Its leftovers still move to the Trash.")
+            return String(localized: "Homebrew installed this app as the cask \(cask.token). Purge runs \(cask.command), which deletes the app permanently, then clears its download from Homebrew's cache. Its leftovers still move to the Trash.")
         }
         return String(localized: "The app moves to the Trash. Homebrew keeps listing \(cask.token) until you run \(cask.command) yourself.")
     }

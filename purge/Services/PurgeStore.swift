@@ -486,6 +486,11 @@ final class PurgeStore: ObservableObject {
     /// Where the cask gate re-reads Homebrew's Caskrooms before a removal
     /// (#254). Tests point it at a temporary prefix.
     var homebrewPrefixes: [URL] = HomebrewCaskCatalog.defaultPrefixes
+    /// `brew cleanup <token>` after Homebrew removed a cask app (#254), which
+    /// drops the cask's cached download. Tests swap in a fake.
+    var homebrewCleanup: (HomebrewCask) async -> Void = { cask in
+        await HomebrewCaskCatalog.cleanup(cask)
+    }
     private let uninstallScanner = AppUninstallScanner()
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
@@ -3032,6 +3037,7 @@ final class PurgeStore: ObservableObject {
             switch outcome {
             case .removed:
                 recordRemoved()
+                await homebrewCleanup(cask)
             case .gone:
                 // Nothing to remove and nothing run: the app left between the sheet
                 // and now. Its leftovers can still go.
@@ -3039,6 +3045,7 @@ final class PurgeStore: ObservableObject {
             case .failed(let message):
                 if bundleIsGone {
                     recordRemoved()
+                    await homebrewCleanup(cask)
                     homebrewNotes.append(String(localized: "Homebrew removed \(entry.app.name) but reported a problem: \(message)"))
                 } else {
                     homebrewNotes.append(String(localized: "Homebrew couldn't remove \(entry.app.name), so Purge moved it to the Trash instead. Homebrew said: \(message)"))

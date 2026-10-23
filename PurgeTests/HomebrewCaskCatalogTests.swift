@@ -174,6 +174,38 @@ struct HomebrewCaskCatalogTests {
         #expect(removed == .removed)
     }
 
+    /// After a removal, `brew cleanup <token>` and nothing wider: the same
+    /// program and environment, scoped to the one cask, and never run when
+    /// there is no brew to run.
+    @Test
+    func cleanupIsScopedToTheCask() async throws {
+        let fixture = try makeFixture()
+        defer { try? fm.removeItem(at: fixture.root) }
+        let cask = HomebrewCask(token: "keka", prefix: fixture.prefix)
+        let seen = CleanupRecorder()
+        let ran = await HomebrewCaskCatalog.cleanup(cask, home: fixture.root) { path, arguments, environment in
+            seen.record(path, arguments, environment)
+            return ProcessRunner.Output(status: 0, stdout: Data("Removing: ...Keka-1.6.8.dmg... (32.8MB)\n".utf8), stderr: Data(), timedOut: false)
+        }
+        #expect(ran)
+        #expect(seen.path == fixture.prefix.appendingPathComponent("bin/brew").path)
+        #expect(seen.arguments == ["cleanup", "--scrub", "keka"])
+        #expect(seen.environment?["HOMEBREW_NO_AUTO_UPDATE"] == "1")
+
+        let failed = await HomebrewCaskCatalog.cleanup(cask, home: fixture.root) { _, _, _ in
+            ProcessRunner.Output(status: 1, stdout: Data(), stderr: Data("Error: No available cask with the name \"keka\".\n".utf8), timedOut: false)
+        }
+        #expect(!failed)
+
+        let noBrew = try makeFixture(brew: false)
+        defer { try? fm.removeItem(at: noBrew.root) }
+        let skipped = await HomebrewCaskCatalog.cleanup(HomebrewCask(token: "keka", prefix: noBrew.prefix), home: noBrew.root) { _, _, _ in
+            Issue.record("cleanup must not run without brew")
+            return nil
+        }
+        #expect(!skipped)
+    }
+
     /// Casks belong to Installed Apps, behind the review sheet and its toggle.
     /// The Command-line tools scan reads the same prefix and must never list
     /// one, or a cask app could be removed from a section that never shows it.
@@ -292,4 +324,19 @@ struct HomebrewCaskUninstallPlanTests {
         #expect(UninstallReviewSheet.homebrewNote(for: off)?.contains("moves to the Trash") == true)
         #expect(UninstallReviewSheet.homebrewNote(for: UninstallAppPlan(app: plain, items: items(for: plain))) == nil)
     }
+}
+
+private final class CleanupRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: (String, [String], [String: String])?
+
+    func record(_ path: String, _ arguments: [String], _ environment: [String: String]) {
+        lock.lock()
+        defer { lock.unlock() }
+        values = (path, arguments, environment)
+    }
+
+    var path: String? { lock.lock(); defer { lock.unlock() }; return values?.0 }
+    var arguments: [String]? { lock.lock(); defer { lock.unlock() }; return values?.1 }
+    var environment: [String: String]? { lock.lock(); defer { lock.unlock() }; return values?.2 }
 }

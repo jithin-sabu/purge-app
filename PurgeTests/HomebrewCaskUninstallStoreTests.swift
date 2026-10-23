@@ -69,12 +69,14 @@ struct HomebrewCaskUninstallStoreTests {
             runs.tools.append(tool)
             return fake(tool)
         }
+        store.homebrewCleanup = { cask in runs.cleanups.append(cask) }
         store.installedApps = [fixture.app]
         return store
     }
 
     private final class Runs {
         var tools: [PackageManagerTool] = []
+        var cleanups: [HomebrewCask] = []
     }
 
     private func withHandoffRoot<T>(_ root: URL, _ body: () async throws -> T) async rethrows -> T {
@@ -108,6 +110,8 @@ struct HomebrewCaskUninstallStoreTests {
         #expect(tool.arguments == ["uninstall", "--cask", "example"])
         #expect(tool.locations.map(\.path) == [fixture.bundle.path])
         #expect(!fm.fileExists(atPath: fixture.bundle.path))
+        // The cask's download is cleared only after Homebrew removed the app.
+        #expect(runs.cleanups == [fixture.cask])
 
         let report = try #require(store.lastDeletionReport)
         #expect(report.bytesMovedToTrash == 0)
@@ -138,6 +142,7 @@ struct HomebrewCaskUninstallStoreTests {
         await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan(removesThroughHomebrew: false)) }
 
         #expect(runs.tools.isEmpty)
+        #expect(runs.cleanups.isEmpty)
         #expect(fm.fileExists(atPath: fixture.bundle.path))
         #expect(store.manualDeletionSession?.notes.isEmpty == true)
     }
@@ -180,6 +185,7 @@ struct HomebrewCaskUninstallStoreTests {
         await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan()) }
 
         #expect(runs.tools.count == 1)
+        #expect(runs.cleanups.isEmpty)
         #expect(fm.fileExists(atPath: fixture.bundle.path))
         let note = try #require(store.manualDeletionSession?.notes.first)
         #expect(note.contains("Homebrew couldn't remove Example"))
@@ -206,6 +212,7 @@ struct HomebrewCaskUninstallStoreTests {
         await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan()) }
 
         #expect(runs.tools.count == 1)
+        #expect(runs.cleanups == [fixture.cask])
         let report = try #require(store.lastDeletionReport)
         #expect(report.bytesRemovedDirectly == 12_345)
         #expect(report.deletedItems.first?.movedToTrash == false)

@@ -1320,7 +1320,7 @@
 "Purge moves the items you keep ticked to the Trash, where you can put them back. An app removed through Homebrew is deleted permanently by Homebrew's own uninstall and can't be put back." = "Purge 会将仍被勾选的项目移到废纸篓，可随时恢复。通过 Homebrew 移除的应用会由 Homebrew 自带的卸载流程永久删除，无法放回。";
 "Remove %lld Items" = "移除 %lld 项";
 "Remove through Homebrew" = "通过 Homebrew 移除";
-"Homebrew installed this app as the cask %@. Purge runs %@, which deletes the app permanently. Its leftovers still move to the Trash." = "Homebrew 以 cask %@ 安装了此应用。Purge 会运行 %@，这会永久删除该应用。其残留文件仍会移到废纸篓。";
+"Homebrew installed this app as the cask %@. Purge runs %@, which deletes the app permanently, then clears its download from Homebrew's cache. Its leftovers still move to the Trash." = "Homebrew 以 cask %@ 安装了此应用。Purge 会运行 %@，这会永久删除该应用，然后清除 Homebrew 缓存中的安装包。其残留文件仍会移到废纸篓。";
 "The app moves to the Trash. Homebrew keeps listing %@ until you run %@ yourself." = "应用将移到废纸篓。Homebrew 仍会列出 %@，直到你自行运行 %@。";
 "Deleted permanently by Homebrew, not moved to the Trash" = "由 Homebrew 永久删除，不会移到废纸篓";
 "%@ · Installed by Homebrew" = "%@ · 由 Homebrew 安装";
