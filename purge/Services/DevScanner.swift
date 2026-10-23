@@ -1119,6 +1119,8 @@ nonisolated final class DevScanner {
             access: access,
             maxDepth: maxDepth
         )
+        // A cancelled walk stopped part way. Its list is incomplete, so nothing is sized.
+        guard !Task.isCancelled else { return [] }
 
         ScanPhaseTiming.finish(
             "discoverProjects walk",
