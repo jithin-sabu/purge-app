@@ -195,4 +195,63 @@ struct ProjectMarkerTests {
         #expect(full.directoriesWalked > 200)
         #expect(cancelled.directoriesWalked == 0)
     }
+
+    /// A walk cancelled part way has an incomplete list, so discovery sizes none of
+    /// it and sends no project groups. Without this, the projects found before the
+    /// cancel would reach the Dev Tools list as if they were the whole result.
+    @Test func cancelledDiscoverySendsNoGroups() async throws {
+        let root = try makeFolder()
+        let home = try makeFolder()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: home)
+        }
+        // One project the walk finds at once, then a tree that keeps it busy for
+        // hundreds of milliseconds, so the cancel below lands while it is walking.
+        let project = root.appendingPathComponent("app", isDirectory: true)
+        try touch("app/package.json", in: root)
+        try FileManager.default.createDirectory(at: project.appendingPathComponent("node_modules/dep"), withIntermediateDirectories: true)
+        let tree = root.appendingPathComponent("tree", isDirectory: true)
+        for a in 0..<8 {
+            for b in 0..<8 {
+                for c in 0..<8 {
+                    try FileManager.default.createDirectory(
+                        at: tree.appendingPathComponent("a\(a)/b\(b)/c\(c)/d"),
+                        withIntermediateDirectories: true
+                    )
+                }
+            }
+        }
+        let roots = [project, tree]
+
+        let fullStart = Date()
+        let full = DevScanner.findProjectRoots(in: roots, home: home, access: .full)
+        let fullWalk = Date().timeIntervalSince(fullStart)
+        #expect(full.roots.map { $0.0.lastPathComponent } == ["app"])
+
+        let scanner = DevScanner()
+        let (stream, continuation) = AsyncStream<DeveloperScanEvent>.makeStream()
+        let discovery = Task.detached(priority: .background) {
+            let groups = await scanner.discoverProjects(access: .full, roots: roots, home: home, continuation: continuation)
+            continuation.finish()
+            return groups
+        }
+        try await Task.sleep(for: .milliseconds(15))
+        let cancelledAt = Date()
+        discovery.cancel()
+        let groups = await discovery.value
+        let stopped = Date().timeIntervalSince(cancelledAt)
+
+        var events: [DeveloperScanEvent] = []
+        for await event in stream { events.append(event) }
+        let groupEvents = events.filter {
+            if case .projectGroupFound = $0 { return true }
+            return false
+        }
+
+        #expect(groups.isEmpty)
+        #expect(groupEvents.isEmpty)
+        // It stopped at the cancel rather than finishing the tree.
+        #expect(stopped < fullWalk)
+    }
 }

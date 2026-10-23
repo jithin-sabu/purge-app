@@ -54,6 +54,25 @@ struct ExplanationDatabaseIndexTests {
         }
     }
 
+    /// Two entries sharing a key in another case, or a bundle ID, would be resolved
+    /// by dictionary order, which can differ between launches, and the entry picks
+    /// the row's safety level. Aliases are not checked: a later entry wins a shared
+    /// alias by design, and `everyNameResolvesAsTheLinearSearchDid` covers that.
+    @Test func keysAndBundleIDsNameOneEntryEach() throws {
+        var keyByLowercasedKey: [String: String] = [:]
+        var keyByBundleID: [String: String] = [:]
+        for entry in try Self.entries() {
+            let lower = entry.key.lowercased()
+            #expect(keyByLowercasedKey[lower] == nil, "key \(entry.key) also spelt \(keyByLowercasedKey[lower] ?? "")")
+            keyByLowercasedKey[lower] = entry.key
+            for id in entry.bundleIDs {
+                let lowerID = id.lowercased()
+                #expect(keyByBundleID[lowerID] == nil, "bundle ID \(id) is on \(entry.key) and \(keyByBundleID[lowerID] ?? "")")
+                keyByBundleID[lowerID] = entry.key
+            }
+        }
+    }
+
     @Test func bundleIDsByKeyMatchTheFile() throws {
         for entry in try Self.entries() {
             #expect(ExplanationDatabase.allBundleIDs(forKey: entry.key) == entry.bundleIDs)

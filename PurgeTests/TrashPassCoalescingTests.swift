@@ -42,6 +42,12 @@ private final class FakeDu: @unchecked Sendable {
 @Suite("Trash size passes")
 @MainActor
 struct TrashPassCoalescingTests {
+    private func waitUntil(_ condition: () -> Bool) async {
+        for _ in 0..<200 where !condition() {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
     private func makeTrash() throws -> [URL] {
         let parent = FileManager.default.temporaryDirectory
             .appendingPathComponent("purge-trash-passes-\(UUID().uuidString)", isDirectory: true)
@@ -80,8 +86,9 @@ struct TrashPassCoalescingTests {
         let du = FakeDu(delay: 0.2)
         let store = TrashStore(trashURLs: urls, measureSizes: { du.measure($0) })
 
-        // Let the `init` pass start with the old size.
-        try await Task.sleep(for: .milliseconds(50))
+        // Once the `init` pass has started with the old size, change it.
+        await waitUntil { du.passes == 1 }
+        #expect(du.passes == 1)
         du.setBytes(4000)
         await store.refresh(trigger: "after-change")
 

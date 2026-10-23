@@ -2,14 +2,17 @@ import Foundation
 import Testing
 @testable import Purge
 
-/// A volume the test controls: each read returns the current free space, records
-/// whether it ran on the main thread, and can be made slow.
+/// A volume the test controls: each read returns the free space as it was when the
+/// read started, records whether it ran on the main thread, and can be made slow.
+/// `startedReadCount` and `readCount` let a test wait for a read to start or land
+/// instead of sleeping and hoping.
 private final class FakeVolume: @unchecked Sendable {
     private let lock = NSLock()
     private var free: Int64
+    private var started = 0
     private var reads = 0
     private var mainThreadReads = 0
-    private let delay: TimeInterval
+    private var delay: TimeInterval
 
     init(free: Int64, delay: TimeInterval = 0) {
         self.free = free
@@ -19,6 +22,17 @@ private final class FakeVolume: @unchecked Sendable {
     func setFree(_ bytes: Int64) {
         lock.lock(); defer { lock.unlock() }
         free = bytes
+    }
+
+    /// How long each read started from now on takes.
+    func setDelay(_ seconds: TimeInterval) {
+        lock.lock(); defer { lock.unlock() }
+        delay = seconds
+    }
+
+    var startedReadCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return started
     }
 
     var readCount: Int {
@@ -32,11 +46,16 @@ private final class FakeVolume: @unchecked Sendable {
     }
 
     func read() -> VolumeCapacity? {
+        lock.lock()
+        started += 1
+        let bytes = free
+        let delay = delay
+        lock.unlock()
         if delay > 0 { Thread.sleep(forTimeInterval: delay) }
         lock.lock(); defer { lock.unlock() }
         reads += 1
         if Thread.isMainThread { mainThreadReads += 1 }
-        return VolumeCapacity(totalBytes: 1_000_000_000_000, availableBytes: free)
+        return VolumeCapacity(totalBytes: 1_000_000_000_000, availableBytes: bytes)
     }
 }
 
@@ -85,8 +104,8 @@ struct DiskSummaryStoreTests {
         let store = DiskSummaryStore(read: { volume.read() })
 
         store.refresh()
-        // Let the read start, then change the volume under it.
-        try? await Task.sleep(for: .milliseconds(30))
+        // Once the read has started, change the volume under it.
+        await waitUntil { volume.startedReadCount == 2 }
         volume.setFree(70 * Self.gigabyte)
         for _ in 0..<5 { store.refresh() }
         await waitUntil { volume.readCount == 3 && store.freeDiskBytes == 70 * Self.gigabyte }
@@ -115,11 +134,40 @@ struct DiskSummaryStoreTests {
         let store = DiskSummaryStore(read: { volume.read() })
 
         store.markBackgrounded()
-        // The user empties the Trash in Finder.
-        try? await Task.sleep(for: .milliseconds(50))
+        // Once the baseline has been read, the user empties the Trash in Finder.
+        await waitUntil { volume.readCount == 2 }
         volume.setFree(103 * Self.gigabyte)
         await store.refreshAfterForegroundReturn()
 
+        #expect(store.freeDiskBytes == 103 * Self.gigabyte)
+        #expect(store.freeSpaceIncreaseBytes == 3 * Self.gigabyte)
+    }
+
+    /// The Trash total changes as the app returns, which starts a `refresh` read at
+    /// the same moment as the foreground read. Whichever lands last may not publish
+    /// an older figure over a newer one.
+    @Test func anOlderReadNeverPublishesOverANewerOne() async {
+        let volume = FakeVolume(free: 100 * Self.gigabyte)
+        let store = DiskSummaryStore(read: { volume.read() })
+        store.markBackgrounded()
+        await waitUntil { volume.readCount == 2 }
+
+        // A slow refresh read starts first and sees 100 GB.
+        volume.setDelay(0.2)
+        store.refresh()
+        await waitUntil { volume.startedReadCount == 3 }
+
+        // The foreground read starts after it, sees 103 GB, and lands first.
+        volume.setDelay(0)
+        volume.setFree(103 * Self.gigabyte)
+        await store.refreshAfterForegroundReturn()
+        #expect(store.freeDiskBytes == 103 * Self.gigabyte)
+        #expect(store.freeSpaceIncreaseBytes == 3 * Self.gigabyte)
+
+        // The slow read lands and is dropped.
+        await waitUntil { volume.readCount == 4 }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(volume.readCount == 4)
         #expect(store.freeDiskBytes == 103 * Self.gigabyte)
         #expect(store.freeSpaceIncreaseBytes == 3 * Self.gigabyte)
     }
@@ -143,7 +191,7 @@ struct DiskSummaryStoreTests {
         let store = DiskSummaryStore(read: { volume.read() })
 
         store.markBackgrounded()
-        try? await Task.sleep(for: .milliseconds(50))
+        await waitUntil { volume.readCount == 2 }
         volume.setFree(100 * Self.gigabyte + VolumeCapacityReader.noiseFloorBytes - 1)
         await store.refreshAfterForegroundReturn()
 

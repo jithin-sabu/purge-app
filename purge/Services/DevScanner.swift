@@ -1106,15 +1106,18 @@ nonisolated final class DevScanner {
         }
     }
 
-    private func discoverProjects(
+    /// Walks `roots` (the usual search roots under `home` when nil) for projects,
+    /// then sizes their artifacts. Tests pass a temporary tree.
+    func discoverProjects(
         access: ScanAccess,
         maxDepth: Int = 4,
+        roots: [URL]? = nil,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
     ) async -> [ProjectGroup] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
         let walkStart = Date()
         let (discoveredRoots, directoriesWalked) = Self.findProjectRoots(
-            in: Self.projectSearchRoots(home: home),
+            in: roots ?? Self.projectSearchRoots(home: home),
             home: home,
             access: access,
             maxDepth: maxDepth

@@ -20,6 +20,12 @@ final class DiskSummaryStore: ObservableObject {
     /// one more read after it rather than each starting their own.
     private var readTask: Task<Void, Never>?
     private var readAgain = false
+    /// Reads numbered in the order they started, and the number of the newest one
+    /// published. The foreground return and the background baseline read outside the
+    /// `refresh` chain, so an older read can land after a newer one; it is dropped
+    /// rather than published over the newer figure.
+    private var readsStarted = 0
+    private var newestPublishedRead = 0
     private var pendingAnimation: Animation?
     /// Reads the volume. Tests hand in a fake.
     private let read: @Sendable () -> VolumeCapacity?
@@ -48,10 +54,11 @@ final class DiskSummaryStore: ObservableObject {
         readTask = Task {
             repeat {
                 readAgain = false
-                if let capacity = await readOffMain() {
+                let (read, capacity) = await readOffMain()
+                if let capacity {
                     let animation = pendingAnimation
                     pendingAnimation = nil
-                    withAnimation(animation) { apply(capacity) }
+                    withAnimation(animation) { publish(capacity, from: read) }
                 }
             } while readAgain
             readTask = nil
@@ -64,8 +71,8 @@ final class DiskSummaryStore: ObservableObject {
     func markBackgrounded() {
         freeSpaceIncreaseBytes = nil
         backgroundBaseline = Task {
-            let capacity = await readOffMain()
-            if let capacity { apply(capacity) }
+            let (read, capacity) = await readOffMain()
+            if let capacity { publish(capacity, from: read) }
             return capacity?.availableBytes
         }
     }
@@ -80,16 +87,17 @@ final class DiskSummaryStore: ObservableObject {
         backgroundBaseline = nil
         let before = await baseline?.value
 
-        guard let capacity = await readOffMain() else {
+        let (read, capacity) = await readOffMain()
+        guard let capacity else {
             freeSpaceIncreaseBytes = nil
             return
         }
-        apply(capacity)
+        publish(capacity, from: read)
         guard let before else {
             freeSpaceIncreaseBytes = nil
             return
         }
-        let delta = freeDiskBytes - before
+        let delta = capacity.availableBytes - before
         freeSpaceIncreaseBytes = delta >= VolumeCapacityReader.noiseFloorBytes ? delta : nil
     }
 
@@ -99,8 +107,20 @@ final class DiskSummaryStore: ObservableObject {
         usedDiskBytes = capacity.usedBytes
     }
 
-    private func readOffMain() async -> VolumeCapacity? {
+    /// Publishes a read unless a read that started after it already has.
+    private func publish(_ capacity: VolumeCapacity, from read: Int) {
+        guard read > newestPublishedRead else { return }
+        newestPublishedRead = read
+        apply(capacity)
+    }
+
+    /// Reads the volume off the main thread and returns the read's start number
+    /// with the result.
+    private func readOffMain() async -> (read: Int, capacity: VolumeCapacity?) {
+        readsStarted += 1
+        let number = readsStarted
         let read = read
-        return await Task.detached(priority: .utility) { read() }.value
+        let capacity = await Task.detached(priority: .utility) { read() }.value
+        return (number, capacity)
     }
 }
