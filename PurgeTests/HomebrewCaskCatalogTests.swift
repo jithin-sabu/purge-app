@@ -112,6 +112,25 @@ struct HomebrewCaskCatalogTests {
         #expect(HomebrewCaskCatalog.installedCasks(prefixes: [fixture.prefix]).isEmpty)
     }
 
+    /// `brew uninstall --cask` removes every app a cask installed, so a cask
+    /// that links two apps owns neither here: ticking one would delete the other.
+    @Test
+    func aCaskWithTwoAppsOwnsNeither() throws {
+        let fixture = try makeFixture()
+        defer { try? fm.removeItem(at: fixture.root) }
+        let first = try makeBundle("Suite One", in: fixture)
+        let second = try makeBundle("Suite Two", in: fixture)
+        try link(token: "suite", to: first, in: fixture)
+        try link(token: "suite", to: second, in: fixture)
+        let single = try makeBundle("Solo", in: fixture)
+        try link(token: "solo", to: single, in: fixture)
+
+        let casks = HomebrewCaskCatalog.installedCasks(prefixes: [fixture.prefix])
+        #expect(casks.keys.sorted() == [single.path])
+        #expect(HomebrewCaskCatalog.cask(owning: first, prefixes: [fixture.prefix]) == nil)
+        #expect(HomebrewCaskCatalog.cask(owning: second, prefixes: [fixture.prefix]) == nil)
+    }
+
     /// A Caskroom folder name reaches `brew`'s argv, so one that could read as
     /// an option or has a space is never a token.
     @Test

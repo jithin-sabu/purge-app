@@ -960,7 +960,7 @@ private struct AppListRow: View {
         .help(app.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
+            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")\(app.homebrewCask == nil ? "" : ", " + String(localized: "Installed by Homebrew"))"
         )
         .accessibilityValue(isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -1190,9 +1190,9 @@ struct UninstallReviewSheet: View {
         }
         let names = ListFormatter.localizedString(byJoining: candidates.map(\.app.name))
         if candidates.count == 1 {
-            return String(localized: "Homebrew installed \(names). Remove with Homebrew deletes the app permanently and Homebrew forgets it. Move All to Trash keeps it recoverable, but Homebrew still lists it. Ticked leftovers move to the Trash either way.")
+            return String(localized: "Homebrew installed \(names). Remove with Homebrew runs the cask's own uninstall: it deletes the app permanently, may stop its background services and delete its helper tools and installer files permanently too, and Homebrew forgets it. Move All to Trash keeps the app recoverable, but Homebrew still lists it. Ticked leftovers that are still there afterwards move to the Trash.")
         }
-        return String(localized: "Homebrew installed \(names). Remove with Homebrew deletes those apps permanently and Homebrew forgets them. Move All to Trash keeps them recoverable, but Homebrew still lists them. Ticked leftovers move to the Trash either way.")
+        return String(localized: "Homebrew installed \(names). Remove with Homebrew runs each cask's own uninstall: it deletes those apps permanently, may stop their background services and delete their helper tools and installer files permanently too, and Homebrew forgets them. Move All to Trash keeps them recoverable, but Homebrew still lists them. Ticked leftovers that are still there afterwards move to the Trash.")
     }
 
     /// With no cask app there is one button, as before. With one, the choice

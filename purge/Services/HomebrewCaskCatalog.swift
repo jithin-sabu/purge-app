@@ -7,9 +7,10 @@ import Foundation
 /// in the Caskroom, `Caskroom/<token>/<version>/<App>.app -> /Applications/<App>.app`,
 /// sometimes one folder down (`Media Converter.localized/Media Converter.app`).
 /// That link is the only evidence this reads: an app is a cask's when a link
-/// in that cask's folder points at the app's bundle. A cask with no such link,
-/// such as a command-line binary or a cask whose app has been moved, matches
-/// nothing.
+/// in that cask's folder points at the app's bundle, and that cask links no
+/// other app. A cask with no such link, such as a command-line binary or a
+/// cask whose app has been moved, matches nothing, and so does a cask that
+/// installs several apps, because Homebrew would remove them all together.
 ///
 /// Removal is Homebrew's: `PurgeStore` runs `brew uninstall --cask <token>`
 /// through `PackageManagerUninstaller`, which deletes the app permanently.
@@ -37,11 +38,14 @@ nonisolated enum HomebrewCaskCatalog {
             for token in PackageManagerToolScanner.directoryNames(in: caskroom)
             where PackageManager.homebrewCask.isValidPackageName(token) {
                 let cask = HomebrewCask(token: token, prefix: prefix)
-                for bundlePath in appLinkTargets(inCask: caskroom.appendingPathComponent(token, isDirectory: true)) {
-                    // The first cask to claim a bundle keeps it; two casks never
-                    // install the same app, so this only guards a hand-made mess.
-                    if result[bundlePath] == nil { result[bundlePath] = cask }
-                }
+                let bundlePaths = Set(appLinkTargets(inCask: caskroom.appendingPathComponent(token, isDirectory: true)))
+                // `brew uninstall --cask` removes every app the cask installed.
+                // A cask that owns two or more is never offered: ticking one app
+                // would delete its siblings, so those apps take the Trash route.
+                guard bundlePaths.count == 1, let bundlePath = bundlePaths.first else { continue }
+                // The first cask to claim a bundle keeps it; two casks never
+                // install the same app, so this only guards a hand-made mess.
+                if result[bundlePath] == nil { result[bundlePath] = cask }
             }
         }
         return result
@@ -87,7 +91,14 @@ nonisolated enum HomebrewCaskCatalog {
     static func cleanup(
         _ cask: HomebrewCask,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        runner: PackageManagerUninstaller.Runner = PackageManagerUninstaller.liveRunner
+        runner: PackageManagerUninstaller.Runner = { path, arguments, environment in
+            await ProcessRunner.runAsync(
+                executablePath: path,
+                arguments: arguments,
+                timeout: HomebrewCaskCatalog.cleanupTimeout,
+                environment: environment
+            )
+        }
     ) async -> Bool {
         guard PackageManager.homebrewCask.isValidPackageName(cask.token),
               FileManager.default.isExecutableFile(atPath: cask.brewExecutable.path) else { return false }

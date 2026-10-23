@@ -2904,6 +2904,42 @@ final class PurgeStore: ObservableObject {
         )
     }
 
+    /// Why Homebrew did not remove a cask app (#254), for the completion note.
+    private enum HomebrewFallbackReason {
+        /// The Caskroom no longer links the cask to this bundle.
+        case notListed
+        /// Homebrew exited with an error and the app is still there.
+        case refused(String)
+        /// Homebrew exited cleanly but the app is still there.
+        case stillPresent
+        /// No `brew` program for this prefix.
+        case managerMissing
+    }
+
+    /// The note for an app Homebrew did not remove. It only claims the Trash
+    /// when the Trash route really moved the bundle; otherwise the app is still
+    /// on this Mac and its "needs your OK" row says what to do next.
+    private static func homebrewFallbackNote(name: String, reason: HomebrewFallbackReason, movedToTrash: Bool) -> String {
+        switch (reason, movedToTrash) {
+        case (.notListed, true):
+            return String(localized: "Homebrew no longer lists \(name), so Purge moved it to the Trash instead.")
+        case (.notListed, false):
+            return String(localized: "Homebrew no longer lists \(name).")
+        case (.refused(let message), true):
+            return String(localized: "Homebrew couldn't remove \(name), so Purge moved it to the Trash instead. Homebrew said: \(message)")
+        case (.refused(let message), false):
+            return String(localized: "Homebrew couldn't remove \(name). Homebrew said: \(message)")
+        case (.stillPresent, true):
+            return String(localized: "Homebrew finished but \(name) was still there, so Purge moved it to the Trash instead.")
+        case (.stillPresent, false):
+            return String(localized: "Homebrew finished but \(name) was still there.")
+        case (.managerMissing, true):
+            return String(localized: "Purge couldn't find Homebrew, so it moved \(name) to the Trash instead.")
+        case (.managerMissing, false):
+            return String(localized: "Purge couldn't find Homebrew to remove \(name).")
+        }
+    }
+
     /// Trashes the checked items across all apps in `plan`, reusing the same
     /// live-session overlay, progress poller, and history entry as the other
     /// manual flows. Kept separate from `performLargeFileDeletion`: they share
@@ -3010,17 +3046,27 @@ final class PurgeStore: ObservableObject {
         var homebrewDeleted: [DeletedItem] = []
         var homebrewBytes: Int64 = 0
         var homebrewNotes: [String] = []
+        // Apps Homebrew did not remove, with why. Their note is written after
+        // Pass 1, once it is known whether the Trash route took them.
+        var homebrewFallbacks: [(name: String, bundlePath: String, reason: HomebrewFallbackReason)] = []
         var homebrewGonePaths = Set<String>()
         var trashBundleApps = bundleRemovingApps.filter { homebrewCasks[$0.app.id] == nil }
+        // One read of the Caskrooms for the whole run, off the main actor: the
+        // gate below compares against it, and the progress overlay keeps moving.
+        let caskPrefixes = homebrewPrefixes
+        let ownedCasks: [String: HomebrewCask] = homebrewCasks.isEmpty
+            ? [:]
+            : await Task.detached { HomebrewCaskCatalog.installedCasks(prefixes: caskPrefixes) }.value
         for entry in bundleRemovingApps {
             guard let cask = homebrewCasks[entry.app.id] else { continue }
             let bundlePath = entry.bundle.path.standardizedFileURL.path
-            guard HomebrewCaskCatalog.cask(owning: entry.bundle.path, prefixes: homebrewPrefixes) == cask else {
-                homebrewNotes.append(String(localized: "Homebrew no longer lists \(entry.app.name), so Purge moved it to the Trash instead."))
+            guard ownedCasks[bundlePath] == cask else {
+                homebrewFallbacks.append((entry.app.name, bundlePath, .notListed))
                 trashBundleApps.append(entry)
                 continue
             }
             RemovedAppMonitor.shared.noteRemovalByPurge(of: [entry.bundle.path])
+            progressBuffer.ingest(.itemStarted(name: entry.app.name))
             let tool = HomebrewCaskCatalog.uninstallTool(for: cask, bundleURL: entry.bundle.path)
             let outcome = await packageManagerUninstall(tool)
             let bundleIsGone = !FileManager.default.fileExists(atPath: bundlePath)
@@ -3033,6 +3079,7 @@ final class PurgeStore: ObservableObject {
                 ))
                 homebrewBytes += entry.bundle.sizeBytes
                 homebrewGonePaths.insert(bundlePath)
+                progressBuffer.ingest(.itemDeleted(sizeBytes: entry.bundle.sizeBytes))
             }
             switch outcome {
             case .removed:
@@ -3040,22 +3087,23 @@ final class PurgeStore: ObservableObject {
                 await homebrewCleanup(cask)
             case .gone:
                 // Nothing to remove and nothing run: the app left between the sheet
-                // and now. Its leftovers can still go.
+                // and now. Its leftovers can still go, and the total stays whole.
                 homebrewGonePaths.insert(bundlePath)
+                progressBuffer.ingest(.itemDeleted(sizeBytes: entry.bundle.sizeBytes))
             case .failed(let message):
                 if bundleIsGone {
                     recordRemoved()
                     await homebrewCleanup(cask)
                     homebrewNotes.append(String(localized: "Homebrew removed \(entry.app.name) but reported a problem: \(message)"))
                 } else {
-                    homebrewNotes.append(String(localized: "Homebrew couldn't remove \(entry.app.name), so Purge moved it to the Trash instead. Homebrew said: \(message)"))
+                    homebrewFallbacks.append((entry.app.name, bundlePath, .refused(message)))
                     trashBundleApps.append(entry)
                 }
             case .stillPresent:
-                homebrewNotes.append(String(localized: "Homebrew finished but \(entry.app.name) was still there, so Purge moved it to the Trash instead."))
+                homebrewFallbacks.append((entry.app.name, bundlePath, .stillPresent))
                 trashBundleApps.append(entry)
             case .managerMissing:
-                homebrewNotes.append(String(localized: "Purge couldn't find Homebrew, so it moved \(entry.app.name) to the Trash instead."))
+                homebrewFallbacks.append((entry.app.name, bundlePath, .managerMissing))
                 trashBundleApps.append(entry)
             }
         }
@@ -3098,6 +3146,16 @@ final class PurgeStore: ObservableObject {
                 errorMessage = String(localized: "Unable to remove \(label). Please try again.")
                 return
             }
+        }
+
+        // Now the Trash route has run, each Homebrew fallback can say what really
+        // happened: moved to the Trash, or still on this Mac with its own row.
+        for fallback in homebrewFallbacks {
+            homebrewNotes.append(Self.homebrewFallbackNote(
+                name: fallback.name,
+                reason: fallback.reason,
+                movedToTrash: movedBundlePaths.contains(fallback.bundlePath)
+            ))
         }
 
         // Partition by whether the bundle actually left. A held app keeps every one

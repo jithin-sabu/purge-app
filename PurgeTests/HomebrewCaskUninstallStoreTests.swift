@@ -40,7 +40,7 @@ struct HomebrewCaskUninstallStoreTests {
         }
     }
 
-    private func makeFixture(linked: Bool = true) throws -> Fixture {
+    private func makeFixture(linked: Bool = true, siblingApp: Bool = false) throws -> Fixture {
         let root = fm.temporaryDirectory
             .appendingPathComponent("HomebrewCaskUninstallStoreTests-\(UUID().uuidString)", isDirectory: true)
             .standardizedFileURL
@@ -55,6 +55,11 @@ struct HomebrewCaskUninstallStoreTests {
         try fm.createDirectory(at: version, withIntermediateDirectories: true)
         if linked {
             try fm.createSymbolicLink(atPath: version.appendingPathComponent("Example.app").path, withDestinationPath: bundle.path)
+        }
+        if siblingApp {
+            let sibling = root.appendingPathComponent("Applications/Example Helper.app", isDirectory: true)
+            try fm.createDirectory(at: sibling.appendingPathComponent("Contents", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(atPath: version.appendingPathComponent("Example Helper.app").path, withDestinationPath: sibling.path)
         }
         return Fixture(root: root, prefix: prefix, bundle: bundle, cask: HomebrewCask(token: "example", prefix: prefix))
     }
@@ -165,7 +170,30 @@ struct HomebrewCaskUninstallStoreTests {
         #expect(fm.fileExists(atPath: fixture.bundle.path))
         let note = try #require(store.manualDeletionSession?.notes.first)
         #expect(note.contains("Homebrew no longer lists Example"))
+        // The bundle is still here, so the note must not claim the Trash.
+        #expect(!note.contains("Trash"))
         #expect(store.lastDeletionReport?.deletedItems.isEmpty == true)
+    }
+
+    /// A cask that installed two apps is never Homebrew's to remove through
+    /// Purge, even when the plan says so: `brew uninstall --cask` would take the
+    /// sibling the user did not tick.
+    @Test
+    func aCaskWithASiblingAppNeverRunsHomebrew() async throws {
+        let fixture = try makeFixture(siblingApp: true)
+        defer { try? fm.removeItem(at: fixture.root) }
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let runs = Runs()
+        let store = makeStore(fixture, scans: scans, runs: runs) { _ in .removed }
+
+        await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan()) }
+
+        #expect(runs.tools.isEmpty)
+        #expect(runs.cleanups.isEmpty)
+        #expect(fm.fileExists(atPath: fixture.bundle.path))
+        #expect(fm.fileExists(atPath: fixture.root.appendingPathComponent("Applications/Example Helper.app").path))
+        #expect(store.lastDeletionReport?.bytesRemovedDirectly == 0)
     }
 
     /// Homebrew refusing leaves the app in place; Purge shows Homebrew's words
@@ -190,6 +218,8 @@ struct HomebrewCaskUninstallStoreTests {
         let note = try #require(store.manualDeletionSession?.notes.first)
         #expect(note.contains("Homebrew couldn't remove Example"))
         #expect(note.contains("requires sudo"))
+        // The Trash route declined the bundle, so the note must not say it moved.
+        #expect(!note.contains("moved it to the Trash"))
         #expect(store.lastDeletionReport?.bytesRemovedDirectly == 0)
         #expect(store.lastDeletionReport?.deletedItems.isEmpty == true)
     }
