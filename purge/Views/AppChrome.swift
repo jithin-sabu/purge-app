@@ -1287,8 +1287,9 @@ private struct CompletionBoltEchoRing: View {
 /// header with the count and, when more than one row can be retried, Retry all;
 /// then a row per item with a tinted icon tile, its name, the reason, and its
 /// action or status. Open from the start, so nothing hides behind a chevron. Past
-/// three rows the rest wait behind "more".
-private struct CleanFailureCard: View {
+/// three rows the rest wait behind "more". Internal, not private, so the test
+/// host can render its expanded and retrying states for screenshots.
+struct CleanFailureCard: View {
     let failures: [CleanFailureItem]
     @Binding var showsAll: Bool
     let retryingIDs: Set<UUID>
@@ -1601,7 +1602,7 @@ private struct NeedsAdministratorPanel: View {
 
 /// One row of `CleanFailureCard`: a 28pt icon tile tinted by what went wrong, the
 /// item's name over the reason, and on the right its button or its status badge.
-private struct CleanFailureCardRow: View {
+struct CleanFailureCardRow: View {
     let failure: CleanFailureItem
     let isRetrying: Bool
     let onOpenSettings: () -> Void
