@@ -47,11 +47,11 @@ struct RemoveDownloadConfirmSheet: View {
         case (_, 0):
             return String(localized: "\(localOnly) other selected files aren't in iCloud, so they stay.")
         case (0, 1):
-            return String(localized: "1 other selected file is still syncing, so it stays.")
+            return String(localized: "1 other selected file can't be kept only in iCloud right now, so it stays.")
         case (0, _):
-            return String(localized: "\(notReady) other selected files are still syncing, so they stay.")
+            return String(localized: "\(notReady) other selected files can't be kept only in iCloud right now, so they stay.")
         default:
-            return String(localized: "\(localOnly + notReady) other selected files stay: \(localOnly) aren't in iCloud, \(notReady) still syncing.")
+            return String(localized: "\(localOnly + notReady) other selected files stay: \(localOnly) aren't in iCloud, \(notReady) can't be kept only there right now.")
         }
     }
 

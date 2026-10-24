@@ -51,6 +51,9 @@ struct ICloudDownloadPolicyTests {
 
         state = ready(); state.isPurgeable = false
         #expect(ICloudDownloadPolicy.decision(for: state, now: now) == .keptOnThisMac)
+
+        state = ready(); state.hasOtherLinks = true
+        #expect(ICloudDownloadPolicy.decision(for: state, now: now) == .hasOtherLinks)
     }
 
     /// The case the #106 test found on a real Mac: a 3.71 GB file fully
@@ -128,12 +131,19 @@ struct ICloudDownloadPolicyTests {
         let linkState = try #require(ICloudDownloadState.read(link))
         #expect(!linkState.isRegularFile)
         #expect(ICloudDownloadState.read(folder.appendingPathComponent("missing.bin")) == nil)
+        #expect(!state.hasOtherLinks)
+
+        // A second name for the same file: evicting one would empty both.
+        let hardLink = folder.appendingPathComponent("second-name.bin")
+        try fm.linkItem(at: file, to: hardLink)
+        #expect(ICloudDownloadState.read(file)?.hasOtherLinks == true)
+        #expect(ICloudDownloadState.read(hardLink)?.hasOtherLinks == true)
     }
 
     @Test func everyRefusalHasAReason() {
         let refusals: [ICloudDownloadDecision] = [
             .outsideLargeFiles, .notAFile, .notInICloud, .hasConflicts,
-            .notUploaded, .notDownloaded, .keptOnThisMac, .changedRecently
+            .notUploaded, .notDownloaded, .keptOnThisMac, .changedRecently, .hasOtherLinks
         ]
         for decision in refusals {
             #expect(!decision.skipReasonKey.isEmpty)
@@ -246,6 +256,73 @@ struct ICloudDownloadRemoverTests {
             ICloudDownloadSkip(path: pinned, reasonKey: ICloudDownloadDecision.keptOnThisMac.skipReasonKey),
             ICloudDownloadSkip(path: conflicted, reasonKey: ICloudDownloadDecision.hasConflicts.skipReasonKey)
         ])
+    }
+
+    /// The first pass says yes, then the file is saved while the open-file
+    /// listing runs. The check right before the eviction reads it again and
+    /// leaves it.
+    @Test func aFileSavedDuringTheRunIsLeftAlone() async {
+        let path = "/Users/someone/Documents/edited-meanwhile.mov"
+        let readyState = ready(100)
+        let stale: ICloudDownloadState = {
+            var state = readyState
+            state.isUploaded = false
+            return state
+        }()
+        final class Reads: @unchecked Sendable {
+            let lock = NSLock()
+            var count = 0
+            var evicted: [String] = []
+        }
+        let reads = Reads()
+        let remover = ICloudDownloadRemover(
+            home: home,
+            readState: { _ in
+                reads.lock.withLock {
+                    reads.count += 1
+                    return reads.count == 1 ? readyState : stale
+                }
+            },
+            evict: { url in reads.lock.withLock { reads.evicted.append(url.path) } },
+            listOpenFiles: { "" },
+            now: { now },
+            settleAttempts: 1,
+            settleInterval: .milliseconds(1)
+        )
+
+        let report = await remover.removeDownloads(at: [URL(fileURLWithPath: path)])
+
+        #expect(reads.evicted.isEmpty)
+        #expect(report.removed.isEmpty)
+        #expect(report.skipped == [ICloudDownloadSkip(path: path, reasonKey: ICloudDownloadDecision.notUploaded.skipReasonKey)])
+    }
+
+    /// A file that can't be read after its eviction is settled at once: the
+    /// wait for the space to show can't change it.
+    @Test func anUnreadableFileDoesNotHoldUpTheRun() async {
+        let cloud = FakeICloud()
+        let gone = "/Users/someone/Documents/moved-elsewhere.mov"
+        cloud[gone] = ready(500)
+        cloud.slowPaths = [gone]
+        let remover = ICloudDownloadRemover(
+            home: home,
+            readState: { url in
+                let path = url.standardizedFileURL.path
+                if cloud.evicted.contains(path) { return nil }
+                return cloud[path]
+            },
+            evict: { try cloud.evict($0) },
+            listOpenFiles: { "" },
+            now: { now },
+            settleAttempts: 6,
+            settleInterval: .milliseconds(400)
+        )
+
+        let started = Date()
+        let report = await remover.removeDownloads(at: [URL(fileURLWithPath: gone)])
+
+        #expect(Date().timeIntervalSince(started) < 0.4)
+        #expect(report.removed == [ICloudDownloadRemoval(path: gone, bytesFreed: 0)])
     }
 
     @Test func nothingOutsideLargeFilesFoldersIsEvicted() async {
@@ -470,6 +547,92 @@ struct RemoveDownloadStoreTests {
         #expect(store.pendingRemoveDownload == nil)
     }
 
+    /// A file in iCloud Drive's own folder never reaches the Trash, by Delete
+    /// Selected or by Delete extra copies: trashing it would remove it from
+    /// every device. The store leaves it out before the deleter is asked, so it
+    /// isn't even reported as skipped.
+    @Test func iCloudDriveRowsNeverReachTheTrash() async throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purge-106-trash-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        let drive = LargeFileScanPolicy.iCloudDriveRoot(home: home)
+        try fm.createDirectory(at: downloads, withIntermediateDirectories: true)
+        try fm.createDirectory(at: drive, withIntermediateDirectories: true)
+        func make(_ url: URL) throws -> URL {
+            try Data(repeating: 0x5A, count: 4096).write(to: url)
+            return url
+        }
+        let local = try make(downloads.appendingPathComponent("local.bin"))
+        let keeper = try make(downloads.appendingPathComponent("keeper.bin"))
+        let inDrive = try make(drive.appendingPathComponent("drive.bin"))
+        func large(_ url: URL, trashable: Bool) -> LargeFile {
+            LargeFile(path: url, sizeBytes: 4096, lastUsed: Date(timeIntervalSince1970: 0), category: .other,
+                      syncsWithICloud: !trashable, canMoveToTrash: trashable, canRemoveDownload: !trashable)
+        }
+        let localRow = large(local, trashable: true)
+        let keeperRow = large(keeper, trashable: true)
+        let driveRow = large(inDrive, trashable: false)
+
+        let trash = FakeTrash()
+        let scans = FakeScans()
+        scans.hasAccess = true
+        defer { scans.cleanUp() }
+        let store = scans.makeStore(fileDeleter: FileDeleter(home: home, trash: trash.trash))
+        let drivePath = inDrive.standardizedFileURL.path
+
+        // Delete Selected with both rows ticked.
+        store.largeFiles = [localRow, driveRow]
+        store.setAllLargeFilesSelected(true, ids: [localRow.id, driveRow.id])
+        store.presentLargeFileDeletionSheet()
+        await store.confirmLargeFileDeletion()
+        #expect(trash.trashedPaths == [local.standardizedFileURL.path])
+        let report = try #require(store.lastDeletionReport)
+        let skippedPaths = report.skippedItems.map(\.path)
+        #expect(!skippedPaths.contains(drivePath), "skipped: \(skippedPaths), deleted: \(report.deletedItems.map(\.path))")
+        #expect(store.largeFiles.map(\.id) == [driveRow.id])
+
+        // Delete extra copies, with the iCloud Drive row as a copy to go.
+        store.largeFiles = [keeperRow, driveRow]
+        store.pendingDuplicateCleanup = DuplicateCleanupRequest(sets: [
+            DuplicateCopySet(id: "set", copies: [keeperRow, driveRow], suggestedKeeperID: keeperRow.id)
+        ])
+        await store.confirmDuplicateCleanup(keeperByGroupID: [:])
+        #expect(trash.trashedPaths == [local.standardizedFileURL.path])
+        #expect(fm.fileExists(atPath: drivePath))
+    }
+
+    /// A row that can't go to the Trash takes no part in a duplicate set, so
+    /// Delete extra copies never offers it.
+    @Test func iCloudDriveRowsStayOutOfDuplicates() async throws {
+        let fm = FileManager.default
+        let folder = fm.temporaryDirectory.appendingPathComponent("purge-106-dupes-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: folder) }
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        let bytes = Data(repeating: 0x42, count: 64 * 1024)
+        let urls = ["a.bin", "b.bin", "c.bin"].map { folder.appendingPathComponent($0) }
+        for url in urls { try bytes.write(to: url) }
+        let rows = urls.enumerated().map { index, url in
+            LargeFile(path: url, sizeBytes: Int64(bytes.count), lastUsed: Date(timeIntervalSince1970: 0), category: .other,
+                      syncsWithICloud: index == 2, canMoveToTrash: index != 2, canRemoveDownload: index == 2)
+        }
+
+        let scans = FakeScans()
+        scans.hasAccess = true
+        defer { scans.cleanUp() }
+        scans.largeFileEvents = rows.map { .file($0) }
+        let store = scans.makeStore()
+        await store.scanLargeFiles()
+        for _ in 0..<100 where store.largeFileDuplicates.isChecking || store.largeFileDuplicates.index.isEmpty {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let index = store.largeFileDuplicates.index
+        #expect(index.groups.count == 1)
+        #expect(Set(index.groups.first?.fileIDs ?? []) == [rows[0].id, rows[1].id])
+        #expect(index.groupIDByFileID[rows[2].id] == nil)
+    }
+
     @Test func noButtonWithoutARemovableFile() {
         let scans = FakeScans()
         scans.hasAccess = true
@@ -512,8 +675,10 @@ struct RemoveDownloadStoreTests {
         let result = outcome.report
         #expect(result.removed == [ICloudDownloadRemoval(path: readyPath, bytesFreed: 900)])
         #expect(result.skipped.map(\.path) == [notReadyPath])
-        // The skipped row is still listed and still ticked, and the sheet says so.
-        #expect(outcome.stillSelectedCount == 1)
+        // The skipped row is still listed and still ticked, but the sheet lists
+        // it already, so it isn't counted as another file still selected.
+        #expect(store.largeFileSelection.ids == [stale.id])
+        #expect(outcome.stillSelectedCount == 0)
 
         let entry = try #require(CleanupHistoryStore.shared.archive.entries.first)
         #expect(entry.kind == .iCloudDownloadsRemoved)
@@ -531,9 +696,9 @@ struct RemoveDownloadStoreTests {
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 0)
             == "3 other selected files aren't in iCloud, so they stay.")
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 0, notReady: 1)
-            == "1 other selected file is still syncing, so it stays.")
+            == "1 other selected file can't be kept only in iCloud right now, so it stays.")
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 2)
-            == "5 other selected files stay: 3 aren't in iCloud, 2 still syncing.")
+            == "5 other selected files stay: 3 aren't in iCloud, 2 can't be kept only there right now.")
     }
 
     /// The iCloud chip shows exactly the files Keep Only in iCloud can act on,

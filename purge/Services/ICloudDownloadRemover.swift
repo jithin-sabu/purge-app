@@ -73,22 +73,22 @@ nonisolated final class ICloudDownloadRemover: Sendable {
 
     @concurrent func removeDownloads(at urls: [URL]) async -> ICloudDownloadReport {
         var seen = Set<String>()
-        var ready: [(path: String, state: ICloudDownloadState)] = []
+        var ready: [String] = []
         var evicted: [(path: String, before: Int64)] = []
         var skipped: [ICloudDownloadSkip] = []
 
+        // A first pass, so the open-file listing below is only taken when some
+        // file can go, and covers only those.
         for url in urls {
             let path = url.standardizedFileURL.path
             guard seen.insert(path).inserted else { continue }
             if Task.isCancelled { break }
-            let (decision, state) = ICloudDownloadPolicy.evaluate(
-                URL(fileURLWithPath: path), home: home, now: now(), readState: readState
-            )
-            guard decision == .removable, let state else {
+            let decision = evaluate(path).decision
+            guard decision == .removable else {
                 skipped.append(ICloudDownloadSkip(path: path, reasonKey: decision.skipReasonKey))
                 continue
             }
-            ready.append((path, state))
+            ready.append(path)
         }
 
         // A file an app has open stays: the app may still be writing it, or
@@ -96,7 +96,7 @@ nonisolated final class ICloudDownloadRemover: Sendable {
         // One listing covers every file. When it can't be read nothing is
         // removed, since an empty answer is no proof that nothing is open.
         let listing = ready.isEmpty ? "" : listOpenFiles()
-        for (path, state) in ready {
+        for path in ready {
             if Task.isCancelled { break }
             guard let listing else {
                 skipped.append(ICloudDownloadSkip(path: path, reasonKey: Self.openCheckUnavailableReasonKey))
@@ -105,6 +105,14 @@ nonisolated final class ICloudDownloadRemover: Sendable {
             let spellings = Set(OpenFileCheck.spellings(of: URL(fileURLWithPath: path)))
             guard OpenFileCheck.holders(in: listing, folders: spellings).isEmpty else {
                 skipped.append(ICloudDownloadSkip(path: path, reasonKey: Self.openInAppReasonKey))
+                continue
+            }
+            // Every check again, from disk, right before this file's eviction.
+            // The listing can take seconds and earlier files took their turn,
+            // so a save in that time must stop it here, not in the first pass.
+            let (decision, state) = evaluate(path)
+            guard decision == .removable, let state else {
+                skipped.append(ICloudDownloadSkip(path: path, reasonKey: decision.skipReasonKey))
                 continue
             }
             do {
@@ -116,22 +124,28 @@ nonisolated final class ICloudDownloadRemover: Sendable {
         }
 
         // Measured after, not assumed from the scan: the figure is what the
-        // disk got back.
-        // A file that can't be read afterwards counts as nothing freed, never as
-        // all of it.
-        var after: [String: Int64] = [:]
+        // disk got back. A file that can't be read afterwards (moved or renamed
+        // from another device meanwhile) counts as nothing freed, never as all
+        // of it, and is settled: waiting can't change it.
+        var after: [String: Int64?] = [:]
         for attempt in 0..<max(settleAttempts, 1) {
             after = Dictionary(uniqueKeysWithValues: evicted.map { item in
-                (item.path, readState(URL(fileURLWithPath: item.path))?.allocatedBytes ?? item.before)
+                (item.path, readState(URL(fileURLWithPath: item.path))?.allocatedBytes)
             })
-            if after.values.allSatisfy({ $0 == 0 }) || attempt >= settleAttempts - 1 { break }
+            let settled = after.values.allSatisfy { $0 == nil || $0 == 0 }
+            if settled || attempt >= settleAttempts - 1 { break }
             try? await Task.sleep(for: settleInterval)
         }
 
         let removed = evicted.map { item in
-            ICloudDownloadRemoval(path: item.path, bytesFreed: max(0, item.before - (after[item.path] ?? item.before)))
+            let left = (after[item.path] ?? nil) ?? item.before
+            return ICloudDownloadRemoval(path: item.path, bytesFreed: max(0, item.before - left))
         }
         return ICloudDownloadReport(date: now(), removed: removed, skipped: skipped)
+    }
+
+    private func evaluate(_ path: String) -> (decision: ICloudDownloadDecision, state: ICloudDownloadState?) {
+        ICloudDownloadPolicy.evaluate(URL(fileURLWithPath: path), home: home, now: now(), readState: readState)
     }
 
     static let evictFailedReasonKey = "macOS couldn't remove this file's copy on this Mac."

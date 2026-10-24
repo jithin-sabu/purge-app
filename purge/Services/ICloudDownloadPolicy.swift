@@ -17,6 +17,10 @@ nonisolated enum ICloudDownloadDecision: Equatable, Sendable {
     case outsideLargeFiles
     /// Gone, a folder, or a link.
     case notAFile
+    /// A hard link: the file has another name on this disk. Eviction acts on
+    /// the file's data, so the other name, which may sit outside iCloud and be
+    /// open, would become a placeholder too.
+    case hasOtherLinks
     case notInICloud
     case hasConflicts
     /// iCloud does not have this version yet.
@@ -39,6 +43,8 @@ nonisolated enum ICloudDownloadDecision: Equatable, Sendable {
             return ""
         case .outsideLargeFiles, .notAFile:
             return "Purge can't keep this file only in iCloud."
+        case .hasOtherLinks:
+            return "This file is also linked from another place on this Mac."
         case .notInICloud:
             return "This file isn't stored in iCloud."
         case .hasConflicts:
@@ -72,6 +78,8 @@ nonisolated struct ICloudDownloadState: Equatable, Sendable {
     /// Downloaded doesn't carry it.
     var isPurgeable: Bool
     var modified: Date?
+    /// More than one name for the same file (`st_nlink` above 1).
+    var hasOtherLinks = false
 
     /// Reads the file now, past any cached resource values. Nil when it is gone.
     static func read(_ url: URL) -> ICloudDownloadState? {
@@ -95,7 +103,8 @@ nonisolated struct ICloudDownloadState: Equatable, Sendable {
             isDownloadedAndCurrent: values?.ubiquitousItemDownloadingStatus == .current,
             allocatedBytes: Int64(values?.totalFileAllocatedSize ?? 0),
             isPurgeable: isRegularFile && hasPurgeableFlag(path),
-            modified: values?.contentModificationDate
+            modified: values?.contentModificationDate,
+            hasOtherLinks: isRegularFile && info.st_nlink > 1
         )
     }
 
@@ -138,6 +147,7 @@ nonisolated enum ICloudDownloadPolicy {
     /// every branch without iCloud.
     static func decision(for state: ICloudDownloadState?, now: Date) -> ICloudDownloadDecision {
         guard let state, state.isRegularFile else { return .notAFile }
+        guard !state.hasOtherLinks else { return .hasOtherLinks }
         guard state.isUbiquitous else { return .notInICloud }
         guard !state.hasConflicts else { return .hasConflicts }
         guard state.isUploaded else { return .notUploaded }

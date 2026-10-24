@@ -80,8 +80,8 @@ nonisolated struct RemoveDownloadRequest: Identifiable {
     /// Selected files left out because they are only on this Mac, so the sheet
     /// accounts for every file the user ticked.
     var localOnlyCount = 0
-    /// Selected synced files left out because they can't have their download
-    /// removed right now, for example while they upload.
+    /// Selected synced files left out because the scan found them not ready:
+    /// uploading, recently changed, set to Keep Downloaded, or in conflict.
     var notReadyCount = 0
     /// False when the request came from one row's menu, where the rest of the
     /// selection has nothing to do with it.
@@ -2150,9 +2150,14 @@ final class PurgeStore: ObservableObject {
         if !report.removed.isEmpty {
             CleanupHistoryStore.shared.appendICloudDownloadRemoval(report)
         }
+        // Files this run skipped are listed on the sheet already, so they
+        // don't count as "other" files still selected.
+        let skippedIDs = Set(report.skipped.map(\.path))
         removeDownloadResult = RemoveDownloadResult(
             report: report,
-            stillSelectedCount: request.fromSelection ? selectedLargeFiles.count : 0
+            stillSelectedCount: request.fromSelection
+                ? selectedLargeFiles.filter { !skippedIDs.contains($0.id) }.count
+                : 0
         )
     }
 

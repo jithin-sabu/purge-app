@@ -1379,9 +1379,6 @@
 "They stay in their folders and download again when you open them." = "它们仍在原来的文件夹里，打开时会重新下载。";
 "1 other selected file isn't in iCloud, so it stays." = "另有 1 个所选文件不在 iCloud 中，因此保留。";
 "%lld other selected files aren't in iCloud, so they stay." = "另有 %lld 个所选文件不在 iCloud 中，因此保留。";
-"1 other selected file is still syncing, so it stays." = "另有 1 个所选文件仍在同步，因此保留。";
-"%lld other selected files are still syncing, so they stay." = "另有 %lld 个所选文件仍在同步，因此保留。";
-"%lld other selected files stay: %lld aren't in iCloud, %lld still syncing." = "另有 %lld 个所选文件保留：%lld 个不在 iCloud 中，%lld 个仍在同步。";
 "Frees %@ on this Mac" = "将在这台 Mac 上释放 %@";
 "1 other file is still selected." = "另有 1 个文件仍处于选中状态。";
 "%lld other files are still selected." = "另有 %lld 个文件仍处于选中状态。";
@@ -1392,3 +1389,7 @@
 "All %lld files sync with iCloud, so they also leave your other devices." = "全部 %lld 个文件都与 iCloud 同步，因此也会从你的其他设备上移除。";
 "1 of these files syncs with iCloud, so it also leaves your other devices." = "其中 1 个文件与 iCloud 同步，因此也会从你的其他设备上移除。";
 "%lld of these files sync with iCloud, so they also leave your other devices." = "其中 %lld 个文件与 iCloud 同步，因此也会从你的其他设备上移除。";
+"1 other selected file can't be kept only in iCloud right now, so it stays." = "另有 1 个所选文件目前无法只在 iCloud 中保留，因此保留在这台 Mac 上。";
+"%lld other selected files can't be kept only in iCloud right now, so they stay." = "另有 %lld 个所选文件目前无法只在 iCloud 中保留，因此保留在这台 Mac 上。";
+"%lld other selected files stay: %lld aren't in iCloud, %lld can't be kept only there right now." = "另有 %lld 个所选文件保留：%lld 个不在 iCloud 中，%lld 个目前无法只在 iCloud 中保留。";
+"This file is also linked from another place on this Mac." = "此文件在这台 Mac 上的其他位置也有链接。";
