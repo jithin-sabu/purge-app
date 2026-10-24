@@ -1435,9 +1435,6 @@ struct LargeFileDeletionConfirmSheet: View {
     /// which copy survives — issue #17 is explicit that this is the user's call —
     /// so this only states plainly what the current selection does.
     var fullyConsumedDuplicateGroups: [DuplicateGroup] = []
-    /// Set when some of these files can be kept only in iCloud instead (#106).
-    /// The warning then carries a button for that, not a sentence about it.
-    var onKeepOnlyInICloud: (() -> Void)?
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
@@ -1497,17 +1494,7 @@ struct LargeFileDeletionConfirmSheet: View {
             }
 
             if let iCloudWarning {
-                LargeFileCautionNote {
-                    VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
-                        Text(iCloudWarning)
-                        // The other way to get the space back, offered where the
-                        // user is about to take the drastic one (#106).
-                        if let onKeepOnlyInICloud {
-                            Button(String(localized: "Keep Only in iCloud Instead"), action: onKeepOnlyInICloud)
-                                .buttonStyle(.purge(.soft, size: .small))
-                        }
-                    }
-                }
+                LargeFileCautionNote { Text(iCloudWarning) }
             }
 
             HStack(spacing: AppStyle.Spacing.small) {

@@ -1352,7 +1352,6 @@
 "Freed %@. They're still in their folders." = "已释放 %@。它们仍在原来的文件夹里。";
 "These files are still on this Mac." = "这些文件仍在这台 Mac 上。";
 "Also in iCloud. Keep them only there to free %@ without deleting anything." = "这些文件也在 iCloud 中。只在 iCloud 中保留它们，即可释放 %@，而不会删除任何内容。";
-"Keep Only in iCloud Instead" = "改为只在 iCloud 中保留";
 "This file syncs with iCloud, so it also leaves your other devices." = "此文件与 iCloud 同步，因此也会从你的其他设备上移除。";
 "All %lld files sync with iCloud, so they also leave your other devices." = "全部 %lld 个文件都与 iCloud 同步，因此也会从你的其他设备上移除。";
 "1 of these files syncs with iCloud, so it also leaves your other devices." = "其中 1 个文件与 iCloud 同步，因此也会从你的其他设备上移除。";

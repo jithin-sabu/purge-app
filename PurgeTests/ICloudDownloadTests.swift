@@ -470,29 +470,6 @@ struct RemoveDownloadStoreTests {
         #expect(store.pendingRemoveDownload == nil)
     }
 
-    /// The trash sheet's button closes it and opens Keep Only in iCloud for the
-    /// same selection, once the first sheet has gone.
-    @Test func theTrashSheetHandsOverToKeepOnlyInICloud() async throws {
-        let scans = FakeScans()
-        scans.hasAccess = true
-        defer { scans.cleanUp() }
-        let store = scans.makeStore()
-        let base = "/tmp/purge-106-\(UUID().uuidString)"
-        let local = row("\(base)/Documents/local.mov", synced: false, removable: false)
-        let synced = row("\(base)/Documents/synced.mov", synced: true, removable: true)
-        store.largeFiles = [local, synced]
-        store.setAllLargeFilesSelected(true, ids: [local.id, synced.id])
-        store.presentLargeFileDeletionSheet()
-        #expect(store.showLargeFileDeletionSheet)
-
-        store.switchFromTrashToKeepOnlyInICloud()
-        #expect(!store.showLargeFileDeletionSheet)
-        #expect(store.pendingRemoveDownload == nil)
-        try await Task.sleep(for: .milliseconds(600))
-        #expect(store.pendingRemoveDownload?.files.map(\.id) == [synced.id])
-        #expect(store.pendingRemoveDownload?.localOnlyCount == 1)
-    }
-
     @Test func noButtonWithoutARemovableFile() {
         let scans = FakeScans()
         scans.hasAccess = true

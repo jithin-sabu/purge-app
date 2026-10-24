@@ -1892,16 +1892,6 @@ final class PurgeStore: ObservableObject {
         )
     }
 
-    /// From the trash sheet's iCloud warning: close it and open Keep Only in
-    /// iCloud for the same selection. The second sheet waits for the first to
-    /// finish closing, since a sheet can't open while another is leaving.
-    func switchFromTrashToKeepOnlyInICloud() {
-        showLargeFileDeletionSheet = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            self?.requestRemoveDownloads()
-        }
-    }
-
     func dismissRemoveDownloads() {
         pendingRemoveDownload = nil
     }
