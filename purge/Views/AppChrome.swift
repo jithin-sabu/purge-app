@@ -649,12 +649,13 @@ struct SafeCleanupCelebrationOverlay: View {
                     }
 
                     if session.phase == .complete, !otherFailures.isEmpty {
-                        CleanFailureDisclosure(
+                        CleanFailureCard(
                             failures: otherFailures,
-                            isExpanded: $failuresExpanded,
+                            showsAll: $failuresExpanded,
                             retryingIDs: retryingFailureIDs,
                             onOpenSettings: openFullDiskAccessSettings,
-                            onRetry: retryFailure
+                            onRetry: retryFailure,
+                            onRetryAll: retryAllFailures
                         )
                     }
 
@@ -809,8 +810,17 @@ struct SafeCleanupCelebrationOverlay: View {
         }
     }
 
-    /// Locked-app failures get the reassuring setup panel; everything else keeps the
-    /// terse disclosure. Split so a run that hits both still shows each correctly.
+    /// Every row in the card that offers Retry, in one go. Each goes through
+    /// `retryFailure`, which keeps the macOS update leftovers together and skips a
+    /// row whose retry is already running.
+    private func retryAllFailures() {
+        for item in otherFailures where item.reason.showsRetry {
+            retryFailure(item)
+        }
+    }
+
+    /// Locked-app failures get the reassuring setup panel; everything else goes in
+    /// the failure card. Split so a run that hits both still shows each correctly.
     private var administratorFailures: [CleanFailureItem] {
         session.failedItems.filter { $0.reason == .needsAdministrator }
     }
@@ -1273,21 +1283,34 @@ private struct CompletionBoltEchoRing: View {
     }
 }
 
-private struct CleanFailureDisclosure: View {
+/// The items a finished clean left behind, as one card under the total (#162): a
+/// header with the count and, when more than one row can be retried, Retry all;
+/// then a row per item with a tinted icon tile, its name, the reason, and its
+/// action or status. Open from the start, so nothing hides behind a chevron. Past
+/// three rows the rest wait behind "more". Internal, not private, so the test
+/// host can render its expanded and retrying states for screenshots.
+struct CleanFailureCard: View {
     let failures: [CleanFailureItem]
-    @Binding var isExpanded: Bool
+    @Binding var showsAll: Bool
     let retryingIDs: Set<UUID>
     let onOpenSettings: () -> Void
     let onRetry: (CleanFailureItem) -> Void
+    let onRetryAll: () -> Void
 
-    private var summaryText: String {
+    private static let rowsBeforeMore = 3
+
+    private var headerText: String {
         failures.count == 1
             ? String(localized: "1 item couldn't be cleaned")
             : String(localized: "\(failures.count) items couldn't be cleaned")
     }
 
+    private var retryableCount: Int {
+        failures.filter(\.reason.showsRetry).count
+    }
+
     private var visibleFailures: [CleanFailureItem] {
-        Array(failures.prefix(3))
+        showsAll ? failures : Array(failures.prefix(Self.rowsBeforeMore))
     }
 
     private var hiddenCount: Int {
@@ -1295,46 +1318,111 @@ private struct CleanFailureDisclosure: View {
     }
 
     var body: some View {
-        VStack(alignment: .center, spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isExpanded.toggle()
+        VStack(spacing: 0) {
+            HStack(spacing: AppStyle.Spacing.small) {
+                Text(headerText)
+                    .font(AppStyle.Typography.headline)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if retryableCount > 1 {
+                    Button(String(localized: "Retry all"), action: onRetryAll)
+                        .buttonStyle(.purge(.quiet, size: .small))
+                        .disabled(!retryingIDs.isEmpty)
                 }
-            } label: {
-                HStack(spacing: 5) {
-                    Text(summaryText)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.semibold))
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                }
-                .font(AppStyle.Typography.callout)
-                .foregroundStyle(AppColors.textTertiary)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, AppStyle.Spacing.medium)
+            .padding(.vertical, AppStyle.Spacing.xSmall)
 
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(visibleFailures) { failure in
-                        CleanFailureRow(
-                            failure: failure,
-                            isRetrying: retryingIDs.contains(failure.id),
-                            onOpenSettings: onOpenSettings,
-                            onRetry: onRetry
-                        )
-                    }
+            hairline
 
-                    if hiddenCount > 0 {
-                        Text("+\(hiddenCount) more")
-                            .font(AppStyle.Typography.metadata)
-                            .foregroundStyle(AppColors.textTertiary)
-                            .frame(maxWidth: .infinity, alignment: .center)
+            ForEach(Array(visibleFailures.enumerated()), id: \.element.id) { index, failure in
+                if index > 0 {
+                    hairline.padding(.horizontal, AppStyle.Spacing.medium)
+                }
+                CleanFailureCardRow(
+                    failure: failure,
+                    isRetrying: retryingIDs.contains(failure.id),
+                    onOpenSettings: onOpenSettings,
+                    onRetry: onRetry
+                )
+            }
+
+            if hiddenCount > 0 {
+                hairline.padding(.horizontal, AppStyle.Spacing.medium)
+                Button("+\(hiddenCount) more") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showsAll = true
                     }
                 }
-                .frame(maxWidth: 360)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .buttonStyle(.purge(.quiet, size: .small))
+                .padding(.vertical, AppStyle.Spacing.xxSmall)
             }
         }
-        .multilineTextAlignment(.center)
+        .background(
+            AppColors.surfaceCard,
+            in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+                .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
+        }
+        .frame(maxWidth: 520)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var hairline: some View {
+        Rectangle()
+            .fill(AppColors.borderSubtle)
+            .frame(height: 0.5)
+    }
+}
+
+/// How the card colours a failure's icon tile, and what its badge says when the
+/// row offers no action. Kept with the view: the model knows no colours.
+private extension CleanFailureReason {
+    var tileTone: AppBadge.Tone {
+        switch self {
+        case .safetySkipped, .keptForOtherApp:
+            .warning
+        case .needsFullDiskAccess, .needsAdministrator, .systemProtected:
+            .neutral
+        case .inUse, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
+            .danger
+        }
+    }
+
+    var tileFill: Color {
+        switch tileTone {
+        case .neutral: AppColors.statusUnsureFill
+        case .accent: AppColors.fillSecondary
+        case .safe: AppColors.statusSafeFill
+        case .warning: AppColors.statusCheckFill
+        case .danger: AppColors.statusDangerFill
+        }
+    }
+
+    var tileForeground: Color {
+        switch tileTone {
+        case .neutral: AppColors.statusUnsureText
+        case .accent: AppColors.textSecondary
+        case .safe: AppColors.statusSafeText
+        case .warning: AppColors.statusCheckText
+        case .danger: AppColors.statusDangerText
+        }
+    }
+
+    /// The badge on a row with no button. `nil` where the row has a Retry or Open
+    /// Settings button instead, or where the explanation already says what to do.
+    var statusBadgeTitle: String? {
+        switch self {
+        case .safetySkipped: String(localized: "Skipped")
+        case .keptForOtherApp: String(localized: "Kept")
+        case .systemProtected: String(localized: "Protected")
+        case .needsFullDiskAccess, .needsAdministrator, .inUse, .xcodeLicenseNotAccepted,
+             .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
+            nil
+        }
     }
 }
 
@@ -1512,59 +1600,65 @@ private struct NeedsAdministratorPanel: View {
     }
 }
 
-private struct CleanFailureRow: View {
+/// One row of `CleanFailureCard`: a 28pt icon tile tinted by what went wrong, the
+/// item's name over the reason, and on the right its button or its status badge.
+struct CleanFailureCardRow: View {
     let failure: CleanFailureItem
     let isRetrying: Bool
     let onOpenSettings: () -> Void
     let onRetry: (CleanFailureItem) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             Image(systemName: failure.reason.systemImage)
-                .font(.caption)
-                .foregroundStyle(AppColors.textTertiary)
-                .frame(width: 14, alignment: .center)
-                .padding(.top, 2)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(failure.reason.tileForeground)
+                .frame(width: 28, height: 28)
+                .background(
+                    failure.reason.tileFill,
+                    in: RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                )
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text(failure.displayName)
-                    .font(AppStyle.Typography.callout)
-                    .foregroundStyle(AppColors.textSecondary)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 Text(LocalizedStringKey(failure.reason.explanation))
-                    .font(AppStyle.Typography.metadata)
-                    .foregroundStyle(AppColors.textTertiary)
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-                if failure.reason.showsOpenSettings || failure.reason.showsRetry {
-                    HStack(spacing: 10) {
-                        if failure.reason.showsOpenSettings {
-                            Button("Open Settings", action: onOpenSettings)
-                                .buttonStyle(.purge(.quiet, size: .small))
-                        }
-                        if failure.reason.showsRetry {
-                            Button {
-                                onRetry(failure)
-                            } label: {
-                                if isRetrying {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                        .scaleEffect(0.7)
-                                } else {
-                                    Text(failure.reason.retryTitle)
-                                }
-                            }
-                            .buttonStyle(.purge(.quiet, size: .small))
-                            .disabled(isRetrying)
-                        }
+            if failure.reason.showsOpenSettings {
+                Button("Open Settings", action: onOpenSettings)
+                    .buttonStyle(.purge(.secondary, size: .small))
+            }
+            if failure.reason.showsRetry {
+                Button {
+                    onRetry(failure)
+                } label: {
+                    if isRetrying {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                    } else {
+                        Text(failure.reason.retryTitle)
                     }
-                    .padding(.top, 2)
                 }
+                .buttonStyle(.purge(.secondary, size: .small))
+                .disabled(isRetrying)
+            } else if let title = failure.reason.statusBadgeTitle {
+                AppBadge(text: title, tone: failure.reason.tileTone)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, AppStyle.Spacing.medium)
+        .padding(.vertical, AppStyle.Spacing.small)
+        .multilineTextAlignment(.leading)
     }
 }
 

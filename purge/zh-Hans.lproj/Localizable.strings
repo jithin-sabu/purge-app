@@ -593,6 +593,9 @@
 "Size (smallest first)" = "大小（从小到大）";
 "Size filter" = "按大小筛选";
 "Skipped" = "已跳过";
+"Retry all" = "全部重试";
+"Kept" = "已保留";
+"Protected" = "受保护";
 "Skipped for safety" = "出于安全考虑已跳过";
 "Smallest" = "最小优先";
 "Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. Backups on your backup disk aren't touched." = "快照可能保存着自上次备份以来修改或删除文件的唯一副本。快照删除后无法恢复。Purge 会保留最新的快照和上次备份留下的那张，时间机器可能仍需要它们。备份磁盘上的备份不会受到影响。";
