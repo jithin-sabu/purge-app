@@ -88,10 +88,16 @@ struct LargeFileChipFallbackTests {
 
     // MARK: - Launch
 
+    /// `register()` runs at every launch, the test host's too, so it must leave
+    /// the old value alone; the app removes it only outside the test host.
     @Test
     func launchDropsTheChipAnOlderVersionSaved() {
         suite.defaults.set(LargeFileCategory.image.rawValue, forKey: LargeFileFilterDefaults.legacyCategoryKey)
         LargeFileFilterDefaults.register(userDefaults: suite.defaults)
+        #expect(suite.defaults.string(forKey: LargeFileFilterDefaults.legacyCategoryKey)
+            == LargeFileCategory.image.rawValue)
+
+        LargeFileFilterDefaults.removeLegacyCategory(userDefaults: suite.defaults)
         #expect(suite.defaults.object(forKey: LargeFileFilterDefaults.legacyCategoryKey) == nil)
     }
 

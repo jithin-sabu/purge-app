@@ -725,7 +725,7 @@ struct RemoveDownloadStoreTests {
 
         let suite = ThrowawayDefaults()
         suite.defaults.set(LargeFileCategoryFilter.iCloud, forKey: LargeFileFilterDefaults.legacyCategoryKey)
-        LargeFileFilterDefaults.register(userDefaults: suite.defaults)
+        LargeFileFilterDefaults.removeLegacyCategory(userDefaults: suite.defaults)
         #expect(suite.defaults.object(forKey: LargeFileFilterDefaults.legacyCategoryKey) == nil)
     }
 

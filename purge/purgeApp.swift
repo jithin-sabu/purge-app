@@ -141,6 +141,9 @@ struct PurgeApp: App {
         // Before the Dock policy below reads the preference it may repair.
         StartupPreferenceStore.resolvePersistedModes(isFreshInstall: firstRun == .freshInstall)
         LargeFileFilterDefaults.register()
+        if !TestHost.isActive() {
+            LargeFileFilterDefaults.removeLegacyCategory()
+        }
         UNUserNotificationCenter.current().delegate = ScheduledNotificationPresentationDelegate.shared
         // As early as the app can act, so a login launch with the Dock icon hidden
         // never flashes into the Dock before hiding itself again.

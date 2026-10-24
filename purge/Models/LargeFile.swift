@@ -560,9 +560,13 @@ enum LargeFileFilterDefaults {
     /// every launch starts on All (`PurgeStore.largeFileCategoryFilter`).
     static let legacyCategoryKey = "filter.largeFiles"
 
-    static func register(userDefaults: UserDefaults = .standard) {
+    /// Drops the chip an older version saved. The app calls this at launch only
+    /// outside the test host, which shares the real user's defaults.
+    static func removeLegacyCategory(userDefaults: UserDefaults = .standard) {
         userDefaults.removeObject(forKey: legacyCategoryKey)
+    }
 
+    static func register(userDefaults: UserDefaults = .standard) {
         if userDefaults.object(forKey: LargeFileSizeThreshold.userDefaultsKey) == nil,
            userDefaults.object(forKey: legacySizeKey) != nil {
             let legacySize = userDefaults.integer(forKey: legacySizeKey)
