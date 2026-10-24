@@ -89,19 +89,61 @@ enum LargeFileScanPolicy {
     }
 
     nonisolated static func isInsideExcludedDirectory(_ url: URL) -> Bool {
-        let components = url.standardizedFileURL.pathComponents.dropLast()
-        for component in components {
-            if component.hasPrefix(".") { return true }
-            if excludedFolderNames.contains(component) { return true }
-            if projectArtifactFolderNames.contains(component) { return true }
-            let ext = (component as NSString).pathExtension.lowercased()
-            if ["app", "photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater", "bundle"].contains(ext) {
-                return true
-            }
-            // A file inside a VM is part of its disk. Only the whole bundle goes.
-            if LargeFileKind.virtualMachineExtensions.contains(ext) { return true }
+        url.standardizedFileURL.pathComponents.dropLast().contains(where: isExcludedComponent)
+    }
+
+    /// A folder name whose contents are never offered.
+    private nonisolated static func isExcludedComponent(_ component: String) -> Bool {
+        if component.hasPrefix(".") { return true }
+        if excludedFolderNames.contains(component) { return true }
+        if projectArtifactFolderNames.contains(component) { return true }
+        let ext = (component as NSString).pathExtension.lowercased()
+        if ["app", "photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater", "bundle"].contains(ext) {
+            return true
         }
-        return false
+        // A file inside a VM is part of its disk. Only the whole bundle goes.
+        return LargeFileKind.virtualMachineExtensions.contains(ext)
+    }
+
+    /// The folder a root is walked at. Usually the root itself. When the user
+    /// moved the folder and left a link in its place
+    /// (`~/Documents -> /Volumes/Data/Documents`), it is the folder the link
+    /// leads to: the enumerator never follows a link, not even at the root, so
+    /// such a root used to be listed as empty (#273). Links inside the folder
+    /// are still never followed.
+    ///
+    /// A link is followed only to a folder the user could have moved their
+    /// files to: one inside the home folder, or on a volume under `/Volumes`.
+    /// Nil for any other target, and the root is not walked. That rules out
+    /// `~/Library`, where a cloud provider's folder deletes a trashed file on
+    /// every device, the home folder and the folders above it, which hold
+    /// `~/Library`, the rest of the system, and any folder whose files the gate
+    /// refuses anyway, such as a hidden one.
+    ///
+    /// The scan walks what this returns, and `isEligibleForDeletion` asks again
+    /// at delete time, so a link changed after the scan is read as it is then.
+    /// `volumes` is for tests.
+    nonisolated static func walkedFolder(
+        for root: URL,
+        home: URL,
+        volumes: URL = URL(fileURLWithPath: "/Volumes", isDirectory: true)
+    ) -> URL? {
+        let fm = FileManager.default
+        guard (try? fm.destinationOfSymbolicLink(atPath: root.path)) != nil else { return root }
+        // Resolved in full, so a link to a link ends at the folder, and in the
+        // spelling the store and the gate use (`/var`, not `/private/var`).
+        let target = root.resolvingSymlinksInPath().standardizedFileURL
+        let path = target.path
+        var isDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else { return nil }
+
+        let homePath = home.resolvingSymlinksInPath().standardizedFileURL.path
+        let volumesPath = volumes.resolvingSymlinksInPath().standardizedFileURL.path
+        guard path.hasPrefix(homePath + "/") || path.hasPrefix(volumesPath + "/") else { return nil }
+        if homePath == path || homePath.hasPrefix(path + "/") { return nil }
+        if (path + "/").contains("/Library/") { return nil }
+        if target.pathComponents.contains(where: isExcludedComponent) { return nil }
+        return target
     }
 
     /// Safari's unfinished download: a `.download` folder directly in
@@ -155,6 +197,12 @@ enum LargeFileScanPolicy {
     ///
     /// This is Large Files' own gate, not `DeletionSafetyPolicy.evaluate(_:)`:
     /// these are the user's files, which the cache allowlist refuses by design.
+    ///
+    /// The roots are matched where the item really is: its folder with every
+    /// link resolved, against the folder each root is walked at
+    /// (`walkedFolder`). A file under a linked root passes by its real path
+    /// (#273), and one reached through a link anywhere else does not, so the
+    /// `~/Library` and excluded-folder checks also apply to where it really is.
     nonisolated static func isEligibleForDeletion(
         _ url: URL,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -169,24 +217,38 @@ enum LargeFileScanPolicy {
         if path.contains("/Library/") { return false }
         if isInsideExcludedDirectory(std) { return false }
 
+        // The folder is resolved, not the item: a link the user picked is
+        // trashed as the link, wherever it points.
+        let real = std.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(std.lastPathComponent).standardizedFileURL
+        let realPath = real.path
+        if realPath.contains("/Library/") { return false }
+        if isInsideExcludedDirectory(real) { return false }
+
+        func walkedPath(_ root: URL) -> String? {
+            walkedFolder(for: root, home: home).map {
+                $0.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+            }
+        }
         func isUnder(_ roots: [URL]) -> Bool {
             roots.contains { root in
-                path.hasPrefix(root.standardizedFileURL.path + "/")
+                walkedPath(root).map { realPath.hasPrefix($0) } ?? false
             }
         }
 
         // Inside a Safari download bundle: only the whole bundle goes.
-        let downloads = home.appendingPathComponent("Downloads", isDirectory: true).standardizedFileURL.path + "/"
-        if path.hasPrefix(downloads),
-           let first = path.dropFirst(downloads.count).split(separator: "/").first,
-           path.count > downloads.count + first.count,
+        let downloadsRoot = home.appendingPathComponent("Downloads", isDirectory: true)
+        if let downloads = walkedPath(downloadsRoot),
+           realPath.hasPrefix(downloads),
+           let first = realPath.dropFirst(downloads.count).split(separator: "/").first,
+           realPath.count > downloads.count + first.count,
            isSafariDownloadBundle(URL(fileURLWithPath: downloads + first), home: home) {
             return false
         }
 
         guard isDir.boolValue else { return isUnder(scanRoots(home: home)) }
 
-        if isSafariDownloadBundle(std, home: home) { return true }
+        if isSafariDownloadBundle(std, home: home) { return isUnder([downloadsRoot]) }
         guard VirtualMachineApp(bundleExtension: std.pathExtension) != nil else { return false }
         guard isUnder(scanRoots(home: home)) || isUnder(virtualMachineRoots(home: home)) else { return false }
         return !virtualMachineIsInUse(std, isAppRunning: isAppRunning)

@@ -1204,6 +1204,7 @@
 "Purge never lists files inside a library" = "Purge 不会列出资料库内的文件";
 "Try %@" = "试试 %@";
 "%@ couldn't be read." = "无法读取 %@。";
+"It links to %@, which Large Files doesn't scan." = "它链接到 %@，大文件不会扫描该位置。";
 "Checked %@" = "已检查 %@";
 "Cloud" = "云端";
 "1 file · %@" = "1 个文件 · %@";
