@@ -70,7 +70,7 @@ Rules:
 
 Every `.font(...)` on text uses `AppStyle.Typography`, adding `.weight(...)` for emphasis. SF Symbols may still size their glyph with `.system(size:)`.
 
-Text is set in [Onest](https://github.com/googlefonts/onest), bundled as `purge/Resources/Fonts/OnestText.ttf` under the SIL Open Font License (`Onest-OFL.txt`). The bundled copy has its digits removed, so a number inside ordinary text, such as "Last used 6 months ago", is drawn by the system font.
+Text is set in [Onest](https://github.com/googlefonts/onest), bundled as `purge/Resources/Fonts/OnestText.ttf` under the SIL Open Font License (`Onest-OFL.txt`). The bundled copy has its digits removed, so a number inside ordinary text, such as "Last used 6 months ago", is drawn by the system font. `AppFonts.register()` runs at launch and registers a copy kept in Application Support, because CoreText reads a registered font from its path again while the app runs, and the bundle's path dies when Xcode cleans a build or the user moves Purge to Applications.
 
 | Style | Spec | Tracking | Use for |
 | --- | --- | --- | --- |
