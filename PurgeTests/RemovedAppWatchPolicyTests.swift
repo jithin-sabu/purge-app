@@ -1084,22 +1084,11 @@ struct ApplicationsFolderWatcherTests {
 
 @Suite("Removed-app handoff files", .serialized)
 struct RemovedAppHandoffTests {
-    private func withTemporaryRoot(_ body: () throws -> Void) throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("purge-handoff-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let previous = RemovedAppHandoff.root
-        RemovedAppHandoff.root = root
-        defer { RemovedAppHandoff.root = previous }
-        try body()
-    }
-
     /// Reading leaves records in place, so a review that has to wait for
     /// onboarding or Full Disk Access is not lost. Discarding removes one.
     @Test
     func pendingRecordsStayUntilDiscarded() throws {
-        try withTemporaryRoot {
+        try withTemporaryHandoffRoot {
             RemovedAppHandoff.enqueue(.init(path: "/Applications/A.app", bundleID: "com.a", name: "A", fileNumber: 7, removedAt: Date()))
             RemovedAppHandoff.enqueue(.init(path: "/Applications/B.app", bundleID: "com.b", name: "B"))
 
@@ -1118,7 +1107,7 @@ struct RemovedAppHandoffTests {
     /// A record that waited more than a week is dropped rather than reviewed.
     @Test
     func oldRecordsExpire() throws {
-        try withTemporaryRoot {
+        try withTemporaryHandoffRoot {
             let longAgo = Date().addingTimeInterval(-RemovedAppWatchPolicy.recordLifetime - 60)
             RemovedAppHandoff.enqueue(.init(path: "/Applications/Old.app", bundleID: "com.old", name: "Old", removedAt: longAgo))
             RemovedAppHandoff.enqueue(.init(path: "/Applications/New.app", bundleID: "com.new", name: "New", removedAt: Date()))
@@ -1128,16 +1117,36 @@ struct RemovedAppHandoffTests {
 
     @Test
     func ignoreExpiresAfterGrace() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("purge-ignore-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let previous = RemovedAppHandoff.root
-        RemovedAppHandoff.root = root
-        defer { RemovedAppHandoff.root = previous }
+        try withTemporaryHandoffRoot {
+            let path = "/Applications/Gone.app"
+            RemovedAppHandoff.ignore(paths: [path])
+            #expect(RemovedAppHandoff.isIgnored(path: path))
+        }
+    }
 
-        let path = "/Applications/Gone.app"
-        RemovedAppHandoff.ignore(paths: [path])
-        #expect(RemovedAppHandoff.isIgnored(path: path))
+    /// Suites run in parallel, and more than one binds the root. Each must see
+    /// only what it wrote itself: a shared global once left this suite reading
+    /// the Homebrew cask suite's folder, and that suite writing to the real one.
+    @Test
+    func rootsBoundAtTheSameTimeStayApart() async throws {
+        let home = RemovedAppHandoff.root
+        async let first: Bool = withTemporaryHandoffRoot {
+            RemovedAppHandoff.ignore(paths: ["/Applications/First.app"])
+            await Task.yield()
+            return RemovedAppHandoff.isIgnored(path: "/Applications/First.app")
+                && !RemovedAppHandoff.isIgnored(path: "/Applications/Second.app")
+                && RemovedAppHandoff.root != home
+        }
+        async let second: Bool = withTemporaryHandoffRoot {
+            RemovedAppHandoff.ignore(paths: ["/Applications/Second.app"])
+            await Task.yield()
+            return RemovedAppHandoff.isIgnored(path: "/Applications/Second.app")
+                && !RemovedAppHandoff.isIgnored(path: "/Applications/First.app")
+                && RemovedAppHandoff.root != home
+        }
+        let (firstSawOnlyItsOwn, secondSawOnlyItsOwn) = try await (first, second)
+        #expect(firstSawOnlyItsOwn)
+        #expect(secondSawOnlyItsOwn)
+        #expect(RemovedAppHandoff.root == home)
     }
 }
