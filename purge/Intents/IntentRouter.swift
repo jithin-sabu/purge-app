@@ -13,26 +13,32 @@ final class IntentRouter {
     static let shared = IntentRouter(
         store: AppEnvironment.store,
         reveal: revealWindow,
-        onboardingDone: { FirstRunGate.hasCompletedOnboarding }
+        onboardingDone: { FirstRunGate.hasCompletedOnboarding },
+        showRefusal: ExternalUninstallHandler.showRefusal
     )
 
     private let store: PurgeStore
     private let reveal: @MainActor () -> Void
     private let onboardingDone: @MainActor () -> Bool
     private let reviewUninstall: (@MainActor () async -> Void)?
+    private let showRefusal: @MainActor (_ title: String, _ detail: String) -> Void
 
     /// `reviewUninstall` stands in for building the uninstall review in tests,
-    /// which would otherwise walk the disk for leftovers.
+    /// which would otherwise walk the disk for leftovers. `showRefusal` is the
+    /// alert Uninstall shows when it cannot find the app; tests leave it out, so
+    /// nothing modal opens in the test host.
     init(
         store: PurgeStore,
         reveal: @escaping @MainActor () -> Void,
         onboardingDone: @escaping @MainActor () -> Bool,
-        reviewUninstall: (@MainActor () async -> Void)? = nil
+        reviewUninstall: (@MainActor () async -> Void)? = nil,
+        showRefusal: @escaping @MainActor (_ title: String, _ detail: String) -> Void = { _, _ in }
     ) {
         self.store = store
         self.reveal = reveal
         self.onboardingDone = onboardingDone
         self.reviewUninstall = reviewUninstall
+        self.showRefusal = showRefusal
     }
 
     private func requestUninstallReview() async {
@@ -161,6 +167,11 @@ final class IntentRouter {
     /// sheet, the same sheet the Uninstall button opens, listing the app and its
     /// leftovers. Nothing is removed until the person confirms there. Without
     /// Full Disk Access the tab asks for it first, and the review waits for them.
+    ///
+    /// The app list this session holds can predate the app: one installed after
+    /// it was made is missing from it (#176). So an app that is on disk but not
+    /// listed gets one more scan, and an app still missing after that gets an
+    /// alert rather than an empty list.
     func showUninstaller(appID: String, name: String) async {
         guard onboardingDone() else {
             reveal()
@@ -176,12 +187,53 @@ final class IntentRouter {
         store.refreshPermission()
         guard store.hasFullDiskAccess else { return }
         store.requestScanIfNeeded(.apps)
-        guard await appIsListed(appID) else { return }
+        var listed = await appIsListed(appID)
+        if !listed, FileManager.default.fileExists(atPath: appID) {
+            guard isStillWaiting(on: appID) else { return }
+            store.requestScan(.apps)
+            listed = await appIsListed(appID)
+        }
         // The person may have moved on while the list loaded.
-        guard store.selectedTab == .uninstaller,
-              store.selectedAppIDs == [appID],
-              store.uninstallPlan == nil else { return }
+        guard isStillWaiting(on: appID) else { return }
+        // Read again now: the app can go while the list loads, and a list that
+        // still holds a removed app must not open a review for it.
+        let onDisk = FileManager.default.fileExists(atPath: appID)
+        guard listed, onDisk else {
+            let miss: UninstallMiss = onDisk ? .notListed(name: name) : .gone(name: name)
+            showRefusal(miss.refusal.title, miss.refusal.detail)
+            return
+        }
         await requestUninstallReview()
+    }
+
+    /// Why Uninstall opened no review for the app it was handed (#176).
+    enum UninstallMiss: Equatable {
+        /// Nothing is at the app's path any more.
+        case gone(name: String)
+        /// The app is on disk, but a fresh app list still leaves it out.
+        case notListed(name: String)
+
+        var refusal: (title: String, detail: String) {
+            switch self {
+            case .gone(let name):
+                return (
+                    String(localized: "\(name) is no longer there"),
+                    String(localized: "Purge could not find \(name) where it was. It may have been moved or already removed.")
+                )
+            case .notListed(let name):
+                return (
+                    String(localized: "Purge could not find \(name) in its app list"),
+                    String(localized: "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder, and never Apple's built-in apps. Check where \(name) is installed and try again.")
+                )
+            }
+        }
+    }
+
+    /// The uninstaller still shows this app alone and no review is open.
+    private func isStillWaiting(on appID: String) -> Bool {
+        store.selectedTab == .uninstaller
+            && store.selectedAppIDs == [appID]
+            && store.uninstallPlan == nil
     }
 
     /// Waits for the app list to include the app. False once the list is done

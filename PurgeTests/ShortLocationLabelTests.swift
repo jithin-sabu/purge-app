@@ -25,4 +25,13 @@ struct ShortLocationLabelTests {
         #expect(shortLocationLabel(for: home.appendingPathComponent(".config/tool")) == "~/.config")
         #expect(shortLocationLabel(for: URL(fileURLWithPath: "/Library/Application Support/Tool")) == "/Library/Application Support")
     }
+
+    /// Cache rows name apps the same way whatever Finder's "Show all filename
+    /// extensions" is set to (#176).
+    @Test func appNamesDropTheBundleExtension() {
+        #expect(appNameWithoutExtension("Slack.app") == "Slack")
+        #expect(appNameWithoutExtension("Slack") == "Slack")
+        #expect(appNameWithoutExtension("Visual Studio Code.APP") == "Visual Studio Code")
+        #expect(appNameWithoutExtension(".app") == ".app")
+    }
 }

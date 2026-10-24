@@ -877,6 +877,10 @@
 "%@ is outside the Applications folder" = "%@ 不在“应用程序”文件夹中";
 "%@ is part of macOS" = "%@ 是 macOS 的一部分";
 "%@ is part of another app" = "%@ 是另一个应用的一部分";
+"%@ is no longer there" = "%@ 已不在原处";
+"Purge could not find %@ where it was. It may have been moved or already removed." = "Purge 在原来的位置找不到 %@。它可能已被移动或移除。";
+"Purge could not find %@ in its app list" = "Purge 的应用列表中找不到 %@";
+"Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具只列出 /Applications 和个人主文件夹中“应用程序”文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
 "%@ is inside another app or package, so Purge does not list it on its own. To remove it, uninstall the app it belongs to." = "%@ 位于另一个应用或软件包内，因此 Purge 不会单独列出它。要移除它，请卸载它所属的应用。";
 "%lld of the files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash." = "要移到废纸篓的文件中有 %lld 个与 iCloud 同步，因此它们也会从你的其他设备上消失。你可以从废纸篓中恢复它们。";
 "%lld simulators use it. %@" = "有 %lld 个模拟器在使用它。%@";

@@ -23,9 +23,14 @@ enum AppUninstallScanPolicy {
 
     /// True for a bundle that must never be offered for uninstall: anything under
     /// `/System`, and Purge itself (removing the tool mid-uninstall).
+    ///
+    /// `/Applications/Safari.app` is a symlink into
+    /// `/System/Cryptexes/App/System/Applications/Safari.app` (#176), so the
+    /// `/System` check reads where the bundle really lives as well as its path.
     nonisolated static func isProtectedApp(bundleURL: URL, bundleID: String?) -> Bool {
-        let path = bundleURL.standardizedFileURL.path
-        if path.hasPrefix("/System/") { return true }
+        let std = bundleURL.standardizedFileURL
+        if std.path.hasPrefix("/System/") { return true }
+        if std.resolvingSymlinksInPath().path.hasPrefix("/System/") { return true }
         if let bundleID, protectedBundleIDs.contains(bundleID) { return true }
         return false
     }
@@ -134,7 +139,11 @@ enum AppUninstallScanPolicy {
         // (`AppBundleReach`), so every bundle it offers can actually be trashed.
         // A path through another bundle or package, a symlink, or a hidden
         // folder stays out, so the gate never reaches bundle internals.
+        // Never one that links into `/System`, like `/Applications/Safari.app`,
+        // and never Purge itself, read by its bundle id as the list reads it (#176).
         if std.pathExtension == "app" {
+            let bundleID = AppBundleReach.readInfoPlist(at: std)["CFBundleIdentifier"] as? String
+            guard !isProtectedApp(bundleURL: std, bundleID: bundleID) else { return false }
             let appRoots = installedAppRoots(home: home).map { $0.standardizedFileURL.path }
             return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil
         }

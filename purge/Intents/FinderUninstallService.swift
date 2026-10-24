@@ -19,16 +19,21 @@ enum ExternalUninstallHandler {
             Task { await IntentRouter.shared.showUninstaller(appID: appID, name: name) }
         default:
             guard let refusal = outcome.refusal else { return }
-            // Purge may be hidden, or launched just now for this request, so
-            // the alert has to bring it forward or it would show behind Finder.
-            NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.messageText = refusal.title
-            alert.informativeText = refusal.detail
-            alert.alertStyle = .informational
-            alert.addButton(withTitle: String(localized: "OK"))
-            alert.runModal()
+            showRefusal(title: refusal.title, detail: refusal.detail)
         }
+    }
+
+    /// Also the alert `IntentRouter` shows when the app is not in the list (#176).
+    static func showRefusal(title: String, detail: String) {
+        // Purge may be hidden, or launched just now for this request, so
+        // the alert has to bring it forward or it would show behind Finder.
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: String(localized: "OK"))
+        alert.runModal()
     }
 }
 

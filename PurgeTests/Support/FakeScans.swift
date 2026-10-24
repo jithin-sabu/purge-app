@@ -46,6 +46,9 @@ final class FakeScans {
     private(set) var gitStatusAnswerCount = 0
     /// Full Disk Access steps as they start, plus anything a test adds.
     var log: [String] = []
+    /// Runs as each Full Disk Access step starts, so a test can change what the
+    /// store holds the way the real step would.
+    var onFullAccessStep: ((ScanStep) -> Void)?
     /// Every scan in the order it started: App Caches with its access, and the steps.
     private(set) var events: [String] = []
 
@@ -203,6 +206,7 @@ final class FakeScans {
             fullAccessStep: { step, _ in
                 self.log.append("step \(step.rawValue)")
                 self.events.append("step \(step.rawValue)")
+                self.onFullAccessStep?(step)
                 if self.holdsFullAccessSteps {
                     await withCheckedContinuation { self.heldSteps.append($0) }
                 }
