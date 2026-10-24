@@ -341,8 +341,8 @@ nonisolated struct LargeFile: Identifiable, Hashable {
 /// happened once and is exactly what this type exists to prevent.
 ///
 /// Duplicates is a pseudo-category rather than a `LargeFileCategory` case: a
-/// duplicate cuts across every category, and reusing the one persisted filter key
-/// keeps the chips single-select without a second piece of state.
+/// duplicate cuts across every category, and reusing the one filter value keeps
+/// the chips single-select without a second piece of state.
 ///
 /// iCloud is the same kind of pseudo-category (#106): the synced files that also
 /// use space here, where Keep Only in iCloud lives. It cuts across every
@@ -352,15 +352,33 @@ nonisolated enum LargeFileCategoryFilter {
     static let duplicates = "duplicates"
     static let iCloud = "icloud"
 
-    static func includes(_ file: LargeFile, rawValue: String, duplicates index: DuplicateIndex) -> Bool {
+    /// The chip the list filters on and lights: the one the user picked while
+    /// it is drawn, All otherwise.
+    ///
+    /// A chip is drawn only while the rows hold something under it. When they
+    /// stop holding anything, because a rescan found none, or the user trashed
+    /// or excluded the last of them, the picked chip goes away. Filtering on it
+    /// anyway left an empty list with no chip lit, which read as "no large
+    /// files on this Mac" (#277). A value no chip uses, such as one saved by an
+    /// older version, falls back the same way.
+    static func activeRawValue(rawValue: String, files: [LargeFile], duplicates index: DuplicateIndex) -> String {
+        switch rawValue {
+        case all:
+            return all
+        case Self.duplicates:
+            return isDuplicatesActive(rawValue: rawValue, duplicates: index) ? rawValue : all
+        case Self.iCloud:
+            return isICloudActive(rawValue: rawValue, files: files) ? rawValue : all
+        default:
+            return files.contains(where: { $0.category.rawValue == rawValue }) ? rawValue : all
+        }
+    }
+
+    private static func includes(_ file: LargeFile, rawValue: String, duplicates index: DuplicateIndex) -> Bool {
         switch rawValue {
         case all:
             return true
         case Self.duplicates:
-            // The filter persists across launches, so a stored "duplicates" can
-            // outlive the scan that produced the groups. Falling back to "all"
-            // beats relaunching into a permanently empty list.
-            guard !index.isEmpty else { return true }
             return index.groupIDByFileID[file.id] != nil
         case Self.iCloud:
             return file.canRemoveDownload
@@ -442,7 +460,8 @@ nonisolated enum LargeFileCategoryFilter {
     /// the caller's sort menu to arrange them.
     ///
     /// Shared by `LargeFilesView` and by the page header `ContentView` draws
-    /// outside it, so the two cannot disagree about what is on screen.
+    /// outside it, so the two cannot disagree about what is on screen. Filters
+    /// on `activeRawValue`, so a chip that is no longer drawn shows everything.
     static func visibleIndices(
         in files: [LargeFile],
         rawValue: String,
@@ -453,7 +472,7 @@ nonisolated enum LargeFileCategoryFilter {
             return duplicateSections(in: files, query: query, duplicates: index)
                 .flatMap(\.memberIndices)
         }
-        let rawValue = rawValue == iCloud && !isICloudActive(rawValue: rawValue, files: files) ? all : rawValue
+        let rawValue = activeRawValue(rawValue: rawValue, files: files, duplicates: index)
         return files.indices.filter { i in
             includes(files[i], rawValue: rawValue, duplicates: index)
                 && files[i].matches(searchQuery: query)
@@ -537,20 +556,17 @@ enum LargeFileAgeThreshold: Int, CaseIterable, Identifiable {
 
 enum LargeFileFilterDefaults {
     private static let legacySizeKey = "largeFiles.minSizeMB"
-    static let categoryKey = "filter.largeFiles"
+    /// Where versions before #277 saved the chip. The chip is no longer saved:
+    /// every launch starts on All (`PurgeStore.largeFileCategoryFilter`).
+    static let legacyCategoryKey = "filter.largeFiles"
+
+    /// Drops the chip an older version saved. The app calls this at launch only
+    /// outside the test host, which shares the real user's defaults.
+    static func removeLegacyCategory(userDefaults: UserDefaults = .standard) {
+        userDefaults.removeObject(forKey: legacyCategoryKey)
+    }
 
     static func register(userDefaults: UserDefaults = .standard) {
-        // Duplicates is a way of looking at a scan, not a standing preference:
-        // it only means anything once a scan has found groups, and landing in it
-        // on launch shows an empty list until one has. The category chips share
-        // this key, so the persisted value is dropped back to "all" here rather
-        // than being written differently at the tap site.
-        // iCloud likewise needs a scan before it holds anything (#106).
-        if [LargeFileCategoryFilter.duplicates, LargeFileCategoryFilter.iCloud]
-            .contains(userDefaults.string(forKey: categoryKey)) {
-            userDefaults.set(LargeFileCategoryFilter.all, forKey: categoryKey)
-        }
-
         if userDefaults.object(forKey: LargeFileSizeThreshold.userDefaultsKey) == nil,
            userDefaults.object(forKey: legacySizeKey) != nil {
             let legacySize = userDefaults.integer(forKey: legacySizeKey)

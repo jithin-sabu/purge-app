@@ -724,9 +724,9 @@ struct RemoveDownloadStoreTests {
         ) == [0, 1])
 
         let suite = ThrowawayDefaults()
-        suite.defaults.set(LargeFileCategoryFilter.iCloud, forKey: LargeFileFilterDefaults.categoryKey)
-        LargeFileFilterDefaults.register(userDefaults: suite.defaults)
-        #expect(suite.defaults.string(forKey: LargeFileFilterDefaults.categoryKey) == LargeFileCategoryFilter.all)
+        suite.defaults.set(LargeFileCategoryFilter.iCloud, forKey: LargeFileFilterDefaults.legacyCategoryKey)
+        LargeFileFilterDefaults.removeLegacyCategory(userDefaults: suite.defaults)
+        #expect(suite.defaults.object(forKey: LargeFileFilterDefaults.legacyCategoryKey) == nil)
     }
 
     @Test func historySaysTheFilesAreStillInICloud() throws {

@@ -18,7 +18,6 @@ struct ContentView: View {
     // Same defaults as the tabs, so the subtitle counts what the list shows.
     @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.safe.rawValue
     @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.safe.rawValue
-    @AppStorage(LargeFileFilterDefaults.categoryKey) private var largeFilesCategoryFilterRaw = LargeFileCategoryFilter.all
 
     /// Large Files search text. Held here rather than inside `LargeFilesView` so the
     /// page header subtitle can be filtered by it too, and deliberately `@State`
@@ -717,7 +716,7 @@ struct ContentView: View {
         let files = store.largeFiles
         return LargeFileCategoryFilter.visibleIndices(
             in: files,
-            rawValue: largeFilesCategoryFilterRaw,
+            rawValue: store.largeFileCategoryFilter,
             query: largeFilesSearchQuery,
             duplicates: largeFilesDuplicateIndex
         ).map { files[$0] }
