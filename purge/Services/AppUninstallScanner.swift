@@ -101,6 +101,35 @@ nonisolated final class AppUninstallScanner {
         }
     }
 
+    /// Where Apple's own apps live. Safari sits in the system cryptex, and
+    /// `/Applications/Safari.app` only links to it.
+    static let systemAppRoots = [
+        URL(fileURLWithPath: "/System/Applications", isDirectory: true),
+        URL(fileURLWithPath: "/System/Cryptexes/App/System/Applications", isDirectory: true)
+    ]
+
+    /// The apps the uninstaller never lists but that still use their files:
+    /// Apple's apps, and any app-root entry `isProtectedApp` holds back (#176).
+    /// A removal counts them with the installed apps when it holds back a
+    /// leftover another app still uses, so taking out a second copy that carries
+    /// an Apple bundle id never takes the system app's settings with it.
+    static func protectedApps(systemRoots: [URL] = systemAppRoots) -> [InstalledApp] {
+        let protectedInRoots = discoverAppBundleURLs().filter { url in
+            AppUninstallScanPolicy.isProtectedApp(bundleURL: url, bundleID: Bundle(url: url)?.bundleIdentifier)
+        }
+        let system = systemRoots.flatMap { AppBundleReach.appBundleURLs(in: $0) ?? [] }
+        return (system + protectedInRoots).map { url in
+            let bundle = Bundle(url: url)
+            return InstalledApp(
+                name: displayName(for: url, bundle: bundle),
+                bundleURL: url,
+                bundleID: bundle?.bundleIdentifier,
+                bundleSizeBytes: 0,
+                isRunning: false
+            )
+        }
+    }
+
     /// `.app` bundles in each app root at any depth (vendors that group their
     /// apps, e.g. `/Applications/Utilities/…` or
     /// `/Applications/Autodesk/AutoCAD 2026/…`). `AppBundleReach` owns the

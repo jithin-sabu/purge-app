@@ -188,15 +188,17 @@ final class IntentRouter {
         guard store.hasFullDiskAccess else { return }
         store.requestScanIfNeeded(.apps)
         var listed = await appIsListed(appID)
-        let onDisk = FileManager.default.fileExists(atPath: appID)
-        if !listed, onDisk {
+        if !listed, FileManager.default.fileExists(atPath: appID) {
             guard isStillWaiting(on: appID) else { return }
             store.requestScan(.apps)
             listed = await appIsListed(appID)
         }
         // The person may have moved on while the list loaded.
         guard isStillWaiting(on: appID) else { return }
-        guard listed else {
+        // Read again now: the app can go while the list loads, and a list that
+        // still holds a removed app must not open a review for it.
+        let onDisk = FileManager.default.fileExists(atPath: appID)
+        guard listed, onDisk else {
             let miss: UninstallMiss = onDisk ? .notListed(name: name) : .gone(name: name)
             showRefusal(miss.refusal.title, miss.refusal.detail)
             return

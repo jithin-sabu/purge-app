@@ -1600,11 +1600,12 @@ final class PurgeStore: ObservableObject {
         let owner = pending.app
         let survivors = installedApps
         let appGroupClaims = await AppGroupClaims.gatherOffMain(for: survivors, leftovers: leftovers)
+        let claimants = await survivorsWithProtectedApps(survivors)
         let deletableLeftovers = leftovers.filter { leftover in
             if let otherApp = Self.appStillUsing(
                 leftover: leftover,
                 excludingOwner: owner,
-                among: survivors,
+                among: claimants,
                 appGroupClaims: appGroupClaims
             ) {
                 keptSharedFailures.append(keptSharedFailure(item: leftover, otherApp: otherApp))
@@ -3001,8 +3002,9 @@ final class PurgeStore: ObservableObject {
             for: survivors,
             leftovers: appPlans.flatMap(\.items)
         )
+        let claimants = await survivorsWithProtectedApps(survivors)
         if Task.isCancelled { return }
-        Self.markSharedWithSurvivors(in: &appPlans, survivors: survivors, appGroupClaims: appGroupClaims)
+        Self.markSharedWithSurvivors(in: &appPlans, survivors: claimants, appGroupClaims: appGroupClaims)
 
         let id = appPlans.map(\.app.id).sorted().joined(separator: "|")
         uninstallPlan = UninstallPlan(id: id, apps: appPlans)
@@ -3075,6 +3077,17 @@ final class PurgeStore: ObservableObject {
     /// itself would unnecessarily elevate files in a user-writable folder.
     private func pathNeedsPrivilege(_ url: URL) -> Bool {
         !FileManager.default.isWritableFile(atPath: url.deletingLastPathComponent().path)
+    }
+
+    /// `survivors` plus the apps the uninstaller never lists, Apple's among them
+    /// (#176), so they hold back leftovers that are theirs too. They claim by
+    /// bundle id and name only: their app groups are not read, which would mean
+    /// reading the signatures of some 60 system bundles on every review.
+    private func survivorsWithProtectedApps(_ survivors: [InstalledApp]) async -> [InstalledApp] {
+        let protected = await Task.detached(priority: .userInitiated) {
+            AppUninstallScanner.protectedApps()
+        }.value
+        return survivors + protected
     }
 
     /// The other still-installed app, if any, that a leftover also belongs to.
@@ -3400,6 +3413,7 @@ final class PurgeStore: ObservableObject {
                 for: remainingApps,
                 leftovers: leftoverBatch.flatMap { $0.1 }
             )
+            let claimants = await survivorsWithProtectedApps(remainingApps)
             var urls: [URL] = []
             var names: [String: String] = [:]
             var sizes: [String: Int64] = [:]
@@ -3414,7 +3428,7 @@ final class PurgeStore: ObservableObject {
                     if let otherApp = Self.appStillUsing(
                         leftover: item,
                         excludingOwner: app,
-                        among: remainingApps,
+                        among: claimants,
                         appGroupClaims: appGroupClaims
                     ) {
                         keptSharedFailures.append(keptSharedFailure(item: item, otherApp: otherApp))

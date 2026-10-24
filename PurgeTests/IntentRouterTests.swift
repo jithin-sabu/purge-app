@@ -210,11 +210,16 @@ struct IntentRouterTests {
     // MARK: Uninstall an app
 
     @Test("Uninstall opens the review for that app alone once the app list has it")
-    func uninstallOpensReview() async {
+    func uninstallOpensReview() async throws {
         let fake = FakeScans()
         fake.hasAccess = true
         let store = fake.makeStore()
-        let zoom = Self.app("Zoom")
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bundle = folder.appendingPathComponent("Zoom.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let zoom = InstalledApp(name: "Zoom", bundleURL: bundle, bundleID: "test.zoom", bundleSizeBytes: 0, isRunning: false)
         store.installedApps = [zoom, Self.app("Other")]
         store.selectedAppIDs = [Self.app("Other").id]
         store.uninstallSection = .leftovers
@@ -234,6 +239,29 @@ struct IntentRouterTests {
         #expect(store.uninstallerFocus == UninstallerFocus(appID: zoom.id, name: "Zoom"))
         #expect(reviews == [[zoom.id]])
         #expect(reveals.count == 1)
+        fake.cleanUp()
+    }
+
+    /// A list that still holds an app removed from disk opens no review for it (#176).
+    @Test("A listed app that is gone from disk gets the gone alert, not a review")
+    func uninstallListedButGoneShowsAlert() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let gone = Self.app("Gone-\(UUID().uuidString)")
+        store.installedApps = [gone]
+        var reviewed = false
+        var refusals: [String] = []
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: { reviewed = true },
+            showRefusal: { title, _ in refusals.append(title) }
+        )
+
+        await router.showUninstaller(appID: gone.id, name: "Gone")
+
+        #expect(!reviewed)
+        #expect(refusals == [IntentRouter.UninstallMiss.gone(name: "Gone").refusal.title])
         fake.cleanUp()
     }
 

@@ -139,9 +139,11 @@ enum AppUninstallScanPolicy {
         // (`AppBundleReach`), so every bundle it offers can actually be trashed.
         // A path through another bundle or package, a symlink, or a hidden
         // folder stays out, so the gate never reaches bundle internals.
-        // Never one that links into `/System`, like `/Applications/Safari.app` (#176).
+        // Never one that links into `/System`, like `/Applications/Safari.app`,
+        // and never Purge itself, read by its bundle id as the list reads it (#176).
         if std.pathExtension == "app" {
-            guard !isProtectedApp(bundleURL: std, bundleID: nil) else { return false }
+            let bundleID = AppBundleReach.readInfoPlist(at: std)["CFBundleIdentifier"] as? String
+            guard !isProtectedApp(bundleURL: std, bundleID: bundleID) else { return false }
             let appRoots = installedAppRoots(home: home).map { $0.standardizedFileURL.path }
             return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil
         }
