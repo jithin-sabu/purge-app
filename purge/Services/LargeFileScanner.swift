@@ -152,15 +152,69 @@ nonisolated final class LargeFileScanner {
             }
         )
 
-        for walk in walks {
+        // A root the user moved and left a link in its place is walked where the
+        // link leads (#273). Nil for a missing root, and for a link Large Files
+        // doesn't follow.
+        let exists = walks.map { fm.fileExists(atPath: $0.root.path) }
+        let folders = walks.indices.map { index in
+            exists[index] ? LargeFileScanPolicy.walkedFolder(for: walks[index].root, home: home) : nil
+        }
+        // Two roots can lead to one folder, or one into the other's
+        // (`~/Desktop -> ~/Documents/Desktop`). That folder is walked once, by
+        // the root that holds it. Listed twice, a file would be its own
+        // duplicate, and trashing the "extra copy" would trash the only one.
+        // Folders are compared by identity, not spelling: on the default volume
+        // `~/documents` is `~/Documents` (2026-10-22 in `docs/safety-notes.md`).
+        // A VM folder is always walked: the other walk may not reach it, such as
+        // past a model store it skips, and `isFirstListing` keeps a bundle both
+        // walks find to one row.
+        let identities = folders.map { $0.flatMap { FileIdentity(path: $0.path) } }
+        func isCovered(_ index: Int) -> Bool {
+            guard !walks[index].bundlesOnly,
+                  let folder = folders[index], let own = identities[index] else { return false }
+            var above = Set<FileIdentity>()
+            var parent = folder.resolvingSymlinksInPath()
+            while parent.path != "/" {
+                parent = parent.deletingLastPathComponent()
+                if let identity = FileIdentity(path: parent.path) { above.insert(identity) }
+            }
+            return walks.indices.contains { other in
+                guard other != index, !walks[other].bundlesOnly, !walks[other].downloadOnly,
+                      let identity = identities[other] else { return false }
+                return above.contains(identity) || (identity == own && other < index)
+            }
+        }
+        // Skipping a covered root is the fast path. Each entry is also listed
+        // once, by its folder's identity and its name, which holds for any mix
+        // of roots, such as a home folder linked inside a VM folder. Hard links
+        // in two folders are two entries and stay two rows, as before.
+        var listedEntries = Set<ListedEntry>()
+        func isFirstListing(_ file: LargeFile) -> Bool {
+            guard let folder = FileIdentity(path: file.path.deletingLastPathComponent().path) else { return true }
+            return listedEntries.insert(ListedEntry(folder: folder, name: file.path.lastPathComponent)).inserted
+        }
+
+        for (index, walk) in walks.enumerated() {
             let root = walk.root
             let bundlesOnly = walk.bundlesOnly
             if Task.isCancelled { break }
-            guard fm.fileExists(atPath: root.path) else { continue }
+            guard exists[index] else { continue }
             // Folders the user excluded are never entered, not just hidden from the
             // results, so an excluded archive also stops costing scan time (#46).
+            // Asked first, so an excluded root is never named as unread or as
+            // checked. `scoped` resolves the link, as the store resolves its keys.
             let excluded = exclusions.scoped(to: root)
             if excluded.excludesRoot { continue }
+            guard let folder = folders[index] else {
+                if !bundlesOnly {
+                    summary.unreadableRoots.append(.init(path: root, reason: unwalkedLinkReason(root)))
+                }
+                continue
+            }
+            if isCovered(index) {
+                if !bundlesOnly { summary.checkedRoots.append(root) }
+                continue
+            }
             // How the enumerator spells the root, taken from its first child rather
             // than from `root`: it can differ (`/private/var` for `/var`), and
             // matching is on the path below this prefix. See `ScanExclusions`.
@@ -170,9 +224,9 @@ nonisolated final class LargeFileScanner {
             // the enumerator reports the refusal here and then yields nothing. The
             // summary names it so the empty state can say the scan was incomplete.
             let rootFailure = RootFailure()
-            let rootPath = root.resolvingSymlinksInPath().path
+            let rootPath = folder.resolvingSymlinksInPath().path
             guard let enumerator = fm.enumerator(
-                at: root,
+                at: folder,
                 includingPropertiesForKeys: Array(resourceKeys),
                 options: [.skipsHiddenFiles, .skipsPackageDescendants],
                 errorHandler: { url, error in
@@ -229,7 +283,7 @@ nonisolated final class LargeFileScanner {
                                     minBytes: minBytes, staleDays: staleDays, now: now,
                                     installedApps: installedApps, isExcluded: isExcluded,
                                     home: home, downloadOnly: walk.downloadOnly
-                                ) {
+                                ), isFirstListing(file) {
                                     continuation.yield(.file(file))
                                 }
                                 continue
@@ -297,7 +351,7 @@ nonisolated final class LargeFileScanner {
                             minBytes: minBytes, staleDays: staleDays, now: now,
                             installedApps: installedApps, isExcluded: isExcluded,
                             home: home, downloadOnly: walk.downloadOnly
-                        ) {
+                        ), isFirstListing(file) {
                             continuation.yield(.file(file))
                         }
                     }
@@ -325,6 +379,19 @@ nonisolated final class LargeFileScanner {
     /// reads it.
     private nonisolated final class RootFailure {
         var error: Error?
+    }
+
+    /// A directory entry: the folder it is in, by identity, and its name.
+    private struct ListedEntry: Hashable {
+        let folder: FileIdentity
+        let name: String
+    }
+
+    /// Why a root that is a link was left out, with where it leads, so the
+    /// summary doesn't read as a folder macOS refused to open.
+    private static func unwalkedLinkReason(_ root: URL) -> String {
+        let target = (root.resolvingSymlinksInPath().path as NSString).abbreviatingWithTildeInPath
+        return String(localized: "It links to \(target), which Large Files doesn't scan.")
     }
 
     /// The last-used filter, shared by the rows and the summary's tallies.
