@@ -63,7 +63,7 @@ struct FileDeleterRetryRouteTests {
             route: failed.route
         )
 
-        #expect(outcome == .deleted(bytes: 2048, movedToTrash: true))
+        #expect(outcome == .deleted(bytes: 2048, movedToTrash: true, remaining: []))
         #expect(trash.trashedPaths == [key])
     }
 
@@ -193,6 +193,46 @@ struct FileDeleterRetryRouteTests {
 
         #expect(outcome == .alreadyGone)
         #expect(trash.trashedPaths.isEmpty)
+    }
+
+    /// A leftover whose first clean did not mark it for the helper stays off the
+    /// helper on retry, however the move fails.
+    @MainActor
+    @Test("A retry without helper eligibility never calls the privileged mover")
+    func retryWithoutHelperEligibilityNeverCallsTheMover() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let leftover = try home.file("Library/Preferences/com.purgetest.leftover.plist", bytes: 512)
+        let trash = FakeTrash()
+        trash.failNextCalls(1)
+        let moverCalls = MoverRecorder()
+        let deleter = FileDeleter(
+            privilegedMover: { urls in
+                moverCalls.record(urls)
+                return PrivilegedMoveResult(moved: urls, failed: [], indeterminate: [])
+            },
+            home: home.url,
+            trash: trash.trash
+        )
+
+        let outcome = await deleter.retryDeleteItem(
+            at: leftover,
+            displayName: "PurgeTest Preferences",
+            expectedSizeBytes: 512,
+            route: .userSelected(isAIModel: false, privilegedEligible: false)
+        )
+
+        #expect(outcome == .failed(.unknown))
+        #expect(moverCalls.calls.isEmpty)
+        #expect(trash.trashedPaths.isEmpty)
+    }
+
+    private final class MoverRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private(set) var calls: [[URL]] = []
+        func record(_ urls: [URL]) {
+            lock.lock(); calls.append(urls); lock.unlock()
+        }
     }
 
     /// The one place a failure is rebuilt from another: the helper is off, so the

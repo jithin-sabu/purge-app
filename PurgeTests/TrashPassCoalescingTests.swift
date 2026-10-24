@@ -42,8 +42,11 @@ private final class FakeDu: @unchecked Sendable {
 @Suite("Trash size passes")
 @MainActor
 struct TrashPassCoalescingTests {
+    /// Up to ten seconds: the first pass starts from a `Task` on the main actor,
+    /// and a shared CI runner under a full test run can take more than two
+    /// seconds to get to it (#174 CI).
     private func waitUntil(_ condition: () -> Bool) async {
-        for _ in 0..<200 where !condition() {
+        for _ in 0..<1000 where !condition() {
             try? await Task.sleep(for: .milliseconds(10))
         }
     }

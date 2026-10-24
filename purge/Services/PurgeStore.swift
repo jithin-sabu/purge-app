@@ -1267,8 +1267,21 @@ final class PurgeStore: ObservableObject {
         if MacOSInstallLeftovers.isEntryPath(key) {
             return await retryInstallLeftoverFailures([item], session: session)
         }
-        // Every clean checks this before it starts. A retry is no exception.
-        guard !ExcludedPathsStore.isExcluded(url) else { return nil }
+        // Every clean checks this before it starts. A retry is no exception, and
+        // the row says so rather than keeping a Retry that does nothing.
+        guard !ExcludedPathsStore.isExcluded(url) else {
+            if item.reason != .safetySkipped {
+                session.replaceFailure(id: item.id, with: [item.replacingReason(.safetySkipped)])
+            }
+            return nil
+        }
+        // A leftover's owner can come back between the clean and the retry, or
+        // another app that shares its files can be installed. The clean checked
+        // that before anything moved; the retry checks it again.
+        if case .userSelected(isAIModel: false, _) = item.route, await leftoverIsClaimedNow(at: url) {
+            session.replaceFailure(id: item.id, with: [item.replacingReason(.keptForOtherApp)])
+            return nil
+        }
 
         switch item.route {
         case .lockedUninstall:
@@ -1295,13 +1308,20 @@ final class PurgeStore: ObservableObject {
             simulatorRuntimeID: simulatorRuntimeIDsByPath()[key]
         )
         switch outcome {
-        case .deleted(let bytes, let movedToTrash):
-            resolveRetriedFailure(item: item, bytes: bytes, movedToTrash: movedToTrash, session: session)
+        case .deleted(let bytes, let movedToTrash, let remaining):
+            resolveRetriedFailure(
+                item: item,
+                bytes: bytes,
+                movedToTrash: movedToTrash,
+                remaining: remaining,
+                session: session
+            )
             return bytes
         case .alreadyGone:
             // Something else removed it since the clean. The row goes, nothing is
-            // credited or recorded, and the lists stop showing it.
+            // credited or recorded, and every list stops showing it.
             session.removeResolvedFailure(id: item.id, additionalMovedBytes: 0)
+            removeScanRows { $0.standardizedFileURL.path == key }
             removeUserSelectedRows(deletedPaths: [key])
             return nil
         case .failed(let reason):
@@ -1348,6 +1368,7 @@ final class PurgeStore: ObservableObject {
                 item: item,
                 bytes: deleted.sizeBytes,
                 movedToTrash: deleted.movedToTrash,
+                remaining: [],
                 session: session
             )
             movedBytes += deleted.sizeBytes
@@ -1375,16 +1396,24 @@ final class PurgeStore: ObservableObject {
         return movedBytes > 0 ? movedBytes : nil
     }
 
-    /// Shared bookkeeping once a retried failure finally goes: clear it from the
-    /// overlay, credit the bytes, and drop it from every list that showed it. A
-    /// simulator or runtime is filed as removed outright, not as moved to the Trash.
+    /// Shared bookkeeping once a retried failure goes: credit the bytes, drop it
+    /// from every list that showed it, and clear it from the overlay. A folder
+    /// emptied entry by entry can go only in part; its entries that still failed
+    /// take the row's place, each with its own reason and Retry. A simulator or
+    /// runtime is filed as removed outright, not as moved to the Trash.
     private func resolveRetriedFailure(
         item: CleanFailureItem,
         bytes: Int64,
         movedToTrash: Bool,
+        remaining: [FailedDeletionItem],
         session: DeletionSession
     ) {
-        session.removeResolvedFailure(id: item.id, additionalMovedBytes: bytes)
+        if remaining.isEmpty {
+            session.removeResolvedFailure(id: item.id, additionalMovedBytes: bytes)
+        } else {
+            session.replaceFailure(id: item.id, with: remaining.map(CleanFailureItem.init(failed:)))
+            session.addRetriedMovedBytes(bytes)
+        }
         if movedToTrash {
             session.noteMovedToTrash(count: 1)
             incrementMovedToTrashTotal(by: bytes)
@@ -1399,7 +1428,7 @@ final class PurgeStore: ObservableObject {
             bytesMovedToTrash: movedToTrash ? bytes : 0,
             bytesRemovedDirectly: movedToTrash ? 0 : bytes,
             deletedItems: [deleted],
-            failedItems: [],
+            failedItems: remaining,
             skippedItems: [],
             capacityBefore: nil,
             capacityAfter: nil,
@@ -1412,12 +1441,92 @@ final class PurgeStore: ObservableObject {
 
     /// Drops the rows `reflectDeletionReportInScanState` does not know: Large Files
     /// rows, with their duplicate groups, and orphan leftovers. `deletedPaths` are
-    /// standardized. A Large Files row goes only when every path it stood for is in
-    /// the set, as `performLargeFileDeletion` requires.
+    /// standardized. A Large Files row stands for every path in it, and goes once
+    /// none of them is left: the one just retried, and any the clean or an earlier
+    /// retry already took, which are gone from disk.
     private func removeUserSelectedRows(deletedPaths: Set<String>) {
-        let clearedRows = largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) }
+        let clearedRows = largeFiles.filter { row in
+            row.componentPaths.contains { deletedPaths.contains($0.path) }
+                && row.componentPaths.allSatisfy {
+                    deletedPaths.contains($0.path) || !FileManager.default.fileExists(atPath: $0.path)
+                }
+        }
         if !clearedRows.isEmpty { removeClearedLargeFileRows(clearedRows) }
         removeOrphanLeftoverRows(deletedPaths: deletedPaths)
+    }
+
+    /// Whether an app claims a leftover now. The clean checked that before anything
+    /// moved. A retry can come minutes later, after the app was put back or another
+    /// app that shares its files was installed, so it checks again, against a fresh
+    /// listing rather than the one on screen. Only a leftover path is checked: a
+    /// Large Files row or a model component has no owner to come back.
+    private func leftoverIsClaimedNow(at url: URL) async -> Bool {
+        guard let category = AppUninstallScanPolicy.leftoverCategory(for: url) else { return false }
+        if let bundleID = Self.bundleIDNaming(url, category: category) {
+            let present = await Task.detached(priority: .userInitiated) {
+                OrphanLeftoverScanPolicy.isOwnerPresent(bundleID: bundleID)
+            }.value
+            if present { return true }
+        }
+        var apps: [InstalledApp] = []
+        for await app in uninstallScanner.installedAppsStream() {
+            apps.append(app)
+        }
+        let probe = UninstallItem(
+            path: url,
+            sizeBytes: 0,
+            category: category,
+            safetyInfo: SafetyInfo(
+                level: .medium,
+                headline: url.lastPathComponent,
+                explanation: "",
+                recoverySteps: "",
+                reinstallCommand: nil
+            ),
+            matchReason: .bundleID,
+            isSelected: false
+        )
+        let claims = await AppGroupClaims.gatherOffMain(for: apps, leftovers: [probe])
+        return Self.appClaimingLeftover(at: url, among: apps, appGroupClaims: claims) != nil
+    }
+
+    /// The installed app, if any, that a leftover belongs to by the uninstaller's
+    /// own matching rules: its name is anchored to the app's bundle id or display
+    /// name, or an app lists its group. No app is excused, since the app whose
+    /// removal left it is no longer installed.
+    nonisolated static func appClaimingLeftover(
+        at url: URL,
+        among apps: [InstalledApp],
+        appGroupClaims: AppGroupClaims,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> InstalledApp? {
+        guard let category = AppUninstallScanPolicy.leftoverCategory(for: url, home: home) else { return nil }
+        return AppUninstallScanPolicy.claimant(
+            forLeftoverName: url.lastPathComponent,
+            category: category,
+            ownerID: "",
+            among: apps,
+            appGroupClaims: appGroupClaims
+        )
+    }
+
+    /// The bundle id a leftover is named after, in the roots keyed that way, so
+    /// Launch Services can say whether that app is back. `nil` where the name is
+    /// something else, such as a group container or a launch agent's own label.
+    nonisolated static func bundleIDNaming(_ url: URL, category: UninstallCategory) -> String? {
+        let name = url.lastPathComponent
+        switch category {
+        case .preferences:
+            return name.hasSuffix(".plist") ? String(name.dropLast(".plist".count)) : nil
+        case .savedState:
+            return name.hasSuffix(".savedState") ? String(name.dropLast(".savedState".count)) : nil
+        case .containers:
+            return name
+        case .applicationSupport, .caches, .logs:
+            return name.contains(".") && !name.contains(" ") ? name : nil
+        case .bundle, .groupContainers, .launchAgents, .launchDaemons, .homeFolderData, .other:
+            return nil
+        }
     }
 
     /// Takes the orphan leftovers whose standardized path is in `deletedPaths` off

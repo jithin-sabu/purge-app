@@ -19,7 +19,7 @@ nonisolated struct DeletedItem: Identifiable {
     }
 }
 
-nonisolated struct FailedDeletionItem: Identifiable {
+nonisolated struct FailedDeletionItem: Identifiable, Equatable {
     let id = UUID()
     let path: String
     let displayName: String
@@ -126,7 +126,9 @@ nonisolated struct DeletionReport: Identifiable {
 nonisolated enum RetryOutcome: Sendable, Equatable {
     /// The item went: to the Trash, or outright for a simulator or runtime, which
     /// `movedToTrash` tells apart so the record and the Trash line stay honest.
-    case deleted(bytes: Int64, movedToTrash: Bool)
+    /// `remaining` is what still failed this time: the entries of a folder emptied
+    /// one by one that did not move, each its own row from here on.
+    case deleted(bytes: Int64, movedToTrash: Bool, remaining: [FailedDeletionItem])
     /// Nothing was at the path any more. Something else removed it since the clean.
     case alreadyGone
     /// Still there, with the reason the route gave this time. A gate's refusal
@@ -940,7 +942,8 @@ nonisolated final class FileDeleter: Sendable {
         if !report.deletedItems.isEmpty {
             return .deleted(
                 bytes: report.bytesMovedToTrash + report.bytesRemovedDirectly,
-                movedToTrash: report.deletedItems.allSatisfy(\.movedToTrash)
+                movedToTrash: report.deletedItems.allSatisfy(\.movedToTrash),
+                remaining: report.failedItems
             )
         }
         if let failed = report.failedItems.first { return .failed(failed.reason) }

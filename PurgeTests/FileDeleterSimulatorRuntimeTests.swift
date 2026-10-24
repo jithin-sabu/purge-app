@@ -92,6 +92,6 @@ struct FileDeleterSimulatorRuntimeTests {
 
         #expect(recorder.asked == [identifier])
         // Removed outright, so the row is never counted as moved to the Trash.
-        #expect(result == .deleted(bytes: 42, movedToTrash: false))
+        #expect(result == .deleted(bytes: 42, movedToTrash: false, remaining: []))
     }
 }
