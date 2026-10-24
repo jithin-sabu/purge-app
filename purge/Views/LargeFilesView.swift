@@ -555,7 +555,7 @@ struct LargeFilesView: View {
     }
 
     static func iCloudNote(bytes: Int64) -> String {
-        String(localized: "These files are also in iCloud. Keep them only in iCloud to free \(formatBytes(bytes)) on this Mac without deleting them. They stay in their folders in Finder, and opening one downloads it again.")
+        String(localized: "Also in iCloud. Keep them only there to free \(formatBytes(bytes)) without deleting anything.")
     }
 
     /// The card under the empty-state heading is this wide: enough for a legend
@@ -1435,6 +1435,9 @@ struct LargeFileDeletionConfirmSheet: View {
     /// which copy survives — issue #17 is explicit that this is the user's call —
     /// so this only states plainly what the current selection does.
     var fullyConsumedDuplicateGroups: [DuplicateGroup] = []
+    /// Set when some of these files can be kept only in iCloud instead (#106).
+    /// The warning then carries a button for that, not a sentence about it.
+    var onKeepOnlyInICloud: (() -> Void)?
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
@@ -1495,12 +1498,13 @@ struct LargeFileDeletionConfirmSheet: View {
 
             if let iCloudWarning {
                 LargeFileCautionNote {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
                         Text(iCloudWarning)
-                        // The other way to get the space back, named where the
+                        // The other way to get the space back, offered where the
                         // user is about to take the drastic one (#106).
-                        if files.contains(where: \.canRemoveDownload) {
-                            Text("To free the space and keep files in iCloud, cancel and use Keep Only in iCloud. It's under the iCloud filter and in each file's right-click menu.")
+                        if let onKeepOnlyInICloud {
+                            Button(String(localized: "Keep Only in iCloud Instead"), action: onKeepOnlyInICloud)
+                                .buttonStyle(.purge(.soft, size: .small))
                         }
                     }
                 }

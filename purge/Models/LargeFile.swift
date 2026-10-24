@@ -295,20 +295,20 @@ nonisolated struct LargeFile: Identifiable, Hashable {
 
     /// Copy for the trash confirmation when `syncedCount` of the `totalCount`
     /// files being trashed also live on the user's other devices. Nothing to say
-    /// when none do. iCloud items still go to the Trash, so they can be put back.
+    /// when none do. The sheet already says the Trash gives them back.
     static func iCloudDeletionWarning(syncedCount: Int, totalCount: Int) -> String? {
         guard syncedCount >= 1 else { return nil }
         // Whole sentences, not a shared tail, so each one translates as a unit.
         if totalCount == 1 {
-            return String(localized: "The file you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash.")
+            return String(localized: "This file syncs with iCloud, so it also leaves your other devices.")
         }
         if syncedCount >= totalCount {
-            return String(localized: "All \(totalCount) files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash.")
+            return String(localized: "All \(totalCount) files sync with iCloud, so they also leave your other devices.")
         }
         if syncedCount == 1 {
-            return String(localized: "1 of the files you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash.")
+            return String(localized: "1 of these files syncs with iCloud, so it also leaves your other devices.")
         }
-        return String(localized: "\(syncedCount) of the files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash.")
+        return String(localized: "\(syncedCount) of these files sync with iCloud, so they also leave your other devices.")
     }
 
     var displayName: String { displayNameOverride ?? path.lastPathComponent }

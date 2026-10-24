@@ -100,6 +100,9 @@ struct ContentView: View {
             LargeFileDeletionConfirmSheet(
                 files: store.selectedTrashableLargeFiles,
                 fullyConsumedDuplicateGroups: store.duplicateGroupsFullyConsumedBySelection,
+                onKeepOnlyInICloud: store.selectedRemovableDownloads.isEmpty
+                    ? nil
+                    : { store.switchFromTrashToKeepOnlyInICloud() },
                 onCancel: { store.dismissLargeFileDeletionSheet() },
                 onConfirm: { Task { await store.confirmLargeFileDeletion() } }
             )

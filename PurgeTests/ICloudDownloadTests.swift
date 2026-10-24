@@ -470,6 +470,29 @@ struct RemoveDownloadStoreTests {
         #expect(store.pendingRemoveDownload == nil)
     }
 
+    /// The trash sheet's button closes it and opens Keep Only in iCloud for the
+    /// same selection, once the first sheet has gone.
+    @Test func theTrashSheetHandsOverToKeepOnlyInICloud() async throws {
+        let scans = FakeScans()
+        scans.hasAccess = true
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        let base = "/tmp/purge-106-\(UUID().uuidString)"
+        let local = row("\(base)/Documents/local.mov", synced: false, removable: false)
+        let synced = row("\(base)/Documents/synced.mov", synced: true, removable: true)
+        store.largeFiles = [local, synced]
+        store.setAllLargeFilesSelected(true, ids: [local.id, synced.id])
+        store.presentLargeFileDeletionSheet()
+        #expect(store.showLargeFileDeletionSheet)
+
+        store.switchFromTrashToKeepOnlyInICloud()
+        #expect(!store.showLargeFileDeletionSheet)
+        #expect(store.pendingRemoveDownload == nil)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(store.pendingRemoveDownload?.files.map(\.id) == [synced.id])
+        #expect(store.pendingRemoveDownload?.localOnlyCount == 1)
+    }
+
     @Test func noButtonWithoutARemovableFile() {
         let scans = FakeScans()
         scans.hasAccess = true
@@ -529,11 +552,11 @@ struct RemoveDownloadStoreTests {
     @Test func mixedSelectionsAreSpelledOut() {
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 0, notReady: 0) == nil)
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 0)
-            == "Purge leaves 3 other selected files alone. They're only on this Mac, not in iCloud.")
+            == "3 other selected files aren't in iCloud, so they stay.")
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 0, notReady: 1)
-            == "Purge leaves 1 other selected file alone. It syncs with iCloud but isn't ready yet, for example because it's still uploading.")
+            == "1 other selected file is still syncing, so it stays.")
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 2)
-            == "Purge leaves 5 other selected files alone: 3 only on this Mac, not in iCloud, and 2 in iCloud but not ready yet, for example still uploading.")
+            == "5 other selected files stay: 3 aren't in iCloud, 2 still syncing.")
     }
 
     /// The iCloud chip shows exactly the files Keep Only in iCloud can act on,

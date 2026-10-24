@@ -4,9 +4,8 @@ import SwiftUI
 /// Confirms Keep Only in iCloud for synced files picked in Large Files (#106).
 /// Finder calls the same action Remove Download.
 ///
-/// The point of the copy is that nothing disappears: the files stay in iCloud
-/// and in their folders, marked with a cloud, and only the copy on this Mac
-/// goes. It also says the one real cost, that opening them needs a connection.
+/// The copy says one thing, short: the files stay in iCloud and in their
+/// folders, and only the copy on this Mac goes.
 struct RemoveDownloadConfirmSheet: View {
     let request: RemoveDownloadRequest
     let onCancel: () -> Void
@@ -23,20 +22,15 @@ struct RemoveDownloadConfirmSheet: View {
     private var title: String {
         request.files.count == 1
             ? String(localized: "Keep this file only in iCloud?")
-            : String(localized: "Keep these files only in iCloud?")
+            : String(localized: "Keep \(request.files.count) files only in iCloud?")
     }
 
     private var explanation: String {
         request.files.count == 1
-            ? String(localized: "The file stays in iCloud Drive and in its folder in Finder, marked with a cloud. Purge removes only the copy on this Mac. Open the file to download it again. You need an internet connection to open it.")
-            : String(localized: "The files stay in iCloud Drive and in their folders in Finder, marked with a cloud. Purge removes only the copies on this Mac. Open a file to download it again. You need an internet connection to open them.")
+            ? String(localized: "It stays in its folder and downloads again when you open it.")
+            : String(localized: "They stay in their folders and download again when you open them.")
     }
 
-    private var confirmTitle: String {
-        request.files.count == 1
-            ? String(localized: "Keep Only in iCloud")
-            : String(localized: "Keep \(request.files.count) Only in iCloud")
-    }
 
     /// Accounts for every selected file this run leaves alone, by reason, so a
     /// Select All over a mixed list never seems to lose files from view.
@@ -49,15 +43,15 @@ struct RemoveDownloadConfirmSheet: View {
         case (0, 0):
             return nil
         case (1, 0):
-            return String(localized: "Purge leaves 1 other selected file alone. It's only on this Mac, not in iCloud.")
+            return String(localized: "1 other selected file isn't in iCloud, so it stays.")
         case (_, 0):
-            return String(localized: "Purge leaves \(localOnly) other selected files alone. They're only on this Mac, not in iCloud.")
+            return String(localized: "\(localOnly) other selected files aren't in iCloud, so they stay.")
         case (0, 1):
-            return String(localized: "Purge leaves 1 other selected file alone. It syncs with iCloud but isn't ready yet, for example because it's still uploading.")
+            return String(localized: "1 other selected file is still syncing, so it stays.")
         case (0, _):
-            return String(localized: "Purge leaves \(notReady) other selected files alone. They sync with iCloud but aren't ready yet, for example because they're still uploading.")
+            return String(localized: "\(notReady) other selected files are still syncing, so they stay.")
         default:
-            return String(localized: "Purge leaves \(localOnly + notReady) other selected files alone: \(localOnly) only on this Mac, not in iCloud, and \(notReady) in iCloud but not ready yet, for example still uploading.")
+            return String(localized: "\(localOnly + notReady) other selected files stay: \(localOnly) aren't in iCloud, \(notReady) still syncing.")
         }
     }
 
@@ -93,7 +87,7 @@ struct RemoveDownloadConfirmSheet: View {
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
-                Text("Freeing \(formatBytes(totalBytes)) on this Mac")
+                Text("Frees \(formatBytes(totalBytes)) on this Mac")
                     .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
 
@@ -104,7 +98,7 @@ struct RemoveDownloadConfirmSheet: View {
                     .keyboardShortcut(.cancelAction)
 
                 // Primary, not destructive: nothing is deleted.
-                Button(confirmTitle, action: onConfirm)
+                Button(String(localized: "Keep Only in iCloud"), action: onConfirm)
                     .buttonStyle(.purge(.primary))
                     .keyboardShortcut(.defaultAction)
             }
@@ -127,8 +121,8 @@ struct RemoveDownloadResultSheet: View {
     private var stillSelectedNote: String? {
         switch result.stillSelectedCount {
         case 0: return nil
-        case 1: return String(localized: "1 other file is still selected in Large Files.")
-        default: return String(localized: "\(result.stillSelectedCount) other files are still selected in Large Files.")
+        case 1: return String(localized: "1 other file is still selected.")
+        default: return String(localized: "\(result.stillSelectedCount) other files are still selected.")
         }
     }
 
@@ -143,11 +137,11 @@ struct RemoveDownloadResultSheet: View {
     private var explanation: String {
         switch report.removed.count {
         case 0:
-            return String(localized: "The files below are still on this Mac.")
+            return String(localized: "These files are still on this Mac.")
         case 1:
-            return String(localized: "Freed \(formatBytes(report.bytesFreed)) on this Mac. The file is still in iCloud Drive and in its folder in Finder. Open it to download it again.")
+            return String(localized: "Freed \(formatBytes(report.bytesFreed)). It's still in its folder.")
         default:
-            return String(localized: "Freed \(formatBytes(report.bytesFreed)) on this Mac. The files are still in iCloud Drive and in their folders in Finder. Open one to download it again.")
+            return String(localized: "Freed \(formatBytes(report.bytesFreed)). They're still in their folders.")
         }
     }
 
