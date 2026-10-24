@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-10-22: A project in use stayed listed under its other spelling
 
-**Found internally** in a code audit ([#175](https://github.com/jithin-sabu/purge-app/issues/175)), no report. **Fixed:** not yet released. **Affected:** v1.7.1 to v1.12.0.
+**Found internally** in a code audit ([#175](https://github.com/jithin-sabu/purge-app/issues/175)), no report. **Fixed:** [#255](https://github.com/jithin-sabu/purge-app/pull/255), shipped in v1.13.0 (2026-10-24). **Affected:** v1.7.1 to v1.12.0.
 
 ### What happened
 
