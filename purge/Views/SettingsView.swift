@@ -393,15 +393,21 @@ struct SettingsView: View {
     }
 
     /// The same figure the History sheet shows for the entry: trashed plus
-    /// permanently deleted bytes, or the measured gain for the Apple Intelligence
-    /// models, which move nothing to the Trash.
+    /// permanently deleted bytes, the measured gain for the Apple Intelligence
+    /// models, or what removed iCloud downloads freed. The last two move nothing
+    /// to the Trash.
     private func lastCleanSummary(referenceDate: Date) -> String {
         guard let latest = history.archive.entries.first else {
             return String(localized: "None yet")
         }
         let relative = relativeDateText(for: latest.date, referenceDate: referenceDate)
-        let removedNothing = latest.kind != .appleIntelligenceModels
-            && latest.bytesMovedToTrash + latest.bytesDeletedPermanently == 0
+        let removedNothing: Bool
+        switch latest.kind {
+        case nil:
+            removedNothing = latest.bytesMovedToTrash + latest.bytesDeletedPermanently == 0
+        case .appleIntelligenceModels?, .iCloudDownloadsRemoved?:
+            removedNothing = false
+        }
         guard !removedNothing else {
             return String(localized: "Last: nothing moved, \(relative)")
         }

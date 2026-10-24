@@ -14,6 +14,17 @@ enum LargeFileScanPolicy {
         ]
     }
 
+    /// iCloud Drive's own folder. With Desktop & Documents syncing, its Desktop
+    /// and Documents entries are links to the home folders, which the walk
+    /// doesn't follow, so nothing is listed twice. Walked only with Full Disk
+    /// Access, like every other root here, and its files are offered for Remove
+    /// Download only, never for the Trash: trashing them removes them from
+    /// every device (#106). `isEligibleForDeletion` refuses them, being under
+    /// `~/Library`.
+    nonisolated static func iCloudDriveRoot(home: URL) -> URL {
+        home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
+    }
+
     /// Where Parallels Desktop and VMware Fusion keep VMs by default. These are
     /// walked for VM bundles only, never for loose files. UTM keeps its VMs in
     /// its container under `~/Library`, which Large Files stays out of.

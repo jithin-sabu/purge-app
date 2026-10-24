@@ -198,6 +198,15 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// unbadged.
     let syncsWithICloud: Bool
 
+    /// False for a file found in iCloud Drive's own folder: Large Files offers
+    /// those for Remove Download only (#106). The delete gate refuses them too.
+    let canMoveToTrash: Bool
+
+    /// True when, at scan time, the file passed every `ICloudDownloadPolicy`
+    /// check. A hint for the buttons and the sheet only: the remover checks
+    /// again, from disk, right before it acts.
+    let canRemoveDownload: Bool
+
     /// What the row is when its size alone doesn't say: a restore image, a
     /// virtual machine, an unfinished download. Nil for everything else.
     let kind: LargeFileKind?
@@ -220,8 +229,9 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// form) — only the `~` prefix differs, which nobody searches for.
     let searchHaystack: String
 
-    /// The folder the row shows, or the `sourceLabel` in its place. Stored for the
-    /// same reason as `id`: working it out stats the disk, and the list read it twice
+    /// The folder the row shows, or the `sourceLabel` in its place, with iCloud
+    /// Drive's own folder named as Finder names it (#106). Stored for the same
+    /// reason as `id`: working it out stats the disk, and the list read it twice
     /// per row on every render (#190).
     let locationLabel: String
 
@@ -235,6 +245,8 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         sourceLabel: String? = nil,
         componentPaths: [URL]? = nil,
         syncsWithICloud: Bool = false,
+        canMoveToTrash: Bool = true,
+        canRemoveDownload: Bool = false,
         kind: LargeFileKind? = nil
     ) {
         self.path = path
@@ -246,6 +258,8 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         self.sourceLabel = sourceLabel
         self.componentPaths = (componentPaths ?? [path]).map(\.standardizedFileURL)
         self.syncsWithICloud = syncsWithICloud
+        self.canMoveToTrash = canMoveToTrash
+        self.canRemoveDownload = canRemoveDownload
         let kind = kind ?? LargeFileKind.kind(forExtension: path.pathExtension)
         self.kind = kind
         let standardized = path.standardizedFileURL
@@ -258,7 +272,10 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         ]
         .compactMap { $0 }
         .joined(separator: "\n")
-        self.locationLabel = sourceLabel ?? displayDirectoryPath(for: path.deletingLastPathComponent())
+        let folder = path.deletingLastPathComponent()
+        self.locationLabel = sourceLabel
+            ?? Self.iCloudDriveLocation(for: folder)
+            ?? displayDirectoryPath(for: folder)
     }
 
     /// Whether this row should stay visible for `query`. Whitespace splits the query
@@ -285,24 +302,36 @@ nonisolated struct LargeFile: Identifiable, Hashable {
 
     /// Copy for the trash confirmation when `syncedCount` of the `totalCount`
     /// files being trashed also live on the user's other devices. Nothing to say
-    /// when none do. iCloud items still go to the Trash, so they can be put back.
+    /// when none do. The sheet already says the Trash gives them back.
     static func iCloudDeletionWarning(syncedCount: Int, totalCount: Int) -> String? {
         guard syncedCount >= 1 else { return nil }
         // Whole sentences, not a shared tail, so each one translates as a unit.
         if totalCount == 1 {
-            return String(localized: "The file you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash.")
+            return String(localized: "This file syncs with iCloud, so it also leaves your other devices.")
         }
         if syncedCount >= totalCount {
-            return String(localized: "All \(totalCount) files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash.")
+            return String(localized: "All \(totalCount) files sync with iCloud, so they also leave your other devices.")
         }
         if syncedCount == 1 {
-            return String(localized: "1 of the files you're trashing syncs with iCloud, so it also disappears from your other devices. You can restore it from the Trash.")
+            return String(localized: "1 of these files syncs with iCloud, so it also leaves your other devices.")
         }
-        return String(localized: "\(syncedCount) of the files you're trashing sync with iCloud, so they also disappear from your other devices. You can restore them from the Trash.")
+        return String(localized: "\(syncedCount) of these files sync with iCloud, so they also leave your other devices.")
     }
 
     var displayName: String { displayNameOverride ?? path.lastPathComponent }
     var formattedSize: String { formatBytes(sizeBytes) }
+    /// "iCloud Drive/Projects" for a folder inside iCloud Drive's own folder,
+    /// which Finder shows as iCloud Drive. Nil anywhere else.
+    static func iCloudDriveLocation(
+        for folder: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> String? {
+        let root = LargeFileScanPolicy.iCloudDriveRoot(home: home).standardizedFileURL.path
+        let path = folder.standardizedFileURL.path
+        if path == root { return String(localized: "iCloud Drive") }
+        guard path.hasPrefix(root + "/") else { return nil }
+        return String(localized: "iCloud Drive") + "/" + path.dropFirst(root.count + 1)
+    }
 }
 
 /// The chip filter over the Large Files list, shared by `LargeFilesView` (which
@@ -314,9 +343,14 @@ nonisolated struct LargeFile: Identifiable, Hashable {
 /// Duplicates is a pseudo-category rather than a `LargeFileCategory` case: a
 /// duplicate cuts across every category, and reusing the one persisted filter key
 /// keeps the chips single-select without a second piece of state.
+///
+/// iCloud is the same kind of pseudo-category (#106): the synced files that also
+/// use space here, where Keep Only in iCloud lives. It cuts across every
+/// category too.
 nonisolated enum LargeFileCategoryFilter {
     static let all = "all"
     static let duplicates = "duplicates"
+    static let iCloud = "icloud"
 
     static func includes(_ file: LargeFile, rawValue: String, duplicates index: DuplicateIndex) -> Bool {
         switch rawValue {
@@ -328,6 +362,8 @@ nonisolated enum LargeFileCategoryFilter {
             // beats relaunching into a permanently empty list.
             guard !index.isEmpty else { return true }
             return index.groupIDByFileID[file.id] != nil
+        case Self.iCloud:
+            return file.canRemoveDownload
         default:
             return file.category.rawValue == rawValue
         }
@@ -335,6 +371,13 @@ nonisolated enum LargeFileCategoryFilter {
 
     static func isDuplicatesActive(rawValue: String, duplicates index: DuplicateIndex) -> Bool {
         rawValue == duplicates && !index.isEmpty
+    }
+
+    /// The iCloud chip is on and still has files under it. Once the last one
+    /// has been kept only in iCloud the chip goes away, and the list falls back
+    /// to All rather than sitting empty under a chip that is no longer there.
+    static func isICloudActive(rawValue: String, files: [LargeFile]) -> Bool {
+        rawValue == iCloud && files.contains(where: \.canRemoveDownload)
     }
 
     /// One duplicate group's rows, as indices into the array they came from.
@@ -410,6 +453,7 @@ nonisolated enum LargeFileCategoryFilter {
             return duplicateSections(in: files, query: query, duplicates: index)
                 .flatMap(\.memberIndices)
         }
+        let rawValue = rawValue == iCloud && !isICloudActive(rawValue: rawValue, files: files) ? all : rawValue
         return files.indices.filter { i in
             includes(files[i], rawValue: rawValue, duplicates: index)
                 && files[i].matches(searchQuery: query)
@@ -501,7 +545,9 @@ enum LargeFileFilterDefaults {
         // on launch shows an empty list until one has. The category chips share
         // this key, so the persisted value is dropped back to "all" here rather
         // than being written differently at the tap site.
-        if userDefaults.string(forKey: categoryKey) == LargeFileCategoryFilter.duplicates {
+        // iCloud likewise needs a scan before it holds anything (#106).
+        if [LargeFileCategoryFilter.duplicates, LargeFileCategoryFilter.iCloud]
+            .contains(userDefaults.string(forKey: categoryKey)) {
             userDefaults.set(LargeFileCategoryFilter.all, forKey: categoryKey)
         }
 

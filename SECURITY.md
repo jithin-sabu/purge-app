@@ -35,6 +35,12 @@ patient, but safety reports get priority over everything else.
   review sheet says so, and a cask app has a Move All to Trash button to take
   the Trash route instead. Docker Desktop's data
   folder goes to the Trash. Purge does not run `docker system prune`.
+  Keep Only in iCloud in Large Files (Finder's Remove Download) deletes
+  nothing: it drops the copy of an iCloud file on this Mac through
+  `FileManager.evictUbiquitousItem(at:)`, and the file stays in iCloud and in
+  its folder. Purge does it only for a file you picked that is fully
+  uploaded, has no sync conflict, is not set to Keep Downloaded, has not
+  changed for five minutes and is not open in an app.
 - **Allowlist-based deletion.** Only paths that match an explicit safety
   allowlist are ever eligible for cleanup. Anything not on the list is never
   touched.

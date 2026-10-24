@@ -31,30 +31,49 @@ struct CleanupHistorySummaryRow: View {
     }
 
     static func title(for entry: CleanupHistoryEntry) -> LocalizedStringKey {
-        if entry.kind == .appleIntelligenceModels { return LocalizedStringKey("Apple Intelligence models removed") }
-        return entry.trigger == .scheduled ? LocalizedStringKey("Automatic clean") : LocalizedStringKey("Manual clean")
+        switch entry.kind {
+        case .appleIntelligenceModels?:
+            return LocalizedStringKey("Apple Intelligence models removed")
+        case .iCloudDownloadsRemoved?:
+            return LocalizedStringKey("Kept only in iCloud")
+        case nil:
+            return entry.trigger == .scheduled ? LocalizedStringKey("Automatic clean") : LocalizedStringKey("Manual clean")
+        }
     }
 
     /// Moved bytes for a clean, plus what it deleted permanently. For the Apple
     /// Intelligence models nothing was moved, so the measured gain leads, or says
-    /// it was not measured.
+    /// it was not measured. Removed iCloud downloads show what they freed here.
     var primaryFigure: String {
-        guard entry.kind == .appleIntelligenceModels else {
+        switch entry.kind {
+        case nil:
             return formatBytes(entry.bytesMovedToTrash + entry.bytesDeletedPermanently)
+        case .appleIntelligenceModels?:
+            guard let reclaimed = entry.bytesReclaimedOnVolume else { return String(localized: "Not measured") }
+            return formatBytes(reclaimed)
+        case .iCloudDownloadsRemoved?:
+            return formatBytes(entry.bytesFreedByRemovedDownloads)
         }
-        guard let reclaimed = entry.bytesReclaimedOnVolume else { return String(localized: "Not measured") }
-        return formatBytes(reclaimed)
     }
 
     /// Reclaimed is shown only for entries where it was measured. Older entries and
     /// cleans that only trashed files have nothing measured to show, so they stay
     /// described as moved. Simulators and runtimes are counted as deleted, never as
-    /// moved to the Trash (#170).
+    /// moved to the Trash (#170). Removed iCloud downloads say the files stay in
+    /// iCloud, so nobody looks for them in the Trash (#106).
     var detailText: String {
-        if entry.kind == .appleIntelligenceModels {
+        switch entry.kind {
+        case .appleIntelligenceModels?:
             let apple = entry.deletedItems.reduce(Int64(0)) { $0 + $1.sizeBytes }
             let sets = entry.deletedItems.count == 1 ? String(localized: "1 model set") : String(localized: "\(entry.deletedItems.count) model sets")
             return String(localized: "\(sets) released, Apple counted \(formatBytes(apple))")
+        case .iCloudDownloadsRemoved?:
+            let count = entry.deletedItems.count
+            return count == 1
+                ? String(localized: "1 file, still in iCloud Drive")
+                : String(localized: "\(count) files, still in iCloud Drive")
+        case nil:
+            break
         }
         let trashed = entry.trashedItems.count
         let deleted = entry.permanentlyDeletedItems.count

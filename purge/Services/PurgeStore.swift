@@ -73,6 +73,30 @@ nonisolated struct DuplicateCleanupRequest: Identifiable {
     var id: String { sets.map(\.id).joined(separator: "|") }
 }
 
+/// Files the user asked to remove the downloads of, awaiting confirmation (#106).
+nonisolated struct RemoveDownloadRequest: Identifiable {
+    let id = UUID()
+    let files: [LargeFile]
+    /// Selected files left out because they are only on this Mac, so the sheet
+    /// accounts for every file the user ticked.
+    var localOnlyCount = 0
+    /// Selected synced files left out because the scan found them not ready:
+    /// uploading, recently changed, set to Keep Downloaded, or in conflict.
+    var notReadyCount = 0
+    /// False when the request came from one row's menu, where the rest of the
+    /// selection has nothing to do with it.
+    var fromSelection = true
+}
+
+/// What a Remove Download did, for the result sheet.
+nonisolated struct RemoveDownloadResult: Identifiable {
+    var id: UUID { report.id }
+    let report: ICloudDownloadReport
+    /// Rows still ticked afterwards. The run leaves them selected, and the
+    /// sheet says so, so a later Delete Selected doesn't come as a surprise.
+    let stillSelectedCount: Int
+}
+
 /// Scan-tab selection (app caches, dev tools, simulators, project artifacts) kept in
 /// its own observable, held as a plain `let` on the store (NOT @Published), so a
 /// toggle re-renders only the views that display selection — never the results List
@@ -277,6 +301,12 @@ final class PurgeStore: ObservableObject {
     /// The duplicate-cleanup review awaiting confirmation, or nil when closed.
     /// Drives a `.sheet(item:)`.
     @Published var pendingDuplicateCleanup: DuplicateCleanupRequest?
+    /// The Remove Download review awaiting confirmation, or nil when closed (#106).
+    @Published var pendingRemoveDownload: RemoveDownloadRequest?
+    /// What the last Remove Download did, shown until the user closes it.
+    @Published var removeDownloadResult: RemoveDownloadResult?
+    /// Replaced in tests with one that evicts nothing real.
+    var iCloudDownloadRemover = ICloudDownloadRemover()
 
     // MARK: Uninstaller (issue #45)
 
@@ -806,6 +836,7 @@ final class PurgeStore: ObservableObject {
             || pendingUnknownDeletion != nil
             || showLargeFileDeletionSheet
             || pendingDuplicateCleanup != nil
+            || pendingRemoveDownload != nil
             || showMissingLockfileFriction
             || showUncommittedGitFriction
             || showHighRiskDeletionSecondConfirm
@@ -1870,12 +1901,30 @@ final class PurgeStore: ObservableObject {
         return largeFiles.filter { ids.contains($0.id) }
     }
 
+    /// The selected rows Delete Selected acts on. A file from iCloud Drive's own
+    /// folder is offered for Remove Download only, so it never counts here.
+    var selectedTrashableLargeFiles: [LargeFile] {
+        selectedLargeFiles.filter(\.canMoveToTrash)
+    }
+
     var selectedLargeFileCount: Int {
-        selectedLargeFiles.count
+        selectedTrashableLargeFiles.count
     }
 
     var selectedLargeFileBytes: Int64 {
-        selectedLargeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        selectedTrashableLargeFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    }
+
+    /// The selected rows Remove Download acts on.
+    var selectedRemovableDownloads: [LargeFile] {
+        selectedLargeFiles.filter(\.canRemoveDownload)
+    }
+
+    /// Whether the scan found any file whose download can be removed. The
+    /// Remove Download button shows only then, so a Mac without iCloud Drive
+    /// never sees it.
+    var hasRemovableDownloads: Bool {
+        largeFiles.contains(where: \.canRemoveDownload)
     }
 
     /// Duplicate groups the current selection would wipe out completely — every
@@ -1994,7 +2043,9 @@ final class PurgeStore: ObservableObject {
         hasCompletedLargeFileScan = true
         stampScanRecords([.largeFiles])
         recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, $0.sizeBytes) }, uniquingKeysWith: { first, _ in first })
-        startDuplicateScan(for: largeFiles, generation: generation)
+        // Delete extra copies trashes copies, so a file that can't go to the
+        // Trash takes no part in a duplicate set.
+        startDuplicateScan(for: largeFiles.filter(\.canMoveToTrash), generation: generation)
     }
 
     /// Looks for byte-identical copies among the finished scan results.
@@ -2046,8 +2097,68 @@ final class PurgeStore: ObservableObject {
     }
 
     func presentLargeFileDeletionSheet() {
-        guard !selectedLargeFiles.isEmpty else { return }
+        guard !selectedTrashableLargeFiles.isEmpty else { return }
         showLargeFileDeletionSheet = true
+    }
+
+    /// Opens the Remove Download review for the selection, or for `file` alone
+    /// when it comes from a row's menu.
+    func requestRemoveDownloads(for file: LargeFile? = nil) {
+        if let file {
+            guard file.canRemoveDownload else { return }
+            pendingRemoveDownload = RemoveDownloadRequest(files: [file], fromSelection: false)
+            return
+        }
+        let selected = selectedLargeFiles
+        let files = selected.filter(\.canRemoveDownload)
+        guard !files.isEmpty else { return }
+        let leftOut = selected.filter { !$0.canRemoveDownload }
+        pendingRemoveDownload = RemoveDownloadRequest(
+            files: files,
+            localOnlyCount: leftOut.filter { !$0.syncsWithICloud }.count,
+            notReadyCount: leftOut.filter(\.syncsWithICloud).count
+        )
+    }
+
+    func dismissRemoveDownloads() {
+        pendingRemoveDownload = nil
+    }
+
+    func dismissRemoveDownloadResult() {
+        removeDownloadResult = nil
+    }
+
+    /// Removes the downloads of the confirmed files. Each file is checked again
+    /// from disk by the remover first. Rows whose download went come off the
+    /// list, since they no longer use space here; the result sheet and History
+    /// say they are still in iCloud.
+    func confirmRemoveDownloads() async {
+        guard let request = pendingRemoveDownload else { return }
+        pendingRemoveDownload = nil
+        // A row selected before its folder was excluded is left alone.
+        let targets = request.files.filter { !ExcludedPathsStore.isExcluded($0.path) }
+        guard !targets.isEmpty else { return }
+        guard claimConfirmedCleanOrExplain() else { return }
+
+        isDeleting = true
+        errorMessage = nil
+        defer { isDeleting = false }
+
+        let report = await iCloudDownloadRemover.removeDownloads(at: targets.map(\.path))
+        let removedIDs = Set(report.removed.map(\.path))
+        removeClearedLargeFileRows(largeFiles.filter { removedIDs.contains($0.id) })
+        if !report.removed.isEmpty {
+            CleanupHistoryStore.shared.appendICloudDownloadRemoval(report)
+        }
+        // Files this run skipped are listed on the sheet already, so they
+        // don't count as "other" files still selected.
+        let skippedIDs = Set(report.skipped.map(\.path))
+        removeDownloadResult = RemoveDownloadResult(
+            report: report,
+            stillSelectedCount: request.fromSelection
+                ? selectedLargeFiles.filter { !skippedIDs.contains($0.id) }.count
+                : 0
+        )
     }
 
     func dismissLargeFileDeletionSheet() {
@@ -2094,12 +2205,13 @@ final class PurgeStore: ObservableObject {
 
     func confirmLargeFileDeletion() async {
         showLargeFileDeletionSheet = false
-        await performLargeFileDeletion(targets: selectedLargeFiles)
+        await performLargeFileDeletion(targets: selectedTrashableLargeFiles)
     }
 
     private func performLargeFileDeletion(targets: [LargeFile]) async {
-        // A row selected before its folder was excluded must not be trashed.
-        let targets = targets.filter { !ExcludedPathsStore.isExcluded($0.path) }
+        // A row selected before its folder was excluded must not be trashed, and
+        // a file from iCloud Drive's own folder is never offered for the Trash.
+        let targets = targets.filter { $0.canMoveToTrash && !ExcludedPathsStore.isExcluded($0.path) }
         guard !targets.isEmpty else { return }
         guard claimConfirmedCleanOrExplain() else { return }
 
