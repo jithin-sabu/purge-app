@@ -2,14 +2,14 @@ import AppKit
 import SwiftUI
 
 nonisolated enum RemoveDownloadLabels {
-    /// "Remove Download (3.81 GB)" when every selected file qualifies, and
-    /// "Remove 5 Downloads (6.5 GB)" when only some do.
-    static func buttonTitle(removable: Int, selected: Int, bytes: Int64) -> String {
-        let size = formatBytes(bytes)
-        guard selected > removable else { return String(localized: "Remove Download (\(size))") }
+    /// "Remove Download" when every selected file qualifies, and "Remove 5
+    /// Downloads" when only some do. The size follows in the rounded number
+    /// font, drawn by `AnimatedDeleteActionLabel`.
+    static func buttonTitle(removable: Int, selected: Int) -> String {
+        guard selected > removable else { return String(localized: "Remove Download") }
         return removable == 1
-            ? String(localized: "Remove 1 Download (\(size))")
-            : String(localized: "Remove \(removable) Downloads (\(size))")
+            ? String(localized: "Remove 1 Download")
+            : String(localized: "Remove \(removable) Downloads")
     }
 }
 

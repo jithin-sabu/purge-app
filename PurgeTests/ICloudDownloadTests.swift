@@ -528,12 +528,9 @@ struct RemoveDownloadStoreTests {
     /// The label gives the count once only some of the selection qualifies, and
     /// the note accounts for every file left alone, by reason.
     @Test func mixedSelectionsAreSpelledOut() {
-        #expect(RemoveDownloadLabels.buttonTitle(removable: 2, selected: 2, bytes: 6_500_000_000)
-            == "Remove Download (\(formatBytes(6_500_000_000)))")
-        #expect(RemoveDownloadLabels.buttonTitle(removable: 5, selected: 10, bytes: 6_500_000_000)
-            == "Remove 5 Downloads (\(formatBytes(6_500_000_000)))")
-        #expect(RemoveDownloadLabels.buttonTitle(removable: 1, selected: 4, bytes: 3_810_000_000)
-            == "Remove 1 Download (\(formatBytes(3_810_000_000)))")
+        #expect(RemoveDownloadLabels.buttonTitle(removable: 2, selected: 2) == "Remove Download")
+        #expect(RemoveDownloadLabels.buttonTitle(removable: 5, selected: 10) == "Remove 5 Downloads")
+        #expect(RemoveDownloadLabels.buttonTitle(removable: 1, selected: 4) == "Remove 1 Download")
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 0, notReady: 0) == nil)
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 0)
             == "Purge leaves 3 other selected files alone. They're only on this Mac, so there's no download to remove.")

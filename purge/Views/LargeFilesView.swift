@@ -707,11 +707,15 @@ private struct LargeFileRemoveDownloadButton: View {
             if !files.isEmpty {
                 let selectedCount = store.selectedLargeFiles.count
                 Button(action: action) {
-                    Label(
-                        RemoveDownloadLabels.buttonTitle(removable: files.count, selected: selectedCount, bytes: files.reduce(Int64(0)) { $0 + $1.sizeBytes }),
+                    // The same label as Delete Selected, so the size uses the
+                    // rounded number font and counts the way that one does.
+                    AnimatedDeleteActionLabel(
+                        inactiveTitle: String(localized: "Remove Download"),
+                        activeTitle: RemoveDownloadLabels.buttonTitle(removable: files.count, selected: selectedCount),
+                        selectedCount: files.count,
+                        selectedBytes: files.reduce(Int64(0)) { $0 + $1.sizeBytes },
                         systemImage: "icloud.and.arrow.up"
                     )
-                    .labelStyle(.titleAndIcon)
                 }
                 .buttonStyle(.purge(.secondary))
                 .fixedSize()

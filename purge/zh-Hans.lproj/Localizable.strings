@@ -1340,7 +1340,6 @@
 "Freed %@ on this Mac. The files are still in iCloud Drive and in their folders in Finder. Open one to download it again." = "已在这台 Mac 上释放 %@。这些文件仍在 iCloud 云盘中，也仍在访达中原来的文件夹里。打开文件即可重新下载。";
 "Left on this Mac" = "保留在这台 Mac 上";
 "In iCloud Drive" = "在 iCloud 云盘中";
-"Remove Download (%@)" = "移除下载（%@）";
 "Free the space on this Mac and keep the selected files in iCloud Drive" = "释放这台 Mac 上的空间，并将所选文件保留在 iCloud 云盘中";
 "Remove Download…" = "移除下载…";
 "To free the space and keep files in iCloud, cancel and use Remove Download instead." = "如果想释放空间并将文件保留在 iCloud 中，请取消并改用“移除下载”。";
@@ -1358,5 +1357,4 @@
 "Purge leaves %lld other selected files alone: %lld only on this Mac, with no download to remove, and %lld in iCloud but not ready yet, for example still uploading." = "另有 %lld 个所选文件 Purge 不会处理：%lld 个只在这台 Mac 上，没有可移除的下载；%lld 个在 iCloud 中但尚未就绪，例如仍在上传。";
 "1 other file is still selected in Large Files." = "“大文件”中仍选中另外 1 个文件。";
 "%lld other files are still selected in Large Files." = "“大文件”中仍选中另外 %lld 个文件。";
-"Remove 1 Download (%@)" = "移除 1 个下载（%@）";
-"Remove %lld Downloads (%@)" = "移除 %lld 个下载（%@）";
+"Remove 1 Download" = "移除 1 个下载";
