@@ -223,9 +223,9 @@ struct RemoveDownloadResultSheet: View {
     }
 }
 
-/// A plain note for Keep Only in iCloud: above the iCloud chip's rows and on its
-/// sheets. Not the caution box: nothing here is a risk.
-struct ICloudOnlyNote: View {
+/// A plain note on the Keep Only in iCloud sheets. Not the caution box:
+/// nothing here is a risk.
+private struct ICloudOnlyNote: View {
     let text: String
 
     var body: some View {

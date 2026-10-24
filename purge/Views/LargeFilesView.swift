@@ -91,7 +91,7 @@ struct LargeFilesView: View {
         LargeFileCategoryFilter.isICloudActive(rawValue: categoryFilterRaw, files: store.largeFiles)
     }
 
-    /// The synced files matching the search, for the iCloud chip and its note.
+    /// The synced files matching the search, for the iCloud chip's count.
     private var iCloudMatches: [LargeFile] {
         searchMatches.filter(\.canRemoveDownload)
     }
@@ -498,16 +498,6 @@ struct LargeFilesView: View {
                     .transition(reduceMotion ? .opacity : .scanRowInsertion)
                 }
             } else {
-                // What the iCloud chip shows, said once above its rows, so the
-                // action beside Select All can't be read as deleting (#106).
-                if isICloudFilterActive {
-                    ICloudOnlyNote(text: Self.iCloudNote(bytes: iCloudMatches.reduce(Int64(0)) { $0 + $1.sizeBytes }))
-                        .padding(.bottom, AppStyle.Spacing.xSmall)
-                        .listRowInsets(ScanListRowInsets.standard)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-
                 // Iterate stable `[Int]` indices (not fresh LargeFile copies) so the
                 // ForEach data doesn't churn on selection and the List stays put —
                 // see `visibleIndices`.
@@ -552,10 +542,6 @@ struct LargeFilesView: View {
         .scrollContentBackground(.hidden)
         .background(AppColors.surfaceBase)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.largeFilesRevision)
-    }
-
-    static func iCloudNote(bytes: Int64) -> String {
-        String(localized: "Also in iCloud. Keep them only there to free \(formatBytes(bytes)) without deleting anything.")
     }
 
     /// The card under the empty-state heading is this wide: enough for a legend
