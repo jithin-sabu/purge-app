@@ -165,9 +165,13 @@ nonisolated final class LargeFileScanner {
         // duplicate, and trashing the "extra copy" would trash the only one.
         // Folders are compared by identity, not spelling: on the default volume
         // `~/documents` is `~/Documents` (2026-10-22 in `docs/safety-notes.md`).
+        // A VM folder is always walked: the other walk may not reach it, such as
+        // past a model store it skips, and `isFirstListing` keeps a bundle both
+        // walks find to one row.
         let identities = folders.map { $0.flatMap { FileIdentity(path: $0.path) } }
         func isCovered(_ index: Int) -> Bool {
-            guard let folder = folders[index], let own = identities[index] else { return false }
+            guard !walks[index].bundlesOnly,
+                  let folder = folders[index], let own = identities[index] else { return false }
             var above = Set<FileIdentity>()
             var parent = folder.resolvingSymlinksInPath()
             while parent.path != "/" {
@@ -195,6 +199,12 @@ nonisolated final class LargeFileScanner {
             let bundlesOnly = walk.bundlesOnly
             if Task.isCancelled { break }
             guard exists[index] else { continue }
+            // Folders the user excluded are never entered, not just hidden from the
+            // results, so an excluded archive also stops costing scan time (#46).
+            // Asked first, so an excluded root is never named as unread or as
+            // checked. `scoped` resolves the link, as the store resolves its keys.
+            let excluded = exclusions.scoped(to: root)
+            if excluded.excludesRoot { continue }
             guard let folder = folders[index] else {
                 if !bundlesOnly {
                     summary.unreadableRoots.append(.init(path: root, reason: unwalkedLinkReason(root)))
@@ -205,10 +215,6 @@ nonisolated final class LargeFileScanner {
                 if !bundlesOnly { summary.checkedRoots.append(root) }
                 continue
             }
-            // Folders the user excluded are never entered, not just hidden from the
-            // results, so an excluded archive also stops costing scan time (#46).
-            let excluded = exclusions.scoped(to: folder)
-            if excluded.excludesRoot { continue }
             // How the enumerator spells the root, taken from its first child rather
             // than from `root`: it can differ (`/private/var` for `/var`), and
             // matching is on the path below this prefix. See `ScanExclusions`.

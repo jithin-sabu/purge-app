@@ -67,17 +67,21 @@ struct LargeFileSymlinkedRootTests {
         var paths: [String] { files.map(\.id) }
     }
 
-    private func scan(_ fixture: Fixture, roots: [String]) async -> Run {
+    /// `excluding` names roots the user excluded, keyed as the store keys them.
+    private func scan(
+        _ fixture: Fixture, roots: [String], virtualMachineRoots: [String] = [], excluding: [String] = []
+    ) async -> Run {
+        let keys = excluding.map { fixture.root($0).standardizedFileURL.resolvingSymlinksInPath().path }
         let stream = LargeFileScanner().scanEvents(
             minBytes: 1024,
             staleDays: 0,
             roots: roots.map(fixture.root),
-            virtualMachineRoots: [],
+            virtualMachineRoots: virtualMachineRoots.map(fixture.root),
             iCloudDriveRoots: [],
             installedApps: [],
             isAppRunning: { _ in false },
             home: fixture.home,
-            exclusions: ScanExclusions(keys: []),
+            exclusions: ScanExclusions(keys: Set(keys)),
             isExcluded: { _ in false }
         )
         var run = Run()
@@ -206,6 +210,21 @@ struct LargeFileSymlinkedRootTests {
         #expect(run.summary?.checkedRoots.map(\.lastPathComponent) == ["Movies", "Music"])
     }
 
+    /// A VM folder linked inside another root's folder is still walked for
+    /// bundles. The other walk may not reach it: here it skips the model
+    /// store the VM folder sits in. The bundle is listed once (PR #276 review).
+    @Test
+    func aVirtualMachineFolderInsideAnotherRootIsStillWalked() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.write("home/Documents/huggingface/models/Parallels/Win.pvm/harddisk.hdd/disk.hds")
+        try fixture.link("Parallels", to: "home/Documents/huggingface/models/Parallels")
+
+        let run = await scan(fixture, roots: ["Documents"], virtualMachineRoots: ["Parallels"])
+
+        #expect(run.paths == [fixture.listedPath("home/Documents/huggingface/models/Parallels/Win.pvm")])
+    }
+
     /// A link into `~/Library`, here a cloud provider's folder, is not walked.
     /// Trashing a file there removes it from every device, and the summary
     /// says why the folder was left out instead of "couldn't be opened".
@@ -230,6 +249,66 @@ struct LargeFileSymlinkedRootTests {
         #expect(!LargeFileScanPolicy.isEligibleForDeletion(throughLink, home: fixture.home))
     }
 
+    /// On the default volume `~/library` is `~/Library`, and macOS 13 and 14
+    /// keep a link's own spelling when resolving it. A link spelled that way
+    /// is still not walked, and no spelling of its files passes the gate
+    /// (PR #276 review).
+    @Test(.enabled(if: Self.temporaryVolumeIgnoresCase, "needs a case-insensitive volume"))
+    func aLinkIntoLibrarySpelledInOtherCapitalsIsNotWalked() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.write("home/Library/CloudStorage/OneDrive-Personal/Documents/deck.key")
+        let link = try fixture.link("Documents", to: "home/library/CloudStorage/OneDrive-Personal/Documents")
+
+        #expect(LargeFileScanPolicy.walkedFolder(for: link, home: fixture.home) == nil)
+        let run = await scan(fixture, roots: ["Documents"])
+        #expect(run.files.isEmpty)
+        for spelling in [
+            "home/Library/CloudStorage/OneDrive-Personal/Documents/deck.key",
+            "home/library/CloudStorage/OneDrive-Personal/Documents/deck.key",
+            "home/Documents/deck.key",
+        ] {
+            let file = fixture.base.appendingPathComponent(spelling)
+            #expect(!LargeFileScanPolicy.isEligibleForDeletion(file, home: fixture.home), "\(spelling)")
+        }
+    }
+
+    // MARK: - Folders the user excluded
+
+    /// An excluded root is skipped before anything else, so a link Large
+    /// Files doesn't follow is not named as unread when the user excluded it.
+    @Test
+    func anExcludedRootThatIsNotFollowedIsNotNamedAsUnread() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.write("home/Library/CloudStorage/OneDrive-Personal/Documents/deck.key")
+        try fixture.link("Documents", to: "home/Library/CloudStorage/OneDrive-Personal/Documents")
+
+        let run = await scan(fixture, roots: ["Documents"], excluding: ["Documents"])
+        let summary = try #require(run.summary)
+
+        #expect(run.files.isEmpty)
+        #expect(summary.unreadableRoots.isEmpty)
+        #expect(summary.checkedRoots.isEmpty)
+    }
+
+    /// A root that leads into an excluded root's folder is excluded with it,
+    /// not counted as checked.
+    @Test
+    func aRootInsideAnExcludedRootIsNotCountedAsChecked() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.write("home/Documents/Desktop/notes.mov")
+        try fixture.link("Desktop", to: "home/Documents/Desktop")
+
+        let run = await scan(fixture, roots: ["Documents", "Desktop"], excluding: ["Documents"])
+        let summary = try #require(run.summary)
+
+        #expect(run.files.isEmpty)
+        #expect(summary.unreadableRoots.isEmpty)
+        #expect(summary.checkedRoots.isEmpty)
+    }
+
     // MARK: - Where a link may lead
 
     @Test
@@ -244,7 +323,7 @@ struct LargeFileSymlinkedRootTests {
 
     @Test(arguments: [
         "Volumes/Data/Documents",
-        "Volumes/Data",
+        "Volumes/Data/Old Mac/Documents",
         "home/Moved/Documents",
     ])
     func aLinkToAFolderTheUserCouldHaveMovedItToIsFollowed(target: String) throws {
@@ -261,6 +340,8 @@ struct LargeFileSymlinkedRootTests {
         // `/Volumes` itself, and places that are neither in the home folder nor on a volume.
         "Volumes",
         "Elsewhere/Documents",
+        // A whole drive: other users' files, and every backup copy on it.
+        "Volumes/Data",
         // The home folder and folders above it would walk `~/Library`.
         "home",
         "",
@@ -268,6 +349,9 @@ struct LargeFileSymlinkedRootTests {
         "home/Library/CloudStorage/Dropbox",
         "home/Library",
         "Volumes/Data/Library/Documents",
+        // `Library` in any capitals is never followed into.
+        "Volumes/Data/library/Documents",
+        "home/Moved/LIBRARY/Documents",
         "home/.hidden/Documents",
         "Volumes/Data/Mac.pvm",
         "home/Code/node_modules",
@@ -294,7 +378,74 @@ struct LargeFileSymlinkedRootTests {
         #expect(LargeFileScanPolicy.walkedFolder(for: link, home: fixture.home, volumes: fixture.volumes) == nil)
     }
 
+    /// A copy of a whole Mac, of a home folder, or a Time Machine drive is not
+    /// a folder someone moved. Walked, it would offer other users' files, and
+    /// "Keep one of each" would tick every backup copy for the Trash.
+    @Test(arguments: ["System", "Users", "Library", "Backups.backupdb"])
+    func aLinkToACopyOfAMacOrAHomeFolderIsNotFollowed(marker: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/Data/Old Mac/\(marker)")
+        let link = try fixture.link("Documents", to: "Volumes/Data/Old Mac")
+
+        #expect(LargeFileScanPolicy.walkedFolder(for: link, home: fixture.home, volumes: fixture.volumes) == nil)
+    }
+
+    /// A network share, or a cloud drive mounted as a disk, may pass a move to
+    /// its Trash on as a delete on every device. Only a disk attached to this
+    /// Mac is followed, in `/Volumes` or in the home folder.
+    @Test(arguments: ["Volumes/Cloud/Documents", "home/Mounts/Cloud/Documents"])
+    func aLinkToADiskThatIsNotLocalIsNotFollowed(target: String) throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let file = try fixture.write("\(target)/deck.key")
+        let link = try fixture.link("Documents", to: target)
+
+        let local = LargeFileScanPolicy.walkedFolder(
+            for: link, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in true }
+        )
+        #expect(local != nil)
+        #expect(LargeFileScanPolicy.walkedFolder(
+            for: link, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in false }
+        ) == nil)
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(
+            file, home: fixture.home, volumes: fixture.volumes, isLocalDisk: { _ in false }
+        ))
+    }
+
+    /// The default check passes the startup disk and refuses a file system
+    /// that is not on the list, here `/dev`.
+    @Test
+    func theStartupDiskIsLocalAndDevIsNot() {
+        #expect(LargeFileScanPolicy.isOnLocalDisk(FileManager.default.temporaryDirectory))
+        #expect(!LargeFileScanPolicy.isOnLocalDisk(URL(fileURLWithPath: "/dev", isDirectory: true)))
+    }
+
     // MARK: - The delete gate
+
+    /// Every newly removable file in #273 sits on another drive. The gate
+    /// passes one under a linked folder there, refuses it once the link leads
+    /// to the drive's root, and refuses a `Library` folder on the drive.
+    @Test
+    func theGateMatchesAFolderOnAnotherDrive() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let file = try fixture.write("Volumes/Data/Documents/Archive/photos.zip")
+        let inLibrary = try fixture.write("Volumes/Data/Documents/Archive/Library/old.zip")
+        let link = try fixture.link("Documents", to: "Volumes/Data/Documents")
+        func passes(_ url: URL) -> Bool {
+            LargeFileScanPolicy.isEligibleForDeletion(url, home: fixture.home, volumes: fixture.volumes)
+        }
+
+        #expect(passes(file))
+        #expect(!passes(inLibrary))
+        // Without the fake `/Volumes` the folder is outside every root.
+        #expect(!LargeFileScanPolicy.isEligibleForDeletion(file, home: fixture.home))
+
+        try FileManager.default.removeItem(at: link)
+        try fixture.link("Documents", to: "Volumes/Data")
+        #expect(!passes(file))
+    }
 
     /// A file reached through a link inside a root is not the root's file. The
     /// scan never lists it, and the gate refuses it too, by its real folder.

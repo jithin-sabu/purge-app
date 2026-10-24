@@ -195,7 +195,7 @@ extension PurgeStore {
             }
             return items
         case .largeFiles:
-            return largeFiles.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
+            return Self.overviewItems(forLargeFiles: largeFiles)
         case .apps:
             return installedApps.flatMap { app in
                 appFootprintItemsByAppID[app.id]
@@ -204,6 +204,16 @@ extension PurgeStore {
         case .leftovers:
             return orphanLeftovers.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
         }
+    }
+
+    /// The Large Files rows on this disk, which is all the bar shows. A home
+    /// folder linked to another drive lists its files there by their
+    /// `/Volumes/…` path (#273), and counted they would push the bar past the
+    /// used space. String work only, like `OverviewSizedItem.normalized`.
+    nonisolated static func overviewItems(forLargeFiles files: [LargeFile]) -> [OverviewSizedItem] {
+        files
+            .filter { !$0.path.path.hasPrefix("/Volumes/") }
+            .map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
     }
 
     /// A tool can span several folders. Each gets its own measured size where known;

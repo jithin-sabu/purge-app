@@ -110,6 +110,23 @@ struct OverviewBreakdownTests {
         #expect(breakdown.categoryBytes[.apps] == nil)
     }
 
+    /// A home folder linked to another drive lists its files by their
+    /// `/Volumes/…` path (#273). They are not on this disk, so the bar leaves
+    /// them out. The 500 GB example from the PR #276 review: counted, Large
+    /// Files filled the bar and Free was drawn short.
+    @Test func largeFilesOnAnotherDriveAreNotCountedOnThisDisk() {
+        let rows = [
+            LargeFile(path: URL(fileURLWithPath: "/Volumes/Data/Movies/archive.mov"), sizeBytes: 500 * gb, lastUsed: Date(), category: .video),
+            LargeFile(path: URL(fileURLWithPath: "/Users/me/Movies/trip.mov"), sizeBytes: 12 * gb, lastUsed: Date(), category: .video),
+        ]
+        let items = PurgeStore.overviewItems(forLargeFiles: rows)
+        #expect(items.map(\.path) == ["/Users/me/Movies/trip.mov"])
+
+        let breakdown = OverviewBreakdown(totalBytes: 500 * gb, freeBytes: 300 * gb, sources: [.largeFiles: .live(items)])
+        #expect(breakdown.bytes(for: .largeFiles) == 12 * gb)
+        #expect(breakdown.everythingElseBytes == 188 * gb)
+    }
+
     @Test func everythingElseNeverGoesNegative() {
         // Hard links counted by two scans can add up to more than the used space.
         let breakdown = OverviewBreakdown(
