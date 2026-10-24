@@ -103,10 +103,18 @@ private struct AppDropdownRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 6) {
-                Text(LocalizedStringKey(label))
-                    .font(AppStyle.Typography.body)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
+                // A label that is all figure, such as "5 MB", is SF Rounded
+                // alone, whose line is shorter than Onest's. The hidden Onest
+                // copy keeps every row the same height.
+                ZStack(alignment: .leading) {
+                    Text(verbatim: label)
+                        .font(AppStyle.Typography.body)
+                        .hidden()
+                        .accessibilityHidden(true)
+                    Text(figures: label, style: AppStyle.Typography.body)
+                        .foregroundStyle(AppColors.textPrimary)
+                }
+                .lineLimit(1)
 
                 Spacer(minLength: 0)
 

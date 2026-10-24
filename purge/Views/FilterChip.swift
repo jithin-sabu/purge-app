@@ -109,7 +109,9 @@ struct FilterChip: View {
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         } else {
-            Text(LocalizedStringKey(label))
+            // A dropdown's value, such as "Larger than 1 GB", shows its figure
+            // like the app's other sizes.
+            Text(figures: label, style: AppStyle.Typography.body)
                 .lineLimit(1)
         }
     }
