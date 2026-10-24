@@ -519,6 +519,16 @@ struct LargeFilesView: View {
                 }
             }
 
+            // A folder the scan couldn't read still gets its warning under the
+            // rows: without it a partial list looks complete.
+            if let summary = store.largeFileScanSummary, !summary.unreadableRoots.isEmpty {
+                LargeFileScanSummaryCard(summary: summary, includesCloud: false)
+                    .padding(.top, AppStyle.Spacing.xSmall)
+                    .listRowInsets(ScanListRowInsets.standard)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+
             ScanListBottomSpacer()
         }
         .listStyle(.plain)

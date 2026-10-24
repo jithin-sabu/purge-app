@@ -41,10 +41,15 @@ nonisolated enum LargeFileEmptyState: Equatable {
 
 /// Where the files over the threshold went when none of them are on this Mac:
 /// a folder the scan couldn't open or a cloud provider. One plain row per
-/// place, with its size. Only an empty list shows it. A media library is left
-/// out: it is no file of its own, and Purge never lists what is inside one.
+/// place, with its size. A media library is left out: it is no file of its
+/// own, and Purge never lists what is inside one.
+///
+/// Under a list with rows it shows only the folders that couldn't be read, so a
+/// partial result never reads as complete.
 struct LargeFileScanSummaryCard: View {
     let summary: LargeFileScanSummary
+    /// False under a list with rows, where only the unreadable folders matter.
+    var includesCloud = true
 
     /// Whether the summary has a row to show. With none the card is left out.
     static func hasRows(_ summary: LargeFileScanSummary) -> Bool {
@@ -66,7 +71,7 @@ struct LargeFileScanSummaryCard: View {
                         .lineLimit(2)
                 }
             }
-            ForEach(summary.cloudOnly) { group in
+            ForEach(includesCloud ? summary.cloudOnly : []) { group in
                 row(
                     label: String(localized: "\(group.provider.displayName), not downloaded"),
                     value: Self.countText(count: group.count, bytes: group.bytes)
