@@ -1335,3 +1335,17 @@
 "Homebrew couldn't remove %@, so Purge moved it to the Trash instead. Homebrew said: %@" = "Homebrew 无法移除 %@，因此 Purge 改为将其移到废纸篓。Homebrew 的输出：%@";
 "Homebrew finished but %@ was still there, so Purge moved it to the Trash instead." = "Homebrew 已运行完毕，但 %@ 仍然存在，因此 Purge 改为将其移到废纸篓。";
 "Purge couldn't find Homebrew, so it moved %@ to the Trash instead." = "Purge 找不到 Homebrew，因此改为将 %@ 移到废纸篓。";
+
+/* Clean result outcomes (#162) */
+"Couldn't remove %@" = "无法移除 %@";
+"Nothing was cleaned" = "没有清理任何项目";
+"%lld items couldn't be removed" = "%lld 项无法移除";
+"%lld of %lld items cleaned" = "已清理 %lld 项，共 %lld 项";
+"deleted permanently" = "已永久删除";
+"%lld moved to trash, %lld deleted permanently" = "%lld 项已移到废纸篓，%lld 项已永久删除";
+"Purge kept %lld items to stay on the safe side." = "为安全起见，Purge 保留了 %lld 项。";
+"Purge kept %@ to stay on the safe side." = "为安全起见，Purge 保留了 %@。";
+"Retry %lld items" = "重试 %lld 项";
+"Tried again, still couldn't remove it." = "已再次尝试，仍然无法移除。";
+"Nothing left to clean" = "没有需要清理的项目";
+"Everything you picked was already gone, so there was nothing to move." = "你选择的项目都已不存在，因此没有可移动的内容。";
