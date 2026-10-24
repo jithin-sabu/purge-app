@@ -263,15 +263,103 @@ struct IntentRouterTests {
         fake.hasAccess = true
         let store = fake.makeStore()
         var reviewed = false
+        var refusals: [String] = []
         let router = IntentRouter(
             store: store, reveal: {}, onboardingDone: { true },
-            reviewUninstall: { reviewed = true }
+            reviewUninstall: { reviewed = true },
+            showRefusal: { title, _ in refusals.append(title) }
         )
 
-        await router.showUninstaller(appID: "/Applications/Gone.app", name: "Gone")
+        await router.showUninstaller(appID: "/Applications/Gone-\(UUID().uuidString).app", name: "Gone")
 
-        #expect(fake.log.contains("step apps"))
+        // Nothing is on disk there, so a second scan would not find it either.
+        #expect(fake.log.filter { $0 == "step apps" }.count == 1)
         #expect(!reviewed)
+        #expect(refusals == [IntentRouter.UninstallMiss.gone(name: "Gone").refusal.title])
+        fake.cleanUp()
+    }
+
+    /// The Finder, Dock and Shortcuts route for an app installed after this
+    /// session's list was made (#176): the list is scanned again, and the review
+    /// opens once the app is in it.
+    @Test("An app on disk that the list leaves out gets one more scan, then the review")
+    func uninstallRescansForNewlyInstalledApp() async throws {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bundle = folder.appendingPathComponent("New.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let newApp = InstalledApp(name: "New", bundleURL: bundle, bundleID: "test.new", bundleSizeBytes: 0, isRunning: false)
+        store.installedApps = [Self.app("Other")]
+        // The first apps step sees the old list; the second finds the new app.
+        var appSteps = 0
+        fake.onFullAccessStep = { step in
+            guard step == .apps else { return }
+            appSteps += 1
+            if appSteps == 2 { store.installedApps.append(newApp) }
+        }
+        var reviews: [Set<String>] = []
+        var refusals: [String] = []
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: { reviews.append(store.selectedAppIDs) },
+            showRefusal: { title, _ in refusals.append(title) }
+        )
+
+        await router.showUninstaller(appID: newApp.id, name: "New")
+
+        #expect(appSteps == 2)
+        #expect(reviews == [[newApp.id]])
+        #expect(refusals.isEmpty)
+        fake.cleanUp()
+    }
+
+    @Test("An app on disk that a fresh list still leaves out gets an alert")
+    func uninstallUnlistedAppShowsAlert() async throws {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bundle = folder.appendingPathComponent("Unlisted.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let appID = bundle.standardizedFileURL.path
+        var reviewed = false
+        var refusals: [String] = []
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: { reviewed = true },
+            showRefusal: { title, _ in refusals.append(title) }
+        )
+
+        await router.showUninstaller(appID: appID, name: "Unlisted")
+
+        #expect(fake.log.filter { $0 == "step apps" }.count == 2)
+        #expect(!reviewed)
+        #expect(refusals == [IntentRouter.UninstallMiss.notListed(name: "Unlisted").refusal.title])
+        fake.cleanUp()
+    }
+
+    @Test("No alert once the person has left the uninstaller")
+    func uninstallMissNoAlertAfterMovingOn() async {
+        let fake = FakeScans()
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        fake.onFullAccessStep = { _ in store.selectedTab = .overview }
+        var refusals: [String] = []
+        let router = IntentRouter(
+            store: store, reveal: {}, onboardingDone: { true },
+            reviewUninstall: {},
+            showRefusal: { title, _ in refusals.append(title) }
+        )
+
+        await router.showUninstaller(appID: "/Applications/Gone-\(UUID().uuidString).app", name: "Gone")
+
+        #expect(refusals.isEmpty)
         fake.cleanUp()
     }
 
@@ -309,7 +397,8 @@ struct IntentRouterTests {
     @Test("The app picker uses the uninstaller's ids and never lists system apps or Purge")
     func appPickerMatchesUninstaller() {
         let discovered = AppUninstallScanner.discoverInstalledApps()
-        #expect(discovered.allSatisfy { !$0.bundleURL.path.hasPrefix("/System/") })
+        // Resolved, because `/Applications/Safari.app` links into `/System` (#176).
+        #expect(discovered.allSatisfy { !$0.bundleURL.resolvingSymlinksInPath().path.hasPrefix("/System/") })
         #expect(discovered.allSatisfy { $0.bundleID != "io.getpurge.app" })
 
         let url = URL(fileURLWithPath: "/Applications/Zoom.app")

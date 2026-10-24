@@ -36,5 +36,13 @@ nonisolated func appDisplayName(forBundleID bundleID: String) -> String? {
     guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
         return nil
     }
-    return FileManager.default.displayName(atPath: appURL.path)
+    return appNameWithoutExtension(FileManager.default.displayName(atPath: appURL.path))
+}
+
+/// `FileManager.displayName` keeps ".app" when Finder is set to show every
+/// extension, so the same row read "Slack" on one Mac and "Slack.app" on
+/// another (#176). The localized name it gives is kept.
+nonisolated func appNameWithoutExtension(_ displayName: String) -> String {
+    guard displayName.lowercased().hasSuffix(".app"), displayName.count > 4 else { return displayName }
+    return String(displayName.dropLast(4))
 }

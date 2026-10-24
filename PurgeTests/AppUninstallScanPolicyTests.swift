@@ -53,6 +53,25 @@ struct AppUninstallScanPolicyTests {
         #expect(!AppUninstallScanPolicy.isProtectedApp(bundleURL: rectangle, bundleID: "com.knollsoft.Rectangle"))
     }
 
+    /// `/Applications/Safari.app` links into the system cryptex (#176). A
+    /// throwaway link into `/System` stands in for it, so the test fails on
+    /// any Mac if the check reads only the path it was handed.
+    @Test
+    func appLinkedIntoSystemIsProtected() throws {
+        let fm = FileManager.default
+        let folder = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: folder) }
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        let link = folder.appendingPathComponent("Calculator.app")
+        try fm.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: "/System/Applications/Calculator.app"))
+
+        #expect(AppUninstallScanPolicy.isProtectedApp(bundleURL: link, bundleID: "com.apple.calculator"))
+        // A real bundle folder in the same place is not.
+        try fm.removeItem(at: link)
+        try fm.createDirectory(at: link, withIntermediateDirectories: true)
+        #expect(!AppUninstallScanPolicy.isProtectedApp(bundleURL: link, bundleID: "com.example.calculator"))
+    }
+
     @Test
     func appRootsExcludeSystemApplications() {
         let roots = AppUninstallScanPolicy.installedAppRoots().map(\.path)
@@ -233,6 +252,24 @@ struct AppUninstallScanPolicyTests {
     func systemPathIsNotEligible() {
         let url = URL(fileURLWithPath: "/System/Applications/Calculator.app", isDirectory: true)
         #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
+    }
+
+    /// Like `/Applications/Safari.app` (#176): an app root entry that links into
+    /// `/System` never passes the gate, though a real bundle there does.
+    @Test
+    func appLinkedIntoSystemIsNotEligible() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let apps = home.appendingPathComponent("Applications", isDirectory: true)
+        try fm.createDirectory(at: apps, withIntermediateDirectories: true)
+        let link = apps.appendingPathComponent("Calculator.app")
+        try fm.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: "/System/Applications/Calculator.app"))
+
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(link, home: home, dotFolderCatalog: testCatalog))
+        try fm.removeItem(at: link)
+        try fm.createDirectory(at: link, withIntermediateDirectories: true)
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(link, home: home, dotFolderCatalog: testCatalog))
     }
 
     @Test

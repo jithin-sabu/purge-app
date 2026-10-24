@@ -1236,7 +1236,7 @@ struct UninstallReviewSheet: View {
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.textSecondary)
                 }
-                if app.isRunning {
+                if appPlan.wrappedValue.quitsAppFirst {
                     Text("will be quit first")
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.statusCheckText)

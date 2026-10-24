@@ -284,6 +284,12 @@ nonisolated struct UninstallAppPlan: Identifiable, Hashable {
 
     var bundleItem: UninstallItem? { items.first { $0.category == .bundle } }
 
+    /// Whether the app is quit before anything moves: only when it is running
+    /// and its bundle is ticked. Leftovers alone never quit it (#176).
+    var quitsAppFirst: Bool {
+        app.isRunning && bundleItem?.isSelected == true
+    }
+
     /// The cask Homebrew removes when this plan runs: the app's cask, with the
     /// toggle on and the bundle ticked. Nil means the bundle goes to the Trash,
     /// or stays.
