@@ -65,7 +65,7 @@ struct HomebrewCaskUninstallStoreTests {
     }
 
     /// A store whose Homebrew pass reads the fixture's Caskroom and runs `fake`
-    /// instead of brew. The watcher's hand-off files go to the fixture too.
+    /// instead of brew. The watcher's hand-off files go to a temporary folder of the test's own.
     private func makeStore(_ fixture: Fixture, scans: FakeScans, runs: Runs,
                            fake: @escaping (PackageManagerTool) -> PackageManagerUninstaller.Outcome) -> PurgeStore {
         let store = scans.makeStore()
@@ -84,13 +84,6 @@ struct HomebrewCaskUninstallStoreTests {
         var cleanups: [HomebrewCask] = []
     }
 
-    private func withHandoffRoot<T>(_ root: URL, _ body: () async throws -> T) async rethrows -> T {
-        let previous = RemovedAppHandoff.root
-        RemovedAppHandoff.root = root.appendingPathComponent("handoff", isDirectory: true)
-        defer { RemovedAppHandoff.root = previous }
-        return try await body()
-    }
-
     @Test
     func homebrewRemovesTheAppAndHistorySaysPermanently() async throws {
         let fixture = try makeFixture()
@@ -103,7 +96,7 @@ struct HomebrewCaskUninstallStoreTests {
             return .removed
         }
 
-        let watcherTold = await withHandoffRoot(fixture.root) {
+        let watcherTold = try await withTemporaryHandoffRoot {
             await store.confirmUninstallPlan(fixture.plan())
             return RemovedAppHandoff.isIgnored(path: fixture.bundle.path)
         }
@@ -144,7 +137,7 @@ struct HomebrewCaskUninstallStoreTests {
         let runs = Runs()
         let store = makeStore(fixture, scans: scans, runs: runs) { _ in .removed }
 
-        await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan(removesThroughHomebrew: false)) }
+        try await withTemporaryHandoffRoot { await store.confirmUninstallPlan(fixture.plan(removesThroughHomebrew: false)) }
 
         #expect(runs.tools.isEmpty)
         #expect(runs.cleanups.isEmpty)
@@ -164,7 +157,7 @@ struct HomebrewCaskUninstallStoreTests {
         let runs = Runs()
         let store = makeStore(fixture, scans: scans, runs: runs) { _ in .removed }
 
-        await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan()) }
+        try await withTemporaryHandoffRoot { await store.confirmUninstallPlan(fixture.plan()) }
 
         #expect(runs.tools.isEmpty)
         #expect(fm.fileExists(atPath: fixture.bundle.path))
@@ -187,7 +180,7 @@ struct HomebrewCaskUninstallStoreTests {
         let runs = Runs()
         let store = makeStore(fixture, scans: scans, runs: runs) { _ in .removed }
 
-        await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan()) }
+        try await withTemporaryHandoffRoot { await store.confirmUninstallPlan(fixture.plan()) }
 
         #expect(runs.tools.isEmpty)
         #expect(runs.cleanups.isEmpty)
@@ -210,7 +203,7 @@ struct HomebrewCaskUninstallStoreTests {
             .failed("Error: Cask 'example' requires sudo to uninstall its pkg.")
         }
 
-        await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan()) }
+        try await withTemporaryHandoffRoot { await store.confirmUninstallPlan(fixture.plan()) }
 
         #expect(runs.tools.count == 1)
         #expect(runs.cleanups.isEmpty)
@@ -239,7 +232,7 @@ struct HomebrewCaskUninstallStoreTests {
             return .failed("Error: Failure while executing; `/usr/bin/sudo -E -- /usr/sbin/pkgutil --forget com.example.pkg` exited with 1.")
         }
 
-        await withHandoffRoot(fixture.root) { await store.confirmUninstallPlan(fixture.plan()) }
+        try await withTemporaryHandoffRoot { await store.confirmUninstallPlan(fixture.plan()) }
 
         #expect(runs.tools.count == 1)
         #expect(runs.cleanups == [fixture.cask])

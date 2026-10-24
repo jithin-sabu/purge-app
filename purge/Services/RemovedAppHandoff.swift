@@ -25,8 +25,11 @@ nonisolated enum RemovedAppHandoff {
         var until: Date
     }
 
-    /// Tests point this at a temporary directory. The app and the watcher use the default.
-    static var root: URL = FileManager.default.homeDirectoryForCurrentUser
+    /// The folder the records and the ignore list live in. The app and the
+    /// watcher use the default. Tests bind it to a temporary folder with
+    /// `RemovedAppHandoff.$root.withValue`; it is task-local, so suites running
+    /// at the same time each see their own folder and none of them writes here.
+    @TaskLocal static var root: URL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Purge", isDirectory: true)
 
     static let launchURL = URL(string: "purge://removed-apps")!
