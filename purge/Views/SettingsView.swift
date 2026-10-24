@@ -1205,7 +1205,7 @@ struct SettingsMenuPicker<Option: Hashable>: View {
             onSelect: { selection = $0 }
         ) {
             HStack(spacing: 8) {
-                Text(optionLabel(selection))
+                Text(figures: optionLabel(selection), style: AppStyle.Typography.body)
                     .lineLimit(1)
 
                 Spacer(minLength: fillsWidth ? 8 : 0)
