@@ -1331,8 +1331,6 @@
 "The files stay in iCloud Drive and in their folders in Finder, marked with a cloud. Purge removes only the copies on this Mac. Open a file to download it again. You need an internet connection to open them." = "这些文件会保留在 iCloud 云盘中，也仍在访达中原来的文件夹里，并标有云朵图标。Purge 只移除这台 Mac 上的副本。打开文件即可重新下载。打开它们需要连接互联网。";
 "Remove Download" = "移除下载";
 "Remove %lld Downloads" = "移除 %lld 个下载";
-"1 other selected file syncs with iCloud but can't have its download removed yet, for example because it's still uploading. Purge leaves it as it is." = "另有 1 个所选文件与 iCloud 同步，但暂时无法移除它的下载，例如因为它仍在上传。Purge 会保持它不变。";
-"%lld other selected files sync with iCloud but can't have their downloads removed yet, for example because they're still uploading. Purge leaves them as they are." = "另有 %lld 个所选文件与 iCloud 同步，但暂时无法移除它们的下载，例如因为它们仍在上传。Purge 会保持它们不变。";
 "Freeing %@ on this Mac" = "将在这台 Mac 上释放 %@";
 "No downloads removed" = "未移除任何下载";
 "Download removed" = "已移除下载";
@@ -1344,8 +1342,6 @@
 "In iCloud Drive" = "在 iCloud 云盘中";
 "Remove Download (%@)" = "移除下载（%@）";
 "Free the space on this Mac and keep the selected files in iCloud Drive" = "释放这台 Mac 上的空间，并将所选文件保留在 iCloud 云盘中";
-"No synced files selected" = "未选择同步的文件";
-"%lld files selected" = "已选择 %lld 个文件";
 "Remove Download…" = "移除下载…";
 "To free the space and keep files in iCloud, cancel and use Remove Download instead." = "如果想释放空间并将文件保留在 iCloud 中，请取消并改用“移除下载”。";
 "iCloud downloads removed" = "已移除 iCloud 下载";
@@ -1355,3 +1351,12 @@
 "iCloud Drive" = "iCloud 云盘";
 "This file is open in an app. Quit the app, then try again." = "此文件正在某个应用中打开。请退出该应用，然后再试一次。";
 "Purge couldn't check whether an app has this file open." = "Purge 无法确认是否有应用打开了此文件。";
+"Purge leaves 1 other selected file alone. It's only on this Mac, so there's no download to remove." = "另有 1 个所选文件 Purge 不会处理。它只在这台 Mac 上，没有可移除的下载。";
+"Purge leaves %lld other selected files alone. They're only on this Mac, so there's no download to remove." = "另有 %lld 个所选文件 Purge 不会处理。它们只在这台 Mac 上，没有可移除的下载。";
+"Purge leaves 1 other selected file alone. It syncs with iCloud but isn't ready yet, for example because it's still uploading." = "另有 1 个所选文件 Purge 不会处理。它与 iCloud 同步，但尚未就绪，例如因为它仍在上传。";
+"Purge leaves %lld other selected files alone. They sync with iCloud but aren't ready yet, for example because they're still uploading." = "另有 %lld 个所选文件 Purge 不会处理。它们与 iCloud 同步，但尚未就绪，例如因为它们仍在上传。";
+"Purge leaves %lld other selected files alone: %lld only on this Mac, with no download to remove, and %lld in iCloud but not ready yet, for example still uploading." = "另有 %lld 个所选文件 Purge 不会处理：%lld 个只在这台 Mac 上，没有可移除的下载；%lld 个在 iCloud 中但尚未就绪，例如仍在上传。";
+"1 other file is still selected in Large Files." = "“大文件”中仍选中另外 1 个文件。";
+"%lld other files are still selected in Large Files." = "“大文件”中仍选中另外 %lld 个文件。";
+"Remove 1 Download (%@)" = "移除 1 个下载（%@）";
+"Remove %lld Downloads (%@)" = "移除 %lld 个下载（%@）";

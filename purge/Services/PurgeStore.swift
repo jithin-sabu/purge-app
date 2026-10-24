@@ -77,9 +77,24 @@ nonisolated struct DuplicateCleanupRequest: Identifiable {
 nonisolated struct RemoveDownloadRequest: Identifiable {
     let id = UUID()
     let files: [LargeFile]
+    /// Selected files left out because they are only on this Mac, so the sheet
+    /// accounts for every file the user ticked.
+    var localOnlyCount = 0
     /// Selected synced files left out because they can't have their download
-    /// removed right now, so the sheet can say they stay.
-    let leftOutCount: Int
+    /// removed right now, for example while they upload.
+    var notReadyCount = 0
+    /// False when the request came from one row's menu, where the rest of the
+    /// selection has nothing to do with it.
+    var fromSelection = true
+}
+
+/// What a Remove Download did, for the result sheet.
+nonisolated struct RemoveDownloadResult: Identifiable {
+    var id: UUID { report.id }
+    let report: ICloudDownloadReport
+    /// Rows still ticked afterwards. The run leaves them selected, and the
+    /// sheet says so, so a later Delete Selected doesn't come as a surprise.
+    let stillSelectedCount: Int
 }
 
 /// Scan-tab selection (app caches, dev tools, simulators, project artifacts) kept in
@@ -289,7 +304,7 @@ final class PurgeStore: ObservableObject {
     /// The Remove Download review awaiting confirmation, or nil when closed (#106).
     @Published var pendingRemoveDownload: RemoveDownloadRequest?
     /// What the last Remove Download did, shown until the user closes it.
-    @Published var removeDownloadResult: ICloudDownloadReport?
+    @Published var removeDownloadResult: RemoveDownloadResult?
     /// Replaced in tests with one that evicts nothing real.
     var iCloudDownloadRemover = ICloudDownloadRemover()
 
@@ -1861,17 +1876,20 @@ final class PurgeStore: ObservableObject {
     /// Opens the Remove Download review for the selection, or for `file` alone
     /// when it comes from a row's menu.
     func requestRemoveDownloads(for file: LargeFile? = nil) {
-        let files: [LargeFile]
-        let leftOut: Int
         if let file {
-            files = file.canRemoveDownload ? [file] : []
-            leftOut = 0
-        } else {
-            files = selectedRemovableDownloads
-            leftOut = selectedLargeFiles.filter { $0.syncsWithICloud && !$0.canRemoveDownload }.count
+            guard file.canRemoveDownload else { return }
+            pendingRemoveDownload = RemoveDownloadRequest(files: [file], fromSelection: false)
+            return
         }
+        let selected = selectedLargeFiles
+        let files = selected.filter(\.canRemoveDownload)
         guard !files.isEmpty else { return }
-        pendingRemoveDownload = RemoveDownloadRequest(files: files, leftOutCount: leftOut)
+        let leftOut = selected.filter { !$0.canRemoveDownload }
+        pendingRemoveDownload = RemoveDownloadRequest(
+            files: files,
+            localOnlyCount: leftOut.filter { !$0.syncsWithICloud }.count,
+            notReadyCount: leftOut.filter(\.syncsWithICloud).count
+        )
     }
 
     func dismissRemoveDownloads() {
@@ -1904,7 +1922,10 @@ final class PurgeStore: ObservableObject {
         if !report.removed.isEmpty {
             CleanupHistoryStore.shared.appendICloudDownloadRemoval(report)
         }
-        removeDownloadResult = report
+        removeDownloadResult = RemoveDownloadResult(
+            report: report,
+            stillSelectedCount: request.fromSelection ? selectedLargeFiles.count : 0
+        )
     }
 
     func dismissLargeFileDeletionSheet() {

@@ -111,9 +111,9 @@ struct ContentView: View {
                 onConfirm: { Task { await store.confirmRemoveDownloads() } }
             )
         }
-        .sheet(item: $store.removeDownloadResult) { report in
+        .sheet(item: $store.removeDownloadResult) { result in
             RemoveDownloadResultSheet(
-                report: report,
+                result: result,
                 onDone: { store.dismissRemoveDownloadResult() }
             )
         }

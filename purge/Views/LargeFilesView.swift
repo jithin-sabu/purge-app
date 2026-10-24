@@ -689,32 +689,38 @@ private struct LargeFileDeleteButton: View {
     }
 }
 
-/// Remove Download for the selected iCloud files (#106). Counts only the rows
-/// it acts on, so a selection mixing local and synced files reads true. Its own
-/// view observing the selection, like the delete button, so a tick never
+/// Remove Download for the selected iCloud files (#106). It shows only while the
+/// selection holds a file it can act on, so most of the time the bar is just
+/// Select All and the sort menu. With a mixed selection the label gives the
+/// count, so "6.5 GB" next to ten ticked rows plainly means five of them. Its
+/// own view observing the selection, like the delete button, so a tick never
 /// re-renders the List.
 private struct LargeFileRemoveDownloadButton: View {
     @EnvironmentObject private var store: PurgeStore
     @ObservedObject var selection: LargeFileSelection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let action: () -> Void
 
     var body: some View {
         let files = store.selectedRemovableDownloads
-        let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        Button(action: action) {
-            Label(
-                files.isEmpty
-                    ? String(localized: "Remove Download")
-                    : String(localized: "Remove Download (\(formatBytes(bytes)))"),
-                systemImage: "icloud.and.arrow.up"
-            )
-            .labelStyle(.titleAndIcon)
+        Group {
+            if !files.isEmpty {
+                let selectedCount = store.selectedLargeFiles.count
+                Button(action: action) {
+                    Label(
+                        RemoveDownloadLabels.buttonTitle(removable: files.count, selected: selectedCount, bytes: files.reduce(Int64(0)) { $0 + $1.sizeBytes }),
+                        systemImage: "icloud.and.arrow.up"
+                    )
+                    .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.purge(.secondary))
+                .fixedSize()
+                .disabled(store.isDeleting)
+                .help("Free the space on this Mac and keep the selected files in iCloud Drive")
+                .transition(.opacity)
+            }
         }
-        .buttonStyle(.purge(.secondary))
-        .fixedSize()
-        .disabled(files.isEmpty || store.isDeleting)
-        .help("Free the space on this Mac and keep the selected files in iCloud Drive")
-        .accessibilityValue(files.isEmpty ? Text("No synced files selected") : Text("\(files.count) files selected"))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: files.isEmpty)
     }
 }
 

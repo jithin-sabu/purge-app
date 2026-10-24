@@ -1,6 +1,18 @@
 import AppKit
 import SwiftUI
 
+nonisolated enum RemoveDownloadLabels {
+    /// "Remove Download (3.81 GB)" when every selected file qualifies, and
+    /// "Remove 5 Downloads (6.5 GB)" when only some do.
+    static func buttonTitle(removable: Int, selected: Int, bytes: Int64) -> String {
+        let size = formatBytes(bytes)
+        guard selected > removable else { return String(localized: "Remove Download (\(size))") }
+        return removable == 1
+            ? String(localized: "Remove 1 Download (\(size))")
+            : String(localized: "Remove \(removable) Downloads (\(size))")
+    }
+}
+
 /// Confirms Remove Download for iCloud files picked in Large Files (#106).
 ///
 /// The point of the copy is that nothing disappears: the files stay in iCloud
@@ -37,14 +49,26 @@ struct RemoveDownloadConfirmSheet: View {
             : String(localized: "Remove \(request.files.count) Downloads")
     }
 
+    /// Accounts for every selected file this run leaves alone, by reason, so a
+    /// Select All over a mixed list never seems to lose files from view.
     private var leftOutNote: String? {
-        switch request.leftOutCount {
-        case 0:
+        Self.leftOutNote(localOnly: request.localOnlyCount, notReady: request.notReadyCount)
+    }
+
+    static func leftOutNote(localOnly: Int, notReady: Int) -> String? {
+        switch (localOnly, notReady) {
+        case (0, 0):
             return nil
-        case 1:
-            return String(localized: "1 other selected file syncs with iCloud but can't have its download removed yet, for example because it's still uploading. Purge leaves it as it is.")
+        case (1, 0):
+            return String(localized: "Purge leaves 1 other selected file alone. It's only on this Mac, so there's no download to remove.")
+        case (_, 0):
+            return String(localized: "Purge leaves \(localOnly) other selected files alone. They're only on this Mac, so there's no download to remove.")
+        case (0, 1):
+            return String(localized: "Purge leaves 1 other selected file alone. It syncs with iCloud but isn't ready yet, for example because it's still uploading.")
+        case (0, _):
+            return String(localized: "Purge leaves \(notReady) other selected files alone. They sync with iCloud but aren't ready yet, for example because they're still uploading.")
         default:
-            return String(localized: "\(request.leftOutCount) other selected files sync with iCloud but can't have their downloads removed yet, for example because they're still uploading. Purge leaves them as they are.")
+            return String(localized: "Purge leaves \(localOnly + notReady) other selected files alone: \(localOnly) only on this Mac, with no download to remove, and \(notReady) in iCloud but not ready yet, for example still uploading.")
         }
     }
 
@@ -76,7 +100,7 @@ struct RemoveDownloadConfirmSheet: View {
             .frame(minHeight: 180)
 
             if let leftOutNote {
-                LargeFileCautionNote { Text(leftOutNote) }
+                RemoveDownloadInfoNote(text: leftOutNote)
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
@@ -106,8 +130,18 @@ struct RemoveDownloadConfirmSheet: View {
 /// this is where the user learns where the files are: still in iCloud Drive,
 /// still in their folders, one click away in Finder.
 struct RemoveDownloadResultSheet: View {
-    let report: ICloudDownloadReport
+    let result: RemoveDownloadResult
     let onDone: () -> Void
+
+    private var report: ICloudDownloadReport { result.report }
+
+    private var stillSelectedNote: String? {
+        switch result.stillSelectedCount {
+        case 0: return nil
+        case 1: return String(localized: "1 other file is still selected in Large Files.")
+        default: return String(localized: "\(result.stillSelectedCount) other files are still selected in Large Files.")
+        }
+    }
 
     private var title: String {
         switch report.removed.count {
@@ -174,6 +208,10 @@ struct RemoveDownloadResultSheet: View {
             }
             .frame(minHeight: 180)
 
+            if let stillSelectedNote {
+                RemoveDownloadInfoNote(text: stillSelectedNote)
+            }
+
             HStack(spacing: AppStyle.Spacing.small) {
                 Spacer()
 
@@ -199,6 +237,32 @@ struct RemoveDownloadResultSheet: View {
     static func location(of file: URL) -> String {
         let folder = file.deletingLastPathComponent()
         return LargeFile.iCloudDriveLocation(for: folder) ?? displayDirectoryPath(for: folder)
+    }
+}
+
+/// A plain note on the Remove Download sheets. Not the caution box: nothing
+/// here is a risk, it only accounts for files the run leaves alone.
+private struct RemoveDownloadInfoNote: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .foregroundStyle(AppColors.textSecondary)
+                .accessibilityHidden(true)
+
+            Text(text)
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                .fill(AppColors.fillSecondary)
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 

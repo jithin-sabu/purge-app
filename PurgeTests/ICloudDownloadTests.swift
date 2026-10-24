@@ -454,13 +454,17 @@ struct RemoveDownloadStoreTests {
         store.requestRemoveDownloads()
         let request = store.pendingRemoveDownload
         #expect(Set(request?.files.map(\.id) ?? []) == [synced.id, driveOnly.id])
-        #expect(request?.leftOutCount == 1)
+        #expect(request?.localOnlyCount == 1)
+        #expect(request?.notReadyCount == 1)
+        #expect(request?.fromSelection == true)
         #expect(store.isReviewingOrCleaning)
         store.dismissRemoveDownloads()
 
         // A row's menu opens the review for that file alone.
         store.requestRemoveDownloads(for: synced)
         #expect(store.pendingRemoveDownload?.files.map(\.id) == [synced.id])
+        #expect(store.pendingRemoveDownload?.fromSelection == false)
+        #expect(store.pendingRemoveDownload?.localOnlyCount == 0)
         store.dismissRemoveDownloads()
         store.requestRemoveDownloads(for: local)
         #expect(store.pendingRemoveDownload == nil)
@@ -504,9 +508,12 @@ struct RemoveDownloadStoreTests {
         #expect(cloud.evicted == [readyPath])
         #expect(store.largeFiles.map(\.id) == [stale.id])
         #expect(!store.isDeleting)
-        let result = try #require(store.removeDownloadResult)
+        let outcome = try #require(store.removeDownloadResult)
+        let result = outcome.report
         #expect(result.removed == [ICloudDownloadRemoval(path: readyPath, bytesFreed: 900)])
         #expect(result.skipped.map(\.path) == [notReadyPath])
+        // The skipped row is still listed and still ticked, and the sheet says so.
+        #expect(outcome.stillSelectedCount == 1)
 
         let entry = try #require(CleanupHistoryStore.shared.archive.entries.first)
         #expect(entry.kind == .iCloudDownloadsRemoved)
@@ -516,6 +523,24 @@ struct RemoveDownloadStoreTests {
         #expect(entry.permanentlyDeletedItems.isEmpty)
         #expect(entry.bytesFreedByRemovedDownloads == 900)
         #expect(entry.skippedItems.map(\.reason) == [ICloudDownloadDecision.notUploaded.skipReasonKey])
+    }
+
+    /// The label gives the count once only some of the selection qualifies, and
+    /// the note accounts for every file left alone, by reason.
+    @Test func mixedSelectionsAreSpelledOut() {
+        #expect(RemoveDownloadLabels.buttonTitle(removable: 2, selected: 2, bytes: 6_500_000_000)
+            == "Remove Download (\(formatBytes(6_500_000_000)))")
+        #expect(RemoveDownloadLabels.buttonTitle(removable: 5, selected: 10, bytes: 6_500_000_000)
+            == "Remove 5 Downloads (\(formatBytes(6_500_000_000)))")
+        #expect(RemoveDownloadLabels.buttonTitle(removable: 1, selected: 4, bytes: 3_810_000_000)
+            == "Remove 1 Download (\(formatBytes(3_810_000_000)))")
+        #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 0, notReady: 0) == nil)
+        #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 0)
+            == "Purge leaves 3 other selected files alone. They're only on this Mac, so there's no download to remove.")
+        #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 0, notReady: 1)
+            == "Purge leaves 1 other selected file alone. It syncs with iCloud but isn't ready yet, for example because it's still uploading.")
+        #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 2)
+            == "Purge leaves 5 other selected files alone: 3 only on this Mac, with no download to remove, and 2 in iCloud but not ready yet, for example still uploading.")
     }
 
     @Test func historySaysTheFilesAreStillInICloud() throws {
