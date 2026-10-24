@@ -551,16 +551,20 @@ struct SafeCleanupCelebrationOverlay: View {
     /// Follows the app's appearance, like the window behind it.
     private let sheetBackground = AppColors.surfaceBase
 
+    /// `retryFailedIDs` seeds the "tried again" note; only the test host passes
+    /// it, to render that state without a retry.
     init(
         session: DeletionSession,
         doneTitle: String = "Done",
         allowsSupportNudge: Bool = true,
+        retryFailedIDs: Set<UUID> = [],
         onDone: @escaping () -> Void
     ) {
         self.session = session
         self.doneTitle = doneTitle
         self.allowsSupportNudge = allowsSupportNudge
         self.onDone = onDone
+        _retryFailedIDs = State(initialValue: retryFailedIDs)
         // Sessions created already-complete mount straight into the final layout;
         // live runs mount in the cleaning phase even if the engine has since finished
         // (the completion sequence then runs from onAppear, honoring the dwell).
@@ -608,9 +612,11 @@ struct SafeCleanupCelebrationOverlay: View {
 
                 VStack(spacing: AppStyle.Spacing.small) {
                     // The header kept its figure and nothing else is listed: the
-                    // panel sits here, beneath the number, as it always has.
-                    if session.phase == .complete, !headerAnchoredToTop, headerKind == .figure,
-                       !administratorFailures.isEmpty {
+                    // panel sits here, beneath the number, as it always has. Not
+                    // before the outcome is settled: laid out hidden during the
+                    // dwell, it would push the cleaning header up.
+                    if session.phase == .complete, completionHeaderShown, !headerAnchoredToTop,
+                       headerKind == .figure, !administratorFailures.isEmpty {
                         administratorPanel
                     }
 
@@ -708,7 +714,7 @@ struct SafeCleanupCelebrationOverlay: View {
         // back to the centre once nothing is listed under it.
         .onChange(of: session.failedItems) { _ in
             guard session.phase == .complete, footerVisible else { return }
-            followOutcomeAfterRetry()
+            reconcileHeaderWithOutcome()
         }
         .onDisappear { sequenceTask?.cancel() }
     }
@@ -726,6 +732,8 @@ struct SafeCleanupCelebrationOverlay: View {
         case failed
         /// Nothing went and Purge kept every item on purpose.
         case skipped
+        /// Nothing went and nothing is listed: it was all already gone.
+        case gone
     }
 
     private var headerKind: HeaderKind {
@@ -737,6 +745,8 @@ struct SafeCleanupCelebrationOverlay: View {
             return administratorFailures.isEmpty ? .failed : .administrator
         case .skippedOnly:
             return .skipped
+        case .nothingLeft:
+            return .gone
         }
     }
 
@@ -753,7 +763,7 @@ struct SafeCleanupCelebrationOverlay: View {
         let administrator = session.failedItems.filter { $0.reason == .needsAdministrator }
         let other = session.failedItems.filter { $0.reason != .needsAdministrator }
         switch session.outcome {
-        case .success:
+        case .success, .nothingLeft:
             return false
         case .partial, .skippedOnly:
             return !other.isEmpty
@@ -786,6 +796,13 @@ struct SafeCleanupCelebrationOverlay: View {
                 systemImage: "hand.raised",
                 title: String(localized: "Nothing was cleaned"),
                 subtitle: skippedSubtitle,
+                note: nil
+            )
+        case .gone:
+            outcomeHeader(
+                systemImage: "checkmark",
+                title: String(localized: "Nothing left to clean"),
+                subtitle: String(localized: "Everything you picked was already gone, so there was nothing to move."),
                 note: nil
             )
         }
@@ -1136,9 +1153,11 @@ struct SafeCleanupCelebrationOverlay: View {
         }
     }
 
-    /// After a retry: a failed run that now has a figure shows it, and a header
-    /// with nothing listed under it any more settles back to the centre.
-    private func followOutcomeAfterRetry() {
+    /// Brings the header in step with the outcome as it stands now: a run that
+    /// has a figure shows it, and a header with nothing listed under it settles
+    /// back to the centre. Called after a retry, and once more when the
+    /// completion sequence ends, for a retry that finished during the dwell.
+    private func reconcileHeaderWithOutcome() {
         if session.outcome.showsFigure, !checkmarkVisible {
             tagline = TimeTagline.select(for: session.elapsedSeconds)
             checkmarkProgress = 1
@@ -1289,7 +1308,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     headerAnchoredToTop = wantsHeaderAtTop
                     footerVisible = true
                 }
-                if showsFigure, session.elapsedSeconds < 3 {
+                if session.outcome.showsFigure, session.elapsedSeconds < 3 {
                     boltFlashToken += 1
                 }
                 return
@@ -1314,7 +1333,12 @@ struct SafeCleanupCelebrationOverlay: View {
             try? await Task.sleep(nanoseconds: 100_000_000)
             guard !Task.isCancelled else { return }
 
-            if showsFigure {
+            // Read again: an automatic retry of a locked app can finish during
+            // the dwell and give the run a figure after all.
+            if session.outcome.showsFigure {
+                if tagline == nil {
+                    tagline = TimeTagline.select(for: session.elapsedSeconds)
+                }
                 withAnimation(.easeInOut(duration: 0.3)) {
                     subtitleShowsComplete = true
                 }
@@ -1350,9 +1374,13 @@ struct SafeCleanupCelebrationOverlay: View {
             // jumping while the counter is still settling.
             withAnimation(.easeInOut(duration: 0.3)) {
                 resolveSupportNudge()
+                completionHeaderShown = true
                 headerAnchoredToTop = wantsHeaderAtTop
                 footerVisible = true
             }
+            // A retry that finished during the dwell changed the outcome after
+            // the branch above was taken; the header catches up here.
+            reconcileHeaderWithOutcome()
         }
     }
 }

@@ -105,6 +105,19 @@ struct DeletionSessionOutcomeTests {
         #expect(session.attemptedCount == 2)
     }
 
+    /// `retryCleanFailure` handles `.alreadyGone` by dropping the row with no
+    /// bytes and no count. The screen must not then claim a Trash move.
+    @Test("A retry that found the row already gone leaves nothing to clean")
+    func alreadyGoneLeavesNothing() {
+        let row = failure("payload.bin")
+        let session = DeletionSession.completed(bytesMovedToTrash: 0, elapsedSeconds: 1, movedToTrashCount: 0, failedItems: [row])
+
+        session.removeResolvedFailure(id: row.id, additionalMovedBytes: 0)
+
+        #expect(session.outcome == .nothingLeft)
+        #expect(!session.outcome.showsFigure)
+    }
+
     @Test("A zero count changes nothing")
     func zeroCount() {
         let session = DeletionSession.completed(bytesMovedToTrash: 0, elapsedSeconds: 1, movedToTrashCount: 0, failedItems: [])

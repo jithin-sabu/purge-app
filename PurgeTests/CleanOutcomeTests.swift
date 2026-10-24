@@ -17,6 +17,13 @@ struct CleanOutcomeTests {
         #expect(CleanOutcome.resolve(removedCount: 3, failedItems: []) == .success)
     }
 
+    /// A row whose file went away before its Retry leaves the list and counts
+    /// nothing. That is not a success with a figure: nothing moved.
+    @Test("Nothing failed and nothing removed is nothing left, never a success")
+    func nothingRemovedNothingFailed() {
+        #expect(CleanOutcome.resolve(removedCount: 0, failedItems: []) == .nothingLeft)
+    }
+
     @Test("Some removed and some failed is partial")
     func someFailed() {
         let outcome = CleanOutcome.resolve(removedCount: 4, failedItems: [failure("a", .inUse)])
@@ -77,5 +84,6 @@ struct CleanOutcomeTests {
         #expect(CleanOutcome.partial.showsFigure)
         #expect(!CleanOutcome.failed.showsFigure)
         #expect(!CleanOutcome.skippedOnly.showsFigure)
+        #expect(!CleanOutcome.nothingLeft.showsFigure)
     }
 }

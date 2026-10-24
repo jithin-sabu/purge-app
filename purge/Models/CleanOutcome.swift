@@ -16,12 +16,15 @@ enum CleanOutcome: Equatable {
     /// Nothing went, and Purge kept every item on purpose. Neither a failure nor
     /// a success, so the screen says so plainly.
     case skippedOnly
+    /// Nothing went and nothing is listed: every item was already gone, at clean
+    /// time or by the time its row was retried. No figure, since nothing moved.
+    case nothingLeft
 
     /// `removedCount` counts Trash moves and permanent removals alike. A row that
     /// a retry resolved has left `failedItems` and been counted, so the outcome
     /// follows the retries too.
     static func resolve(removedCount: Int, failedItems: [CleanFailureItem]) -> CleanOutcome {
-        if failedItems.isEmpty { return .success }
+        if failedItems.isEmpty { return removedCount > 0 ? .success : .nothingLeft }
         if removedCount > 0 { return .partial }
         return failedItems.allSatisfy { $0.reason == .safetySkipped } ? .skippedOnly : .failed
     }
@@ -33,7 +36,7 @@ extension CleanOutcome {
     var showsFigure: Bool {
         switch self {
         case .success, .partial: true
-        case .failed, .skippedOnly: false
+        case .failed, .skippedOnly, .nothingLeft: false
         }
     }
 }

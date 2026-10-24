@@ -1347,3 +1347,5 @@
 "Purge kept %@ to stay on the safe side." = "为安全起见，Purge 保留了 %@。";
 "Retry %lld items" = "重试 %lld 项";
 "Tried again, still couldn't remove it." = "已再次尝试，仍然无法移除。";
+"Nothing left to clean" = "没有需要清理的项目";
+"Everything you picked was already gone, so there was nothing to move." = "你选择的项目都已不存在，因此没有可移动的内容。";
