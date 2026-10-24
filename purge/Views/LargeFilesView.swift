@@ -15,7 +15,6 @@ struct LargeFilesView: View {
     var showsPageHeader = true
     var usesExternalScrollContainer = false
 
-    @AppStorage(LargeFileFilterDefaults.categoryKey) private var categoryFilterRaw = LargeFileCategoryFilter.all
     @AppStorage("sort.largeFiles") private var sortRaw: String = SortOption.sizeDesc.rawValue
     @AppStorage(LargeFileSizeThreshold.userDefaultsKey) private var minSizeMB: Int = LargeFileSizeThreshold.defaultOption.rawValue
     @AppStorage(LargeFileAgeThreshold.userDefaultsKey) private var minAgeDays: Int = LargeFileAgeThreshold.defaultOption.rawValue
@@ -32,9 +31,19 @@ struct LargeFilesView: View {
     /// the index exactly once per pass, so this fires exactly once.
     @State private var duplicateIndex: DuplicateIndex = .empty
 
-    /// Pseudo-category shared with the real category chips via `categoryFilterRaw`,
-    /// so chip selection stays single-select without a second piece of state.
+    /// Pseudo-category shared with the real category chips via
+    /// `store.largeFileCategoryFilter`, so chip selection stays single-select
+    /// without a second piece of state.
     private static let duplicatesFilterID = LargeFileCategoryFilter.duplicates
+
+    /// The chip the list filters on and lights. The store holds the one the user
+    /// picked; this is All once that chip has no rows and is no longer drawn, so
+    /// the list never filters on a chip the user can't see (#277).
+    private var activeCategoryFilter: String {
+        LargeFileCategoryFilter.activeRawValue(
+            rawValue: store.largeFileCategoryFilter, files: store.largeFiles, duplicates: duplicateIndex
+        )
+    }
 
     private var currentSort: SortOption {
         SortOption(rawValue: sortRaw) ?? .sizeDesc
@@ -74,13 +83,11 @@ struct LargeFilesView: View {
     }
 
     /// Whether the Duplicates chip is the active filter *and* has something to
-    /// show. The two come apart within a session: a fresh Scan empties the index
-    /// while the chip is still selected, and without this guard the list would
-    /// show nothing until the duplicate pass finished. Across launches the filter
-    /// is reset in `LargeFileFilterDefaults.register()` instead.
+    /// show. The two come apart when the last copies leave the list while the
+    /// chip is selected; `activeCategoryFilter` then reads All.
     private var isDuplicatesFilterActive: Bool {
         LargeFileCategoryFilter.isDuplicatesActive(
-            rawValue: categoryFilterRaw, duplicates: duplicateIndex
+            rawValue: activeCategoryFilter, duplicates: duplicateIndex
         )
     }
 
@@ -88,7 +95,7 @@ struct LargeFilesView: View {
     /// iCloud is offered here and nowhere else in the bar, so its meaning is
     /// plain from where it sits.
     private var isICloudFilterActive: Bool {
-        LargeFileCategoryFilter.isICloudActive(rawValue: categoryFilterRaw, files: store.largeFiles)
+        LargeFileCategoryFilter.isICloudActive(rawValue: activeCategoryFilter, files: store.largeFiles)
     }
 
     /// The synced files matching the search, for the iCloud chip's count.
@@ -154,7 +161,7 @@ struct LargeFilesView: View {
     private var visibleIndices: [Int] {
         let files = store.largeFiles
         let filtered = LargeFileCategoryFilter.visibleIndices(
-            in: files, rawValue: categoryFilterRaw, query: searchQuery, duplicates: duplicateIndex
+            in: files, rawValue: activeCategoryFilter, query: searchQuery, duplicates: duplicateIndex
         )
 
         // Under the Duplicates chip the rows are laid out group by group, which
@@ -376,7 +383,7 @@ struct LargeFilesView: View {
         count: Int,
         tier: FilterChipTier = .neutral
     ) -> some View {
-        let isOn = categoryFilterRaw == id
+        let isOn = activeCategoryFilter == id
         return Button {
             selectCategory(id)
         } label: {
@@ -394,10 +401,10 @@ struct LargeFilesView: View {
 
     private func selectCategory(_ id: String) {
         if reduceMotion {
-            categoryFilterRaw = id
+            store.largeFileCategoryFilter = id
         } else {
             withAnimation(.easeInOut(duration: 0.15)) {
-                categoryFilterRaw = id
+                store.largeFileCategoryFilter = id
             }
         }
     }

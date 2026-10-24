@@ -285,6 +285,12 @@ final class PurgeStore: ObservableObject {
     /// What the last Large Files scan looked at and left off the list (#230).
     /// Nil until a scan finishes; a scan that was cancelled leaves none.
     @Published var largeFileScanSummary: LargeFileScanSummary?
+    /// The Large Files chip the user picked: All, Duplicates, iCloud or a
+    /// category's raw value. Held here and never saved, so each launch and each
+    /// Large Files scan starts on All (#277). The list filters on
+    /// `LargeFileCategoryFilter.activeRawValue`, which is All while this chip
+    /// has no rows.
+    @Published var largeFileCategoryFilter = LargeFileCategoryFilter.all
     /// Large-file selection lives in its own observable object (NOT @Published on the
     /// store) so toggling a row does not fire the store's objectWillChange and thus
     /// does not re-render the results List container — a List re-render reverts the
@@ -1963,6 +1969,9 @@ final class PurgeStore: ObservableObject {
         hasCompletedLargeFileScan = false
         largeFiles = []
         largeFileScanSummary = nil
+        // New rows open on All. A chip picked for the old rows may hold nothing
+        // in these, such as Images after the size menu moved to 1 GB (#277).
+        largeFileCategoryFilter = LargeFileCategoryFilter.all
         largeFileSelection.ids.removeAll()
         duplicateScanTask?.cancel()
         duplicateScanTask = nil
