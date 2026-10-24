@@ -1,19 +1,8 @@
 import AppKit
 import SwiftUI
 
-nonisolated enum RemoveDownloadLabels {
-    /// "Remove Download" when every selected file qualifies, and "Remove 5
-    /// Downloads" when only some do. The size follows in the rounded number
-    /// font, drawn by `AnimatedDeleteActionLabel`.
-    static func buttonTitle(removable: Int, selected: Int) -> String {
-        guard selected > removable else { return String(localized: "Remove Download") }
-        return removable == 1
-            ? String(localized: "Remove 1 Download")
-            : String(localized: "Remove \(removable) Downloads")
-    }
-}
-
-/// Confirms Remove Download for iCloud files picked in Large Files (#106).
+/// Confirms Keep Only in iCloud for synced files picked in Large Files (#106).
+/// Finder calls the same action Remove Download.
 ///
 /// The point of the copy is that nothing disappears: the files stay in iCloud
 /// and in their folders, marked with a cloud, and only the copy on this Mac
@@ -33,8 +22,8 @@ struct RemoveDownloadConfirmSheet: View {
 
     private var title: String {
         request.files.count == 1
-            ? String(localized: "Remove this download from your Mac?")
-            : String(localized: "Remove these downloads from your Mac?")
+            ? String(localized: "Keep this file only in iCloud?")
+            : String(localized: "Keep these files only in iCloud?")
     }
 
     private var explanation: String {
@@ -45,8 +34,8 @@ struct RemoveDownloadConfirmSheet: View {
 
     private var confirmTitle: String {
         request.files.count == 1
-            ? String(localized: "Remove Download")
-            : String(localized: "Remove \(request.files.count) Downloads")
+            ? String(localized: "Keep Only in iCloud")
+            : String(localized: "Keep \(request.files.count) Only in iCloud")
     }
 
     /// Accounts for every selected file this run leaves alone, by reason, so a
@@ -60,15 +49,15 @@ struct RemoveDownloadConfirmSheet: View {
         case (0, 0):
             return nil
         case (1, 0):
-            return String(localized: "Purge leaves 1 other selected file alone. It's only on this Mac, so there's no download to remove.")
+            return String(localized: "Purge leaves 1 other selected file alone. It's only on this Mac, not in iCloud.")
         case (_, 0):
-            return String(localized: "Purge leaves \(localOnly) other selected files alone. They're only on this Mac, so there's no download to remove.")
+            return String(localized: "Purge leaves \(localOnly) other selected files alone. They're only on this Mac, not in iCloud.")
         case (0, 1):
             return String(localized: "Purge leaves 1 other selected file alone. It syncs with iCloud but isn't ready yet, for example because it's still uploading.")
         case (0, _):
             return String(localized: "Purge leaves \(notReady) other selected files alone. They sync with iCloud but aren't ready yet, for example because they're still uploading.")
         default:
-            return String(localized: "Purge leaves \(localOnly + notReady) other selected files alone: \(localOnly) only on this Mac, with no download to remove, and \(notReady) in iCloud but not ready yet, for example still uploading.")
+            return String(localized: "Purge leaves \(localOnly + notReady) other selected files alone: \(localOnly) only on this Mac, not in iCloud, and \(notReady) in iCloud but not ready yet, for example still uploading.")
         }
     }
 
@@ -100,7 +89,7 @@ struct RemoveDownloadConfirmSheet: View {
             .frame(minHeight: 180)
 
             if let leftOutNote {
-                RemoveDownloadInfoNote(text: leftOutNote)
+                ICloudOnlyNote(text: leftOutNote)
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
@@ -145,16 +134,16 @@ struct RemoveDownloadResultSheet: View {
 
     private var title: String {
         switch report.removed.count {
-        case 0: return String(localized: "No downloads removed")
-        case 1: return String(localized: "Download removed")
-        default: return String(localized: "\(report.removed.count) downloads removed")
+        case 0: return String(localized: "Nothing changed")
+        case 1: return String(localized: "Kept only in iCloud")
+        default: return String(localized: "\(report.removed.count) files kept only in iCloud")
         }
     }
 
     private var explanation: String {
         switch report.removed.count {
         case 0:
-            return String(localized: "Nothing changed. The files below are still downloaded on this Mac.")
+            return String(localized: "The files below are still on this Mac.")
         case 1:
             return String(localized: "Freed \(formatBytes(report.bytesFreed)) on this Mac. The file is still in iCloud Drive and in its folder in Finder. Open it to download it again.")
         default:
@@ -209,7 +198,7 @@ struct RemoveDownloadResultSheet: View {
             .frame(minHeight: 180)
 
             if let stillSelectedNote {
-                RemoveDownloadInfoNote(text: stillSelectedNote)
+                ICloudOnlyNote(text: stillSelectedNote)
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
@@ -240,9 +229,9 @@ struct RemoveDownloadResultSheet: View {
     }
 }
 
-/// A plain note on the Remove Download sheets. Not the caution box: nothing
-/// here is a risk, it only accounts for files the run leaves alone.
-private struct RemoveDownloadInfoNote: View {
+/// A plain note for Keep Only in iCloud: above the iCloud chip's rows and on its
+/// sheets. Not the caution box: nothing here is a risk.
+struct ICloudOnlyNote: View {
     let text: String
 
     var body: some View {

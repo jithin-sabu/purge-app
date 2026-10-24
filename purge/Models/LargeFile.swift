@@ -342,9 +342,14 @@ nonisolated struct LargeFile: Identifiable, Hashable {
 /// Duplicates is a pseudo-category rather than a `LargeFileCategory` case: a
 /// duplicate cuts across every category, and reusing the one persisted filter key
 /// keeps the chips single-select without a second piece of state.
+///
+/// iCloud is the same kind of pseudo-category (#106): the synced files that also
+/// use space here, where Keep Only in iCloud lives. It cuts across every
+/// category too.
 nonisolated enum LargeFileCategoryFilter {
     static let all = "all"
     static let duplicates = "duplicates"
+    static let iCloud = "icloud"
 
     static func includes(_ file: LargeFile, rawValue: String, duplicates index: DuplicateIndex) -> Bool {
         switch rawValue {
@@ -356,6 +361,8 @@ nonisolated enum LargeFileCategoryFilter {
             // beats relaunching into a permanently empty list.
             guard !index.isEmpty else { return true }
             return index.groupIDByFileID[file.id] != nil
+        case Self.iCloud:
+            return file.canRemoveDownload
         default:
             return file.category.rawValue == rawValue
         }
@@ -363,6 +370,13 @@ nonisolated enum LargeFileCategoryFilter {
 
     static func isDuplicatesActive(rawValue: String, duplicates index: DuplicateIndex) -> Bool {
         rawValue == duplicates && !index.isEmpty
+    }
+
+    /// The iCloud chip is on and still has files under it. Once the last one
+    /// has been kept only in iCloud the chip goes away, and the list falls back
+    /// to All rather than sitting empty under a chip that is no longer there.
+    static func isICloudActive(rawValue: String, files: [LargeFile]) -> Bool {
+        rawValue == iCloud && files.contains(where: \.canRemoveDownload)
     }
 
     /// One duplicate group's rows, as indices into the array they came from.
@@ -438,6 +452,7 @@ nonisolated enum LargeFileCategoryFilter {
             return duplicateSections(in: files, query: query, duplicates: index)
                 .flatMap(\.memberIndices)
         }
+        let rawValue = rawValue == iCloud && !isICloudActive(rawValue: rawValue, files: files) ? all : rawValue
         return files.indices.filter { i in
             includes(files[i], rawValue: rawValue, duplicates: index)
                 && files[i].matches(searchQuery: query)
@@ -529,7 +544,9 @@ enum LargeFileFilterDefaults {
         // on launch shows an empty list until one has. The category chips share
         // this key, so the persisted value is dropped back to "all" here rather
         // than being written differently at the tap site.
-        if userDefaults.string(forKey: categoryKey) == LargeFileCategoryFilter.duplicates {
+        // iCloud likewise needs a scan before it holds anything (#106).
+        if [LargeFileCategoryFilter.duplicates, LargeFileCategoryFilter.iCloud]
+            .contains(userDefaults.string(forKey: categoryKey)) {
             userDefaults.set(LargeFileCategoryFilter.all, forKey: categoryKey)
         }
 

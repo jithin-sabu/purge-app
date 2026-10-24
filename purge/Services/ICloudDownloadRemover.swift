@@ -134,7 +134,7 @@ nonisolated final class ICloudDownloadRemover: Sendable {
         return ICloudDownloadReport(date: now(), removed: removed, skipped: skipped)
     }
 
-    static let evictFailedReasonKey = "macOS couldn't remove the download of this file."
+    static let evictFailedReasonKey = "macOS couldn't remove this file's copy on this Mac."
     static let openInAppReasonKey = "This file is open in an app. Quit the app, then try again."
     static let openCheckUnavailableReasonKey = "Purge couldn't check whether an app has this file open."
 }

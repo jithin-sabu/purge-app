@@ -35,7 +35,7 @@ struct CleanupHistorySummaryRow: View {
         case .appleIntelligenceModels?:
             return LocalizedStringKey("Apple Intelligence models removed")
         case .iCloudDownloadsRemoved?:
-            return LocalizedStringKey("iCloud downloads removed")
+            return LocalizedStringKey("Kept only in iCloud")
         case nil:
             return entry.trigger == .scheduled ? LocalizedStringKey("Automatic clean") : LocalizedStringKey("Manual clean")
         }

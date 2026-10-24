@@ -38,7 +38,7 @@ nonisolated enum ICloudDownloadDecision: Equatable, Sendable {
         case .removable:
             return ""
         case .outsideLargeFiles, .notAFile:
-            return "Purge can't remove the download of this file."
+            return "Purge can't keep this file only in iCloud."
         case .notInICloud:
             return "This file isn't stored in iCloud."
         case .hasConflicts:

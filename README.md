@@ -87,7 +87,7 @@ Git worktrees made by AI coding tools (Cursor, Codex, Conductor, T3 Code, and Cl
 
 Find space-hogging personal files without digging through folders:
 
-- Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**, plus `~/Parallels` and `~/Virtual Machines.localized` for virtual machines only, and iCloud Drive's own folder for downloads you can remove
+- Scans **Documents**, **Desktop**, **Downloads**, **Movies**, **Music**, and **Pictures**, plus `~/Parallels` and `~/Virtual Machines.localized` for virtual machines only, and iCloud Drive's own folder for files you can keep only in iCloud
 - Skips managed libraries (Photos, iMovie, Music, and similar), hidden folders, and project folders like `node_modules`, `Pods`, `DerivedData` and build output. Deleting a single file out of a dependency tree only breaks the install, so those belong in Dev Tools, which removes them a folder at a time
 - **Search** filters the list as you type, matching the file name, the folder it sits in, and its source label
 - Filter by **size** (5 MB to 1 GB) and **last used** (any time up to over 1 year ago)
@@ -96,7 +96,7 @@ Find space-hogging personal files without digging through folders:
 - Sort by size, date, or name; select files and review before deleting
 - **Quick Look** preview and **Reveal in Finder** from each row
 - Deletions move files to **Trash**, so nothing is permanently erased
-- **Remove Download** frees the space an iCloud file takes on this Mac and keeps the file in iCloud. It stays in its folder in Finder with a cloud mark, and opening it downloads it again, the same as Finder's Remove Download. Purge offers it only for files fully uploaded to iCloud, with no sync conflict, not set to Keep Downloaded, unchanged for five minutes and not open in an app, and checks all of that again just before it acts. Files in iCloud Drive's own folder get Remove Download only, never the Trash, since trashing them removes them from your other devices. It is never part of Clean Safe Items or a scheduled clean
+- **Keep Only in iCloud** frees the space an iCloud file takes on this Mac and keeps the file in iCloud, the same as Finder's Remove Download. The **iCloud** chip lists the synced files that also use space here, with how much you'd free, and the action sits there and in each synced file's right-click menu. The file stays in its folder in Finder with a cloud mark, and opening it downloads it again. Purge offers it only for files fully uploaded to iCloud, with no sync conflict, not set to Keep Downloaded, unchanged for five minutes and not open in an app, and checks all of that again just before it acts. Files in iCloud Drive's own folder are never offered for the Trash, since trashing them removes them from your other devices. It is never part of Clean Safe Items or a scheduled clean
 
 Large Files is separate from cache cleanup: these are your personal files, not rebuildable caches.
 

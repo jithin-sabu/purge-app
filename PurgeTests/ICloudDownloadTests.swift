@@ -525,19 +525,43 @@ struct RemoveDownloadStoreTests {
         #expect(entry.skippedItems.map(\.reason) == [ICloudDownloadDecision.notUploaded.skipReasonKey])
     }
 
-    /// The label gives the count once only some of the selection qualifies, and
-    /// the note accounts for every file left alone, by reason.
+    /// The note accounts for every selected file left alone, by reason.
     @Test func mixedSelectionsAreSpelledOut() {
-        #expect(RemoveDownloadLabels.buttonTitle(removable: 2, selected: 2) == "Remove Download")
-        #expect(RemoveDownloadLabels.buttonTitle(removable: 5, selected: 10) == "Remove 5 Downloads")
-        #expect(RemoveDownloadLabels.buttonTitle(removable: 1, selected: 4) == "Remove 1 Download")
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 0, notReady: 0) == nil)
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 0)
-            == "Purge leaves 3 other selected files alone. They're only on this Mac, so there's no download to remove.")
+            == "Purge leaves 3 other selected files alone. They're only on this Mac, not in iCloud.")
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 0, notReady: 1)
             == "Purge leaves 1 other selected file alone. It syncs with iCloud but isn't ready yet, for example because it's still uploading.")
         #expect(RemoveDownloadConfirmSheet.leftOutNote(localOnly: 3, notReady: 2)
-            == "Purge leaves 5 other selected files alone: 3 only on this Mac, with no download to remove, and 2 in iCloud but not ready yet, for example still uploading.")
+            == "Purge leaves 5 other selected files alone: 3 only on this Mac, not in iCloud, and 2 in iCloud but not ready yet, for example still uploading.")
+    }
+
+    /// The iCloud chip shows exactly the files Keep Only in iCloud can act on,
+    /// falls back to All once none are left, and is never restored at launch,
+    /// before a scan has found anything.
+    @Test func theICloudChipShowsOnlyFilesItCanActOn() {
+        let base = "/tmp/purge-106-\(UUID().uuidString)"
+        let files = [
+            row("\(base)/Documents/local.mov", synced: false, removable: false),
+            row("\(base)/Documents/synced.mov", synced: true, removable: true),
+            row("\(base)/Documents/uploading.mov", synced: true, removable: false),
+        ]
+        let shown = LargeFileCategoryFilter.visibleIndices(
+            in: files, rawValue: LargeFileCategoryFilter.iCloud, query: "", duplicates: .empty
+        )
+        #expect(shown == [1])
+        #expect(LargeFileCategoryFilter.isICloudActive(rawValue: LargeFileCategoryFilter.iCloud, files: files))
+
+        let noneLeft = [files[0], files[2]]
+        #expect(!LargeFileCategoryFilter.isICloudActive(rawValue: LargeFileCategoryFilter.iCloud, files: noneLeft))
+        #expect(LargeFileCategoryFilter.visibleIndices(
+            in: noneLeft, rawValue: LargeFileCategoryFilter.iCloud, query: "", duplicates: .empty
+        ) == [0, 1])
+
+        let suite = ThrowawayDefaults()
+        suite.defaults.set(LargeFileCategoryFilter.iCloud, forKey: LargeFileFilterDefaults.categoryKey)
+        LargeFileFilterDefaults.register(userDefaults: suite.defaults)
+        #expect(suite.defaults.string(forKey: LargeFileFilterDefaults.categoryKey) == LargeFileCategoryFilter.all)
     }
 
     @Test func historySaysTheFilesAreStillInICloud() throws {

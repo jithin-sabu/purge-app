@@ -28,8 +28,8 @@ patient, but safety reports get priority over everything else.
   keeps the newest snapshot and the one from your last backup. The Apple
   Intelligence models on macOS 27 are released through Apple's own asset
   service and can be downloaded again; see below. Docker Desktop's data folder
-  goes to the Trash. Purge does not run `docker system prune`. Remove Download
-  in Large Files deletes nothing: it drops the copy of an iCloud file on this
+  goes to the Trash. Purge does not run `docker system prune`. Keep Only in
+  iCloud in Large Files (Finder's Remove Download) deletes nothing: it drops the copy of an iCloud file on this
   Mac through `FileManager.evictUbiquitousItem(at:)`, and the file stays in
   iCloud and in its folder. Purge does it only for a file you picked that is
   fully uploaded, has no sync conflict, is not set to Keep Downloaded, has not
