@@ -47,6 +47,18 @@ enum AppUninstallScanPolicy {
         let category: UninstallCategory
     }
 
+    /// The category of the leftover root `url` sits inside, or `nil` when it is
+    /// not inside one. A retry uses it to run the ownership check again (#174).
+    nonisolated static func leftoverCategory(
+        for url: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> UninstallCategory? {
+        let path = url.standardizedFileURL.path
+        return leftoverSearchRoots(home: home)
+            .first { path.hasPrefix($0.url.standardizedFileURL.path + "/") }?
+            .category
+    }
+
     /// The support locations from the issue. User-domain roots first, then the
     /// two shared `/Library` roots that hold launch daemons and shared support.
     nonisolated static func leftoverSearchRoots(home: URL) -> [LeftoverRoot] {
