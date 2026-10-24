@@ -78,7 +78,8 @@ struct LargeFileScanSummaryTests {
         let run = await scan(roots: [root], staleDays: 365)
         let summary = try #require(run.summary)
         #expect(summary.cloudOnlyCount == 0)
-        #expect(summary.hasSkippedSomething == false)
+        #expect(summary.skippedLibraries.isEmpty)
+        #expect(summary.unreadableRoots.isEmpty)
     }
 
     @Test
@@ -142,7 +143,6 @@ struct LargeFileScanSummaryTests {
         #expect(skipped.name == "Photos Library")
         #expect(skipped.appName == "Photos")
         #expect(skipped.bytes >= 8192)
-        #expect(summary.hasSkippedSomething)
     }
 
     /// A library under the threshold is nothing to explain.
@@ -175,7 +175,6 @@ struct LargeFileScanSummaryTests {
         #expect(summary.checkedRoots.isEmpty)
         #expect(summary.unreadableRoots.map(\.path.path) == [root.path])
         #expect(summary.unreadableRoots.first?.name == root.lastPathComponent)
-        #expect(summary.hasSkippedSomething)
     }
 
     @Test
@@ -230,8 +229,9 @@ struct LargeFileScanSummaryTests {
         #expect(LargeFileEmptyState.resolve(nil) == .nothingLarge)
         #expect(LargeFileEmptyState.resolve(summary) == .nothingLarge)
 
+        // A media library is no reason of its own: Purge never lists what is inside one.
         summary.skippedLibraries = [.init(path: URL(fileURLWithPath: "/tmp/Photos Library.photoslibrary"), bytes: 10)]
-        #expect(LargeFileEmptyState.resolve(summary) == .library)
+        #expect(LargeFileEmptyState.resolve(summary) == .nothingLarge)
 
         summary.addCloudOnly(.oneDrive, bytes: 10)
         #expect(LargeFileEmptyState.resolve(summary) == .cloudOnly)
@@ -263,10 +263,21 @@ struct LargeFileScanSummaryTests {
     }
 
     @Test
-    func countTextReadsAsTheLegendDoes() {
+    func countTextReadsAsTheRowsDo() {
         #expect(LargeFileScanSummaryCard.countText(count: 0, bytes: 0) == "0 files")
         #expect(LargeFileScanSummaryCard.countText(count: 1, bytes: 0) == "1 file")
         #expect(LargeFileScanSummaryCard.countText(count: 1, bytes: 1024 * 1024) == "1 file · \(formatBytes(1024 * 1024))")
         #expect(LargeFileScanSummaryCard.countText(count: 14, bytes: 1024 * 1024) == "14 files · \(formatBytes(1024 * 1024))")
+    }
+
+    @Test
+    func onlyAFolderOrACloudGetsARow() {
+        var summary = LargeFileScanSummary(minBytes: 1)
+        summary.checkedRoots = [URL(fileURLWithPath: "/Users/someone/Documents", isDirectory: true)]
+        #expect(LargeFileScanSummaryCard.hasRows(summary) == false)
+        summary.skippedLibraries = [.init(path: URL(fileURLWithPath: "/Users/someone/Pictures/Photos Library.photoslibrary"), bytes: 100)]
+        #expect(LargeFileScanSummaryCard.hasRows(summary) == false)
+        summary.cloudOnly = [.init(provider: .iCloudDrive, count: 1, bytes: 1)]
+        #expect(LargeFileScanSummaryCard.hasRows(summary))
     }
 }

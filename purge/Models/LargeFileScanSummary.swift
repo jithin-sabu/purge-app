@@ -140,11 +140,6 @@ nonisolated struct LargeFileScanSummary: Equatable, Sendable {
     var cloudOnlyBytes: Int64 { cloudOnly.reduce(0) { $0 + $1.bytes } }
     var libraryBytes: Int64 { skippedLibraries.reduce(0) { $0 + $1.bytes } }
 
-    /// Whether the summary has anything to show next to a list that has rows.
-    var hasSkippedSomething: Bool {
-        !cloudOnly.isEmpty || !skippedLibraries.isEmpty || !unreadableRoots.isEmpty
-    }
-
     mutating func addCloudOnly(_ provider: CloudProvider, bytes: Int64) {
         if let index = cloudOnly.firstIndex(where: { $0.provider == provider }) {
             cloudOnly[index].count += 1
