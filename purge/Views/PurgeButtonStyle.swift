@@ -131,7 +131,7 @@ private struct PurgeButtonBody: View {
         }
     }
 
-    private var font: Font {
+    private var font: AppStyle.TextStyle {
         switch size {
         case .small: AppStyle.Typography.callout.weight(.semibold)
         case .regular: AppStyle.Typography.headline

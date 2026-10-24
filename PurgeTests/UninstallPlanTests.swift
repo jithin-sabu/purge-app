@@ -78,4 +78,29 @@ struct UninstallPlanTests {
         #expect(plan.totalSelectedItems == 2)
         #expect(plan.totalSelectedBytes == 3_000)
     }
+
+    /// The review says a running app "will be quit first" only when its bundle
+    /// is ticked, the only case the removal quits it (#176).
+    @Test
+    func runningAppIsQuitOnlyWhenItsBundleIsTicked() {
+        let running = InstalledApp(
+            name: "Xcode",
+            bundleURL: URL(fileURLWithPath: "/Applications/Xcode.app", isDirectory: true),
+            bundleID: "com.apple.dt.Xcode",
+            bundleSizeBytes: 0,
+            isRunning: true
+        )
+        var plan = UninstallAppPlan(app: running, items: [
+            item(path: "/Applications/Xcode.app", bytes: 1_000, reason: .appBundle),
+            item(path: "/Users/x/Library/Preferences/com.apple.dt.Xcode.plist", bytes: 50, reason: .bundleID)
+        ])
+        #expect(plan.quitsAppFirst)
+
+        plan.items[0].isSelected = false
+        #expect(!plan.quitsAppFirst)
+
+        plan.items[0].isSelected = true
+        let idle = UninstallAppPlan(app: makeApp(bundlePath: "/Applications/Xcode.app"), items: plan.items)
+        #expect(!idle.quitsAppFirst)
+    }
 }

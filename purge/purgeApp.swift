@@ -17,6 +17,8 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         LaunchContext.captureLaunchKind()
+        // Before the first paint, so no label shows the system font first.
+        AppFonts.register()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

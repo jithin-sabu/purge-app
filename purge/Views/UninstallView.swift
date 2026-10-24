@@ -771,7 +771,6 @@ private struct UninstallItemRow: View {
     /// Leftovers rows name only the folder the item sits in; the full path is
     /// in the tooltip and Reveal in Finder.
     var showsShortLocation = false
-
     @State private var isContextMenuActive = false
 
     var body: some View {
@@ -890,6 +889,14 @@ private struct AppListRow: View {
     @State private var isHovering = false
     @State private var isContextMenuActive = false
 
+    /// The folder, plus who installed it when Homebrew did (#254), so the
+    /// review sheet's Homebrew choice is no surprise.
+    private var locationLine: String {
+        let folder = app.bundleURL.deletingLastPathComponent().path
+        guard app.homebrewCask != nil else { return folder }
+        return String(localized: "\(folder) · Installed by Homebrew")
+    }
+
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             // Same pattern as App Caches: a native checkbox for appearance, with
@@ -913,7 +920,7 @@ private struct AppListRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                Text(app.bundleURL.deletingLastPathComponent().path)
+                Text(locationLine)
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
                     .lineLimit(1)
@@ -953,7 +960,7 @@ private struct AppListRow: View {
         .help(app.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
+            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")\(app.homebrewCask == nil ? "" : ", " + String(localized: "Installed by Homebrew"))"
         )
         .accessibilityValue(isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -1154,7 +1161,7 @@ struct UninstallReviewSheet: View {
                 .font(AppStyle.Typography.pageTitle)
                 .foregroundStyle(AppColors.textPrimary)
 
-            Text("Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted permanently, so you can put anything back if you change your mind.")
+            Text(Self.introText(for: plan))
                 .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1165,6 +1172,46 @@ struct UninstallReviewSheet: View {
         let count = plan.apps.count
         if count == 1 { return String(localized: "Uninstall \(plan.apps[0].app.name)?") }
         return String(localized: "Uninstall \(count) apps?")
+    }
+
+    /// Which apps in the plan Homebrew could remove (#254): cask apps whose
+    /// bundle is ticked. They decide whether the sheet offers the two buttons.
+    static func homebrewCandidates(in plan: UninstallPlan) -> [UninstallAppPlan] {
+        plan.apps.filter { $0.app.homebrewCask != nil && $0.bundleItem?.isSelected == true }
+    }
+
+    /// The intro follows where the ticked items go. With a cask app in the
+    /// plan it explains the two buttons, because that choice is the one place
+    /// the permanent removal is decided.
+    static func introText(for plan: UninstallPlan) -> String {
+        let candidates = homebrewCandidates(in: plan)
+        if candidates.isEmpty {
+            return String(localized: "Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted permanently, so you can put anything back if you change your mind.")
+        }
+        let names = ListFormatter.localizedString(byJoining: candidates.map(\.app.name))
+        if candidates.count == 1 {
+            return String(localized: "Homebrew installed \(names). Remove with Homebrew runs the cask's own uninstall: it deletes the app permanently, may stop its background services and delete its helper tools and installer files permanently too, and Homebrew forgets it. Move All to Trash keeps the app recoverable, but Homebrew still lists it. Ticked leftovers that are still there afterwards move to the Trash.")
+        }
+        return String(localized: "Homebrew installed \(names). Remove with Homebrew runs each cask's own uninstall: it deletes those apps permanently, may stop their background services and delete their helper tools and installer files permanently too, and Homebrew forgets them. Move All to Trash keeps them recoverable, but Homebrew still lists them. Ticked leftovers that are still there afterwards move to the Trash.")
+    }
+
+    /// With no cask app there is one button, as before. With one, the choice
+    /// is the button: Remove with Homebrew, or Move All to Trash beside it.
+    static func primaryButtonTitle(for plan: UninstallPlan) -> String {
+        if homebrewCandidates(in: plan).isEmpty { return String(localized: "Move \(plan.totalSelectedItems) to Trash") }
+        return String(localized: "Remove with Homebrew")
+    }
+
+    static func secondaryButtonTitle(for plan: UninstallPlan) -> String? {
+        homebrewCandidates(in: plan).isEmpty ? nil : String(localized: "Move All to Trash")
+    }
+
+    /// The plan a button hands back: every cask app set to Homebrew, or every
+    /// one set to the Trash. An app that is not a cask ignores the flag.
+    static func plan(_ plan: UninstallPlan, removingThroughHomebrew: Bool) -> UninstallPlan {
+        var plan = plan
+        for index in plan.apps.indices { plan.apps[index].removesThroughHomebrew = removingThroughHomebrew }
+        return plan
     }
 
     private func appSection(_ appPlan: Binding<UninstallAppPlan>) -> some View {
@@ -1184,7 +1231,12 @@ struct UninstallReviewSheet: View {
                     .frame(width: 24, height: 24)
                 Text(app.name)
                     .font(AppStyle.Typography.rowTitle)
-                if app.isRunning {
+                if app.homebrewCask != nil {
+                    Text("Installed by Homebrew")
+                        .font(AppStyle.Typography.metadata)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+                if appPlan.wrappedValue.quitsAppFirst {
                     Text("will be quit first")
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.statusCheckText)
@@ -1195,6 +1247,9 @@ struct UninstallReviewSheet: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .monospacedDigit()
             }
+            // The same inset as the cards' contents, so the header's checkbox
+            // sits over the rows' checkboxes and its size over their sizes.
+            .padding(.horizontal, AppStyle.Spacing.small)
 
             ForEach(appPlan.items) { $item in
                 UninstallItemRow(
@@ -1225,20 +1280,40 @@ struct UninstallReviewSheet: View {
         appPlan.wrappedValue.toggleAllFromHeader()
     }
 
+    /// One button, or three when a cask app's bundle is ticked (#254). The
+    /// choice is made here, not in a toggle, so each button hands back the
+    /// plan with every app set the way it says. With three, Cancel takes the
+    /// far left where the size line was, and the two real choices sit together
+    /// on the right.
     private var footer: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
-                .font(AppStyle.Typography.metadataEmphasis.numbers)
-                .foregroundStyle(AppColors.textSecondary)
+        let secondary = Self.secondaryButtonTitle(for: plan)
+        return HStack(spacing: AppStyle.Spacing.small) {
+            if secondary == nil {
+                Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+                    .font(AppStyle.Typography.metadataEmphasis.numbers)
+                    .foregroundStyle(AppColors.textSecondary)
+            } else {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.purge(.secondary))
+                    .keyboardShortcut(.cancelAction)
+            }
 
             Spacer()
 
-            Button("Cancel", action: onCancel)
+            if let secondary {
+                Button(secondary) {
+                    onConfirm(Self.plan(plan, removingThroughHomebrew: false))
+                }
                 .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
+                .disabled(plan.totalSelectedItems == 0)
+            } else {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.purge(.secondary))
+                    .keyboardShortcut(.cancelAction)
+            }
 
-            Button("Move \(plan.totalSelectedItems) to Trash") {
-                onConfirm(plan)
+            Button(Self.primaryButtonTitle(for: plan)) {
+                onConfirm(Self.plan(plan, removingThroughHomebrew: true))
             }
             .buttonStyle(.purge(.destructive))
             .keyboardShortcut(.defaultAction)

@@ -19,18 +19,27 @@ nonisolated struct DeletedItem: Identifiable {
     }
 }
 
-nonisolated struct FailedDeletionItem: Identifiable {
+nonisolated struct FailedDeletionItem: Identifiable, Equatable {
     let id = UUID()
     let path: String
     let displayName: String
     let reason: CleanFailureReason
     let sizeBytes: Int64
+    /// The route that tried it, so Retry tries the same one (#174).
+    let route: DeletionRoute
 
-    init(path: String, displayName: String?, reason: CleanFailureReason, sizeBytes: Int64 = 0) {
+    init(
+        path: String,
+        displayName: String?,
+        reason: CleanFailureReason,
+        sizeBytes: Int64 = 0,
+        route: DeletionRoute = .cache
+    ) {
         self.path = path
         self.displayName = displayName ?? URL(fileURLWithPath: path).lastPathComponent
         self.reason = reason
         self.sizeBytes = sizeBytes
+        self.route = route
     }
 }
 
@@ -42,12 +51,21 @@ nonisolated struct SkippedDeletionItem: Identifiable, Hashable {
     /// `true` when the user should see a "skipped for safety" notice.
     /// `false` for silent never-delete blocks.
     let isUserVisible: Bool
+    /// The route that refused it.
+    let route: DeletionRoute
 
-    init(path: String, displayName: String?, reason: String, isUserVisible: Bool) {
+    init(
+        path: String,
+        displayName: String?,
+        reason: String,
+        isUserVisible: Bool,
+        route: DeletionRoute = .cache
+    ) {
         self.path = path
         self.displayName = displayName ?? URL(fileURLWithPath: path).lastPathComponent
         self.reason = reason
         self.isUserVisible = isUserVisible
+        self.route = route
     }
 }
 
@@ -102,6 +120,20 @@ nonisolated struct DeletionReport: Identifiable {
     var movedNothingAndFailed: Bool {
         deletedItems.isEmpty && !failedItems.isEmpty
     }
+}
+
+/// What one retry from the completion screen came to (#174).
+nonisolated enum RetryOutcome: Sendable, Equatable {
+    /// The item went: to the Trash, or outright for a simulator or runtime, which
+    /// `movedToTrash` tells apart so the record and the Trash line stay honest.
+    /// `remaining` is what still failed this time: the entries of a folder emptied
+    /// one by one that did not move, each its own row from here on.
+    case deleted(bytes: Int64, movedToTrash: Bool, remaining: [FailedDeletionItem])
+    /// Nothing was at the path any more. Something else removed it since the clean.
+    case alreadyGone
+    /// Still there, with the reason the route gave this time. A gate's refusal
+    /// comes back as `.safetySkipped`, which offers no Retry.
+    case failed(CleanFailureReason)
 }
 
 /// Outcome of asking CoreSimulator to remove a runtime image.
@@ -183,6 +215,7 @@ nonisolated final class FileDeleter: Sendable {
         var bytesRemovedDirectly: Int64 = 0
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
+        var fullDiskAccess: Bool?
         var skippedItems: [SkippedDeletionItem] = []
         var ownershipWarningPaths: [String] = []
         var installLeftovers: [URL] = []
@@ -199,6 +232,13 @@ nonisolated final class FileDeleter: Sendable {
                 if DeletionSafetyPolicy.isOfferedForCleanup(url),
                    DeletionSafetyPolicy.evaluate(url) == .allow {
                     installLeftovers.append(url)
+                } else {
+                    skippedItems.append(SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: "This file was skipped for safety",
+                        isUserVisible: true
+                    ))
                 }
                 continue
             }
@@ -230,7 +270,18 @@ nonisolated final class FileDeleter: Sendable {
                 continue
             }
 
-            guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { continue }
+            // The scan offered every row here, so a refusal now means the answer
+            // changed since: Mail opened, Spotify downloaded music, a project
+            // started holding state. The row says so instead of vanishing (#174).
+            guard DeletionSafetyPolicy.isOfferedForCleanup(url) else {
+                skippedItems.append(SkippedDeletionItem(
+                    path: url.path,
+                    displayName: friendlyTitle,
+                    reason: "This file was skipped for safety",
+                    isUserVisible: true
+                ))
+                continue
+            }
 
             let decision = DeletionSafetyPolicy.evaluate(url)
             switch decision {
@@ -252,17 +303,23 @@ nonisolated final class FileDeleter: Sendable {
                 }
 
                 onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
-                let size = pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.directoryByteSize(at: url)
+                // A folder emptied entry by entry sums its entries below, so it is
+                // never measured whole here.
+                let deletesContentsOnly = DeletionSafetyPolicy.shouldDeleteContentsOnly(url)
+                let size = deletesContentsOnly
+                    ? 0
+                    : (pathToExpectedSizeBytes[standardizedPath] ?? FolderSizing.directoryByteSize(at: url))
 
-                if DeletionSafetyPolicy.shouldDeleteContentsOnly(url) {
+                if deletesContentsOnly {
                     var didDeleteAnyContent = false
                     var movedBytes: Int64 = 0
 
-                    if let contents = try? FileManager.default.contentsOfDirectory(
-                        at: url,
-                        includingPropertiesForKeys: Self.contentsEntryKeys,
-                        options: [.skipsHiddenFiles]
-                    ) {
+                    do {
+                        let contents = try FileManager.default.contentsOfDirectory(
+                            at: url,
+                            includingPropertiesForKeys: Self.contentsEntryKeys,
+                            options: [.skipsHiddenFiles]
+                        )
                         // Entries move one at a time, and a Telegram media folder can
                         // hold tens of thousands. Each one reports its own size as it
                         // moves, so the progress screen keeps moving, and the total
@@ -285,10 +342,25 @@ nonisolated final class FileDeleter: Sendable {
                                     error: error,
                                     displayName: contentURL.lastPathComponent,
                                     sizeBytes: entryBytes,
-                                    failedItems: &failedItems
+                                    route: .cache,
+                                    failedItems: &failedItems,
+                                    fullDiskAccess: &fullDiskAccess
                                 )
                             }
                         }
+                    } catch {
+                        // A folder that cannot even be listed is a failure with a
+                        // reason, usually Full Disk Access, not a folder that was
+                        // never there (#174).
+                        recordDeletionFailure(
+                            path: url.path,
+                            error: error,
+                            displayName: friendlyTitle,
+                            sizeBytes: pathToExpectedSizeBytes[standardizedPath] ?? 0,
+                            route: .cache,
+                            failedItems: &failedItems,
+                            fullDiskAccess: &fullDiskAccess
+                        )
                     }
 
                     if didDeleteAnyContent {
@@ -345,7 +417,9 @@ nonisolated final class FileDeleter: Sendable {
                             error: error,
                             displayName: friendlyTitle,
                             sizeBytes: size,
-                            failedItems: &failedItems
+                            route: .cache,
+                            failedItems: &failedItems,
+                            fullDiskAccess: &fullDiskAccess
                         )
                     }
                 }
@@ -469,6 +543,7 @@ nonisolated final class FileDeleter: Sendable {
         var bytesMovedToTrash: Int64 = 0
         var deletedItems: [DeletedItem] = []
         var failedItems: [FailedDeletionItem] = []
+        var fullDiskAccess: Bool?
         var skippedItems: [SkippedDeletionItem] = []
         var ownershipWarningPaths: [String] = []
         let volumeURL = home
@@ -486,18 +561,26 @@ nonisolated final class FileDeleter: Sendable {
             // equally narrow gate. The uninstaller adds a third: an app bundle in
             // an app root, or a leftover inside a known Library location. The
             // fourth is a command-line tool's folder, shims and job plists.
-            let isEligible = aiModelPaths.contains(standardizedPath)
+            let isAIModel = aiModelPaths.contains(standardizedPath)
+            let isEligible = isAIModel
                 ? AIModelScanPolicy.isEligibleForDeletion(url, home: home)
                 : LargeFileScanPolicy.isEligibleForDeletion(url, home: home)
                     || AIModelScanPolicy.isEligibleForDeletion(url, home: home)
                     || AppUninstallScanPolicy.isEligibleForUninstallDeletion(url, home: home)
                     || commandLineToolPaths.contains(standardizedPath)
+            // Stamped here, from the flags this call was given, so a retry asks the
+            // same gate with the same flags (#174).
+            let route = DeletionRoute.userSelected(
+                isAIModel: isAIModel,
+                privilegedEligible: privilegedEligiblePaths.contains(standardizedPath)
+            )
             guard isEligible else {
                 skippedItems.append(SkippedDeletionItem(
                     path: url.path,
                     displayName: friendlyTitle,
                     reason: "This file was skipped for safety",
-                    isUserVisible: true
+                    isUserVisible: true,
+                    route: route
                 ))
                 continue
             }
@@ -515,7 +598,9 @@ nonisolated final class FileDeleter: Sendable {
                     error: error,
                     displayName: friendlyTitle,
                     sizeBytes: size,
-                    failedItems: &failedItems
+                    route: route,
+                    failedItems: &failedItems,
+                    fullDiskAccess: &fullDiskAccess
                 )
             }
         }
@@ -645,7 +730,8 @@ nonisolated final class FileDeleter: Sendable {
                         path: item.path,
                         displayName: item.displayName,
                         reason: .needsAdministrator,
-                        sizeBytes: item.sizeBytes
+                        sizeBytes: item.sizeBytes,
+                        route: item.route
                     ))
                 }
             } else {
@@ -807,33 +893,81 @@ nonisolated final class FileDeleter: Sendable {
         return root[identifier] != nil
     }
 
-    /// Retries deletion for a single previously failed item.
+    /// Retries one failed item through the route that tried it the first time, so
+    /// the same gate decides again with the same flags (#174). A Large Files row
+    /// retried through the cache route used to be refused there every time and
+    /// vanish from the report, which left Retry on the screen for good.
     func retryDeleteItem(
         at url: URL,
         displayName: String?,
         expectedSizeBytes: Int64,
+        route: DeletionRoute,
         simulatorRuntimeID: String? = nil
-    ) async -> Result<Int64, CleanFailureReason> {
+    ) async -> RetryOutcome {
+        let key = url.standardizedFileURL.path
+        // A runtime or device row's path is only a handle for `simctl`, so only a
+        // file row can be seen to be gone.
+        let isSimulatorHandle = simulatorRuntimeID != nil || Self.coreSimulatorDeviceUDID(from: url) != nil
+        if !isSimulatorHandle, !Self.stillOnDisk(url) { return .alreadyGone }
+
+        let names = [key: displayName ?? url.lastPathComponent]
+        let sizes = [key: expectedSizeBytes]
         let report: DeletionReport
         do {
-            let key = url.standardizedFileURL.path
-            report = try await deleteItems(
-                at: [url],
-                pathToDisplayName: [key: displayName ?? url.lastPathComponent],
-                pathToExpectedSizeBytes: [key: expectedSizeBytes],
-                simulatorRuntimeIDsByPath: simulatorRuntimeID.map { [key: $0] } ?? [:]
-            )
+            switch route {
+            case .cache:
+                report = try await deleteItems(
+                    at: [url],
+                    pathToDisplayName: names,
+                    pathToExpectedSizeBytes: sizes,
+                    simulatorRuntimeIDsByPath: simulatorRuntimeID.map { [key: $0] } ?? [:]
+                )
+            case .userSelected(let isAIModel, let privilegedEligible):
+                report = try await deleteUserSelectedFiles(
+                    at: [url],
+                    pathToDisplayName: names,
+                    pathToExpectedSizeBytes: sizes,
+                    aiModelPaths: isAIModel ? [key] : [],
+                    privilegedEligiblePaths: privilegedEligible ? [key] : []
+                )
+            case .lockedUninstall:
+                // A held app is finished bundle first by the store, never one path
+                // at a time here. The row stays as it is.
+                return .failed(.needsAdministrator)
+            }
         } catch {
-            return .failure(.unknown)
+            return .failed(.unknown)
         }
 
-        if report.deletedItems.isEmpty {
-            if let failed = report.failedItems.first {
-                return .failure(failed.reason)
-            }
-            return .failure(.unknown)
+        if !report.deletedItems.isEmpty {
+            return .deleted(
+                bytes: report.bytesMovedToTrash + report.bytesRemovedDirectly,
+                movedToTrash: report.deletedItems.allSatisfy(\.movedToTrash),
+                remaining: report.failedItems
+            )
         }
-        return .success(report.bytesMovedToTrash + report.bytesRemovedDirectly)
+        if let failed = report.failedItems.first { return .failed(failed.reason) }
+        if !report.skippedItems.isEmpty { return .failed(.safetySkipped) }
+        // The move found nothing there: it went some other way since the clean.
+        return .alreadyGone
+    }
+
+    /// Whether something is still at `url`, the link itself for a symlink. Only a
+    /// clear "no such file" counts as gone: a path that cannot be read at all is
+    /// still a failure to show, not a row to drop.
+    private static func stillOnDisk(_ url: URL) -> Bool {
+        var info = stat()
+        if lstat(url.path, &info) == 0 { return true }
+        return !(errno == ENOENT || errno == ENOTDIR)
+    }
+
+    /// Probes Full Disk Access the first time a run needs to know, then reuses the
+    /// answer. A folder whose contents all fail used to probe once per entry (#190).
+    private static func fullDiskAccess(cachedIn cached: inout Bool?) -> Bool {
+        if let cached { return cached }
+        let granted = PermissionChecker().hasFullDiskAccess()
+        cached = granted
+        return granted
     }
 
     private func recordDeletionFailure(
@@ -841,12 +975,14 @@ nonisolated final class FileDeleter: Sendable {
         error: Error,
         displayName: String?,
         sizeBytes: Int64,
-        failedItems: inout [FailedDeletionItem]
+        route: DeletionRoute,
+        failedItems: inout [FailedDeletionItem],
+        fullDiskAccess: inout Bool?
     ) {
         guard let reason = CleanFailureReason.resolved(
             from: error,
             path: path,
-            fullDiskAccessGranted: PermissionChecker().hasFullDiskAccess()
+            fullDiskAccessGranted: Self.fullDiskAccess(cachedIn: &fullDiskAccess)
         ) else {
             NSLog("Purge: item already gone, skipping %@", path)
             return
@@ -856,7 +992,8 @@ nonisolated final class FileDeleter: Sendable {
             path: path,
             displayName: displayName,
             reason: reason,
-            sizeBytes: sizeBytes
+            sizeBytes: sizeBytes,
+            route: route
         ))
     }
 }

@@ -99,11 +99,11 @@ struct CleanupHistorySummaryRow: View {
         return formatter
     }()
 
-    private var scheduleStatusPrimaryFont: Font {
+    private var scheduleStatusPrimaryFont: AppStyle.TextStyle {
         AppStyle.Typography.body
     }
 
-    private var scheduleStatusTertiaryFont: Font {
+    private var scheduleStatusTertiaryFont: AppStyle.TextStyle {
         AppStyle.Typography.metadata
     }
 }

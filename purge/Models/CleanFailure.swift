@@ -188,13 +188,16 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     /// protection when the file — or the directory holding it — really is
     /// immutable or SIP-marked. Anything else is honestly unknown, and offering
     /// a retry beats inventing a cause.
+    ///
+    /// `fullDiskAccessGranted` probes the disk, so it is only asked for a
+    /// permission error.
     static func resolved(
         from error: Error,
         path: String,
-        fullDiskAccessGranted: Bool
+        fullDiskAccessGranted: @autoclosure () -> Bool
     ) -> CleanFailureReason? {
         guard let reason = from(error: error) else { return nil }
-        guard fullDiskAccessGranted, reason == .needsFullDiskAccess else { return reason }
+        guard reason == .needsFullDiskAccess, fullDiskAccessGranted() else { return reason }
         return FileProtection.blocksRemoval(URL(fileURLWithPath: path)) ? .systemProtected : .unknown
     }
 
@@ -210,25 +213,57 @@ nonisolated enum CleanFailureReason: Equatable, Error {
     }
 }
 
+/// Which `FileDeleter` route tried an item, kept on its failure so Retry goes back
+/// through the same gate (#174). A retry can then never remove more than the first
+/// attempt could: the cache route answers to `DeletionSafetyPolicy.evaluate`, the
+/// user-selected route to the four policy gates, with the flags the first call set.
+nonisolated enum DeletionRoute: Hashable, Sendable {
+    /// `FileDeleter.deleteItems`: caches, Dev Tools, simulators and runtimes.
+    case cache
+    /// `FileDeleter.deleteUserSelectedFiles`, with the flags that call passed for
+    /// this path. `isAIModel` keeps a model component on the model gate alone (#157);
+    /// `privilegedEligible` lets the helper move it when the plain move fails.
+    case userSelected(isAIModel: Bool, privilegedEligible: Bool)
+    /// The one "needs your OK" row for a held app, finished bundle first by
+    /// `PurgeStore.completeLockedUninstall`. Never retried by `FileDeleter` itself.
+    case lockedUninstall
+}
+
 struct CleanFailureItem: Identifiable, Equatable {
     let id: UUID
     let path: String
     let displayName: String
     let reason: CleanFailureReason
     let sizeBytes: Int64
+    let route: DeletionRoute
 
     init(
         id: UUID = UUID(),
         path: String,
         displayName: String,
         reason: CleanFailureReason,
-        sizeBytes: Int64 = 0
+        sizeBytes: Int64 = 0,
+        route: DeletionRoute = .cache
     ) {
         self.id = id
         self.path = path
         self.displayName = displayName
         self.reason = reason
         self.sizeBytes = sizeBytes
+        self.route = route
+    }
+
+    /// The same row with the reason a retry just came back with. Keeps the id, so
+    /// the list does not rebuild the row.
+    func replacingReason(_ reason: CleanFailureReason) -> CleanFailureItem {
+        CleanFailureItem(
+            id: id,
+            path: path,
+            displayName: displayName,
+            reason: reason,
+            sizeBytes: sizeBytes,
+            route: route
+        )
     }
 
     /// An entry a finished macOS update left in `macOS Install Data` (#127). These go
@@ -244,7 +279,8 @@ struct CleanFailureItem: Identifiable, Equatable {
             path: failed.path,
             displayName: failed.displayName,
             reason: failed.reason,
-            sizeBytes: failed.sizeBytes
+            sizeBytes: failed.sizeBytes,
+            route: failed.route
         )
     }
 
@@ -254,7 +290,8 @@ struct CleanFailureItem: Identifiable, Equatable {
             path: skipped.path,
             displayName: skipped.displayName,
             reason: .safetySkipped,
-            sizeBytes: 0
+            sizeBytes: 0,
+            route: skipped.route
         )
     }
 }

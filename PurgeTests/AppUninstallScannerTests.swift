@@ -154,8 +154,9 @@ struct AppUninstallScannerTests {
             apps.append(app)
         }
         // Whatever this machine has installed, the scan must never surface a
-        // system bundle or Purge itself.
-        #expect(apps.allSatisfy { !$0.bundleURL.path.hasPrefix("/System/") })
+        // system bundle or Purge itself. `/Applications/Safari.app` links into
+        // `/System`, so where each bundle really lives is what counts (#176).
+        #expect(apps.allSatisfy { !$0.bundleURL.resolvingSymlinksInPath().path.hasPrefix("/System/") })
         #expect(apps.allSatisfy { $0.bundleID != "io.getpurge.app" })
     }
 

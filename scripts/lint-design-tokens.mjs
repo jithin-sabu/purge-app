@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Fails when a view steps around the design system: raw colours, SwiftUI's
-// hierarchical greys, point sizes on text, or literal corner radii. The tokens
+// hierarchical greys, point sizes or tracking on text, or literal corner radii. The tokens
 // live in purge/Theme/AppColors.swift and purge/Views/AppStyle.swift; see
 // docs/design-system.md. Add `design-lint: allow` to a line to exempt it.
 //
@@ -40,6 +40,10 @@ const rules = [
   {
     pattern: /cornerRadius: *\d|\.cornerRadius\( *\d/,
     message: "literal corner radius; use AppStyle.Radius",
+  },
+  {
+    pattern: /\.(tracking|kerning)\(/,
+    message: "literal tracking; the AppStyle.Typography style sets it",
   },
   {
     pattern: /\b(AppButtonStyle|SolidDestructiveButtonStyle|OnboardingCapsuleButtonStyle|statusTextButton)\b/,

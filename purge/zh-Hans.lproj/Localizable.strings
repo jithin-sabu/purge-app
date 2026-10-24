@@ -593,6 +593,9 @@
 "Size (smallest first)" = "大小（从小到大）";
 "Size filter" = "按大小筛选";
 "Skipped" = "已跳过";
+"Retry all" = "全部重试";
+"Kept" = "已保留";
+"Protected" = "受保护";
 "Skipped for safety" = "出于安全考虑已跳过";
 "Smallest" = "最小优先";
 "Snapshots may hold the only copy of files you changed or deleted since your last backup. Removed snapshots can't be put back. Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. Backups on your backup disk aren't touched." = "快照可能保存着自上次备份以来修改或删除文件的唯一副本。快照删除后无法恢复。Purge 会保留最新的快照和上次备份留下的那张，时间机器可能仍需要它们。备份磁盘上的备份不会受到影响。";
@@ -874,6 +877,10 @@
 "%@ is outside the Applications folder" = "%@ 不在“应用程序”文件夹中";
 "%@ is part of macOS" = "%@ 是 macOS 的一部分";
 "%@ is part of another app" = "%@ 是另一个应用的一部分";
+"%@ is no longer there" = "%@ 已不在原处";
+"Purge could not find %@ where it was. It may have been moved or already removed." = "Purge 在原来的位置找不到 %@。它可能已被移动或移除。";
+"Purge could not find %@ in its app list" = "Purge 的应用列表中找不到 %@";
+"Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具只列出 /Applications 和个人主文件夹中“应用程序”文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
 "%@ is inside another app or package, so Purge does not list it on its own. To remove it, uninstall the app it belongs to." = "%@ 位于另一个应用或软件包内，因此 Purge 不会单独列出它。要移除它，请卸载它所属的应用。";
 "%lld simulators use it. %@" = "有 %lld 个模拟器在使用它。%@";
 ", syncs with iCloud" = "，与 iCloud 同步";
@@ -1312,6 +1319,36 @@
 "Scans skip these folders and everything inside them. You can also right-click a scan result and choose Exclude from scans." = "扫描会跳过这些文件夹及其中的所有内容。也可以右键点按扫描结果，选择“从扫描中排除”。";
 "More about %@" = "关于“%@”的更多信息";
 
+/* Homebrew cask apps in the uninstaller (#254) */
+"Homebrew installed %@. Remove with Homebrew runs the cask's own uninstall: it deletes the app permanently, may stop its background services and delete its helper tools and installer files permanently too, and Homebrew forgets it. Move All to Trash keeps the app recoverable, but Homebrew still lists it. Ticked leftovers that are still there afterwards move to the Trash." = "Homebrew 安装了 %@。“通过 Homebrew 移除”会运行该 cask 自带的卸载流程：永久删除该应用，可能会停止其后台服务并永久删除其辅助工具和安装文件，Homebrew 也不再记录它。“全部移到废纸篓”可以恢复该应用，但 Homebrew 仍会列出它。之后仍然存在的已勾选残留文件会移到废纸篓。";
+"Homebrew installed %@. Remove with Homebrew runs each cask's own uninstall: it deletes those apps permanently, may stop their background services and delete their helper tools and installer files permanently too, and Homebrew forgets them. Move All to Trash keeps them recoverable, but Homebrew still lists them. Ticked leftovers that are still there afterwards move to the Trash." = "Homebrew 安装了 %@。“通过 Homebrew 移除”会运行各 cask 自带的卸载流程：永久删除这些应用，可能会停止其后台服务并永久删除其辅助工具和安装文件，Homebrew 也不再记录它们。“全部移到废纸篓”可以恢复它们，但 Homebrew 仍会列出它们。之后仍然存在的已勾选残留文件会移到废纸篓。";
+"Remove with Homebrew" = "通过 Homebrew 移除";
+"Homebrew no longer lists %@." = "Homebrew 已不再列出 %@。";
+"Homebrew couldn't remove %@. Homebrew said: %@" = "Homebrew 无法移除 %@。Homebrew 的输出：%@";
+"Homebrew finished but %@ was still there." = "Homebrew 已运行完毕，但 %@ 仍然存在。";
+"Purge couldn't find Homebrew to remove %@." = "Purge 找不到 Homebrew 来移除 %@。";
+"Move All to Trash" = "全部移到废纸篓";
+"Installed by Homebrew" = "由 Homebrew 安装";
+"%@ · Installed by Homebrew" = "%@ · 由 Homebrew 安装";
+"Homebrew no longer lists %@, so Purge moved it to the Trash instead." = "Homebrew 已不再列出 %@，因此 Purge 改为将其移到废纸篓。";
+"Homebrew removed %@ but reported a problem: %@" = "Homebrew 已移除 %@，但报告了一个问题：%@";
+"Homebrew couldn't remove %@, so Purge moved it to the Trash instead. Homebrew said: %@" = "Homebrew 无法移除 %@，因此 Purge 改为将其移到废纸篓。Homebrew 的输出：%@";
+"Homebrew finished but %@ was still there, so Purge moved it to the Trash instead." = "Homebrew 已运行完毕，但 %@ 仍然存在，因此 Purge 改为将其移到废纸篓。";
+"Purge couldn't find Homebrew, so it moved %@ to the Trash instead." = "Purge 找不到 Homebrew，因此改为将 %@ 移到废纸篓。";
+
+/* Clean result outcomes (#162) */
+"Couldn't remove %@" = "无法移除 %@";
+"Nothing was cleaned" = "没有清理任何项目";
+"%lld items couldn't be removed" = "%lld 项无法移除";
+"%lld of %lld items cleaned" = "已清理 %lld 项，共 %lld 项";
+"deleted permanently" = "已永久删除";
+"%lld moved to trash, %lld deleted permanently" = "%lld 项已移到废纸篓，%lld 项已永久删除";
+"Purge kept %lld items to stay on the safe side." = "为安全起见，Purge 保留了 %lld 项。";
+"Purge kept %@ to stay on the safe side." = "为安全起见，Purge 保留了 %@。";
+"Retry %lld items" = "重试 %lld 项";
+"Tried again, still couldn't remove it." = "已再次尝试，仍然无法移除。";
+"Nothing left to clean" = "没有需要清理的项目";
+"Everything you picked was already gone, so there was nothing to move." = "你选择的项目都已不存在，因此没有可移动的内容。";
 /* Remove Download for iCloud files (#106) */
 "This file isn't stored in iCloud." = "此文件没有存储在 iCloud 中。";
 "This file has a sync conflict. Resolve it in Finder first." = "此文件存在同步冲突。请先在访达中解决。";

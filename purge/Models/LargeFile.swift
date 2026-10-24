@@ -224,13 +224,16 @@ nonisolated struct LargeFile: Identifiable, Hashable {
     /// is one, and the kind's badge ("Virtual machine") when there is one — so a
     /// query finds a row by what it's called, what it is, *or* where it lives. The
     /// path and label differ for labelled rows: an Ollama model shows "Ollama" but sits in
-    /// `~/.ollama/models`, and both should be findable. Deliberately uses the raw
-    /// path rather than `locationLabel`/`displayDirectoryPath`: that helper resolves
-    /// the home directory through FileManager and is MainActor-isolated under this
-    /// target's default isolation, and `LargeFile` is built inside the scanners'
-    /// detached tasks. The raw path matches the same words anyway ("Downloads" hits
-    /// either form) — only the `~` prefix differs, which nobody searches for.
+    /// `~/.ollama/models`, and both should be findable. Uses the raw path rather than
+    /// `locationLabel`, which matches the same words anyway ("Downloads" hits either
+    /// form) — only the `~` prefix differs, which nobody searches for.
     let searchHaystack: String
+
+    /// The folder the row shows, or the `sourceLabel` in its place, with iCloud
+    /// Drive's own folder named as Finder names it (#106). Stored for the same
+    /// reason as `id`: working it out stats the disk, and the list read it twice
+    /// per row on every render (#190).
+    let locationLabel: String
 
     init(
         path: URL,
@@ -269,6 +272,10 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         ]
         .compactMap { $0 }
         .joined(separator: "\n")
+        let folder = path.deletingLastPathComponent()
+        self.locationLabel = sourceLabel
+            ?? Self.iCloudDriveLocation(for: folder)
+            ?? displayDirectoryPath(for: folder)
     }
 
     /// Whether this row should stay visible for `query`. Whitespace splits the query
@@ -313,12 +320,6 @@ nonisolated struct LargeFile: Identifiable, Hashable {
 
     var displayName: String { displayNameOverride ?? path.lastPathComponent }
     var formattedSize: String { formatBytes(sizeBytes) }
-    var locationLabel: String {
-        if let sourceLabel { return sourceLabel }
-        let folder = path.deletingLastPathComponent()
-        return Self.iCloudDriveLocation(for: folder) ?? displayDirectoryPath(for: folder)
-    }
-
     /// "iCloud Drive/Projects" for a folder inside iCloud Drive's own folder,
     /// which Finder shows as iCloud Drive. Nil anywhere else.
     static func iCloudDriveLocation(

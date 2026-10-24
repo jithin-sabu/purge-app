@@ -6,9 +6,10 @@ import Foundation
 ///
 /// The checks mirror what the App Uninstaller lists: app bundles in
 /// `/Applications` or `~/Applications` at any depth but never inside another
-/// app or package, never Apple's apps under `/System`, and never Purge itself. An app that passes here is one
-/// the uninstaller's list will contain once it loads, so `IntentRouter` can
-/// open the review on it.
+/// app or package, never Apple's apps under `/System`, and never Purge itself.
+/// An app that passes here is one the uninstaller would list, but the list this
+/// session holds may predate it, so `IntentRouter` looks again when the app is
+/// missing and says so if it still cannot find it (#176).
 nonisolated enum ExternalUninstallRequest {
 
     enum Outcome: Equatable {
@@ -87,11 +88,9 @@ nonisolated enum ExternalUninstallRequest {
         let path = bundleURL.standardizedFileURL.path
 
         if let bundleID, purgeBundleIDs.contains(bundleID) { return .purgeItself }
-        // `/Applications/Safari.app` is a symlink into the system cryptex, so
-        // the `/System` check has to see where the bundle really lives.
-        let resolved = bundleURL.resolvingSymlinksInPath()
-        if AppUninstallScanPolicy.isProtectedApp(bundleURL: bundleURL, bundleID: bundleID)
-            || AppUninstallScanPolicy.isProtectedApp(bundleURL: resolved, bundleID: bundleID) {
+        // Also sees through `/Applications/Safari.app`, a symlink into the
+        // system cryptex.
+        if AppUninstallScanPolicy.isProtectedApp(bundleURL: bundleURL, bundleID: bundleID) {
             return .appleApp(name: name)
         }
         let rootPaths = roots.map { $0.standardizedFileURL.path }

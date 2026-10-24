@@ -46,6 +46,9 @@ final class FakeScans {
     private(set) var gitStatusAnswerCount = 0
     /// Full Disk Access steps as they start, plus anything a test adds.
     var log: [String] = []
+    /// Runs as each Full Disk Access step starts, so a test can change what the
+    /// store holds the way the real step would.
+    var onFullAccessStep: ((ScanStep) -> Void)?
     /// Every scan in the order it started: App Caches with its access, and the steps.
     private(set) var events: [String] = []
 
@@ -58,8 +61,19 @@ final class FakeScans {
     private var heldEverythingElse: [AsyncStream<EverythingElseMeasureEvent>.Continuation] = []
     private let suite = ThrowawayDefaults()
 
-    func makeStore() -> PurgeStore {
-        let store = PurgeStore(defaults: defaults, scanSources: sources)
+    /// `gitChecker` is the one a clean asks before it moves anything. `fileDeleter`
+    /// is the engine a clean or a retry runs; pass one with a `FakeTrash` so a test
+    /// moves nothing real.
+    func makeStore(
+        gitChecker: GitStatusChecker = GitStatusChecker(),
+        fileDeleter: FileDeleter = FileDeleter()
+    ) -> PurgeStore {
+        let store = PurgeStore(
+            defaults: defaults,
+            scanSources: sources,
+            gitChecker: gitChecker,
+            fileDeleter: fileDeleter
+        )
         store.refreshPermission()
         return store
     }
@@ -192,6 +206,7 @@ final class FakeScans {
             fullAccessStep: { step, _ in
                 self.log.append("step \(step.rawValue)")
                 self.events.append("step \(step.rawValue)")
+                self.onFullAccessStep?(step)
                 if self.holdsFullAccessSteps {
                     await withCheckedContinuation { self.heldSteps.append($0) }
                 }

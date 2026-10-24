@@ -18,12 +18,18 @@ nonisolated final class AppUninstallScanner {
     /// catalog in the app; tests hand in a small one.
     private let catalog: AppDotFolderCatalog
 
+    /// Where Homebrew's Caskrooms are looked for (#254). Tests hand in a
+    /// temporary prefix so the scan never reads this Mac's.
+    private let homebrewPrefixes: [URL]
+
     init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        catalog: AppDotFolderCatalog = .shared
+        catalog: AppDotFolderCatalog = .shared,
+        homebrewPrefixes: [URL] = HomebrewCaskCatalog.defaultPrefixes
     ) {
         self.home = home
         self.catalog = catalog
+        self.homebrewPrefixes = homebrewPrefixes
     }
 
     // MARK: Installed apps
@@ -31,17 +37,21 @@ nonisolated final class AppUninstallScanner {
     /// Streams the apps the uninstaller can act on. Bundles under `/System` and
     /// Purge itself are never emitted.
     func installedAppsStream() -> AsyncStream<InstalledApp> {
-        AsyncStream { continuation in
+        AsyncStream { [homebrewPrefixes] continuation in
             let task = Task.detached(priority: .userInitiated) {
-                Self.runInstalledAppsScan(continuation: continuation)
+                Self.runInstalledAppsScan(homebrewPrefixes: homebrewPrefixes, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    private static func runInstalledAppsScan(continuation: AsyncStream<InstalledApp>.Continuation) {
+    private static func runInstalledAppsScan(
+        homebrewPrefixes: [URL],
+        continuation: AsyncStream<InstalledApp>.Continuation
+    ) {
         let apps = discoverInstalledApps()
         let runningIDs = runningBundleIDs()
+        let casks = HomebrewCaskCatalog.installedCasks(prefixes: homebrewPrefixes)
 
         // Yield as soon as the bundle is identified. Spotlight's indexed size is
         // a cheap first figure so the list can paint without waiting on `du`;
@@ -57,7 +67,8 @@ nonisolated final class AppUninstallScanner {
                     bundleID: app.bundleID,
                     bundleSizeBytes: size,
                     isRunning: isRunning,
-                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: app.bundleURL)
+                    lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: app.bundleURL),
+                    homebrewCask: casks[app.bundleURL.standardizedFileURL.path]
                 )
             )
         }
@@ -86,6 +97,35 @@ nonisolated final class AppUninstallScanner {
                 name: displayName(for: bundleURL, bundle: bundle),
                 bundleURL: bundleURL,
                 bundleID: bundleID
+            )
+        }
+    }
+
+    /// Where Apple's own apps live. Safari sits in the system cryptex, and
+    /// `/Applications/Safari.app` only links to it.
+    static let systemAppRoots = [
+        URL(fileURLWithPath: "/System/Applications", isDirectory: true),
+        URL(fileURLWithPath: "/System/Cryptexes/App/System/Applications", isDirectory: true)
+    ]
+
+    /// The apps the uninstaller never lists but that still use their files:
+    /// Apple's apps, and any app-root entry `isProtectedApp` holds back (#176).
+    /// A removal counts them with the installed apps when it holds back a
+    /// leftover another app still uses, so taking out a second copy that carries
+    /// an Apple bundle id never takes the system app's settings with it.
+    static func protectedApps(systemRoots: [URL] = systemAppRoots) -> [InstalledApp] {
+        let protectedInRoots = discoverAppBundleURLs().filter { url in
+            AppUninstallScanPolicy.isProtectedApp(bundleURL: url, bundleID: Bundle(url: url)?.bundleIdentifier)
+        }
+        let system = systemRoots.flatMap { AppBundleReach.appBundleURLs(in: $0) ?? [] }
+        return (system + protectedInRoots).map { url in
+            let bundle = Bundle(url: url)
+            return InstalledApp(
+                name: displayName(for: url, bundle: bundle),
+                bundleURL: url,
+                bundleID: bundle?.bundleIdentifier,
+                bundleSizeBytes: 0,
+                isRunning: false
             )
         }
     }

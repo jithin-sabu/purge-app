@@ -80,6 +80,11 @@ final class DeletionSession: ObservableObject, Identifiable {
     private(set) var elapsedSeconds: Double = 0
     private(set) var failedCount: Int = 0
     private(set) var movedToTrashCount: Int = 0
+    /// Items that went outright rather than to the Trash: simulators, runtimes
+    /// and cask apps Homebrew removed. Their bytes are inside
+    /// `finalBytesMovedToTrash`, which is the one figure the screen shows; this
+    /// count is what lets the screen say "deleted permanently" about them (#162).
+    private(set) var removedPermanentlyCount: Int = 0
     @Published private(set) var failedItems: [CleanFailureItem] = []
     /// `true` when at least one item was moved to the Trash by the privileged helper
     /// but could not be fully handed back to the user, so emptying the Trash may ask
@@ -89,6 +94,13 @@ final class DeletionSession: ObservableObject, Identifiable {
 
     /// Raises the Trash-ownership note. Safe to call more than once.
     func noteTrashOwnershipWarning() { trashOwnershipWarning = true }
+
+    /// Plain lines the completion screen shows under the total: what Homebrew
+    /// said when it could not remove a cask app and Purge trashed it instead
+    /// (#254). Empty for every ordinary run.
+    @Published private(set) var notes: [String] = []
+
+    func addNote(_ note: String) { notes.append(note) }
 
     init(totalBytes: Int64, totalItems: Int, startedAt: Date = Date()) {
         self.totalBytes = totalBytes
@@ -110,6 +122,7 @@ final class DeletionSession: ObservableObject, Identifiable {
         bytesMovedToTrash: Int64,
         elapsedSeconds: Double,
         movedToTrashCount: Int,
+        removedPermanentlyCount: Int = 0,
         failedItems: [CleanFailureItem],
         startedAt: Date? = nil
     ) -> DeletionSession {
@@ -117,6 +130,7 @@ final class DeletionSession: ObservableObject, Identifiable {
         session.finalBytesMovedToTrash = bytesMovedToTrash
         session.elapsedSeconds = elapsedSeconds
         session.movedToTrashCount = movedToTrashCount
+        session.removedPermanentlyCount = removedPermanentlyCount
         session.failedItems = failedItems
         session.failedCount = failedItems.count
         return session
@@ -133,7 +147,8 @@ final class DeletionSession: ObservableObject, Identifiable {
         bytesMovedToTrash finalBytes: Int64,
         elapsedSeconds engineElapsed: Double,
         failedItems: [CleanFailureItem],
-        movedToTrashCount: Int
+        movedToTrashCount: Int,
+        removedPermanentlyCount: Int = 0
     ) {
         guard phase == .cleaning else { return }
         finalBytesMovedToTrash = finalBytes
@@ -145,13 +160,54 @@ final class DeletionSession: ObservableObject, Identifiable {
         self.failedItems = failedItems
         self.failedCount = failedItems.count
         self.movedToTrashCount = movedToTrashCount
+        self.removedPermanentlyCount = removedPermanentlyCount
         phase = .complete
+    }
+
+    /// Everything the run and its retries removed, to the Trash or outright.
+    var removedCount: Int { movedToTrashCount + removedPermanentlyCount }
+
+    /// What the run set out to remove: what went plus what is still listed. A
+    /// retry moves a row from one side to the other, so the sum holds.
+    var attemptedCount: Int { removedCount + failedItems.count }
+
+    /// Which screen this run gets (#162). Only meaningful once `phase == .complete`.
+    var outcome: CleanOutcome {
+        CleanOutcome.resolve(removedCount: removedCount, failedItems: failedItems)
+    }
+
+    /// The line under the figure. Trash moves keep the wording that reminds the
+    /// user nothing is reclaimed yet; items removed outright are gone, and the
+    /// screen must say so (#136, #162). A mixed run names both by count.
+    var removalWording: String {
+        if removedPermanentlyCount == 0 {
+            return String(localized: "moved to trash, not yet reclaimed")
+        }
+        if movedToTrashCount == 0 {
+            return String(localized: "deleted permanently")
+        }
+        return String(localized: "\(movedToTrashCount) moved to trash, \(removedPermanentlyCount) deleted permanently")
     }
 
     func removeResolvedFailure(id: UUID, additionalMovedBytes: Int64) {
         failedItems.removeAll { $0.id == id }
         failedCount = failedItems.count
         finalBytesMovedToTrash += additionalMovedBytes
+    }
+
+    /// Counts items a retry moved to the Trash after the run finished, so a run that
+    /// moved nothing at first still shows the "Empty your Trash" line once a retry
+    /// does (#174). Items removed outright are not counted.
+    func noteMovedToTrash(count: Int) {
+        guard count > 0 else { return }
+        movedToTrashCount += count
+    }
+
+    /// Counts a simulator, runtime or cask app a retry removed outright, so the
+    /// outcome and the wording under the figure follow the retry (#162).
+    func noteRemovedPermanently(count: Int) {
+        guard count > 0 else { return }
+        removedPermanentlyCount += count
     }
 
     /// Credits bytes from a partial retry while leaving its unresolved failure visible.

@@ -15,7 +15,6 @@ struct OnboardingWelcomeStep: View {
         Text("Welcome to")
           .font(AppStyle.Typography.sectionTitle.weight(.medium))
           .foregroundStyle(AppColors.textPrimary.opacity(0.8))
-          .tracking(0.2)
 
         Text("Purge")
           .font(AppStyle.Typography.display.weight(.semibold))

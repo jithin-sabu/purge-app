@@ -68,146 +68,79 @@ private struct BundledArrayEntry: Codable {
 
 /// Loads and matches against explicit entries in the local explanation database.
 enum ExplanationDatabase {
-    private nonisolated(unsafe) static var cachedRecords: [String: BundledExplanationRecord]?
-    private nonisolated(unsafe) static var cachedBundleIndex: [String: BundledExplanationRecord]?
-    private nonisolated(unsafe) static var cachedAliasIndex: [String: BundledExplanationRecord]?
-    private nonisolated(unsafe) static var cachedAliasKeyIndex: [String: String]?
-    private nonisolated(unsafe) static var cachedBundleKeyIndex: [String: String]?
-    private nonisolated(unsafe) static var cachedBundleIDsByKey: [String: [String]]?
+    /// Every lookup table, built once from `explanations.json`. A `static let` is
+    /// initialised exactly once even when the scanners reach it from several
+    /// threads at the same time, which the lazily filled `static var`s it replaced
+    /// were not (#190). Keys of the case-insensitive tables are lowercased.
+    private nonisolated struct Index: Sendable {
+        var records: [String: BundledExplanationRecord] = [:]
+        var keyByLowercasedKey: [String: String] = [:]
+        var recordByAlias: [String: BundledExplanationRecord] = [:]
+        var keyByAlias: [String: String] = [:]
+        var recordByBundleID: [String: BundledExplanationRecord] = [:]
+        var keyByBundleID: [String: String] = [:]
+        var bundleIDsByKey: [String: [String]] = [:]
+    }
 
-    private nonisolated static func loadFromBundle() -> [String: BundledExplanationRecord] {
-        if let cachedRecords { return cachedRecords }
+    private nonisolated static let index: Index = loadIndex()
+
+    private nonisolated static func loadIndex() -> Index {
         guard let url = Bundle.main.url(forResource: "explanations", withExtension: "json"),
               let data = try? Data(contentsOf: url)
-        else {
-            cachedRecords = [:]
-            cachedBundleIndex = [:]
-            cachedAliasIndex = [:]
-            return [:]
-        }
+        else { return Index() }
 
+        var index = Index()
         if let array = try? JSONDecoder().decode([BundledArrayEntry].self, from: data) {
-            var dict: [String: BundledExplanationRecord] = [:]
-            var aliasIndex: [String: BundledExplanationRecord] = [:]
-            var aliasKeyIndex: [String: String] = [:]
-            var bundleIDsByKey: [String: [String]] = [:]
             for entry in array {
                 let rec = entry.record
-                dict[entry.key] = rec
+                index.records[entry.key] = rec
                 if let bundleIds = entry.bundleIds, !bundleIds.isEmpty {
-                    bundleIDsByKey[entry.key] = bundleIds
+                    index.bundleIDsByKey[entry.key] = bundleIds
                 }
-                if let aliases = entry.aliases {
-                    for alias in aliases {
-                        aliasIndex[alias.lowercased()] = rec
-                        aliasKeyIndex[alias.lowercased()] = entry.key
-                    }
+                // A later entry wins an alias two entries share, as it always has.
+                for alias in entry.aliases ?? [] {
+                    index.recordByAlias[alias.lowercased()] = rec
+                    index.keyByAlias[alias.lowercased()] = entry.key
                 }
             }
-            cachedRecords = dict
-            cachedAliasIndex = aliasIndex
-            cachedAliasKeyIndex = aliasKeyIndex
-            cachedBundleIDsByKey = bundleIDsByKey
-            return dict
+        } else if let decoded = try? JSONDecoder().decode([String: BundledExplanationRecord].self, from: data) {
+            index.records = decoded
+        } else {
+            return Index()
         }
 
-        if let decoded = try? JSONDecoder().decode([String: BundledExplanationRecord].self, from: data) {
-            cachedRecords = decoded
-            cachedAliasIndex = [:]
-            return decoded
-        }
-
-        cachedRecords = [:]
-        cachedBundleIndex = [:]
-        cachedAliasIndex = [:]
-        return [:]
-    }
-
-    private nonisolated static func aliasIndex() -> [String: BundledExplanationRecord] {
-        if let cachedAliasIndex { return cachedAliasIndex }
-        _ = loadFromBundle()
-        return cachedAliasIndex ?? [:]
-    }
-
-    private nonisolated static func bundleIdIndex() -> [String: BundledExplanationRecord] {
-        if let cachedBundleIndex { return cachedBundleIndex }
-        let dict = loadFromBundle()
-        var index: [String: BundledExplanationRecord] = [:]
-        var keyIndex: [String: String] = [:]
-        for (key, record) in dict {
-            guard let bundleIds = record.bundleIds else { continue }
-            for id in bundleIds {
-                index[id.lowercased()] = record
-                keyIndex[id.lowercased()] = key
+        for (key, record) in index.records {
+            index.keyByLowercasedKey[key.lowercased()] = key
+            for id in record.bundleIds ?? [] {
+                index.recordByBundleID[id.lowercased()] = record
+                index.keyByBundleID[id.lowercased()] = key
             }
         }
-        cachedBundleIndex = index
-        cachedBundleKeyIndex = keyIndex
         return index
-    }
-
-    private nonisolated static func bundleKeyIndex() -> [String: String] {
-        if let cachedBundleKeyIndex { return cachedBundleKeyIndex }
-        _ = bundleIdIndex()
-        return cachedBundleKeyIndex ?? [:]
-    }
-
-    private nonisolated static func aliasKeyIndex() -> [String: String] {
-        if let cachedAliasKeyIndex { return cachedAliasKeyIndex }
-        _ = loadFromBundle()
-        return cachedAliasKeyIndex ?? [:]
-    }
-
-    private nonisolated static func bundleIDsByKeyIndex() -> [String: [String]] {
-        if let cachedBundleIDsByKey { return cachedBundleIDsByKey }
-        _ = loadFromBundle()
-        return cachedBundleIDsByKey ?? [:]
     }
 
     /// Keys, aliases, and bundle IDs. All matching is case-insensitive.
     nonisolated static func matchBundledDatabase(folderName: String) -> BundledExplanationRecord? {
         let lower = folderName.lowercased()
-        let dict = loadFromBundle()
-
-        if let record = dict.first(where: { $0.key.lowercased() == lower })?.value {
+        if let key = index.keyByLowercasedKey[lower], let record = index.records[key] {
             return record
         }
-
-        if let record = aliasIndex()[lower] {
-            return record
-        }
-
-        if let record = bundleIdIndex()[lower] {
-            return record
-        }
-
-        return nil
+        return index.recordByAlias[lower] ?? index.recordByBundleID[lower]
     }
 
     /// Canonical `explanations.json` key for a folder name, alias, or bundle ID (case-insensitive).
     nonisolated static func definitionKey(forFolderName folderName: String) -> String? {
         let lower = folderName.lowercased()
-        let dict = loadFromBundle()
-
-        if let key = dict.keys.first(where: { $0.lowercased() == lower }) {
-            return key
-        }
-        if let key = aliasKeyIndex()[lower] {
-            return key
-        }
-        if let key = bundleKeyIndex()[lower] {
-            return key
-        }
-        return nil
+        return index.keyByLowercasedKey[lower] ?? index.keyByAlias[lower] ?? index.keyByBundleID[lower]
     }
 
     /// All bundle IDs declared under a definition key.
     nonisolated static func allBundleIDs(forKey key: String) -> [String] {
-        bundleIDsByKeyIndex()[key] ?? []
+        index.bundleIDsByKey[key] ?? []
     }
 
     nonisolated static func record(forKey key: String) -> BundledExplanationRecord? {
-        loadFromBundle()[key]
+        index.records[key]
     }
 
     /// The `kind` of a definition, which picks the row symbol when the cache

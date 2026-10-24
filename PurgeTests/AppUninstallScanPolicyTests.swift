@@ -53,6 +53,25 @@ struct AppUninstallScanPolicyTests {
         #expect(!AppUninstallScanPolicy.isProtectedApp(bundleURL: rectangle, bundleID: "com.knollsoft.Rectangle"))
     }
 
+    /// `/Applications/Safari.app` links into the system cryptex (#176). A
+    /// throwaway link into `/System` stands in for it, so the test fails on
+    /// any Mac if the check reads only the path it was handed.
+    @Test
+    func appLinkedIntoSystemIsProtected() throws {
+        let fm = FileManager.default
+        let folder = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: folder) }
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        let link = folder.appendingPathComponent("Calculator.app")
+        try fm.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: "/System/Applications/Calculator.app"))
+
+        #expect(AppUninstallScanPolicy.isProtectedApp(bundleURL: link, bundleID: "com.apple.calculator"))
+        // A real bundle folder in the same place is not.
+        try fm.removeItem(at: link)
+        try fm.createDirectory(at: link, withIntermediateDirectories: true)
+        #expect(!AppUninstallScanPolicy.isProtectedApp(bundleURL: link, bundleID: "com.example.calculator"))
+    }
+
     @Test
     func appRootsExcludeSystemApplications() {
         let roots = AppUninstallScanPolicy.installedAppRoots().map(\.path)
@@ -233,6 +252,42 @@ struct AppUninstallScanPolicyTests {
     func systemPathIsNotEligible() {
         let url = URL(fileURLWithPath: "/System/Applications/Calculator.app", isDirectory: true)
         #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url))
+    }
+
+    /// Like `/Applications/Safari.app` (#176): an app root entry that links into
+    /// `/System` never passes the gate, though a real bundle there does.
+    @Test
+    func appLinkedIntoSystemIsNotEligible() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let apps = home.appendingPathComponent("Applications", isDirectory: true)
+        try fm.createDirectory(at: apps, withIntermediateDirectories: true)
+        let link = apps.appendingPathComponent("Calculator.app")
+        try fm.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: "/System/Applications/Calculator.app"))
+
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(link, home: home, dotFolderCatalog: testCatalog))
+        try fm.removeItem(at: link)
+        try fm.createDirectory(at: link, withIntermediateDirectories: true)
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(link, home: home, dotFolderCatalog: testCatalog))
+    }
+
+    /// A copy of Purge in an app root never passes the gate, read by the bundle
+    /// id in its Info.plist as the list reads it (#176).
+    @Test
+    func purgeCopyIsNotEligible() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let bundle = home.appendingPathComponent("Applications/Purge.app", isDirectory: true)
+        try fm.createDirectory(at: bundle.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        let plist = bundle.appendingPathComponent("Contents/Info.plist")
+
+        (["CFBundleIdentifier": "io.getpurge.app"] as NSDictionary).write(to: plist, atomically: true)
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(bundle, home: home, dotFolderCatalog: testCatalog))
+
+        (["CFBundleIdentifier": "com.example.purge-lookalike"] as NSDictionary).write(to: plist, atomically: true)
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(bundle, home: home, dotFolderCatalog: testCatalog))
     }
 
     @Test
@@ -439,6 +494,50 @@ struct AppUninstallScanPolicyTests {
         PurgeStore.markSharedWithSurvivors(in: &alone, survivors: [makeApp()], appGroupClaims: AppGroupClaims())
         #expect(alone[0].items[0].keptForApp == nil)
         #expect(alone[0].items[0].isSelected == false)
+    }
+
+    /// The uninstaller never lists Apple's apps, but they still hold back their
+    /// own files (#176). Removing a second copy that carries a system app's
+    /// bundle id must leave that app's preferences alone.
+    @Test
+    func protectedAppHoldsBackItsLeftoversFromASecondCopy() throws {
+        let fm = FileManager.default
+        let token = UUID().uuidString.prefix(8).lowercased()
+        let systemRoot = fm.temporaryDirectory.appendingPathComponent("purgetest-system-\(token)", isDirectory: true)
+        defer { try? fm.removeItem(at: systemRoot) }
+        let bundleID = "com.purgetest.system\(token)"
+        let systemApp = systemRoot.appendingPathComponent("SystemFake.app", isDirectory: true)
+        try fm.createDirectory(at: systemApp.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        let info: NSDictionary = ["CFBundleIdentifier": bundleID, "CFBundleName": "SystemFake", "CFBundlePackageType": "APPL"]
+        info.write(to: systemApp.appendingPathComponent("Contents/Info.plist"), atomically: true)
+
+        let protected = AppUninstallScanner.protectedApps(systemRoots: [systemRoot])
+        #expect(protected.contains { $0.bundleID == bundleID && $0.name == "SystemFake" })
+
+        let secondCopy = makeApp(name: "SystemFake", bundlePath: "/Applications/SystemFake.app", bundleID: bundleID)
+        let preferences = UninstallItem(
+            path: home.appendingPathComponent("Library/Preferences/\(bundleID).plist"),
+            sizeBytes: 1,
+            category: .preferences,
+            safetyInfo: AppUninstallScanPolicy.safetyInfo(
+                for: .bundleID, category: .preferences,
+                url: home.appendingPathComponent("Library/Preferences/\(bundleID).plist"), appName: "SystemFake"
+            ),
+            matchReason: .bundleID,
+            isSelected: true
+        )
+        var plans = [UninstallAppPlan(app: secondCopy, items: [preferences])]
+        PurgeStore.markSharedWithSurvivors(in: &plans, survivors: protected, appGroupClaims: AppGroupClaims())
+        #expect(plans[0].items[0].keptForApp == "SystemFake")
+        #expect(plans[0].items[0].isSelected == false)
+    }
+
+    /// The real system roots: Safari lives in the cryptex, not in `/Applications`.
+    @Test
+    func protectedAppsIncludeSafariFromTheCryptex() {
+        let protected = AppUninstallScanner.protectedApps()
+        #expect(protected.contains { $0.bundleID == "com.apple.Safari" })
+        #expect(protected.contains { $0.bundleID == "com.apple.calculator" })
     }
 
     /// The uninstaller's catalog row is Check First with its own wording, not the

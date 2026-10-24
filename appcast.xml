@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.13.0</title>
+      <pubDate>Sat, 24 Oct 2026 13:22:17 +0000</pubDate>
+      <sparkle:version>36</sparkle:version>
+      <sparkle:shortVersionString>1.13.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Command-line tools in the uninstaller</strong>: A new section lists tools installed by a script and tools from Homebrew, npm, pipx, uv and Cargo. Script installs go to the Trash. Package-manager tools are removed by their manager, permanently, after you confirm.</li>
+          <li><strong>Homebrew cask apps uninstall through Homebrew</strong>: The review sheet offers Remove with Homebrew, which deletes the app permanently, or Move All to Trash, which keeps it recoverable.</li>
+          <li><strong>Downloaded AI models in Large Files</strong>: Hugging Face, PyTorch Hub, Whisper, GPT4All, Jan, DiffusionBee and Draw Things models are listed, Check First, with stray weight files over 100 MB.</li>
+          <li><strong>Running simulators are shown</strong>: Booted simulators appear in Dev Tools with a note to shut them down first. A runtime row says when it only runs certain devices.</li>
+          <li><strong>Faster, with fewer freezes</strong>: Disk checks run off the main thread, project scans finish more than twice as fast, text is set in Onest, Settings is shorter, and waiting tabs say what they wait for.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.13.0/Purgev1.13.0.dmg"
+        sparkle:edSignature="/QK5vZVFIJmflqHRf4CWOULK/JNj5pYL9yak0kk+oiHdeM6zlXBBbSxjzfu0A667K01qrF+bUB0ZinVjwQYpAw=="
+        length="10681089"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.12.0</title>
       <pubDate>Tue, 20 Oct 2026 12:40:49 +0000</pubDate>
       <sparkle:version>35</sparkle:version>

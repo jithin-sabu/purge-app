@@ -1103,11 +1103,11 @@ struct SettingsView: View {
         ScheduledCleaningRegistrar.shared.nextCleanDate()
     }
 
-    private var scheduleStatusPrimaryFont: Font {
+    private var scheduleStatusPrimaryFont: AppStyle.TextStyle {
         AppStyle.Typography.body
     }
 
-    private var scheduleStatusSecondaryFont: Font {
+    private var scheduleStatusSecondaryFont: AppStyle.TextStyle {
         AppStyle.Typography.callout
     }
 
