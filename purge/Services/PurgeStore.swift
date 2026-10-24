@@ -1235,7 +1235,8 @@ final class PurgeStore: ObservableObject {
                 bytesMovedToTrash: movedBytes + report.bytesRemovedDirectly,
                 elapsedSeconds: elapsedSeconds,
                 failedItems: report.userVisibleFailures,
-                movedToTrashCount: report.movedToTrashCount
+                movedToTrashCount: report.movedToTrashCount,
+                removedPermanentlyCount: report.deletedItems.count - report.movedToTrashCount
             )
             // Only the helper's moves can leave root-owned files in the Trash.
             if !report.ownershipWarningPaths.isEmpty { session?.noteTrashOwnershipWarning() }
@@ -1417,6 +1418,8 @@ final class PurgeStore: ObservableObject {
         if movedToTrash {
             session.noteMovedToTrash(count: 1)
             incrementMovedToTrashTotal(by: bytes)
+        } else {
+            session.noteRemovedPermanently(count: 1)
         }
         let deleted = DeletedItem(
             path: item.path,
@@ -3485,7 +3488,8 @@ final class PurgeStore: ObservableObject {
             bytesMovedToTrash: report.bytesMovedToTrash + report.bytesRemovedDirectly,
             elapsedSeconds: elapsedSeconds,
             failedItems: report.userVisibleFailures + heldFailures + keptSharedFailures,
-            movedToTrashCount: report.movedToTrashCount
+            movedToTrashCount: report.movedToTrashCount,
+            removedPermanentlyCount: report.deletedItems.count - report.movedToTrashCount
         )
         if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
         homebrewNotes.forEach { liveSession.addNote($0) }

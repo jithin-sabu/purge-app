@@ -526,8 +526,17 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var appearedAt = Date()
     @State private var didBeginCompletion = false
     @State private var sequenceTask: Task<Void, Never>?
-    @State private var failuresExpanded = false
     @State private var retryingFailureIDs: Set<UUID> = []
+    /// Rows whose last Retry came back with nothing to show for it. The row says
+    /// so, rather than looking exactly as it did before the tap (#162).
+    @State private var retryFailedIDs: Set<UUID> = []
+    /// `false` while the cleaning header is up. A run that removed nothing swaps
+    /// it for the outcome header once the dwell has passed (#162); a run that
+    /// removed something keeps the header it has, and this never matters.
+    @State private var completionHeaderShown: Bool
+    /// `true` once a list sits under the header. The header moves up to make room
+    /// and stays there, so a retry that empties a row never shifts it (#162).
+    @State private var headerAnchoredToTop: Bool
     @State private var boltFlashToken = 0
     /// Set once per screen when the lifetime total reached a new milestone.
     @State private var supportMilestoneBytes: Int64?
@@ -565,10 +574,12 @@ struct SafeCleanupCelebrationOverlay: View {
         _confettiArmed = State(initialValue: mountsComplete)
         _displayedBytes = State(initialValue: mountsComplete ? session.finalBytesMovedToTrash : 0)
         _displayedFraction = State(initialValue: mountsComplete ? 1 : 0)
-        _tagline = State(initialValue: mountsComplete ? TimeTagline.select(for: session.elapsedSeconds) : nil)
-        _boltFlashToken = State(
-            initialValue: mountsComplete && session.elapsedSeconds < 3 ? 1 : 0
-        )
+        // A run that removed nothing has no figure, so no timing line either.
+        let showsFigure = mountsComplete && session.outcome.showsFigure
+        _tagline = State(initialValue: showsFigure ? TimeTagline.select(for: session.elapsedSeconds) : nil)
+        _boltFlashToken = State(initialValue: showsFigure && session.elapsedSeconds < 3 ? 1 : 0)
+        _completionHeaderShown = State(initialValue: mountsComplete)
+        _headerAnchoredToTop = State(initialValue: mountsComplete && Self.wantsHeaderAtTop(session))
     }
 
     var body: some View {
@@ -583,80 +594,24 @@ struct SafeCleanupCelebrationOverlay: View {
             }
 
             VStack(spacing: AppStyle.Spacing.large) {
-                Spacer(minLength: 0)
+                if !headerAnchoredToTop {
+                    Spacer(minLength: 0)
+                }
 
-                if hidesSuccessChrome {
-                    // Nothing moved: the panel is the whole story, centered on its own.
-                    administratorPanel
-                        .frame(maxWidth: 460)
-                } else {
-                    CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
-                        .frame(width: 88, height: 88)
-                        .scaleEffect(checkmarkScale)
-                        .opacity(checkmarkVisible ? 1 : 0)
-                        .accessibilityHidden(true)
+                header
 
-                    VStack(spacing: AppStyle.Spacing.small) {
-                        Text(formatBytes(displayedBytes))
-                            .font(AppStyle.Typography.display.numbers)
-                            .foregroundStyle(AppColors.textPrimary)
-                            .monospacedDigit()
-                            .contentTransition(reduceMotion ? .identity : .numericText())
-                            .multilineTextAlignment(.center)
-                            .accessibilityAddTraits(.isHeader)
-
-                        Text(subtitleText)
-                            .font(AppStyle.Typography.sectionTitle)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .contentTransition(.opacity)
-
-                        // The cleaning-phase progress group draws into the slot the
-                        // completion lines occupy (always laid out, opacity-toggled),
-                        // so neither phase ever shifts the other's elements.
-                        ZStack(alignment: .top) {
-                            VStack(spacing: AppStyle.Spacing.small) {
-                                if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
-                                    OnboardingSizeComparisonLine(items: comparisonItems)
-                                        .foregroundStyle(AppColors.textSecondary)
-                                }
-
-                                if tagline != nil {
-                                    CompletionTimeTagline(
-                                        elapsedSeconds: session.elapsedSeconds,
-                                        boltFlashToken: boltFlashToken
-                                    )
-                                    .padding(.top, AppStyle.Spacing.xSmall)
-                                }
-                            }
-                            .opacity(completionLinesVisible ? 1 : 0)
-
-                            progressGroup
-                                .frame(height: 0, alignment: .top)
-                                .opacity(progressGroupVisible ? 1 : 0)
-                        }
-                    }
-                    .frame(maxWidth: 560)
+                if headerAnchoredToTop, session.phase == .complete {
+                    resultsBlock
                 }
 
                 Spacer(minLength: 0)
 
                 VStack(spacing: AppStyle.Spacing.small) {
-                    // When the header is hidden the panel already stands above; only
-                    // show it here (beneath the success number) when the header stayed.
-                    if session.phase == .complete, !administratorFailures.isEmpty, !hidesSuccessChrome {
+                    // The header kept its figure and nothing else is listed: the
+                    // panel sits here, beneath the number, as it always has.
+                    if session.phase == .complete, !headerAnchoredToTop, headerKind == .figure,
+                       !administratorFailures.isEmpty {
                         administratorPanel
-                    }
-
-                    if session.phase == .complete, !otherFailures.isEmpty {
-                        CleanFailureCard(
-                            failures: otherFailures,
-                            showsAll: $failuresExpanded,
-                            retryingIDs: retryingFailureIDs,
-                            onOpenSettings: openFullDiskAccessSettings,
-                            onRetry: retryFailure,
-                            onRetryAll: retryAllFailures
-                        )
                     }
 
                     if session.phase == .complete, let supportMilestoneBytes {
@@ -705,10 +660,7 @@ struct SafeCleanupCelebrationOverlay: View {
                         }
                     }
 
-                    Button(LocalizedStringKey(doneTitle), action: onDone)
-                        .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!footerVisible)
+                    footerButtons
 
                     if session.phase == .complete, let supportFooterLine {
                         SupportFooterLink(
@@ -751,8 +703,306 @@ struct SafeCleanupCelebrationOverlay: View {
         .onChange(of: session.bytesMovedToTrash) { newValue in
             mirrorLiveProgress(bytesMovedToTrash: newValue)
         }
+        // A retry can turn a failed run into a partial one, or empty the list.
+        // The header follows: it shows the figure once there is one, and settles
+        // back to the centre once nothing is listed under it.
+        .onChange(of: session.failedItems) { _ in
+            guard session.phase == .complete, footerVisible else { return }
+            followOutcomeAfterRetry()
+        }
         .onDisappear { sequenceTask?.cancel() }
     }
+
+    /// What stands at the top of the sheet. The figure header serves the cleaning
+    /// phase and every run that removed something; a run that removed nothing gets
+    /// the outcome it earned instead (#162).
+    private enum HeaderKind: Equatable {
+        /// Checkmark, figure, wording and timing. Also the cleaning-phase header.
+        case figure
+        /// Only locked apps stand between the run and its items: the permission
+        /// panel is the whole story.
+        case administrator
+        /// Nothing went and something failed.
+        case failed
+        /// Nothing went and Purge kept every item on purpose.
+        case skipped
+    }
+
+    private var headerKind: HeaderKind {
+        guard session.phase == .complete, completionHeaderShown else { return .figure }
+        switch session.outcome {
+        case .success, .partial:
+            return .figure
+        case .failed:
+            return administratorFailures.isEmpty ? .failed : .administrator
+        case .skippedOnly:
+            return .skipped
+        }
+    }
+
+    /// The one row of a failed run is the header itself, so no card repeats it.
+    private var failureCardRows: [CleanFailureItem] {
+        if headerKind == .failed, otherFailures.count == 1 { return [] }
+        return otherFailures
+    }
+
+    /// A list under the header moves the header to the top. Static, so `init` can
+    /// settle it for a session that mounts complete.
+    private static func wantsHeaderAtTop(_ session: DeletionSession) -> Bool {
+        guard session.phase == .complete else { return false }
+        let administrator = session.failedItems.filter { $0.reason == .needsAdministrator }
+        let other = session.failedItems.filter { $0.reason != .needsAdministrator }
+        switch session.outcome {
+        case .success:
+            return false
+        case .partial, .skippedOnly:
+            return !other.isEmpty
+        case .failed:
+            return administrator.isEmpty ? other.count > 1 : !other.isEmpty
+        }
+    }
+
+    private var wantsHeaderAtTop: Bool { Self.wantsHeaderAtTop(session) }
+
+    @ViewBuilder
+    private var header: some View {
+        switch headerKind {
+        case .figure:
+            figureHeader
+                .transition(.opacity)
+        case .administrator:
+            administratorPanel
+                .frame(maxWidth: 460)
+                .transition(.opacity)
+        case .failed:
+            outcomeHeader(
+                systemImage: "exclamationmark",
+                title: failedTitle,
+                subtitle: failedSubtitle,
+                note: failedRetryNote
+            )
+        case .skipped:
+            outcomeHeader(
+                systemImage: "hand.raised",
+                title: String(localized: "Nothing was cleaned"),
+                subtitle: skippedSubtitle,
+                note: nil
+            )
+        }
+    }
+
+    private var figureHeader: some View {
+        VStack(spacing: AppStyle.Spacing.large) {
+            CompletionCheckmarkBadge(progress: checkmarkProgress, color: celebrationAccent)
+                .frame(width: 88, height: 88)
+                .scaleEffect(checkmarkScale)
+                .opacity(checkmarkVisible ? 1 : 0)
+                .accessibilityHidden(true)
+
+            VStack(spacing: AppStyle.Spacing.small) {
+                Text(formatBytes(displayedBytes))
+                    .font(AppStyle.Typography.display.numbers)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text(subtitleText)
+                    .font(AppStyle.Typography.sectionTitle)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
+
+                // The cleaning-phase progress group draws into the slot the
+                // completion lines occupy (always laid out, opacity-toggled),
+                // so neither phase ever shifts the other's elements.
+                ZStack(alignment: .top) {
+                    VStack(spacing: AppStyle.Spacing.small) {
+                        // Some went and some did not: say how many of each, in
+                        // the same breath as the figure (#162).
+                        if session.phase == .complete, session.outcome == .partial {
+                            Text("\(session.removedCount) of \(session.attemptedCount) items cleaned")
+                                .font(AppStyle.Typography.body.weight(.medium))
+                                .foregroundStyle(AppColors.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+
+                        if let comparisonItems = OnboardingSizeComparison.items(for: comparisonBytes) {
+                            OnboardingSizeComparisonLine(items: comparisonItems)
+                                .foregroundStyle(AppColors.textSecondary)
+                        }
+
+                        if tagline != nil {
+                            CompletionTimeTagline(
+                                elapsedSeconds: session.elapsedSeconds,
+                                boltFlashToken: boltFlashToken
+                            )
+                            .padding(.top, AppStyle.Spacing.xSmall)
+                        }
+                    }
+                    .opacity(completionLinesVisible ? 1 : 0)
+
+                    progressGroup
+                        .frame(height: 0, alignment: .top)
+                        .opacity(progressGroupVisible ? 1 : 0)
+                }
+            }
+            .frame(maxWidth: 560)
+        }
+    }
+
+    /// The header of a run that removed nothing: the same 88pt ring as the
+    /// checkmark, with what happened in its place, and under it the one line that
+    /// says what to do. One failure names the item; more are counted, and listed.
+    private func outcomeHeader(systemImage: String, title: String, subtitle: String, note: String?) -> some View {
+        VStack(spacing: AppStyle.Spacing.large) {
+            CompletionOutcomeBadge(systemImage: systemImage, color: celebrationAccent)
+                .frame(width: 88, height: 88)
+                .accessibilityHidden(true)
+
+            VStack(spacing: AppStyle.Spacing.small) {
+                Text(title)
+                    .font(AppStyle.Typography.title)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+
+                Text(subtitle)
+                    .font(AppStyle.Typography.sectionTitle.weight(.regular))
+                    .foregroundStyle(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let note {
+                    Text(note)
+                        .font(AppStyle.Typography.body)
+                        .foregroundStyle(AppColors.statusDangerText)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .frame(maxWidth: 560)
+        }
+        .transition(.opacity)
+    }
+
+    private var failedTitle: String {
+        if otherFailures.count == 1, let only = otherFailures.first {
+            return String(localized: "Couldn't remove \(only.displayName)")
+        }
+        return String(localized: "Nothing was cleaned")
+    }
+
+    private var failedSubtitle: String {
+        if otherFailures.count == 1, let only = otherFailures.first {
+            return only.reason.explanation
+        }
+        return String(localized: "\(otherFailures.count) items couldn't be removed")
+    }
+
+    /// Under the single failure's reason, once its Retry came back empty-handed.
+    private var failedRetryNote: String? {
+        guard otherFailures.count == 1, let only = otherFailures.first,
+              retryFailedIDs.contains(only.id) else { return nil }
+        return String(localized: "Tried again, still couldn't remove it.")
+    }
+
+    private var skippedSubtitle: String {
+        if otherFailures.count == 1, let only = otherFailures.first {
+            return String(localized: "Purge kept \(only.displayName) to stay on the safe side.")
+        }
+        return String(localized: "Purge kept \(otherFailures.count) items to stay on the safe side.")
+    }
+
+    /// What sits under a top-anchored header: the permission panel when locked
+    /// apps are part of a run that also lists other rows, then the card.
+    @ViewBuilder
+    private var resultsBlock: some View {
+        if headerKind != .administrator, !administratorFailures.isEmpty {
+            administratorPanel
+        }
+
+        if !failureCardRows.isEmpty {
+            CleanFailureCard(
+                failures: failureCardRows,
+                // The outcome header already says what the card would: only a
+                // figure or the panel above it leaves the count to the card.
+                showsHeader: headerKind == .figure || headerKind == .administrator,
+                retryingIDs: retryingFailureIDs,
+                retryFailedIDs: retryFailedIDs,
+                onOpenSettings: openFullDiskAccessSettings,
+                onRetry: retryFailure,
+                onRetryAll: retryAllFailures
+            )
+            .transition(.opacity)
+        }
+    }
+
+    /// The action a failed run puts on its primary button: the one row's own
+    /// action, or a retry of every row that can be retried. Done steps down to
+    /// secondary then; everywhere else Done is the only button.
+    private enum FooterAction: Equatable {
+        case retry(CleanFailureItem)
+        case retryAll(Int)
+        case openSettings
+    }
+
+    private var footerAction: FooterAction? {
+        guard headerKind == .failed else { return nil }
+        if otherFailures.count == 1, let only = otherFailures.first {
+            if only.reason.showsRetry { return .retry(only) }
+            if only.reason.showsOpenSettings { return .openSettings }
+            return nil
+        }
+        let retryable = otherFailures.filter(\.reason.showsRetry).count
+        return retryable > 1 ? .retryAll(retryable) : nil
+    }
+
+    private var footerActionTitle: String {
+        switch footerAction {
+        case .retry(let item): item.reason.retryTitle
+        case .retryAll(let count): String(localized: "Retry \(count) items")
+        case .openSettings: String(localized: "Open Settings")
+        case nil: ""
+        }
+    }
+
+    private func performFooterAction() {
+        switch footerAction {
+        case .retry(let item): retryFailure(item)
+        case .retryAll: retryAllFailures()
+        case .openSettings: openFullDiskAccessSettings()
+        case nil: break
+        }
+    }
+
+    @ViewBuilder
+    private var footerButtons: some View {
+        if footerAction != nil {
+            Button(action: performFooterAction) {
+                if !retryingFailureIDs.isEmpty {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text(footerActionTitle)
+                }
+            }
+            .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
+            .keyboardShortcut(.defaultAction)
+            .disabled(!footerVisible || !retryingFailureIDs.isEmpty)
+
+            Button(LocalizedStringKey(doneTitle), action: onDone)
+                .buttonStyle(.purge(.secondary, size: .large, width: .fixed(300)))
+                .keyboardShortcut(.cancelAction)
+                .disabled(!footerVisible)
+        } else {
+            Button(LocalizedStringKey(doneTitle), action: onDone)
+                .buttonStyle(.purge(.primary, size: .large, width: .fixed(300)))
+                .keyboardShortcut(.defaultAction)
+                .disabled(!footerVisible)
+        }
+    }
+
 
     private var progressGroup: some View {
         VStack(spacing: AppStyle.Spacing.xSmall) {
@@ -781,7 +1031,7 @@ struct SafeCleanupCelebrationOverlay: View {
     /// files are in the trash and still on the volume; nothing is reclaimed until the
     /// trash is emptied, so this must never read as an achievement.
     private var subtitleText: String {
-        subtitleShowsComplete ? String(localized: "moved to trash, not yet reclaimed") : String(localized: "of \(formatBytes(session.totalBytes))")
+        subtitleShowsComplete ? session.removalWording : String(localized: "of \(formatBytes(session.totalBytes))")
     }
 
     private var currentItemText: String {
@@ -795,11 +1045,15 @@ struct SafeCleanupCelebrationOverlay: View {
             return
         }
         guard !retryingFailureIDs.contains(item.id) else { return }
+        retryFailedIDs.remove(item.id)
         retryingFailureIDs.insert(item.id)
         Task {
             let movedBytes = await store.retryCleanFailure(item, session: session)
             retryingFailureIDs.remove(item.id)
-            guard let movedBytes else { return }
+            guard let movedBytes else {
+                noteRetryChangedNothing([item])
+                return
+            }
             if reduceMotion {
                 displayedBytes += movedBytes
             } else {
@@ -852,11 +1106,15 @@ struct SafeCleanupCelebrationOverlay: View {
     private func retryInstallLeftovers(_ items: [CleanFailureItem]) {
         let ids = Set(items.map(\.id))
         guard !ids.isEmpty, retryingFailureIDs.isDisjoint(with: ids) else { return }
+        retryFailedIDs.subtract(ids)
         retryingFailureIDs.formUnion(ids)
         Task {
             let movedBytes = await store.retryInstallLeftoverFailures(items, session: session)
             retryingFailureIDs.subtract(ids)
-            guard let movedBytes else { return }
+            guard let movedBytes else {
+                noteRetryChangedNothing(items)
+                return
+            }
             if reduceMotion {
                 displayedBytes += movedBytes
             } else {
@@ -867,20 +1125,38 @@ struct SafeCleanupCelebrationOverlay: View {
         }
     }
 
+    /// A retry that came back with nothing to show: the row is still there with
+    /// the reason it had. A row whose reason changed already reads differently,
+    /// and a locked app's tap was the setup step, so neither gets the note.
+    private func noteRetryChangedNothing(_ items: [CleanFailureItem]) {
+        for item in items where item.reason != .needsAdministrator {
+            guard let row = session.failedItems.first(where: { $0.id == item.id }),
+                  row.reason == item.reason else { continue }
+            retryFailedIDs.insert(item.id)
+        }
+    }
+
+    /// After a retry: a failed run that now has a figure shows it, and a header
+    /// with nothing listed under it any more settles back to the centre.
+    private func followOutcomeAfterRetry() {
+        if session.outcome.showsFigure, !checkmarkVisible {
+            tagline = TimeTagline.select(for: session.elapsedSeconds)
+            checkmarkProgress = 1
+            checkmarkScale = 1
+            subtitleShowsComplete = true
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+                checkmarkVisible = true
+                completionLinesVisible = true
+            }
+        }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+            headerAnchoredToTop = wantsHeaderAtTop
+        }
+    }
+
     private func revealAdministratorItemInFinder() {
         guard let first = administratorFailures.first else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: first.path)])
-    }
-
-    /// When the only outcome is a locked app and nothing actually moved, the success
-    /// header (checkmark, "0 bytes", timing) is just noise around a "0". Drop it and
-    /// let the permission panel stand on its own. As soon as something did move, the
-    /// header earns its place again and the panel sits beneath it.
-    private var hidesSuccessChrome: Bool {
-        session.phase == .complete
-            && !administratorFailures.isEmpty
-            && session.movedToTrashCount == 0
-            && session.finalBytesMovedToTrash == 0
     }
 
     private var administratorPanel: some View {
@@ -910,7 +1186,7 @@ struct SafeCleanupCelebrationOverlay: View {
     private var showsConfetti: Bool {
         // Don't celebrate when something still needs the user's attention.
         confettiArmed
-            && administratorFailures.isEmpty
+            && session.outcome == .success
             && session.finalBytesMovedToTrash >= Self.confettiThresholdBytes
             && !reduceMotion
     }
@@ -989,7 +1265,10 @@ struct SafeCleanupCelebrationOverlay: View {
 
         sequenceTask = Task { @MainActor in
             let finalBytes = session.finalBytesMovedToTrash
-            tagline = TimeTagline.select(for: session.elapsedSeconds)
+            // A run that removed nothing has no figure to settle, draw a
+            // checkmark over, or time (#162).
+            let showsFigure = session.outcome.showsFigure
+            tagline = showsFigure ? TimeTagline.select(for: session.elapsedSeconds) : nil
             if let tagline {
                 TimeTagline.store(tagline)
             }
@@ -1006,9 +1285,11 @@ struct SafeCleanupCelebrationOverlay: View {
                     subtitleShowsComplete = true
                     checkmarkVisible = true
                     completionLinesVisible = true
+                    completionHeaderShown = true
+                    headerAnchoredToTop = wantsHeaderAtTop
                     footerVisible = true
                 }
-                if session.elapsedSeconds < 3 {
+                if showsFigure, session.elapsedSeconds < 3 {
                     boltFlashToken += 1
                 }
                 return
@@ -1031,32 +1312,45 @@ struct SafeCleanupCelebrationOverlay: View {
                 progressGroupVisible = false
             }
             try? await Task.sleep(nanoseconds: 100_000_000)
-            withAnimation(.easeInOut(duration: 0.3)) {
-                subtitleShowsComplete = true
-            }
-            try? await Task.sleep(nanoseconds: 150_000_000)
             guard !Task.isCancelled else { return }
 
-            confettiArmed = true
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                checkmarkVisible = true
-                checkmarkScale = 1
+            if showsFigure {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    subtitleShowsComplete = true
+                }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                guard !Task.isCancelled else { return }
+
+                confettiArmed = true
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    checkmarkVisible = true
+                    checkmarkScale = 1
+                }
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    checkmarkProgress = 1
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    completionLinesVisible = true
+                }
+                if session.elapsedSeconds < 3 {
+                    boltFlashToken += 1
+                }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            } else {
+                // Nothing to count up to: the cleaning header gives way to the
+                // outcome in one fade, once the bar has gone.
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    completionHeaderShown = true
+                }
+                try? await Task.sleep(nanoseconds: 300_000_000)
             }
-            withAnimation(.easeInOut(duration: 0.6)) {
-                checkmarkProgress = 1
-            }
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            withAnimation(.easeInOut(duration: 0.3)) {
-                completionLinesVisible = true
-            }
-            if session.elapsedSeconds < 3 {
-                boltFlashToken += 1
-            }
-            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
             // Inserted with the footer so the header glides up once, instead of
             // jumping while the counter is still settling.
             withAnimation(.easeInOut(duration: 0.3)) {
                 resolveSupportNudge()
+                headerAnchoredToTop = wantsHeaderAtTop
                 footerVisible = true
             }
         }
@@ -1283,21 +1577,29 @@ private struct CompletionBoltEchoRing: View {
     }
 }
 
-/// The items a finished clean left behind, as one card under the total (#162): a
+/// The items a finished clean left behind, as one card under the header (#162): a
 /// header with the count and, when more than one row can be retried, Retry all;
 /// then a row per item with a tinted icon tile, its name, the reason, and its
 /// action or status. Open from the start, so nothing hides behind a chevron. Past
-/// three rows the rest wait behind "more". Internal, not private, so the test
-/// host can render its expanded and retrying states for screenshots.
+/// four rows the list scrolls inside the card, at a fixed height, so the header
+/// above never moves. A screen whose own header already gives the count leaves
+/// the card's out. Internal, not private, so the test host can render its states
+/// for screenshots.
 struct CleanFailureCard: View {
     let failures: [CleanFailureItem]
-    @Binding var showsAll: Bool
+    var showsHeader = true
     let retryingIDs: Set<UUID>
+    var retryFailedIDs: Set<UUID> = []
     let onOpenSettings: () -> Void
     let onRetry: (CleanFailureItem) -> Void
     let onRetryAll: () -> Void
 
-    private static let rowsBeforeMore = 3
+    /// Rows shown before the list scrolls. Four one-line rows fit under the
+    /// header at the sheet's usual height; the fifth peeks, so the scroll shows.
+    private static let rowsBeforeScroll = 4
+    /// One row of a single-line reason: the 28pt tile and 12pt above and below.
+    private static let rowHeight: CGFloat = 52
+    private static let listHeight: CGFloat = CGFloat(rowsBeforeScroll) * rowHeight + 4
 
     private var headerText: String {
         failures.count == 1
@@ -1309,54 +1611,35 @@ struct CleanFailureCard: View {
         failures.filter(\.reason.showsRetry).count
     }
 
-    private var visibleFailures: [CleanFailureItem] {
-        showsAll ? failures : Array(failures.prefix(Self.rowsBeforeMore))
-    }
-
-    private var hiddenCount: Int {
-        max(0, failures.count - visibleFailures.count)
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: AppStyle.Spacing.small) {
-                Text(headerText)
-                    .font(AppStyle.Typography.headline)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                if retryableCount > 1 {
-                    Button(String(localized: "Retry all"), action: onRetryAll)
-                        .buttonStyle(.purge(.quiet, size: .small))
-                        .disabled(!retryingIDs.isEmpty)
-                }
-            }
-            .padding(.horizontal, AppStyle.Spacing.medium)
-            .padding(.vertical, AppStyle.Spacing.xSmall)
-
-            hairline
-
-            ForEach(Array(visibleFailures.enumerated()), id: \.element.id) { index, failure in
-                if index > 0 {
-                    hairline.padding(.horizontal, AppStyle.Spacing.medium)
-                }
-                CleanFailureCardRow(
-                    failure: failure,
-                    isRetrying: retryingIDs.contains(failure.id),
-                    onOpenSettings: onOpenSettings,
-                    onRetry: onRetry
-                )
-            }
-
-            if hiddenCount > 0 {
-                hairline.padding(.horizontal, AppStyle.Spacing.medium)
-                Button("+\(hiddenCount) more") {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showsAll = true
+            if showsHeader {
+                HStack(spacing: AppStyle.Spacing.small) {
+                    Text(headerText)
+                        .font(AppStyle.Typography.headline)
+                        .foregroundStyle(AppColors.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if retryableCount > 1 {
+                        Button(String(localized: "Retry all"), action: onRetryAll)
+                            .buttonStyle(.purge(.quiet, size: .small))
+                            .disabled(!retryingIDs.isEmpty)
                     }
                 }
-                .buttonStyle(.purge(.quiet, size: .small))
-                .padding(.vertical, AppStyle.Spacing.xxSmall)
+                .padding(.horizontal, AppStyle.Spacing.medium)
+                .padding(.vertical, AppStyle.Spacing.xSmall)
+
+                hairline
+            }
+
+            if failures.count > Self.rowsBeforeScroll {
+                ScrollView {
+                    rows
+                }
+                .scrollIndicators(.visible)
+                .frame(height: Self.listHeight)
+            } else {
+                rows
             }
         }
         .background(
@@ -1369,6 +1652,23 @@ struct CleanFailureCard: View {
         }
         .frame(maxWidth: 520)
         .accessibilityElement(children: .contain)
+    }
+
+    private var rows: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(failures.enumerated()), id: \.element.id) { index, failure in
+                if index > 0 {
+                    hairline.padding(.horizontal, AppStyle.Spacing.medium)
+                }
+                CleanFailureCardRow(
+                    failure: failure,
+                    isRetrying: retryingIDs.contains(failure.id),
+                    retryChangedNothing: retryFailedIDs.contains(failure.id),
+                    onOpenSettings: onOpenSettings,
+                    onRetry: onRetry
+                )
+            }
+        }
     }
 
     private var hairline: some View {
@@ -1605,6 +1905,8 @@ private struct NeedsAdministratorPanel: View {
 struct CleanFailureCardRow: View {
     let failure: CleanFailureItem
     let isRetrying: Bool
+    /// The last Retry left the row as it was, so it says so under the reason.
+    var retryChangedNothing = false
     let onOpenSettings: () -> Void
     let onRetry: (CleanFailureItem) -> Void
 
@@ -1631,6 +1933,13 @@ struct CleanFailureCardRow: View {
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if retryChangedNothing {
+                    Text("Tried again, still couldn't remove it.")
+                        .font(AppStyle.Typography.callout)
+                        .foregroundStyle(AppColors.statusDangerText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1749,6 +2058,25 @@ private struct CompletionCheckmarkBadge: View {
 
             AnimatedCompletionCheckmark(progress: progress, color: color)
                 .padding(22)
+        }
+    }
+}
+
+/// The checkmark's ring with a symbol in it, for a run that removed nothing
+/// (#162): an exclamation mark when something failed, a raised hand when Purge
+/// kept every item on purpose.
+private struct CompletionOutcomeBadge: View {
+    let systemImage: String
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.92), lineWidth: 5)
+
+            Image(systemName: systemImage)
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(color)
         }
     }
 }
