@@ -86,14 +86,12 @@ struct FileDeleterSimulatorRuntimeTests {
             at: mount,
             displayName: "iOS 26.3.1 Runtime",
             expectedSizeBytes: 42,
+            route: .cache,
             simulatorRuntimeID: identifier
         )
 
         #expect(recorder.asked == [identifier])
-        guard case .success(let bytes) = result else {
-            Issue.record("expected success, got \(result)")
-            return
-        }
-        #expect(bytes == 42)
+        // Removed outright, so the row is never counted as moved to the Trash.
+        #expect(result == .deleted(bytes: 42, movedToTrash: false))
     }
 }

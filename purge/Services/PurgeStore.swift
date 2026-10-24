@@ -494,7 +494,7 @@ final class PurgeStore: ObservableObject {
     private let uninstallScanner = AppUninstallScanner()
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
-    private let fileDeleter = FileDeleter()
+    private let fileDeleter: FileDeleter
     private let defaults: UserDefaults
     private let gitChecker: GitStatusChecker
 
@@ -564,18 +564,21 @@ final class PurgeStore: ObservableObject {
         totalMovedToTrashBytes > 0
     }
 
-    /// `defaults`, `scanSources` and `gitChecker` are for tests; the app uses the
-    /// standard ones.
+    /// `defaults`, `scanSources`, `gitChecker` and `fileDeleter` are for tests; the
+    /// app uses the standard ones. A test's deleter keeps a fake Trash, so nothing
+    /// a test makes reaches the user's own (#171).
     init(
         defaults: UserDefaults = .standard,
         scanSources: ScanSources? = nil,
-        gitChecker: GitStatusChecker = GitStatusChecker()
+        gitChecker: GitStatusChecker = GitStatusChecker(),
+        fileDeleter: FileDeleter = FileDeleter()
     ) {
         let cacheScanner = CacheScanner()
         let devScanner = DevScanner()
         self.cacheScanner = cacheScanner
         self.devScanner = devScanner
         self.gitChecker = gitChecker
+        self.fileDeleter = fileDeleter
         self.scanSources = scanSources
             ?? .live(
                 cacheScanner: cacheScanner,
@@ -1251,34 +1254,62 @@ final class PurgeStore: ObservableObject {
         manualDeletionSession = nil
     }
 
-    /// Retries deletion for a single failed item from the completion overlay.
+    /// Retries deletion for a single failed item from the completion overlay. The
+    /// row goes back through the route that tried it (#174), so the same gate
+    /// decides again and a retry never reaches further than the clean did. Returns
+    /// the bytes that went, or `nil` when the row is still there or was already gone.
     func retryCleanFailure(_ item: CleanFailureItem, session: DeletionSession) async -> Int64? {
         let url = URL(fileURLWithPath: item.path)
+        let key = url.standardizedFileURL.path
 
         // Leftover macOS update files, whatever the reason, go back through the clean
         // route together; see `retryInstallLeftoverFailures`.
-        if MacOSInstallLeftovers.isEntryPath(url.standardizedFileURL.path) {
+        if MacOSInstallLeftovers.isEntryPath(key) {
             return await retryInstallLeftoverFailures([item], session: session)
         }
+        // Every clean checks this before it starts. A retry is no exception.
+        guard !ExcludedPathsStore.isExcluded(url) else { return nil }
 
-        if item.reason == .needsAdministrator {
+        switch item.route {
+        case .lockedUninstall:
             // A whole app held back because its bundle is locked.
             // Removing it goes through the helper and takes the bundle *and* the
             // leftovers we deferred with it, so nothing is stripped until the app can go.
             return await completeLockedUninstall(for: item, session: session)
+        case .userSelected(isAIModel: _, privilegedEligible: true) where item.reason == .needsAdministrator:
+            // A leftover only the helper can move. As for a held app, the first tap
+            // is the setup step; the engine tries the helper on the next one.
+            guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
+                PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+                return nil
+            }
+        case .cache, .userSelected:
+            break
         }
 
-        let result = await fileDeleter.retryDeleteItem(
+        let outcome = await fileDeleter.retryDeleteItem(
             at: url,
             displayName: item.displayName,
             expectedSizeBytes: item.sizeBytes,
-            simulatorRuntimeID: simulatorRuntimeIDsByPath()[url.standardizedFileURL.path]
+            route: item.route,
+            simulatorRuntimeID: simulatorRuntimeIDsByPath()[key]
         )
-        switch result {
-        case .success(let movedBytes):
-            resolveRetriedFailure(item: item, movedBytes: movedBytes, session: session)
-            return movedBytes
-        case .failure:
+        switch outcome {
+        case .deleted(let bytes, let movedToTrash):
+            resolveRetriedFailure(item: item, bytes: bytes, movedToTrash: movedToTrash, session: session)
+            return bytes
+        case .alreadyGone:
+            // Something else removed it since the clean. The row goes, nothing is
+            // credited or recorded, and the lists stop showing it.
+            session.removeResolvedFailure(id: item.id, additionalMovedBytes: 0)
+            removeUserSelectedRows(deletedPaths: [key])
+            return nil
+        case .failed(let reason):
+            // The row shows what this attempt found. A gate's refusal reads as
+            // skipped for safety, which offers no Retry.
+            if reason != item.reason {
+                session.replaceFailure(id: item.id, with: [item.replacingReason(reason)])
+            }
             return nil
         }
     }
@@ -1313,7 +1344,12 @@ final class PurgeStore: ObservableObject {
         for deleted in report.deletedItems {
             let key = URL(fileURLWithPath: deleted.path).standardizedFileURL.path
             guard let item = itemsByPath[key] else { continue }
-            resolveRetriedFailure(item: item, movedBytes: deleted.sizeBytes, session: session)
+            resolveRetriedFailure(
+                item: item,
+                bytes: deleted.sizeBytes,
+                movedToTrash: deleted.movedToTrash,
+                session: session
+            )
             movedBytes += deleted.sizeBytes
         }
         // What didn't move gets its new reason, so the screen never keeps offering a
@@ -1339,19 +1375,29 @@ final class PurgeStore: ObservableObject {
         return movedBytes > 0 ? movedBytes : nil
     }
 
-    /// Shared bookkeeping once a retried failure finally lands in the Trash: clear it
-    /// from the overlay, credit the moved bytes, and drop it from the scan results.
-    private func resolveRetriedFailure(item: CleanFailureItem, movedBytes: Int64, session: DeletionSession) {
-        session.removeResolvedFailure(id: item.id, additionalMovedBytes: movedBytes)
-        incrementMovedToTrashTotal(by: movedBytes)
+    /// Shared bookkeeping once a retried failure finally goes: clear it from the
+    /// overlay, credit the bytes, and drop it from every list that showed it. A
+    /// simulator or runtime is filed as removed outright, not as moved to the Trash.
+    private func resolveRetriedFailure(
+        item: CleanFailureItem,
+        bytes: Int64,
+        movedToTrash: Bool,
+        session: DeletionSession
+    ) {
+        session.removeResolvedFailure(id: item.id, additionalMovedBytes: bytes)
+        if movedToTrash {
+            session.noteMovedToTrash(count: 1)
+            incrementMovedToTrashTotal(by: bytes)
+        }
         let deleted = DeletedItem(
             path: item.path,
-            sizeBytes: movedBytes,
-            displayName: item.displayName
+            sizeBytes: bytes,
+            displayName: item.displayName,
+            movedToTrash: movedToTrash
         )
         let report = DeletionReport(
-            bytesMovedToTrash: movedBytes,
-            bytesRemovedDirectly: 0,
+            bytesMovedToTrash: movedToTrash ? bytes : 0,
+            bytesRemovedDirectly: movedToTrash ? 0 : bytes,
             deletedItems: [deleted],
             failedItems: [],
             skippedItems: [],
@@ -1360,7 +1406,33 @@ final class PurgeStore: ObservableObject {
             timestamp: Date()
         )
         reflectDeletionReportInScanState(report)
+        removeUserSelectedRows(deletedPaths: [URL(fileURLWithPath: item.path).standardizedFileURL.path])
         recordCleanup(report, trigger: .manual, source: .retry, addToHistory: false)
+    }
+
+    /// Drops the rows `reflectDeletionReportInScanState` does not know: Large Files
+    /// rows, with their duplicate groups, and orphan leftovers. `deletedPaths` are
+    /// standardized. A Large Files row goes only when every path it stood for is in
+    /// the set, as `performLargeFileDeletion` requires.
+    private func removeUserSelectedRows(deletedPaths: Set<String>) {
+        let clearedRows = largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) }
+        if !clearedRows.isEmpty { removeClearedLargeFileRows(clearedRows) }
+        removeOrphanLeftoverRows(deletedPaths: deletedPaths)
+    }
+
+    /// Takes the orphan leftovers whose standardized path is in `deletedPaths` off
+    /// the Leftovers list and out of its selection.
+    private func removeOrphanLeftoverRows(deletedPaths: Set<String>) {
+        let clearedIDs = Set(
+            orphanLeftovers
+                .filter { deletedPaths.contains($0.path.standardizedFileURL.path) }
+                .map(\.id)
+        )
+        guard !clearedIDs.isEmpty else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            orphanLeftovers.removeAll { clearedIDs.contains($0.id) }
+        }
+        orphanSelectedIDs.subtract(clearedIDs)
     }
 
     /// Finishes a deferred locked-app uninstall once the helper is set up. Removes the
@@ -1375,15 +1447,19 @@ final class PurgeStore: ObservableObject {
         }
 
         let bundleKey = URL(fileURLWithPath: item.path).standardizedFileURL.path
-        let pending = pendingLockedUninstalls.first { $0.bundlePath == bundleKey }
-        let leftovers = pending?.items.filter { $0.category != .bundle } ?? []
+        // Only a held app the uninstaller planned may run bundle first. A leftover
+        // row carries its own route and never comes here (#174).
+        guard let pending = pendingLockedUninstalls.first(where: { $0.bundlePath == bundleKey }) else {
+            return nil
+        }
+        let leftovers = pending.items.filter { $0.category != .bundle }
 
         // Pass 1 — the bundle, on its own. It is always helper-eligible: the validated
         // .app the user chose to remove, which a managed installer can protect even in
         // a writable /Applications. Not one leftover is touched until the bundle moves.
-        let bundleURL = pending?.app.bundleURL ?? URL(fileURLWithPath: item.path)
-        let bundleName = pending?.app.name ?? item.displayName
-        let bundleSize = pending?.items.first(where: { $0.category == .bundle })?.sizeBytes ?? item.sizeBytes
+        let bundleURL = pending.app.bundleURL
+        let bundleName = pending.app.name
+        let bundleSize = pending.items.first(where: { $0.category == .bundle })?.sizeBytes ?? item.sizeBytes
         RemovedAppMonitor.shared.noteRemovalByPurge(of: [bundleURL])
         guard let bundleReport = try? await fileDeleter.deleteUserSelectedFiles(
             at: [bundleURL],
@@ -1409,33 +1485,29 @@ final class PurgeStore: ObservableObject {
         // finishing this app's removal never strips files a surviving copy needs.
         // The removed app is already out of `installedApps` above.
         var keptSharedFailures: [CleanFailureItem] = []
-        let deletableLeftovers: [UninstallItem]
-        if let owner = pending?.app {
-            let survivors = installedApps
-            let appGroupClaims = await AppGroupClaims.gatherOffMain(for: survivors, leftovers: leftovers)
-            deletableLeftovers = leftovers.filter { leftover in
-                if let otherApp = Self.appStillUsing(
-                    leftover: leftover,
-                    excludingOwner: owner,
-                    among: survivors,
-                    appGroupClaims: appGroupClaims
-                ) {
-                    keptSharedFailures.append(keptSharedFailure(item: leftover, otherApp: otherApp))
-                    return false
-                }
-                return true
+        let owner = pending.app
+        let survivors = installedApps
+        let appGroupClaims = await AppGroupClaims.gatherOffMain(for: survivors, leftovers: leftovers)
+        let deletableLeftovers = leftovers.filter { leftover in
+            if let otherApp = Self.appStillUsing(
+                leftover: leftover,
+                excludingOwner: owner,
+                among: survivors,
+                appGroupClaims: appGroupClaims
+            ) {
+                keptSharedFailures.append(keptSharedFailure(item: leftover, otherApp: otherApp))
+                return false
             }
-        } else {
-            deletableLeftovers = leftovers
+            return true
         }
 
         // Pass 2 — the leftovers, now that the app is actually gone. Each escalates
         // only when its own parent directory is not writable.
         var leftoverReport: DeletionReport?
+        var eligible = Set<String>()
         if !deletableLeftovers.isEmpty {
             var names: [String: String] = [:]
             var sizes: [String: Int64] = [:]
-            var eligible = Set<String>()
             for leftover in deletableLeftovers {
                 let key = leftover.path.standardizedFileURL.path
                 names[key] = "\(bundleName) \(leftover.category.displayName)"
@@ -1464,35 +1536,44 @@ final class PurgeStore: ObservableObject {
             bytesRemovedDirectly: 0,
             deletedItems: bundleReport.deletedItems + (leftoverReport?.deletedItems ?? []),
             failedItems: leftoverReport?.failedItems ?? [],
-            skippedItems: [],
+            skippedItems: leftoverReport?.skippedItems ?? [],
             capacityBefore: nil,
             capacityAfter: nil,
             timestamp: Date()
         )
         reflectDeletionReportInScanState(report)
+        session.noteMovedToTrash(count: report.movedToTrashCount)
         recordCleanup(report, trigger: .manual, source: .uninstall, addToHistory: false)
 
         // The app is gone. Any leftover that still failed becomes its own plain row,
-        // no longer described as a locked application.
+        // no longer described as a locked application, on the user-selected route
+        // with the same helper eligibility, so Retry tries it the same way (#174).
         let movedLeftoverPaths = Set((leftoverReport?.deletedItems ?? []).map {
             URL(fileURLWithPath: $0.path).standardizedFileURL.path
         })
         let failedLeftovers = deletableLeftovers.filter {
             !movedLeftoverPaths.contains($0.path.standardizedFileURL.path)
         }
-        let reportReasons = (leftoverReport?.failedItems ?? []).reduce(into: [String: CleanFailureReason]()) {
+        var reportReasons = (leftoverReport?.failedItems ?? []).reduce(into: [String: CleanFailureReason]()) {
             reasons, failure in
             reasons[URL(fileURLWithPath: failure.path).standardizedFileURL.path] = failure.reason
+        }
+        // A leftover the gate refused is skipped for safety, not a failure to retry.
+        for skipped in leftoverReport?.skippedItems ?? [] {
+            reportReasons[URL(fileURLWithPath: skipped.path).standardizedFileURL.path] = .safetySkipped
         }
         let failedReplacements = failedLeftovers.map { leftover -> CleanFailureItem in
             let key = leftover.path.standardizedFileURL.path
             let reported = reportReasons[key] ?? .unknown
+            // The helper is on by now, so "needs administrator" only means its move
+            // failed. Retry on the plain row tries the helper again.
             let reason: CleanFailureReason = reported == .needsAdministrator ? .unknown : reported
             return CleanFailureItem(
                 path: leftover.path.path,
                 displayName: "\(bundleName) \(leftover.category.displayName)",
                 reason: reason,
-                sizeBytes: leftover.sizeBytes
+                sizeBytes: leftover.sizeBytes,
+                route: .userSelected(isAIModel: false, privilegedEligible: eligible.contains(key))
             )
         }
         // Both the leftovers that failed and the ones kept for another app remain as
@@ -2444,15 +2525,7 @@ final class PurgeStore: ObservableObject {
             let deletedPaths = Set(report.deletedItems.map {
                 URL(fileURLWithPath: $0.path).standardizedFileURL.path
             })
-            let clearedIDs = Set(
-                orphanLeftovers
-                    .filter { deletedPaths.contains($0.path.standardizedFileURL.path) }
-                    .map(\.id)
-            )
-            withAnimation(.easeInOut(duration: 0.2)) {
-                orphanLeftovers.removeAll { clearedIDs.contains($0.id) }
-            }
-            orphanSelectedIDs.subtract(clearedIDs)
+            removeOrphanLeftoverRows(deletedPaths: deletedPaths)
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,
@@ -3291,7 +3364,8 @@ final class PurgeStore: ObservableObject {
                 path: app.bundleURL.path,
                 displayName: app.name,
                 reason: .needsAdministrator,
-                sizeBytes: items.reduce(0) { $0 + $1.sizeBytes }
+                sizeBytes: items.reduce(0) { $0 + $1.sizeBytes },
+                route: .lockedUninstall
             )
         }
 

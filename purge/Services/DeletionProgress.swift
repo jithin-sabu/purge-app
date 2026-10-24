@@ -161,6 +161,14 @@ final class DeletionSession: ObservableObject, Identifiable {
         finalBytesMovedToTrash += additionalMovedBytes
     }
 
+    /// Counts items a retry moved to the Trash after the run finished, so a run that
+    /// moved nothing at first still shows the "Empty your Trash" line once a retry
+    /// does (#174). Items removed outright are not counted.
+    func noteMovedToTrash(count: Int) {
+        guard count > 0 else { return }
+        movedToTrashCount += count
+    }
+
     /// Credits bytes from a partial retry while leaving its unresolved failure visible.
     func addRetriedMovedBytes(_ bytes: Int64) {
         guard bytes > 0 else { return }

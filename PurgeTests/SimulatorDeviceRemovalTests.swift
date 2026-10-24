@@ -345,12 +345,8 @@ struct SimulatorDeviceRemovalTests {
         let deleter = FileDeleter(simulatorDeviceRemover: { _, _ in
             .failed(.simulatorServiceNeedsRestart, detail: "exit 1")
         })
-        let result = await deleter.retryDeleteItem(at: device, displayName: nil, expectedSizeBytes: 1)
-        guard case .failure(let reason) = result else {
-            Issue.record("expected a failure, got \(result)")
-            return
-        }
-        #expect(reason == .simulatorServiceNeedsRestart)
+        let result = await deleter.retryDeleteItem(at: device, displayName: nil, expectedSizeBytes: 1, route: .cache)
+        #expect(result == .failed(.simulatorServiceNeedsRestart))
     }
 }
 
