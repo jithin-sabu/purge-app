@@ -195,16 +195,63 @@ struct InsetCardDivider: View {
 /// falls back to the system font. It is registered for this process, which lets
 /// SwiftUI's own `.weight(_:)` drive the variable weight axis. Text that shows
 /// sizes, units or percentages uses `TextStyle.numbers` instead.
+///
+/// CoreText reads a registered font from its path again while the app runs,
+/// and the bundle's path can go away: Xcode cleans or replaces a debug build,
+/// and a user drags Purge from Downloads to Applications. On 2026-10-24 a
+/// running build lost its bundle and every label turned into the system font
+/// until a rebuild put the file back. So `register()` copies the font into
+/// Application Support, where nothing moves it, and registers the copy. It
+/// runs from `applicationWillFinishLaunching`, before the first paint.
 enum AppFonts {
-    private static let isRegistered: Bool = {
-        guard let url = Bundle.main.url(forResource: "OnestText", withExtension: "ttf") else { return false }
+    private static let resourceName = "OnestText"
+    private static var registration: Bool?
+
+    /// Registers Onest for this process once; later calls return the same answer.
+    @discardableResult
+    static func register() -> Bool {
+        if let registration { return registration }
+        let result = registerOnce()
+        registration = result
+        return result
+    }
+
+    private static func registerOnce() -> Bool {
+        guard let bundled = Bundle.main.url(forResource: resourceName, withExtension: "ttf") else { return false }
+        // The test host shares the user's Application Support folder, so it
+        // registers the bundle's copy and writes nothing (#181).
+        let url = TestHost.isActive() ? bundled : (stableCopy(of: bundled, in: stableFolder) ?? bundled)
         var error: Unmanaged<CFError>?
         return CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error)
-    }()
+    }
+
+    private static var stableFolder: URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return support
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "io.getpurge.app", isDirectory: true)
+            .appendingPathComponent("Fonts", isDirectory: true)
+    }
+
+    /// The font at `bundled`, copied into `folder` when the copy there is
+    /// missing or differs. Returns nil when the copy cannot be made, and the
+    /// caller registers the bundled file instead.
+    static func stableCopy(of bundled: URL, in folder: URL) -> URL? {
+        let copy = folder.appendingPathComponent(bundled.lastPathComponent)
+        do {
+            let data = try Data(contentsOf: bundled)
+            if (try? Data(contentsOf: copy)) != data {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try data.write(to: copy, options: .atomic)
+            }
+            return copy
+        } catch {
+            return nil
+        }
+    }
 
     static func onest(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         // Without the font file, fall back to the system font, not a missing face.
-        isRegistered
+        register()
             ? Font.custom("Onest", size: size).weight(weight)
             : Font.system(size: size, weight: weight)
     }
