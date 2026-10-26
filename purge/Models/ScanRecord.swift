@@ -10,6 +10,9 @@ nonisolated struct ScanRecord: Codable, Equatable, Sendable {
     /// App Caches and Dev Tools only: how much of it is safe to clean, the one
     /// figure their Overview rows show. Absent in records saved before it existed.
     var safeBytes: Int64? = nil
+    /// Large Files only: the size and last-used filters the count was taken under.
+    /// Absent in records saved before it existed, which are shown as they were.
+    var largeFileFilter: LargeFileFilterSnapshot? = nil
 }
 
 nonisolated struct ScanRecordStore {

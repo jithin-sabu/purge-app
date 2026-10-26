@@ -1389,3 +1389,11 @@
 "%lld other selected files can't be kept only in iCloud right now, so they stay." = "另有 %lld 个所选文件目前无法只在 iCloud 中保留，因此保留在这台 Mac 上。";
 "%lld other selected files stay: %lld aren't in iCloud, %lld can't be kept only there right now." = "另有 %lld 个所选文件保留：%lld 个不在 iCloud 中，%lld 个目前无法只在 iCloud 中保留。";
 "This file is also linked from another place on this Mac." = "此文件在这台 Mac 上的其他位置也有链接。";
+
+/* Overview Large Files row (#279) */
+"%lld %@ over %@ not used in %@" = "%lld %@超过 %@ 且 %@ 未使用的文件";
+"Change filter" = "更改筛选";
+"No files over %@ not used in %@" = "没有超过 %@ 且 %@ 未使用的文件";
+"No files over %@" = "没有超过 %@ 的文件";
+"a month" = "一个月";
+"a year" = "一年";

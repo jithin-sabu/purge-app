@@ -541,6 +541,18 @@ enum LargeFileAgeThreshold: Int, CaseIterable, Identifiable {
         String(localized: "Last used: \(label)")
     }
 
+    /// The span the Overview row names after its count: "12 files over 1 GB not
+    /// used in a year". Nil for Any time, which adds nothing to the line (#279).
+    var rowSpan: String? {
+        switch self {
+        case .anyTime: return nil
+        case .oneMonth: return String(localized: "a month")
+        case .months3: return String(localized: "3 months")
+        case .months6: return String(localized: "6 months")
+        case .year1: return String(localized: "a year")
+        }
+    }
+
     static func current(userDefaults: UserDefaults = .standard) -> LargeFileAgeThreshold {
         LargeFileAgeThreshold(rawValue: userDefaults.integer(forKey: userDefaultsKey)) ?? defaultOption
     }
@@ -551,6 +563,33 @@ enum LargeFileAgeThreshold: Int, CaseIterable, Identifiable {
             return anyTime.rawValue
         }
         return LargeFileAgeThreshold(rawValue: raw)?.rawValue ?? defaultOption.rawValue
+    }
+}
+
+/// The two filters a Large Files scan ran under. Saved with the scan's record so
+/// a figure from an earlier launch is shown only while the filters still match
+/// it; a count taken at 100 MB says nothing about a 1 GB filter (#279).
+nonisolated struct LargeFileFilterSnapshot: Codable, Equatable, Sendable {
+    var sizeMB: Int
+    var ageDays: Int
+
+    init(sizeMB: Int, ageDays: Int) {
+        self.sizeMB = sizeMB
+        self.ageDays = ageDays
+    }
+
+    init(size: LargeFileSizeThreshold, age: LargeFileAgeThreshold) {
+        self.init(sizeMB: size.rawValue, ageDays: age.rawValue)
+    }
+
+    var size: LargeFileSizeThreshold { LargeFileSizeThreshold(rawValue: sizeMB) ?? .defaultOption }
+    var age: LargeFileAgeThreshold { LargeFileAgeThreshold(rawValue: ageDays) ?? .defaultOption }
+
+    static func current(userDefaults: UserDefaults = .standard) -> LargeFileFilterSnapshot {
+        LargeFileFilterSnapshot(
+            size: LargeFileSizeThreshold.current(userDefaults: userDefaults),
+            age: LargeFileAgeThreshold.current(userDefaults: userDefaults)
+        )
     }
 }
 
