@@ -1107,20 +1107,24 @@ nonisolated final class DevScanner {
     }
 
     /// Walks `roots` (the usual search roots under `home` when nil) for projects,
-    /// then sizes their artifacts. Tests pass a temporary tree.
+    /// then sizes their artifacts. Tests pass a temporary tree, and `onDirectory`
+    /// is called with each folder as the walk enters it, so a test can cancel at
+    /// a known point of the walk.
     func discoverProjects(
         access: ScanAccess,
         maxDepth: Int = 4,
         roots: [URL]? = nil,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil
+        continuation: AsyncStream<DeveloperScanEvent>.Continuation? = nil,
+        onDirectory: (@Sendable (URL) -> Void)? = nil
     ) async -> [ProjectGroup] {
         let walkStart = Date()
         let (discoveredRoots, directoriesWalked) = Self.findProjectRoots(
             in: roots ?? Self.projectSearchRoots(home: home),
             home: home,
             access: access,
-            maxDepth: maxDepth
+            maxDepth: maxDepth,
+            onDirectory: onDirectory
         )
         // A cancelled walk stopped part way. Its list is incomplete, so nothing is sized.
         guard !Task.isCancelled else { return [] }
@@ -1193,11 +1197,13 @@ nonisolated final class DevScanner {
 
     /// Walks `roots` for project markers and returns each project root once,
     /// shallowest first, with how many directories the walk visited.
+    /// `onDirectory` is called with each folder as the walk enters it.
     nonisolated static func findProjectRoots(
         in roots: [URL],
         home: URL,
         access: ScanAccess,
-        maxDepth: Int = 4
+        maxDepth: Int = 4,
+        onDirectory: (@Sendable (URL) -> Void)? = nil
     ) -> (roots: [(URL, [ProjectType])], directoriesWalked: Int) {
         let fm = FileManager.default
         var discoveredRoots: [(URL, [ProjectType])] = []
@@ -1226,6 +1232,7 @@ nonisolated final class DevScanner {
             // A newer scan replaced this one: stop rather than walk the rest of home.
             guard depth <= maxDepth, !Task.isCancelled else { return }
             directoriesWalked += 1
+            onDirectory?(directory)
 
             // One listing serves the project markers and the walk below (#190).
             let listing = try? fm.contentsOfDirectory(
