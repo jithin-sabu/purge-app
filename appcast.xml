@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.13.1</title>
+      <pubDate>Mon, 26 Oct 2026 23:32:46 +0000</pubDate>
+      <sparkle:version>37</sparkle:version>
+      <sparkle:shortVersionString>1.13.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Keep Only in iCloud for Large Files</strong>: An iCloud chip lists synced files that also take space on this Mac. Keep Only in iCloud removes the local copy, like Finder's Remove Download. The file stays in iCloud and downloads again when opened.</li>
+          <li><strong>Large Files scans linked folders</strong>: A home folder moved to another drive and replaced with a link is scanned where it really lives. Links into ~/Library or a drive's root are left alone.</li>
+          <li><strong>The clean result screen says what happened</strong>: A clean where everything failed no longer shows a checkmark over 0 bytes. Items left behind sit in one card with a reason and a Retry button on each row.</li>
+          <li><strong>Retry works for every kind of item</strong>: Large Files, duplicates, AI models and uninstall leftovers can be retried. Items Purge refused for safety are listed instead of dropped.</li>
+          <li><strong>Uninstalling a just-installed app from Finder works</strong>: Uninstall with Purge, the Dock icon and the Shortcuts action scan again for an app the list is missing. The Large Files tab starts on All, and the Overview row names both of its filters.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.13.1/Purgev1.13.1.dmg"
+        sparkle:edSignature="WcMunDkde/PPg5lSo7vSDT33yj6vANTwxytv8xQbWoBLgsyUoFKiuKagGdtdZJpYrXqY40R5dSPUdJMiU2NfBA=="
+        length="10841688"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.13.0</title>
       <pubDate>Sat, 24 Oct 2026 13:22:17 +0000</pubDate>
       <sparkle:version>36</sparkle:version>
