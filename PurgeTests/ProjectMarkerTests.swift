@@ -199,59 +199,83 @@ struct ProjectMarkerTests {
     /// A walk cancelled part way has an incomplete list, so discovery sizes none of
     /// it and sends no project groups. Without this, the projects found before the
     /// cancel would reach the Dev Tools list as if they were the whole result.
+    ///
+    /// The walk's directory hook cancels the task from inside the walk, after the
+    /// first project is found and before the last root, so the cancel lands at
+    /// the same place on every machine. Nothing here depends on how long the walk
+    /// takes (#281). A run without the cancel lists the project first, which
+    /// proves the empty result below comes from the cancel.
     @Test func cancelledDiscoverySendsNoGroups() async throws {
+        // Under home, where `collectArtifacts` looks, and older than every
+        // staleness window, so the project is listed whatever the setting says.
+        let fixture = try ActivityFixture(files: ["app/package.json", "app/node_modules/dep/index.js"])
+        defer { fixture.cleanUp() }
+        try fixture.ageEverything(to: Date().addingTimeInterval(-1100 * 86_400))
+        let project = fixture.url("app")
+
         let root = try makeFolder()
         let home = try makeFolder()
         defer {
             try? FileManager.default.removeItem(at: root)
             try? FileManager.default.removeItem(at: home)
         }
-        // One project the walk finds at once, then a tree that keeps it busy for
-        // hundreds of milliseconds, so the cancel below lands while it is walking.
-        let project = root.appendingPathComponent("app", isDirectory: true)
-        try touch("app/package.json", in: root)
-        try FileManager.default.createDirectory(at: project.appendingPathComponent("node_modules/dep"), withIntermediateDirectories: true)
-        let tree = root.appendingPathComponent("tree", isDirectory: true)
-        for a in 0..<8 {
-            for b in 0..<8 {
-                for c in 0..<8 {
-                    try FileManager.default.createDirectory(
-                        at: tree.appendingPathComponent("a\(a)/b\(b)/c\(c)/d"),
-                        withIntermediateDirectories: true
-                    )
-                }
-            }
-        }
-        let roots = [project, tree]
-
-        let fullStart = Date()
-        let full = DevScanner.findProjectRoots(in: roots, home: home, access: .full)
-        let fullWalk = Date().timeIntervalSince(fullStart)
-        #expect(full.roots.map { $0.0.lastPathComponent } == ["app"])
+        // After the project: a folder where the walk is cancelled, with a project
+        // below it, and a last root the walk must never reach.
+        let hold = root.appendingPathComponent("hold", isDirectory: true)
+        try touch("hold/inner/Cargo.toml", in: root)
+        let after = root.appendingPathComponent("after", isDirectory: true)
+        try touch("after/package.json", in: root)
+        let roots = [project, hold, after]
 
         let scanner = DevScanner()
-        let (stream, continuation) = AsyncStream<DeveloperScanEvent>.makeStream()
-        let discovery = Task.detached(priority: .background) {
-            let groups = await scanner.discoverProjects(access: .full, roots: roots, home: home, continuation: continuation)
-            continuation.finish()
-            return groups
-        }
-        try await Task.sleep(for: .milliseconds(15))
-        let cancelledAt = Date()
-        discovery.cancel()
-        let groups = await discovery.value
-        let stopped = Date().timeIntervalSince(cancelledAt)
-
-        var events: [DeveloperScanEvent] = []
-        for await event in stream { events.append(event) }
-        let groupEvents = events.filter {
-            if case .projectGroupFound = $0 { return true }
-            return false
+        func discover(onDirectory: (@Sendable (URL) -> Void)? = nil) async -> (groups: [ProjectGroup], sent: [ProjectGroup]) {
+            let (stream, continuation) = AsyncStream<DeveloperScanEvent>.makeStream()
+            let discovery = Task.detached(priority: .background) {
+                let groups = await scanner.discoverProjects(
+                    access: .full, roots: roots, home: home, continuation: continuation, onDirectory: onDirectory
+                )
+                continuation.finish()
+                return groups
+            }
+            let groups = await discovery.value
+            var sent: [ProjectGroup] = []
+            for await event in stream {
+                if case .projectGroupFound(let group) = event { sent.append(group) }
+            }
+            return (groups, sent)
         }
 
-        #expect(groups.isEmpty)
-        #expect(groupEvents.isEmpty)
-        // It stopped at the cancel rather than finishing the tree.
-        #expect(stopped < fullWalk)
+        let whole = await discover()
+        #expect(whole.groups.map(\.displayName) == ["app"])
+        #expect(whole.sent.map(\.displayName) == ["app"])
+
+        let walked = WalkedDirectories()
+        let cancelled = await discover(onDirectory: { directory in
+            walked.record(directory)
+            // Cancel from inside the walk, the moment it enters `hold`.
+            if directory.path == hold.path {
+                withUnsafeCurrentTask { $0?.cancel() }
+            }
+        })
+
+        #expect(cancelled.groups.isEmpty)
+        #expect(cancelled.sent.isEmpty)
+        // The walk found `app` before the cancel and stopped at `hold`: it entered
+        // nothing below `hold` and never reached `after`.
+        #expect(walked.names == ["app", "hold"])
+    }
+}
+
+/// The folders a walk entered, recorded from the walk's own thread.
+private final class WalkedDirectories: @unchecked Sendable {
+    private let lock = NSLock()
+    private var directories: [URL] = []
+
+    func record(_ directory: URL) {
+        lock.withLock { directories.append(directory) }
+    }
+
+    var names: [String] {
+        lock.withLock { directories.map(\.lastPathComponent) }
     }
 }
