@@ -247,7 +247,7 @@ private struct OverviewCategoryRow: View {
     @State private var isHovering = false
 
     private var phase: OverviewCategoryPhase { store.overviewPhase(for: category) }
-    private var record: ScanRecord? { store.scanRecords[category] }
+    private var record: ScanRecord? { store.applicableRecord(for: category) }
     private var isRecorded: Bool { store.isShowingRecordedFigure(for: category) }
 
     var body: some View {
@@ -261,7 +261,7 @@ private struct OverviewCategoryRow: View {
                 HStack(spacing: 6) {
                     Text(OverviewCategoryStyle.name(category))
                         .font(AppStyle.Typography.headline)
-                    if OverviewCategoryStyle.isReview(category), showsFigure {
+                    if OverviewCategoryStyle.isReview(category), showsFigure, !isEmptyLargeFiles {
                         AppBadge(text: String(localized: "Review first"), tone: .warning)
                     }
                 }
@@ -312,6 +312,16 @@ private struct OverviewCategoryRow: View {
         phase == .ready || phase == .scanning || isRecorded
     }
 
+    /// A finished Large Files scan, live or saved, that found nothing under the
+    /// current filters. There is nothing to review and no size to show, so the row
+    /// explains the filters instead and offers to change them (#279).
+    private var isEmptyLargeFiles: Bool {
+        guard category == .largeFiles else { return false }
+        if phase == .ready { return store.totals(for: category).count == 0 }
+        if isRecorded, let record { return record.count == 0 }
+        return false
+    }
+
     /// While scanning, the text itself shimmers; a spinner beside it would come and
     /// go with every pass of the scan.
     private var statusLine: some View {
@@ -339,6 +349,10 @@ private struct OverviewCategoryRow: View {
         case .waiting:
             // About to be measured again: no figure, not even the last one, until it scans.
             EmptyView()
+        case _ where isEmptyLargeFiles:
+            // "0%  0 bytes" gives the user nothing to act on. The filters do.
+            Button(String(localized: "Change filter")) { store.selectedTab = .largeFiles }
+                .buttonStyle(.purge(.secondary))
         default:
             HStack(spacing: AppStyle.Spacing.small) {
                 Text(OverviewCategoryStyle.shareText(share))
@@ -398,7 +412,7 @@ private struct OverviewCategoryRow: View {
     }
 
     private func largeFilesDetail(count: Int) -> String {
-        String(localized: "\(count) \(count == 1 ? String(localized: "file") : String(localized: "files")) over \(LargeFileSizeThreshold.current().label)")
+        OverviewLargeFilesLine.text(count: count, filter: store.largeFileFilter)
     }
 
     private func cacheDetail(safeBytes: Int64) -> String {
@@ -820,6 +834,25 @@ enum OverviewMotion {
     /// The disk bar's segments. A little longer than the scan's publish beat, so each
     /// update picks up from the last one mid-glide and the bar fills without steps.
     static let bar = Animation.easeOut(duration: 0.6)
+}
+
+// MARK: - Large Files line
+
+/// The Large Files row's line. It names both filters the scan ran under, so a
+/// zero says what was looked for: "No files over 1 GB not used in a year" (#279).
+nonisolated enum OverviewLargeFilesLine {
+    static func text(count: Int, filter: LargeFileFilterSnapshot) -> String {
+        let size = filter.size.label
+        let word = count == 1 ? String(localized: "file") : String(localized: "files")
+        if let span = filter.age.rowSpan {
+            return count == 0
+                ? String(localized: "No files over \(size) not used in \(span)")
+                : String(localized: "\(count) \(word) over \(size) not used in \(span)")
+        }
+        return count == 0
+            ? String(localized: "No files over \(size)")
+            : String(localized: "\(count) \(word) over \(size)")
+    }
 }
 
 // MARK: - Styling shared with the sidebar

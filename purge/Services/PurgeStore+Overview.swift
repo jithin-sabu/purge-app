@@ -20,6 +20,8 @@ struct OverviewBreakdownKey: Equatable {
     let freeBytes: Int64
     let phases: [OverviewCategoryPhase]
     let records: [OverviewCategory: ScanRecord]
+    /// A saved Large Files figure counts only while these still match its own.
+    let largeFileFilter: LargeFileFilterSnapshot
 }
 
 extension PurgeStore {
@@ -71,7 +73,8 @@ extension PurgeStore {
             totalBytes: totalBytes,
             freeBytes: freeBytes,
             phases: phases,
-            records: scanRecords
+            records: scanRecords,
+            largeFileFilter: largeFileFilter
         )
         if let cached = overviewBreakdownCache, cached.key == key {
             return cached.breakdown
@@ -89,11 +92,23 @@ extension PurgeStore {
     /// `overviewSource` without building the item lists, since rows and the sidebar ask
     /// on every render.
     func isShowingRecordedFigure(for category: OverviewCategory) -> Bool {
-        guard scanRecords[category] != nil else { return false }
+        guard applicableRecord(for: category) != nil else { return false }
         switch overviewPhase(for: category) {
         case .notScanned: return true
         case .needsAccess, .waiting, .scanning, .ready: return false
         }
+    }
+
+    /// The saved record the Overview may show for the category. A Large Files
+    /// record counted under other filters than today's is left out: its figure
+    /// would be read against a filter it never used (#279). A record saved before
+    /// filters were stored is shown as it was.
+    func applicableRecord(for category: OverviewCategory) -> ScanRecord? {
+        guard let record = scanRecords[category] else { return nil }
+        if category == .largeFiles, let filter = record.largeFileFilter, filter != largeFileFilter {
+            return nil
+        }
+        return record
     }
 
     /// The five categories' live items in claim order, for the Everything else
@@ -124,7 +139,7 @@ extension PurgeStore {
         for category: OverviewCategory,
         phase: OverviewCategoryPhase
     ) -> OverviewCategorySource {
-        let record = scanRecords[category]
+        let record = applicableRecord(for: category)
         switch phase {
         case .needsAccess:
             return .none

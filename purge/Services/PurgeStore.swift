@@ -531,7 +531,7 @@ final class PurgeStore: ObservableObject {
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
     private let fileDeleter: FileDeleter
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
     private let gitChecker: GitStatusChecker
 
     private enum ScanCoalesce {
@@ -558,6 +558,10 @@ final class PurgeStore: ObservableObject {
     private var scanGeneration = 0
     private var largeFileScanGeneration = 0
     private var hasCompletedLargeFileScan = false
+    /// The filters the finished Large Files scan ran under. Its rows count as this
+    /// session's results only while the filters still match, so a filter changed
+    /// without a rescan never shows the old rows against the new filter (#279).
+    private var completedLargeFileFilter: LargeFileFilterSnapshot?
     /// The rows the saved Large Files record counted, by id, from the last scan this
     /// session that ran to the end. Empty while the record is from an earlier launch.
     private var recordedLargeFileSizes: [String: Int64] = [:]
@@ -1967,6 +1971,7 @@ final class PurgeStore: ObservableObject {
         // does not count its partial list, the saved record keeps the last full
         // figures, and opening the tab scans again (#180).
         hasCompletedLargeFileScan = false
+        completedLargeFileFilter = nil
         largeFiles = []
         largeFileScanSummary = nil
         // New rows open on All. A chip picked for the old rows may hold nothing
@@ -1982,8 +1987,9 @@ final class PurgeStore: ObservableObject {
             }
         }
 
-        let minBytes = LargeFileSizeThreshold.current().bytes
-        let staleDays = LargeFileAgeThreshold.currentThresholdDays()
+        let filter = largeFileFilter
+        let minBytes = filter.size.bytes
+        let staleDays = filter.age.days
         var collected: [LargeFile] = []
 
         // The scanner checks every file against the store before yielding it, off
@@ -2050,7 +2056,8 @@ final class PurgeStore: ObservableObject {
         publish()
         largeFileScanSummary = summary
         hasCompletedLargeFileScan = true
-        stampScanRecords([.largeFiles])
+        completedLargeFileFilter = filter
+        stampScanRecords([.largeFiles], largeFileFilter: filter)
         recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, $0.sizeBytes) }, uniquingKeysWith: { first, _ in first })
         // Delete extra copies trashes copies, so a file that can't go to the
         // Trash takes no part in a duplicate set.
@@ -4157,7 +4164,9 @@ final class PurgeStore: ObservableObject {
             guard !cacheResultsNeedAccessRescan else { return false }
             return hasSessionCacheScan || !cacheItems.isEmpty || !devTools.isEmpty || !projectGroups.isEmpty
         case .largeFiles:
-            return hasCompletedLargeFileScan
+            // Rows found under other filters than today's are not results for
+            // today's: the tab scans again, and the Overview shows no figure.
+            return hasCompletedLargeFileScan && completedLargeFileFilter == largeFileFilter
         case .apps:
             return hasCompletedInstalledAppsScan && hasFinishedMeasuringApps
         case .leftovers:
@@ -4172,12 +4181,28 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Records a finished scan: the date, plus the figures it found.
-    private func stampScanRecords(_ categories: [OverviewCategory], at date: Date = Date()) {
+    /// The size and last-used filters a Large Files scan runs under right now.
+    var largeFileFilter: LargeFileFilterSnapshot {
+        LargeFileFilterSnapshot.current(userDefaults: defaults)
+    }
+
+    /// Records a finished scan: the date, plus the figures it found. A Large Files
+    /// scan passes the filters it ran under, so its record can say what it counted.
+    private func stampScanRecords(
+        _ categories: [OverviewCategory],
+        at date: Date = Date(),
+        largeFileFilter: LargeFileFilterSnapshot? = nil
+    ) {
         for category in categories {
             let totals = totals(for: category)
             saveScanRecord(
-                ScanRecord(completedAt: date, bytes: totals.bytes, count: totals.count, safeBytes: safeCleanupBytes(for: category)),
+                ScanRecord(
+                    completedAt: date,
+                    bytes: totals.bytes,
+                    count: totals.count,
+                    safeBytes: safeCleanupBytes(for: category),
+                    largeFileFilter: category == .largeFiles ? largeFileFilter : nil
+                ),
                 for: category
             )
         }
