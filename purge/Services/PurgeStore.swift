@@ -558,6 +558,10 @@ final class PurgeStore: ObservableObject {
     private var scanGeneration = 0
     private var largeFileScanGeneration = 0
     private var hasCompletedLargeFileScan = false
+    /// The filters the finished Large Files scan ran under. Its rows count as this
+    /// session's results only while the filters still match, so a filter changed
+    /// without a rescan never shows the old rows against the new filter (#279).
+    private var completedLargeFileFilter: LargeFileFilterSnapshot?
     /// The rows the saved Large Files record counted, by id, from the last scan this
     /// session that ran to the end. Empty while the record is from an earlier launch.
     private var recordedLargeFileSizes: [String: Int64] = [:]
@@ -1967,6 +1971,7 @@ final class PurgeStore: ObservableObject {
         // does not count its partial list, the saved record keeps the last full
         // figures, and opening the tab scans again (#180).
         hasCompletedLargeFileScan = false
+        completedLargeFileFilter = nil
         largeFiles = []
         largeFileScanSummary = nil
         // New rows open on All. A chip picked for the old rows may hold nothing
@@ -2051,6 +2056,7 @@ final class PurgeStore: ObservableObject {
         publish()
         largeFileScanSummary = summary
         hasCompletedLargeFileScan = true
+        completedLargeFileFilter = filter
         stampScanRecords([.largeFiles], largeFileFilter: filter)
         recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, $0.sizeBytes) }, uniquingKeysWith: { first, _ in first })
         // Delete extra copies trashes copies, so a file that can't go to the
@@ -4158,7 +4164,9 @@ final class PurgeStore: ObservableObject {
             guard !cacheResultsNeedAccessRescan else { return false }
             return hasSessionCacheScan || !cacheItems.isEmpty || !devTools.isEmpty || !projectGroups.isEmpty
         case .largeFiles:
-            return hasCompletedLargeFileScan
+            // Rows found under other filters than today's are not results for
+            // today's: the tab scans again, and the Overview shows no figure.
+            return hasCompletedLargeFileScan && completedLargeFileFilter == largeFileFilter
         case .apps:
             return hasCompletedInstalledAppsScan && hasFinishedMeasuringApps
         case .leftovers:

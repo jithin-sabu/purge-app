@@ -141,6 +141,36 @@ struct OverviewLargeFilesRowTests {
         #expect(store.applicableRecord(for: .largeFiles)?.count == 12)
     }
 
+    /// The tab rescans on every filter change, but should a filter ever change
+    /// without one, this session's rows are not results for the new filter: the
+    /// row shows no figure, and opening the tab scans again.
+    @Test
+    func liveResultsHideOnceAFilterChangedWithoutARescan() async {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        fake.largeFileEvents = [.file(file("/Users/someone/Movies/wedding.mov", bytes: 4_000_000_000))]
+        let store = fake.makeStore()
+
+        await store.scanLargeFiles()
+        #expect(store.overviewPhase(for: .largeFiles) == .ready)
+        #expect(store.hasSessionResults(for: .largeFiles))
+
+        fake.defaults.set(LargeFileSizeThreshold.gb1.rawValue, forKey: LargeFileSizeThreshold.userDefaultsKey)
+
+        #expect(!store.hasSessionResults(for: .largeFiles))
+        #expect(store.overviewPhase(for: .largeFiles) == .notScanned)
+        // The record was counted under the old filter too, so no saved figure either.
+        #expect(!store.isShowingRecordedFigure(for: .largeFiles))
+        #expect(store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 100_000_000_000).bytes(for: .largeFiles) == 0)
+
+        // A scan under the new filter is this session's result again.
+        await store.scanLargeFiles()
+        #expect(fake.largeFileScanCount == 2)
+        #expect(store.overviewPhase(for: .largeFiles) == .ready)
+        #expect(store.scanRecords[.largeFiles]?.largeFileFilter == LargeFileFilterSnapshot(size: .gb1, age: .anyTime))
+    }
+
     /// Only Large Files carries filters. Another category's record is untouched
     /// by the Large Files filter changing.
     @Test
