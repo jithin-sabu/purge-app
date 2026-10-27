@@ -235,8 +235,10 @@ struct AllowlistExplanationDataTests {
     }
 
     /// These names belong to folders that are not caches: installed Homebrew
-    /// packages, committed git hooks, and installed tool versions.
-    @Test(arguments: ["Cellar", ".husky", ".volta", ".mise", "Devices"])
+    /// packages, committed git hooks, installed tool versions, git's records of
+    /// its linked worktrees, and tool folders that keep config or the tool itself
+    /// next to a cache (`.moon`, `.nx`, `~/.hex`) (#184).
+    @Test(arguments: ["Cellar", ".husky", ".volta", ".mise", "Devices", "worktrees", ".moon", ".nx", ".hex"])
     func nonCacheFolderNamesHaveNoEntry(name: String) {
         #expect(ExplanationDatabase.matchBundledDatabase(folderName: name) == nil)
     }
@@ -250,6 +252,13 @@ struct AllowlistExplanationDataTests {
     @Test
     func flutterSettingsFileIsNotOffered() {
         #expect(AuditPaths.evaluate(".flutter") != .allow)
+    }
+
+    /// Dev Tools listed `~/.git/worktrees` once, but the allowlist never let it
+    /// through, so the row was removed (#184).
+    @Test
+    func gitWorktreeRecordsAreNotOffered() {
+        #expect(AuditPaths.evaluate(".git/worktrees") != .allow)
     }
 
     @Test

@@ -8,7 +8,6 @@
     "aliases": [
       "Adobe Media Cache Files"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -20,7 +19,6 @@
     "aliases": [
       "Adobe Media Cache"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -33,7 +31,6 @@
       "Adobe Camera Raw",
       "Adobe Camera Raw 2"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -43,7 +40,6 @@
     "explanation": "Build caches in ~/.android that the next build recreates. Emulators, the key your phones trust for debugging, and your debug signing key are left alone.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -59,7 +55,6 @@
       "Comet",
       "CometUpdater"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -73,7 +68,6 @@
     "aliases": [
       "Blender"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -85,7 +79,6 @@
     "aliases": [
       "checkpoint-nodejs"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -97,7 +90,6 @@
     "aliases": [
       "CloudKit"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -111,7 +103,6 @@
     "aliases": [
       "com.anthropic.claudefordesktop.ShipIt"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -125,7 +116,6 @@
     "aliases": [
       "com.apple.accountsd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -139,7 +129,6 @@
     "aliases": [
       "com.apple.akd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -153,7 +142,6 @@
     "aliases": [
       "com.apple.AMPLibraryAgent"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -167,7 +155,6 @@
     "aliases": [
       "com.apple.amsaccountsd"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -181,7 +168,6 @@
     "aliases": [
       "com.apple.amsengagementd"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -195,7 +181,6 @@
     "aliases": [
       "com.apple.ap.adprivacyd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -209,7 +194,6 @@
     "aliases": [
       "com.apple.appleaccountd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -223,7 +207,6 @@
     "aliases": [
       "com.apple.AppleMediaServices"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -237,7 +220,6 @@
     "aliases": [
       "com.apple.appstoreagent"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -253,7 +235,6 @@
       "com.apple.assistantd",
       "com.apple.AssistantServices"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -267,7 +248,6 @@
     "aliases": [
       "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -281,7 +261,6 @@
     "aliases": [
       "com.apple.betaenrollmentagent"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -295,7 +274,6 @@
     "aliases": [
       "com.apple.bird"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -309,7 +287,6 @@
     "aliases": [
       "com.apple.businessservicesd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -323,7 +300,6 @@
     "aliases": [
       "com.apple.cache_delete"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -337,7 +313,6 @@
     "aliases": [
       "com.apple.cloudd"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -351,7 +326,6 @@
     "aliases": [
       "com.apple.CloudTelemetry"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -365,7 +339,6 @@
     "aliases": [
       "com.apple.ctcategories.service"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -379,7 +352,6 @@
     "aliases": [
       "com.apple.dataaccess.dataaccessd"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -393,7 +365,6 @@
     "aliases": [
       "com.apple.donotdisturbd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -407,7 +378,6 @@
     "aliases": [
       "com.apple.duetexpertd"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -421,7 +391,6 @@
     "aliases": [
       "com.apple.e5rt.e5bundlecache"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -435,7 +404,6 @@
     "aliases": [
       "com.apple.FeatureAccessAgent"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -449,7 +417,6 @@
     "aliases": [
       "com.apple.feedbacklogger"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -463,7 +430,6 @@
     "aliases": [
       "com.apple.FileProviderDaemon.AppStoreService"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -477,7 +443,6 @@
     "aliases": [
       "com.apple.findmy.fmipcore"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -491,7 +456,6 @@
     "aliases": [
       "com.apple.geoanalyticsd"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -503,7 +467,6 @@
     "aliases": [
       "GeoServices"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -517,7 +480,6 @@
     "aliases": [
       "com.apple.helpd"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -533,7 +495,6 @@
       "com.apple.homed",
       "com.apple.HomeKit"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -547,7 +508,6 @@
     "aliases": [
       "com.apple.iCloudNotificationAgent"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -563,7 +523,6 @@
       "com.apple.iTunes",
       "com.apple.itunescloudd"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -577,7 +536,6 @@
     "aliases": [
       "com.apple.managedappdistributionagent"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -591,7 +549,6 @@
     "aliases": [
       "com.apple.nsurlsessiond"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -605,7 +562,6 @@
     "aliases": [
       "com.apple.parsecd"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -620,7 +576,6 @@
       "com.apple.passd",
       "PassKit"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -634,7 +589,6 @@
     "aliases": [
       "com.apple.proactive.eventtracker"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -648,7 +602,6 @@
     "aliases": [
       "com.apple.remindd"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -664,7 +617,6 @@
       "com.apple.Safari",
       "com.apple.Safari.SafeBrowsing"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -678,7 +630,6 @@
     "aliases": [
       "com.apple.shazamlibrary.cloud"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -693,7 +644,6 @@
       "com.apple.sirittsd",
       "SiriTTS"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -707,7 +657,6 @@
     "aliases": [
       "com.apple.Spotlight"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -721,7 +670,6 @@
     "aliases": [
       "com.apple.tipsd"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -735,7 +683,6 @@
     "aliases": [
       "com.apple.VideoConference"
     ],
-    "scope": "app_caches",
     "kind": "calls"
   },
   {
@@ -749,7 +696,6 @@
     "aliases": [
       "com.datadoghq"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -766,7 +712,6 @@
       "com.google.GoogleUpdater",
       "google-sdks-events"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -780,7 +725,6 @@
     "aliases": [
       "com.microsoft.autoupdate.fba"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -794,7 +738,6 @@
     "aliases": [
       "com.microsoft.EdgeUpdater"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -808,7 +751,6 @@
     "aliases": [
       "com.nt-ware.SmartClient"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -823,7 +765,6 @@
       "com.openai.codex",
       "Codex"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -837,7 +778,6 @@
     "aliases": [
       "com.todesktop.230313mzl4w4u92.ShipIt"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -855,7 +795,6 @@
       "Dia",
       "company.thebrowser.Browser"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -867,7 +806,6 @@
     "aliases": [
       "FamilyCircle"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -881,7 +819,6 @@
     "aliases": [
       "io.getpurge.app"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -896,7 +833,6 @@
       "io.sentry",
       "SentryCrash"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -908,7 +844,6 @@
     "aliases": [
       "ms-playwright-go"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -920,7 +855,6 @@
     "aliases": [
       "node_modules"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -932,7 +866,6 @@
     "aliases": [
       "prisma-nodejs"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -944,7 +877,6 @@
     "aliases": [
       "segment"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -956,7 +888,6 @@
     "aliases": [
       "ssu"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -968,7 +899,6 @@
     "aliases": [
       "macOS Installer"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -980,7 +910,6 @@
     "aliases": [
       "macOS Install Data"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -992,7 +921,6 @@
     "aliases": [
       ".dart_tool"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1004,7 +932,6 @@
     "aliases": [
       "AMSDataMigratorTool"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -1020,18 +947,7 @@
       "app.spokenly",
       "app.spokenly.revenuecat"
     ],
-    "scope": "app_caches",
     "kind": "ai"
-  },
-  {
-    "key": "archives",
-    "display_name": "App Archives",
-    "tag": "medium",
-    "explanation": "Archived builds created by development tools. Check contents before deleting — may contain important project archives.",
-    "bundle_ids": [],
-    "aliases": [],
-    "scope": "dev_tools",
-    "kind": "build"
   },
   {
     "key": "container-managerd",
@@ -1044,7 +960,6 @@
     "aliases": [
       "com.apple.containermanagerd"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -1058,7 +973,6 @@
     "aliases": [
       "com.apple.storekitagent"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -1072,7 +986,6 @@
     "aliases": [
       "com.docker.docker"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1086,7 +999,6 @@
     "aliases": [
       "com.raycast.macos"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -1098,22 +1010,7 @@
       "deriveddata"
     ],
     "explanation": "Temporary files Xcode creates while building apps. Always safe to delete — your next build will just take a little longer.",
-    "scope": "dev_tools",
     "kind": "build"
-  },
-  {
-    "key": "swiftpm",
-    "display_name": "Swift Package Manager",
-    "tag": "safe",
-    "explanation": "Swift packages downloaded for your projects. Each project downloads its dependencies again the next time you build it.",
-    "bundle_ids": [
-      "org.swift.swiftpm"
-    ],
-    "aliases": [
-      "org.swift.swiftpm"
-    ],
-    "scope": "dev_tools",
-    "kind": "packages"
   },
   {
     "key": "zen",
@@ -1124,7 +1021,6 @@
     "aliases": [
       "zen"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -1138,7 +1034,6 @@
     "aliases": [
       "com.apple.dt.Xcode.ITunesSoftwareService"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -1152,7 +1047,6 @@
     "aliases": [
       "com.apple.gamed"
     ],
-    "scope": "app_caches",
     "kind": "games"
   },
   {
@@ -1166,7 +1060,6 @@
     "aliases": [
       "com.apple.chrono"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -1180,7 +1073,6 @@
     "aliases": [
       "com.apple.translationd"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -1194,7 +1086,6 @@
     "aliases": [
       "com.figma.agent"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -1206,7 +1097,6 @@
     "aliases": [
       "GameKit"
     ],
-    "scope": "app_caches",
     "kind": "games"
   },
   {
@@ -1218,7 +1108,6 @@
     "aliases": [
       "ImageCache"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -1231,21 +1120,7 @@
       "RevenueCat",
       "RevenueCatFonts"
     ],
-    "scope": "app_caches",
     "kind": "store"
-  },
-  {
-    "key": "gitworktrees",
-    "display_name": "Git Worktree Checkouts",
-    "tag": "medium",
-    "explanation": "Forgotten branch checkouts created by Git. Safe to remove if you are no longer working on those branches, but check first that you have no unsaved work.",
-    "bundle_ids": [],
-    "aliases": [
-      "worktrees",
-      ".git/worktrees"
-    ],
-    "scope": "dev_tools",
-    "kind": "code"
   },
   {
     "key": "vscode",
@@ -1258,7 +1133,6 @@
       "CachedData",
       "CachedExtensionVSIXs"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1270,7 +1144,6 @@
     "aliases": [
       "Cursor"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1283,7 +1156,6 @@
       "JetBrains",
       "JetPackCache"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1296,7 +1168,6 @@
       "zed",
       "Zed"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1306,10 +1177,8 @@
     "explanation": "Cached Go packages and build outputs. Safe to delete and will be re-downloaded when you build your Go projects again.",
     "bundle_ids": [],
     "aliases": [
-      "go/pkg/mod",
       "go-build"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1322,7 +1191,6 @@
       "maven",
       ".m2"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1335,7 +1203,6 @@
       "sbt",
       ".ivy2"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1348,7 +1215,6 @@
       "rubygems",
       ".gem"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1361,7 +1227,6 @@
       "bundler",
       ".bundle"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1374,7 +1239,6 @@
       "composer",
       ".composer"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1387,7 +1251,6 @@
       "cargo",
       ".cargo"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1400,7 +1263,6 @@
       "terraform",
       ".terraform.d"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1413,7 +1275,6 @@
       "act",
       "github-actions"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1426,7 +1287,6 @@
       "vagrant",
       ".vagrant.d"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1440,7 +1300,6 @@
       ".zsh_sessions",
       "zcompdump"
     ],
-    "scope": "app_caches",
     "kind": "terminal"
   },
   {
@@ -1453,7 +1312,6 @@
       "electron",
       "Code Cache"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -1466,7 +1324,6 @@
       "Logs",
       "applogs"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -1479,7 +1336,6 @@
       "DiagnosticReports",
       "crashreports"
     ],
-    "scope": "app_caches",
     "kind": "logs"
   },
   {
@@ -1491,7 +1347,6 @@
     ],
     "tag": "medium",
     "explanation": "Virtual iPhone and iPad devices Xcode tests apps on. Deleting one also deletes its apps and data. Xcode can create a new one when you need it.",
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -1504,7 +1359,6 @@
       ".bun",
       "bun-install"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1514,10 +1368,8 @@
     "explanation": "Cached modules downloaded by Deno, a JavaScript and TypeScript runtime. Safe to delete and will be re-downloaded when you next run a Deno project.",
     "bundle_ids": [],
     "aliases": [
-      "deno",
-      "deno/deps"
+      "deno"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1530,7 +1382,6 @@
       ".turbo",
       "turbo-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1543,18 +1394,7 @@
       "mise",
       "rtx"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
-  },
-  {
-    "key": "nextjs-cache",
-    "display_name": "Next.js Build Cache",
-    "tag": "safe",
-    "explanation": "Temporary build files created by Next.js. Safe to delete and will be recreated the next time you build or run your Next.js project.",
-    "bundle_ids": [],
-    "aliases": [],
-    "scope": "dev_tools",
-    "kind": "build"
   },
   {
     "key": "vite-cache",
@@ -1566,7 +1406,6 @@
       ".vite",
       "vite-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1579,7 +1418,6 @@
       ".parcel-cache",
       "parcel-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1591,7 +1429,6 @@
     "aliases": [
       ".eslintcache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1605,7 +1442,6 @@
       ".jest-cache",
       "jest_cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1618,7 +1454,6 @@
       ".vitest-cache",
       "vitest-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1632,7 +1467,6 @@
       "cypress",
       "cypress-cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1646,8 +1480,6 @@
       ".pyc",
       "pycache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -1661,7 +1493,6 @@
       "uv-cache",
       ".uv"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1674,7 +1505,6 @@
       ".ruff_cache",
       "ruff-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1687,7 +1517,6 @@
       ".mypy_cache",
       "mypy-cache"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1700,8 +1529,6 @@
       ".kotlin",
       "kotlin-build"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -1710,13 +1537,7 @@
     "tag": "safe",
     "explanation": "Compiled Android app files. Safe to delete — your project will rebuild automatically next time.",
     "bundle_ids": [],
-    "aliases": [
-      "build/intermediates",
-      "build/outputs",
-      "app/build"
-    ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
+    "aliases": [],
     "kind": "build"
   },
   {
@@ -1727,11 +1548,8 @@
     "bundle_ids": [],
     "aliases": [
       ".gradle",
-      "gradle-cache",
-      "caches/modules"
+      "gradle-cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -1743,7 +1561,6 @@
     "aliases": [
       "Gradle Dependency Cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1757,7 +1574,6 @@
       "Pods",
       "pod-cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1767,22 +1583,7 @@
     "explanation": "Spec repos CocoaPods uses to look up libraries. The public one comes back on your next pod install; private ones from pod repo add must be added again.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
-  },
-  {
-    "key": "swift-build",
-    "display_name": "Swift Build Artifacts",
-    "tag": "safe",
-    "explanation": "Compiled Swift build files. Safe to delete and will be rebuilt the next time you build your Swift project.",
-    "bundle_ids": [],
-    "aliases": [
-      ".build",
-      "swift-build"
-    ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
-    "kind": "build"
   },
   {
     "key": "rust-target",
@@ -1794,8 +1595,6 @@
       "target",
       "rust-target"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -1809,8 +1608,6 @@
       ".flutter-plugins-dependencies",
       "flutter_cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -1823,7 +1620,6 @@
       "pub-cache",
       ".pub-cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1835,7 +1631,6 @@
     "aliases": [
       "xcarchive"
     ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1850,7 +1645,6 @@
       "tvOS DeviceSupport",
       "xros DeviceSupport"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -1864,7 +1658,6 @@
       "homebrew",
       "homebrew-cache"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1877,7 +1670,6 @@
       ".nvm",
       "nvm"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1889,7 +1681,6 @@
     "aliases": [
       "volta"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1900,10 +1691,8 @@
     "bundle_ids": [],
     "aliases": [
       "pnpm-store",
-      ".pnpm-store",
-      "pnpm/store"
+      ".pnpm-store"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1917,7 +1706,6 @@
       "yarn",
       "berry"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -1930,20 +1718,7 @@
       "npm-cache",
       "npm"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
-  },
-  {
-    "key": "husky-cache",
-    "display_name": "Husky Git Hooks",
-    "tag": "safe",
-    "explanation": "Temporary files used by Husky to manage Git hooks in your projects. Safe to delete and will be regenerated automatically.",
-    "bundle_ids": [],
-    "aliases": [
-      "_husky"
-    ],
-    "scope": "dev_tools",
-    "kind": "build"
   },
   {
     "key": "storybook-cache",
@@ -1955,33 +1730,6 @@
       ".storybook-cache",
       "storybook-static"
     ],
-    "scope": "dev_tools",
-    "kind": "build"
-  },
-  {
-    "key": "nx-cache",
-    "display_name": "Nx Monorepo Cache",
-    "tag": "safe",
-    "explanation": "Saved build and test results from Nx, a monorepo build tool. Safe to delete. Your next build will take a little longer as it rebuilds from scratch.",
-    "bundle_ids": [],
-    "aliases": [
-      ".nx",
-      "nx-cache"
-    ],
-    "scope": "dev_tools",
-    "kind": "build"
-  },
-  {
-    "key": "moon-cache",
-    "display_name": "Moon Build Cache",
-    "tag": "safe",
-    "explanation": "Saved build outputs from Moon, a build and task runner for monorepos. Safe to delete and will be regenerated on the next run.",
-    "bundle_ids": [],
-    "aliases": [
-      ".moon",
-      "moon-cache"
-    ],
-    "scope": "dev_tools",
     "kind": "build"
   },
   {
@@ -1996,7 +1744,6 @@
       "dev.warp.Warp-Stable",
       "Warp"
     ],
-    "scope": "app_caches",
     "kind": "terminal"
   },
   {
@@ -2012,7 +1759,6 @@
       "iTerm2",
       "iTerm"
     ],
-    "scope": "app_caches",
     "kind": "terminal"
   },
   {
@@ -2027,7 +1773,6 @@
       "com.mitchellh.ghostty",
       "Ghostty"
     ],
-    "scope": "app_caches",
     "kind": "terminal"
   },
   {
@@ -2043,7 +1788,6 @@
       "Google",
       "Chrome"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2058,7 +1802,6 @@
       "org.mozilla.firefox",
       "Firefox"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2073,7 +1816,6 @@
       "com.brave.Browser",
       "Brave"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2088,7 +1830,6 @@
       "com.operasoftware.Opera",
       "Opera"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2103,7 +1844,6 @@
       "com.tinyspeck.slackmacgap",
       "Slack"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2118,7 +1858,6 @@
       "com.hnc.Discord",
       "Discord"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2133,7 +1872,6 @@
       "us.zoom.xos",
       "Zoom"
     ],
-    "scope": "app_caches",
     "kind": "calls"
   },
   {
@@ -2148,7 +1886,6 @@
       "notion.id",
       "Notion"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2163,7 +1900,6 @@
       "com.spotify.client",
       "Spotify"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -2178,7 +1914,6 @@
       "net.whatsapp.WhatsApp",
       "WhatsApp"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2193,7 +1928,6 @@
       "ru.keepcoder.Telegram",
       "Telegram"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2205,7 +1939,6 @@
     "aliases": [
       "Telegram Media Cache"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2220,7 +1953,6 @@
       "com.linear",
       "Linear"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2235,7 +1967,6 @@
       "com.figma.Desktop",
       "Figma"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -2250,7 +1981,6 @@
       "com.loom.desktop",
       "Loom"
     ],
-    "scope": "app_caches",
     "kind": "calls"
   },
   {
@@ -2265,7 +1995,6 @@
       "com.grammarly.ProjectLlama",
       "Grammarly"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2280,7 +2009,6 @@
       "com.runningwithcrayons.Alfred",
       "Alfred"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2296,7 +2024,6 @@
       "1Password 7",
       "1Password 8"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2311,7 +2038,6 @@
       "com.dropbox.DropboxMacFileHelper",
       "Dropbox"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -2326,7 +2052,6 @@
       "com.google.GoogleDrive",
       "Google Drive"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -2341,7 +2066,6 @@
       "com.microsoft.OneDrive",
       "OneDrive"
     ],
-    "scope": "app_caches",
     "kind": "cloud"
   },
   {
@@ -2357,7 +2081,6 @@
       "Teams",
       "Microsoft Teams"
     ],
-    "scope": "app_caches",
     "kind": "calls"
   },
   {
@@ -2372,7 +2095,6 @@
       "com.microsoft.Word",
       "Microsoft Word"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2387,7 +2109,6 @@
       "com.microsoft.Excel",
       "Microsoft Excel"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -2402,7 +2123,6 @@
       "com.granola.app",
       "Granola"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -2417,7 +2137,6 @@
       "com.anthropic.claudefordesktop",
       "Claude"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -2432,7 +2151,6 @@
       "com.openai.chat",
       "ChatGPT"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -2447,7 +2165,6 @@
       "com.ollama.Ollama",
       "Ollama"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -2462,7 +2179,6 @@
       "com.bohemiancoding.sketch3",
       "Sketch"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -2477,7 +2193,6 @@
       "com.seriflabs.affinitydesigner2",
       "Affinity Designer"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -2492,7 +2207,6 @@
       "com.seriflabs.affinityphoto2",
       "Affinity Photo"
     ],
-    "scope": "app_caches",
     "kind": "design"
   },
   {
@@ -2507,7 +2221,6 @@
       "com.apple.dt.Xcode",
       "Xcode"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2522,7 +2235,6 @@
       "com.apple.iphonesimulator",
       "Simulator"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -2538,7 +2250,6 @@
       "Android Studio",
       "AndroidStudio"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2553,7 +2264,6 @@
       "com.proxyman.NSProxy",
       "Proxyman"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2568,7 +2278,6 @@
       "com.tinyapp.TablePlus",
       "TablePlus"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2583,7 +2292,6 @@
       "at.eggerapps.Postico",
       "Postico"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2598,7 +2306,6 @@
       "com.insomnia.app",
       "Insomnia"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2614,7 +2321,6 @@
       "Paw",
       "RapidAPI"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2629,7 +2335,6 @@
       "com.DanPristupov.Fork",
       "Fork"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2644,7 +2349,6 @@
       "com.torusknot.SourceTreeNotMAS",
       "SourceTree"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2659,7 +2363,6 @@
       "com.fournova.Tower3",
       "Tower"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -2674,7 +2377,6 @@
       "net.telestream.screenflow",
       "ScreenFlow"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -2689,7 +2391,6 @@
       "com.macpaw.CleanMyMac4",
       "CleanMyMac"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2704,7 +2405,6 @@
       "com.sindresorhus.Lungo",
       "Lungo"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2719,7 +2419,6 @@
       "com.surteesstudios.Bartender",
       "Bartender"
     ],
-    "scope": "app_caches",
     "kind": "utilities"
   },
   {
@@ -2734,7 +2433,6 @@
       "pl.maketheweb.cleanshotx",
       "CleanShot"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -2749,7 +2447,6 @@
       "com.apple.screencaptureui",
       "Screenshot"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -2764,7 +2461,6 @@
       "com.xnapper.xnapper",
       "Xnapper"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -2779,7 +2475,6 @@
       "com.apple.Maps",
       "Maps"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -2794,7 +2489,6 @@
       "com.apple.Photos",
       "Photos"
     ],
-    "scope": "app_caches",
     "kind": "photos"
   },
   {
@@ -2809,7 +2503,6 @@
       "com.apple.mail",
       "Mail"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2824,7 +2517,6 @@
       "com.apple.Music",
       "Music"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -2837,7 +2529,6 @@
       "NetworkCache",
       "com.apple.networkserviceproxy"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -2852,7 +2543,6 @@
       "com.apple.ScreenTimeAgent",
       "ScreenTime"
     ],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -2865,7 +2555,6 @@
       "npm-npx-cache",
       "_npx"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -2878,7 +2567,6 @@
       "npm-logs",
       "_logs"
     ],
-    "scope": "dev_tools",
     "kind": "logs"
   },
   {
@@ -2891,7 +2579,6 @@
       "xcode-docs-cache",
       "DocumentationCache"
     ],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -2904,7 +2591,6 @@
       "corepack-cache",
       "corepack"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -2916,7 +2602,6 @@
     "aliases": [
       "cursor-agent-leftover"
     ],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -2928,7 +2613,6 @@
     "aliases": [
       "orphaned-git-worktree"
     ],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -2938,7 +2622,6 @@
     "explanation": "An older version of a Cursor extension superseded by a newer install. Safe to delete.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -2948,7 +2631,6 @@
     "explanation": "An older version of a VS Code extension superseded by a newer install. Safe to delete.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -2958,7 +2640,6 @@
     "explanation": "Saved state, including AI chats, for VS Code or Cursor projects whose folders no longer exist. If you moved or renamed a project, its chats are in here.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -2970,7 +2651,6 @@
     "aliases": [
       "stale-browser-framework"
     ],
-    "scope": "app_caches",
     "kind": "browser"
   },
   {
@@ -2982,7 +2662,6 @@
     "aliases": [
       "LinkThumbnail"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -2994,7 +2673,6 @@
     "aliases": [
       "ChatMedia"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -3006,7 +2684,6 @@
     "aliases": [
       "AppInstallationBinaryDeltas"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -3018,7 +2695,6 @@
     "aliases": [
       "ShipIt"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -3030,7 +2706,6 @@
     "aliases": [
       "Electron Updater Downloads"
     ],
-    "scope": "app_caches",
     "kind": "updater"
   },
   {
@@ -3040,7 +2715,6 @@
     "explanation": "Spotlight index profile data. Nothing is lost, but Spotlight rebuilds it afterwards and search can be slower or incomplete in the meantime.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "app_caches",
     "kind": "system"
   },
   {
@@ -3053,8 +2727,6 @@
       "_build",
       "elixir-build"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3066,8 +2738,6 @@
     "aliases": [
       "elixir-deps"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3077,11 +2747,8 @@
     "explanation": "Downloaded Elixir and Erlang packages kept by Hex so repeat builds do not re-download them. Safe to delete and re-downloaded on your next build.",
     "bundle_ids": [],
     "aliases": [
-      "Hex Package Cache",
-      ".hex"
+      "Hex Package Cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3094,8 +2761,6 @@
       "Rebar3 Cache",
       "rebar3"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3107,8 +2772,6 @@
     "aliases": [
       ".next"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3120,8 +2783,6 @@
     "aliases": [
       ".nuxt"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3133,8 +2794,6 @@
     "aliases": [
       ".output"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3146,8 +2805,6 @@
     "aliases": [
       ".svelte-kit"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3159,8 +2816,6 @@
     "aliases": [
       ".astro"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3172,8 +2827,6 @@
     "aliases": [
       ".angular"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3185,8 +2838,6 @@
     "aliases": [
       ".pytest_cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3198,8 +2849,6 @@
     "aliases": [
       ".tox"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3209,8 +2858,6 @@
     "explanation": "Compiled output from Swift Package Manager. Safe to delete and rebuilt by your next swift build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3220,8 +2867,6 @@
     "explanation": "Compiled classes and packaged output produced by Maven. Safe to delete and rebuilt by your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3231,8 +2876,6 @@
     "explanation": "Compiled output produced by a Gradle build. Safe to delete and rebuilt by your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3242,8 +2885,6 @@
     "explanation": "Compiled output produced by sbt for a Scala project. Safe to delete and rebuilt by your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3253,8 +2894,6 @@
     "explanation": "Compiled programs and libraries produced by a .NET build. Safe to delete and rebuilt by your next dotnet build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3264,8 +2903,6 @@
     "explanation": "Temporary files .NET creates while compiling. Safe to delete and recreated on your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3275,8 +2912,6 @@
     "explanation": "Third-party PHP packages downloaded by Composer. Safe to delete and re-downloaded by composer install, which needs an internet connection.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3286,8 +2921,6 @@
     "explanation": "Ruby gems installed into the project by Bundler. Safe to delete and reinstalled by bundle install, which needs an internet connection.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3299,8 +2932,6 @@
     "aliases": [
       ".stack-work"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3312,8 +2943,6 @@
     "aliases": [
       "dist-newstyle"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3325,8 +2954,6 @@
     "aliases": [
       ".zig-cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3336,8 +2963,6 @@
     "explanation": "Finished programs and libraries produced by a Zig build. Safe to delete and rebuilt on your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3347,8 +2972,6 @@
     "explanation": "Compiled output produced by Dune for an OCaml project. Safe to delete and rebuilt by your next build.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3358,8 +2981,6 @@
     "explanation": "Compiled output and build configuration produced by CMake. Safe to delete, though you will need to configure and build the project again.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3371,8 +2992,6 @@
     "aliases": [
       ".terraform"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3384,8 +3003,6 @@
     "aliases": [
       ".godot"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3395,8 +3012,6 @@
     "explanation": "Unity's imported-asset database for this project. It rebuilds itself, but reimporting a large project can take a long time, so check before removing it.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3406,8 +3021,6 @@
     "explanation": "Scratch files Unity writes while the editor is running. Recreated automatically, but do not remove it while the project is open in Unity.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3417,8 +3030,6 @@
     "explanation": "Generated build files Unreal creates while compiling a project. They come back on the next build, which will take longer than usual.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3428,8 +3039,6 @@
     "explanation": "Cooked assets and compiled shaders Unreal caches for a project. Rebuilt automatically, but the first build afterwards can be very slow.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3441,8 +3050,6 @@
     "aliases": [
       "NuGet Packages"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3454,8 +3061,6 @@
     "aliases": [
       "Stack Cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3467,8 +3072,6 @@
     "aliases": [
       "Cabal Packages"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3480,8 +3083,6 @@
     "aliases": [
       "Bazel Cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "build"
   },
   {
@@ -3493,8 +3094,6 @@
     "aliases": [
       "Swift Package Cache"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3507,8 +3106,6 @@
       "venv",
       ".venv"
     ],
-    "scope": "dev_tools",
-    "staleness_aware": true,
     "kind": "packages"
   },
   {
@@ -3520,7 +3117,6 @@
     "aliases": [
       "node-gyp"
     ],
-    "scope": "app_caches",
     "kind": "packages"
   },
   {
@@ -3532,7 +3128,6 @@
     "aliases": [
       "typescript"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -3544,7 +3139,6 @@
     "aliases": [
       "cursor-compile-cache"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -3556,7 +3150,6 @@
     "aliases": [
       "claude-cli-nodejs"
     ],
-    "scope": "app_caches",
     "kind": "ai"
   },
   {
@@ -3568,7 +3161,6 @@
     "aliases": [
       "com.apple.python"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -3580,7 +3172,6 @@
     "aliases": [
       "JNA"
     ],
-    "scope": "app_caches",
     "kind": "code"
   },
   {
@@ -3592,7 +3183,6 @@
     "aliases": [
       "com.apple.DictionaryServices"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -3604,7 +3194,6 @@
     "aliases": [
       "com.apple.ap.PromotedContentJetService"
     ],
-    "scope": "app_caches",
     "kind": "store"
   },
   {
@@ -3616,7 +3205,6 @@
     "aliases": [
       "Device Software Updates"
     ],
-    "scope": "app_caches",
     "kind": "devices"
   },
   {
@@ -3628,7 +3216,6 @@
     "aliases": [
       "CacheClip"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -3640,7 +3227,6 @@
     "aliases": [
       "Aerial Wallpaper Videos"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -3652,7 +3238,6 @@
     "aliases": [
       "Messages Previews"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -3664,7 +3249,6 @@
     "aliases": [
       "Mail Downloads"
     ],
-    "scope": "app_caches",
     "kind": "messaging"
   },
   {
@@ -3676,7 +3260,6 @@
     "aliases": [
       "Unfinished Downloads"
     ],
-    "scope": "app_caches",
     "kind": "documents"
   },
   {
@@ -3688,7 +3271,6 @@
     "aliases": [
       "Simulator Caches"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -3700,7 +3282,6 @@
     "aliases": [
       "Xcode Test Devices"
     ],
-    "scope": "dev_tools",
     "kind": "devices"
   },
   {
@@ -3710,7 +3291,6 @@
     "explanation": "Earlier versions of Claude Code or Cursor Agent that stayed behind after updates. The version you run and the newest one are kept. Safe to delete.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "ai"
   },
   {
@@ -3722,7 +3302,6 @@
     "aliases": [
       "pre-commit"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3732,7 +3311,6 @@
     "explanation": "App builds, templates and SDK data the Expo tools downloaded. Your Expo login is left alone. Safe to delete; Expo downloads what it needs again.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3742,7 +3320,6 @@
     "explanation": "Source downloads pyenv and rbenv keep after installing a Python or Ruby version. Installed versions are left alone. Safe to delete.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3752,7 +3329,6 @@
     "explanation": "Completion and update-check files that Oh My Zsh keeps. Safe to delete; they are recreated when you open a new terminal window.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "terminal"
   },
   {
@@ -3762,7 +3338,6 @@
     "explanation": "Package downloads opam keeps for OCaml. Installed packages are left alone. Safe to delete; opam downloads them again when needed.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3774,7 +3349,6 @@
     "aliases": [
       "puppeteer"
     ],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3784,7 +3358,6 @@
     "explanation": "Packages conda unpacked to build your environments, which link to these files and keep working. Deleting frees less than shown; conda clean --all is safer.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "packages"
   },
   {
@@ -3799,7 +3372,6 @@
       "EffectCraft",
       "ai.storyteller.effectcraft"
     ],
-    "scope": "app_caches",
     "kind": "media"
   },
   {
@@ -3809,7 +3381,6 @@
     "explanation": "Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "code"
   },
   {
@@ -3819,7 +3390,6 @@
     "explanation": "Hermes agent downloads and scratch space in ~/.hermes/cache. Clean it while Hermes is idle, since a running task may use it. Settings, keys and sessions stay.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "ai"
   },
   {
@@ -3829,7 +3399,6 @@
     "explanation": "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone.",
     "bundle_ids": [],
     "aliases": [],
-    "scope": "dev_tools",
     "kind": "browser"
   }
 ]

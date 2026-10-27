@@ -36,7 +36,6 @@ nonisolated final class DevScanner {
         "Yarn Cache": "yarn-cache",
         "CocoaPods": "cocoapods-spec-repos",
         "Android Build Cache": "android-sdk",
-        "Git Worktrees": "gitworktrees",
         "VS Code Cache": "vscode",
         "Cursor Cache": "cursor",
         "JetBrains Cache": "jetbrains",
@@ -669,10 +668,6 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent(".android/build-cache", isDirectory: true)
             ]),
             ("Docker Desktop", [home.appendingPathComponent("Library/Containers/com.docker.docker", isDirectory: true)]),
-
-            ("Git Worktrees", [
-                home.appendingPathComponent(".git/worktrees", isDirectory: true)
-            ]),
 
             ("VS Code Cache", [
                 home.appendingPathComponent("Library/Application Support/Code/Cache", isDirectory: true),

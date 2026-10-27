@@ -296,10 +296,6 @@
 "Spokenly App" = "Spokenly 应用";
 "This stores temporary data for the Spokenly app. It is safe to delete and will be recreated when the app is next used." = "Spokenly 应用的临时数据。可以安全删除，下次使用应用时会重新创建。";
 
-/* archives */
-"App Archives" = "应用归档";
-"Archived builds created by development tools. Check contents before deleting — may contain important project archives." = "开发工具创建的归档构建。删除前请检查内容，可能包含重要的项目归档。";
-
 /* container-managerd */
 "App Sandbox Manager" = "应用沙盒管理器";
 "Used by the macOS service that manages each app's private storage. Usually safe to delete, but some apps may need to set their storage up again." = "macOS 管理应用隔离存储的服务使用的数据。通常可以安全删除，但部分应用可能需要重新建立存储区域。";
@@ -319,10 +315,6 @@
 /* DerivedData */
 "Xcode Build Files" = "Xcode 构建文件";
 "Temporary files Xcode creates while building apps. Always safe to delete — your next build will just take a little longer." = "Xcode 构建应用时创建的临时文件，始终可以安全删除，只是下次构建会稍慢。";
-
-/* swiftpm */
-"Swift Package Manager" = "Swift 软件包管理器";
-"Swift packages downloaded for your projects. Each project downloads its dependencies again the next time you build it." = "为项目下载的 Swift 软件包。项目下次构建时会重新下载依赖。";
 
 /* zen */
 "Zen Browser" = "Zen 浏览器";
@@ -359,10 +351,6 @@
 /* revenuecat */
 "RevenueCat Purchases" = "RevenueCat 购买服务";
 "This stores temporary data for RevenueCat, a tool that apps use to manage in-app subscriptions and purchases. It is safe to delete." = "RevenueCat 的临时数据，应用通过此工具管理应用内订阅与购买。可以安全删除。";
-
-/* gitworktrees */
-"Git Worktree Checkouts" = "Git 工作树检出";
-"Forgotten branch checkouts created by Git. Safe to remove if you are no longer working on those branches, but check first that you have no unsaved work." = "Git 创建后遗留的分支检出目录。如果已不再使用这些分支，可以安全移除，但请先检查是否有未保存的工作。";
 
 /* vscode */
 "VS Code Cache" = "VS Code 缓存";
@@ -456,10 +444,6 @@
 "Mise Tool Version Cache" = "Mise 工具版本缓存";
 "Cached runtime versions managed by Mise (formerly rtx), a tool version manager. Safe to delete but Mise will need to re-download any tools you use next time." = "工具版本管理器 Mise（原名 rtx）管理的运行时版本缓存。可以安全删除，但下次使用工具时，Mise 需重新下载。";
 
-/* nextjs-cache */
-"Next.js Build Cache" = "Next.js 构建缓存";
-"Temporary build files created by Next.js. Safe to delete and will be recreated the next time you build or run your Next.js project." = "Next.js 创建的临时构建文件。可以安全删除，下次构建或运行 Next.js 项目时会重新创建。";
-
 /* vite-cache */
 "Vite Build Cache" = "Vite 构建缓存";
 "Temporary files created by Vite, a fast frontend build tool. Safe to delete and will be regenerated when you next start your project." = "快速前端构建工具 Vite 创建的临时文件。可以安全删除，下次启动项目时会重新生成。";
@@ -524,10 +508,6 @@
 "CocoaPods Spec Repos" = "CocoaPods 规格仓库";
 "Spec repos CocoaPods uses to look up libraries. The public one comes back on your next pod install; private ones from pod repo add must be added again." = "CocoaPods 用于查找代码库的规格仓库。公共仓库会在下次 pod install 时恢复；通过 pod repo add 添加的私有仓库需重新添加。";
 
-/* swift-build */
-"Swift Build Artifacts" = "Swift 构建产物";
-"Compiled Swift build files. Safe to delete and will be rebuilt the next time you build your Swift project." = "已编译的 Swift 构建文件。可以安全删除，下次构建 Swift 项目时会重建。";
-
 /* rust-target */
 "Rust Build Output" = "Rust 构建输出";
 "Compiled Rust project files. Safe to delete — your project will recompile automatically on the next build." = "已编译的 Rust 项目文件。可以安全删除，下次构建时项目会自动重新编译。";
@@ -572,21 +552,9 @@
 "npm Package Cache" = "npm 软件包缓存";
 "Cached packages downloaded by npm. Safe to delete and will be re-downloaded when you run npm install." = "npm 下载并缓存的软件包。可以安全删除，运行 npm install 时会重新下载。";
 
-/* husky-cache */
-"Husky Git Hooks" = "Husky Git 钩子";
-"Temporary files used by Husky to manage Git hooks in your projects. Safe to delete and will be regenerated automatically." = "Husky 在项目中管理 Git 钩子所用的临时文件。可以安全删除，会自动重新生成。";
-
 /* storybook-cache */
 "Storybook Cache" = "Storybook 缓存";
 "Temporary build files created by Storybook, a UI component development tool. Safe to delete and will be rebuilt the next time you start Storybook." = "UI 组件开发工具 Storybook 创建的临时构建文件。可以安全删除，下次启动 Storybook 时会重建。";
-
-/* nx-cache */
-"Nx Monorepo Cache" = "Nx 单仓库缓存";
-"Saved build and test results from Nx, a monorepo build tool. Safe to delete. Your next build will take a little longer as it rebuilds from scratch." = "单仓库构建工具 Nx 保存的构建与测试结果。可以安全删除，但下次需从头构建，会稍慢。";
-
-/* moon-cache */
-"Moon Build Cache" = "Moon 构建缓存";
-"Saved build outputs from Moon, a build and task runner for monorepos. Safe to delete and will be regenerated on the next run." = "单仓库构建与任务执行工具 Moon 保存的构建输出。可以安全删除，下次运行时会重新生成。";
 
 /* warp-terminal */
 "Warp Terminal" = "Warp 终端";
