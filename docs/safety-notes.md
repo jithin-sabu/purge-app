@@ -184,7 +184,7 @@ checks that a project edited today is not listed. In the same file,
 `entryLimitIsTooBigToCheck` and `tooBigProjectIsCheckFirst` cover the cut-off
 walk, `sameNameFolderIsWalked` the skipped folder names,
 `showAllRecentProjectIsCheckFirst` Show all, and `RecentProjectResetTests` the
-reset and recategorize paths. The earlier tests
+reset path. Recategorize had no caller and was removed in #184. The earlier tests
 always passed the age in directly, so none of them read the setting the way the
 scanner does.
 

@@ -70,9 +70,10 @@ final class DiskSummaryStore: ObservableObject {
 
     /// Re-reads the volume once the app is back, after the background read is done.
     func refreshAfterForegroundReturn() async {
-        let pending = backgroundRead
-        backgroundRead = nil
-        await pending?.value
+        if let pending = backgroundRead {
+            backgroundRead = nil
+            await pending.value
+        }
 
         let (read, capacity) = await readOffMain()
         guard let capacity else { return }
