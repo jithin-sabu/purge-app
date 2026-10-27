@@ -667,8 +667,24 @@ struct ContentView: View {
         case .overview:
             return overviewPageSubtitle(now: now)
         case .appCaches:
+            if let saved = lastScanSubtitle(
+                showing: [.appCaches],
+                step: .cachesAndDevTools,
+                isScanning: store.isScanningGeneral || store.isScanningAll,
+                now: now
+            ) {
+                return saved
+            }
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
+            if let saved = lastScanSubtitle(
+                showing: [.devTools, .simulators, .runtimes, .projects],
+                step: .cachesAndDevTools,
+                isScanning: store.isScanningDeveloper || store.isScanningProjects || store.isScanningAll,
+                now: now
+            ) {
+                return saved
+            }
             if store.isAwaitingFirstDevToolsScan {
                 let isScanning = store.isScanningDeveloper || store.isScanningAll
                 return ScanStatusPlaceholder.subtitle(
@@ -678,9 +694,23 @@ struct ContentView: View {
             }
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
         case .largeFiles:
-            return store.hasFullDiskAccess ? largeFilesPageSubtitle : nil
+            guard store.hasFullDiskAccess else { return nil }
+            if let lastScan = store.largeFilesLastScan {
+                return lastScanSubtitle(savedAt: lastScan.scannedAt, step: .largeFiles, isScanning: store.isScanningLargeFiles, now: now)
+            }
+            return largeFilesPageSubtitle
         case .uninstaller:
-            return store.hasFullDiskAccess ? uninstallerPageSubtitle : nil
+            guard store.hasFullDiskAccess else { return nil }
+            let saved: String?
+            switch store.uninstallSection {
+            case .installedApps:
+                saved = lastScanSubtitle(showing: [.apps], step: .apps, isScanning: store.isScanningInstalledApps, now: now)
+            case .leftovers:
+                saved = lastScanSubtitle(showing: [.leftovers], step: .leftovers, isScanning: store.isScanningOrphans, now: now)
+            case .commandLineTools:
+                saved = nil
+            }
+            return saved ?? uninstallerPageSubtitle
         case .settings:
             return nil
         case .about:
@@ -688,12 +718,34 @@ struct ContentView: View {
         }
     }
 
+    /// While a tab still shows rows from the last scan (#283), its subtitle dates them
+    /// in place of a count of what this scan has found so far.
+    private func lastScanSubtitle(
+        showing sections: [LastScanSection],
+        step: ScanStep,
+        isScanning: Bool,
+        now: Date
+    ) -> String? {
+        guard let savedAt = store.lastScanRows.oldestSavedAt(showing: sections) else { return nil }
+        return lastScanSubtitle(savedAt: savedAt, step: step, isScanning: isScanning, now: now)
+    }
+
+    private func lastScanSubtitle(savedAt: Date, step: ScanStep, isScanning: Bool, now: Date) -> String {
+        let age = compactAgoText(from: savedAt, to: now)
+        switch store.scanWaitStatus(for: step, isScanning: isScanning) {
+        case .scanning, .waiting:
+            return String(localized: "From the last scan, \(age) · Checking again…")
+        case .notScanned:
+            return String(localized: "From the last scan, \(age)")
+        }
+    }
+
     /// What the scan queue is doing, or when the Overview's figures were last scanned.
+    /// Kept to the active step so it stays one line: each row already says whether
+    /// it is up next, and a saved figure's tooltip says when it was measured.
     private func overviewPageSubtitle(now: Date) -> String? {
         if let active = store.scanQueue.active {
-            let waiting = store.scanQueue.pending.count
-            let name = active.displayName
-            return waiting > 0 ? String(localized: "Scanning \(name), then \(waiting) more…") : String(localized: "Scanning \(name)…")
+            return String(localized: "Scanning \(active.displayName)…")
         }
         if store.isScanningAll {
             return String(localized: "Scanning \(ScanStep.cachesAndDevTools.displayName)…")

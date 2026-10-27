@@ -239,6 +239,7 @@ final class PurgeStore: ObservableObject {
             invalidateSafeCleanupSummary()
             cacheItemsRevision &+= 1
             categoryInputsDidChange()
+            lastScanListDidChange(.appCaches)
         }
     }
     /// Cheap stand-in for "the set of cache rows changed", for use as an
@@ -249,25 +250,35 @@ final class PurgeStore: ObservableObject {
             invalidateSafeCleanupSummary()
             devToolsRevision &+= 1
             categoryInputsDidChange()
+            lastScanListDidChange(.devTools)
         }
     }
     @Published private(set) var devToolsRevision = 0
     @Published var simulatorDevices: [SimulatorDevice] = [] {
-        didSet { categoryInputsDidChange() }
+        didSet {
+            categoryInputsDidChange()
+            lastScanListDidChange(.simulators)
+        }
     }
     /// Booted simulators, shown without a checkbox so the space they take is not a
     /// mystery. Never selected, never counted as recoverable, never deleted.
-    @Published var runningSimulatorDevices: [SimulatorDevice] = []
+    @Published var runningSimulatorDevices: [SimulatorDevice] = [] {
+        didSet { confirmLastScanRows(.simulators) }
+    }
     /// Runtime images the simulators boot from. Sized by `simctl` on arrival, so
     /// there is no staged set; removed through `simctl runtime delete`, never
     /// trashed, so never part of the one-click safe clean or a scheduled clean.
     @Published var simulatorRuntimes: [SimulatorRuntime] = [] {
-        didSet { categoryInputsDidChange() }
+        didSet {
+            categoryInputsDidChange()
+            lastScanListDidChange(.runtimes)
+        }
     }
     @Published var projectGroups: [ProjectGroup] = [] {
         didSet {
             invalidateSafeCleanupSummary()
             categoryInputsDidChange()
+            lastScanListDidChange(.projects)
         }
     }
     @Published var largeFiles: [LargeFile] = [] {
@@ -319,14 +330,20 @@ final class PurgeStore: ObservableObject {
     /// Apps the picker offers, as selectable tiles. Order is decided in the
     /// view (alphabetical by default); this array is not pre-sorted by size.
     @Published var installedApps: [InstalledApp] = [] {
-        didSet { categoryInputsDidChange() }
+        didSet {
+            categoryInputsDidChange()
+            lastScanListDidChange(.apps)
+        }
     }
     @Published var isScanningInstalledApps = false
     @Published private(set) var hasCompletedInstalledAppsScan = false
     /// Bundle-plus-safe-leftover total per app id, filled in the background after
     /// the list loads. Absent until measured; callers fall back to bundle size.
     @Published private(set) var removableBytesByAppID: [String: Int64] = [:] {
-        didSet { categoryInputsDidChange() }
+        didSet {
+            categoryInputsDidChange()
+            lastScanListDidChange(.apps)
+        }
     }
     /// Every path counted in an app's total, with its size, so the Overview can
     /// count a file once when another category (usually App Caches) found it too.
@@ -357,7 +374,10 @@ final class PurgeStore: ObservableObject {
     /// Leftovers whose owning app is no longer installed, shown as a section under
     /// the App Uninstaller tab. Always "Check First", never preselected.
     @Published var orphanLeftovers: [UninstallItem] = [] {
-        didSet { categoryInputsDidChange() }
+        didSet {
+            categoryInputsDidChange()
+            lastScanListDidChange(.leftovers)
+        }
     }
     @Published var isScanningOrphans = false
     @Published private(set) var hasCompletedOrphanScan = false
@@ -481,6 +501,23 @@ final class PurgeStore: ObservableObject {
     private(set) var developerResultsAccess: ScanAccess?
     /// Last finished scan per Overview category, read at launch and kept current.
     @Published private(set) var scanRecords: [OverviewCategory: ScanRecord] = [:]
+    /// Rows from the last scan's saved file (#283), for display only. See
+    /// `PurgeStore+LastScan.swift`: nothing that cleans or counts reads them.
+    @Published var lastScanRows = LastScanRows()
+    /// Nil under the test host unless a test passes its own.
+    let lastScanStore: LastScanStore?
+    /// Lists whose scan ran to its end this session, so they may replace the file.
+    var lastScanSavable: Set<LastScanSection> = []
+    /// Lists that changed since the file was last written.
+    var lastScanDirty: Set<LastScanSection> = []
+    /// When each list's scan last finished, which the file dates its rows by.
+    var lastScanFinishedAt: [LastScanSection: Date] = [:]
+    var lastScanWriteTask: Task<Void, Never>?
+    /// Writes handed to the file store, for tests to wait on.
+    var lastScanWriteCount = 0
+    /// Paths a clean, an uninstall or a deletion outside Purge took out this
+    /// session. The launch read leaves them out, in case it finishes after them.
+    var lastScanForgottenPaths: Set<String> = []
     /// True once App Caches and Dev Tools have finished a scan in this session.
     @Published private(set) var hasSessionCacheScan = false
     /// True once the App Caches half has finished in this session, even if it found
@@ -564,7 +601,7 @@ final class PurgeStore: ObservableObject {
     private var completedLargeFileFilter: LargeFileFilterSnapshot?
     /// The rows the saved Large Files record counted, by id, from the last scan this
     /// session that ran to the end. Empty while the record is from an earlier launch.
-    private var recordedLargeFileSizes: [String: Int64] = [:]
+    private var recordedLargeFileSizes: [String: (bytes: Int64, category: LargeFileCategory)] = [:]
     private var installedAppsScanGeneration = 0
     private var orphanScanGeneration = 0
     private var commandLineToolScanGeneration = 0
@@ -604,14 +641,15 @@ final class PurgeStore: ObservableObject {
         totalMovedToTrashBytes > 0
     }
 
-    /// `defaults`, `scanSources`, `gitChecker` and `fileDeleter` are for tests; the
-    /// app uses the standard ones. A test's deleter keeps a fake Trash, so nothing
+    /// `defaults`, `scanSources`, `gitChecker`, `fileDeleter` and `lastScanStore` are
+    /// for tests; the app uses the standard ones. A test's deleter keeps a fake Trash, so nothing
     /// a test makes reaches the user's own (#171).
     init(
         defaults: UserDefaults = .standard,
         scanSources: ScanSources? = nil,
         gitChecker: GitStatusChecker = GitStatusChecker(),
-        fileDeleter: FileDeleter = FileDeleter()
+        fileDeleter: FileDeleter = FileDeleter(),
+        lastScanStore: LastScanStore? = TestHost.isActive() ? nil : LastScanStore()
     ) {
         let cacheScanner = CacheScanner()
         let devScanner = DevScanner()
@@ -630,6 +668,7 @@ final class PurgeStore: ObservableObject {
             )
         self.defaults = defaults
         self.scanRecordStore = ScanRecordStore(defaults: defaults)
+        self.lastScanStore = lastScanStore
         var moved = Int64(defaults.integer(forKey: StorageKeys.totalMovedToTrashBytes))
         if moved > Self.maxStorableLifetimeMovedBytes {
             moved = 0
@@ -1581,6 +1620,8 @@ final class PurgeStore: ObservableObject {
                 .filter { deletedPaths.contains($0.path.standardizedFileURL.path) }
                 .map(\.id)
         )
+        removeLastScanRows { deletedPaths.contains($0.path) }
+        forgetInLastScanFile(paths: deletedPaths)
         guard !clearedIDs.isEmpty else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             orphanLeftovers.removeAll { clearedIDs.contains($0.id) }
@@ -1748,6 +1789,7 @@ final class PurgeStore: ObservableObject {
         let deletedPaths = Set(report.deletedItems.map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
         guard !deletedPaths.isEmpty else { return }
         removeScanRows { deletedPaths.contains($0.standardizedFileURL.path) }
+        forgetInLastScanFile(paths: deletedPaths.union(report.deletedItems.map(\.path)))
     }
 
     /// Full Disk Access was turned off with a full scan's rows still up. Those rows
@@ -1774,6 +1816,7 @@ final class PurgeStore: ObservableObject {
     /// and totals update without a rescan. Paths are passed as stored, so a caller
     /// that must not touch the disk never has to.
     private func removeScanRows(where isRemoved: (URL) -> Bool) {
+        removeLastScanRows(where: isRemoved)
         stagedGeneralCacheItems = stagedGeneralCacheItems.compactMap { item in
             let remaining = item.locations.filter { !isRemoved($0.path) }
             guard !remaining.isEmpty else { return nil }
@@ -2058,7 +2101,7 @@ final class PurgeStore: ObservableObject {
         hasCompletedLargeFileScan = true
         completedLargeFileFilter = filter
         stampScanRecords([.largeFiles], largeFileFilter: filter)
-        recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, $0.sizeBytes) }, uniquingKeysWith: { first, _ in first })
+        recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, ($0.sizeBytes, $0.category)) }, uniquingKeysWith: { first, _ in first })
         // Delete extra copies trashes copies, so a file that can't go to the
         // Trash takes no part in a duplicate set.
         startDuplicateScan(for: largeFiles.filter(\.canMoveToTrash), generation: generation)
@@ -2337,8 +2380,9 @@ final class PurgeStore: ObservableObject {
         largeFileDuplicates.removeFiles(ids: ids)
         let recordedSizes = ids.compactMap { recordedLargeFileSizes.removeValue(forKey: $0) }
         guard !isSettled(.largeFiles), !recordedSizes.isEmpty, var record = scanRecords[.largeFiles] else { return }
-        record.bytes = max(0, record.bytes - recordedSizes.reduce(0, +))
+        record.bytes = max(0, record.bytes - recordedSizes.reduce(0) { $0 + $1.bytes })
         record.count = max(0, record.count - recordedSizes.count)
+        record.removeLargeFiles(recordedSizes)
         saveScanRecord(record, for: .largeFiles)
     }
 
@@ -2361,6 +2405,7 @@ final class PurgeStore: ObservableObject {
         let generation = installedAppsScanGeneration
         isScanningInstalledApps = true
         hasCompletedInstalledAppsScan = false
+        lastScanListsStarted([.apps])
         installedApps = []
         removableTotalsTask?.cancel()
         removableTotalsTask = nil
@@ -2388,6 +2433,9 @@ final class PurgeStore: ObservableObject {
         guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         installedApps = collected
         hasCompletedInstalledAppsScan = true
+        // Every app on the Mac is listed now; saved apps not among them are gone.
+        // The file waits for the totals, which the next lines measure.
+        lastScanListsFinished([.apps], savable: false)
         // The app list just changed under "Uninstall <app> with Purge".
         PurgeAppShortcuts.refreshAppList()
 
@@ -2404,6 +2452,7 @@ final class PurgeStore: ObservableObject {
             self.removableTotalsTask = nil
             if !Task.isCancelled, self.hasMeasuredAllRemovableTotals {
                 self.stampScanRecords([.apps])
+                self.lastScanListsFinished([.apps])
             }
         }
     }
@@ -2521,6 +2570,7 @@ final class PurgeStore: ObservableObject {
         let generation = orphanScanGeneration
         isScanningOrphans = true
         hasCompletedOrphanScan = false
+        lastScanListsStarted([.leftovers])
         orphanLeftovers = []
         orphanSelectedIDs = []
         defer {
@@ -2542,19 +2592,25 @@ final class PurgeStore: ObservableObject {
         orphanLeftovers = collected.sorted { $0.sizeBytes > $1.sizeBytes }
         hasCompletedOrphanScan = true
         stampScanRecords([.leftovers])
+        lastScanListsFinished([.leftovers])
     }
 
+    /// Only a row on the live list can be ticked, never one from the last scan's
+    /// saved file (#283).
     func toggleOrphanSelected(id: String) {
         if orphanSelectedIDs.contains(id) {
             orphanSelectedIDs.remove(id)
-        } else {
+        } else if orphanLeftovers.contains(where: { $0.id == id }) {
             orphanSelectedIDs.insert(id)
         }
     }
 
+    /// Only rows on the live list can be ticked: a leftover from the last scan's
+    /// saved file (#283) must not land ticked when the scan finds it again.
     func setAllOrphansSelected(_ selected: Bool, ids: [String]) {
         if selected {
-            orphanSelectedIDs.formUnion(ids)
+            let live = Set(orphanLeftovers.map(\.id))
+            orphanSelectedIDs.formUnion(ids.filter(live.contains))
         } else {
             orphanSelectedIDs.subtract(ids)
         }
@@ -2698,6 +2754,9 @@ final class PurgeStore: ObservableObject {
         installedApps.removeAll { $0.id == key }
         selectedAppIDs.remove(key)
         removableBytesByAppID[key] = nil
+        let spellings: Set<String> = [bundleURL.path, key]
+        removeLastScanRows { spellings.contains($0.path) }
+        forgetInLastScanFile(paths: spellings)
     }
 
     /// Trashes leftovers whose app is already gone (orphans, and apps removed
@@ -3074,17 +3133,20 @@ final class PurgeStore: ObservableObject {
 
     // MARK: App selection
 
+    /// Only a listed app can be ticked, never one from the last scan's saved file
+    /// (#283). Uninstall an App sets `selectedAppIDs` itself, before the list loads.
     func toggleAppSelected(id: String) {
         if selectedAppIDs.contains(id) {
             selectedAppIDs.remove(id)
-        } else {
+        } else if installedApps.contains(where: { $0.id == id }) {
             selectedAppIDs.insert(id)
         }
     }
 
     func setAllAppsSelected(_ selected: Bool, ids: [String]) {
         if selected {
-            selectedAppIDs.formUnion(ids)
+            let live = Set(installedApps.map(\.id))
+            selectedAppIDs.formUnion(ids.filter(live.contains))
         } else {
             selectedAppIDs.subtract(ids)
         }
@@ -3610,6 +3672,11 @@ final class PurgeStore: ObservableObject {
                 installedApps.removeAll { $0.id == app.id }
             }
         }
+        // The app and its leftovers leave the last scan's saved rows too, on screen
+        // and in the file, so none of them comes back dimmed at the next launch (#283).
+        let removedSpellings = deletedPaths.union(report.deletedItems.map(\.path))
+        removeLastScanRows { removedSpellings.contains($0.path) }
+        forgetInLastScanFile(paths: removedSpellings)
 
         // Held apps moved nothing; surface each as one "needs your OK" row so the
         // panel can offer setup and then remove the whole app at once.
@@ -3886,6 +3953,7 @@ final class PurgeStore: ObservableObject {
         )
         if scanGeneration == generation, !Task.isCancelled {
             hasSessionGeneralScan = true
+            lastScanListsFinished([.appCaches])
         }
     }
 
@@ -3972,6 +4040,9 @@ final class PurgeStore: ObservableObject {
             )
         }
 
+        if scanGeneration == generation, !Task.isCancelled {
+            lastScanListsFinished([.devTools, .simulators, .runtimes])
+        }
         startProjectDiscovery(generation: generation, access: access)
     }
 
@@ -4017,6 +4088,7 @@ final class PurgeStore: ObservableObject {
             // the newer discovery's git check would mark it clean (#173).
             guard scanGeneration == generation, !Task.isCancelled else { return }
             flushProjectGroupBuffers(coalesce: coalesce, animate: false)
+            lastScanListsFinished([.projects])
             ScanPhaseTiming.finish(
                 "discoverProjects stream",
                 since: streamStart,
@@ -4201,7 +4273,8 @@ final class PurgeStore: ObservableObject {
                     bytes: totals.bytes,
                     count: totals.count,
                     safeBytes: safeCleanupBytes(for: category),
-                    largeFileFilter: category == .largeFiles ? largeFileFilter : nil
+                    largeFileFilter: category == .largeFiles ? largeFileFilter : nil,
+                    largeFileCategories: category == .largeFiles ? ScanRecord.largeFileCategoryTotals(of: largeFiles) : nil
                 ),
                 for: category
             )
@@ -4219,15 +4292,20 @@ final class PurgeStore: ObservableObject {
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard let self else { return }
             self.scanRecordRefreshTask = nil
-            for category in OverviewCategory.allCases where self.isSettled(category) {
+            for category in OverviewCategory.allCases where self.isSettled(category) && self.hasFinishedLists(for: category) {
                 guard var record = self.scanRecords[category] else { continue }
                 let totals = self.totals(for: category)
                 let safeBytes = self.safeCleanupBytes(for: category)
+                let largeFileCategories = category == .largeFiles
+                    ? ScanRecord.largeFileCategoryTotals(of: self.largeFiles)
+                    : record.largeFileCategories
                 guard record.bytes != totals.bytes || record.count != totals.count || record.safeBytes != safeBytes
+                    || record.largeFileCategories != largeFileCategories
                 else { continue }
                 record.bytes = totals.bytes
                 record.count = totals.count
                 record.safeBytes = safeBytes
+                record.largeFileCategories = largeFileCategories
                 self.saveScanRecord(record, for: category)
             }
         }
@@ -4631,6 +4709,7 @@ final class PurgeStore: ObservableObject {
     }
 
     private func clearGeneralScanState() {
+        lastScanListsStarted([.appCaches])
         pendingCacheSizePaths = []
         cacheItems = []
         stagedGeneralCacheItems = []
@@ -4639,6 +4718,7 @@ final class PurgeStore: ObservableObject {
     }
 
     private func clearDeveloperScanState() {
+        lastScanListsStarted([.devTools, .simulators, .runtimes, .projects])
         projectDiscoveryTask?.cancel()
         projectDiscoveryTask = nil
         isScanningProjects = false
@@ -5351,16 +5431,35 @@ final class PurgeStore: ObservableObject {
 
     // MARK: - Project row selection bindings
 
+    /// The single-row setters tick only rows on a live list, never one from the
+    /// last scan's saved file (#283), as the Select All setters do.
     func setCacheSelected(id: String, isSelected: Bool) {
-        if isSelected { scanSelection.cacheIDs.insert(id) } else { scanSelection.cacheIDs.remove(id) }
+        if isSelected {
+            guard cacheItems.contains(where: { $0.id == id }) else { return }
+            scanSelection.cacheIDs.insert(id)
+        } else {
+            scanSelection.cacheIDs.remove(id)
+        }
     }
 
+    /// Only rows on the live list can be ticked, never one from the last scan's
+    /// saved file (#283).
     func setAllCachesSelected(_ selected: Bool, ids: [String]) {
-        if selected { scanSelection.cacheIDs.formUnion(ids) } else { scanSelection.cacheIDs.subtract(ids) }
+        if selected {
+            let live = Set(cacheItems.map(\.id))
+            scanSelection.cacheIDs.formUnion(ids.filter(live.contains))
+        } else {
+            scanSelection.cacheIDs.subtract(ids)
+        }
     }
 
     func setDevToolSelected(id: String, isSelected: Bool) {
-        if isSelected { scanSelection.devToolIDs.insert(id) } else { scanSelection.devToolIDs.remove(id) }
+        if isSelected {
+            guard devTools.contains(where: { $0.id == id }) else { return }
+            scanSelection.devToolIDs.insert(id)
+        } else {
+            scanSelection.devToolIDs.remove(id)
+        }
     }
 
     private func projectArtifactIndices(groupID: String, artifactID: String) -> (groupIndex: Int, artifactIndex: Int)? {
@@ -5388,11 +5487,21 @@ final class PurgeStore: ObservableObject {
     }
 
     func setSimulatorDeviceSelected(id: UUID, isSelected: Bool) {
-        if isSelected { scanSelection.simulatorIDs.insert(id) } else { scanSelection.simulatorIDs.remove(id) }
+        if isSelected {
+            guard simulatorDevices.contains(where: { $0.id == id }) else { return }
+            scanSelection.simulatorIDs.insert(id)
+        } else {
+            scanSelection.simulatorIDs.remove(id)
+        }
     }
 
     func setSimulatorRuntimeSelected(id: String, isSelected: Bool) {
-        if isSelected { scanSelection.simulatorRuntimeIDs.insert(id) } else { scanSelection.simulatorRuntimeIDs.remove(id) }
+        if isSelected {
+            guard simulatorRuntimes.contains(where: { $0.id == id }) else { return }
+            scanSelection.simulatorRuntimeIDs.insert(id)
+        } else {
+            scanSelection.simulatorRuntimeIDs.remove(id)
+        }
     }
 
     func setSimulatorGroupSelection(allSelected: Bool) {

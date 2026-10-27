@@ -24,6 +24,9 @@ final class FakeScans {
     /// What the Command-line tools scan returns (#225).
     var commandLineTools = CommandLineToolScanResult()
     private(set) var everythingElseAccesses: [ScanAccess] = []
+    /// Yielded by an App Caches scan as soon as it starts. A held scan then stays
+    /// open until it is let go.
+    var generalEvents: [CacheScanEvent] = []
     /// Yielded by a Dev Tools scan that is not held, before it finishes.
     var developerEvents: [DeveloperScanEvent] = []
     /// Yielded by project discovery as soon as it starts. A held discovery then
@@ -64,15 +67,19 @@ final class FakeScans {
     /// `gitChecker` is the one a clean asks before it moves anything. `fileDeleter`
     /// is the engine a clean or a retry runs; pass one with a `FakeTrash` so a test
     /// moves nothing real.
+    /// `lastScanStore` is the saved-scan file (#283); pass one on a temporary file
+    /// to test it. Without one the store reads and writes no saved scan.
     func makeStore(
         gitChecker: GitStatusChecker = GitStatusChecker(),
-        fileDeleter: FileDeleter = FileDeleter()
+        fileDeleter: FileDeleter = FileDeleter(),
+        lastScanStore: LastScanStore? = nil
     ) -> PurgeStore {
         let store = PurgeStore(
             defaults: defaults,
             scanSources: sources,
             gitChecker: gitChecker,
-            fileDeleter: fileDeleter
+            fileDeleter: fileDeleter,
+            lastScanStore: lastScanStore
         )
         store.refreshPermission()
         return store
@@ -156,6 +163,7 @@ final class FakeScans {
                 self.generalAccesses.append(access)
                 self.events.append("general \(access)")
                 let (stream, continuation) = AsyncStream<CacheScanEvent>.makeStream()
+                self.generalEvents.forEach { continuation.yield($0) }
                 if self.holdsGeneral {
                     self.heldGeneral.append(continuation)
                 } else {

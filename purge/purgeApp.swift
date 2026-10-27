@@ -53,6 +53,12 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
         CleaningQuitGuard.shouldAllowTermination() ? .terminateNow : .terminateCancel
     }
 
+    /// Writes the last scan's pending changes and waits for the file, so a clean
+    /// just before quitting is already in it at the next launch (#283).
+    func applicationWillTerminate(_ notification: Notification) {
+        AppEnvironment.store.flushLastScanWrites()
+    }
+
     /// Always `false`, in both modes. In the menu bar mode closing the window is
     /// not quitting. In on-demand mode it is, but `WindowCloseQuitter` handles
     /// that, because this callback cannot tell the user closing the window from

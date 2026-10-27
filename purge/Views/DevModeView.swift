@@ -38,8 +38,11 @@ struct DevToolsView<PageHeader: View>: View {
     private struct ProjectGroupRowKey: Hashable, Identifiable {
         let id: String
         let groupIndex: Int
-        static func make(group: ProjectGroup, groupIndex: Int) -> ProjectGroupRowKey {
-            ProjectGroupRowKey(id: "project-group-\(group.id)", groupIndex: groupIndex)
+        /// A group from the last scan (#283); `groupIndex` then points into the
+        /// saved rows. Same id as the live group, so it turns live in place.
+        var isFromLastScan = false
+        static func make(group: ProjectGroup, groupIndex: Int, isFromLastScan: Bool = false) -> ProjectGroupRowKey {
+            ProjectGroupRowKey(id: "project-group-\(group.id)", groupIndex: groupIndex, isFromLastScan: isFromLastScan)
         }
     }
 
@@ -63,10 +66,13 @@ struct DevToolsView<PageHeader: View>: View {
 
     private enum MergedDevStandardRow: Hashable, Identifiable {
         case tool(id: String, index: Int)
+        /// A tool from the last scan (#283), indexing the saved rows. Shares the live
+        /// row's id, so it turns live in place.
+        case savedTool(id: String, index: Int)
 
         var id: String {
             switch self {
-            case .tool(let id, _): return "merged-tool-\(id)"
+            case .tool(let id, _), .savedTool(let id, _): return "merged-tool-\(id)"
             }
         }
     }
@@ -115,23 +121,69 @@ struct DevToolsView<PageHeader: View>: View {
         return store.projectGroups.indices.filter { groupHasVisibleArtifacts(store.projectGroups[$0], filter: filter) }
     }
 
-    private func sortedProjectGroupIndices() -> [Int] {
-        let ix = filteredProjectGroupIndices()
+    /// Live project groups and the last scan's (#283) in one sorted list.
+    private func sortedProjectGroupRows() -> [ProjectGroupRowKey] {
+        let filter = currentSafetyFilter
         let groups = store.projectGroups
+        let saved = lastScanProjectGroups
+        var rows = filteredProjectGroupIndices().map { ProjectGroupRowKey.make(group: groups[$0], groupIndex: $0) }
+        for index in saved.indices where saved[index].artifacts.contains(where: { filter.matches($0.safetyInfo) }) {
+            rows.append(.make(group: saved[index], groupIndex: index, isFromLastScan: true))
+        }
+        let group: (ProjectGroupRowKey) -> ProjectGroup = { $0.isFromLastScan ? saved[$0.groupIndex] : groups[$0.groupIndex] }
         switch currentSort {
         case .sizeDesc:
-            return ix.sorted { groups[$0].totalBytes > groups[$1].totalBytes }
+            return rows.sorted { group($0).totalBytes > group($1).totalBytes }
         case .sizeAsc:
-            return ix.sorted { groups[$0].totalBytes < groups[$1].totalBytes }
+            return rows.sorted { group($0).totalBytes < group($1).totalBytes }
         case .dateNewest:
-            return ix.sorted { groupModified(groups[$0]) > groupModified(groups[$1]) }
+            return rows.sorted { groupModified(group($0)) > groupModified(group($1)) }
         case .dateOldest:
-            return ix.sorted { groupModified(groups[$0]) < groupModified(groups[$1]) }
+            return rows.sorted { groupModified(group($0)) < groupModified(group($1)) }
         case .nameAZ:
-            return ix.sorted {
-                groups[$0].displayName.localizedCaseInsensitiveCompare(groups[$1].displayName) == .orderedAscending
+            return rows.sorted {
+                group($0).displayName.localizedCaseInsensitiveCompare(group($1).displayName) == .orderedAscending
             }
         }
+    }
+
+    // MARK: Rows from the last scan (#283)
+
+    /// Saved rows the live lists don't have yet. Read only: nothing here feeds
+    /// Select All, the selected count or Clean, which read the live lists.
+    private var lastScanTools: [DevTool] {
+        let saved = store.lastScanRows.devTools
+        guard !saved.isEmpty else { return [] }
+        let live = Set(store.devTools.map(\.id))
+        return saved.filter { $0.isDetected && !live.contains($0.id) }
+    }
+
+    private var lastScanSimulators: [SimulatorDevice] {
+        let saved = store.lastScanRows.simulatorDevices
+        guard !saved.isEmpty else { return [] }
+        let live = Set(store.simulatorDevices.map(\.id)).union(store.runningSimulatorDevices.map(\.id))
+        return saved.filter { !live.contains($0.id) }
+    }
+
+    private var lastScanRuntimes: [SimulatorRuntime] {
+        let saved = store.lastScanRows.simulatorRuntimes
+        guard !saved.isEmpty else { return [] }
+        let live = Set(store.simulatorRuntimes.map(\.id))
+        return saved.filter { !live.contains($0.id) }
+    }
+
+    private var lastScanProjectGroups: [ProjectGroup] {
+        let saved = store.lastScanRows.projectGroups
+        guard !saved.isEmpty else { return [] }
+        let live = Set(store.projectGroups.map(\.id))
+        return saved.filter { !live.contains($0.id) }
+    }
+
+    private var hasLastScanRows: Bool {
+        !store.lastScanRows.devTools.isEmpty
+            || !store.lastScanRows.simulatorDevices.isEmpty
+            || !store.lastScanRows.simulatorRuntimes.isEmpty
+            || !store.lastScanRows.projectGroups.isEmpty
     }
 
     private func groupModified(_ group: ProjectGroup) -> Date {
@@ -176,6 +228,28 @@ struct DevToolsView<PageHeader: View>: View {
         let filter = currentSafetyFilter
         return store.simulatorDevices.contains { filter.matches($0.safetyInfo) }
             || !visibleRunningSimulators.isEmpty
+            || lastScanSimulators.contains { filter.matches($0.safetyInfo) }
+    }
+
+    /// Live and saved simulators by id, in the list's order.
+    private func sortedSimulatorRowIDs() -> [UUID] {
+        let filter = currentSafetyFilter
+        let list = store.simulatorDevices.filter { filter.matches($0.safetyInfo) }
+            + lastScanSimulators.filter { filter.matches($0.safetyInfo) }
+        let sorted: [SimulatorDevice]
+        switch currentSort {
+        case .sizeDesc:
+            sorted = list.sorted { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
+        case .sizeAsc:
+            sorted = list.sorted { ($0.sizeOnDisk ?? 0) < ($1.sizeOnDisk ?? 0) }
+        case .dateNewest:
+            sorted = list.sorted { ($0.lastBootedAt ?? .distantPast) > ($1.lastBootedAt ?? .distantPast) }
+        case .dateOldest:
+            sorted = list.sorted { ($0.lastBootedAt ?? .distantPast) < ($1.lastBootedAt ?? .distantPast) }
+        case .nameAZ:
+            sorted = list.sorted { $0.safetyInfo.headline.localizedCaseInsensitiveCompare($1.safetyInfo.headline) == .orderedAscending }
+        }
+        return sorted.map(\.id)
     }
 
     /// Booted simulators, shown under the ones that can be removed.
@@ -189,25 +263,6 @@ struct DevToolsView<PageHeader: View>: View {
         return store.simulatorDevices.indices.filter { filter.matches(store.simulatorDevices[$0].safetyInfo) }
     }
 
-    private func sortedVisibleSimulatorIndices() -> [Int] {
-        let raw = visibleSimulatorIndices()
-        let list = store.simulatorDevices
-        switch currentSort {
-        case .sizeDesc:
-            return raw.sorted { (list[$0].sizeOnDisk ?? 0) > (list[$1].sizeOnDisk ?? 0) }
-        case .sizeAsc:
-            return raw.sorted { (list[$0].sizeOnDisk ?? 0) < (list[$1].sizeOnDisk ?? 0) }
-        case .dateNewest:
-            return raw.sorted { (list[$0].lastBootedAt ?? .distantPast) > (list[$1].lastBootedAt ?? .distantPast) }
-        case .dateOldest:
-            return raw.sorted { (list[$0].lastBootedAt ?? .distantPast) < (list[$1].lastBootedAt ?? .distantPast) }
-        case .nameAZ:
-            return raw.sorted {
-                list[$0].safetyInfo.headline.localizedCaseInsensitiveCompare(list[$1].safetyInfo.headline) == .orderedAscending
-            }
-        }
-    }
-
     private func simulatorSectionByteTotal() -> Int64 {
         visibleSimulatorIndices().reduce(Int64(0)) { $0 + (store.simulatorDevices[$1].sizeOnDisk ?? 0) }
     }
@@ -215,30 +270,33 @@ struct DevToolsView<PageHeader: View>: View {
     private var runtimeSectionVisible: Bool {
         let filter = currentSafetyFilter
         return store.simulatorRuntimes.contains { filter.matches($0.safetyInfo) }
+            || lastScanRuntimes.contains { filter.matches($0.safetyInfo) }
+    }
+
+    /// Live and saved runtimes by id, in the list's order.
+    private func sortedRuntimeRowIDs() -> [String] {
+        let filter = currentSafetyFilter
+        let list = store.simulatorRuntimes.filter { filter.matches($0.safetyInfo) }
+            + lastScanRuntimes.filter { filter.matches($0.safetyInfo) }
+        let sorted: [SimulatorRuntime]
+        switch currentSort {
+        case .sizeDesc:
+            sorted = list.sorted { $0.sizeBytes > $1.sizeBytes }
+        case .sizeAsc:
+            sorted = list.sorted { $0.sizeBytes < $1.sizeBytes }
+        case .dateNewest:
+            sorted = list.sorted { ($0.lastUsedAt ?? .distantPast) > ($1.lastUsedAt ?? .distantPast) }
+        case .dateOldest:
+            sorted = list.sorted { ($0.lastUsedAt ?? .distantPast) < ($1.lastUsedAt ?? .distantPast) }
+        case .nameAZ:
+            sorted = list.sorted { $0.safetyInfo.headline.localizedCaseInsensitiveCompare($1.safetyInfo.headline) == .orderedAscending }
+        }
+        return sorted.map(\.id)
     }
 
     private func visibleRuntimeIndices() -> [Int] {
         let filter = currentSafetyFilter
         return store.simulatorRuntimes.indices.filter { filter.matches(store.simulatorRuntimes[$0].safetyInfo) }
-    }
-
-    private func sortedVisibleRuntimeIndices() -> [Int] {
-        let raw = visibleRuntimeIndices()
-        let list = store.simulatorRuntimes
-        switch currentSort {
-        case .sizeDesc:
-            return raw.sorted { list[$0].sizeBytes > list[$1].sizeBytes }
-        case .sizeAsc:
-            return raw.sorted { list[$0].sizeBytes < list[$1].sizeBytes }
-        case .dateNewest:
-            return raw.sorted { (list[$0].lastUsedAt ?? .distantPast) > (list[$1].lastUsedAt ?? .distantPast) }
-        case .dateOldest:
-            return raw.sorted { (list[$0].lastUsedAt ?? .distantPast) < (list[$1].lastUsedAt ?? .distantPast) }
-        case .nameAZ:
-            return raw.sorted {
-                list[$0].safetyInfo.headline.localizedCaseInsensitiveCompare(list[$1].safetyInfo.headline) == .orderedAscending
-            }
-        }
     }
 
     private func runtimeSectionByteTotal() -> Int64 {
@@ -248,23 +306,31 @@ struct DevToolsView<PageHeader: View>: View {
     private func mergedStandardRowEntries() -> [MergedDevStandardRow] {
         let tools = sortedStandardToolIndices()
         var rows: [MergedDevStandardRow] = tools.map { .tool(id: store.devTools[$0].id, index: $0) }
+        let filter = currentSafetyFilter
+        let saved = store.lastScanRows.devTools
+        let liveIDs = Set(store.devTools.map(\.id))
+        for index in saved.indices where saved[index].isDetected && !liveIDs.contains(saved[index].id)
+            && filter.matches(saved[index].safetyInfo) {
+            rows.append(.savedTool(id: saved[index].id, index: index))
+        }
+
+        func tool(_ e: MergedDevStandardRow) -> DevTool {
+            switch e {
+            case .tool(_, let i): return store.devTools[i]
+            case .savedTool(_, let i): return saved[i]
+            }
+        }
 
         func entrySize(_ e: MergedDevStandardRow) -> Int64 {
-            switch e {
-            case .tool(_, let i): return store.devTools[i].sizeBytes
-            }
+            tool(e).sizeBytes
         }
 
         func entryDate(_ e: MergedDevStandardRow) -> Date {
-            switch e {
-            case .tool(_, let i): return devToolModified(store.devTools[i])
-            }
+            devToolModified(tool(e))
         }
 
         func entryName(_ e: MergedDevStandardRow) -> String {
-            switch e {
-            case .tool(_, let i): return store.devTools[i].safetyInfo.headline
-            }
+            tool(e).safetyInfo.headline
         }
 
         switch currentSort {
@@ -524,6 +590,12 @@ struct DevToolsView<PageHeader: View>: View {
         for runtime in store.simulatorRuntimes {
             infos.append(runtime.safetyInfo)
         }
+        // Rows from the last scan count in the chips, so a filter never looks
+        // empty while they show (#283).
+        infos += lastScanTools.map(\.safetyInfo)
+        infos += lastScanSimulators.map(\.safetyInfo)
+        infos += lastScanRuntimes.map(\.safetyInfo)
+        infos += lastScanProjectGroups.flatMap(\.artifacts).map(\.safetyInfo)
         return infos
     }
 
@@ -541,6 +613,7 @@ struct DevToolsView<PageHeader: View>: View {
             && store.devTools.isEmpty
             && store.simulatorDevices.isEmpty
             && store.runningSimulatorDevices.isEmpty
+            && !hasLastScanRows
     }
 
     private var showsDeveloperListContent: Bool {
@@ -567,7 +640,7 @@ struct DevToolsView<PageHeader: View>: View {
         mergedStandardRowEntries().isEmpty
             && !simulatorSectionVisible
             && !runtimeSectionVisible
-            && filteredProjectGroupIndices().isEmpty
+            && sortedProjectGroupRows().isEmpty
     }
 
     /// Row counts mirror the dev tools list + chip aggregates (detected tools + all project artifacts),
@@ -613,6 +686,9 @@ struct DevToolsView<PageHeader: View>: View {
             switch entry {
             case .tool(_, let i):
                 sum += store.devTools[i].sizeBytes
+            case .savedTool:
+                // Saved rows count in no total.
+                break
             }
         }
         if simulatorSectionVisible {
@@ -692,7 +768,7 @@ struct DevToolsView<PageHeader: View>: View {
     /// filters, Select All and sort have nothing to act on, so the tab shows only
     /// its status.
     private var isAwaitingFirstScan: Bool {
-        store.isAwaitingFirstDevToolsScan
+        store.isAwaitingFirstDevToolsScan && !hasLastScanRows
     }
 
     private var scanStatus: some View {
@@ -808,7 +884,7 @@ struct DevToolsView<PageHeader: View>: View {
         }
         if simulatorSectionVisible { return .simulators }
         if runtimeSectionVisible { return .runtimes }
-        if !filteredProjectGroupIndices().isEmpty || store.isScanningProjects { return .projects }
+        if !sortedProjectGroupRows().isEmpty || store.isScanningProjects { return .projects }
         return nil
     }
 
@@ -878,6 +954,34 @@ struct DevToolsView<PageHeader: View>: View {
                     .listRowSeparator(.hidden)
                     .transition(rowInsertionTransition)
                     }
+                case .savedTool(let entryID, let index):
+                    let saved = store.lastScanRows.devTools
+                    if saved.indices.contains(index), saved[index].id == entryID {
+                        let tool = saved[index]
+                        ScanResultRow(
+                            isSelected: false,
+                            primaryLabel: tool.safetyInfo.headline,
+                            formattedSize: tool.formattedSize,
+                            safetyInfo: tool.safetyInfo,
+                            brandIcon: .devTool(tool),
+                            reinstallSafety: tool.reinstallSafety,
+                            revealLocations: {
+                                zip(tool.paths, tool.standardizedPaths).map { path, key in
+                                    ScanRowLocation(
+                                        url: path,
+                                        sizeBytes: tool.pathSizeBytesByPath[key]
+                                            ?? (tool.paths.count == 1 ? tool.sizeBytes : nil)
+                                    )
+                                }
+                            },
+                            isFromLastScan: true
+                        )
+                        .id(DeveloperListRowID.tool(tool.id))
+                        .listRowInsets(ScanListRowInsets.standard)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .transition(rowInsertionTransition)
+                    }
                 }
             }
 
@@ -888,7 +992,7 @@ struct DevToolsView<PageHeader: View>: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 
-                    ForEach(sortedVisibleSimulatorIndices().map { store.simulatorDevices[$0].id }, id: \.self) { deviceID in
+                    ForEach(sortedSimulatorRowIDs(), id: \.self) { deviceID in
                         if let device = store.simulatorDevices.first(where: { $0.id == deviceID }) {
                             ScanSelectionScope(
                                 selection: store.scanSelection,
@@ -920,6 +1024,23 @@ struct DevToolsView<PageHeader: View>: View {
                                     usesCompactExplanation: true
                                 )
                             }
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(rowInsertionTransition)
+                        } else if let device = lastScanSimulators.first(where: { $0.id == deviceID }) {
+                            ScanResultRow(
+                                isSelected: false,
+                                primaryLabel: device.safetyInfo.headline,
+                                formattedSize: device.formattedSize,
+                                safetyInfo: device.safetyInfo,
+                                brandIcon: .sfSymbol("ipad.and.iphone"),
+                                revealLocations: {
+                                    [ScanRowLocation(url: device.folderURL, sizeBytes: device.sizeOnDisk)]
+                                },
+                                usesCompactExplanation: true,
+                                isFromLastScan: true
+                            )
                             .listRowInsets(ScanListRowInsets.standard)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -956,7 +1077,7 @@ struct DevToolsView<PageHeader: View>: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 
-                    ForEach(sortedVisibleRuntimeIndices().map { store.simulatorRuntimes[$0].id }, id: \.self) { runtimeID in
+                    ForEach(sortedRuntimeRowIDs(), id: \.self) { runtimeID in
                         if let runtime = store.simulatorRuntimes.first(where: { $0.id == runtimeID }) {
                             ScanSelectionScope(
                                 selection: store.scanSelection,
@@ -992,21 +1113,48 @@ struct DevToolsView<PageHeader: View>: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                             .transition(rowInsertionTransition)
+                        } else if let runtime = lastScanRuntimes.first(where: { $0.id == runtimeID }) {
+                            ScanResultRow(
+                                isSelected: false,
+                                primaryLabel: runtime.safetyInfo.headline,
+                                formattedSize: runtime.formattedSize,
+                                safetyInfo: runtime.safetyInfo,
+                                brandIcon: .sfSymbol("internaldrive"),
+                                detailCaption: String(localized: "Build \(runtime.build)"),
+                                revealLocations: {
+                                    [ScanRowLocation(url: runtime.locationURL, sizeBytes: runtime.sizeBytes)]
+                                },
+                                usesCompactExplanation: true,
+                                isFromLastScan: true
+                            )
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(rowInsertionTransition)
                         }
                     }
                 }
             }
 
-            if !sortedProjectGroupIndices().isEmpty {
+            if !sortedProjectGroupRows().isEmpty {
                 Group {
                     developerProjectsSectionHeader
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 
-                    ForEach(sortedProjectGroupIndices().map { ProjectGroupRowKey.make(group: store.projectGroups[$0], groupIndex: $0) }) { row in
+                    ForEach(sortedProjectGroupRows()) { row in
                         let gi = row.groupIndex
-                        if store.projectGroups.indices.contains(gi), row.id == "project-group-\(store.projectGroups[gi].id)" {
+                        if row.isFromLastScan {
+                            let saved = lastScanProjectGroups
+                            if saved.indices.contains(gi), row.id == "project-group-\(saved[gi].id)" {
+                                lastScanProjectGroupCard(saved[gi])
+                                    .listRowInsets(ScanListRowInsets.standard)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .transition(rowInsertionTransition)
+                            }
+                        } else if store.projectGroups.indices.contains(gi), row.id == "project-group-\(store.projectGroups[gi].id)" {
                             let group = store.projectGroups[gi]
                             let isExpanded = expandedProjectRoots.contains(group.id)
 
@@ -1017,6 +1165,16 @@ struct DevToolsView<PageHeader: View>: View {
                                 .transition(rowInsertionTransition)
                         }
                     }
+
+                    // One more card's shape under the projects found so far, while
+                    // the search goes on.
+                    if store.isScanningProjects {
+                        ProjectGroupSkeletonCard(titleWidth: 130)
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(.opacity)
+                    }
                 }
             } else if store.isScanningProjects {
                 Group {
@@ -1025,12 +1183,15 @@ struct DevToolsView<PageHeader: View>: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 
-                    Text("Finding projects…")
-                        .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .listRowInsets(ScanListRowInsets.standard)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                    // Cards in the shape of the ones the search lands, so nothing
+                    // moves when the first project arrives.
+                    ForEach(ProjectGroupSkeletonCard.titleWidths, id: \.self) { width in
+                        ProjectGroupSkeletonCard(titleWidth: width)
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(.opacity)
+                    }
                 }
             }
 
@@ -1079,9 +1240,15 @@ struct DevToolsView<PageHeader: View>: View {
 
     private var developerProjectsSectionHeader: some View {
         devToolsSectionHeader(.projects) {
-            Text("Developer Projects")
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.textSecondary)
+            HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+                Text("Developer Projects")
+                    .font(AppStyle.Typography.metadataEmphasis)
+                    .foregroundStyle(AppColors.textSecondary)
+                Spacer(minLength: AppStyle.Spacing.small)
+                if store.isScanningProjects {
+                    ProjectSearchStatus(found: sortedProjectGroupRows().filter { !$0.isFromLastScan }.count)
+                }
+            }
         }
     }
 
@@ -1216,6 +1383,60 @@ struct DevToolsView<PageHeader: View>: View {
         .accessibilityLabel("Project \(group.displayName)")
         .accessibilityHint("Grouped dev tool cleanup targets")
         }
+    }
+
+    /// A project from the last scan (#283): the card's header, read only, with the
+    /// clock where its checkbox goes. Its folders are named in the summary line.
+    private func lastScanProjectGroupCard(_ group: ProjectGroup) -> some View {
+        let filter = currentSafetyFilter
+        let artifacts = group.artifacts.filter { filter.matches($0.safetyInfo) }
+        let level: SafetyLevel = artifacts.contains { $0.safetyInfo.level == .medium } ? .medium : .safe
+        let summary = artifacts.first(where: { $0.checkFirstReason != nil && $0.safetyInfo.level == .medium })?
+            .checkFirstReason?.summary
+            ?? artifacts.map(\.safetyInfo.headline).joined(separator: String(localized: ", "))
+        return HStack(alignment: .center, spacing: 10) {
+            LastScanRowMarker()
+                .frame(width: 24)
+            AdaptiveBrandIconImage(
+                source: .projectGroup(group),
+                squareSize: AppStyle.Row.projectGroupIconSize
+            )
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(group.displayName)
+                    .font(AppStyle.Typography.rowTitle)
+                Text(summary)
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(formatBytes(artifacts.reduce(Int64(0)) { $0 + $1.sizeBytes }))
+                .font(AppStyle.Typography.rowTitle.numbers)
+                .foregroundStyle(AppColors.textSecondary)
+                .monospacedDigit()
+            projectBadge(level: level)
+            // Where the chevron sits, so sizes line up with the live cards.
+            Color.clear
+                .frame(width: 12, height: 12)
+                .padding(.trailing, AppStyle.Spacing.xSmall)
+        }
+        .padding(.vertical, AppStyle.Spacing.xSmall)
+        .padding(.horizontal, AppStyle.Spacing.xSmall)
+        .frame(minHeight: AppStyle.Row.parentHeight)
+        .contentShape(Rectangle())
+        .help(LastScanRowMarker.help)
+        .overlay {
+            ScanRowContextMenu(isMenuActive: .constant(false)) {
+                FinderReveal.menuEntries(for: [ScanRowLocation(url: group.rootPath)])
+            }
+        }
+        .devToolsGroupCardChrome()
+        .opacity(0.55)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Project \(group.displayName)")
+        .accessibilityHint(LastScanRowMarker.help)
     }
 
     /// The strictest level among the folders on show, so a closed card never reads
@@ -1356,6 +1577,67 @@ struct DevToolsView<PageHeader: View>: View {
             return String(localized: "Project")
         }
         return String(localized: "Project, \(types)")
+    }
+}
+
+/// Beside the Developer Projects heading while the search runs. The count is of
+/// the projects this scan has listed, so it grows as they land.
+private struct ProjectSearchStatus: View {
+    let found: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(found > 0 ? String(localized: "\(found) found, still looking…") : String(localized: "Searching…"))
+                .font(AppStyle.Typography.metadata.numbers)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A project card with no project in it: the same checkbox, icon, two text lines
+/// and chevron at the same height, so the card that replaces it doesn't move.
+private struct ProjectGroupSkeletonCard: View {
+    /// Title widths for the cards shown before any project lands, so they read as
+    /// a list, not a pattern.
+    static let titleWidths: [CGFloat] = [140, 110, 160]
+
+    let titleWidth: CGFloat
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                .stroke(AppColors.textSecondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
+                .frame(width: 14, height: 14)
+                .frame(width: 24)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
+                .frame(width: AppStyle.Row.projectGroupIconSize, height: AppStyle.Row.projectGroupIconSize)
+            // Invisible text in the real card's styles holds its line heights.
+            VStack(alignment: .leading, spacing: 2) {
+                ZStack(alignment: .leading) {
+                    Text(verbatim: " ").font(AppStyle.Typography.rowTitle).opacity(0)
+                    SkeletonBar(width: titleWidth, height: 10)
+                }
+                ZStack(alignment: .leading) {
+                    Text(verbatim: " ").font(AppStyle.Typography.metadata).opacity(0)
+                    SkeletonBar(width: titleWidth * 0.6, height: 8)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            SkeletonBar(width: 52, height: 10)
+            SkeletonBar(width: 12, height: 12)
+                .padding(.trailing, AppStyle.Spacing.xSmall)
+        }
+        .padding(.vertical, AppStyle.Spacing.xSmall)
+        .padding(.horizontal, AppStyle.Spacing.xSmall)
+        .frame(minHeight: AppStyle.Row.parentHeight)
+        .devToolsGroupCardChrome()
+        .shimmering()
+        .accessibilityHidden(true)
     }
 }
 

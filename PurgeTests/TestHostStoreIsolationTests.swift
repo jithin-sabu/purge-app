@@ -15,7 +15,7 @@ struct TestHostStoreIsolationTests {
         // One folder for the whole run, or a store would lose what it saved.
         #expect(TestHost.supportDirectory() == TestHost.supportDirectory())
         let scratch = TestHost.supportDirectory().standardizedFileURL
-        for file in [ExcludedPathsStore.fileURL(), UserOverridesStore.fileURL(), CleanupHistoryStore.fileURL()] {
+        for file in [ExcludedPathsStore.fileURL(), UserOverridesStore.fileURL(), CleanupHistoryStore.fileURL(), LastScanStore.defaultFileURL()] {
             #expect(file.deletingLastPathComponent().standardizedFileURL == scratch)
             #expect(!file.standardizedFileURL.path.hasPrefix(realSupport.standardizedFileURL.path + "/"))
         }

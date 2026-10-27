@@ -436,13 +436,31 @@ struct LargeFilesView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The last scan's glass lifts as the first file lands (#283).
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: store.largeFilesLastScan == nil)
+    }
+
+    /// Large Files keeps only its total between launches, never the file list
+    /// (#283), so while it scans again the wait says what it found last time.
+    private var lastScanLine: String? {
+        guard let record = store.applicableRecord(for: .largeFiles), record.count > 0 else { return nil }
+        let size = formatBytes(record.bytes)
+        let age = compactAgoText(from: record.completedAt, to: Date())
+        return record.count == 1
+            ? String(localized: "Last scan found 1 file, \(size), \(age)")
+            : String(localized: "Last scan found \(record.count) files, \(size), \(age)")
     }
 
     @ViewBuilder
     private var listOrPlaceholder: some View {
         if store.largeFiles.isEmpty {
             if isAwaitingFirstScan || scanWaitStatus == .scanning {
-                ScanStatusPlaceholder(status: scanWaitStatus, copy: .largeFiles)
+                if let lastScan = store.largeFilesLastScan {
+                    LargeFilesLastScanGlass(lastScan: lastScan, status: scanWaitStatus)
+                        .transition(.opacity)
+                } else {
+                    ScanStatusPlaceholder(status: scanWaitStatus, copy: .largeFiles, lastScanLine: lastScanLine)
+                }
             } else {
                 emptyState
             }
@@ -1059,6 +1077,163 @@ private struct DuplicateGroupCard: View {
         .lineLimit(1)
         .frame(height: Self.headerHeight)
         .padding(.horizontal, 4)
+    }
+}
+
+/// Large Files while it waits for its scan, with a saved last scan (#283): the
+/// page as it was, faded. The chips carry the last scan's counts and the
+/// rows keep the exact shape of real ones, without names, since Large Files never
+/// saves them. The first file to land replaces it with the list.
+private struct LargeFilesLastScanGlass: View {
+    let lastScan: LargeFilesLastScan
+    let status: ScanWaitStatus
+
+    /// Title widths for the nameless rows, so they read as a list, not a pattern.
+    private static let titleWidths: [CGFloat] = [190, 150, 220, 170, 200, 140, 180, 160]
+
+    /// Enough rows to fill the page, never more than the scan found.
+    private var rowCount: Int { min(lastScan.count, Self.titleWidths.count) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            chips
+            ZStack {
+                rows
+                glass
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .padding(.top, AppStyle.Spacing.xSmall)
+    }
+
+    /// The last scan's chips, to look at: there is nothing to filter until files land.
+    private var chips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                FilterChip(
+                    style: .tab,
+                    label: String(localized: "All"),
+                    isSelected: true,
+                    leadingSystemImage: "square.grid.2x2",
+                    count: lastScan.count
+                )
+                ForEach(lastScan.kinds, id: \.category) { kind in
+                    FilterChip(
+                        style: .tab,
+                        label: kind.category.displayName,
+                        leadingSystemImage: kind.category.symbolName,
+                        count: kind.count
+                    )
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        .opacity(0.55)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rows: some View {
+        VStack(spacing: 6) {
+            ForEach(0..<rowCount, id: \.self) { index in
+                LargeFileSkeletonRow(titleWidth: Self.titleWidths[index])
+            }
+        }
+        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .opacity(0.4)
+        .accessibilityHidden(true)
+    }
+
+    /// The rows fade into the page itself, not under a material: a material
+    /// lightens what it covers, so the page read a shade lighter than the header
+    /// above it.
+    private var glass: some View {
+        capsule
+            .accessibilityElement(children: .combine)
+    }
+
+    private var capsule: some View {
+        HStack(spacing: AppStyle.Spacing.small) {
+            icon
+                .frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AppStyle.Typography.headline)
+                Text(subtitle)
+                    .font(AppStyle.Typography.metadata.numbers)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.vertical, AppStyle.Spacing.small)
+        .padding(.leading, AppStyle.Spacing.small)
+        .padding(.trailing, AppStyle.Spacing.large)
+        .background(Capsule(style: .continuous).fill(AppColors.surfaceRaised))
+        .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderStrong, lineWidth: 0.5))
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch status {
+        case .scanning, .waiting:
+            ProgressView()
+                .controlSize(.small)
+        case .notScanned:
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppColors.textTertiary)
+        }
+    }
+
+    private var title: String {
+        switch status {
+        case .scanning:
+            return String(localized: "Looking for large files again")
+        case .waiting(let behind):
+            guard let behind, behind != .largeFiles else { return String(localized: "Starting…") }
+            return String(localized: "Up next, after \(behind.displayName)")
+        case .notScanned:
+            return String(localized: "Use Scan to look again")
+        }
+    }
+
+    private var subtitle: String {
+        let size = formatBytes(lastScan.bytes)
+        let age = compactAgoText(from: lastScan.scannedAt, to: Date())
+        return lastScan.count == 1
+            ? String(localized: "Last scan: 1 file, \(size), \(age)")
+            : String(localized: "Last scan: \(lastScan.count) files, \(size), \(age)")
+    }
+}
+
+/// A Large Files row with no file in it: the same card, checkbox, thumbnail and
+/// size slots at the same height, so the list that replaces it doesn't move.
+private struct LargeFileSkeletonRow: View {
+    let titleWidth: CGFloat
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                .stroke(AppColors.textSecondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
+                .frame(width: 14, height: 14)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
+                .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonBar(width: titleWidth, height: 10)
+                SkeletonBar(width: titleWidth * 0.6, height: 8)
+            }
+            Spacer(minLength: 12)
+            SkeletonBar(width: 56, height: 10)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: LargeFileRow.contentHeight)
+        .modifier(ScanRowCardChrome())
+        .shimmering()
     }
 }
 

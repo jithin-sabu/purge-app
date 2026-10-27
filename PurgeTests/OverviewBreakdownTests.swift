@@ -226,7 +226,7 @@ struct OverviewPresentationTests {
     }
 
     @MainActor
-    @Test func aCategoryQueuedForARescanShowsNoFigure() {
+    @Test func aQueuedCategoryWithNoSavedFigureShowsNone() {
         let fake = FakeScans()
         defer { fake.cleanUp() }
         let store = fake.makeStore()
@@ -235,6 +235,52 @@ struct OverviewPresentationTests {
         #expect(!store.isShowingRecordedFigure(for: .appCaches))
         let breakdown = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
         #expect(breakdown.bytes(for: .appCaches) == 0)
+    }
+
+    /// A reopen shows what the last scan found while the rescan waits its turn (#283).
+    @MainActor
+    @Test func aCategoryQueuedForARescanShowsItsSavedFigureDimmed() {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        let saved = Date(timeIntervalSinceNow: -2 * 24 * 60 * 60)
+        ScanRecordStore(defaults: fake.defaults).save(
+            ScanRecord(completedAt: saved, bytes: 7_000_000_000, count: 40, safeBytes: 5_000_000_000),
+            for: .appCaches
+        )
+        let store = fake.makeStore()
+        store.scanQueue.enqueue([.cachesAndDevTools])
+        #expect(store.overviewPhase(for: .appCaches) == .waiting)
+        #expect(store.isShowingRecordedFigure(for: .appCaches))
+        #expect(store.applicableRecord(for: .appCaches)?.completedAt == saved)
+        let breakdown = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
+        #expect(breakdown.bytes(for: .appCaches) == 7_000_000_000)
+    }
+
+    /// The saved figure stays until the step is done, so the row never climbs from
+    /// zero over a figure the user already saw. Then the live one takes over.
+    @MainActor
+    @Test func aScanningCategoryKeepsItsSavedFigureUntilTheStepFinishes() async {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        ScanRecordStore(defaults: fake.defaults).save(
+            ScanRecord(completedAt: Date(timeIntervalSinceNow: -3600), bytes: 7_000_000_000, count: 40, safeBytes: 5_000_000_000),
+            for: .appCaches
+        )
+        let store = fake.makeStore()
+        fake.holdsGeneral = true
+        store.startLaunchScans()
+        #expect(await eventually { store.overviewPhase(for: .appCaches) == .scanning })
+        #expect(store.isShowingRecordedFigure(for: .appCaches))
+        let during = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
+        #expect(during.bytes(for: .appCaches) == 7_000_000_000)
+
+        fake.holdsGeneral = false
+        fake.finishHeldGeneral()
+        #expect(await eventually { store.overviewPhase(for: .appCaches) == .ready })
+        #expect(!store.isShowingRecordedFigure(for: .appCaches))
+        let after = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
+        // The fake scan finds nothing, so the live figure replaces the saved one.
+        #expect(after.bytes(for: .appCaches) == 0)
     }
 
     @MainActor
@@ -256,5 +302,21 @@ struct OverviewPresentationTests {
     @MainActor
     @Test func overviewIsTheFirstTab() {
         #expect(PurgeStore.Tab.allCases.first == .overview)
+    }
+
+    /// Waits for the store to settle; counts only the time this loop ran, as in
+    /// `ScanQueueStoreTests`, so a stalled test host doesn't expire it.
+    @MainActor
+    private func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
+        var waited: TimeInterval = 0
+        var last = Date()
+        while !condition() {
+            guard waited < timeout else { return false }
+            try? await Task.sleep(for: .milliseconds(10))
+            let now = Date()
+            waited += min(now.timeIntervalSince(last), 0.25)
+            last = now
+        }
+        return true
     }
 }

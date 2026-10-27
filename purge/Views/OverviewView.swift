@@ -304,7 +304,7 @@ private struct OverviewCategoryRow: View {
     }
 
     private var scanTimeHelp: String {
-        guard phase == .ready || phase == .notScanned, let record else { return "" }
+        guard phase == .ready || isRecorded, let record else { return "" }
         return String(localized: "Scanned \(compactAgoText(from: record.completedAt, to: now))")
     }
 
@@ -318,7 +318,9 @@ private struct OverviewCategoryRow: View {
     private var isEmptyLargeFiles: Bool {
         guard category == .largeFiles else { return false }
         if phase == .ready { return store.totals(for: category).count == 0 }
-        if isRecorded, let record { return record.count == 0 }
+        // A saved zero that is waiting or being rescanned keeps its place in the
+        // queue; "Change filter" only makes sense once nothing is coming.
+        if phase == .notScanned, isRecorded, let record { return record.count == 0 }
         return false
     }
 
@@ -346,8 +348,8 @@ private struct OverviewCategoryRow: View {
         case .notScanned where !isRecorded:
             Button("Scan") { store.requestScan(category.step) }
                 .buttonStyle(.purge(.secondary))
-        case .waiting:
-            // About to be measured again: no figure, not even the last one, until it scans.
+        case .waiting where !isRecorded:
+            // Nothing saved to show until its scan lands.
             EmptyView()
         case _ where isEmptyLargeFiles:
             // "0%  0 bytes" gives the user nothing to act on. The filters do.
