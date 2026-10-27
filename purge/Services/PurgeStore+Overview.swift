@@ -94,8 +94,8 @@ extension PurgeStore {
     func isShowingRecordedFigure(for category: OverviewCategory) -> Bool {
         guard applicableRecord(for: category) != nil else { return false }
         switch overviewPhase(for: category) {
-        case .notScanned: return true
-        case .needsAccess, .waiting, .scanning, .ready: return false
+        case .notScanned, .waiting, .scanning: return true
+        case .needsAccess, .ready: return false
         }
     }
 
@@ -123,6 +123,15 @@ extension PurgeStore {
         return items
     }
 
+    /// When the oldest saved figure still on the Overview was measured, or nil when
+    /// every row shows this session's own. The subtitle dates the saved ones by it.
+    func oldestRecordedFigureDate() -> Date? {
+        OverviewCategory.allCases
+            .filter(isShowingRecordedFigure(for:))
+            .compactMap { applicableRecord(for: $0)?.completedAt }
+            .min()
+    }
+
     /// True when any category shows a total saved by an earlier session. Its
     /// paths are unknown, so the Everything else groups can't take it out.
     func overviewShowsRecordedFigures() -> Bool {
@@ -132,9 +141,11 @@ extension PurgeStore {
         }
     }
 
-    /// A scan in progress shows what it has found so far. A category waiting for its
-    /// turn shows nothing: it is about to be measured again, so the old figure would
-    /// only be replaced. One not scanned this session shows its saved figure.
+    /// Until a category's scan finishes this session, it shows its saved figure from
+    /// the last one, dimmed and dated, while it waits and while it scans (#283). The
+    /// live figure takes over when the scan is done, so a reopen never shows a page of
+    /// blanks or a total that climbs from zero. A category with no saved figure shows
+    /// what its scan has found so far.
     private func overviewSource(
         for category: OverviewCategory,
         phase: OverviewCategoryPhase
@@ -143,11 +154,12 @@ extension PurgeStore {
         switch phase {
         case .needsAccess:
             return .none
-        case .scanning, .ready:
+        case .ready:
             return .live(overviewItems(for: category))
-        case .waiting:
-            return .none
-        case .notScanned:
+        case .scanning:
+            if let record { return .recorded(record.bytes) }
+            return .live(overviewItems(for: category))
+        case .waiting, .notScanned:
             if let record { return .recorded(record.bytes) }
             return .none
         }

@@ -35,6 +35,7 @@
 "%@ was removed from Applications, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it." = "%@ 已从“应用程序”中移除，但这些文件仍在 Mac 上。勾选的项目会移到废纸篓，清空前都可以恢复。";
 "%@ · %lld selected · %@" = "%@ · 已选 %lld 项 · %@";
 "%@ · measuring space…" = "%@ · 正在统计空间…";
+"%@ · Last scan %@" = "%@ · 上次扫描：%@";
 "%@, %@" = "%@，%@";
 "%@, %@ reclaimed" = "%@，已释放 %@";
 "%@, %@ selected" = "%@，已选择 %@";
