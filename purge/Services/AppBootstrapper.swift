@@ -37,6 +37,9 @@ enum AppBootstrapper {
         // A Purge the deleted-apps watcher started windowless shows one review
         // and quits, so it skips the launch scan (#177). The menu bar scans on
         // its first open instead, and a window the user opens scans as usual.
+        // The last scan's rows, shown dimmed while this launch scans again (#283).
+        // Started first so they are up before the menu bar's launch scan lands.
+        Task { await env.store.loadLastScan() }
         env.menuModel.attach(store: env.store, scansAtLaunch: !RemovedAppMonitor.startsWindowless)
         MenuScanNotifier.configure()
         ScheduledNotificationPresentationDelegate.shared.onCleanAction = { [weak menuModel = env.menuModel] in
