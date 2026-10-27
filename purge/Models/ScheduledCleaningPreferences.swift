@@ -17,15 +17,15 @@ enum ScheduledCleaningFrequency: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Seconds between repeats (local notification + graceful activation sweep).
-    /// For `.custom` this is a fallback only — the engine reads the persisted
-    /// interval via `ScheduledCleaningPreferenceStore.effectiveRepeatIntervalSeconds`.
-    var repeatIntervalSeconds: TimeInterval {
+    /// Seconds between repeats of a preset (local notification + graceful
+    /// activation sweep). `nil` for `.custom`, whose interval the user sets:
+    /// `ScheduledCleaningPreferenceStore.effectiveRepeatIntervalSeconds` reads it.
+    var repeatIntervalSeconds: TimeInterval? {
         switch self {
         case .weekly: return 7 * 24 * 60 * 60
         case .monthly: return 30 * 24 * 60 * 60
         case .quarterly: return 90 * 24 * 60 * 60
-        case .custom: return 30 * 24 * 60 * 60
+        case .custom: return nil
         }
     }
 }

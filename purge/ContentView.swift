@@ -936,12 +936,9 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
             // so the app-level notifications are the only signal that actually fires.
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
                 diskStore.markBackgrounded()
-                trashStore.markBackgrounded()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 Task {
-                    // Size the trash first: the free-space note is only interpretable
-                    // alongside what the trash gave up.
                     await trashStore.refresh(trigger: "foreground-return")
                     await diskStore.refreshAfterForegroundReturn()
                 }

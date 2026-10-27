@@ -7,15 +7,9 @@ final class DiskSummaryStore: ObservableObject {
     @Published private(set) var totalDiskBytes: Int64 = 0
     @Published private(set) var usedDiskBytes: Int64 = 0
     @Published private(set) var freeDiskBytes: Int64 = 0
-    /// How much free space the volume gained while the app was in the background. `nil`
-    /// unless a real increase was observed.
-    ///
-    /// This is volume state, never an achievement, and never Purge's doing. The user
-    /// emptied the trash in Finder; Purge only observed the result.
-    @Published private(set) var freeSpaceIncreaseBytes: Int64?
 
     /// The read taken when the app went to the background, still running or done.
-    private var backgroundBaseline: Task<Int64?, Never>?
+    private var backgroundRead: Task<Void, Never>?
     /// The volume read in flight, if any. Triggers that arrive while it runs share
     /// one more read after it rather than each starting their own.
     private var readTask: Task<Void, Never>?
@@ -65,40 +59,24 @@ final class DiskSummaryStore: ObservableObject {
         }
     }
 
-    /// Records free space as the app goes away, so a return can report what changed.
-    /// The read runs off the main thread; the return waits for it. If the read fails
-    /// there is no trustworthy baseline, so none is recorded.
+    /// Reads the volume as the app goes away. The read runs off the main thread; the
+    /// return waits for it.
     func markBackgrounded() {
-        freeSpaceIncreaseBytes = nil
-        backgroundBaseline = Task {
+        backgroundRead = Task {
             let (read, capacity) = await readOffMain()
             if let capacity { publish(capacity, from: read) }
-            return capacity?.availableBytes
         }
     }
 
-    /// Re-reads the volume and reports any gain since the app went away. Small movements
-    /// are ignored: other processes write while we are not looking, so only a change that
-    /// clears measurement noise means anything. The gain is published only when both the
-    /// background baseline and this foreground read succeeded — otherwise the delta would
-    /// compare a real figure against a stale or missing one.
+    /// Re-reads the volume once the app is back, after the background read is done.
     func refreshAfterForegroundReturn() async {
-        let baseline = backgroundBaseline
-        backgroundBaseline = nil
-        let before = await baseline?.value
+        let pending = backgroundRead
+        backgroundRead = nil
+        await pending?.value
 
         let (read, capacity) = await readOffMain()
-        guard let capacity else {
-            freeSpaceIncreaseBytes = nil
-            return
-        }
+        guard let capacity else { return }
         publish(capacity, from: read)
-        guard let before else {
-            freeSpaceIncreaseBytes = nil
-            return
-        }
-        let delta = capacity.availableBytes - before
-        freeSpaceIncreaseBytes = delta >= VolumeCapacityReader.noiseFloorBytes ? delta : nil
     }
 
     private func apply(_ capacity: VolumeCapacity) {

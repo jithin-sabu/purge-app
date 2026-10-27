@@ -332,15 +332,8 @@ nonisolated enum ProjectArtifactCatalog {
 
     // MARK: - Lookups
 
-    private nonisolated static let rulesByType: [ProjectType: [ProjectArtifactRule]] =
-        Dictionary(grouping: rules, by: \.projectType)
-
     private nonisolated static let rulesByKind: [DeletableArtifactKind: [ProjectArtifactRule]] =
         Dictionary(grouping: rules, by: \.kind)
-
-    nonisolated static func rules(for type: ProjectType) -> [ProjectArtifactRule] {
-        rulesByType[type] ?? []
-    }
 
     nonisolated static func rules(forKind kind: DeletableArtifactKind) -> [ProjectArtifactRule] {
         rulesByKind[kind] ?? []

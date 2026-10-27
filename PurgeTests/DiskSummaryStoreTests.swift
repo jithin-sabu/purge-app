@@ -129,18 +129,17 @@ struct DiskSummaryStoreTests {
         #expect(store.freeDiskBytes == 70 * Self.gigabyte)
     }
 
-    @Test func foregroundReturnReportsSpaceFreedWhileAway() async {
+    @Test func foregroundReturnShowsSpaceFreedWhileAway() async {
         let volume = FakeVolume(free: 100 * Self.gigabyte)
         let store = DiskSummaryStore(read: { volume.read() })
 
         store.markBackgrounded()
-        // Once the baseline has been read, the user empties the Trash in Finder.
+        // Once the background read is done, the user empties the Trash in Finder.
         await waitUntil { volume.readCount == 2 }
         volume.setFree(103 * Self.gigabyte)
         await store.refreshAfterForegroundReturn()
 
         #expect(store.freeDiskBytes == 103 * Self.gigabyte)
-        #expect(store.freeSpaceIncreaseBytes == 3 * Self.gigabyte)
     }
 
     /// The Trash total changes as the app returns, which starts a `refresh` read at
@@ -162,19 +161,17 @@ struct DiskSummaryStoreTests {
         volume.setFree(103 * Self.gigabyte)
         await store.refreshAfterForegroundReturn()
         #expect(store.freeDiskBytes == 103 * Self.gigabyte)
-        #expect(store.freeSpaceIncreaseBytes == 3 * Self.gigabyte)
 
         // The slow read lands and is dropped.
         await waitUntil { volume.readCount == 4 }
         try? await Task.sleep(for: .milliseconds(50))
         #expect(volume.readCount == 4)
         #expect(store.freeDiskBytes == 103 * Self.gigabyte)
-        #expect(store.freeSpaceIncreaseBytes == 3 * Self.gigabyte)
     }
 
-    /// The return waits for a baseline read that is still running, so a quick
-    /// switch away and back cannot compare against a missing figure.
-    @Test func foregroundReturnWaitsForTheBaseline() async {
+    /// The return waits for a background read that is still running, then reads
+    /// again.
+    @Test func foregroundReturnWaitsForTheBackgroundRead() async {
         let volume = FakeVolume(free: 100 * Self.gigabyte, delay: 0.1)
         let store = DiskSummaryStore(read: { volume.read() })
 
@@ -182,19 +179,6 @@ struct DiskSummaryStoreTests {
         await store.refreshAfterForegroundReturn()
 
         #expect(store.freeDiskBytes == 100 * Self.gigabyte)
-        #expect(store.freeSpaceIncreaseBytes == nil)
         #expect(volume.readCount == 3)
-    }
-
-    @Test func smallMovementsAreNotReported() async {
-        let volume = FakeVolume(free: 100 * Self.gigabyte)
-        let store = DiskSummaryStore(read: { volume.read() })
-
-        store.markBackgrounded()
-        await waitUntil { volume.readCount == 2 }
-        volume.setFree(100 * Self.gigabyte + VolumeCapacityReader.noiseFloorBytes - 1)
-        await store.refreshAfterForegroundReturn()
-
-        #expect(store.freeSpaceIncreaseBytes == nil)
     }
 }

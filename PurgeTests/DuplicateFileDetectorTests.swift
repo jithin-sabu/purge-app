@@ -335,9 +335,8 @@ struct DuplicateFileDetectorTests {
         let index = DuplicateIndex(groups: [small, big])
 
         #expect(index.groups.map(\.id) == ["big", "small"])
-        #expect(index.groupRank(forFileID: "/b1") == 0)
-        #expect(index.groupRank(forFileID: "/s1") == 1)
-        // Non-members sort last, after every group.
-        #expect(index.groupRank(forFileID: "/not-a-duplicate") == .max)
+        #expect(index.group(forFileID: "/b1")?.id == "big")
+        #expect(index.group(forFileID: "/s1")?.id == "small")
+        #expect(index.group(forFileID: "/not-a-duplicate") == nil)
     }
 }

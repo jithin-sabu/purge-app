@@ -61,12 +61,6 @@ final class ScheduledCleaningRegistrar: ObservableObject {
     /// on every switch into Purge (#173).
     static let retryGapAfterFailure: TimeInterval = 60 * 60
 
-    /// Convenience shim over the standard domain, kept for any external caller.
-    /// The registrar itself reads the anchor through its injected `ud`.
-    static var lastGraceSweepDate: Date? {
-        UserDefaults.standard.object(forKey: lastGraceSweepKey) as? Date
-    }
-
     @Published private(set) var lastOutcome: LastScheduledCleanOutcome?
 
     private weak var store: PurgeStore?

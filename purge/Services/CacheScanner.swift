@@ -37,10 +37,6 @@ nonisolated final class CacheScanner {
         }
     }
 
-    func calculateFolderSize(at url: URL) -> Int64 {
-        FolderSizing.directoryByteSize(at: url)
-    }
-
     private func runGeneralScan(
         access: ScanAccess,
         continuation: AsyncStream<CacheScanEvent>.Continuation
@@ -652,10 +648,6 @@ nonisolated final class CacheScanner {
                     "Library/Logs/DiagnosticReports",
                     isDirectory: true
                 )
-            ),
-            (
-                String(localized: "Font Cache"),
-                home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)
             )
         ]
     }
