@@ -1081,7 +1081,7 @@ private struct DuplicateGroupCard: View {
 }
 
 /// Large Files while it waits for its scan, with a saved last scan (#283): the
-/// page as it was, under glass. The chips carry the last scan's counts and the
+/// page as it was, faded. The chips carry the last scan's counts and the
 /// rows keep the exact shape of real ones, without names, since Large Files never
 /// saves them. The first file to land replaces it with the list.
 private struct LargeFilesLastScanGlass: View {
@@ -1143,19 +1143,16 @@ private struct LargeFilesLastScanGlass: View {
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .opacity(0.4)
         .accessibilityHidden(true)
     }
 
-    /// The same glass and capsule as the Everything else page while it measures.
+    /// The rows fade into the page itself, not under a material: a material
+    /// lightens what it covers, so the page read a shade lighter than the header
+    /// above it.
     private var glass: some View {
-        ZStack {
-            Rectangle()
-                .fill(.regularMaterial)
-            Rectangle()
-                .fill(AppColors.surfaceBase.opacity(0.3))
-            capsule
-        }
-        .accessibilityElement(children: .combine)
+        capsule
+            .accessibilityElement(children: .combine)
     }
 
     private var capsule: some View {
@@ -1175,7 +1172,7 @@ private struct LargeFilesLastScanGlass: View {
         .padding(.vertical, AppStyle.Spacing.small)
         .padding(.leading, AppStyle.Spacing.small)
         .padding(.trailing, AppStyle.Spacing.large)
-        .background(Capsule(style: .continuous).fill(.regularMaterial))
+        .background(Capsule(style: .continuous).fill(AppColors.surfaceRaised))
         .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderStrong, lineWidth: 0.5))
     }
 
