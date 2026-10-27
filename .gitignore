@@ -1,6 +1,7 @@
 Secrets.xcconfig
 *.xcconfig
 node_modules/
+__pycache__/
 build/
 DerivedData/
 xcuserdata/
