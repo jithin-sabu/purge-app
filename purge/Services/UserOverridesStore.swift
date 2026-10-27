@@ -83,23 +83,6 @@ enum UserOverridesStore {
         return loadEntriesLocked()[canonicalKey(forPath: path)]
     }
 
-    nonisolated static func write(
-        path: URL,
-        overrideTag: String,
-        originalTag: String,
-        date: Date = Date()
-    ) {
-        lock.lock()
-        defer { lock.unlock() }
-        var entries = loadEntriesLocked()
-        entries[canonicalKey(forPath: path)] = UserOverrideEntry(
-            overrideTag: overrideTag,
-            overrideDate: date,
-            originalTag: originalTag
-        )
-        persistLocked(entries)
-    }
-
     nonisolated static func remove(path: URL) {
         lock.lock()
         defer { lock.unlock() }

@@ -86,15 +86,6 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(item: $store.pendingUnknownDeletion) { payload in
-            UnknownDeleteConfirmSheet(
-                candidates: payload.candidates,
-                onCancel: { store.dismissUnknownDeletionRequest() },
-                onConfirm: {
-                    Task { await store.userConfirmedUnknownDeletionFlow() }
-                }
-            )
-        }
         .sheet(isPresented: $store.showLargeFileDeletionSheet) {
             LargeFileDeletionConfirmSheet(
                 files: store.selectedTrashableLargeFiles,

@@ -41,7 +41,6 @@ struct EverythingElseNoDeleteTests {
         "DeletionSession",
         "showDeletionSheet",
         "showLargeFileDeletionSheet",
-        "pendingUnknownDeletion",
         "scanSelection",
         "largeFileSelection",
         "selectedAppIDs",
@@ -183,7 +182,6 @@ struct EverythingElseNoDeleteTests {
         #expect(!store.showDeletionSheet)
         #expect(!store.showLargeFileDeletionSheet)
         #expect(store.deletionSheetCandidates == nil)
-        #expect(store.pendingUnknownDeletion == nil)
         #expect(store.manualDeletionSession == nil)
         #expect(store.interactiveSafeCleanupSession == nil)
         #expect(store.uninstallPlan == nil)

@@ -1,7 +1,6 @@
 import Foundation
 
 enum DeveloperScanEvent {
-    case status(String)
     case devToolFound(DevTool)
     case devToolSizeResolved(id: String, pathSizeBytesByPath: [String: Int64], sizeBytes: Int64, lastModified: Date)
     case projectGroupFound(ProjectGroup)
@@ -89,7 +88,7 @@ nonisolated final class DevScanner {
         Self.automaticSafetyInfo(forDevToolLabel: toolLabel, primaryPath: primaryPath)
     }
 
-    /// Shared automatic safety resolution for global dev tool rows (scan + reset/recategorize).
+    /// Shared automatic safety resolution for global dev tool rows (scan + reset).
     nonisolated static func automaticSafetyInfo(forDevToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
         let key = toolExplanationKeys[toolLabel] ?? toolLabel
         if toolLabel == "Xcode Archives", let path = primaryPath {
@@ -153,7 +152,6 @@ nonisolated final class DevScanner {
                     continuation.finish()
                     return
                 }
-                continuation.yield(.status(String(localized: "Scanning Developer Projects...")))
                 _ = await self.discoverProjects(access: access, continuation: continuation)
                 continuation.finish()
             }
@@ -165,7 +163,6 @@ nonisolated final class DevScanner {
         access: ScanAccess,
         continuation: AsyncStream<DeveloperScanEvent>.Continuation
     ) async {
-        continuation.yield(.status(String(localized: "Scanning Dev Tools...")))
         let globalDiscoveryStart = Date()
         let (tools, toolSizeJobs) = scanGlobalCachePlaceholders(access: access)
         ScanPhaseTiming.finish(
@@ -183,7 +180,6 @@ nonisolated final class DevScanner {
 
         await withTaskGroup(of: Void.self) { group in
             group.addTask { [toolSizeJobs] in
-                continuation.yield(.status(String(localized: "Calculating Dev Tool sizes...")))
                 let sizingStart = Date()
                 await self.runDevToolSizeJobs(toolSizeJobs, continuation: continuation)
                 let pathCount = toolSizeJobs.reduce(0) { $0 + $1.paths.count }
@@ -196,7 +192,6 @@ nonisolated final class DevScanner {
 
             group.addTask {
                 if Task.isCancelled { return }
-                continuation.yield(.status(String(localized: "Scanning iOS Simulators...")))
                 let simDiscoveryStart = Date()
                 let listing = await self.discoverSimulatorsWithoutSizes(access: access)
                 let simulators = listing.shutdown

@@ -403,24 +403,12 @@ struct RecentProjectResetTests {
         #expect(store.manualSafeCleanupCandidates().count == 1)
     }
 
-    @Test("Recategorize")
-    func recategorizeKeepsCheckFirst() {
-        let scans = FakeScans()
-        defer { scans.cleanUp() }
-        let store = store(with: recentArtifact(), scans)
-        store.recategorizeProjectArtifact(groupIndex: 0, artifactIndex: 0)
-        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
-        #expect(store.manualSafeCleanupCandidates().isEmpty)
-    }
-
     @Test("a project too big to check stays Check First too")
     func tooBigToCheckSurvivesReset() {
         let scans = FakeScans()
         defer { scans.cleanUp() }
         let store = store(with: recentArtifact(.tooBigToCheck), scans)
         store.resetProjectArtifactToAutomatic(groupIndex: 0, artifactIndex: 0)
-        #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
-        store.recategorizeProjectArtifact(groupIndex: 0, artifactIndex: 0)
         #expect(store.projectGroups[0].artifacts[0].safetyInfo.level == .medium)
     }
 }
