@@ -104,7 +104,7 @@ struct OnboardingFlowView: View {
     switch step {
     case .firstScan, .lookDeeper:
       return false
-    default:
+    case .welcome, .results:
       return true
     }
   }
@@ -158,7 +158,7 @@ struct OnboardingFlowView: View {
           exitToReviewPath()
         }
         .disabled(isResultsCleaning)
-      default:
+      case .firstScan, .lookDeeper:
         EmptyView()
       }
     }

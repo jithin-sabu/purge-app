@@ -168,8 +168,7 @@ around it is a project that produces it, like `app/build` next to
 Show all still lists every project, but folders of a project worked on in the
 last 6 months are Check First, so Clean Safe Items and scheduled cleans skip
 them. Each artifact keeps the reason it is Check First, so Reset to automatic
-and Recategorize land on Check First again. A path the user marked Safe by hand
-stays Safe.
+lands on Check First again. A path the user marked Safe by hand stays Safe.
 
 A closed project card used to show only the name and size, so a project held at
 Check First looked the same as a Safe one. The card header now shows the
