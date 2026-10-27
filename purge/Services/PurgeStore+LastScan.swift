@@ -97,7 +97,38 @@ nonisolated struct LastScanRows: Equatable {
     init() {}
 }
 
+/// What the last Large Files scan found, by kind, for the tab to draw under
+/// glass while it scans again (#283). Kinds and totals only: Large Files never
+/// saves a file name.
+nonisolated struct LargeFilesLastScan: Equatable {
+    struct Kind: Equatable {
+        var category: LargeFileCategory
+        var count: Int
+    }
+
+    var count: Int
+    var bytes: Int64
+    var scannedAt: Date
+    var kinds: [Kind]
+}
+
 extension PurgeStore {
+    /// The last Large Files scan while this session has listed no file yet. Nil
+    /// without a record that applies to today's filters, for a record saved before
+    /// kinds were, or for one that found nothing: the tab then keeps its plain
+    /// waiting state.
+    var largeFilesLastScan: LargeFilesLastScan? {
+        guard largeFiles.isEmpty, isAwaitingFirstLargeFileScan,
+              let record = applicableRecord(for: .largeFiles), record.count > 0,
+              let saved = record.largeFileCategories else { return nil }
+        let kinds = saved.compactMap { total -> LargeFilesLastScan.Kind? in
+            guard let category = LargeFileCategory(rawValue: total.category), total.count > 0 else { return nil }
+            return LargeFilesLastScan.Kind(category: category, count: total.count)
+        }
+        guard !kinds.isEmpty else { return nil }
+        return LargeFilesLastScan(count: record.count, bytes: record.bytes, scannedAt: record.completedAt, kinds: kinds)
+    }
+
     // MARK: Loading
 
     /// Reads the saved file and shows its rows for every list this session has

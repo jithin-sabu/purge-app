@@ -694,7 +694,11 @@ struct ContentView: View {
             }
             return pageSubtitle(count: devToolsSubtitleItemCount, bytes: devToolsSubtitleTotalSize)
         case .largeFiles:
-            return store.hasFullDiskAccess ? largeFilesPageSubtitle : nil
+            guard store.hasFullDiskAccess else { return nil }
+            if let lastScan = store.largeFilesLastScan {
+                return lastScanSubtitle(savedAt: lastScan.scannedAt, step: .largeFiles, isScanning: store.isScanningLargeFiles, now: now)
+            }
+            return largeFilesPageSubtitle
         case .uninstaller:
             guard store.hasFullDiskAccess else { return nil }
             let saved: String?
@@ -723,6 +727,10 @@ struct ContentView: View {
         now: Date
     ) -> String? {
         guard let savedAt = store.lastScanRows.oldestSavedAt(showing: sections) else { return nil }
+        return lastScanSubtitle(savedAt: savedAt, step: step, isScanning: isScanning, now: now)
+    }
+
+    private func lastScanSubtitle(savedAt: Date, step: ScanStep, isScanning: Bool, now: Date) -> String {
         let age = compactAgoText(from: savedAt, to: now)
         switch store.scanWaitStatus(for: step, isScanning: isScanning) {
         case .scanning, .waiting:

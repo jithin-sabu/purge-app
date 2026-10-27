@@ -212,6 +212,9 @@
 "From the last scan. Purge is checking it again." = "来自上次扫描。Purge 正在重新检查。";
 "Last scan found %lld files, %@, %@" = "上次扫描找到 %lld 个文件，%@，%@";
 "Last scan found 1 file, %@, %@" = "上次扫描找到 1 个文件，%@，%@";
+"Last scan: %lld files, %@, %@" = "上次扫描：%lld 个文件，%@，%@";
+"Last scan: 1 file, %@, %@" = "上次扫描：1 个文件，%@，%@";
+"Looking for large files again" = "正在重新查找大文件";
 "Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "正在运行，因此无法移除。请先在“模拟器”中将其关闭，然后重新扫描。";
 "Dependencies" = "依赖项";
 "Dev Tools" = "开发工具";
@@ -333,6 +336,8 @@
 "Seen in use by this app while it was installed" = "此应用安装期间曾被发现使用此文件夹";
 "These apps are open or back on this Mac, so their files were kept: %@." = "这些应用正在运行或已回到这台 Mac 上，因此已保留其文件：%@。";
 "This hidden folder in your home folder was written by %@, which is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app." = "个人文件夹中的这个隐藏文件夹由已卸载的 %@ 写入。它包含应用数据，而非可重建的缓存，不会自动恢复。请仅在确定不会重新安装此应用时移除。";
+"Up next, after %@" = "扫描完%@后开始";
+"Use Scan to look again" = "点按“扫描”重新查找";
 "macOS restore image. Only needed to set up a Mac, device or virtual machine. Safe to remove once setup is done." = "macOS 恢复映像。只在设置 Mac、设备或虚拟机时需要，设置完成后可以安全移除。";
 "Made with" = "用";
 "Manual category" = "手动分类";

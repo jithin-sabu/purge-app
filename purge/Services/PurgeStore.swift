@@ -601,7 +601,7 @@ final class PurgeStore: ObservableObject {
     private var completedLargeFileFilter: LargeFileFilterSnapshot?
     /// The rows the saved Large Files record counted, by id, from the last scan this
     /// session that ran to the end. Empty while the record is from an earlier launch.
-    private var recordedLargeFileSizes: [String: Int64] = [:]
+    private var recordedLargeFileSizes: [String: (bytes: Int64, category: LargeFileCategory)] = [:]
     private var installedAppsScanGeneration = 0
     private var orphanScanGeneration = 0
     private var commandLineToolScanGeneration = 0
@@ -2101,7 +2101,7 @@ final class PurgeStore: ObservableObject {
         hasCompletedLargeFileScan = true
         completedLargeFileFilter = filter
         stampScanRecords([.largeFiles], largeFileFilter: filter)
-        recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, $0.sizeBytes) }, uniquingKeysWith: { first, _ in first })
+        recordedLargeFileSizes = Dictionary(largeFiles.map { ($0.id, ($0.sizeBytes, $0.category)) }, uniquingKeysWith: { first, _ in first })
         // Delete extra copies trashes copies, so a file that can't go to the
         // Trash takes no part in a duplicate set.
         startDuplicateScan(for: largeFiles.filter(\.canMoveToTrash), generation: generation)
@@ -2380,8 +2380,9 @@ final class PurgeStore: ObservableObject {
         largeFileDuplicates.removeFiles(ids: ids)
         let recordedSizes = ids.compactMap { recordedLargeFileSizes.removeValue(forKey: $0) }
         guard !isSettled(.largeFiles), !recordedSizes.isEmpty, var record = scanRecords[.largeFiles] else { return }
-        record.bytes = max(0, record.bytes - recordedSizes.reduce(0, +))
+        record.bytes = max(0, record.bytes - recordedSizes.reduce(0) { $0 + $1.bytes })
         record.count = max(0, record.count - recordedSizes.count)
+        record.removeLargeFiles(recordedSizes)
         saveScanRecord(record, for: .largeFiles)
     }
 
@@ -4272,7 +4273,8 @@ final class PurgeStore: ObservableObject {
                     bytes: totals.bytes,
                     count: totals.count,
                     safeBytes: safeCleanupBytes(for: category),
-                    largeFileFilter: category == .largeFiles ? largeFileFilter : nil
+                    largeFileFilter: category == .largeFiles ? largeFileFilter : nil,
+                    largeFileCategories: category == .largeFiles ? ScanRecord.largeFileCategoryTotals(of: largeFiles) : nil
                 ),
                 for: category
             )
@@ -4294,11 +4296,16 @@ final class PurgeStore: ObservableObject {
                 guard var record = self.scanRecords[category] else { continue }
                 let totals = self.totals(for: category)
                 let safeBytes = self.safeCleanupBytes(for: category)
+                let largeFileCategories = category == .largeFiles
+                    ? ScanRecord.largeFileCategoryTotals(of: self.largeFiles)
+                    : record.largeFileCategories
                 guard record.bytes != totals.bytes || record.count != totals.count || record.safeBytes != safeBytes
+                    || record.largeFileCategories != largeFileCategories
                 else { continue }
                 record.bytes = totals.bytes
                 record.count = totals.count
                 record.safeBytes = safeBytes
+                record.largeFileCategories = largeFileCategories
                 self.saveScanRecord(record, for: category)
             }
         }
