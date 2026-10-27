@@ -9,8 +9,6 @@ struct OnboardingFlowView: View {
 
   @State private var step: OnboardingStep
   @StateObject private var revealController = OnboardingScanRevealController()
-  @State private var celebrationMovedToTrashBytes: Int64 = 0
-  @State private var pinnedCleanupCandidates: [PurgeStore.DeletionCandidate] = []
   @State private var resultsSnapshot: OnboardingResultsSnapshot?
   @State private var isResultsCleaning = false
   /// Where the flow goes once the look-deeper step is done: home after a clean, or
@@ -104,7 +102,7 @@ struct OnboardingFlowView: View {
 
   private var showsFooter: Bool {
     switch step {
-    case .firstScan, .cleaning, .celebration, .lookDeeper:
+    case .firstScan, .lookDeeper:
       return false
     default:
       return true
@@ -124,15 +122,6 @@ struct OnboardingFlowView: View {
         )
       case .results:
         OnboardingResultsStep(snapshot: resultsSnapshot)
-      case .cleaning:
-        OnboardingCleaningStep(pinnedCandidates: pinnedCleanupCandidates) { movedBytes in
-          celebrationMovedToTrashBytes = movedBytes
-          advance(to: .celebration)
-        }
-      case .celebration:
-        OnboardingCelebrationView(bytesMovedToTrash: celebrationMovedToTrashBytes) {
-          finishOnboarding()
-        }
       case .lookDeeper:
         LookDeeperView(
           context: .onboarding(didClean: didCleanBeforeLookDeeper),
@@ -236,7 +225,6 @@ struct OnboardingFlowView: View {
       return
     }
 
-    pinnedCleanupCandidates = candidates
     resultsSnapshot = OnboardingResultsSnapshot(
       totalBytes: candidates.reduce(Int64(0)) { $0 + $1.sizeBytes },
       categories: store.onboardingResultsCategories

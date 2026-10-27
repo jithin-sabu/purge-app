@@ -23,7 +23,6 @@ struct AppBrandMark: View {
 /// Sidebar column insets — brand mark and nav selection share the same leading edge.
 enum SidebarLayout {
     static let width: CGFloat = 240
-    static let horizontalInset: CGFloat = 8
     static let navRowInnerPadding: CGFloat = 8
     static let selectionCornerRadius: CGFloat = 8
     /// Clears unified title-bar traffic lights with a little breathing room below.
@@ -263,80 +262,6 @@ enum ScanQueueLabels {
     static let queued = String(localized: "Up next...")
 }
 
-/// Scan and Clean Selected — top-trailing actions on App Caches / Dev Tools pages.
-struct AppScanCleanActions: View {
-    let onScan: () -> Void
-    var scanPhase: PurgeStore.ScanPhase = .idle
-    var isQueued = false
-
-    var body: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            AppScanButton(scanPhase: scanPhase, isQueued: isQueued, action: onScan)
-            AppCleanSelectedButton()
-        }
-        .fixedSize()
-    }
-}
-
-struct AppScanButton: View {
-    let scanPhase: PurgeStore.ScanPhase
-    /// Waiting its turn behind another scan in the queue.
-    var isQueued = false
-    let action: () -> Void
-
-    private var isBusy: Bool {
-        isQueued || scanPhase == .scanning || scanPhase == .cancelling
-    }
-
-    private var title: String {
-        if isQueued { return ScanQueueLabels.queued }
-        switch scanPhase {
-        case .cancelling:
-            return String(localized: "Cancelling...")
-        case .scanning:
-            return String(localized: "Scanning...")
-        case .idle, .completed:
-            return String(localized: "Scan")
-        }
-    }
-
-    var body: some View {
-        Button(action: action) {
-            CleaningButtonLabel(
-                title: title,
-                systemImage: isBusy ? nil : "arrow.clockwise",
-                isCleaning: isBusy
-            )
-        }
-        .buttonStyle(.purge(.secondary))
-        .keyboardShortcut("r", modifiers: [.command])
-        .disabled(isBusy)
-    }
-}
-
-struct AppCleanSelectedButton: View {
-    @EnvironmentObject private var store: PurgeStore
-
-    var body: some View {
-        // Scan-tab selection lives in its own object; scope observes it so the
-        // count/label and enabled state update when a scan-tab selection changes.
-        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
-            Button {
-                store.showDeletionSheet = true
-            } label: {
-                AnimatedDeleteActionLabel(
-                    inactiveTitle: String(localized: "Clean Selected"),
-                    activeTitle: String(localized: "Clean Selected"),
-                    selectedCount: store.selectedCount,
-                    selectedBytes: store.selectedTotalBytes
-                )
-            }
-            .buttonStyle(.purge(.primary))
-            .disabled(store.selectedCount == 0 || store.isDeleting)
-        }
-    }
-}
-
 struct CleaningButtonLabel: View {
     let title: String
     let systemImage: String?
@@ -522,7 +447,7 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var confettiArmed: Bool
     @State private var displayedBytes: Int64
     @State private var displayedFraction: Double
-    @State private var tagline: TimeTagline.Selection?
+    @State private var showsTimeTagline: Bool
     @State private var appearedAt = Date()
     @State private var didBeginCompletion = false
     @State private var sequenceTask: Task<Void, Never>?
@@ -580,7 +505,7 @@ struct SafeCleanupCelebrationOverlay: View {
         _displayedFraction = State(initialValue: mountsComplete ? 1 : 0)
         // A run that removed nothing has no figure, so no timing line either.
         let showsFigure = mountsComplete && session.outcome.showsFigure
-        _tagline = State(initialValue: showsFigure ? TimeTagline.select(for: session.elapsedSeconds) : nil)
+        _showsTimeTagline = State(initialValue: showsFigure)
         _boltFlashToken = State(initialValue: showsFigure && session.elapsedSeconds < 3 ? 1 : 0)
         _completionHeaderShown = State(initialValue: mountsComplete)
         _headerAnchoredToTop = State(initialValue: mountsComplete && Self.wantsHeaderAtTop(session))
@@ -850,7 +775,7 @@ struct SafeCleanupCelebrationOverlay: View {
                                 .foregroundStyle(AppColors.textSecondary)
                         }
 
-                        if tagline != nil {
+                        if showsTimeTagline {
                             CompletionTimeTagline(
                                 elapsedSeconds: session.elapsedSeconds,
                                 boltFlashToken: boltFlashToken
@@ -1159,7 +1084,7 @@ struct SafeCleanupCelebrationOverlay: View {
     /// completion sequence ends, for a retry that finished during the dwell.
     private func reconcileHeaderWithOutcome() {
         if session.outcome.showsFigure, !checkmarkVisible {
-            tagline = TimeTagline.select(for: session.elapsedSeconds)
+            showsTimeTagline = true
             checkmarkProgress = 1
             checkmarkScale = 1
             subtitleShowsComplete = true
@@ -1226,9 +1151,6 @@ struct SafeCleanupCelebrationOverlay: View {
                 checkmarkProgress = 1
             }
         }
-        if let tagline {
-            TimeTagline.store(tagline)
-        }
         resolveSupportNudge()
     }
 
@@ -1287,10 +1209,7 @@ struct SafeCleanupCelebrationOverlay: View {
             // A run that removed nothing has no figure to settle, draw a
             // checkmark over, or time (#162).
             let showsFigure = session.outcome.showsFigure
-            tagline = showsFigure ? TimeTagline.select(for: session.elapsedSeconds) : nil
-            if let tagline {
-                TimeTagline.store(tagline)
-            }
+            showsTimeTagline = showsFigure
 
             if reduceMotion {
                 displayedBytes = finalBytes
@@ -1336,9 +1255,7 @@ struct SafeCleanupCelebrationOverlay: View {
             // Read again: an automatic retry of a locked app can finish during
             // the dwell and give the run a figure after all.
             if session.outcome.showsFigure {
-                if tagline == nil {
-                    tagline = TimeTagline.select(for: session.elapsedSeconds)
-                }
+                showsTimeTagline = true
                 withAnimation(.easeInOut(duration: 0.3)) {
                     subtitleShowsComplete = true
                 }

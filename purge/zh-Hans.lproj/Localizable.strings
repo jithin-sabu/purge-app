@@ -592,12 +592,12 @@
 "Setup didn't complete. Turn it on again to retry." = "设置未完成。请重新开启以重试。";
 "Show Purge in the menu bar" = "在菜单栏显示 Purge";
 "Show all" = "显示全部";
-"Show all items%@ (⌥⌘1)" = "显示全部项目%@（⌥⌘1）";
-"Show check-first items%@ (⌥⌘3)" = "显示需先检查的项目%@（⌥⌘3）";
+"Show all items (⌥⌘1)" = "显示全部项目（⌥⌘1）";
+"Show check-first items (⌥⌘3)" = "显示需先检查的项目（⌥⌘3）";
 "Show in Finder" = "在访达中显示";
 "Show in Finder\n%@" = "在访达中显示\n%@";
 "Show less" = "收起";
-"Show safe items%@ (⌥⌘2)" = "显示安全项目%@（⌥⌘2）";
+"Show safe items (⌥⌘2)" = "显示安全项目（⌥⌘2）";
 "Sifting…" = "正在筛选…";
 "Size (largest first)" = "大小（从大到小）";
 "Size (smallest first)" = "大小（从小到大）";

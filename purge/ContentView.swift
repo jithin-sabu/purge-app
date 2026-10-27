@@ -491,17 +491,13 @@ struct ContentView: View {
                     items: $store.cacheItems,
                     isLoading: store.isScanningGeneral || store.isScanningAll,
                     scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
             } else {
                 AppCachesView(
                     items: $store.cacheItems,
                     isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false
+                    scanPhase: store.scanPhase
                 )
             }
         }
@@ -516,16 +512,12 @@ struct ContentView: View {
                 DevToolsView(
                     isLoading: store.isScanningDeveloper || store.isScanningAll,
                     scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
             } else {
                 DevToolsView(
                     isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false
+                    scanPhase: store.scanPhase
                 )
             }
         }
@@ -543,15 +535,13 @@ struct ContentView: View {
                     isLoading: store.isScanningLargeFiles,
                     onScan: { store.requestScan(.largeFiles) },
                     searchQuery: $largeFilesSearchQuery,
-                    showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
             } else {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
                     onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery,
-                    showsPageHeader: false
+                    searchQuery: $largeFilesSearchQuery
                 )
             }
         }

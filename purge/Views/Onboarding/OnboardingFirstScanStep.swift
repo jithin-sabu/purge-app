@@ -26,14 +26,7 @@ struct OnboardingFirstScanStep: View {
       OnboardingFadingScrollView {
         LazyVStack(spacing: 8) {
           ForEach(revealController.revealedItems) { item in
-            ScanListRow(
-              icon: .brand(item.icon),
-              title: item.title,
-              subtitle: nil,
-              formattedSize: item.formattedSize,
-              primaryBadgeText: nil,
-              primaryBadgeTone: .neutral
-            )
+            ScanListRow(icon: item.icon, title: item.title, formattedSize: item.formattedSize)
             .frame(height: OnboardingLayout.scanRowHeight)
             .onboardingScrollEdgeBlur()
             .transition(Self.rowInsertionTransition)

@@ -6,7 +6,6 @@ import SwiftUI
 final class OnboardingScanRevealController: ObservableObject {
   @Published private(set) var revealedItems: [OnboardingScanFinding] = []
   @Published private(set) var simulatedProgress: Double = 0
-  @Published private(set) var isRevealComplete = false
   @Published private(set) var sourceScanFinished = false
 
   private var revealTask: Task<Void, Never>?
@@ -34,7 +33,6 @@ final class OnboardingScanRevealController: ObservableObject {
     cancel()
     revealedItems = []
     simulatedProgress = 0
-    isRevealComplete = false
     sourceScanFinished = false
     bufferedByID = [:]
     bufferOrder = []
@@ -57,7 +55,6 @@ final class OnboardingScanRevealController: ObservableObject {
           withAnimation(.easeInOut(duration: 0.4)) {
             simulatedProgress = 1
           }
-          isRevealComplete = true
           onReadyForResults()
           return
         }
