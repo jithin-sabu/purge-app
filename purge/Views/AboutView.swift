@@ -76,8 +76,7 @@ struct AboutView: View {
                     .font(AppStyle.Typography.callout.weight(.medium))
                     .foregroundStyle(AppColors.textSecondary)
             } else {
-                Text("Version \(appVersion)")
-                    .font(AppStyle.Typography.callout)
+                Text(figures: String(localized: "Version \(appVersion)"), style: AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
             }
 
@@ -244,8 +243,7 @@ struct AboutView: View {
             }
             .font(AppStyle.Typography.metadata)
 
-            Text(footerVersionText)
-                .font(AppStyle.Typography.metadata)
+            Text(figures: footerVersionText, style: AppStyle.Typography.metadata)
                 .foregroundStyle(AppColors.textTertiary)
         }
         .frame(maxWidth: .infinity)
