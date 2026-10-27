@@ -2,7 +2,9 @@ name: Update Homebrew cask
 
 on:
   release:
-    types: [published]
+    # released fires for a full release and for a prerelease promoted later.
+    # published fires once, for the prerelease too, and never again.
+    types: [released]
 
 permissions:
   contents: read
