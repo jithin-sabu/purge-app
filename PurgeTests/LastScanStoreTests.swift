@@ -50,6 +50,27 @@ struct LastScanStoreTests {
         #expect(store.overviewPhase(for: .appCaches) == .notScanned)
     }
 
+    /// A Select All that somehow carried a saved row's id must not tick it, or the
+    /// live row would land already ticked.
+    @Test
+    func savedIDsNeverEnterTheSelection() async throws {
+        let (fake, file) = try setUp()
+        defer { tearDown(fake, file) }
+        let store = fake.makeStore(lastScanStore: LastScanStore(fileURL: file, appBuild: build))
+        await store.loadLastScan()
+        let savedCache = try #require(store.lastScanRows.cacheItems.first)
+        let savedLeftover = try #require(store.lastScanRows.orphanLeftovers.first)
+
+        store.setAllCachesSelected(true, ids: [savedCache.id])
+        store.setAllOrphansSelected(true, ids: [savedLeftover.id])
+
+        #expect(store.scanSelection.cacheIDs.isEmpty)
+        #expect(store.orphanSelectedIDs.isEmpty)
+        // The live twin lands unticked.
+        store.cacheItems = [savedCache]
+        #expect(store.selectedGeneralDeletionCandidates.isEmpty)
+    }
+
     // MARK: Following the scan
 
     @Test

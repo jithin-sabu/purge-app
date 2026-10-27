@@ -90,6 +90,8 @@ struct ScanWaitCopy {
 struct ScanStatusPlaceholder: View {
     let status: ScanWaitStatus
     let copy: ScanWaitCopy
+    /// What the last scan found, for a tab that keeps only its total (#283).
+    var lastScanLine: String? = nil
 
     /// The page subtitle while the tab waits, in place of a count of nothing.
     static func subtitle(for status: ScanWaitStatus, copy: ScanWaitCopy) -> String {
@@ -111,6 +113,12 @@ struct ScanStatusPlaceholder: View {
             Text(detail)
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
+            if let lastScanLine {
+                Text(lastScanLine)
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 24)

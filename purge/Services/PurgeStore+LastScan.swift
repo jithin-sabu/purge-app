@@ -47,9 +47,7 @@ nonisolated struct LastScanRows: Equatable {
         case .simulators: simulatorDevices = []
         case .runtimes: simulatorRuntimes = []
         case .projects: projectGroups = []
-        case .apps:
-            installedApps = []
-            removableBytesByAppPath = [:]
+        case .apps: installedApps = []
         case .leftovers: orphanLeftovers = []
         }
     }
@@ -154,12 +152,18 @@ extension PurgeStore {
         guard !lastScanRows.isEmpty(section) else { return }
         switch section {
         case .appCaches:
+            let liveIDs = Set(cacheItems.map(\.id))
             let live = Set(cacheItems.flatMap(\.standardizedPaths))
-            let kept = lastScanRows.cacheItems.filter { !$0.standardizedPaths.contains(where: live.contains) }
+            let kept = lastScanRows.cacheItems.filter {
+                !liveIDs.contains($0.id) && !$0.standardizedPaths.contains(where: live.contains)
+            }
             if kept.count != lastScanRows.cacheItems.count { lastScanRows.cacheItems = kept }
         case .devTools:
+            let liveIDs = Set(devTools.map(\.id))
             let live = Set(devTools.flatMap(\.standardizedPaths))
-            let kept = lastScanRows.devTools.filter { !$0.standardizedPaths.contains(where: live.contains) }
+            let kept = lastScanRows.devTools.filter {
+                !liveIDs.contains($0.id) && !$0.standardizedPaths.contains(where: live.contains)
+            }
             if kept.count != lastScanRows.devTools.count { lastScanRows.devTools = kept }
         case .simulators:
             let live = Set(simulatorDevices.map(\.id)).union(runningSimulatorDevices.map(\.id))
@@ -202,6 +206,10 @@ extension PurgeStore {
             withAnimation(.easeInOut(duration: 0.25)) { lastScanRows = rows }
         }
         guard savable else { return }
+        // Every app's own total is measured now, so the saved ones are done too.
+        if sections.contains(.apps), !lastScanRows.removableBytesByAppPath.isEmpty {
+            lastScanRows.removableBytesByAppPath = [:]
+        }
         let finishedAt = Date()
         for section in sections {
             lastScanSavable.insert(section)

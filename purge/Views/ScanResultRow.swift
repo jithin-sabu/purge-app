@@ -62,6 +62,9 @@ struct ScanResultRow: View {
     var showsLeadingIcon: Bool = true
     /// When true, reserves one explanation line instead of two (e.g. simulator device rows).
     var usesCompactExplanation: Bool = false
+    /// A row from the last scan's saved file (#283): dimmed, a clock where the
+    /// checkbox goes, and no way to select it until the scan finds it again.
+    var isFromLastScan: Bool = false
 
     @Environment(\.scanRowPlaceholderAppearance) private var rendersAsPlaceholder
     @State private var isContextMenuActive = false
@@ -79,15 +82,15 @@ struct ScanResultRow: View {
     }
 
     private var canSelectForBulk: Bool {
-        allowsBulkSelection
+        allowsBulkSelection && !isFromLastScan
     }
 
     private var showsRowCheckbox: Bool {
-        showsBulkCheckbox && allowsBulkSelection
+        showsBulkCheckbox && allowsBulkSelection && !isFromLastScan
     }
 
     private var canTapRowToToggleSelection: Bool {
-        showsBulkCheckbox && allowsBulkSelection
+        showsBulkCheckbox && allowsBulkSelection && !isFromLastScan
     }
 
     private var hasExtraBadges: Bool {
@@ -132,7 +135,8 @@ struct ScanResultRow: View {
         isMetadataPending: Bool = false,
         showsCardChrome: Bool = true,
         showsLeadingIcon: Bool = true,
-        usesCompactExplanation: Bool = false
+        usesCompactExplanation: Bool = false,
+        isFromLastScan: Bool = false
     ) {
         self.isSelected = isSelected
         self.onToggle = onToggle
@@ -153,6 +157,7 @@ struct ScanResultRow: View {
         self.showsCardChrome = showsCardChrome
         self.showsLeadingIcon = showsLeadingIcon
         self.usesCompactExplanation = usesCompactExplanation
+        self.isFromLastScan = isFromLastScan
     }
 
     @ViewBuilder
@@ -212,7 +217,9 @@ struct ScanResultRow: View {
     @ViewBuilder
     private var rowBody: some View {
         let stack = HStack(alignment: .center, spacing: 12) {
-            if showsRowCheckbox {
+            if isFromLastScan, showsBulkCheckbox {
+                LastScanRowMarker()
+            } else if showsRowCheckbox {
                 // Non-interactive: the row's own tap gesture publishes selection.
                 // An interactive Toggle here routes clicks through AppKit's control
                 // path, which scrolls the clicked row into view and shifts the list.
@@ -247,6 +254,10 @@ struct ScanResultRow: View {
                 .accessibilityAction {
                     onToggle()
                 }
+        } else if isFromLastScan {
+            stack
+                .contentShape(Rectangle())
+                .help(LastScanRowMarker.help)
         } else {
             stack
         }
@@ -644,6 +655,20 @@ struct ScanRowContextMenu: NSViewRepresentable {
 }
 
 // MARK: - Row chrome
+
+/// Sits where a row's checkbox goes when the row is from the last scan (#283), so
+/// the column keeps its width and nothing shifts when the live row takes its place.
+struct LastScanRowMarker: View {
+    static let help = String(localized: "From the last scan. Purge is checking it again.")
+
+    var body: some View {
+        Image(systemName: "clock.arrow.circlepath")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(AppColors.textTertiary)
+            .frame(width: 14)
+            .accessibilityLabel(Self.help)
+    }
+}
 
 struct ScanRowCardChrome: ViewModifier {
     var showsCardChrome: Bool = true

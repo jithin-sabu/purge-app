@@ -667,8 +667,24 @@ struct ContentView: View {
         case .overview:
             return overviewPageSubtitle(now: now)
         case .appCaches:
+            if let saved = lastScanSubtitle(
+                showing: [.appCaches],
+                step: .cachesAndDevTools,
+                isScanning: store.isScanningGeneral || store.isScanningAll,
+                now: now
+            ) {
+                return saved
+            }
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
+            if let saved = lastScanSubtitle(
+                showing: [.devTools, .simulators, .runtimes, .projects],
+                step: .cachesAndDevTools,
+                isScanning: store.isScanningDeveloper || store.isScanningProjects || store.isScanningAll,
+                now: now
+            ) {
+                return saved
+            }
             if store.isAwaitingFirstDevToolsScan {
                 let isScanning = store.isScanningDeveloper || store.isScanningAll
                 return ScanStatusPlaceholder.subtitle(
@@ -680,11 +696,39 @@ struct ContentView: View {
         case .largeFiles:
             return store.hasFullDiskAccess ? largeFilesPageSubtitle : nil
         case .uninstaller:
-            return store.hasFullDiskAccess ? uninstallerPageSubtitle : nil
+            guard store.hasFullDiskAccess else { return nil }
+            let saved: String?
+            switch store.uninstallSection {
+            case .installedApps:
+                saved = lastScanSubtitle(showing: [.apps], step: .apps, isScanning: store.isScanningInstalledApps, now: now)
+            case .leftovers:
+                saved = lastScanSubtitle(showing: [.leftovers], step: .leftovers, isScanning: store.isScanningOrphans, now: now)
+            case .commandLineTools:
+                saved = nil
+            }
+            return saved ?? uninstallerPageSubtitle
         case .settings:
             return nil
         case .about:
             return nil
+        }
+    }
+
+    /// While a tab still shows rows from the last scan (#283), its subtitle dates them
+    /// in place of a count of what this scan has found so far.
+    private func lastScanSubtitle(
+        showing sections: [LastScanSection],
+        step: ScanStep,
+        isScanning: Bool,
+        now: Date
+    ) -> String? {
+        guard let savedAt = store.lastScanRows.oldestSavedAt(showing: sections) else { return nil }
+        let age = compactAgoText(from: savedAt, to: now)
+        switch store.scanWaitStatus(for: step, isScanning: isScanning) {
+        case .scanning, .waiting:
+            return String(localized: "From the last scan, \(age) · Checking again…")
+        case .notScanned:
+            return String(localized: "From the last scan, \(age)")
         }
     }
 

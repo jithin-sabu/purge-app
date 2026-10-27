@@ -207,6 +207,11 @@
 "Deleted apps' leftovers" = "已删除应用的残留文件";
 "Deleted-app reviews paused" = "已删除应用检查已暂停";
 "Deletes its apps and data." = "会删除此设备的应用和数据。";
+"From the last scan, %@" = "来自上次扫描（%@）";
+"From the last scan, %@ · Checking again…" = "来自上次扫描（%@）· 正在重新检查…";
+"From the last scan. Purge is checking it again." = "来自上次扫描。Purge 正在重新检查。";
+"Last scan found %lld files, %@, %@" = "上次扫描找到 %lld 个文件，%@，%@";
+"Last scan found 1 file, %@, %@" = "上次扫描找到 1 个文件，%@，%@";
 "Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "正在运行，因此无法移除。请先在“模拟器”中将其关闭，然后重新扫描。";
 "Dependencies" = "依赖项";
 "Dev Tools" = "开发工具";

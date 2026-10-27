@@ -2598,9 +2598,12 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Only rows on the live list can be ticked: a leftover from the last scan's
+    /// saved file (#283) must not land ticked when the scan finds it again.
     func setAllOrphansSelected(_ selected: Bool, ids: [String]) {
         if selected {
-            orphanSelectedIDs.formUnion(ids)
+            let live = Set(orphanLeftovers.map(\.id))
+            orphanSelectedIDs.formUnion(ids.filter(live.contains))
         } else {
             orphanSelectedIDs.subtract(ids)
         }
@@ -5409,8 +5412,15 @@ final class PurgeStore: ObservableObject {
         if isSelected { scanSelection.cacheIDs.insert(id) } else { scanSelection.cacheIDs.remove(id) }
     }
 
+    /// Only rows on the live list can be ticked, never one from the last scan's
+    /// saved file (#283).
     func setAllCachesSelected(_ selected: Bool, ids: [String]) {
-        if selected { scanSelection.cacheIDs.formUnion(ids) } else { scanSelection.cacheIDs.subtract(ids) }
+        if selected {
+            let live = Set(cacheItems.map(\.id))
+            scanSelection.cacheIDs.formUnion(ids.filter(live.contains))
+        } else {
+            scanSelection.cacheIDs.subtract(ids)
+        }
     }
 
     func setDevToolSelected(id: String, isSelected: Bool) {

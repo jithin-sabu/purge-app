@@ -147,7 +147,9 @@ struct UninstallView: View {
     }
 
     private var showsLeftoversSegment: Bool {
-        !store.orphanLeftovers.isEmpty || (section == .leftovers && store.isLeftoversScanPending)
+        !store.orphanLeftovers.isEmpty
+            || !store.lastScanRows.orphanLeftovers.isEmpty
+            || (section == .leftovers && store.isLeftoversScanPending)
     }
 
     /// The Command-line tools segment appears once its scan finds a tool (#225).
@@ -237,8 +239,16 @@ struct UninstallView: View {
         SortOption(rawValue: leftoversSortRaw) ?? .sizeDesc
     }
 
+    /// Leftovers from the last scan (#283) this scan has not found again yet.
+    private var lastScanLeftovers: [UninstallItem] {
+        let saved = store.lastScanRows.orphanLeftovers
+        guard !saved.isEmpty else { return [] }
+        let live = Set(store.orphanLeftovers.map(\.path.path))
+        return saved.filter { !live.contains($0.path.path) }
+    }
+
     private var sortedOrphans: [UninstallItem] {
-        let items = store.orphanLeftovers
+        let items = store.orphanLeftovers + lastScanLeftovers
         switch leftoversSort {
         case .sizeDesc: return items.sorted { $0.sizeBytes > $1.sizeBytes }
         case .sizeAsc: return items.sorted { $0.sizeBytes < $1.sizeBytes }
@@ -255,7 +265,8 @@ struct UninstallView: View {
     /// Caches / Dev Tools chrome), then the rows in their own scroll below.
     @ViewBuilder
     private var leftoversScroll: some View {
-        if store.orphanLeftovers.isEmpty {
+        let savedPaths = Set(lastScanLeftovers.map(\.path.path))
+        if store.orphanLeftovers.isEmpty && savedPaths.isEmpty {
             if store.isLeftoversScanPending {
                 leftoversSkeleton
             } else {
@@ -272,15 +283,24 @@ struct UninstallView: View {
                             UninstallSectionHeader(title: section.reason.leftoverSectionTitle)
                                 .padding(.top, index == 0 ? 0 : AppStyle.Spacing.small)
                             ForEach(section.items) { item in
-                                UninstallItemRow(
-                                    item: item,
-                                    isSelected: Binding(
-                                        get: { store.orphanSelectedIDs.contains(item.id) },
-                                        set: { _ in store.toggleOrphanSelected(id: item.id) }
-                                    ),
-                                    togglesOnRowTap: true,
-                                    showsShortLocation: true
-                                )
+                                if savedPaths.contains(item.path.path) {
+                                    UninstallItemRow(
+                                        item: item,
+                                        isSelected: .constant(false),
+                                        showsShortLocation: true,
+                                        isFromLastScan: true
+                                    )
+                                } else {
+                                    UninstallItemRow(
+                                        item: item,
+                                        isSelected: Binding(
+                                            get: { store.orphanSelectedIDs.contains(item.id) },
+                                            set: { _ in store.toggleOrphanSelected(id: item.id) }
+                                        ),
+                                        togglesOnRowTap: true,
+                                        showsShortLocation: true
+                                    )
+                                }
                             }
                         }
                     }
@@ -336,7 +356,30 @@ struct UninstallView: View {
     }
 
     private var filteredApps: [InstalledApp] {
-        sortedApps(Self.matchingApps(store.installedApps, query: appSearchQuery, focus: focusedSearch))
+        sortedApps(Self.matchingApps(store.installedApps + lastScanApps, query: appSearchQuery, focus: focusedSearch))
+    }
+
+    /// Apps from the last scan (#283) this scan has not listed yet, by bundle path.
+    private var lastScanApps: [InstalledApp] {
+        let saved = store.lastScanRows.installedApps
+        guard !saved.isEmpty else { return [] }
+        let live = Set(store.installedApps.map(\.bundleURL.path))
+        return saved.filter { !live.contains($0.bundleURL.path) }
+    }
+
+    /// The size an app's row shows. A saved app shows its total from the last scan,
+    /// and so does a live app until this session has measured it, dimmed in both
+    /// cases, so the figure doesn't blank out and come back.
+    private func displayedSize(for app: InstalledApp, isFromLastScan: Bool) -> AppRowSize {
+        let saved = store.lastScanRows.removableBytesByAppPath[app.bundleURL.path]
+        if isFromLastScan {
+            return AppRowSize(bytes: saved ?? app.bundleSizeBytes, isPending: false, isFromLastScan: true)
+        }
+        if let saved, store.removableBytesByAppID[app.id] == nil {
+            return AppRowSize(bytes: saved, isPending: false, isFromLastScan: true)
+        }
+        let bytes = store.removableBytes(for: app)
+        return AppRowSize(bytes: bytes, isPending: bytes == 0 && !store.hasMeasuredAllRemovableTotals, isFromLastScan: false)
     }
 
     /// The apps the search shows: the focused installation alone while the box
@@ -510,19 +553,20 @@ struct UninstallView: View {
     // MARK: App collection
 
     private var isLoadingApps: Bool {
-        store.isScanningInstalledApps && store.installedApps.isEmpty
+        store.isScanningInstalledApps && store.installedApps.isEmpty && store.lastScanRows.installedApps.isEmpty
     }
 
     /// The apps list has not been found yet this session. Sort, search and view
     /// mode have nothing to act on, so they wait; the section tabs stay, since
     /// Leftovers and Command-line tools may already have results.
     private var isAwaitingFirstAppsScan: Bool {
-        section == .installedApps && store.installedApps.isEmpty && !store.hasCompletedInstalledAppsScan
+        section == .installedApps && store.installedApps.isEmpty && store.lastScanRows.installedApps.isEmpty
+            && !store.hasCompletedInstalledAppsScan
     }
 
     @ViewBuilder
     private var appsContent: some View {
-        if store.installedApps.isEmpty && !store.isScanningInstalledApps {
+        if store.installedApps.isEmpty && lastScanApps.isEmpty && !store.isScanningInstalledApps {
             if store.hasCompletedInstalledAppsScan {
                 emptyState(
                     symbol: "app.badge",
@@ -548,7 +592,7 @@ struct UninstallView: View {
 
     @ViewBuilder
     private var loadedApps: some View {
-        if store.installedApps.isEmpty {
+        if store.installedApps.isEmpty && lastScanApps.isEmpty {
             // Held behind the skeleton while the first scan runs; nothing to show.
             Color.clear
         } else if filteredApps.isEmpty {
@@ -568,18 +612,19 @@ struct UninstallView: View {
     }
 
     private var loadedList: some View {
-        ScrollView {
+        let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
+        return ScrollView {
             // Non-lazy so every row stays in the hierarchy and can slide to its
             // new index on sort. LazyVStack treats reorders as remove + insert.
             VStack(spacing: 6) {
                 ForEach(filteredApps) { app in
+                    let isFromLastScan = savedPaths.contains(app.bundleURL.path)
                     AppListRow(
                         app: app,
-                        totalBytes: store.removableBytes(for: app),
-                        isSizePending: store.removableBytes(for: app) == 0
-                            && !store.hasMeasuredAllRemovableTotals,
+                        size: displayedSize(for: app, isFromLastScan: isFromLastScan),
                         activityLabel: activityLabel(for: app),
-                        isSelected: store.selectedAppIDs.contains(app.id)
+                        isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
+                        isFromLastScan: isFromLastScan
                     ) {
                         store.toggleAppSelected(id: app.id)
                     }
@@ -598,20 +643,21 @@ struct UninstallView: View {
     }
 
     private var loadedGrid: some View {
-        ScrollView {
+        let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
+        return ScrollView {
             // Non-lazy so tiles keep identity across sort and slide in place.
             // LazyVGrid recycles cells and makes reorders look like fly-ins.
             VStack(spacing: 12) {
                 ForEach(gridRows, id: \.startIndex) { row in
                     HStack(spacing: 12) {
                         ForEach(row.apps) { app in
+                            let isFromLastScan = savedPaths.contains(app.bundleURL.path)
                             AppTile(
                                 app: app,
-                                totalBytes: store.removableBytes(for: app),
-                                isSizePending: store.removableBytes(for: app) == 0
-                                    && !store.hasMeasuredAllRemovableTotals,
+                                size: displayedSize(for: app, isFromLastScan: isFromLastScan),
                                 activityLabel: activityLabel(for: app),
-                                isSelected: store.selectedAppIDs.contains(app.id)
+                                isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
+                                isFromLastScan: isFromLastScan
                             ) {
                                 store.toggleAppSelected(id: app.id)
                             }
@@ -771,18 +817,25 @@ private struct UninstallItemRow: View {
     /// Leftovers rows name only the folder the item sits in; the full path is
     /// in the tooltip and Reveal in Finder.
     var showsShortLocation = false
+    /// A leftover from the last scan (#283): dimmed, a clock for the checkbox, and
+    /// nothing to tick until the scan finds it again.
+    var isFromLastScan = false
     @State private var isContextMenuActive = false
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            Toggle("", isOn: $isSelected)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .tint(AppColors.actionPrimary)
-                .disabled(isToggleDisabled)
-                // Leftover list rows select from the whole-row tap, like App Caches.
-                // Review-sheet rows keep a live checkbox because they have no row tap.
-                .allowsHitTesting(!togglesOnRowTap)
+            if isFromLastScan {
+                LastScanRowMarker()
+            } else {
+                Toggle("", isOn: $isSelected)
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .tint(AppColors.actionPrimary)
+                    .disabled(isToggleDisabled)
+                    // Leftover list rows select from the whole-row tap, like App Caches.
+                    // Review-sheet rows keep a live checkbox because they have no row tap.
+                    .allowsHitTesting(!togglesOnRowTap)
+            }
 
             Image(systemName: item.category.symbolName)
                 .foregroundStyle(AppColors.textSecondary)
@@ -834,8 +887,9 @@ private struct UninstallItemRow: View {
             RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
-        .help(showsShortLocation ? displayDirectoryPath(for: item.path) : "")
-        .modifier(OptionalRowTap(enabled: togglesOnRowTap && !isToggleDisabled) {
+        .opacity(isFromLastScan ? 0.55 : 1)
+        .help(isFromLastScan ? LastScanRowMarker.help : showsShortLocation ? displayDirectoryPath(for: item.path) : "")
+        .modifier(OptionalRowTap(enabled: togglesOnRowTap && !isToggleDisabled && !isFromLastScan) {
             isSelected.toggle()
         })
         .finderRevealMenu(isMenuActive: $isContextMenuActive) {
@@ -877,14 +931,27 @@ private struct OptionalRowTap: ViewModifier {
 
 // MARK: - App list row
 
+/// What an app row shows for its size.
+private struct AppRowSize {
+    let bytes: Int64
+    /// No size to show yet (Spotlight and `du` pending).
+    let isPending: Bool
+    /// The total from the last scan (#283), shown dimmed until this one measures it.
+    let isFromLastScan: Bool
+}
+
 private struct AppListRow: View {
     let app: InstalledApp
-    let totalBytes: Int64
-    let isSizePending: Bool
+    let size: AppRowSize
     /// Set while a date sort is active. Nil for name and size.
     let activityLabel: String?
     let isSelected: Bool
+    /// An app from the last scan (#283), shown read only until this scan lists it.
+    var isFromLastScan = false
     let onToggle: () -> Void
+
+    private var totalBytes: Int64 { size.bytes }
+    private var isSizePending: Bool { size.isPending }
 
     @State private var isHovering = false
     @State private var isContextMenuActive = false
@@ -901,12 +968,16 @@ private struct AppListRow: View {
         HStack(spacing: AppStyle.Spacing.small) {
             // Same pattern as App Caches: a native checkbox for appearance, with
             // selection driven by the whole-row tap so AppKit doesn't steal focus.
-            Toggle("", isOn: .constant(isSelected))
-                .labelsHidden()
-                .toggleStyle(.checkbox)
-                .tint(AppColors.actionPrimary)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            if isFromLastScan {
+                LastScanRowMarker()
+            } else {
+                Toggle("", isOn: .constant(isSelected))
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .tint(AppColors.actionPrimary)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
 
             Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
                 .resizable()
@@ -938,7 +1009,7 @@ private struct AppListRow: View {
 
             Text(isSizePending ? "…" : formatBytes(totalBytes))
                 .font(AppStyle.Typography.metadataEmphasis.numbers)
-                .foregroundStyle(AppColors.textSecondary)
+                .foregroundStyle(size.isFromLastScan ? AppColors.textTertiary : AppColors.textSecondary)
                 .monospacedDigit()
                 .contentTransition(.numericText())
                 .frame(minWidth: 72, alignment: .trailing)
@@ -954,17 +1025,18 @@ private struct AppListRow: View {
             RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         )
+        .opacity(isFromLastScan ? 0.55 : 1)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onToggle)
-        .onHover { isHovering = $0 }
-        .help(app.name)
+        .onTapGesture { if !isFromLastScan { onToggle() } }
+        .onHover { isHovering = $0 && !isFromLastScan }
+        .help(isFromLastScan ? LastScanRowMarker.help : app.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")\(app.homebrewCask == nil ? "" : ", " + String(localized: "Installed by Homebrew"))"
         )
-        .accessibilityValue(isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
+        .accessibilityValue(isFromLastScan ? LocalizedStringKey(LastScanRowMarker.help) : isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction(.default, onToggle)
+        .accessibilityAction(.default) { if !isFromLastScan { onToggle() } }
         .finderRevealMenu(isMenuActive: $isContextMenuActive) {
             [ScanRowLocation(url: app.bundleURL, sizeBytes: app.bundleSizeBytes)]
         }
@@ -1017,14 +1089,17 @@ private enum AppTileMetrics {
 private struct AppTile: View {
     let app: InstalledApp
     /// Bundle plus all matched leftovers once measured, bundle size until then.
-    let totalBytes: Int64
-    /// True while this tile still has no size to show (Spotlight and `du` pending).
-    let isSizePending: Bool
+    let size: AppRowSize
     /// Relative date while a date sort is active. Nil for name and size, so the
     /// tile stays the skeleton height.
     let activityLabel: String?
     let isSelected: Bool
+    /// An app from the last scan (#283), shown read only until this scan lists it.
+    var isFromLastScan = false
     let onToggle: () -> Void
+
+    private var totalBytes: Int64 { size.bytes }
+    private var isSizePending: Bool { size.isPending }
 
     @State private var isHovering = false
     @State private var isContextMenuActive = false
@@ -1044,7 +1119,7 @@ private struct AppTile: View {
 
                 Text(isSizePending ? "…" : formatBytes(totalBytes))
                     .font(AppStyle.Typography.metadata.numbers)
-                    .foregroundStyle(AppColors.textSecondary)
+                    .foregroundStyle(size.isFromLastScan ? AppColors.textTertiary : AppColors.textSecondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
 
@@ -1083,18 +1158,19 @@ private struct AppTile: View {
                     lineWidth: isSelected ? 2 : 1
                 )
         }
+        .opacity(isFromLastScan ? 0.55 : 1)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onToggle)
-        .onHover { isHovering = $0 }
+        .onTapGesture { if !isFromLastScan { onToggle() } }
+        .onHover { isHovering = $0 && !isFromLastScan }
         // Full name on hover, since the tile truncates longer ones.
-        .help(activityLabel.map { "\(app.name), \($0)" } ?? app.name)
+        .help(isFromLastScan ? LastScanRowMarker.help : activityLabel.map { "\(app.name), \($0)" } ?? app.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
         )
-        .accessibilityValue(isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
+        .accessibilityValue(isFromLastScan ? LocalizedStringKey(LastScanRowMarker.help) : isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction(.default, onToggle)
+        .accessibilityAction(.default) { if !isFromLastScan { onToggle() } }
         .finderRevealMenu(isMenuActive: $isContextMenuActive) {
             [ScanRowLocation(url: app.bundleURL, sizeBytes: app.bundleSizeBytes)]
         }
@@ -1103,7 +1179,14 @@ private struct AppTile: View {
 
     @ViewBuilder
     private var selectionIndicator: some View {
-        if isSelected {
+        if isFromLastScan {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(AppColors.textTertiary)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(AppColors.fillSecondary).padding(1))
+                .accessibilityHidden(true)
+        } else if isSelected {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 20))
                 .foregroundStyle(AppColors.actionPrimary)

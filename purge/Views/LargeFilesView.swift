@@ -438,11 +438,22 @@ struct LargeFilesView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// Large Files keeps only its total between launches, never the file list
+    /// (#283), so while it scans again the wait says what it found last time.
+    private var lastScanLine: String? {
+        guard let record = store.applicableRecord(for: .largeFiles), record.count > 0 else { return nil }
+        let size = formatBytes(record.bytes)
+        let age = compactAgoText(from: record.completedAt, to: Date())
+        return record.count == 1
+            ? String(localized: "Last scan found 1 file, \(size), \(age)")
+            : String(localized: "Last scan found \(record.count) files, \(size), \(age)")
+    }
+
     @ViewBuilder
     private var listOrPlaceholder: some View {
         if store.largeFiles.isEmpty {
             if isAwaitingFirstScan || scanWaitStatus == .scanning {
-                ScanStatusPlaceholder(status: scanWaitStatus, copy: .largeFiles)
+                ScanStatusPlaceholder(status: scanWaitStatus, copy: .largeFiles, lastScanLine: lastScanLine)
             } else {
                 emptyState
             }
