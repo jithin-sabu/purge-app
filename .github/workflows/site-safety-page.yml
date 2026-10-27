@@ -25,6 +25,12 @@ permissions:
 jobs:
   build:
     name: Build /safety from this branch
+    # Pull requests from forks and Dependabot get no repository secrets, so
+    # they can't read the private site. Their change is checked after merge,
+    # on the push to main.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

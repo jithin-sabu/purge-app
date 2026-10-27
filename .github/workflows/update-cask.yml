@@ -2,44 +2,72 @@ name: Update Homebrew cask
 
 on:
   release:
-    types: [published]
+    # released fires for a full release and for a prerelease promoted later.
+    # published fires once, for the prerelease too, and never again.
+    types: [released]
+
+permissions:
+  contents: read
 
 jobs:
   update-cask:
+    # Homebrew users get every update, so only full releases reach the tap.
+    if: ${{ !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     steps:
+      # The tag reaches shell and sed below, so check its shape before using it.
       - name: Work out the version
         id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag '$TAG' is not vX.Y.Z, so the cask was not updated."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Download the DMG and hash it
         id: hash
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
-          VERSION="${{ steps.v.outputs.version }}"
           URL="https://github.com/jithin-sabu/purge-app/releases/download/v${VERSION}/Purgev${VERSION}.dmg"
-          curl -sL "$URL" -o purge.dmg
+          curl -fsSL --retry 3 "$URL" -o purge.dmg
           echo "sha256=$(sha256sum purge.dmg | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Check out the tap
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: jithin-sabu/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
+          persist-credentials: false
 
       - name: Update the cask
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          SHA: ${{ steps.hash.outputs.sha256 }}
         run: |
-          VERSION="${{ steps.v.outputs.version }}"
-          SHA="${{ steps.hash.outputs.sha256 }}"
           FILE="tap/Casks/purge.rb"
           sed -i "s/  version \".*\"/  version \"${VERSION}\"/" "$FILE"
           sed -i "s/  sha256 \".*\"/  sha256 \"${SHA}\"/" "$FILE"
+          # sed changes nothing when the cask's layout moves, so check it took.
+          grep -Fq "  version \"${VERSION}\"" "$FILE" \
+            || { echo "::error::$FILE has no version line for $VERSION after the update."; exit 1; }
+          grep -Fq "  sha256 \"${SHA}\"" "$FILE" \
+            || { echo "::error::$FILE has no sha256 line for $SHA after the update."; exit 1; }
 
+      # The tap token is only handed to the push, not left in tap/.git/config.
       - name: Commit and push
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Casks/purge.rb
-          git commit -m "purge ${{ steps.v.outputs.version }}" || echo "Nothing to update"
-          git push
+          git commit -m "purge ${VERSION}" || echo "Nothing to update"
+          git push "https://x-access-token:${TAP_TOKEN}@github.com/jithin-sabu/homebrew-tap.git" HEAD
