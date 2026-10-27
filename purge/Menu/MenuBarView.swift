@@ -133,7 +133,8 @@ struct MenuBarContentView: View {
                 HStack(spacing: 8) {
                     HStack(spacing: 0) {
                         Text(menuBytes(bytes))
-                            .font(AppStyle.Typography.sectionTitle)
+                            .font(AppStyle.Typography.sectionTitle.numbers)
+                            .monospacedDigit()
                             .foregroundStyle(AppColors.textPrimary)
                         Text(" to clean")
                             .font(AppStyle.Typography.body)
@@ -251,8 +252,8 @@ private struct ScannedAgoLabel: View {
         HStack(spacing: 3) {
             Image(systemName: "clock")
                 .font(.system(size: 10, weight: .medium))
-            Text(compactAgoText(from: date, to: now))
-                .font(AppStyle.Typography.callout)
+            Text(figures: compactAgoText(from: date, to: now), style: AppStyle.Typography.callout)
+                .monospacedDigit()
         }
         .foregroundStyle(AppColors.textSecondary)
         .onAppear { setTicking(isPanelVisible) }
