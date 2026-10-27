@@ -1165,6 +1165,16 @@ struct DevToolsView<PageHeader: View>: View {
                                 .transition(rowInsertionTransition)
                         }
                     }
+
+                    // One more card's shape under the projects found so far, while
+                    // the search goes on.
+                    if store.isScanningProjects {
+                        ProjectGroupSkeletonCard(titleWidth: 130)
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(.opacity)
+                    }
                 }
             } else if store.isScanningProjects {
                 Group {
@@ -1173,12 +1183,15 @@ struct DevToolsView<PageHeader: View>: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 
-                    Text("Finding projects…")
-                        .font(AppStyle.Typography.metadata)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .listRowInsets(ScanListRowInsets.standard)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                    // Cards in the shape of the ones the search lands, so nothing
+                    // moves when the first project arrives.
+                    ForEach(ProjectGroupSkeletonCard.titleWidths, id: \.self) { width in
+                        ProjectGroupSkeletonCard(titleWidth: width)
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(.opacity)
+                    }
                 }
             }
 
@@ -1227,9 +1240,15 @@ struct DevToolsView<PageHeader: View>: View {
 
     private var developerProjectsSectionHeader: some View {
         devToolsSectionHeader(.projects) {
-            Text("Developer Projects")
-                .font(AppStyle.Typography.metadataEmphasis)
-                .foregroundStyle(AppColors.textSecondary)
+            HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+                Text("Developer Projects")
+                    .font(AppStyle.Typography.metadataEmphasis)
+                    .foregroundStyle(AppColors.textSecondary)
+                Spacer(minLength: AppStyle.Spacing.small)
+                if store.isScanningProjects {
+                    ProjectSearchStatus(found: sortedProjectGroupRows().filter { !$0.isFromLastScan }.count)
+                }
+            }
         }
     }
 
@@ -1558,6 +1577,67 @@ struct DevToolsView<PageHeader: View>: View {
             return String(localized: "Project")
         }
         return String(localized: "Project, \(types)")
+    }
+}
+
+/// Beside the Developer Projects heading while the search runs. The count is of
+/// the projects this scan has listed, so it grows as they land.
+private struct ProjectSearchStatus: View {
+    let found: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(found > 0 ? String(localized: "\(found) found, still looking…") : String(localized: "Searching…"))
+                .font(AppStyle.Typography.metadata.numbers)
+                .foregroundStyle(AppColors.textSecondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A project card with no project in it: the same checkbox, icon, two text lines
+/// and chevron at the same height, so the card that replaces it doesn't move.
+private struct ProjectGroupSkeletonCard: View {
+    /// Title widths for the cards shown before any project lands, so they read as
+    /// a list, not a pattern.
+    static let titleWidths: [CGFloat] = [140, 110, 160]
+
+    let titleWidth: CGFloat
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                .stroke(AppColors.textSecondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
+                .frame(width: 14, height: 14)
+                .frame(width: 24)
+            RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
+                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
+                .frame(width: AppStyle.Row.projectGroupIconSize, height: AppStyle.Row.projectGroupIconSize)
+            // Invisible text in the real card's styles holds its line heights.
+            VStack(alignment: .leading, spacing: 2) {
+                ZStack(alignment: .leading) {
+                    Text(verbatim: " ").font(AppStyle.Typography.rowTitle).opacity(0)
+                    SkeletonBar(width: titleWidth, height: 10)
+                }
+                ZStack(alignment: .leading) {
+                    Text(verbatim: " ").font(AppStyle.Typography.metadata).opacity(0)
+                    SkeletonBar(width: titleWidth * 0.6, height: 8)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            SkeletonBar(width: 52, height: 10)
+            SkeletonBar(width: 12, height: 12)
+                .padding(.trailing, AppStyle.Spacing.xSmall)
+        }
+        .padding(.vertical, AppStyle.Spacing.xSmall)
+        .padding(.horizontal, AppStyle.Spacing.xSmall)
+        .frame(minHeight: AppStyle.Row.parentHeight)
+        .devToolsGroupCardChrome()
+        .shimmering()
+        .accessibilityHidden(true)
     }
 }
 

@@ -35,7 +35,6 @@
 "%@ was removed from Applications, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it." = "%@ 已从“应用程序”中移除，但这些文件仍在 Mac 上。勾选的项目会移到废纸篓，清空前都可以恢复。";
 "%@ · %lld selected · %@" = "%@ · 已选 %lld 项 · %@";
 "%@ · measuring space…" = "%@ · 正在统计空间…";
-"%@ · Last scan %@" = "%@ · 上次扫描：%@";
 "%@, %@" = "%@，%@";
 "%@, %@ reclaimed" = "%@，已释放 %@";
 "%@, %@ selected" = "%@，已选择 %@";
@@ -54,6 +53,7 @@
 "%lld %@ · %@ to review" = "%lld %@文件 · %@ 待检查";
 "%lld bytes" = "%lld 字节";
 "%lld files in this scan have identical contents, including this one." = "本次扫描中有 %lld 个文件内容完全相同，包含此文件。";
+"%lld found, still looking…" = "已找到 %lld 个，仍在查找…";
 "%lld identical copies" = "%lld 份相同副本";
 "%lld items couldn't be cleaned" = "%lld 项无法清理";
 "%lld locations will be removed." = "将移除 %lld 个位置。";
@@ -259,7 +259,6 @@
 "Excluded paths" = "排除的路径";
 "Expand project" = "展开项目";
 "Finding leftovers from deleted apps" = "正在查找已删除应用的残留文件";
-"Finding projects…" = "正在查找项目…";
 "Finish setting up Purge first." = "请先完成 Purge 的设置。";
 "Flutter build" = "Flutter 构建";
 "Found %@ of junk that's safe to clean." = "发现 %@ 可安全清理的垃圾文件。";
@@ -557,7 +556,6 @@
 "Scan progress" = "扫描进度";
 "Scanned %@" = "%@扫描";
 "Scanning" = "正在扫描";
-"Scanning %@, then %lld more…" = "正在扫描 %@，之后还有 %lld 项…";
 "Scanning %@…" = "正在扫描 %@…";
 "Scanning App Caches..." = "正在扫描应用缓存…";
 "Scanning Application Support caches..." = "正在扫描应用支持文件中的缓存…";
@@ -580,6 +578,7 @@
 "Search apps" = "搜索应用";
 "Search apps by name" = "按名称搜索应用";
 "Search large files by name" = "按名称搜索大文件";
+"Searching…" = "正在查找…";
 "Secure removal is on" = "受保护应用移除已启用";
 "Select" = "选择";
 "Select All" = "全选";

@@ -741,21 +741,14 @@ struct ContentView: View {
     }
 
     /// What the scan queue is doing, or when the Overview's figures were last scanned.
-    /// While some rows still show a saved figure, the scanning line says how old it is.
+    /// Kept to the active step so it stays one line: each row already says whether
+    /// it is up next, and a saved figure's tooltip says when it was measured.
     private func overviewPageSubtitle(now: Date) -> String? {
-        let scanning: String?
         if let active = store.scanQueue.active {
-            let waiting = store.scanQueue.pending.count
-            let name = active.displayName
-            scanning = waiting > 0 ? String(localized: "Scanning \(name), then \(waiting) more…") : String(localized: "Scanning \(name)…")
-        } else if store.isScanningAll {
-            scanning = String(localized: "Scanning \(ScanStep.cachesAndDevTools.displayName)…")
-        } else {
-            scanning = nil
+            return String(localized: "Scanning \(active.displayName)…")
         }
-        if let scanning {
-            guard let saved = store.oldestRecordedFigureDate() else { return scanning }
-            return String(localized: "\(scanning) · Last scan \(compactAgoText(from: saved, to: now))")
+        if store.isScanningAll {
+            return String(localized: "Scanning \(ScanStep.cachesAndDevTools.displayName)…")
         }
         guard let latest = store.scanRecords.values.map(\.completedAt).max() else { return nil }
         return String(localized: "Scanned \(compactAgoText(from: latest, to: now))")

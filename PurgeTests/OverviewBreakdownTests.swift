@@ -251,7 +251,7 @@ struct OverviewPresentationTests {
         store.scanQueue.enqueue([.cachesAndDevTools])
         #expect(store.overviewPhase(for: .appCaches) == .waiting)
         #expect(store.isShowingRecordedFigure(for: .appCaches))
-        #expect(store.oldestRecordedFigureDate() == saved)
+        #expect(store.applicableRecord(for: .appCaches)?.completedAt == saved)
         let breakdown = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
         #expect(breakdown.bytes(for: .appCaches) == 7_000_000_000)
     }
@@ -278,7 +278,6 @@ struct OverviewPresentationTests {
         fake.finishHeldGeneral()
         #expect(await eventually { store.overviewPhase(for: .appCaches) == .ready })
         #expect(!store.isShowingRecordedFigure(for: .appCaches))
-        #expect(store.oldestRecordedFigureDate() == nil)
         let after = store.overviewBreakdown(totalBytes: 500_000_000_000, freeBytes: 200_000_000_000)
         // The fake scan finds nothing, so the live figure replaces the saved one.
         #expect(after.bytes(for: .appCaches) == 0)

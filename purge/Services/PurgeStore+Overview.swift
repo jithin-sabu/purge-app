@@ -123,15 +123,6 @@ extension PurgeStore {
         return items
     }
 
-    /// When the oldest saved figure still on the Overview was measured, or nil when
-    /// every row shows this session's own. The subtitle dates the saved ones by it.
-    func oldestRecordedFigureDate() -> Date? {
-        OverviewCategory.allCases
-            .filter(isShowingRecordedFigure(for:))
-            .compactMap { applicableRecord(for: $0)?.completedAt }
-            .min()
-    }
-
     /// True when any category shows a total saved by an earlier session. Its
     /// paths are unknown, so the Everything else groups can't take it out.
     func overviewShowsRecordedFigures() -> Bool {
