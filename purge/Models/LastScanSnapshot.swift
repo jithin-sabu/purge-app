@@ -37,10 +37,15 @@ nonisolated struct LastScanSnapshot: Codable, Equatable, Sendable {
         bundle.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
     }
 
-    /// True when no path of a row sits in a folder macOS protects. Rows that fail are
-    /// never written: the file lives where any app can read it.
-    static func isWritable(_ urls: [URL], home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
-        !urls.contains { ProtectedLocations.contains($0, home: home) }
+    /// True when `url` sits outside every folder macOS protects, by name and through
+    /// any link on the way: `~/Developer` linked to `~/Documents/dev` puts a project
+    /// "in Developer" inside Documents. A path that fails is never written, since the
+    /// file lives where any app can read it. Follows links with `readlink` only (the
+    /// same walk a limited scan uses), so it never prompts, but it reads the disk:
+    /// call it off the main thread.
+    static func isWritable(_ url: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
+        !ProtectedLocations.contains(url, home: home)
+            && ProtectedLocations.isReadable(url, access: .limited, home: home)
     }
 
     /// Takes `section` from `other`, including its absence.

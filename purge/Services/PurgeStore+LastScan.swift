@@ -110,7 +110,13 @@ extension PurgeStore {
         let snapshot = await Task.detached(priority: .userInitiated) {
             Self.readableLastScan(lastScanStore.load(), access: access)
         }.value
-        guard let snapshot else { return }
+        guard var snapshot else { return }
+        // A clean, an uninstall or an app deleted outside Purge may have run while
+        // the file was read; what they removed stays removed.
+        let forgotten = lastScanForgottenPaths
+        if !forgotten.isEmpty {
+            snapshot.removeRows { forgotten.contains($0.path) }
+        }
         let sections = Set(LastScanSection.allCases.filter { !lastScanSavable.contains($0) })
         var rows = LastScanRows(snapshot, sections: sections)
         rows.savedAt = rows.savedAt.filter { !rows.isEmpty($0.key) }
@@ -242,11 +248,15 @@ extension PurgeStore {
         if rows != lastScanRows { lastScanRows = rows }
     }
 
-    /// Takes paths a clean removed out of the saved file, so a list this session
-    /// has not finished scanning never brings them back at the next launch.
+    /// Takes paths a clean, an uninstall or a deletion outside Purge removed out of
+    /// the saved file, so a list this session has not finished scanning never
+    /// brings them back at the next launch. Queued after any write already handed
+    /// over, so an older snapshot can't land on top of it. Pass every spelling the
+    /// caller has (as scanned and standardized); the file is matched by `URL.path`.
     func forgetInLastScanFile(paths: Set<String>) {
-        guard let lastScanStore, !paths.isEmpty else { return }
-        Task.detached(priority: .utility) { lastScanStore.forget(paths: paths) }
+        guard !paths.isEmpty else { return }
+        lastScanForgottenPaths.formUnion(paths)
+        lastScanStore?.forget(paths: paths)
     }
 
     /// Whether every list behind the category's figure finished its latest scan.
@@ -268,53 +278,57 @@ extension PurgeStore {
         guard lastScanWriteTask == nil, !lastScanDirty.isDisjoint(with: lastScanSavable) else { return }
         lastScanWriteTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
             self.lastScanWriteTask = nil
-            let sections = self.lastScanDirty.intersection(self.lastScanSavable)
-            self.lastScanDirty.subtract(sections)
-            guard !sections.isEmpty, let store = self.lastScanStore else { return }
-            let snapshot = self.makeLastScanSnapshot(sections)
-            await Task.detached(priority: .utility) { store.save(sections, from: snapshot) }.value
-            self.lastScanWritesFinished &+= 1
+            self.writeLastScanNow()
         }
     }
 
-    /// The live lists for `sections`, less any row with a path in a protected
-    /// folder. Dated by when each list's scan finished, not by this write, so a
-    /// clean afterwards doesn't make the rows look newer than they are.
+    /// Hands the changed, finished lists to the file store. The snapshot is taken
+    /// and queued in one step on the main thread, so the file sees saves and
+    /// forgets in the order they happened.
+    private func writeLastScanNow() {
+        let sections = lastScanDirty.intersection(lastScanSavable)
+        lastScanDirty.subtract(sections)
+        guard !sections.isEmpty, let lastScanStore else { return }
+        lastScanStore.save(sections, from: makeLastScanSnapshot(sections))
+        lastScanWriteCount &+= 1
+    }
+
+    /// Purge is quitting: write what the half-second wait still holds and wait for
+    /// the file, so a clean just before quitting is in it at the next launch.
+    func flushLastScanWrites() {
+        lastScanWriteTask?.cancel()
+        lastScanWriteTask = nil
+        writeLastScanNow()
+        lastScanStore?.flush()
+    }
+
+    /// The live lists for `sections`. The file store leaves out any path in a
+    /// protected folder as it writes. Dated by when each list's scan finished, not
+    /// by this write, so a clean afterwards doesn't make the rows look newer than
+    /// they are.
     func makeLastScanSnapshot(_ sections: Set<LastScanSection>) -> LastScanSnapshot {
         var snapshot = LastScanSnapshot(appBuild: LastScanSnapshot.currentAppBuild())
         for section in sections {
             let savedAt = lastScanFinishedAt[section] ?? Date()
             switch section {
             case .appCaches:
-                snapshot.appCaches = .init(savedAt: savedAt, rows: cacheItems
-                    .filter { LastScanSnapshot.isWritable($0.paths) }
-                    .map(SavedCacheItem.init))
+                snapshot.appCaches = .init(savedAt: savedAt, rows: cacheItems.map(SavedCacheItem.init))
             case .devTools:
-                snapshot.devTools = .init(savedAt: savedAt, rows: devTools
-                    .filter { $0.isDetected && LastScanSnapshot.isWritable($0.paths) }
-                    .map(SavedDevTool.init))
+                snapshot.devTools = .init(savedAt: savedAt, rows: devTools.filter(\.isDetected).map(SavedDevTool.init))
             case .simulators:
-                snapshot.simulators = .init(savedAt: savedAt, rows: simulatorDevices
-                    .filter { LastScanSnapshot.isWritable([$0.folderURL]) }
-                    .map(SavedSimulatorDevice.init))
+                snapshot.simulators = .init(savedAt: savedAt, rows: simulatorDevices.map(SavedSimulatorDevice.init))
             case .runtimes:
-                snapshot.runtimes = .init(savedAt: savedAt, rows: simulatorRuntimes
-                    .filter { LastScanSnapshot.isWritable([$0.locationURL]) }
-                    .map(SavedSimulatorRuntime.init))
+                snapshot.runtimes = .init(savedAt: savedAt, rows: simulatorRuntimes.map(SavedSimulatorRuntime.init))
             case .projects:
-                snapshot.projects = .init(savedAt: savedAt, rows: projectGroups
-                    .map { SavedProjectGroup($0) }
-                    .filter { LastScanSnapshot.isWritable($0.urls) })
+                snapshot.projects = .init(savedAt: savedAt, rows: projectGroups.map(SavedProjectGroup.init))
             case .apps:
-                snapshot.apps = .init(savedAt: savedAt, rows: installedApps
-                    .filter { LastScanSnapshot.isWritable([$0.bundleURL]) }
-                    .map { app in SavedInstalledApp(app, removableBytes: removableBytesByAppID[app.id]) })
+                snapshot.apps = .init(savedAt: savedAt, rows: installedApps.map { app in
+                    SavedInstalledApp(app, removableBytes: removableBytesByAppID[app.id])
+                })
             case .leftovers:
-                snapshot.leftovers = .init(savedAt: savedAt, rows: orphanLeftovers
-                    .filter { LastScanSnapshot.isWritable([$0.path]) }
-                    .map(SavedLeftover.init))
+                snapshot.leftovers = .init(savedAt: savedAt, rows: orphanLeftovers.map(SavedLeftover.init))
             }
         }
         return snapshot

@@ -9,6 +9,10 @@ import Foundation
 /// rows judged by older rules. A file that cannot be read counts as empty: the only
 /// effect is that a reopen waits for its scans, as it did before this file existed.
 ///
+/// Saves and forgets run on one serial queue, in the order they are called, so a
+/// snapshot taken before a clean can never land after the clean's forget and put
+/// the cleaned row back. `flush()` waits for everything queued, which quitting does.
+///
 /// Tests run inside a hosted copy of the app that shares the user's Application
 /// Support, so under the test host the default file moves to the run's scratch folder.
 nonisolated final class LastScanStore: @unchecked Sendable {
@@ -16,11 +20,17 @@ nonisolated final class LastScanStore: @unchecked Sendable {
 
     private let fileURL: URL
     private let appBuild: String
-    private let lock = NSLock()
+    private let home: URL
+    private let queue = DispatchQueue(label: "io.getpurge.last-scan", qos: .utility)
 
-    init(fileURL: URL = LastScanStore.defaultFileURL(), appBuild: String = LastScanSnapshot.currentAppBuild()) {
+    init(
+        fileURL: URL = LastScanStore.defaultFileURL(),
+        appBuild: String = LastScanSnapshot.currentAppBuild(),
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) {
         self.fileURL = fileURL
         self.appBuild = appBuild
+        self.home = home
     }
 
     static func defaultFileURL() -> URL {
@@ -34,9 +44,10 @@ nonisolated final class LastScanStore: @unchecked Sendable {
     }
 
     /// The saved rows, or nil when there are none this build can show. A file from
-    /// another build or version is removed, so it is never read again.
+    /// another build or version is removed, so it is never read again. Waits for
+    /// anything already queued.
     func load() -> LastScanSnapshot? {
-        lock.withLock {
+        queue.sync { () -> LastScanSnapshot? in
             guard let snapshot = read() else { return nil }
             guard snapshot.version == LastScanSnapshot.currentVersion, snapshot.appBuild == appBuild else {
                 try? FileManager.default.removeItem(at: fileURL)
@@ -47,10 +58,15 @@ nonisolated final class LastScanStore: @unchecked Sendable {
     }
 
     /// Replaces `sections` with what `update` holds for them; the others keep what
-    /// the file had.
+    /// the file had. Rows with a path in a protected folder, by name or through a
+    /// link, are left out here, off the main thread, since following links reads
+    /// the disk.
     func save(_ sections: Set<LastScanSection>, from update: LastScanSnapshot) {
         guard !sections.isEmpty else { return }
-        lock.withLock {
+        let home = home
+        queue.async { [self] in
+            var update = update
+            update.removeRows { !LastScanSnapshot.isWritable($0, home: home) }
             var snapshot = current()
             for section in sections {
                 snapshot.copy(section, from: update)
@@ -64,7 +80,7 @@ nonisolated final class LastScanStore: @unchecked Sendable {
     /// next launch, even from a section this session has not scanned again.
     func forget(paths: Set<String>) {
         guard !paths.isEmpty else { return }
-        lock.withLock {
+        queue.async { [self] in
             guard var snapshot = read(), snapshot.appBuild == appBuild else { return }
             let before = snapshot
             snapshot.removeRows { paths.contains($0.path) }
@@ -73,7 +89,12 @@ nonisolated final class LastScanStore: @unchecked Sendable {
     }
 
     func remove() {
-        lock.withLock { _ = try? FileManager.default.removeItem(at: fileURL) }
+        queue.async { [self] in _ = try? FileManager.default.removeItem(at: fileURL) }
+    }
+
+    /// Returns once every save and forget queued so far has reached the disk.
+    func flush() {
+        queue.sync {}
     }
 
     /// What a save builds on: the file when this build wrote it, else a fresh one.

@@ -513,8 +513,11 @@ final class PurgeStore: ObservableObject {
     /// When each list's scan last finished, which the file dates its rows by.
     var lastScanFinishedAt: [LastScanSection: Date] = [:]
     var lastScanWriteTask: Task<Void, Never>?
-    /// Counts finished writes, for tests to wait on.
-    var lastScanWritesFinished = 0
+    /// Writes handed to the file store, for tests to wait on.
+    var lastScanWriteCount = 0
+    /// Paths a clean, an uninstall or a deletion outside Purge took out this
+    /// session. The launch read leaves them out, in case it finishes after them.
+    var lastScanForgottenPaths: Set<String> = []
     /// True once App Caches and Dev Tools have finished a scan in this session.
     @Published private(set) var hasSessionCacheScan = false
     /// True once the App Caches half has finished in this session, even if it found
@@ -1617,6 +1620,7 @@ final class PurgeStore: ObservableObject {
                 .filter { deletedPaths.contains($0.path.standardizedFileURL.path) }
                 .map(\.id)
         )
+        removeLastScanRows { deletedPaths.contains($0.path) }
         forgetInLastScanFile(paths: deletedPaths)
         guard !clearedIDs.isEmpty else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -2590,10 +2594,12 @@ final class PurgeStore: ObservableObject {
         lastScanListsFinished([.leftovers])
     }
 
+    /// Only a row on the live list can be ticked, never one from the last scan's
+    /// saved file (#283).
     func toggleOrphanSelected(id: String) {
         if orphanSelectedIDs.contains(id) {
             orphanSelectedIDs.remove(id)
-        } else {
+        } else if orphanLeftovers.contains(where: { $0.id == id }) {
             orphanSelectedIDs.insert(id)
         }
     }
@@ -2747,7 +2753,9 @@ final class PurgeStore: ObservableObject {
         installedApps.removeAll { $0.id == key }
         selectedAppIDs.remove(key)
         removableBytesByAppID[key] = nil
-        removeLastScanRows { $0.path == bundleURL.path || $0.path == key }
+        let spellings: Set<String> = [bundleURL.path, key]
+        removeLastScanRows { spellings.contains($0.path) }
+        forgetInLastScanFile(paths: spellings)
     }
 
     /// Trashes leftovers whose app is already gone (orphans, and apps removed
@@ -3124,17 +3132,20 @@ final class PurgeStore: ObservableObject {
 
     // MARK: App selection
 
+    /// Only a listed app can be ticked, never one from the last scan's saved file
+    /// (#283). Uninstall an App sets `selectedAppIDs` itself, before the list loads.
     func toggleAppSelected(id: String) {
         if selectedAppIDs.contains(id) {
             selectedAppIDs.remove(id)
-        } else {
+        } else if installedApps.contains(where: { $0.id == id }) {
             selectedAppIDs.insert(id)
         }
     }
 
     func setAllAppsSelected(_ selected: Bool, ids: [String]) {
         if selected {
-            selectedAppIDs.formUnion(ids)
+            let live = Set(installedApps.map(\.id))
+            selectedAppIDs.formUnion(ids.filter(live.contains))
         } else {
             selectedAppIDs.subtract(ids)
         }
@@ -3660,6 +3671,11 @@ final class PurgeStore: ObservableObject {
                 installedApps.removeAll { $0.id == app.id }
             }
         }
+        // The app and its leftovers leave the last scan's saved rows too, on screen
+        // and in the file, so none of them comes back dimmed at the next launch (#283).
+        let removedSpellings = deletedPaths.union(report.deletedItems.map(\.path))
+        removeLastScanRows { removedSpellings.contains($0.path) }
+        forgetInLastScanFile(paths: removedSpellings)
 
         // Held apps moved nothing; surface each as one "needs your OK" row so the
         // panel can offer setup and then remove the whole app at once.
@@ -5408,8 +5424,15 @@ final class PurgeStore: ObservableObject {
 
     // MARK: - Project row selection bindings
 
+    /// The single-row setters tick only rows on a live list, never one from the
+    /// last scan's saved file (#283), as the Select All setters do.
     func setCacheSelected(id: String, isSelected: Bool) {
-        if isSelected { scanSelection.cacheIDs.insert(id) } else { scanSelection.cacheIDs.remove(id) }
+        if isSelected {
+            guard cacheItems.contains(where: { $0.id == id }) else { return }
+            scanSelection.cacheIDs.insert(id)
+        } else {
+            scanSelection.cacheIDs.remove(id)
+        }
     }
 
     /// Only rows on the live list can be ticked, never one from the last scan's
@@ -5424,7 +5447,12 @@ final class PurgeStore: ObservableObject {
     }
 
     func setDevToolSelected(id: String, isSelected: Bool) {
-        if isSelected { scanSelection.devToolIDs.insert(id) } else { scanSelection.devToolIDs.remove(id) }
+        if isSelected {
+            guard devTools.contains(where: { $0.id == id }) else { return }
+            scanSelection.devToolIDs.insert(id)
+        } else {
+            scanSelection.devToolIDs.remove(id)
+        }
     }
 
     private func projectArtifactIndices(groupID: String, artifactID: String) -> (groupIndex: Int, artifactIndex: Int)? {
@@ -5452,11 +5480,21 @@ final class PurgeStore: ObservableObject {
     }
 
     func setSimulatorDeviceSelected(id: UUID, isSelected: Bool) {
-        if isSelected { scanSelection.simulatorIDs.insert(id) } else { scanSelection.simulatorIDs.remove(id) }
+        if isSelected {
+            guard simulatorDevices.contains(where: { $0.id == id }) else { return }
+            scanSelection.simulatorIDs.insert(id)
+        } else {
+            scanSelection.simulatorIDs.remove(id)
+        }
     }
 
     func setSimulatorRuntimeSelected(id: String, isSelected: Bool) {
-        if isSelected { scanSelection.simulatorRuntimeIDs.insert(id) } else { scanSelection.simulatorRuntimeIDs.remove(id) }
+        if isSelected {
+            guard simulatorRuntimes.contains(where: { $0.id == id }) else { return }
+            scanSelection.simulatorRuntimeIDs.insert(id)
+        } else {
+            scanSelection.simulatorRuntimeIDs.remove(id)
+        }
     }
 
     func setSimulatorGroupSelection(allSelected: Bool) {

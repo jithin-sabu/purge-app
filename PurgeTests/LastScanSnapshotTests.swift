@@ -120,23 +120,35 @@ struct LastScanSnapshotTests {
     // MARK: Privacy
 
     /// The file sits where any app can read it, so nothing from a folder macOS
-    /// protects goes into it: no Documents project, no container cache.
+    /// protects goes into it: no Documents project, no container cache, and nothing
+    /// reached through a link into one (`~/Developer` linked to `~/Documents/dev`).
+    /// Checked on the bytes the store writes, by markers with no slash in them, so
+    /// the way JSON spells "/" can't hide a row.
     @MainActor
     @Test
     func aRowUnderAProtectedFolderIsNeverWritten() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("LastScanLinkedHome-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let fixtureHome = base.appendingPathComponent("home", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixtureHome.appendingPathComponent("Documents/dev"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: fixtureHome.appendingPathComponent("Developer"),
+            withDestinationURL: fixtureHome.appendingPathComponent("Documents/dev")
+        )
         let fake = FakeScans()
         defer { fake.cleanUp() }
         let store = fake.makeStore()
         store.cacheItems = [
-            cacheItem(at: home.appendingPathComponent("Library/Caches/com.example.open")),
-            cacheItem(at: home.appendingPathComponent("Library/Containers/com.example.boxed/Data/Library/Caches"))
+            cacheItem(at: fixtureHome.appendingPathComponent("Library/Caches/com.example.open")),
+            cacheItem(at: fixtureHome.appendingPathComponent("Library/Containers/com.example.boxed/Data/Library/Caches"))
         ]
         store.projectGroups = [
-            projectGroup(root: home.appendingPathComponent("Documents/secret-client")),
-            projectGroup(root: home.appendingPathComponent("Developer/open-project"))
+            projectGroup(root: fixtureHome.appendingPathComponent("Documents/secret-client")),
+            projectGroup(root: fixtureHome.appendingPathComponent("Developer/linked-client")),
+            projectGroup(root: fixtureHome.appendingPathComponent("Projects/open-project"))
         ]
         store.orphanLeftovers = [UninstallItem(
-            path: home.appendingPathComponent("Library/Group Containers/group.com.example.gone"),
+            path: fixtureHome.appendingPathComponent("Library/Group Containers/group.com.example.gone"),
             sizeBytes: 10,
             category: .groupContainers,
             safetyInfo: safety(.medium),
@@ -144,14 +156,36 @@ struct LastScanSnapshotTests {
             isSelected: false
         )]
 
-        let snapshot = store.makeLastScanSnapshot(Set(LastScanSection.allCases))
-        let json = try #require(String(data: JSONEncoder().encode(snapshot), encoding: .utf8))
-        #expect(!json.contains("Library/Containers"))
-        #expect(!json.contains("Group Containers"))
-        #expect(!json.contains("secret-client"))
-        #expect(json.contains("com.example.open"))
-        #expect(json.contains("open-project"))
-        #expect(snapshot.leftovers?.rows.isEmpty == true)
+        let file = base.appendingPathComponent(LastScanStore.fileName)
+        let writer = LastScanStore(fileURL: file, appBuild: "36", home: fixtureHome)
+        writer.save(Set(LastScanSection.allCases), from: store.makeLastScanSnapshot(Set(LastScanSection.allCases)))
+        writer.flush()
+
+        let written = try String(contentsOf: file, encoding: .utf8)
+        #expect(!written.contains("com.example.boxed"))
+        #expect(!written.contains("group.com.example.gone"))
+        #expect(!written.contains("secret-client"))
+        #expect(!written.contains("linked-client"))
+        #expect(written.contains("com.example.open"))
+        #expect(written.contains("open-project"))
+    }
+
+    /// A clean's forget queued after a save wins, even when that save was built
+    /// before the clean: the file sees them in the order they were called.
+    @Test
+    func aForgetQueuedAfterASaveIsNotUndoneByIt() throws {
+        let file = try scratchFile()
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        let store = LastScanStore(fileURL: file, appBuild: "36")
+        let cleaned = home.appendingPathComponent("Library/Caches/com.example.cleaned-\(UUID().uuidString)")
+        var older = LastScanSnapshot(appBuild: "36")
+        older.appCaches = .init(savedAt: Date(), rows: [SavedCacheItem(cacheItem(at: cleaned))])
+
+        for _ in 0..<20 {
+            store.save([.appCaches], from: older)
+            store.forget(paths: [cleaned.path])
+            #expect(store.load()?.appCaches?.rows.isEmpty == true)
+        }
     }
 
     // MARK: When a launch refuses the file
@@ -162,7 +196,9 @@ struct LastScanSnapshotTests {
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
         var update = LastScanSnapshot(appBuild: "36")
         update.runtimes = .init(savedAt: Date(), rows: [SavedSimulatorRuntime(runtime(id: "R1"))])
-        LastScanStore(fileURL: file, appBuild: "36").save([.runtimes], from: update)
+        let writer = LastScanStore(fileURL: file, appBuild: "36")
+        writer.save([.runtimes], from: update)
+        writer.flush()
         #expect(LastScanStore(fileURL: file, appBuild: "36").load()?.runtimes?.rows.count == 1)
 
         #expect(LastScanStore(fileURL: file, appBuild: "37").load() == nil)

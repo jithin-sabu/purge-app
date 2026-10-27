@@ -23,6 +23,7 @@ struct LastScanStoreTests {
         #expect(!store.lastScanRows.devTools.isEmpty)
         #expect(!store.lastScanRows.projectGroups.isEmpty)
         #expect(!store.lastScanRows.simulatorRuntimes.isEmpty)
+        #expect(!store.lastScanRows.simulatorDevices.isEmpty)
         #expect(!store.lastScanRows.installedApps.isEmpty)
         #expect(!store.lastScanRows.orphanLeftovers.isEmpty)
 
@@ -31,6 +32,7 @@ struct LastScanStoreTests {
         #expect(store.devTools.isEmpty)
         #expect(store.projectGroups.isEmpty)
         #expect(store.simulatorRuntimes.isEmpty)
+        #expect(store.simulatorDevices.isEmpty)
         #expect(store.installedApps.isEmpty)
         #expect(store.orphanLeftovers.isEmpty)
         #expect(store.manualSafeCleanupCandidates().isEmpty)
@@ -50,8 +52,8 @@ struct LastScanStoreTests {
         #expect(store.overviewPhase(for: .appCaches) == .notScanned)
     }
 
-    /// A Select All that somehow carried a saved row's id must not tick it, or the
-    /// live row would land already ticked.
+    /// No setter ticks a saved row's id, single row or Select All, or the live row
+    /// would land already ticked. Simulators and runtimes are removed permanently.
     @Test
     func savedIDsNeverEnterTheSelection() async throws {
         let (fake, file) = try setUp()
@@ -59,16 +61,77 @@ struct LastScanStoreTests {
         let store = fake.makeStore(lastScanStore: LastScanStore(fileURL: file, appBuild: build))
         await store.loadLastScan()
         let savedCache = try #require(store.lastScanRows.cacheItems.first)
+        let savedTool = try #require(store.lastScanRows.devTools.first)
+        let savedDevice = try #require(store.lastScanRows.simulatorDevices.first)
+        let savedRuntime = try #require(store.lastScanRows.simulatorRuntimes.first)
         let savedLeftover = try #require(store.lastScanRows.orphanLeftovers.first)
+        let savedApp = try #require(store.lastScanRows.installedApps.first)
 
         store.setAllCachesSelected(true, ids: [savedCache.id])
+        store.setCacheSelected(id: savedCache.id, isSelected: true)
+        store.setDevToolSelected(id: savedTool.id, isSelected: true)
+        store.setSimulatorDeviceSelected(id: savedDevice.id, isSelected: true)
+        store.setSimulatorRuntimeSelected(id: savedRuntime.id, isSelected: true)
         store.setAllOrphansSelected(true, ids: [savedLeftover.id])
+        store.toggleOrphanSelected(id: savedLeftover.id)
+        store.toggleAppSelected(id: savedApp.id)
+        store.setAllAppsSelected(true, ids: [savedApp.id])
 
         #expect(store.scanSelection.cacheIDs.isEmpty)
+        #expect(store.scanSelection.devToolIDs.isEmpty)
+        #expect(store.scanSelection.simulatorIDs.isEmpty)
+        #expect(store.scanSelection.simulatorRuntimeIDs.isEmpty)
         #expect(store.orphanSelectedIDs.isEmpty)
-        // The live twin lands unticked.
+        #expect(store.selectedAppIDs.isEmpty)
+
+        // Nothing reaches the uninstaller either.
+        #expect(store.selectedApps.isEmpty)
+        await store.requestUninstallSelectedApps()
+        #expect(store.uninstallPlan == nil)
+
+        // The live twins land unticked.
         store.cacheItems = [savedCache]
+        store.simulatorRuntimes = [savedRuntime]
         #expect(store.selectedGeneralDeletionCandidates.isEmpty)
+        #expect(store.selectedDeveloperDeletionCandidates.isEmpty)
+    }
+
+    /// An app deleted outside Purge while the file is still being read stays gone:
+    /// the read leaves out what was forgotten, and so does the file (#283 review).
+    @Test
+    func anAppRemovedBeforeTheLaunchReadFinishesStaysGone() async throws {
+        let (fake, file) = try setUp()
+        defer { tearDown(fake, file) }
+        let lastScanStore = LastScanStore(fileURL: file, appBuild: build)
+        let savedApp = try #require(lastScanStore.load()?.apps?.rows.first?.bundleURL)
+        let store = fake.makeStore(lastScanStore: lastScanStore)
+
+        // The deleted-apps watcher drains its queue before the read lands.
+        store.forgetRemovedApp(at: savedApp)
+        await store.loadLastScan()
+
+        #expect(store.lastScanRows.installedApps.isEmpty)
+        #expect(!store.lastScanRows.orphanLeftovers.isEmpty)
+        lastScanStore.flush()
+        #expect(lastScanStore.load()?.apps?.rows.isEmpty == true)
+    }
+
+    /// Quitting within the half-second wait still writes the change.
+    @Test
+    func quittingWritesWhatTheWaitStillHolds() async throws {
+        let (fake, file) = try setUp()
+        defer { tearDown(fake, file) }
+        let store = fake.makeStore(lastScanStore: LastScanStore(fileURL: file, appBuild: build))
+        store.startLaunchScans()
+        #expect(await eventually { isIdle(store) && store.hasFinishedLists(for: .devTools) })
+        #expect(await eventually { store.lastScanWriteCount > 0 && store.lastScanWriteTask == nil })
+
+        let found = home.appendingPathComponent("Library/Caches/com.example.just-before-quit")
+        store.cacheItems = [cacheItem(found)]
+        #expect(store.lastScanWriteTask != nil)
+        store.flushLastScanWrites()
+
+        #expect(LastScanStore(fileURL: file, appBuild: build).load()?.appCaches?.rows.flatMap(\.urls) == [found])
     }
 
     // MARK: Following the scan
@@ -80,9 +143,11 @@ struct LastScanStoreTests {
         let store = fake.makeStore(lastScanStore: LastScanStore(fileURL: file, appBuild: build))
         await store.loadLastScan()
         let savedRuntime = try #require(store.lastScanRows.simulatorRuntimes.first)
+        let savedDevice = try #require(store.lastScanRows.simulatorDevices.first)
         let savedCache = try #require(store.lastScanRows.cacheItems.first)
 
         store.simulatorRuntimes = [savedRuntime]
+        store.simulatorDevices = [savedDevice]
         // Same folder, grouped under another id this time: still the same row.
         store.cacheItems = [CacheItem(
             definitionKey: "com.example.grouped",
@@ -92,6 +157,7 @@ struct LastScanStoreTests {
         )]
 
         #expect(store.lastScanRows.simulatorRuntimes.isEmpty)
+        #expect(store.lastScanRows.simulatorDevices.isEmpty)
         #expect(store.lastScanRows.cacheItems.isEmpty)
         #expect(!store.lastScanRows.devTools.isEmpty)
     }
@@ -105,8 +171,9 @@ struct LastScanStoreTests {
 
         store.startLaunchScans()
         #expect(await eventually { isIdle(store) && store.lastScanRows.isEmpty(.projects) })
-        #expect(await eventually { store.lastScanWritesFinished > 0 && store.lastScanWriteTask == nil })
+        #expect(await eventually { store.lastScanWriteCount > 0 && store.lastScanWriteTask == nil })
 
+        store.lastScanStore?.flush()
         // The fake scans find nothing, so everything saved is gone from the Mac.
         for section in LastScanSection.allCases where section != .apps && section != .leftovers {
             #expect(store.lastScanRows.isEmpty(section), "\(section)")
@@ -122,7 +189,8 @@ struct LastScanStoreTests {
         let store = fake.makeStore(lastScanStore: LastScanStore(fileURL: file, appBuild: build))
         store.startLaunchScans()
         #expect(await eventually { isIdle(store) && store.hasFinishedLists(for: .devTools) })
-        #expect(await eventually { store.lastScanWritesFinished > 0 && store.lastScanWriteTask == nil })
+        #expect(await eventually { store.lastScanWriteCount > 0 && store.lastScanWriteTask == nil })
+        store.lastScanStore?.flush()
 
         // The scan beat the read. Put the old rows back in the file to be sure the
         // store, not an emptied file, keeps them off the screen.
@@ -154,11 +222,12 @@ struct LastScanStoreTests {
         store.cacheItems = [cacheItem(home.appendingPathComponent("Library/Caches/com.example.partial"))]
         try await Task.sleep(for: .milliseconds(900))
 
-        #expect(store.lastScanWritesFinished == 0)
+        #expect(store.lastScanWriteCount == 0)
         #expect(try Data(contentsOf: file) == before)
         fake.cleanUp()
         #expect(await eventually { isIdle(store) })
-        #expect(await eventually { store.lastScanWritesFinished > 0 && store.lastScanWriteTask == nil })
+        #expect(await eventually { store.lastScanWriteCount > 0 && store.lastScanWriteTask == nil })
+        store.lastScanStore?.flush()
     }
 
     @Test
@@ -168,15 +237,17 @@ struct LastScanStoreTests {
         let store = fake.makeStore(lastScanStore: LastScanStore(fileURL: file, appBuild: build))
         store.startLaunchScans()
         #expect(await eventually { isIdle(store) && store.hasFinishedLists(for: .devTools) })
-        #expect(await eventually { store.lastScanWritesFinished > 0 && store.lastScanWriteTask == nil })
+        #expect(await eventually { store.lastScanWriteCount > 0 && store.lastScanWriteTask == nil })
+        store.lastScanStore?.flush()
         let reader = LastScanStore(fileURL: file, appBuild: build)
         #expect(reader.load()?.appCaches?.rows.isEmpty == true)
 
         // A clean or an exclusion later in the session changes a finished list.
-        let written = store.lastScanWritesFinished
+        let written = store.lastScanWriteCount
         let found = home.appendingPathComponent("Library/Caches/com.example.found")
         store.cacheItems = [cacheItem(found)]
-        #expect(await eventually { store.lastScanWritesFinished > written && store.lastScanWriteTask == nil })
+        #expect(await eventually { store.lastScanWriteCount > written && store.lastScanWriteTask == nil })
+        store.lastScanStore?.flush()
         #expect(reader.load()?.appCaches?.rows.flatMap(\.urls) == [found])
     }
 
@@ -252,6 +323,17 @@ struct LastScanStoreTests {
             locationURL: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS_\(marker)"),
             safetyInfo: safety(.medium)
         ))])
+        snapshot.simulators = .init(savedAt: savedAt, rows: [SavedSimulatorDevice(SimulatorDevice(
+            id: UUID(),
+            deviceName: "iPhone 17",
+            runtimeVersion: "iOS 26.0",
+            isAvailable: true,
+            lastBootedAt: nil,
+            sizeOnDisk: 2_000_000_000,
+            folderURL: home.appendingPathComponent("Library/Developer/CoreSimulator/Devices/\(marker)"),
+            isSelected: false,
+            safetyInfo: safety(.medium)
+        ))])
         let root = home.appendingPathComponent("Developer/lastscan-\(marker)")
         snapshot.projects = .init(savedAt: savedAt, rows: [SavedProjectGroup(ProjectGroup(
             displayName: "site",
@@ -285,7 +367,9 @@ struct LastScanStoreTests {
             matchReason: .bundleID,
             isSelected: false
         ))])
-        LastScanStore(fileURL: file, appBuild: build).save(Set(LastScanSection.allCases), from: snapshot)
+        let saver = LastScanStore(fileURL: file, appBuild: build)
+        saver.save(Set(LastScanSection.allCases), from: snapshot)
+        saver.flush()
         return (FakeScans(), file)
     }
 
