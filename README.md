@@ -333,7 +333,7 @@ The signing flags matter: without a development certificate on the machine, the 
 
 ## Privacy
 
-Purge runs entirely on your Mac. Scans, explanations, manual overrides, and cleanup history stay in local Application Support. Nothing is uploaded.
+Purge runs entirely on your Mac. Scans, explanations, manual overrides, and cleanup history stay in local Application Support. Nothing is uploaded. The last scan is saved there too, so Purge has something to show while it scans again. Nothing from Desktop, Documents, Downloads or iCloud is written to it, and Large Files keeps only its total.
 
 The one time Purge talks to the network is the update check: once a day it fetches a small XML file from GitHub to see whether a newer version is available. It sends nothing about you or your Mac, and you can turn it off in **Settings → Updates**.
 

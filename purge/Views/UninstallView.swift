@@ -337,6 +337,8 @@ struct UninstallView: View {
                 store.setAllOrphansSelected(leftoversSelectAllState != .all, ids: ids)
             }
             .fixedSize()
+            // Nothing to tick while the list holds only the last scan's rows (#283).
+            .disabled(store.orphanLeftovers.isEmpty)
             Spacer()
             AppSortMenu(selection: Binding(
                 get: { leftoversSort },
@@ -482,7 +484,8 @@ struct UninstallView: View {
         HStack(spacing: 2) {
             sectionTab(.installedApps, count: store.installedApps.isEmpty ? nil : store.installedApps.count)
             if showsLeftoversSegment {
-                sectionTab(.leftovers, count: store.orphanLeftovers.count)
+                // Counts the last scan's rows too, as the list under it shows them (#283).
+                sectionTab(.leftovers, count: store.orphanLeftovers.count + lastScanLeftovers.count)
             }
             if showsCommandLineToolsSegment {
                 sectionTab(
