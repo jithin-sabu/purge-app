@@ -52,7 +52,7 @@ if [ -n "$LISTED_BUILD" ] && [ "$APP_BUILD" != "$LISTED_BUILD" ]; then
   echo "Build mismatch: appcast.xml lists $VERSION as build $LISTED_BUILD, but the app is build $APP_BUILD." >&2
   exit 1
 fi
-if [ -z "$LISTED_BUILD" ] && [ "$APP_BUILD" -le "$SHIPPED_BUILD" ]; then
+if [ "$APP_BUILD" -le "$SHIPPED_BUILD" ]; then
   echo "Build mismatch: app is build $APP_BUILD, but appcast.xml already ships build $SHIPPED_BUILD." >&2
   echo "Bump CURRENT_PROJECT_VERSION in both configs and re-archive." >&2
   exit 1
