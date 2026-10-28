@@ -70,14 +70,11 @@ enum SafetyAllowlistSummary {
         ]
     }
 
+    /// What cleaning never takes, then what it doesn't speak for: Large Files and
+    /// the uninstaller have their own gate and remove whatever the user confirms,
+    /// apps that need an admin password included (#191).
     static var boundaryLine: String {
-        var parts: [String] = []
-
-        if !DeletionSafetyPolicy.systemCacheDeletionPrefixes.isEmpty {
-            // Leftover macOS update files are the one exception, moved by the helper
-            // only after the user turns secure removal on (#127).
-            parts.append(String(localized: "anything requiring admin privileges, except leftover macOS update files"))
-        }
+        var parts = neverCleanedFolderLabels
 
         let protectedContainerCount =
             DeletionSafetyPolicy.protectedContainerBundleIDs.count
@@ -87,57 +84,48 @@ enum SafetyAllowlistSummary {
             parts.append(String(localized: "protected containers"))
         }
 
-        let personalLabels = personalFileBoundaryLabels
-        if !personalLabels.isEmpty {
-            parts.append(String(localized: "personal files (\(personalLabels.joined(separator: String(localized: ", "))))") )
+        if !DeletionSafetyPolicy.systemCacheDeletionPrefixes.isEmpty {
+            // Leftover macOS update files are the one exception, moved by the helper
+            // only after the user turns secure removal on (#127).
+            parts.append(String(localized: "system folders that need an admin password, except leftover macOS update files"))
         }
 
-        guard !parts.isEmpty else {
-            return String(localized: "What Purge never touches: paths outside the allowlist")
-        }
-
-        return String(localized: "What Purge never touches: \(parts.joined(separator: String(localized: ", ")))")
+        let userPicked = String(localized: "Large Files and the uninstaller remove only what you confirm, which can include your own files and apps that need an admin password.")
+        guard !parts.isEmpty else { return userPicked }
+        let list = ListFormatter.localizedString(byJoining: parts)
+        return String(localized: "Cleaning never touches \(list).") + " " + userPicked
     }
 
-    /// Friendly labels for user-content roots pulled from never-delete policy paths.
-    private static var personalFileBoundaryLabels: [String] {
+    /// Folders `evaluate` refuses along with everything inside them. Documents,
+    /// Desktop, Downloads and Application Support are refused as folders only,
+    /// because the caches and build folders inside them are cleaned, so they are
+    /// never named here. Nor is a never-delete folder with an allowlisted path
+    /// inside it: the allowlist is checked first, so `~/Movies/CacheClip` is
+    /// cleaned although `~/Movies` is protected.
+    static var neverCleanedFolderLabels: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let allowlisted = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: home)
 
         func label(for path: String) -> String? {
             guard path.hasPrefix(home + "/") else { return nil }
-            let relative = String(path.dropFirst(home.count + 1))
-            let top = relative.split(separator: "/").first.map(String.init) ?? relative
-            switch top {
-            case "Documents": return String(localized: "documents")
-            case "Desktop": return String(localized: "desktop")
-            case "Downloads": return String(localized: "downloads")
+            switch String(path.dropFirst(home.count + 1)) {
+            case "Library/Keychains": return String(localized: "keychains")
+            case "Library/Preferences": return String(localized: "preferences")
+            // Only the mailboxes. Mail's attachment copies in its container are
+            // allowlisted.
+            case "Library/Mail": return String(localized: "Mail mailboxes")
             case "Pictures": return String(localized: "pictures")
             case "Music": return String(localized: "music")
             case "Movies": return String(localized: "movies")
-            case "System": return String(localized: "system")
-            case "Library":
-                let sub = relative.split(separator: "/").dropFirst().first.map(String.init) ?? ""
-                switch sub {
-                case "Keychains": return String(localized: "keychains")
-                case "Preferences": return String(localized: "preferences")
-                case "Mail": return String(localized: "mail")
-                case "Application Support": return String(localized: "application support")
-                default: return nil
-                }
-            default:
-                return top.lowercased()
+            default: return nil
             }
         }
 
         var seen = Set<String>()
-        var labels: [String] = []
-
-        for path in DeletionSafetyPolicy.neverDeleteExactPaths(home: home) + DeletionSafetyPolicy.neverDeletePrefixes(home: home) {
-            guard path.hasPrefix(home) else { continue }
-            guard let label = label(for: path), seen.insert(label).inserted else { continue }
-            labels.append(label)
+        return DeletionSafetyPolicy.neverDeletePrefixes(home: home).compactMap { path in
+            guard !allowlisted.contains(where: { $0 == path || $0.hasPrefix(path + "/") }) else { return nil }
+            guard let label = label(for: path), seen.insert(label).inserted else { return nil }
+            return label
         }
-
-        return labels
     }
 }

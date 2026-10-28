@@ -8,8 +8,13 @@ struct DeletionConfirmSheet: View {
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
-    private var totalBytes: Int64 {
-        candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
+    /// Only the simulators and runtimes are freed straight away. The rest waits
+    /// in the Trash until it is emptied (#191).
+    var sizeLine: String {
+        RemovalSizeLine.text(
+            toTrash: RemovalSizeLine.total(trashCandidates, \.sizeBytes),
+            permanently: RemovalSizeLine.total(permanentCandidates, \.sizeBytes)
+        )
     }
 
     /// Simulators and runtimes. `simctl` deletes them, so they never reach the
@@ -309,7 +314,7 @@ struct DeletionConfirmSheet: View {
 
     private func footer(primaryTitle: String) -> some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            Text("Freeing \(formatBytes(totalBytes))")
+            Text(sizeLine)
                 .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
 

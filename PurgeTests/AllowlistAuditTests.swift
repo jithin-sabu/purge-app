@@ -274,6 +274,21 @@ struct AllowlistExplanationDataTests {
     func containerManagerCacheIsNeverOffered() {
         #expect(AuditPaths.evaluate("Library/Caches/com.apple.containermanagerd") == .blockedNeverDelete)
     }
+
+    /// The row is Safe, and its text once said Mise would have to download every
+    /// tool again. The cache holds version lists; installs live elsewhere (#191).
+    @Test
+    func miseTextMatchesItsSafeTag() throws {
+        let record = try #require(ExplanationDatabase.record(forKey: "mise-cache"))
+        #expect(record.tag == "safe")
+        #expect(record.explanation.contains("Installed tools stay"))
+        #expect(!record.explanation.contains("re-download any tools"))
+    }
+
+    @Test(arguments: ["dotnet-bin", "dotnet-obj"])
+    func dotNetNamesKeepTheirDot(key: String) {
+        #expect(ExplanationDatabase.record(forKey: key)?.displayName.hasPrefix(".NET ") == true)
+    }
 }
 
 // MARK: - Part 4: bugs
@@ -468,6 +483,10 @@ struct AllowlistAdditionTests {
         ".expo/state.json",
         ".pyenv/versions",
         ".rbenv/versions",
+        // Mise's installs, which the Safe Mise row's text promises stay (#191).
+        ".local/share/mise",
+        ".local/share/mise/installs",
+        ".local/share/mise/installs/node/22.11.0",
         ".conda/envs",
         "miniforge3/envs",
         "Library/Messages/chat.db",

@@ -43,6 +43,7 @@
 "%@, %@, and %lld more" = "%@、%@，另有 %lld 项";
 "%@, %lld items" = "%@，%lld 项";
 "%@, %lld selected" = "%@，已选择 %lld 项";
+"%@, Purge moves what Clean Safe Items would take to the Trash: Safe caches and Dev Tools items, and build and dependency folders, such as node_modules, in projects you haven't used for a while. It never takes anything marked Check First, and you can put it all back until you empty the Trash." = "%@，Purge 会把“清理安全项目”会清理的内容移到废纸篓：安全的缓存和开发工具项目，以及一段时间没有使用的项目中的构建和依赖文件夹（例如 node_modules）。它绝不会处理标为“先检查”的项目；在你清空废纸篓之前，这些内容都可以放回去。";
 "%@." = "%@。";
 "%@. %@" = "%@。%@";
 "%lld" = "%lld";
@@ -165,6 +166,7 @@
 "Cleaning %@…" = "正在清理 %@…";
 "Cleaning History" = "清理历史记录";
 "Cleaning Schedule" = "清理计划";
+"Cleaning never touches %@." = "清理绝不会处理%@。";
 "Cleaning, %@ of %@" = "正在清理，%@ / %@";
 "Cleaning..." = "正在清理…";
 "Cleaning…" = "正在清理…";
@@ -204,11 +206,16 @@
 "From the last scan, %@" = "来自上次扫描（%@）";
 "From the last scan, %@ · Checking again…" = "来自上次扫描（%@）· 正在重新检查…";
 "From the last scan. Purge is checking it again." = "来自上次扫描。Purge 正在重新检查。";
+"Keeping %lld, moving %@ to Trash" = "保留 %lld 项，将 %@ 移到废纸篓";
+"Large Files and the uninstaller remove only what you confirm, which can include your own files and apps that need an admin password." = "大文件和应用卸载只会移除你确认过的内容，其中可能包括你自己的文件，以及需要管理员密码才能移除的应用。";
 "Last scan found %lld files, %@, %@" = "上次扫描找到 %lld 个文件，%@，%@";
 "Last scan found 1 file, %@, %@" = "上次扫描找到 1 个文件，%@，%@";
 "Last scan: %lld files, %@, %@" = "上次扫描：%lld 个文件，%@，%@";
 "Last scan: 1 file, %@, %@" = "上次扫描：1 个文件，%@，%@";
 "Looking for large files again" = "正在重新查找大文件";
+"Mail mailboxes" = "“邮件”的邮箱";
+"Moving %@ to Trash" = "将 %@ 移到废纸篓";
+"Moving %@ to Trash, freeing %@" = "将 %@ 移到废纸篓，释放 %@";
 "Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "正在运行，因此无法移除。请先在“模拟器”中将其关闭，然后重新扫描。";
 "Dependencies" = "依赖项";
 "Dev Tools" = "开发工具";
@@ -234,7 +241,6 @@
 "Every" = "每隔";
 "Every %lld %@" = "每 %lld %@";
 "Every …" = "每…";
-"%@, we will quietly clean the same safe items as the Clean Safe Items button - safe caches and stale developer artifacts. Your actual work is never deleted." = "%@，会在后台清理与“清理安全项目”按钮相同的项目，包括安全缓存和不再使用的开发工具生成文件。不会删除你的工作文件。";
 "Every 3 months" = "每 3 个月";
 "Every copy is identical, so keeping any one is safe. Purge keeps the copy in a real folder over one in Downloads, a cache, or a build folder, and prefers the original name. The rest go to Trash. Tap a copy to keep it instead." = "所有副本内容完全相同，保留任何一份都可以。Purge 优先保留普通文件夹中、使用原始名称的副本，而非下载、缓存或构建文件夹中的副本。其余副本会移到废纸篓。你也可以点选另一份保留。";
 "Every day" = "每天";
@@ -283,7 +289,6 @@
 "Keep Purge in the menu bar" = "在菜单栏保留 Purge";
 "Keep one copy of each set and review the rest before deleting" = "每组保留一份副本，删除前检查其余副本";
 "Keeping" = "保留";
-"Keeping %lld, freeing %@" = "保留 %lld 项，释放 %@";
 "Kept, still used by %@" = "已保留，仍被 %@ 使用";
 "Large Files" = "大文件";
 "Large Files and the uninstaller are open now too." = "现在也可以使用大文件和卸载功能。";
@@ -701,8 +706,6 @@
 "Weeks" = "周";
 "Welcome to" = "欢迎使用";
 "Welcome to Purge" = "欢迎使用 Purge";
-"What Purge never touches: %@" = "Purge 绝不处理：%@";
-"What Purge never touches: paths outside the allowlist" = "Purge 绝不处理：允许清理列表之外的路径";
 "What are Time Machine snapshots?" = "什么是时间机器快照？";
 "When an app leaves Applications, like dragging it to the Trash in Finder, Purge opens with the files it left behind, even if Purge was quit. Nothing moves until you confirm. A small background watcher stays on while this is enabled; you can turn it off here at any time." = "应用从“应用程序”中移除时（例如在访达中拖到废纸篓），Purge 会打开并显示残留文件，即使之前已退出。确认前不会移动任何内容。启用此功能后，一个小型后台程序会持续监测；你可随时在此关闭。";
 "Xcode can no longer run this device. %@" = "Xcode 已无法运行此设备。%@";
@@ -725,9 +728,7 @@
 "a fresh copy of Xcode" = "一份新的 Xcode";
 "a full base MacBook Air" = "一台装满的基础款 MacBook Air";
 "all of GTA V" = "完整 GTA V";
-"anything requiring admin privileges, except leftover macOS update files" = "需要管理员权限的内容（残留的 macOS 更新文件除外）";
 "app" = "个应用";
-"application support" = "应用支持文件";
 "apps" = "个应用";
 "buy me a coffee" = "请我喝杯咖啡";
 "by" = "制作 ·";
@@ -750,12 +751,9 @@
 "delete" = "删除";
 "delete app" = "删除应用";
 "delete junk" = "删除垃圾文件";
-"desktop" = "桌面";
 "disk full" = "磁盘已满";
 "disk space" = "磁盘空间";
-"documents" = "文稿";
 "done in " = "耗时 ";
-"downloads" = "下载";
 "empty caches" = "清空缓存";
 "file" = "个";
 "files" = "个";
@@ -785,7 +783,6 @@
 "macOS protects this one and won't let it be removed." = "此内容受到 macOS 保护，无法移除。";
 "macOS updates" = "份 macOS 更新";
 "macOS, your documents and photos, and files Purge doesn't sort" = "macOS、你的文稿和照片，以及 Purge 未分类的文件";
-"mail" = "邮件";
 "month" = "月";
 "more screenshots" = "张额外截图";
 "more to clean, from places that were locked" = "可以继续清理，来自此前无法访问的位置";
@@ -796,7 +793,6 @@
 "of %@" = "共 %@";
 "one more screenshot" = "再存一张截图";
 "or" = "或";
-"personal files (%@)" = "个人文件（%@）";
 "pictures" = "图片";
 "preferences" = "偏好设置";
 "protected containers" = "受保护的容器";
@@ -812,7 +808,7 @@
 "space" = "空间";
 "storage" = "存储";
 "storage full" = "存储空间已满";
-"system" = "System 文件夹";
+"system folders that need an admin password, except leftover macOS update files" = "需要管理员密码的系统文件夹（残留的 macOS 更新文件除外）";
 "the next macOS update" = "下一次 macOS 更新";
 "the selected apps" = "所选应用";
 "today" = "今天";

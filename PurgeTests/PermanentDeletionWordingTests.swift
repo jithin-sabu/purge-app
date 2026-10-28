@@ -71,6 +71,7 @@ struct DeletionConfirmSheetPermanentTests {
         #expect(confirm.permanentCandidates.isEmpty)
         #expect(confirm.title == String(localized: "Move selected items to Trash?"))
         #expect(confirm.primaryButtonTitle == String(localized: "Move \(2) to Trash"))
+        #expect(confirm.sizeLine == String(localized: "Moving \(formatBytes(2)) to Trash"))
     }
 
     @Test func simulatorIsListedAsDeletedPermanently() {
@@ -85,6 +86,7 @@ struct DeletionConfirmSheetPermanentTests {
         #expect(confirm.title == String(localized: "Clean selected items?"))
         #expect(confirm.primaryButtonTitle == String(localized: "Clean \(2) Items"))
         #expect(confirm.message != String(localized: "Purge moves these to Trash. You can put anything back if you change your mind."))
+        #expect(confirm.sizeLine == String(localized: "Moving \(formatBytes(1)) to Trash, freeing \(formatBytes(1))"))
     }
 
     @Test func runtimeIsListedAsDeletedPermanently() async {
@@ -123,6 +125,7 @@ struct DeletionConfirmSheetPermanentTests {
         #expect(confirm.permanentCandidates.count == 1)
         #expect(confirm.title == String(localized: "Delete selected items permanently?"))
         #expect(confirm.primaryButtonTitle == String(localized: "Delete \(1) Permanently"))
+        #expect(confirm.sizeLine == String(localized: "Freeing \(formatBytes(1))"))
     }
 }
 

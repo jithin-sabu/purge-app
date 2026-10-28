@@ -1375,7 +1375,7 @@ struct UninstallReviewSheet: View {
         let secondary = Self.secondaryButtonTitle(for: plan)
         return HStack(spacing: AppStyle.Spacing.small) {
             if secondary == nil {
-                Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+                Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
                     .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
             } else {
@@ -1464,7 +1464,7 @@ struct OrphanReviewSheet: View {
 
     private var footer: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+            Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
                 .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
 
@@ -1555,7 +1555,7 @@ struct RemovedAppLeftoverSheet: View {
 
     private var footer: some View {
         HStack(spacing: AppStyle.Spacing.small) {
-            Text("Freeing \(formatBytes(plan.totalSelectedBytes))")
+            Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
                 .font(AppStyle.Typography.metadataEmphasis.numbers)
                 .foregroundStyle(AppColors.textSecondary)
 

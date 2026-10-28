@@ -145,13 +145,13 @@ The labels and explanations are there to be checked, not read cover to cover. Se
 
 - **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete. Git and lockfile checks run first
 - **Clean Safe Files**: same safe cleanup from the menu bar
-- **Scheduled cleaning**: in **Settings → Cleaning Schedule**, enable **Run automatic cleaning** and choose **How often** (weekly, monthly, every 3 months, or a **Custom** interval you set in days, weeks, or months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
+- **Scheduled cleaning**: in **Settings → Cleaning**, turn on **Clean automatically** and choose how often (weekly, monthly, every 3 months, or a **Custom** interval you set in days, weeks, or months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
 - Files and folders move to the **Trash**. Purge never empties the Trash. iOS simulators and simulator runtimes are removed for good through Xcode's `simctl`. Time Machine local snapshots are removed for good through `tmutil`; Purge keeps the newest and the one from your last backup. The Apple Intelligence models are released through Apple's asset service and can be downloaded again. Tools and cask apps a package manager installed are removed by that manager's own uninstall, permanently, when you pick that in the review sheet
 
 ### Settings
 
 - **Appearance**: Light, Dark, or System
-- **Cleaning Schedule**: automatic safe cleanup with a frequency, the next-clean date, and a summary of the last clean
+- **Cleaning**: automatic safe cleanup with a frequency, the next-clean date, and a summary of the last clean
 - **Developer Projects**: stale-project threshold for developer artifact scanning
 - **Excluded from scans**: folders you've told Purge to leave alone, each with its current size. Right-click any scan result and choose **Exclude from scans** to add one. Excluding only ever narrows what Purge looks at
 - **Cleaning History**: every automatic and manual clean, with the space freed and the item count. Open one to see what was moved to the Trash and what was skipped
@@ -270,7 +270,7 @@ Prefer to build Purge yourself instead of downloading the release? Here is how.
 ### Prerequisites
 
 - macOS 13.0 or later
-- **Xcode 16 or later** (from the Mac App Store). The project format and its default-actor-isolation build setting need Xcode 16; earlier versions won't open it
+- **Xcode 26 or later** (from the Mac App Store). The project uses Swift 6.2 build settings (default actor isolation and approachable concurrency) and `@concurrent`, which need Xcode 26; earlier versions won't build it
 - [Node.js](https://nodejs.org) 18+ and npm, only needed if you want to regenerate brand icons
 
 Dependencies are resolved by Swift Package Manager when you first build. The only one is [Sparkle](https://github.com/sparkle-project/Sparkle), which handles in-app updates.
@@ -337,7 +337,7 @@ Purge runs entirely on your Mac. Scans, explanations, manual overrides, and clea
 
 The one time Purge talks to the network is the update check: once a day it fetches a small XML file from GitHub to see whether a newer version is available. It sends nothing about you or your Mac, and you can turn it off in **Settings → Updates**.
 
-Purge never reads or sends file contents.
+Purge reads some file contents, on your Mac only. To find duplicates it compares files of the same size byte for byte. To work out which app or tool a file belongs to, it reads small files such as an app's `Info.plist`, LaunchAgent plists, and the scripts that start command-line tools. It never sends file contents anywhere.
 
 Purge does not use AI. Nothing you scan or clean is sent to an AI service.
 

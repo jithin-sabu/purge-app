@@ -192,6 +192,15 @@ struct CommandLineToolReviewSheet: View {
 
     static let settingsShown = 8
 
+    /// Script installs wait in the Trash. Only what a package manager removes is
+    /// freed straight away (#191).
+    static func sizeLine(for plan: CommandLineToolRemovalPlan) -> String {
+        RemovalSizeLine.text(
+            toTrash: RemovalSizeLine.total(plan.tools, \.sizeBytes),
+            permanently: RemovalSizeLine.total(plan.managed, \.sizeBytes)
+        )
+    }
+
     private var isBusy: Bool {
         switch plan.phase {
         case .checking, .working: return true
@@ -441,7 +450,7 @@ struct CommandLineToolReviewSheet: View {
         HStack(spacing: AppStyle.Spacing.small) {
             switch plan.phase {
             case .review, .checking:
-                Text("Freeing \(formatBytes(plan.totalBytes))")
+                Text(Self.sizeLine(for: plan))
                     .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
                 Spacer()
