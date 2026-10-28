@@ -4,8 +4,8 @@ struct CleanupHistorySummaryRow: View {
     let entry: CleanupHistoryEntry
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(Self.title(for: entry))
                     .font(scheduleStatusPrimaryFont)
                     .foregroundStyle(AppColors.textPrimary)
@@ -15,9 +15,9 @@ struct CleanupHistorySummaryRow: View {
                     .foregroundStyle(AppColors.textTertiary)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
-            VStack(alignment: .trailing, spacing: 3) {
+            VStack(alignment: .trailing, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(primaryFigure)
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)

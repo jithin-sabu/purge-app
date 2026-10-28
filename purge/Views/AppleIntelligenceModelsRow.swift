@@ -28,8 +28,8 @@ struct OverviewAppleIntelligenceRow: View {
             // Apple's own mark for the feature, as an icon image with its own
             // corners: the loop in blue and gold on a white tile.
             OverviewIconTile(symbol: nil, color: AppColors.Chart.everythingElse, imageName: "AppleIntelligenceMark")
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                HStack(spacing: AppStyle.Spacing.xxSmall) {
                     Text("Apple Intelligence models")
                         .font(AppStyle.Typography.headline)
                     infoButton
@@ -43,7 +43,7 @@ struct OverviewAppleIntelligenceRow: View {
             trailing
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .accessibilityElement(children: .contain)
         .task { await store.refreshAccounts() }
@@ -264,7 +264,7 @@ struct AppleIntelligenceBreakdown: View {
                 .monospacedDigit()
         }
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 7)
+        .padding(.vertical, AppStyle.Spacing.xSmall)
     }
 
     private func size(for set: AppleIntelligenceModelSet) -> String {

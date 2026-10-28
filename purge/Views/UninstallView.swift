@@ -176,7 +176,7 @@ struct UninstallView: View {
     @Namespace private var gridReorderNamespace
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: AppStyle.Spacing.xSmall) {
             if showsSectionTabs || !isAwaitingFirstAppsScan {
                 controls
             }
@@ -278,7 +278,7 @@ struct UninstallView: View {
             VStack(spacing: 0) {
                 leftoversToolbar
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
+                    LazyVStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
                         ForEach(Array(orphanSections.enumerated()), id: \.element.reason) { index, section in
                             UninstallSectionHeader(title: section.reason.leftoverSectionTitle)
                                 .padding(.top, index == 0 ? 0 : AppStyle.Spacing.small)
@@ -305,7 +305,7 @@ struct UninstallView: View {
                         }
                     }
                     .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-                    .padding(.top, 2)
+                    .padding(.top, AppStyle.Spacing.xxxSmall)
                     .padding(.bottom, AppStyle.Spacing.large)
                 }
                 .scrollContentBackground(.hidden)
@@ -481,7 +481,7 @@ struct UninstallView: View {
     /// its own row, so the switcher never competes with sort and search for
     /// width. Shown once a second section has something.
     private var sectionTabs: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: AppStyle.Spacing.xxxSmall) {
             sectionTab(.installedApps, count: store.installedApps.isEmpty ? nil : store.installedApps.count)
             if showsLeftoversSegment {
                 // Counts the last scan's rows too, as the list under it shows them (#283).
@@ -494,14 +494,14 @@ struct UninstallView: View {
                 )
             }
         }
-        .padding(3)
+        .padding(AppStyle.Spacing.xxSmall)
         .background(Capsule(style: .continuous).fill(AppColors.surfaceCard))
         .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 1))
         .fixedSize()
     }
 
     private func sectionTabLabel(_ target: UninstallSection, count: Int?, isOn: Bool) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             Image(systemName: target.symbolName)
                 // Badged symbols report a taller ideal size; clip so every
                 // segment shares one height, as `FilterChip` does.
@@ -532,7 +532,7 @@ struct UninstallView: View {
             .foregroundStyle(isOn ? AppColors.textPrimary : AppColors.textSecondary)
             .lineLimit(1)
             .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.vertical, 6)
+            .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
             .background {
                 if isOn {
                     Capsule(style: .continuous)
@@ -619,7 +619,7 @@ struct UninstallView: View {
         return ScrollView {
             // Non-lazy so every row stays in the hierarchy and can slide to its
             // new index on sort. LazyVStack treats reorders as remove + insert.
-            VStack(spacing: 6) {
+            VStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                 ForEach(filteredApps) { app in
                     let isFromLastScan = savedPaths.contains(app.bundleURL.path)
                     AppListRow(
@@ -635,7 +635,7 @@ struct UninstallView: View {
                 }
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .padding(.top, 2)
+            .padding(.top, AppStyle.Spacing.xxxSmall)
             .padding(.bottom, AppStyle.Spacing.large)
         }
         .scrollContentBackground(.hidden)
@@ -650,9 +650,9 @@ struct UninstallView: View {
         return ScrollView {
             // Non-lazy so tiles keep identity across sort and slide in place.
             // LazyVGrid recycles cells and makes reorders look like fly-ins.
-            VStack(spacing: 12) {
+            VStack(spacing: AppStyle.Spacing.small) {
                 ForEach(gridRows, id: \.startIndex) { row in
-                    HStack(spacing: 12) {
+                    HStack(spacing: AppStyle.Spacing.small) {
                         ForEach(row.apps) { app in
                             let isFromLastScan = savedPaths.contains(app.bundleURL.path)
                             AppTile(
@@ -678,7 +678,7 @@ struct UninstallView: View {
                 }
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .padding(.top, 2)
+            .padding(.top, AppStyle.Spacing.xxxSmall)
             .padding(.bottom, AppStyle.Spacing.large)
         }
         .scrollContentBackground(.hidden)
@@ -711,13 +711,13 @@ struct UninstallView: View {
     /// Leftovers opened from the Overview before its scan has landed.
     private var leftoversSkeleton: some View {
         ScrollView {
-            LazyVStack(spacing: 6) {
+            LazyVStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                 ForEach(0..<8, id: \.self) { _ in
                     SkeletonAppListRow()
                 }
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-            .padding(.top, 2)
+            .padding(.top, AppStyle.Spacing.xxxSmall)
             .padding(.bottom, AppStyle.Spacing.large)
         }
         .scrollContentBackground(.hidden)
@@ -729,7 +729,7 @@ struct UninstallView: View {
     // MARK: Shared bits
 
     private func emptyState(symbol: String, title: String, detail: String) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: AppStyle.Spacing.small) {
             Image(systemName: symbol)
                 .font(.system(size: 38))
                 .foregroundStyle(AppColors.textSecondary)
@@ -740,7 +740,7 @@ struct UninstallView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, AppStyle.Spacing.large)
     }
 }
 
@@ -753,7 +753,7 @@ private struct UninstallViewModeSwitcher: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let segmentWidth: CGFloat = 30
-    private static let inset: CGFloat = 2
+    private static let inset: CGFloat = AppStyle.Spacing.xxxSmall
 
     var body: some View {
         HStack(spacing: 0) {
@@ -845,7 +845,7 @@ private struct UninstallItemRow: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(LocalizedStringKey(item.safetyInfo.headline))
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
@@ -987,7 +987,7 @@ private struct AppListRow: View {
                 .frame(width: 36, height: 36)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(app.name)
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
@@ -1058,7 +1058,7 @@ private struct SkeletonAppListRow: View {
                 .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
                 .frame(width: 36, height: 36)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
                 SkeletonBar(width: 120, height: 12, cornerRadius: AppStyle.Radius.xs)
                 SkeletonBar(width: 180, height: 9, cornerRadius: AppStyle.Radius.xs)
             }
@@ -1108,13 +1108,13 @@ private struct AppTile: View {
     @State private var isContextMenuActive = false
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: AppStyle.Spacing.xSmall) {
             Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
                 .resizable()
                 .frame(width: 56, height: 56)
                 .frame(maxWidth: .infinity)
 
-            VStack(spacing: 2) {
+            VStack(spacing: AppStyle.Spacing.xxxSmall) {
                 Text(app.name)
                     .font(AppStyle.Typography.rowTitle)
                     .lineLimit(1)
@@ -1136,8 +1136,8 @@ private struct AppTile: View {
         }
         .frame(maxWidth: .infinity)
         .frame(minHeight: AppTileMetrics.contentHeight)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 14)
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.medium)
         .background {
             RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
                 .fill(AppColors.fillSecondary)
@@ -1152,7 +1152,7 @@ private struct AppTile: View {
             // Always shown, so an untouched tile still reads as selectable: a
             // hollow circle at rest, filled when picked, brighter on hover.
             selectionIndicator
-                .padding(10)
+                .padding(AppStyle.Spacing.small)
         }
         .overlay {
             RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
@@ -1187,18 +1187,18 @@ private struct AppTile: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(AppColors.textTertiary)
                 .frame(width: 20, height: 20)
-                .background(Circle().fill(AppColors.fillSecondary).padding(1))
+                .background(Circle().fill(AppColors.fillSecondary).padding(1)) // design-lint: allow, sits the fill under the glyph's own circle
                 .accessibilityHidden(true)
         } else if isSelected {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 20))
                 .foregroundStyle(AppColors.actionPrimary)
-                .background(Circle().fill(AppColors.fillSecondary).padding(1))
+                .background(Circle().fill(AppColors.fillSecondary).padding(1)) // design-lint: allow, sits the fill under the glyph's own circle
         } else {
             Image(systemName: "circle")
                 .font(.system(size: 20))
                 .foregroundStyle(isHovering ? AppColors.textSecondary : AppColors.textTertiary)
-                .background(Circle().fill(AppColors.fillSecondary).padding(1))
+                .background(Circle().fill(AppColors.fillSecondary).padding(1)) // design-lint: allow, sits the fill under the glyph's own circle
         }
     }
 }
@@ -1230,7 +1230,7 @@ struct UninstallReviewSheet: View {
                         appSection($appPlan)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 280)
 
@@ -1302,7 +1302,7 @@ struct UninstallReviewSheet: View {
 
     private func appSection(_ appPlan: Binding<UninstallAppPlan>) -> some View {
         let app = appPlan.wrappedValue.app
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
             HStack(spacing: AppStyle.Spacing.small) {
                 TriStateCheckbox(
                     title: "",
@@ -1430,7 +1430,7 @@ struct OrphanReviewSheet: View {
             header
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
+                LazyVStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
                     ForEach($plan.items) { $item in
                         UninstallItemRow(
                             item: item,
@@ -1439,7 +1439,7 @@ struct OrphanReviewSheet: View {
                         )
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 260)
 
@@ -1508,7 +1508,7 @@ struct RemovedAppLeftoverSheet: View {
             header
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
+                LazyVStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
                     ForEach($plan.items) { $item in
                         UninstallItemRow(
                             item: item,
@@ -1516,7 +1516,7 @@ struct RemovedAppLeftoverSheet: View {
                         )
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 220)
 
@@ -1591,7 +1591,7 @@ private struct UninstallSearchField: View {
     private var hasText: Bool { !query.isEmpty }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             Image(systemName: "magnifyingglass")
                 .imageScale(.small)
                 .foregroundStyle(AppColors.textSecondary)
@@ -1625,8 +1625,8 @@ private struct UninstallSearchField: View {
                 .transition(.opacity)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
         .frame(width: 180)
         .background {
             Capsule(style: .continuous).fill(AppColors.fillSecondary)

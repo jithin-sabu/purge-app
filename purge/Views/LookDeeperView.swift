@@ -331,7 +331,7 @@ struct LookDeeperSheet: View {
   /// The same width as the app's other sheets. The onboarding step is laid out for
   /// the whole window; over the main window it would read as oversized.
   static let width: CGFloat = 580
-  static let padding: CGFloat = 32
+  static let padding: CGFloat = AppStyle.Spacing.xLarge
 
   var body: some View {
     LookDeeperView(
@@ -348,6 +348,6 @@ struct LookDeeperSheet: View {
 #Preview {
   LookDeeperView(context: .onboarding(didClean: true), onNotNow: {}, onFinished: {})
     .environmentObject(PurgeStore())
-    .padding(40)
+    .padding(AppStyle.Spacing.xLarge)
     .frame(width: AppWindowLayout.width, height: AppWindowLayout.minHeight)
 }

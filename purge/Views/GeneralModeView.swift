@@ -393,7 +393,7 @@ struct AppCachesView: View {
     }
 
     private var emptyFilterState: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: AppStyle.Spacing.xxSmall) {
             Text("Nothing here.")
                 .font(AppStyle.Typography.headline)
             Text("No items match this filter.")
@@ -403,7 +403,7 @@ struct AppCachesView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: AppStyle.Spacing.small) {
             Image(systemName: "externaldrive.badge.checkmark")
                 .font(.system(size: 38))
                 .foregroundStyle(AppColors.textSecondary)

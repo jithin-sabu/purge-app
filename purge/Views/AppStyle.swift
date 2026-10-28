@@ -36,7 +36,11 @@ enum AppStyle {
     }
 
     enum Spacing {
+        /// A title over its subtitle, badge padding.
+        static let xxxSmall: CGFloat = 2
         static let xxSmall: CGFloat = 4
+        /// An icon beside its label, rows in a tight list.
+        static let xxSmallPlus: CGFloat = 6
         static let xSmall: CGFloat = 8
         static let small: CGFloat = 12
         static let medium: CGFloat = 16
@@ -55,7 +59,7 @@ enum AppStyle {
         /// Project group headers (node_modules, Flutter, etc.) — slightly smaller than scan rows (28pt).
         static let projectGroupIconSize: CGFloat = 16
         /// Aligns expanded artifact text with the project title (parent checkbox + spacing).
-        static let projectArtifactLeadingInset: CGFloat = 34
+        static let projectArtifactLeadingInset: CGFloat = 24 + Spacing.small
         /// Inner horizontal padding for scan result cards (matches `ScanResultRow` chrome).
         static let scanCardHorizontalPadding: CGFloat = 14
     }

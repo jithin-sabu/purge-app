@@ -22,7 +22,7 @@ final class SettingsGuidePanel {
     private var onCancel: (() -> Void)?
 
     private static let width: CGFloat = 300
-    private static let gap: CGFloat = 14
+    private static let gap: CGFloat = AppStyle.Spacing.medium
     private static let systemSettingsBundleID = "com.apple.systempreferences"
 
     func show(_ guide: Guide, onCancel: @escaping () -> Void) {

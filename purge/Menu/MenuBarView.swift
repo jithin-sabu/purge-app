@@ -38,8 +38,8 @@ struct MenuBarStatusIcon: View {
 // MARK: - Layout
 
 private enum MenuLayout {
-    static let rowInset: CGFloat = 6
-    static let rowContentInset: CGFloat = 10
+    static let rowInset: CGFloat = AppStyle.Spacing.xxSmallPlus
+    static let rowContentInset: CGFloat = AppStyle.Spacing.small
     static let contentHorizontalInset: CGFloat = rowInset + rowContentInset
     static let mutedStatusOpacity: Double = 0.78
     static let disabledRowOpacity: Double = 0.35
@@ -71,7 +71,7 @@ struct MenuBarContentView: View {
 
     private enum Metrics {
         static let panelWidth: CGFloat = 240
-        static let dividerInset: CGFloat = 12
+        static let dividerInset: CGFloat = AppStyle.Spacing.small
         /// Constant height for the single-line hero states (checking / clear /
         /// ready / cleaned) so the action rows below never jump when the state
         /// swaps. Sized to the tallest line (the 16 pt byte count).
@@ -86,18 +86,18 @@ struct MenuBarContentView: View {
     )
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
             statusRegion
                 .padding(.horizontal, MenuLayout.contentHorizontalInset)
-                .padding(.top, 4)
-                .padding(.bottom, 2)
+                .padding(.top, AppStyle.Spacing.xxSmall)
+                .padding(.bottom, AppStyle.Spacing.xxxSmall)
 
             menuDivider
 
             menuActionRows
         }
         .frame(width: Metrics.panelWidth, alignment: .leading)
-        .padding(.vertical, 6)
+        .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
         .background(MenuOpenDetector(
             onOpen: { model.menuDidOpen() },
             onWindow: { model.panelWindow = $0 },
@@ -119,7 +119,7 @@ struct MenuBarContentView: View {
                     .transition(Self.heroTransition)
 
             case .clear(let lastScanned):
-                HStack(spacing: 8) {
+                HStack(spacing: AppStyle.Spacing.xSmall) {
                     Text("You're all clear")
                         .font(AppStyle.Typography.headline)
                         .foregroundStyle(AppColors.textPrimary)
@@ -130,7 +130,7 @@ struct MenuBarContentView: View {
                 .transition(Self.heroTransition)
 
             case .ready(let bytes, let lastScanned):
-                HStack(spacing: 8) {
+                HStack(spacing: AppStyle.Spacing.xSmall) {
                     HStack(spacing: 0) {
                         Text(menuBytes(bytes))
                             .font(AppStyle.Typography.sectionTitle.numbers)
@@ -146,7 +146,7 @@ struct MenuBarContentView: View {
                 .transition(Self.heroTransition)
 
             case .cleaning(let cleaned, let total):
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
                     Text("Cleaning…")
                         .font(AppStyle.Typography.headline)
                         .foregroundStyle(AppColors.textPrimary)
@@ -161,7 +161,7 @@ struct MenuBarContentView: View {
                 .transition(Self.heroTransition)
 
             case .cleaned(let bytes):
-                HStack(spacing: 8) {
+                HStack(spacing: AppStyle.Spacing.xSmall) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 16))
                         .foregroundStyle(AppColors.statusSafeText)
@@ -215,7 +215,7 @@ struct MenuBarContentView: View {
         Divider()
             .opacity(0.5)
             .padding(.horizontal, Metrics.dividerInset)
-            .padding(.vertical, 2)
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
     }
 
     // MARK: Formatting
@@ -249,7 +249,7 @@ private struct ScannedAgoLabel: View {
     @State private var ticker: Timer?
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: AppStyle.Spacing.xxSmall) {
             Image(systemName: "clock")
                 .font(.system(size: 10, weight: .medium))
             Text(figures: compactAgoText(from: date, to: now), style: AppStyle.Typography.callout)
@@ -328,7 +328,7 @@ private struct CheckingStatusLine: View {
     @State private var cycleTimer: Timer?
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             ProgressView().controlSize(.small)
             // ZStack so the outgoing and incoming words overlap while animating
             // instead of sitting side by side in the HStack.
@@ -417,7 +417,7 @@ private struct MenuTextRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
                 if let systemImage {
                     Image(systemName: systemImage)
                         .frame(width: 16)
@@ -429,7 +429,7 @@ private struct MenuTextRow: View {
             .font(AppStyle.Typography.body)
             .foregroundStyle(rowForeground)
             .padding(.horizontal, MenuLayout.rowContentInset)
-            .padding(.vertical, 5)
+            .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
             .frame(minHeight: 24)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {

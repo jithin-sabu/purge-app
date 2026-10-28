@@ -200,7 +200,7 @@ struct OverviewView: View {
     private func footnotes(now: Date) -> some View {
         let lines = footnoteLines(now: now)
         if !lines.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 ForEach(lines, id: \.self) { line in
                     Text(line)
                 }
@@ -257,8 +257,8 @@ private struct OverviewCategoryRow: View {
                 color: OverviewCategoryStyle.tileColor(category)
             )
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     Text(OverviewCategoryStyle.name(category))
                         .font(AppStyle.Typography.headline)
                     if OverviewCategoryStyle.isReview(category), showsFigure, !isEmptyLargeFiles {
@@ -275,7 +275,7 @@ private struct OverviewCategoryRow: View {
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: phase)
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .background(isHovering || linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .contentShape(Rectangle())
@@ -344,7 +344,7 @@ private struct OverviewCategoryRow: View {
             Image(systemName: "lock")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.textTertiary)
-                .padding(.trailing, 2)
+                .padding(.trailing, AppStyle.Spacing.xxxSmall)
         case .notScanned where !isRecorded:
             Button("Scan") { store.requestScan(category.step) }
                 .buttonStyle(.purge(.secondary))
@@ -546,7 +546,7 @@ struct OverviewPlainRow: View {
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: symbol, color: color)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(LocalizedStringKey(title))
                     .font(AppStyle.Typography.headline)
                 Text(figures: detail, style: AppStyle.Typography.callout)
@@ -564,7 +564,7 @@ struct OverviewPlainRow: View {
                 .frame(minWidth: 64, alignment: .trailing)
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .background(linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .accessibilityElement(children: .combine)
@@ -602,8 +602,8 @@ private struct OverviewSnapshotRow: View {
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: nil, color: AppColors.Chart.everythingElse, appPath: "/System/Applications/Time Machine.app")
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                HStack(spacing: AppStyle.Spacing.xxSmall) {
                     Text("Time Machine snapshots")
                         .font(AppStyle.Typography.headline)
                     infoButton
@@ -616,7 +616,7 @@ private struct OverviewSnapshotRow: View {
             trailing
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .accessibilityElement(children: .contain)
     }
@@ -943,7 +943,7 @@ struct OverviewDiskBar: View {
 
     private static let height: CGFloat = 14
     private static let fadedOpacity: Double = 0.3
-    private nonisolated static let gap: CGFloat = 2
+    private nonisolated static let gap: CGFloat = AppStyle.Spacing.xxxSmall
     private nonisolated static let minimumWidth: CGFloat = 4
 
     var body: some View {

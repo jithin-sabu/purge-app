@@ -105,7 +105,7 @@ struct ScanStatusPlaceholder: View {
     private var shown: ScanWaitStatus { copy.shown(status) }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: AppStyle.Spacing.small) {
             symbol
                 .frame(width: 60, height: 60)
             Text(title)
@@ -121,7 +121,7 @@ struct ScanStatusPlaceholder: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, AppStyle.Spacing.large)
         .accessibilityElement(children: .combine)
     }
 

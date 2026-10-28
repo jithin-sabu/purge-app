@@ -22,6 +22,10 @@ struct DevToolsView: View {
 
     @State private var expandedProjectRoots = Set<String>()
 
+    /// The project card's expand chevron, and the empty slot that stands in for it
+    /// on a saved card.
+    private static let chevronSize: CGFloat = 12
+
     /// Stable list IDs so sibling `ForEach` loops in the same `List` never share
     /// bare `Int` identities (which can duplicate or swap rows on expand/collapse).
     private struct ProjectGroupRowKey: Hashable, Identifiable {
@@ -705,7 +709,7 @@ struct DevToolsView: View {
     }
 
     private var placeholderNoData: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: AppStyle.Spacing.xSmall) {
             Text("No dev tool folders surfaced yet.")
                 .font(AppStyle.Typography.headline)
             Text(scanPhase == .completed ? LocalizedStringKey("Your Mac is looking clean. Check back later.") : LocalizedStringKey("Run a scan after adding projects or tool-generated folders."))
@@ -1137,7 +1141,7 @@ struct DevToolsView: View {
     private func projectGroupCard(for group: ProjectGroup, groupIndex _: Int, isExpanded: Bool) -> some View {
         if let currentGroupIndex = store.projectGroups.firstIndex(where: { $0.id == group.id }) {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
                 // Scoped so the group tri-state reflects artifact selection changes
                 // without re-rendering the list container.
                 ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
@@ -1150,13 +1154,13 @@ struct DevToolsView: View {
                 Button {
                     toggleProjectExpanded(group.id)
                 } label: {
-                    HStack(alignment: .center, spacing: 10) {
+                    HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
                         AdaptiveBrandIconImage(
                             source: .projectGroup(group),
                             squareSize: AppStyle.Row.projectGroupIconSize
                         )
                         .accessibilityLabel(projectGroupIconAccessibilityLabel(for: group))
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                             Text(group.displayName)
                                 .font(AppStyle.Typography.rowTitle)
                             Text(projectSummary(groupIndex: currentGroupIndex))
@@ -1176,7 +1180,7 @@ struct DevToolsView: View {
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(AppColors.textSecondary)
                         }
-                        .frame(width: 12, height: 12)
+                        .frame(width: Self.chevronSize, height: Self.chevronSize)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0), anchor: .center)
                         .padding(.trailing, AppStyle.Spacing.xSmall)
                         .accessibilityHidden(true)
@@ -1238,7 +1242,7 @@ struct DevToolsView: View {
         let summary = artifacts.first(where: { $0.checkFirstReason != nil && $0.safetyInfo.level == .medium })?
             .checkFirstReason?.summary
             ?? artifacts.map(\.safetyInfo.headline).joined(separator: String(localized: ", "))
-        return HStack(alignment: .center, spacing: 10) {
+        return HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             LastScanRowMarker()
                 .frame(width: 24)
             AdaptiveBrandIconImage(
@@ -1246,7 +1250,7 @@ struct DevToolsView: View {
                 squareSize: AppStyle.Row.projectGroupIconSize
             )
             .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(group.displayName)
                     .font(AppStyle.Typography.rowTitle)
                 Text(summary)
@@ -1263,7 +1267,7 @@ struct DevToolsView: View {
             projectBadge(level: level)
             // Where the chevron sits, so sizes line up with the live cards.
             Color.clear
-                .frame(width: 12, height: 12)
+                .frame(width: Self.chevronSize, height: Self.chevronSize)
                 .padding(.trailing, AppStyle.Spacing.xSmall)
         }
         .padding(.vertical, AppStyle.Spacing.xSmall)
@@ -1402,7 +1406,7 @@ struct DevToolsView: View {
     }
 
     private var emptyFilterState: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: AppStyle.Spacing.xxSmall) {
             Text("Nothing here.")
                 .font(AppStyle.Typography.headline)
             Text("No items match this filter.")
@@ -1430,7 +1434,7 @@ private struct ProjectSearchStatus: View {
     let found: Int
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             ProgressView()
                 .controlSize(.mini)
             Text(found > 0 ? String(localized: "\(found) found, still looking…") : String(localized: "Searching…"))
@@ -1452,7 +1456,7 @@ private struct ProjectGroupSkeletonCard: View {
     let titleWidth: CGFloat
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
                 .stroke(AppColors.textSecondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
                 .frame(width: 14, height: 14)
@@ -1461,7 +1465,7 @@ private struct ProjectGroupSkeletonCard: View {
                 .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
                 .frame(width: AppStyle.Row.projectGroupIconSize, height: AppStyle.Row.projectGroupIconSize)
             // Invisible text in the real card's styles holds its line heights.
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 ZStack(alignment: .leading) {
                     Text(verbatim: " ").font(AppStyle.Typography.rowTitle).opacity(0)
                     SkeletonBar(width: titleWidth, height: 10)

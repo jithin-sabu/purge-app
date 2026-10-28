@@ -17,7 +17,7 @@ struct CommandLineToolsSection: View {
         VStack(spacing: 0) {
             toolbar
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
+                LazyVStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
                     if !standalone.isEmpty {
                         UninstallSectionHeader(title: String(localized: "Installed by a script"))
                         ForEach(standalone) { tool in
@@ -49,7 +49,7 @@ struct CommandLineToolsSection: View {
                     }
                 }
                 .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-                .padding(.top, 2)
+                .padding(.top, AppStyle.Spacing.xxxSmall)
                 .padding(.bottom, AppStyle.Spacing.large)
             }
             .scrollContentBackground(.hidden)
@@ -126,7 +126,7 @@ private struct CommandLineToolRow: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 HStack(spacing: AppStyle.Spacing.xSmall) {
                     Text(name)
                         .font(AppStyle.Typography.rowTitle)
@@ -137,8 +137,8 @@ private struct CommandLineToolRow: View {
                         Text("Runs in background")
                             .font(AppStyle.Typography.micro)
                             .foregroundStyle(AppColors.statusCheckText)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, AppStyle.Spacing.xxSmallPlus)
+                            .padding(.vertical, AppStyle.Spacing.xxxSmall)
                             .background(Capsule(style: .continuous).fill(AppColors.statusCheckFill))
                             .fixedSize()
                     }
@@ -219,7 +219,7 @@ struct CommandLineToolReviewSheet: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 240)
 

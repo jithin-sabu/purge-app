@@ -25,7 +25,7 @@ struct ScanListRow: View {
                 .frame(minWidth: 92, minHeight: 36, alignment: .topTrailing)
         }
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, 10)
+        .padding(.vertical, AppStyle.Spacing.small)
         .frame(minHeight: AppStyle.Row.listRowMinHeight, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)

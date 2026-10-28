@@ -3,7 +3,7 @@ import SwiftUI
 
 struct OnboardingWelcomeStep: View {
   var body: some View {
-    VStack(spacing: 30) {
+    VStack(spacing: AppStyle.Spacing.xLarge) {
       Image(nsImage: NSApplication.shared.applicationIconImage)
         .resizable()
         .aspectRatio(contentMode: .fit)
@@ -11,7 +11,7 @@ struct OnboardingWelcomeStep: View {
         .shadow(color: .black.opacity(0.15), radius: 15, x: -8, y: 8)
         .accessibilityHidden(true)
 
-      VStack(spacing: -4) {
+      VStack(spacing: -AppStyle.Spacing.xxSmall) {
         Text("Welcome to")
           .font(AppStyle.Typography.sectionTitle.weight(.medium))
           .foregroundStyle(AppColors.textPrimary.opacity(0.8))

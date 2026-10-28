@@ -37,9 +37,9 @@ struct FilterChip: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let horizontalPadding: CGFloat = 10
-    private static let verticalPadding: CGFloat = 5
-    private static let contentSpacing: CGFloat = 6
+    private static let horizontalPadding: CGFloat = AppStyle.Spacing.small
+    private static let verticalPadding: CGFloat = AppStyle.Spacing.xxSmallPlus
+    private static let contentSpacing: CGFloat = AppStyle.Spacing.xxSmallPlus
 
     var body: some View {
         HStack(spacing: Self.contentSpacing) {

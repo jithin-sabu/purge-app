@@ -367,7 +367,7 @@ struct MorphingActionLabel: View {
     }
 
     private var content: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             icon
             HStack(spacing: 0) {
                 Text(LocalizedStringKey(action.title))

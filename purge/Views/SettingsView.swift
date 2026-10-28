@@ -35,7 +35,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: showsPageHeader ? 28 : 0) {
+            VStack(alignment: .leading, spacing: showsPageHeader ? AppStyle.Spacing.xLarge : 0) {
                 if showsPageHeader {
                     Text("Settings")
                         .font(AppStyle.Typography.pageTitle)
@@ -45,7 +45,7 @@ struct SettingsView: View {
                 // Four groups, one line per setting. The longer explanations sit
                 // behind an info button beside each title, and the two lists
                 // (exclusions, history) open in a sheet.
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
                     generalGroup
                     cleaningGroup
                     uninstallingGroup
@@ -168,7 +168,7 @@ struct SettingsView: View {
             settingsSectionDivider
 
             settingsControlRow(title: String(localized: "Appearance")) {
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: AppStyle.Spacing.medium) {
                     ForEach(AppearanceMode.allCases, id: \.self) { mode in
                         AppearanceOptionButton(
                             mode: mode,
@@ -429,7 +429,7 @@ struct SettingsView: View {
 
     private var runScheduledCleanNowButton: some View {
         Button(action: runScheduledCleanNow) {
-            HStack(spacing: 6) {
+            HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                 if isRunningScheduledCleanNow {
                     ProgressView()
                         .controlSize(.small)
@@ -497,7 +497,7 @@ struct SettingsView: View {
                     Text("Nothing excluded")
                         .font(scheduleStatusPrimaryFont)
                         .foregroundStyle(AppColors.textSecondary)
-                        .padding(16)
+                        .padding(AppStyle.Spacing.medium)
                 } else {
                     ForEach(Array(entries.enumerated()), id: \.element.path) { index, entry in
                         if index > 0 {
@@ -536,7 +536,7 @@ struct SettingsView: View {
                         .font(scheduleStatusSecondaryFont)
                         .foregroundStyle(AppColors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(16)
+                        .padding(AppStyle.Spacing.medium)
                 } else {
                     ForEach(Array(history.archive.entries.enumerated()), id: \.element.id) { index, entry in
                         if index > 0 {
@@ -546,8 +546,8 @@ struct SettingsView: View {
                             selectedHistoryEntry = entry
                         } label: {
                             CleanupHistorySummaryRow(entry: entry)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
+                                .padding(.horizontal, AppStyle.Spacing.medium)
+                                .padding(.vertical, AppStyle.Spacing.small)
                         }
                         .buttonStyle(.plain)
                     }
@@ -763,8 +763,8 @@ struct SettingsView: View {
     }
 
     private func excludedPathRow(entry: ExcludedPathEntry) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text(Bundle.main.localizedString(forKey: CacheHeadline.localized(entry.displayName, cacheFolder: (entry.path as NSString).lastPathComponent, appFolder: CacheHeadline.applicationSupportAppFolder(of: entry.path)), value: nil, table: "Explanations"))
                     .font(scheduleStatusPrimaryFont)
                     .foregroundStyle(AppColors.textPrimary)
@@ -778,7 +778,7 @@ struct SettingsView: View {
                     .truncationMode(.middle)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             excludedSizeLabel(forPath: entry.path)
 
@@ -792,7 +792,7 @@ struct SettingsView: View {
             .buttonStyle(.purge(.secondary, size: .small, width: .square))
             .help("Remove from exclusions. \(entry.displayName) is scanned again next time.")
         }
-        .padding(16)
+        .padding(AppStyle.Spacing.medium)
         .task(id: entry.path) {
             await loadExcludedSizeIfNeeded(forPath: entry.path)
         }
@@ -822,12 +822,12 @@ struct SettingsView: View {
     }
 
     private func excludedTotalRow(entries: [ExcludedPathEntry]) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             Text("Total")
                 .font(scheduleStatusPrimaryFont)
                 .foregroundStyle(AppColors.textSecondary)
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             let total = ExcludedPathsTotal.compute(paths: entries.map(\.path), sizes: excludedPathSizes)
             if total.isComplete {
@@ -842,7 +842,7 @@ struct SettingsView: View {
                     .shimmering()
             }
         }
-        .padding(16)
+        .padding(AppStyle.Spacing.medium)
     }
 
     private func loadExcludedSizeIfNeeded(forPath path: String) async {
@@ -892,7 +892,7 @@ struct SettingsView: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
             Text(LocalizedStringKey(title))
                 .font(AppStyle.Typography.metadataEmphasis)
                 .foregroundStyle(AppColors.textSecondary)
@@ -912,8 +912,8 @@ struct SettingsView: View {
         status: SettingsRowStatus? = nil,
         animatesCaptionChanges: Bool = false
     ) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+            HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                 Text(LocalizedStringKey(title))
                 if let info {
                     SettingsInfoButton(text: info, title: title)
@@ -952,7 +952,7 @@ struct SettingsView: View {
         isToggleDisabled: Bool = false,
         isOn: Binding<Bool>
     ) -> some View {
-        HStack(alignment: .center, spacing: 16) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
             settingsRowLabel(
                 title: title,
                 caption: caption,
@@ -969,8 +969,8 @@ struct SettingsView: View {
                 .tint(AppColors.statusSafeText)
                 .disabled(isToggleDisabled)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, AppStyle.Spacing.medium)
+        .padding(.vertical, AppStyle.Spacing.small)
     }
 
     private func settingsControlRow<Control: View>(
@@ -980,13 +980,13 @@ struct SettingsView: View {
         animatesCaptionChanges: Bool = false,
         @ViewBuilder control: () -> Control
     ) -> some View {
-        HStack(alignment: .center, spacing: 16) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.medium) {
             settingsRowLabel(title: title, caption: caption, info: info, animatesCaptionChanges: animatesCaptionChanges)
 
             control()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, AppStyle.Spacing.medium)
+        .padding(.vertical, AppStyle.Spacing.small)
     }
 
     private func settingsPickerRow<Option: Hashable>(
@@ -1030,8 +1030,8 @@ struct SettingsView: View {
                     .foregroundStyle(AppColors.textTertiary)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, AppStyle.Spacing.medium)
+            .padding(.vertical, AppStyle.Spacing.small)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1204,11 +1204,11 @@ struct SettingsMenuPicker<Option: Hashable>: View {
             optionLabel: optionLabel,
             onSelect: { selection = $0 }
         ) {
-            HStack(spacing: 8) {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
                 Text(figures: optionLabel(selection), style: AppStyle.Typography.body)
                     .lineLimit(1)
 
-                Spacer(minLength: fillsWidth ? 8 : 0)
+                Spacer(minLength: fillsWidth ? AppStyle.Spacing.xSmall : 0)
 
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 10, weight: .semibold))
@@ -1231,7 +1231,7 @@ private struct SettingsPickerButtonStyle: ButtonStyle {
         configuration.label
             .font(AppStyle.Typography.body)
             .foregroundStyle(AppColors.textPrimary)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, AppStyle.Spacing.small)
             .frame(height: AppStyle.Control.height)
             .background(
                 configuration.isPressed ? AppColors.fillSecondary : AppColors.surfaceRaised,
@@ -1291,7 +1291,7 @@ private struct AppearanceOptionButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 7) {
+            VStack(spacing: AppStyle.Spacing.xSmall) {
                 thumbnail
                     .overlay {
                         RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
@@ -1346,7 +1346,7 @@ struct SettingsStatusLine: View {
     let status: SettingsRowStatus
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmallPlus) {
             if status.showsProgress {
                 ProgressView()
                     .controlSize(.mini)

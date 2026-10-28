@@ -10,7 +10,7 @@ enum SkeletonOpacity {
 struct SkeletonBar: View {
     var width: CGFloat
     var height: CGFloat = 10
-    var cornerRadius: CGFloat = 4
+    var cornerRadius: CGFloat = AppStyle.Radius.xs
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -88,7 +88,7 @@ struct CleaningOverlay: View {
         ZStack {
             Rectangle()
                 .fill(.ultraThinMaterial)
-            VStack(spacing: 10) {
+            VStack(spacing: AppStyle.Spacing.small) {
                 ProgressView()
                     .controlSize(.regular)
                 Text(LocalizedStringKey(message))

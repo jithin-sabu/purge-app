@@ -116,7 +116,7 @@ struct DeletionConfirmSheet: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 260)
 
@@ -165,7 +165,7 @@ struct DeletionConfirmSheet: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 260)
 
@@ -229,7 +229,7 @@ struct DeletionConfirmSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
             HStack(spacing: AppStyle.Spacing.small) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                     Text(item.title)
                         .font(AppStyle.Typography.rowTitle)
                         .foregroundStyle(AppColors.textPrimary)
@@ -303,7 +303,7 @@ struct DeletionConfirmSheet: View {
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(fg)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
-            .padding(.vertical, 2)
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
             .background(Capsule(style: .continuous).fill(bg))
     }
 

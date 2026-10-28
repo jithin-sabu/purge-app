@@ -228,11 +228,11 @@ struct LargeFilesView: View {
     }
 
     private var controlsChrome: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
                 thresholdMenu
                 ageMenu
-                Spacer(minLength: 12)
+                Spacer(minLength: AppStyle.Spacing.small)
                 // Before macOS 26 this layout has no Select All bar, which is
                 // where Keep Only in iCloud sits otherwise, so it goes here (#106).
                 if !usesExternalScrollContainer, isICloudFilterActive {
@@ -245,7 +245,7 @@ struct LargeFilesView: View {
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
+                HStack(spacing: AppStyle.Spacing.xxSmall) {
                     // Counts are search-filtered but not category-filtered, so the
                     // chips answer "where did my matches land?" while a query is
                     // active instead of advertising rows the query already hid.
@@ -301,7 +301,7 @@ struct LargeFilesView: View {
                         )
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
@@ -573,7 +573,7 @@ struct LargeFilesView: View {
         return GeometryReader { geometry in
             ScrollView {
                 VStack(spacing: AppStyle.Spacing.medium) {
-                    VStack(spacing: 10) {
+                    VStack(spacing: AppStyle.Spacing.small) {
                         Image(systemName: state.symbol)
                             .font(.system(size: 38))
                             .foregroundStyle(state.symbolColor)
@@ -605,7 +605,7 @@ struct LargeFilesView: View {
     }
 
     private var emptyFilterState: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: AppStyle.Spacing.xxSmall) {
             Text("Nothing here.")
                 .font(AppStyle.Typography.headline)
             // Name the query when there is one: with a search field in the chrome the
@@ -628,7 +628,7 @@ struct LargeFilesView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, AppStyle.Spacing.large)
     }
 
     private func toggleSelection(forFileID id: String) {
@@ -718,7 +718,7 @@ private struct LargeFileDuplicateStatus: View {
     var body: some View {
         Group {
             if duplicates.isChecking {
-                HStack(spacing: 6) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     ProgressView()
                         .controlSize(.small)
                         .scaleEffect(0.7)
@@ -728,7 +728,7 @@ private struct LargeFileDuplicateStatus: View {
                         .foregroundStyle(AppColors.textTertiary)
                         .lineLimit(1)
                 }
-                .padding(.leading, 4)
+                .padding(.leading, AppStyle.Spacing.xxSmall)
                 .transition(.opacity)
                 .accessibilityElement(children: .combine)
             }
@@ -817,13 +817,13 @@ private struct LargeFileSearchField: View {
     @State private var selectsAllOnFocus = false
 
     /// Matches FilterChip's metrics so the row's controls share a baseline.
-    private static let horizontalPadding: CGFloat = 10
-    private static let verticalPadding: CGFloat = 5
+    private static let horizontalPadding: CGFloat = AppStyle.Spacing.small
+    private static let verticalPadding: CGFloat = AppStyle.Spacing.xxSmallPlus
 
     private var hasText: Bool { !query.isEmpty }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             Image(systemName: "magnifyingglass")
                 .imageScale(.small)
                 .foregroundStyle(AppColors.textSecondary)
@@ -952,8 +952,8 @@ private struct DuplicateGroupCard: View {
     let onExcludeFolder: (LargeFile) -> Void
 
     private static let headerHeight: CGFloat = 20
-    private static let innerSpacing: CGFloat = 6
-    private static let padding: CGFloat = 10
+    private static let innerSpacing: CGFloat = AppStyle.Spacing.xxSmallPlus
+    private static let padding: CGFloat = AppStyle.Spacing.small
 
     /// Explicit, because the macOS List estimating this row's height is what
     /// makes a click scroll the list — the estimate/actual drift accumulates over
@@ -1003,7 +1003,7 @@ private struct DuplicateGroupCard: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             // Same colour as the title beside it: this marks the card as a group,
             // it isn't a warning, so it shouldn't pull the eye the way the yellow
             // check tint did.
@@ -1023,7 +1023,7 @@ private struct DuplicateGroupCard: View {
         .font(AppStyle.Typography.metadataEmphasis)
         .lineLimit(1)
         .frame(height: Self.headerHeight)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, AppStyle.Spacing.xxSmall)
     }
 }
 
@@ -1056,7 +1056,7 @@ private struct LargeFilesLastScanGlass: View {
     /// The last scan's chips, to look at: there is nothing to filter until files land.
     private var chips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
                 FilterChip(
                     style: .tab,
                     label: String(localized: "All"),
@@ -1073,7 +1073,7 @@ private struct LargeFilesLastScanGlass: View {
                     )
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
         }
         .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
@@ -1083,7 +1083,7 @@ private struct LargeFilesLastScanGlass: View {
     }
 
     private var rows: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             ForEach(0..<rowCount, id: \.self) { index in
                 LargeFileSkeletonRow(titleWidth: Self.titleWidths[index])
             }
@@ -1106,7 +1106,7 @@ private struct LargeFilesLastScanGlass: View {
         HStack(spacing: AppStyle.Spacing.small) {
             icon
                 .frame(width: 24, height: 24)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(title)
                     .font(AppStyle.Typography.headline)
                 Text(subtitle)
@@ -1163,21 +1163,21 @@ private struct LargeFileSkeletonRow: View {
     let titleWidth: CGFloat
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             RoundedRectangle(cornerRadius: AppStyle.Radius.xs, style: .continuous)
                 .stroke(AppColors.textSecondary.opacity(SkeletonOpacity.medium), lineWidth: 1)
                 .frame(width: 14, height: 14)
             RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                 .fill(AppColors.textSecondary.opacity(SkeletonOpacity.medium))
                 .frame(width: AppStyle.Row.listIconFrameSize, height: AppStyle.Row.listIconFrameSize)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmallPlus) {
                 SkeletonBar(width: titleWidth, height: 10)
                 SkeletonBar(width: titleWidth * 0.6, height: 8)
             }
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
             SkeletonBar(width: 56, height: 10)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .frame(height: LargeFileRow.contentHeight)
         .modifier(ScanRowCardChrome())
         .shimmering()
@@ -1283,19 +1283,19 @@ private struct LargeFileRow: View {
         // row selection, which also scrolls the row in — so the tap must blanket
         // the entire row. The thumbnail/location gestures inside rowMainContent
         // still win at their own hit points.
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             checkboxVisual
 
             rowMainContent
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             Text(file.formattedSize)
                 .font(AppStyle.Typography.metadata.weight(.medium).numbers)
                 .foregroundStyle(AppColors.textPrimary)
                 .monospacedDigit()
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
         .frame(height: Self.contentHeight)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -1341,7 +1341,7 @@ private struct LargeFileRow: View {
     }
 
     private var rowMainContent: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             // Tap gesture rather than a Button: a Button in a macOS List row makes
             // the List scroll the clicked row into view on click, shifting the list.
             LargeFileThumbnailIcon(file: file)
@@ -1359,14 +1359,14 @@ private struct LargeFileRow: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction(.default, quickLook)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 Text(file.displayName)
                     .font(AppStyle.Typography.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                HStack(spacing: 6) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     Text(file.locationLabel)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -1441,7 +1441,7 @@ private struct LargeFileThumbnailIcon: View {
     @State private var thumbnail: NSImage?
 
     private let slotSize = AppStyle.Row.listIconFrameSize
-    private let cornerRadius: CGFloat = 6
+    private let cornerRadius: CGFloat = AppStyle.Radius.sm
 
     private var cacheKey: String {
         LargeFileThumbnailService.cacheKey(path: file.id, modified: file.lastUsed)
@@ -1502,8 +1502,8 @@ private struct LargeFileThumbnailIcon: View {
                 // A wide glyph run (`.www…`) shrinks a little rather than spill.
                 .minimumScaleFactor(0.8)
                 .foregroundStyle(AppColors.textSecondary)
-                .padding(.horizontal, 3)
-                .padding(.vertical, 1)
+                .padding(.horizontal, AppStyle.Spacing.xxSmall)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
                 .background(Capsule(style: .continuous).fill(.regularMaterial))
                 .overlay(Capsule(style: .continuous).strokeBorder(AppColors.borderSubtle, lineWidth: 0.5))
                 .fixedSize(horizontal: false, vertical: true)
@@ -1590,7 +1590,7 @@ struct LargeFileDeletionConfirmSheet: View {
                         fileCard(file)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 260)
 
@@ -1634,13 +1634,13 @@ struct LargeFileDeletionConfirmSheet: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(file.displayName)
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                HStack(spacing: 6) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     Text(file.path.deletingLastPathComponent().path)
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.textSecondary)
@@ -1698,7 +1698,7 @@ struct LargeFileDeletionConfirmSheet: View {
     /// thing to want. It just shouldn't happen by accident after a Select All.
     private var allCopiesWarning: some View {
         LargeFileCautionNote {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 ForEach(namedConsumedGroups) { group in
                     Text("You're deleting all \(group.copyCount) copies of \(groupLabel(group)). No copy will remain.")
                         .lineLimit(2)
@@ -1789,7 +1789,7 @@ struct DuplicateCleanupSheet: View {
                         setCard(set)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 280)
 
@@ -1836,7 +1836,7 @@ struct DuplicateCleanupSheet: View {
                     .foregroundStyle(AppColors.textSecondary)
             }
             .padding(.horizontal, AppStyle.Spacing.small)
-            .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+            .padding(.vertical, AppStyle.Spacing.small)
 
             ForEach(Array(set.copies.enumerated()), id: \.element.id) { index, file in
                 if index > 0 {
@@ -1880,7 +1880,7 @@ struct DuplicateCleanupSheet: View {
             statusTag(isKeeper: isKeeper)
         }
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+        .padding(.vertical, AppStyle.Spacing.small)
         .contentShape(Rectangle())
         .onTapGesture { keeperByGroup[set.id] = file.id }
         .accessibilityElement(children: .combine)
@@ -1899,7 +1899,7 @@ struct DuplicateCleanupSheet: View {
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(isKeeper ? AppColors.statusSafeText : AppColors.statusDangerText)
             .padding(.horizontal, AppStyle.Spacing.xSmall)
-            .padding(.vertical, 2)
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
             .background(
                 Capsule(style: .continuous)
                     .fill(isKeeper ? AppColors.statusSafeFill : AppColors.statusDangerFill)
@@ -1926,7 +1926,7 @@ struct LargeFileCautionNote<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(AppColors.statusCheckText)
                 .accessibilityHidden(true)
@@ -1936,7 +1936,7 @@ struct LargeFileCautionNote<Content: View>: View {
                 .foregroundStyle(AppColors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(10)
+        .padding(AppStyle.Spacing.small)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                 .fill(AppColors.statusCheckFill)

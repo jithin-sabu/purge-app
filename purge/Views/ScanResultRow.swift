@@ -204,7 +204,7 @@ struct ScanResultRow: View {
 
     @ViewBuilder
     private var rowBody: some View {
-        let stack = HStack(alignment: .center, spacing: 12) {
+        let stack = HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             if isFromLastScan, showsBulkCheckbox {
                 LastScanRowMarker()
             } else if showsRowCheckbox {
@@ -221,12 +221,12 @@ struct ScanResultRow: View {
 
             rowMainContent
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             trailingColumn
         }
         .padding(.horizontal, showsCardChrome ? AppStyle.Row.scanCardHorizontalPadding : 0)
-        .padding(.vertical, showsCardChrome ? rowVerticalPadding : 8)
+        .padding(.vertical, showsCardChrome ? rowVerticalPadding : AppStyle.Spacing.xSmall)
 
         // The tap target must blanket the ENTIRE row, not just rowMainContent: a
         // Button/interactive control in a macOS List row scrolls the clicked row
@@ -252,7 +252,7 @@ struct ScanResultRow: View {
     }
 
     private var rowMainContent: some View {
-        HStack(alignment: .center, spacing: showsLeadingIcon ? 12 : 0) {
+        HStack(alignment: .center, spacing: showsLeadingIcon ? AppStyle.Spacing.small : 0) {
             if showsLeadingIcon {
                 rowIconView
             }
@@ -269,7 +269,7 @@ struct ScanResultRow: View {
     }
 
     private var rowTextColumn: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
             Text(primaryLabel)
                 .font(AppStyle.Typography.headline)
                 .lineLimit(1)
@@ -297,7 +297,7 @@ struct ScanResultRow: View {
         ScanContentCrossfade(isLoading: isMetadataPending, contentAlignment: .topTrailing) {
             trailingMetadataSkeleton
         } loaded: {
-            VStack(alignment: .trailing, spacing: 8) {
+            VStack(alignment: .trailing, spacing: AppStyle.Spacing.xSmall) {
                 Text(formattedSize)
                     .font(AppStyle.Typography.metadata.weight(.medium).numbers)
                     .foregroundStyle(AppColors.textPrimary)
@@ -309,7 +309,7 @@ struct ScanResultRow: View {
     }
 
     private var trailingMetadataSkeleton: some View {
-        VStack(alignment: .trailing, spacing: 8) {
+        VStack(alignment: .trailing, spacing: AppStyle.Spacing.xSmall) {
             SkeletonBar(width: 56, height: ScanResultRow.subheadlineOneLineHeight, cornerRadius: AppStyle.Radius.xs)
             SkeletonBar(width: 92, height: 18, cornerRadius: AppStyle.Radius.sm)
         }
@@ -330,7 +330,7 @@ struct ScanResultRow: View {
 
     @ViewBuilder
     private var badgesRow: some View {
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.xxSmallPlus) {
             extraBadges
         }
     }

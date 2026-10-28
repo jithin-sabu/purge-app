@@ -182,12 +182,12 @@ struct SafetyFilterChipRow: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
                 ForEach(SafetyFilter.allCases) { filter in
                     safetyChip(filter)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
         }
         .disableScrollClippingWhenAvailable()
         .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
