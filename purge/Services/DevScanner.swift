@@ -274,10 +274,15 @@ nonisolated final class DevScanner {
             deviceReach = SimulatorRuntime.deviceReachByBuild(fromRuntimesList: runtimes.stdout)
         }
 
+        // An older-format runtime that lives in Apple's download is left out, so a
+        // failed read is "unknown" and leaves every older-format one out (#165).
+        let downloadBuilds = SimulatorRuntime.downloads().map { Set($0.map(\.build)) }
+
         return SimulatorRuntime.parseRuntimeList(
             listing.stdout,
             deviceCountsByRuntimeIdentifier: deviceCounts,
             xcodeRuntimeBuilds: xcodeBuilds,
+            downloadBuilds: downloadBuilds,
             deviceReachByBuild: deviceReach,
             now: now
         )

@@ -1302,6 +1302,9 @@ final class PurgeStore: ObservableObject {
             )
             // Only the helper's moves can leave root-owned files in the Trash.
             if !report.ownershipWarningPaths.isEmpty { session?.noteTrashOwnershipWarning() }
+            for kept in report.keptRuntimeDownloads {
+                session?.addNote(kept.note)
+            }
             recordCleanup(report, trigger: trigger, source: .clean)
         } catch {
             if session != nil {
@@ -1371,7 +1374,7 @@ final class PurgeStore: ObservableObject {
             simulatorRuntimeID: simulatorRuntimeIDsByPath()[key]
         )
         switch outcome {
-        case .deleted(let bytes, let movedToTrash, let remaining):
+        case .deleted(let bytes, let movedToTrash, let remaining, let keptRuntimeDownloads):
             resolveRetriedFailure(
                 item: item,
                 bytes: bytes,
@@ -1379,6 +1382,9 @@ final class PurgeStore: ObservableObject {
                 remaining: remaining,
                 session: session
             )
+            for kept in keptRuntimeDownloads {
+                session.addNote(kept.note)
+            }
             return bytes
         case .alreadyGone:
             // Something else removed it since the clean. The row goes, nothing is

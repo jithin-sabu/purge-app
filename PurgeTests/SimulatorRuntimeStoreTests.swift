@@ -16,7 +16,7 @@ struct SimulatorRuntimeStoreTests {
     ) -> SimulatorRuntime {
         var safety = SimulatorRuntime.safetyInfo(
             platformName: "iOS", version: version, state: "Ready", sizeBytes: sizeBytes,
-            lastUsedAt: nil, deviceCount: deviceCount, isXcodeDefault: false, isLegacyImage: false
+            lastUsedAt: nil, deviceCount: deviceCount, isXcodeDefault: false
         )
         if let level {
             safety = SafetyInfo(
@@ -107,5 +107,80 @@ struct SimulatorRuntimeStoreTests {
 
         #expect(store.simulatorRuntimes.isEmpty)
         #expect(store.selectedCount == 0)
+    }
+
+    /// When Apple keeps a runtime's download, the completion screen says so, and
+    /// the total counts what the volume gave back, not the listed size (#165).
+    @Test func keptDownloadIsNamedOnTheCompletionScreen() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let row = runtime()
+        scans.developerEvents = [.simulatorRuntimeFound(row)]
+        let deleter = FileDeleter(simulatorRuntimeRemover: { _ in
+            .removed(freed: .unknown, download: .kept(bytes: 9_116_354_048), isLegacyImage: false)
+        })
+        let store = scans.makeStore(fileDeleter: deleter)
+        let session = try await cleanTheRuntime(row, in: store)
+
+        #expect(session.finalBytesMovedToTrash == 0)
+        #expect(session.removedPermanentlyCount == 1)
+        #expect(session.notes == [
+            "macOS kept the iOS 26.3.1 Runtime download (\(formatBytes(9_116_354_048))), so that space is still in use."
+        ])
+    }
+
+    /// A runtime that fails once and goes on Retry while Apple keeps its download
+    /// gets the same line as one that went the first time.
+    @Test func keptDownloadIsNamedAfterARetry() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let row = runtime()
+        scans.developerEvents = [.simulatorRuntimeFound(row)]
+        let attempts = Attempts()
+        // if/else, not a ternary in a closure: CI's Xcode 26.6 crashed on that.
+        let deleter = FileDeleter(simulatorRuntimeRemover: { _ in
+            if attempts.next() == 1 {
+                return .failed("runtime still listed after 180s")
+            }
+            return .removed(freed: .unknown, download: .kept(bytes: 9_116_354_048), isLegacyImage: false)
+        })
+        let store = scans.makeStore(fileDeleter: deleter)
+        let session = try await cleanTheRuntime(row, in: store)
+        let failure = try #require(session.failedItems.first)
+        #expect(session.notes.isEmpty)
+
+        _ = await store.retryCleanFailure(failure, session: session)
+
+        #expect(session.failedItems.isEmpty)
+        #expect(session.notes == [
+            "macOS kept the iOS 26.3.1 Runtime download (\(formatBytes(9_116_354_048))), so that space is still in use."
+        ])
+    }
+
+    private final class Attempts: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+
+        func next() -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            count += 1
+            return count
+        }
+    }
+
+    /// Scans, ticks the runtime and confirms the clean, then waits for the
+    /// completion screen.
+    private func cleanTheRuntime(_ row: SimulatorRuntime, in store: PurgeStore) async throws -> DeletionSession {
+        await store.scanDeveloper()
+        store.setSimulatorRuntimeSelected(id: row.id, isSelected: true)
+        store.presentDeletionSheet(candidates: store.deletionCandidates)
+        store.userConfirmedDeletionFromPrimarySheet()
+        for _ in 0..<500 where store.manualDeletionSession?.phase != .complete {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let session = try #require(store.manualDeletionSession)
+        #expect(session.phase == .complete)
+        return session
     }
 }

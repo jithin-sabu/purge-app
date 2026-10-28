@@ -848,7 +848,6 @@
 
 /* Added with the 1.9.0 features: Finder uninstall, background updates, Command-F, iCloud warning, simulator runtimes. */
 "%@ %@ Runtime" = "%@ %@ 运行时";
-"%@ Older image format, so macOS may keep its original download." = "%@这是旧版镜像格式，macOS 可能会保留原始下载文件。";
 "Only runs %@ simulators. %@" = "只能运行 %1$@ 模拟器。%2$@";
 "The only %@ runtime here that runs most devices. %@" = "这是此 Mac 上唯一能运行大多数设备的 %1$@ 运行时。%2$@";
 "%@ is outside the Applications folder" = "%@ 不在“应用程序”文件夹中";
@@ -1374,3 +1373,7 @@
 "No files over %@" = "没有超过 %@ 的文件";
 "a month" = "一个月";
 "a year" = "一年";
+
+/* Simulator runtime download macOS kept after a removal (#165) */
+"macOS kept the %@ download (%@), so that space is still in use." = "macOS 保留了 %1$@ 的下载文件（%2$@），这部分空间仍被占用。";
+"macOS kept the %@ download, so that space is still in use." = "macOS 保留了 %@ 的下载文件，这部分空间仍被占用。";

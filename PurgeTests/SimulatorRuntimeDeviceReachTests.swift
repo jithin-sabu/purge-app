@@ -61,7 +61,7 @@ struct SimulatorRuntimeDeviceReachTests {
         func info(_ reach: SimulatorRuntime.DeviceReach?) -> SafetyInfo {
             SimulatorRuntime.safetyInfo(
                 platformName: "iOS", version: "27.1", state: "Ready", sizeBytes: 7_870_000_000,
-                lastUsedAt: nil, deviceCount: 0, isXcodeDefault: false, isLegacyImage: false,
+                lastUsedAt: nil, deviceCount: 0, isXcodeDefault: false,
                 deviceReach: reach
             )
         }

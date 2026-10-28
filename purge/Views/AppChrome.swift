@@ -578,7 +578,8 @@ struct SafeCleanupCelebrationOverlay: View {
                     }
 
                     // Homebrew refused a cask app and Purge trashed it instead
-                    // (#254): say so, in Homebrew's own last words.
+                    // (#254), in Homebrew's own last words, or macOS kept a
+                    // runtime's download (#165).
                     if session.phase == .complete {
                         ForEach(session.notes, id: \.self) { note in
                             Text(note)

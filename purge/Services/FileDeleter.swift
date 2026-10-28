@@ -90,6 +90,9 @@ nonisolated struct DeletionReport: Identifiable {
     /// to the user. They are gone from their source, but emptying the Trash may ask
     /// for a password. Empty for every ordinary, non-escalated removal.
     var ownershipWarningPaths: [String] = []
+    /// Runtimes `simctl` removed while Apple kept the download they came from, so
+    /// that space is still in use (#165). Empty for every ordinary run.
+    var keptRuntimeDownloads: [KeptRuntimeDownload] = []
 
     /// The measured volume delta, the only number that may be called reclaimed.
     /// `nil` when it was never measured. May be negative or near zero: a trash move
@@ -128,7 +131,13 @@ nonisolated enum RetryOutcome: Sendable, Equatable {
     /// `movedToTrash` tells apart so the record and the Trash line stay honest.
     /// `remaining` is what still failed this time: the entries of a folder emptied
     /// one by one that did not move, each its own row from here on.
-    case deleted(bytes: Int64, movedToTrash: Bool, remaining: [FailedDeletionItem])
+    /// `keptRuntimeDownloads` is a runtime whose download Apple kept (#165).
+    case deleted(
+        bytes: Int64,
+        movedToTrash: Bool,
+        remaining: [FailedDeletionItem],
+        keptRuntimeDownloads: [KeptRuntimeDownload] = []
+    )
     /// Nothing was at the path any more. Something else removed it since the clean.
     case alreadyGone
     /// Still there, with the reason the route gave this time. A gate's refusal
@@ -138,8 +147,38 @@ nonisolated enum RetryOutcome: Sendable, Equatable {
 
 /// Outcome of asking CoreSimulator to remove a runtime image.
 nonisolated enum SimulatorRuntimeRemoval: Sendable, Equatable {
-    case removed
+    /// Gone from `simctl runtime list`. `freed` is what the volume gave back,
+    /// `download` what became of Apple's download of the runtime (#165).
+    case removed(freed: VolumeCapacityReader.SettledGain, download: RuntimeDownloadAfterRemoval, isLegacyImage: Bool)
+    /// Not attempted: an older runtime that lives in Apple's download, or one
+    /// that could not be checked. The scan would not have offered it (#165).
+    case refused(String)
     case failed(String)
+}
+
+/// Apple's download of a runtime once the runtime is gone (#165).
+nonisolated enum RuntimeDownloadAfterRemoval: Sendable, Equatable {
+    /// Apple keeps none now: there was none, or it went with the runtime.
+    case notKept
+    /// Still on disk. `bytes` is `nil` when it could not be measured.
+    case kept(bytes: Int64?)
+    /// The build, the runtime list or AssetsV2 could not be read.
+    case unknown
+}
+
+/// A runtime `simctl` removed while Apple kept its download (#165).
+nonisolated struct KeptRuntimeDownload: Sendable, Equatable {
+    let displayName: String
+    /// `nil` when the download could not be measured.
+    let bytes: Int64?
+
+    /// The completion screen's line for it.
+    var note: String {
+        guard let bytes else {
+            return String(localized: "macOS kept the \(displayName) download, so that space is still in use.")
+        }
+        return String(localized: "macOS kept the \(displayName) download (\(formatBytes(bytes))), so that space is still in use.")
+    }
 }
 
 /// Outcome of asking CoreSimulator to delete one simulator device.
@@ -152,7 +191,7 @@ nonisolated enum SimulatorDeviceRemoval: Sendable, Equatable {
 /// Deletion engine. Runs off the main actor (`@concurrent`) so large removals
 /// never block the UI; progress reaches the UI via the `onProgress` buffer.
 nonisolated final class FileDeleter: Sendable {
-    typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) -> SimulatorRuntimeRemoval
+    typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) async -> SimulatorRuntimeRemoval
     typealias SimulatorDeviceRemover = @Sendable (_ udid: String, _ folder: URL) -> SimulatorDeviceRemoval
     typealias PrivilegedMover = @Sendable (_ urls: [URL]) async -> PrivilegedMoveResult
     typealias Trasher = @Sendable (_ url: URL) throws -> Void
@@ -181,7 +220,7 @@ nonisolated final class FileDeleter: Sendable {
     private let installLeftoverRule: @Sendable () -> Bool
 
     init(
-        simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = FileDeleter.removeSimulatorRuntime,
+        simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = { await FileDeleter.removeSimulatorRuntime(identifier: $0) },
         simulatorDeviceRemover: @escaping SimulatorDeviceRemover = { FileDeleter.removeSimulatorDevice(udid: $0, folder: $1) },
         privilegedMover: @escaping PrivilegedMover = { await PrivilegedUninstall.moveToTrash($0) },
         installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() },
@@ -218,6 +257,7 @@ nonisolated final class FileDeleter: Sendable {
         var fullDiskAccess: Bool?
         var skippedItems: [SkippedDeletionItem] = []
         var ownershipWarningPaths: [String] = []
+        var keptRuntimeDownloads: [KeptRuntimeDownload] = []
         var installLeftovers: [URL] = []
         let volumeURL = FileManager.default.homeDirectoryForCurrentUser
         let capacityBefore = VolumeCapacityReader.read(for: volumeURL)
@@ -248,16 +288,41 @@ nonisolated final class FileDeleter: Sendable {
                 // Never measured here: the location is an 8 GB mounted image, and
                 // the scan already carries what `simctl` reported.
                 let size = pathToExpectedSizeBytes[standardizedPath] ?? 0
-                switch simulatorRuntimeRemover(runtimeID) {
-                case .removed:
-                    bytesRemovedDirectly += size
+                switch await simulatorRuntimeRemover(runtimeID) {
+                case .removed(let freed, let download, let isLegacyImage):
+                    let removedBytes = Self.runtimeRemovedBytes(
+                        listed: size,
+                        freed: freed,
+                        download: download,
+                        isLegacyImage: isLegacyImage
+                    )
+                    bytesRemovedDirectly += removedBytes
                     deletedItems.append(DeletedItem(
                         path: url.path,
-                        sizeBytes: size,
+                        sizeBytes: removedBytes,
                         displayName: friendlyTitle,
                         movedToTrash: false
                     ))
-                    onProgress?(.itemDeleted(sizeBytes: size))
+                    switch download {
+                    case .kept(let bytes):
+                        keptRuntimeDownloads.append(KeptRuntimeDownload(
+                            displayName: friendlyTitle ?? url.lastPathComponent,
+                            bytes: bytes
+                        ))
+                    case .notKept, .unknown:
+                        break
+                    }
+                    onProgress?(.itemDeleted(sizeBytes: removedBytes))
+                case .refused(let reason):
+                    Self.simulatorLog.notice(
+                        "Skipped simulator runtime \(runtimeID, privacy: .public): \(reason, privacy: .public)"
+                    )
+                    skippedItems.append(SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: "This file was skipped for safety",
+                        isUserVisible: true
+                    ))
                 case .failed(let reason):
                     NSLog("Purge: failed to delete simulator runtime %@ — %@", runtimeID, reason)
                     failedItems.append(FailedDeletionItem(
@@ -461,7 +526,8 @@ nonisolated final class FileDeleter: Sendable {
             capacityBefore: capacityBefore,
             capacityAfter: capacityAfter,
             timestamp: Date(),
-            ownershipWarningPaths: ownershipWarningPaths
+            ownershipWarningPaths: ownershipWarningPaths,
+            keptRuntimeDownloads: keptRuntimeDownloads
         )
         return report
     }
@@ -859,9 +925,48 @@ nonisolated final class FileDeleter: Sendable {
     private static let simctlRuntimeListTimeout: TimeInterval = 30
     private static let simctlRuntimePollInterval: TimeInterval = 1
 
-    /// Asks CoreSimulator to remove one runtime image, then waits for it to be gone.
-    static func removeSimulatorRuntime(identifier: String) -> SimulatorRuntimeRemoval {
-        guard let result = Simctl.run(["runtime", "delete", identifier], timeout: simctlRuntimeDeleteTimeout) else {
+    /// Apple removes a newer runtime's download in the seconds after the image
+    /// leaves the list. One still there after this many more polls stayed.
+    private static let runtimeDownloadGoneChecks = 10
+
+    /// Asks CoreSimulator to remove one runtime image and waits for it to be gone.
+    /// Then it reads what the volume gave back, and whether Apple kept the download
+    /// the image came from: an older runtime is mounted from inside that download,
+    /// so the space only comes back if the download goes too (#165).
+    static func removeSimulatorRuntime(
+        identifier: String,
+        runSimctl: Simctl.Runner = Simctl.run,
+        assetsRoot: URL = SimulatorRuntime.mobileAssetRoot,
+        readAvailableBytes: @Sendable () -> Int64? = { VolumeCapacityReader.read()?.availableBytes },
+        pollInterval: TimeInterval = simctlRuntimePollInterval,
+        settleInterval: Duration = .seconds(1)
+    ) async -> SimulatorRuntimeRemoval {
+        // Read first: the build names the download, and the list forgets it once
+        // the runtime goes.
+        guard let list = simulatorRuntimeList(runSimctl: runSimctl) else {
+            return .failed("Could not read simctl runtime list")
+        }
+        guard let entry = list[identifier] as? [String: Any] else {
+            return .failed("simctl runtime list no longer names the runtime")
+        }
+        let build = entry["build"] as? String
+        let kind = entry["kind"] as? String ?? ""
+        let downloads = SimulatorRuntime.downloads(in: assetsRoot)
+
+        // The scan's rule, read again from disk right before the delete, as the
+        // other gates do.
+        if SimulatorRuntime.isHeldByAppleDownload(kind: kind, build: build, downloadBuilds: downloads.map { Set($0.map(\.build)) }) {
+            if let build, downloads != nil {
+                return .refused("older runtime mounted from Apple's download of build \(build)")
+            }
+            return .refused("older runtime whose Apple download could not be checked")
+        }
+        let download = build.flatMap { build in
+            downloads?.first { SimulatorRuntime.isSameBuild($0.build, build) }
+        }
+        let availableBefore = readAvailableBytes()
+
+        guard let result = runSimctl(["runtime", "delete", identifier], simctlRuntimeDeleteTimeout) else {
             return .failed("Could not launch simctl")
         }
         if result.timedOut {
@@ -873,24 +978,82 @@ nonisolated final class FileDeleter: Sendable {
         }
 
         let deadline = Date().addingTimeInterval(simctlRuntimeDeleteTimeout)
+        var listed: Bool? = true
         while Date() < deadline {
-            switch isSimulatorRuntimeListed(identifier) {
-            case .some(false):
-                return .removed
-            case .some(true), .none:
-                Thread.sleep(forTimeInterval: simctlRuntimePollInterval)
+            // `nil`, a list that could not be read, never counts as gone.
+            listed = simulatorRuntimeList(runSimctl: runSimctl).map { $0[identifier] != nil }
+            if listed == false { break }
+            try? await Task.sleep(for: .seconds(pollInterval))
+        }
+        guard listed == false else {
+            return .failed("runtime still listed after \(Int(simctlRuntimeDeleteTimeout))s")
+        }
+
+        if let download {
+            var checks = 0
+            while FileManager.default.fileExists(atPath: download.folder.path), checks < runtimeDownloadGoneChecks {
+                checks += 1
+                try? await Task.sleep(for: .seconds(pollInterval))
             }
         }
-        return .failed("runtime still listed after \(Int(simctlRuntimeDeleteTimeout))s")
+        let freed = await VolumeCapacityReader.settle(
+            since: availableBefore,
+            interval: settleInterval,
+            read: readAvailableBytes
+        )
+        let downloadAfter: RuntimeDownloadAfterRemoval
+        if build == nil || downloads == nil {
+            downloadAfter = .unknown
+        } else if let download {
+            downloadAfter = downloadAfterRemoval(download.folder)
+        } else {
+            downloadAfter = .notKept
+        }
+        return .removed(freed: freed, download: downloadAfter, isLegacyImage: SimulatorRuntime.isLegacyImage(kind: kind))
     }
 
-    /// `nil` when the list could not be read.
-    private static func isSimulatorRuntimeListed(_ identifier: String) -> Bool? {
-        guard let listing = Simctl.run(["runtime", "list", "-j"], timeout: simctlRuntimeListTimeout),
-              listing.succeeded,
-              let root = try? JSONSerialization.jsonObject(with: listing.stdout) as? [String: Any]
+    /// A download folder still there is kept. One `du` can't measure is kept
+    /// without a size, unless it went while it was being measured.
+    private static func downloadAfterRemoval(_ folder: URL) -> RuntimeDownloadAfterRemoval {
+        guard FileManager.default.fileExists(atPath: folder.path) else { return .notKept }
+        if let bytes = FolderSizing.directoryByteSizeIfMeasurable(at: folder) {
+            return .kept(bytes: bytes)
+        }
+        return FileManager.default.fileExists(atPath: folder.path) ? .kept(bytes: nil) : .notKept
+    }
+
+    /// The bytes a removed runtime is booked at: what the volume gave back, never
+    /// what `simctl` listed, which can be wrong either way (#165). A reading that
+    /// settled under the noise floor books nothing. With no settled reading,
+    /// `simctl`'s size stands only for a newer runtime whose download is known to
+    /// be gone, since its image was that download.
+    static func runtimeRemovedBytes(
+        listed: Int64,
+        freed: VolumeCapacityReader.SettledGain,
+        download: RuntimeDownloadAfterRemoval,
+        isLegacyImage: Bool
+    ) -> Int64 {
+        switch freed {
+        case .gained(let bytes):
+            return bytes
+        case .belowNoiseFloor:
+            return 0
+        case .unknown:
+            switch download {
+            case .notKept:
+                return isLegacyImage ? 0 : listed
+            case .kept, .unknown:
+                return 0
+            }
+        }
+    }
+
+    /// `simctl runtime list -j` by image identifier, `nil` when it could not be read.
+    private static func simulatorRuntimeList(runSimctl: Simctl.Runner) -> [String: Any]? {
+        guard let listing = runSimctl(["runtime", "list", "-j"], simctlRuntimeListTimeout),
+              listing.succeeded
         else { return nil }
-        return root[identifier] != nil
+        return try? JSONSerialization.jsonObject(with: listing.stdout) as? [String: Any]
     }
 
     /// Retries one failed item through the route that tried it the first time, so
@@ -943,7 +1106,8 @@ nonisolated final class FileDeleter: Sendable {
             return .deleted(
                 bytes: report.bytesMovedToTrash + report.bytesRemovedDirectly,
                 movedToTrash: report.deletedItems.allSatisfy(\.movedToTrash),
-                remaining: report.failedItems
+                remaining: report.failedItems,
+                keptRuntimeDownloads: report.keptRuntimeDownloads
             )
         }
         if let failed = report.failedItems.first { return .failed(failed.reason) }
