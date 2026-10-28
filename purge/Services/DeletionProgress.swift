@@ -97,7 +97,8 @@ final class DeletionSession: ObservableObject, Identifiable {
 
     /// Plain lines the completion screen shows under the total: what Homebrew
     /// said when it could not remove a cask app and Purge trashed it instead
-    /// (#254). Empty for every ordinary run.
+    /// (#254), and a simulator runtime download macOS kept (#165). Empty for
+    /// every ordinary run.
     @Published private(set) var notes: [String] = []
 
     func addNote(_ note: String) { notes.append(note) }

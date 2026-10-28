@@ -47,7 +47,7 @@ struct DeletionConfirmSheetPermanentTests {
             locationURL: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS_26.3.1", isDirectory: true),
             safetyInfo: SimulatorRuntime.safetyInfo(
                 platformName: "iOS", version: "26.3.1", state: "Ready", sizeBytes: 8_393_503_393,
-                lastUsedAt: nil, deviceCount: 0, isXcodeDefault: false, isLegacyImage: false
+                lastUsedAt: nil, deviceCount: 0, isXcodeDefault: false
             )
         )
     }

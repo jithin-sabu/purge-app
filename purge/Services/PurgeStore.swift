@@ -1302,6 +1302,9 @@ final class PurgeStore: ObservableObject {
             )
             // Only the helper's moves can leave root-owned files in the Trash.
             if !report.ownershipWarningPaths.isEmpty { session?.noteTrashOwnershipWarning() }
+            for kept in report.keptRuntimeDownloads {
+                session?.addNote(String(localized: "macOS kept the \(kept.displayName) download (\(formatBytes(kept.bytes))), so that space is still in use."))
+            }
             recordCleanup(report, trigger: trigger, source: .clean)
         } catch {
             if session != nil {

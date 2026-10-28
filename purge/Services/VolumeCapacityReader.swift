@@ -42,13 +42,14 @@ nonisolated enum VolumeCapacityReader {
     static func settledGain(
         since before: Int64?,
         attempts: Int = 10,
+        interval: Duration = .seconds(1),
         read: @Sendable () -> Int64?
     ) async -> Int64? {
         guard let before else { return nil }
         var previous: Int64?
         for attempt in 0..<attempts {
             if attempt > 0 {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: interval)
             }
             guard let after = read() else { return nil }
             let gained = after - before

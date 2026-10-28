@@ -16,7 +16,7 @@ struct SimulatorRuntimeStoreTests {
     ) -> SimulatorRuntime {
         var safety = SimulatorRuntime.safetyInfo(
             platformName: "iOS", version: version, state: "Ready", sizeBytes: sizeBytes,
-            lastUsedAt: nil, deviceCount: deviceCount, isXcodeDefault: false, isLegacyImage: false
+            lastUsedAt: nil, deviceCount: deviceCount, isXcodeDefault: false
         )
         if let level {
             safety = SafetyInfo(
@@ -107,5 +107,34 @@ struct SimulatorRuntimeStoreTests {
 
         #expect(store.simulatorRuntimes.isEmpty)
         #expect(store.selectedCount == 0)
+    }
+
+    /// When Apple keeps a runtime's download, the completion screen says so, and
+    /// the total counts what the volume gave back, not the listed size (#165).
+    @Test func keptDownloadIsNamedOnTheCompletionScreen() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let row = runtime()
+        scans.developerEvents = [.simulatorRuntimeFound(row)]
+        let deleter = FileDeleter(simulatorRuntimeRemover: { _ in
+            .removed(freedBytes: nil, keptDownloadBytes: 9_116_354_048)
+        })
+        let store = scans.makeStore(fileDeleter: deleter)
+        await store.scanDeveloper()
+        store.setSimulatorRuntimeSelected(id: row.id, isSelected: true)
+
+        store.presentDeletionSheet(candidates: store.deletionCandidates)
+        store.userConfirmedDeletionFromPrimarySheet()
+        for _ in 0..<500 where store.manualDeletionSession?.phase != .complete {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        let session = try #require(store.manualDeletionSession)
+        #expect(session.phase == .complete)
+        #expect(session.finalBytesMovedToTrash == 0)
+        #expect(session.removedPermanentlyCount == 1)
+        #expect(session.notes == [
+            "macOS kept the iOS 26.3.1 Runtime download (\(formatBytes(9_116_354_048))), so that space is still in use."
+        ])
     }
 }

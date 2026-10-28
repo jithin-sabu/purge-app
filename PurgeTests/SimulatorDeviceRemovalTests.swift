@@ -317,7 +317,7 @@ struct SimulatorDeviceRemovalTests {
         let deleter = FileDeleter(
             simulatorRuntimeRemover: { id in
                 recorder.record(id)
-                return .removed
+                return .removed(freedBytes: nil, keptDownloadBytes: nil)
             },
             simulatorDeviceRemover: { udid, _ in
                 recorder.record(udid)

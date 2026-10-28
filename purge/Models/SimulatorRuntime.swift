@@ -16,12 +16,12 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     let version: String
     let build: String
     /// `Patchable Cryptex Disk Image` for runtimes from Xcode 16 on, `Cryptex Disk
-    /// Image` for older ones. The older layout keeps a second copy of the image
-    /// that Apple's own delete can leave behind.
+    /// Image` for older ones. An older one is mounted from inside Apple's
+    /// MobileAsset download, which Apple's own delete can leave behind.
     let kind: String
     let state: String
-    /// What `simctl` reports. It undercounts the older layout and can undercount
-    /// the newer one too, so the clean reports the measured volume delta instead.
+    /// What `simctl` reports. It can be wrong either way, so the clean records
+    /// what the volume gave back instead (#165).
     let sizeBytes: Int64
     let lastUsedAt: Date?
     /// Simulators built on this runtime. `nil` when the device list could not be read.
@@ -33,8 +33,10 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
 
     var formattedSize: String { formatBytes(sizeBytes) }
 
-    /// The pre-Xcode 16 layout: a bundle image cloned from the MobileAsset download.
-    var isLegacyImage: Bool { !kind.hasPrefix("Patchable") }
+    /// The pre-Xcode 16 layout.
+    var isLegacyImage: Bool { Self.isLegacyImage(kind: kind) }
+
+    static func isLegacyImage(kind: String) -> Bool { !kind.hasPrefix("Patchable") }
 
     // MARK: - Parsing
 
@@ -45,12 +47,16 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     /// - Parameter xcodeRuntimeBuilds: from ``xcodeRuntimeBuilds(fromMatchList:)``; the
     ///   builds the selected Xcode creates new simulators on. `nil` when that could not
     ///   be read, which also keeps every row at Check First.
+    /// - Parameter downloadBuilds: from ``downloads(in:)``; the builds Apple keeps a
+    ///   MobileAsset download of. `nil` when that could not be read, which leaves out
+    ///   every older-format runtime.
     /// - Parameter deviceReachByBuild: from ``deviceReachByBuild(fromRuntimesList:)``;
     ///   empty when that could not be read, which only leaves the warning out.
     static func parseRuntimeList(
         _ data: Data,
         deviceCountsByRuntimeIdentifier: [String: Int]?,
         xcodeRuntimeBuilds: Set<String>?,
+        downloadBuilds: Set<String>?,
         deviceReachByBuild: [String: DeviceReach] = [:],
         now: Date = Date()
     ) -> [SimulatorRuntime] {
@@ -82,6 +88,13 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
             }
             let lastUsedAt = (entry["lastUsedAt"] as? String).flatMap { dateParser.date(from: $0) }
             let kind = entry["kind"] as? String ?? ""
+            // An older-format runtime is mounted from inside Apple's download.
+            // `simctl runtime delete` unmounts it but can't remove that download,
+            // so the space stays used and the runtime is mounted again at the
+            // next restart (#165). Offering it would promise space it can't free.
+            if Self.isLegacyImage(kind: kind) {
+                guard let downloadBuilds, !downloadBuilds.contains(build) else { continue }
+            }
             let state = entry["state"] as? String ?? ""
             let platformName = Self.platformName(
                 runtimeIdentifier: runtimeIdentifier,
@@ -97,7 +110,6 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
                 lastUsedAt: lastUsedAt,
                 deviceCount: deviceCount,
                 isXcodeDefault: xcodeRuntimeBuilds.map { $0.contains(build) },
-                isLegacyImage: !kind.hasPrefix("Patchable"),
                 deviceReach: deviceReachByBuild[build],
                 now: now
             )
@@ -216,6 +228,55 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         return name == "xrOS" ? "visionOS" : name
     }
 
+    // MARK: - Apple's downloads
+
+    /// Where MobileAsset keeps what it downloads, runtimes included. Purge only
+    /// reads here: the downloads are Apple's to remove.
+    static let mobileAssetRoot = URL(fileURLWithPath: "/System/Library/AssetsV2", isDirectory: true)
+
+    /// One runtime download, an `<id>.asset` folder under AssetsV2.
+    struct Download: Equatable, Sendable {
+        let build: String
+        let folder: URL
+    }
+
+    /// Every runtime download under `root`, one `com_apple_MobileAsset_<platform>SimulatorRuntime`
+    /// folder per platform, with the build its Info.plist names. Needs no admin rights.
+    ///
+    /// `nil` when a runtime folder or an asset's Info.plist can't be read. That is
+    /// "unknown", never "no download". A Mac without AssetsV2 has none.
+    static func downloads(in root: URL = mobileAssetRoot) -> [Download]? {
+        let fileManager = FileManager.default
+        let platformFolders: [URL]
+        do {
+            platformFolders = try fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                .filter {
+                    let name = $0.lastPathComponent
+                    return name.hasPrefix("com_apple_MobileAsset_") && name.hasSuffix("SimulatorRuntime")
+                }
+        } catch CocoaError.fileReadNoSuchFile {
+            return []
+        } catch {
+            return nil
+        }
+
+        var found: [Download] = []
+        for platformFolder in platformFolders {
+            guard let assets = try? fileManager.contentsOfDirectory(at: platformFolder, includingPropertiesForKeys: nil) else {
+                return nil
+            }
+            for asset in assets where asset.pathExtension == "asset" {
+                guard let data = try? Data(contentsOf: asset.appendingPathComponent("Info.plist")),
+                      let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                      let properties = plist["MobileAssetProperties"] as? [String: Any],
+                      let build = properties["Build"] as? String, !build.isEmpty
+                else { return nil }
+                found.append(Download(build: build, folder: asset))
+            }
+        }
+        return found
+    }
+
     // MARK: - Safety
 
     /// Always Check First. Safe means Clean Safe Items and scheduled cleans take the
@@ -230,7 +291,6 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         lastUsedAt: Date?,
         deviceCount: Int?,
         isXcodeDefault: Bool?,
-        isLegacyImage: Bool,
         deviceReach: DeviceReach? = nil,
         now: Date = Date()
     ) -> SafetyInfo {
@@ -242,7 +302,6 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
             lastUsedAt: lastUsedAt,
             deviceCount: deviceCount,
             isXcodeDefault: isXcodeDefault,
-            isLegacyImage: isLegacyImage,
             now: now
         )
         // Leads the explanation: which runtime boots which devices is what decides
@@ -275,15 +334,11 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
         lastUsedAt: Date?,
         deviceCount: Int?,
         isXcodeDefault: Bool?,
-        isLegacyImage: Bool,
         now: Date
     ) -> SafetyInfo {
         let headline = String(localized: "\(platformName) \(version) Runtime")
         // Not a trash move: the only way back is Apple's download.
-        var cost = String(localized: "Xcode downloads it again (\(formatBytes(sizeBytes))) if a simulator needs it.")
-        if isLegacyImage {
-            cost = String(localized: "\(cost) Older image format, so macOS may keep its original download.")
-        }
+        let cost = String(localized: "Xcode downloads it again (\(formatBytes(sizeBytes))) if a simulator needs it.")
 
         // Each explanation is one localized sentence with the cost at the end, the
         // same shape as the simulator device rows, so translations can drop the

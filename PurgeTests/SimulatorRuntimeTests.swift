@@ -95,12 +95,14 @@ struct SimulatorRuntimeTests {
 
     private func parsed(
         deviceCounts: [String: Int]? = SimulatorRuntime.deviceCounts(fromDevicesList: Data(devicesJSON.utf8)),
-        xcodeBuilds: Set<String>? = []
+        xcodeBuilds: Set<String>? = [],
+        downloadBuilds: Set<String>? = []
     ) -> [SimulatorRuntime] {
         SimulatorRuntime.parseRuntimeList(
             Data(Self.runtimeListJSON.utf8),
             deviceCountsByRuntimeIdentifier: deviceCounts,
             xcodeRuntimeBuilds: xcodeBuilds,
+            downloadBuilds: downloadBuilds,
             now: Self.now
         )
     }
@@ -132,11 +134,13 @@ struct SimulatorRuntimeTests {
         #expect(old.safetyInfo.headline == "iOS 26.3.1 Runtime")
     }
 
+    /// Only shown when Apple keeps no download of it, so the row has no download
+    /// to warn about.
     @Test func legacyImageKindIsRecognised() throws {
         let legacy = try #require(runtime("18.4", in: parsed()))
         #expect(legacy.isLegacyImage)
         #expect(legacy.lastUsedAt == nil)
-        #expect(legacy.safetyInfo.explanation.contains("original download"))
+        #expect(!legacy.safetyInfo.explanation.contains("Older image format"))
     }
 
     @Test func deviceCountsComeFromTheDeviceList() {
@@ -172,7 +176,7 @@ struct SimulatorRuntimeTests {
 
     @Test func garbageInputGivesNoRows() {
         #expect(SimulatorRuntime.parseRuntimeList(
-            Data("not json".utf8), deviceCountsByRuntimeIdentifier: [:], xcodeRuntimeBuilds: []
+            Data("not json".utf8), deviceCountsByRuntimeIdentifier: [:], xcodeRuntimeBuilds: [], downloadBuilds: []
         ).isEmpty)
     }
 
@@ -205,7 +209,7 @@ struct SimulatorRuntimeTests {
         let info = SimulatorRuntime.safetyInfo(
             platformName: "iOS", version: "26.4", state: "Ready", sizeBytes: 8_000_000_000,
             lastUsedAt: Self.now.addingTimeInterval(-5 * 86_400),
-            deviceCount: 0, isXcodeDefault: false, isLegacyImage: false, now: Self.now
+            deviceCount: 0, isXcodeDefault: false, now: Self.now
         )
         #expect(info.level == .medium)
         #expect(info.explanation.hasPrefix("No simulator uses it, but it was used in the last month."))
@@ -231,7 +235,7 @@ struct SimulatorRuntimeTests {
     @Test func unusableRuntimeIsCheckFirst() {
         let info = SimulatorRuntime.safetyInfo(
             platformName: "iOS", version: "17.0", state: "Unusable", sizeBytes: 8_000_000_000,
-            lastUsedAt: Self.now, deviceCount: 3, isXcodeDefault: true, isLegacyImage: true, now: Self.now
+            lastUsedAt: Self.now, deviceCount: 3, isXcodeDefault: true, now: Self.now
         )
         #expect(info.level == .medium)
         #expect(info.explanation.hasPrefix("Xcode can no longer use this runtime."))
@@ -242,7 +246,7 @@ struct SimulatorRuntimeTests {
     @Test func inFlightRuntimeStateIsCheckFirst() {
         let info = SimulatorRuntime.safetyInfo(
             platformName: "iOS", version: "26.6", state: "Mounting", sizeBytes: 8_000_000_000,
-            lastUsedAt: nil, deviceCount: 0, isXcodeDefault: false, isLegacyImage: false, now: Self.now
+            lastUsedAt: nil, deviceCount: 0, isXcodeDefault: false, now: Self.now
         )
         #expect(info.level == .medium)
         #expect(info.explanation.hasPrefix("Xcode lists it as mounting."))
@@ -256,5 +260,58 @@ struct SimulatorRuntimeTests {
         #expect(list.allSatisfy {
             $0.safetyInfo.explanation.hasPrefix("Could not check whether Xcode uses it for new simulators.")
         })
+    }
+
+    // MARK: - Apple's downloads (#165)
+
+    /// iOS 18.4 is mounted from inside Apple's download. Deleting it left that
+    /// download, freed almost nothing, and the runtime came back at the next
+    /// restart, so it is never offered at its listed 8.8 GB.
+    @Test func olderRuntimeWithAnAppleDownloadIsNotOffered() {
+        let list = parsed(downloadBuilds: ["22E238"])
+        #expect(runtime("18.4", in: list) == nil)
+        #expect(list.map(\.version).sorted() == ["26.3.1", "26.5"])
+    }
+
+    /// A newer runtime's image is the download itself, and Apple removes both.
+    @Test func newerRuntimeWithAnAppleDownloadIsStillOffered() {
+        let list = parsed(downloadBuilds: ["22E238", "23D8133", "23F77"])
+        #expect(list.map(\.version).sorted() == ["26.3.1", "26.5"])
+    }
+
+    /// Unknown is never "no download": every older-format runtime is left out.
+    @Test func unreadableDownloadsLeaveOutEveryOlderRuntime() {
+        let list = parsed(downloadBuilds: nil)
+        #expect(runtime("18.4", in: list) == nil)
+        #expect(list.map(\.version).sorted() == ["26.3.1", "26.5"])
+    }
+
+    @Test func downloadsAreReadFromEachRuntimeAssetsInfoPlist() throws {
+        let assets = try FakeAssetsV2()
+        defer { assets.cleanUp() }
+        let iOS = try assets.addDownload(build: "22E238")
+        let watchOS = try assets.addDownload(build: "22R123", folder: "com_apple_MobileAsset_watchOSSimulatorRuntime")
+        // Another kind of asset, unreadable on purpose: it is never opened.
+        try assets.addDownload(build: nil, folder: "com_apple_MobileAsset_Font8")
+
+        let downloads = try #require(SimulatorRuntime.downloads(in: assets.root))
+        // By folder name: the listing may spell the temporary folder another way.
+        let found = Set(downloads.map { "\($0.build) \($0.folder.lastPathComponent)" })
+        #expect(found == ["22E238 \(iOS.lastPathComponent)", "22R123 \(watchOS.lastPathComponent)"])
+    }
+
+    @Test func aMacWithoutAssetsV2HasNoDownloads() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PurgeNoAssetsV2-\(UUID().uuidString)", isDirectory: true)
+        #expect(SimulatorRuntime.downloads(in: missing) == [])
+    }
+
+    @Test func aRuntimeAssetWithoutABuildMakesTheAnswerUnknown() throws {
+        let assets = try FakeAssetsV2()
+        defer { assets.cleanUp() }
+        try assets.addDownload(build: "22E238")
+        try assets.addDownload(build: nil)
+
+        #expect(SimulatorRuntime.downloads(in: assets.root) == nil)
     }
 }
