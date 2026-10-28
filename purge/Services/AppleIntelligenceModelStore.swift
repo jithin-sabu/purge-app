@@ -359,11 +359,11 @@ final class AppleIntelligenceModelStore: ObservableObject {
             let mapping = await services.runWorker("asset-type", ["assetSet": set.name], 30)
             guard mapping.ok, mapping.result["assetType"] as? String == set.assetType else {
                 phase = .idle
-                // The worker's own words are English diagnostics, so they follow
-                // a translated sentence rather than stand alone in the row (#187).
+                // The reason can be the worker's own English diagnostics, so it
+                // follows a translated sentence rather than stand alone (#187).
                 lastOutcome = .notReady(mapping.ok
                     ? String(localized: "This version of macOS names \(set.title) differently, so Purge left them alone.")
-                    : String(localized: "macOS couldn't look up \(set.title), so Purge left them alone: \(mapping.problem)"))
+                    : String(localized: "Purge couldn't look up \(set.title), so it left them alone: \(mapping.problem)"))
                 return
             }
         }

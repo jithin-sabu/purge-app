@@ -1381,8 +1381,7 @@
 "250 MB" = "250 MB";
 "500 MB" = "500 MB";
 "1 GB" = "1 GB";
-"Purge: Apple Intelligence models removed" = "Purge：已移除 Apple 智能模型";
 "Block Apple Intelligence model downloads" = "阻止下载 Apple 智能模型";
 "Stops macOS downloading the Apple Intelligence models Purge removed. Remove this profile, or choose Download Again in Purge, to let them come back." = "阻止 macOS 重新下载 Purge 已移除的 Apple 智能模型。移除此描述文件，或在 Purge 中选择“重新下载”，即可让它们恢复。";
 "request could not be encoded" = "请求无法编码";
-"macOS couldn't look up %@, so Purge left them alone: %@" = "macOS 无法查询 %@，因此 Purge 未作处理：%@";
+"Purge couldn't look up %@, so it left them alone: %@" = "Purge 无法查询 %@，因此未作处理：%@";

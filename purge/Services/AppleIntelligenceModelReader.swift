@@ -231,8 +231,11 @@ nonisolated enum AppleIntelligenceDownloadBlock {
     static let managedPreferences = "/Library/Managed Preferences/com.apple.MobileAsset.plist"
 
     /// The name System Settings lists the profile under. The steps that send the
-    /// user there quote it, so both read this one value (#187).
-    static var profileDisplayName: String { String(localized: "Purge: Apple Intelligence models removed") }
+    /// user there quote it, so both read this one value (#187). It stays in
+    /// English: an installed profile keeps the name it was installed with, and
+    /// every earlier release used this one, so a translated name could send the
+    /// user looking for a profile System Settings doesn't list.
+    static let profileDisplayName = "Purge: Apple Intelligence models removed"
 
     /// The types a new profile has to block: the ones already in force plus the
     /// ones being removed now. The profile keeps one identifier and UUID, so

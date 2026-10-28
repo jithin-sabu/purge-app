@@ -11,11 +11,11 @@ translator to land.
 It also reads every Swift file under purge/ and fails when a literal the app
 localizes has no entry in a translated Localizable.strings (#187). That covers
 String(localized:), Text, Button, Label and the other SwiftUI initializers and
-modifiers that take a LocalizedStringKey, written with a string literal.
-Interpolations match any placeholder, since the check can't see their types.
-Text built from a variable, or a literal passed as a plain String, is not
-localized at all, and this check can't see it either: pass String(localized:)
-in those places.
+modifiers that take a LocalizedStringKey, given a string literal or a ternary
+of two. Interpolations match any placeholder, since the check can't see their
+types. Text built from a variable, or a literal passed as a plain String, is
+not localized at all, and this check can't see it either: pass
+String(localized:) in those places.
 
 Usage: python3 scripts/check-localization.py
 """
@@ -118,10 +118,12 @@ def placeholders(s):
     return sorted(found)
 
 
-# A string literal right after one of these is a localization key. They are the
-# calls the app uses that take a LocalizedStringKey, String.LocalizationValue
-# or LocalizedStringResource. Text("a" + b) and the like are plain Strings, and
-# `source_keys` skips them.
+# A string literal right after one of these is a localization key, and so is
+# each side of `cond ? "a" : "b"` there. They are the calls the app uses that
+# take a LocalizedStringKey, String.LocalizationValue or LocalizedStringResource.
+# Text("a" + b), Text(cond ? "a" : b) and the like are plain Strings, and
+# `source_keys` skips them. The condition holds no comma or colon, so a ternary
+# in a later argument, such as `systemImage:`, is never read as a key.
 LOCALIZED_LITERAL = re.compile(
     r"(?:(?<![\w.])(?:String\(localized:|NSLocalizedString\(|LocalizedStringKey\(|LocalizedStringResource\("
     r"|IntentDescription\(|Text\(|Button\(|Label\(|Toggle\(|Picker\(|Menu\(|Section\(|Link\(|TextField\("
@@ -130,9 +132,12 @@ LOCALIZED_LITERAL = re.compile(
     r"|\.(?:help|accessibilityLabel|accessibilityHint|accessibilityValue|navigationTitle|alert"
     r"|confirmationDialog|badge)\("
     r"|:\s*LocalizedStringResource\s*=)"
-    r"\s*(?=\")"
+    r"\s*(?P<ternary>[^\"()\n?,:]*\?\s*)?(?=\")"
 )
+TERNARY_ELSE = re.compile(r'\s*:\s*(?=")')
 TABLE_ARGUMENT = re.compile(r'\s*,\s*table:\s*"(\w+)"')
+# A complete string literal on one line, so a `//` inside one isn't read as a comment.
+ONE_LINE_LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
 # Stands in for each interpolation in a source key and each placeholder in a
 # table key, so "\(size) free" matches "%@ free".
 INTERPOLATION = "\x00"
@@ -219,18 +224,25 @@ def source_keys():
         text = path.read_text(encoding="utf-8")
         for match in LOCALIZED_LITERAL.finditer(text):
             line_start = text.rfind("\n", 0, match.start()) + 1
-            if "//" in text[line_start:match.start()]:
+            if "//" in ONE_LINE_LITERAL.sub('""', text[line_start:match.start()]):
                 continue  # In a comment.
             line = text.count("\n", 0, match.start()) + 1
             try:
                 key, end = read_swift_literal(text, match.end())
+                keys = [key]
+                if match.group("ternary") is not None:
+                    other = TERNARY_ELSE.match(text, end)
+                    if not other:
+                        continue  # One side isn't a literal, so the whole is a String.
+                    key, end = read_swift_literal(text, other.end())
+                    keys.append(key)
             except (StringsError, ValueError, IndexError) as error:
                 raise StringsError(f"{path.relative_to(ROOT)}:{line}: can't read the string literal: {error}")
             rest = text[end:].lstrip()
             if rest[:1] in ("+", "."):
                 continue  # Part of a String expression, not a key on its own.
             table = TABLE_ARGUMENT.match(text, end)
-            found.append((key, table.group(1) if table else "Localizable", path, line))
+            found += [(key, table.group(1) if table else "Localizable", path, line) for key in keys]
     return found
 
 
