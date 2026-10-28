@@ -128,6 +128,8 @@ struct AppleIntelligenceDownloadBlockTests {
         #expect(settings.count == types.count)
         #expect(settings.values.allSatisfy { $0 == AppleIntelligenceDownloadBlock.blockedURL })
         #expect(settings.keys.allSatisfy { $0.hasPrefix(AppleIntelligenceDownloadBlock.keyPrefix) })
+        // The System Settings steps quote this name, so the profile must carry it.
+        #expect(plist?["PayloadDisplayName"] as? String == AppleIntelligenceDownloadBlock.profileDisplayName)
         #expect(plist?["PayloadRemovalDisallowed"] as? Bool == false)
     }
 

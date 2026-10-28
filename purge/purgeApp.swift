@@ -269,7 +269,7 @@ private struct TabMenuItems: View {
 
     var body: some View {
         ForEach(Array(PurgeStore.Tab.keyboardTabs.enumerated()), id: \.element) { index, tab in
-            Button(tab.rawValue) {
+            Button(tab.displayName) {
                 IntentRouter.revealWindow()
                 store.selectedTab = tab
             }

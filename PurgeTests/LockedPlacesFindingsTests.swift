@@ -29,7 +29,7 @@ struct LockedPlacesFindingsTests {
             candidate("Library/Containers/com.example.sandboxed/Data/Library/Caches", bytes: 300),
             candidate("Documents/app/node_modules", bytes: 200),
         ]) { locked in
-            [OnboardingResultsCategory(title: "Locked", symbol: "lock", bytes: locked.reduce(0) { $0 + $1.sizeBytes })]
+            [OnboardingResultsCategory(kind: .appCaches, bytes: locked.reduce(0) { $0 + $1.sizeBytes })]
         }
 
         #expect(findings.bytes == 500)

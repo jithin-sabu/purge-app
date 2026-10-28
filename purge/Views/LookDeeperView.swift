@@ -224,7 +224,7 @@ struct LookDeeperView: View {
   /// In onboarding, "Show me" lands on the tab that holds most of what was found.
   private func finish(with findings: LockedPlacesFindings) {
     if case .onboarding = context, findings.isWorthLeadingWith {
-      store.selectedTab = findings.categories.first?.title == PurgeStore.devArtifactCategoryTitle
+      store.selectedTab = findings.categories.first?.kind == .devArtifacts
         ? .devTools
         : .appCaches
     }

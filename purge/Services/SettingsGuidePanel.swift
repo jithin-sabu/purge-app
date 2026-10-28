@@ -185,13 +185,13 @@ struct SettingsGuideView: View {
         switch guide {
         case .installProfile:
             return [
-                String(localized: "In System Settings, double-click \"Purge: Apple Intelligence models removed\" under Downloaded."),
+                String(localized: "In System Settings, double-click \"\(AppleIntelligenceDownloadBlock.profileDisplayName)\" under Downloaded."),
                 String(localized: "Click Install…, then Install again when macOS asks."),
                 String(localized: "Enter your password if it asks for one."),
             ]
         case .removeProfile:
             return [
-                String(localized: "In System Settings, select \"Purge: Apple Intelligence models removed\"."),
+                String(localized: "In System Settings, select \"\(AppleIntelligenceDownloadBlock.profileDisplayName)\"."),
                 String(localized: "Click the minus button below the list, then Remove."),
                 String(localized: "Enter your password if it asks for one."),
             ]

@@ -545,7 +545,7 @@ struct UninstallView: View {
             .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(count.map { "\(target.label), \($0) items" } ?? target.label)
+        .accessibilityLabel(count.map { String(localized: "\(target.label), \($0) items") } ?? target.label)
         .accessibilityAddTraits(section == target ? .isSelected : [])
     }
 
