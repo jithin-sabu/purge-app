@@ -165,6 +165,7 @@
 "Cleaning %@…" = "正在清理 %@…";
 "Cleaning History" = "清理历史记录";
 "Cleaning Schedule" = "清理计划";
+"Cleaning never touches %@." = "清理绝不会处理%@。";
 "Cleaning, %@ of %@" = "正在清理，%@ / %@";
 "Cleaning..." = "正在清理…";
 "Cleaning…" = "正在清理…";
@@ -204,6 +205,7 @@
 "From the last scan, %@" = "来自上次扫描（%@）";
 "From the last scan, %@ · Checking again…" = "来自上次扫描（%@）· 正在重新检查…";
 "From the last scan. Purge is checking it again." = "来自上次扫描。Purge 正在重新检查。";
+"Large Files and the uninstaller remove only what you confirm, which can include your own files and apps that need an admin password." = "大文件和应用卸载只会移除你确认过的内容，其中可能包括你自己的文件，以及需要管理员密码才能移除的应用。";
 "Last scan found %lld files, %@, %@" = "上次扫描找到 %lld 个文件，%@，%@";
 "Last scan found 1 file, %@, %@" = "上次扫描找到 1 个文件，%@，%@";
 "Last scan: %lld files, %@, %@" = "上次扫描：%lld 个文件，%@，%@";
@@ -701,8 +703,6 @@
 "Weeks" = "周";
 "Welcome to" = "欢迎使用";
 "Welcome to Purge" = "欢迎使用 Purge";
-"What Purge never touches: %@" = "Purge 绝不处理：%@";
-"What Purge never touches: paths outside the allowlist" = "Purge 绝不处理：允许清理列表之外的路径";
 "What are Time Machine snapshots?" = "什么是时间机器快照？";
 "When an app leaves Applications, like dragging it to the Trash in Finder, Purge opens with the files it left behind, even if Purge was quit. Nothing moves until you confirm. A small background watcher stays on while this is enabled; you can turn it off here at any time." = "应用从“应用程序”中移除时（例如在访达中拖到废纸篓），Purge 会打开并显示残留文件，即使之前已退出。确认前不会移动任何内容。启用此功能后，一个小型后台程序会持续监测；你可随时在此关闭。";
 "Xcode can no longer run this device. %@" = "Xcode 已无法运行此设备。%@";
@@ -725,9 +725,7 @@
 "a fresh copy of Xcode" = "一份新的 Xcode";
 "a full base MacBook Air" = "一台装满的基础款 MacBook Air";
 "all of GTA V" = "完整 GTA V";
-"anything requiring admin privileges, except leftover macOS update files" = "需要管理员权限的内容（残留的 macOS 更新文件除外）";
 "app" = "个应用";
-"application support" = "应用支持文件";
 "apps" = "个应用";
 "buy me a coffee" = "请我喝杯咖啡";
 "by" = "制作 ·";
@@ -750,12 +748,9 @@
 "delete" = "删除";
 "delete app" = "删除应用";
 "delete junk" = "删除垃圾文件";
-"desktop" = "桌面";
 "disk full" = "磁盘已满";
 "disk space" = "磁盘空间";
-"documents" = "文稿";
 "done in " = "耗时 ";
-"downloads" = "下载";
 "empty caches" = "清空缓存";
 "file" = "个";
 "files" = "个";
@@ -796,7 +791,6 @@
 "of %@" = "共 %@";
 "one more screenshot" = "再存一张截图";
 "or" = "或";
-"personal files (%@)" = "个人文件（%@）";
 "pictures" = "图片";
 "preferences" = "偏好设置";
 "protected containers" = "受保护的容器";
@@ -812,7 +806,7 @@
 "space" = "空间";
 "storage" = "存储";
 "storage full" = "存储空间已满";
-"system" = "System 文件夹";
+"system folders that need an admin password, except leftover macOS update files" = "需要管理员密码的系统文件夹（残留的 macOS 更新文件除外）";
 "the next macOS update" = "下一次 macOS 更新";
 "the selected apps" = "所选应用";
 "today" = "今天";

@@ -322,7 +322,20 @@ struct AboutView: View {
     static let repoBaseURL = URL(string: "https://github.com/jithin-sabu/purge-app")!
 
     static var allowlistPolicyURL: URL {
-        URL(string: "\(repoBaseURL.absoluteString)/blob/main/purge/Services/DeletionSafetyPolicy.swift")!
+        allowlistPolicyURL(version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
+    }
+
+    /// The policy as the installed version has it, not as `main` has it now (#191).
+    /// Releases are tagged `v<version>`. A version that is not plain numbers and
+    /// dots has no tag, so it gets `main`.
+    static func allowlistPolicyURL(version: String?) -> URL {
+        let ref: String
+        if let version, !version.isEmpty, version.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }) {
+            ref = "v\(version)"
+        } else {
+            ref = "main"
+        }
+        return URL(string: "\(repoBaseURL.absoluteString)/blob/\(ref)/purge/Services/DeletionSafetyPolicy.swift")!
     }
 }
 
