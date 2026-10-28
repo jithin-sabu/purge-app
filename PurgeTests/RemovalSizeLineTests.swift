@@ -64,15 +64,24 @@ struct RemovalSizeLineTests {
     }
 }
 
+/// The wording checks below read the English text. The test host runs in the
+/// Mac's language, so on a Mac set to Simplified Chinese they are skipped.
+private nonisolated let testHostRunsInEnglish = Bundle.main.preferredLocalizations.first?.hasPrefix("en") ?? false
+
 /// The auto-clean info said "Your actual work is never deleted", a promise no
 /// cleaner can make, and never said where the items go (#191).
 @MainActor
 @Suite("Auto-clean info says where items go")
 struct ScheduleSummaryWordingTests {
     @Test
+    func summaryStartsWithHowOften() {
+        let every = String(localized: "Every week")
+        #expect(SettingsView.scheduleSummary(every: every).hasPrefix(every))
+    }
+
+    @Test(.enabled(if: testHostRunsInEnglish, "Reads the English wording"))
     func summaryNamesTheTrashAndMakesNoGuarantee() {
-        let text = SettingsView.scheduleSummary(every: String(localized: "Every week"))
-        #expect(text.hasPrefix(String(localized: "Every week") + ", "))
+        let text = SettingsView.scheduleSummary(every: "Every week")
         #expect(text.contains("to the Trash"))
         #expect(text.contains("Check First"))
         // Scheduled cleans take dependency folders like node_modules too, not only build output.

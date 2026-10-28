@@ -12,19 +12,29 @@ import Testing
 struct SafetyAllowlistSummaryTests {
     private let home = DeletionSafetyPolicy.cachedHomePath
 
-    /// Folder for each label the line can name.
+    /// Folder for each label the line can name. Labels are compared as the app
+    /// shows them, so the checks hold in every language the test host runs in.
     private let foldersByLabel = [
-        "keychains": "Library/Keychains", "preferences": "Library/Preferences", "Mail mailboxes": "Library/Mail",
-        "pictures": "Pictures", "music": "Music", "movies": "Movies",
+        String(localized: "keychains"): "Library/Keychains",
+        String(localized: "preferences"): "Library/Preferences",
+        String(localized: "Mail mailboxes"): "Library/Mail",
+        String(localized: "pictures"): "Pictures",
+        String(localized: "music"): "Music",
+        String(localized: "movies"): "Movies",
     ]
 
+    private var namedFolders: [String] {
+        SafetyAllowlistSummary.neverCleanedFolderLabels.compactMap { foldersByLabel[$0] }
+    }
+
     @Test
-    func everyNamedFolderIsRefusedWithEverythingInside() throws {
+    func everyNamedFolderIsRefusedWithEverythingInside() {
         let named = SafetyAllowlistSummary.neverCleanedFolderLabels
-        #expect(named == ["keychains", "preferences", "Mail mailboxes", "pictures", "music"])
+        #expect(named.count == namedFolders.count, "a label with no folder: \(named)")
+        #expect(namedFolders == ["Library/Keychains", "Library/Preferences", "Library/Mail", "Pictures", "Music"])
         let allowlisted = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: home)
-        for label in named {
-            let folder = "\(home)/\(try #require(foldersByLabel[label], "\(label)"))"
+        for relative in namedFolders {
+            let folder = "\(home)/\(relative)"
             // The allowlist is checked before the never-delete folders, so an
             // allowlisted path inside one would be cleaned.
             #expect(!allowlisted.contains { $0 == folder || $0.hasPrefix(folder + "/") }, "\(folder)")
@@ -40,29 +50,28 @@ struct SafetyAllowlistSummaryTests {
     @Test
     func moviesIsNotNamedWhileCacheClipIsCleaned() {
         #expect(DeletionSafetyPolicy.evaluate(URL(fileURLWithPath: "\(home)/Movies/CacheClip")) == .allow)
-        #expect(!SafetyAllowlistSummary.neverCleanedFolderLabels.contains("movies"))
+        #expect(!namedFolders.contains("Movies"))
     }
 
     /// These are refused as folders only. Cleaning reaches inside them, so the
     /// line must not name them.
     @Test
     func foldersCleaningReachesInsideAreNotNamed() {
-        for folder in ["Documents", "Desktop", "Downloads", "Library/Application Support"] {
+        let reachedInto = ["Documents", "Desktop", "Downloads", "Library/Application Support"]
+        for folder in reachedInto {
             #expect(DeletionSafetyPolicy.evaluate(URL(fileURLWithPath: "\(home)/\(folder)")) == .blockedNeverDelete)
         }
-        let line = SafetyAllowlistSummary.boundaryLine.lowercased()
-        for name in ["documents", "desktop", "downloads", "application support"] {
-            #expect(!line.contains(name), "\(name)")
-        }
+        #expect(Set(namedFolders).isDisjoint(with: reachedInto))
     }
 
     @Test
     func lineSaysLargeFilesAndTheUninstallerAreSeparate() {
         let line = SafetyAllowlistSummary.boundaryLine
-        #expect(line.hasPrefix("Cleaning never touches "))
-        #expect(line.contains("Large Files and the uninstaller remove only what you confirm"))
-        #expect(line.contains("apps that need an admin password"))
-        #expect(!line.contains("anything requiring admin privileges"))
+        for label in SafetyAllowlistSummary.neverCleanedFolderLabels {
+            #expect(line.contains(label), "\(label)")
+        }
+        #expect(line.contains(String(localized: "system folders that need an admin password, except leftover macOS update files")))
+        #expect(line.hasSuffix(String(localized: "Large Files and the uninstaller remove only what you confirm, which can include your own files and apps that need an admin password.")))
     }
 
     @Test
