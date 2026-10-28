@@ -95,10 +95,6 @@ struct ScanResultRow: View {
         usesCompactExplanation ? 1 : 2
     }
 
-    private var rowVerticalPadding: CGFloat {
-        usesCompactExplanation ? 10 : 12
-    }
-
     private var showsReinstallBadge: Bool {
         guard let reinstallSafety else { return false }
         return reinstallSafety != .notApplicable
@@ -226,7 +222,7 @@ struct ScanResultRow: View {
             trailingColumn
         }
         .padding(.horizontal, showsCardChrome ? AppStyle.Row.scanCardHorizontalPadding : 0)
-        .padding(.vertical, showsCardChrome ? rowVerticalPadding : AppStyle.Spacing.xSmall)
+        .padding(.vertical, showsCardChrome ? AppStyle.Spacing.small : AppStyle.Spacing.xSmall)
 
         // The tap target must blanket the ENTIRE row, not just rowMainContent: a
         // Button/interactive control in a macOS List row scrolls the clicked row

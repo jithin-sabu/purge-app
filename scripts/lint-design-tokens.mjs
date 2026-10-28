@@ -61,12 +61,17 @@ const gapLabels = /\b(spacing|horizontalSpacing|verticalSpacing|minLength):/g;
 const gapMessage = "raw gap; use AppStyle.Spacing";
 // A frame on an empty view is a gap too: `Spacer().frame(height: 12)`.
 const gapReceiver = /\bSpacer\(|\bColor\.clear\b/;
-// Constants that hold a radius or a gap, by name. Blur and shadow radii are not
-// corners.
+// Constants that hold a radius or a gap, stored or computed. A radius counts
+// when its name says corner or when the same file passes it to `cornerRadius`,
+// so a blur radius does not. A gap counts by its name.
 const declaration = /\b(?:let|var)\s+(\w+)\s*(?::\s*[\w.?]+)?\s*=(?!=)\s*(.*)$/;
+const computedProperty = /\bvar\s+(\w+)\s*:\s*CGFloat\s*\{/;
 const parameterDefault = /\b(\w+)\s*:\s*CGFloat\s*=(?!=)\s*([^,)]*)/g;
-const radiusName = /radius$/i;
-const notCornerName = /blur|shadow/i;
+const cornerName = /cornerRadius$/i;
+const cornerUses = [
+  /\bcornerRadius:\s*(?:[Ss]elf\.)?(\w+)\s*[,)]/g,
+  /\.cornerRadius\(\s*(?:[Ss]elf\.)?(\w+)\s*[,)]/g,
+];
 const gapName = /(padding|spacing|inset|gap|margin)s?$/i;
 
 function swiftFiles(dir) {
@@ -133,18 +138,62 @@ function argumentText(lines, index, start, labelled) {
   return text;
 }
 
+// The text with the condition of each `condition ? a : b` taken out, so the 1
+// in `count > 1 ? small : 0` is not read as a gap. Both results stay.
+function withoutConditions(text) {
+  let result = text;
+  for (let match = /\s\?\s/.exec(result); match; match = /\s\?\s/.exec(result)) {
+    const head = result.slice(0, match.index);
+    const start = Math.max(...["?", ":", ",", "(", "=", "\n"].map((char) => head.lastIndexOf(char))) + 1;
+    result = result.slice(0, start) + " " + result.slice(match.index + match[0].length);
+  }
+  return result;
+}
+
+// A number that scales a token, as in `tileGap / 2`, passes. A number beside
+// another number, as in `12 / 2`, does not.
 function hasRawNumber(text) {
-  for (const match of text.matchAll(/(?<![\w.])\d+(?:\.\d+)?(?![\w.])/g)) {
+  const values = withoutConditions(text);
+  for (const match of values.matchAll(/(?<![\w.])\d+(?:\.\d+)?(?![\w.])/g)) {
     if (parseFloat(match[0]) === 0) continue;
-    const before = text.slice(0, match.index).trimEnd().at(-1);
-    const after = text.slice(match.index + match[0].length).trimStart()[0];
-    if (before === "*" || before === "/" || after === "*" || after === "/") continue;
+    const before = values.slice(0, match.index).trimEnd();
+    const after = values.slice(match.index + match[0].length).trimStart();
+    if (/[*/]$/.test(before) && !/(?<![\w.])\d+(?:\.\d+)?\s*[*/]$/.test(before)) continue;
+    if (/^[*/]/.test(after) && !/^[*/]\s*\d/.test(after)) continue;
     return true;
   }
   return false;
 }
 
-function gapProblems(lines, index) {
+// The values a computed property can return: each `return` expression, or the
+// whole body when it is a single expression.
+function computedValues(lines, index, start) {
+  let body = "";
+  let depth = 1;
+  let column = start;
+  for (let i = index; i < lines.length && i < index + 20 && depth > 0; i += 1) {
+    const line = code(lines[i]);
+    for (; column < line.length && depth > 0; column += 1) {
+      const char = line[column];
+      if (char === "{") depth += 1;
+      else if (char === "}") depth -= 1;
+      if (depth > 0) body += char;
+    }
+    body += "\n";
+    column = 0;
+  }
+  const returns = [...body.matchAll(/\breturn\s+([^\n};]+)/g)].map((match) => match[1]);
+  return returns.length > 0 ? returns.join("\n") : body;
+}
+
+// Names this file passes to `cornerRadius`, so a constant used as one counts as
+// a radius whatever it is called.
+function cornerRadiusNames(lines) {
+  const text = lines.map(code).join("\n");
+  return new Set(cornerUses.flatMap((pattern) => [...text.matchAll(pattern)].map((match) => match[1])));
+}
+
+function gapProblems(lines, index, cornerNames) {
   const line = code(lines[index]);
   const found = new Set();
   for (const match of line.matchAll(gapCalls)) {
@@ -162,10 +211,12 @@ function gapProblems(lines, index) {
   const named = [];
   const declared = line.match(declaration);
   if (declared) named.push([declared[1], declared[2]]);
+  const computed = line.match(computedProperty);
+  if (computed) named.push([computed[1], computedValues(lines, index, computed.index + computed[0].length)]);
   for (const match of line.matchAll(parameterDefault)) named.push([match[1], match[2]]);
   for (const [name, value] of named) {
     if (!hasRawNumber(value)) continue;
-    if (radiusName.test(name) && !notCornerName.test(name)) {
+    if (cornerName.test(name) || cornerNames.has(name)) {
       found.add("corner radius in a constant; use AppStyle.Radius");
     } else if (gapName.test(name)) {
       found.add("raw gap in a constant; use AppStyle.Spacing");
@@ -179,6 +230,7 @@ for (const file of swiftFiles(sourceRoot)) {
   const rel = relative(root, file);
   if (tokenFiles.has(rel)) continue;
   const lines = readFileSync(file, "utf8").split("\n");
+  const cornerNames = cornerRadiusNames(lines);
   lines.forEach((line, index) => {
     if (line.includes("design-lint: allow") || line.trimStart().startsWith("//")) return;
     const report = (message) => problems.push(`${rel}:${index + 1}: ${message}\n    ${line.trim()}`);
@@ -187,7 +239,7 @@ for (const file of swiftFiles(sourceRoot)) {
       if (rule.skipIcons && (line.includes("Image(") || chainStart(lines, index).includes("Image("))) continue;
       report(rule.message);
     }
-    gapProblems(lines, index).forEach(report);
+    gapProblems(lines, index, cornerNames).forEach(report);
   });
 }
 
