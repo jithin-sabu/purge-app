@@ -553,11 +553,7 @@ struct DevToolsView: View {
     }
 
     private var developerListEmpty: Bool {
-        return store.projectGroups.isEmpty
-            && store.devTools.isEmpty
-            && store.simulatorDevices.isEmpty
-            && store.runningSimulatorDevices.isEmpty
-            && !hasLastScanRows
+        !store.hasLiveDevToolsRows && !hasLastScanRows
     }
 
     private var showsDeveloperListContent: Bool {
