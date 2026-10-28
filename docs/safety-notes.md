@@ -275,9 +275,16 @@ at v1.8.1.
 
 ### What would have caught it earlier
 
-The audit itself, run before each entry shipped instead of after. The
-[safety page](https://purgemac.com/safety) is now generated from the source
-at build time, so the published list cannot drift from the code.
+The audit itself, run before each entry shipped instead of after.
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+now pins each finding: `gemsOnlyOfferDownloadsNotInstalledGems`,
+`sbtSettingsAreNeverOffered`, `pubCacheKeepsGloballyActivatedTools`,
+`editorWorkspaceStorageIsOfferedEntryByEntry`,
+`zedWorkspaceDatabaseIsNeverOffered`, `jetBrainsLocalHistoryIsNeverOffered`,
+`androidOffersCachesOnly` and `SpotifyOfflineMusicTests`, and
+`bigDownloadStoresAreCheckFirst` covers the rows that moved to Check First. The
+[safety page](https://purgemac.com/safety) is generated from the source at
+build time, so the published list cannot drift from the code.
 
 ## 2026-10-01: An active project's build folders could look stale and be swept
 
@@ -310,7 +317,11 @@ setting says. Four tests describing the bug fail on the old rule.
 ### What would have caught it earlier
 
 "Is anyone using this" is process state, not a folder date. The same lesson as
-the Chrome entry below, applied to projects.
+the Chrome entry below, applied to projects. In
+[`PurgeTests/ProjectActivityPolicyTests.swift`](../PurgeTests/ProjectActivityPolicyTests.swift),
+`recentSourceEditBeatsOldArtifact` and `recentGitIndex` fail on the old
+folder-date rule, `processInside` and `gitLock` check that a project in use is
+hidden, and `inUseProjectHidden` checks it end to end through the scanner.
 
 ## 2026-10-01: Docker Desktop was Safe to Clean, so one-click cleans could trash the VM disk
 
@@ -347,9 +358,14 @@ old tag.
 
 ### What would have caught it earlier
 
-A test that asserts the tier of the resolved row for every entry that can hold
-user data. And a rule that a comment never sets a tier: the tag in
-`explanations.json` is the only thing that does.
+A test that asserts the tier of the resolved row, not the comment next to it.
+`dockerDesktopRowResolvesToCheckFirst` in
+[`PurgeTests/DockerSafetyTierTests.swift`](../PurgeTests/DockerSafetyTierTests.swift)
+resolves the Dev Tools row the way the scanner does, and
+`bigDownloadStoresAreCheckFirst` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+does the same for the other large download stores. A comment never sets a
+tier: the tag in `explanations.json` is the only thing that does.
 
 ## 2026-09-21: Old Version cleanup removed the framework Chrome was running from
 
@@ -414,7 +430,10 @@ again before deleting.
 An item whose safety depends on something outside the filesystem, here a
 running app, needs that state checked at scan time and again at delete time.
 A test that modelled a running browser on an old version would have failed on
-the v1.1.2 code.
+the v1.1.2 code. `loadedHelperVersionIsRefusedAndUnusedLeftoverIsOffered` and
+`runningBrowserWithNoVisibleVersionHidesEveryLeftover` in
+[`PurgeTests/StaleBrowserFrameworkPolicyTests.swift`](../PurgeTests/StaleBrowserFrameworkPolicyTests.swift)
+are that test.
 
 ## 2026-09-11: JetBrains cleaner deleted installed plugins and all IDE settings
 
@@ -450,7 +469,13 @@ pin it.
 
 Treating anything under `Application Support` as not a cache unless an entry
 proves otherwise. The allowlist audit above (#103) went through the whole list
-on that principle.
+on that principle. `jetBrainsApplicationSupportRootIsBlocked` and
+`jetBrainsApplicationSupportCacheDescendantIsBlocked` in
+[`PurgeTests/DeletionSafetyPolicyTests.swift`](../PurgeTests/DeletionSafetyPolicyTests.swift)
+check that the folder and everything in it is refused, and
+`jetBrainsLocalHistoryIsNeverOffered` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+keeps Local History out of the cache that is still offered.
 
 ## 2026-07-25: Spotlight and 29 other items were Safe to Clean although cleaning them had visible consequences
 
@@ -491,6 +516,9 @@ A written definition of Safe, applied to every entry as a checklist rather
 than as a tag. The definition now exists on the
 [safety page](https://purgemac.com/safety): the app rebuilds it on its own and
 you will not notice it is gone. Spotlight fails that test.
+[`PurgeTests/VisibleCostTierTests.swift`](../PurgeTests/VisibleCostTierTests.swift)
+resolves a row from each group above and expects Check First, and checks that
+a Spotlight folder with no entry of its own is Check First too.
 
 ## 2026-07-12: Spotify cache cleanup took files a user kept there on purpose
 
@@ -519,3 +547,6 @@ remove a candidate from the results, never widen what Purge can touch.
 
 Nothing in Purge can know what a modified client keeps in a cache folder. The
 lesson is that a deleter needs a per-path opt-out from the first release.
+[`PurgeTests/ExcludedCacheFolderTests.swift`](../PurgeTests/ExcludedCacheFolderTests.swift)
+excludes a Safe cache row and checks that it leaves the list and the one-click
+clean, and that a file inside the folder counts as excluded too.
