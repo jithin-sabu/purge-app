@@ -130,6 +130,44 @@ struct IntentRouterTests {
         fake.cleanUp()
     }
 
+    /// The tests above all end before anything moves. Here the scan finds a Safe
+    /// row and a Check First one: only the Safe one moves, through a fake Trash
+    /// that moves nothing (#171), and the answer says how much (#189). Neither
+    /// folder is ever made.
+    @Test("Safe rows the scan found are cleaned, and nothing else")
+    func cleanMovesOnlySafeRows() async {
+        func row(_ level: SafetyLevel) -> CacheItem {
+            let folder = "com.purge.test.intent-\(UUID().uuidString)"
+            return CacheItem(
+                definitionKey: nil,
+                location: CacheLocation(
+                    path: URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
+                        .appendingPathComponent("Library/Caches/\(folder)", isDirectory: true),
+                    sizeBytes: 2_000_000,
+                    lastModified: .distantPast,
+                    folderName: folder
+                ),
+                appName: folder,
+                safetyInfo: SafetyInfo(level: level, headline: folder, explanation: "", recoverySteps: "", reinstallCommand: nil)
+            )
+        }
+        let safe = row(.safe)
+        let checkFirst = row(.medium)
+        let fake = FakeScans()
+        fake.hasAccess = true
+        fake.generalEvents = [safe, checkFirst].flatMap { item -> [CacheScanEvent] in
+            [.found(item), .sizeResolved(path: item.path.standardizedFileURL.path, sizeBytes: 2_000_000, lastModified: .distantPast)]
+        }
+        let trash = FakeTrash()
+        let store = fake.makeStore(fileDeleter: FileDeleter(trash: trash.trash))
+        let router = Self.makeRouter(store: store, reveals: RevealCounter())
+
+        #expect(await router.cleanSafeJunk(reduceMotion: true) == .cleaned(bytes: 2_000_000, failedCount: 0))
+        #expect(trash.trashedPaths == [safe.path.standardizedFileURL.path])
+        #expect(fake.generalAccesses.count == 1)
+        fake.cleanUp()
+    }
+
     @Test("Results from the last hour are cleaned from without scanning again")
     func cleanReusesFreshResults() async {
         let fake = FakeScans()

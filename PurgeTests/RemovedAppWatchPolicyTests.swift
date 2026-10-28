@@ -674,14 +674,17 @@ struct ApplicationsFolderWatcherTests {
         #expect(after.fileNumbers[bundle.standardizedFileURL.path] != before.fileNumbers[bundle.standardizedFileURL.path])
     }
 
-    /// End to end through FSEvents: a bundle that leaves is reported at once,
-    /// inside the three seconds the old settle delay waited, and carries the file
-    /// number its Trash copy can be found by. A bundle that comes back shows up in
-    /// the next index, which is what withdraws a review opened during an update.
+    /// End to end through FSEvents: a bundle that leaves is reported at once, by
+    /// the re-list that sees it gone rather than after a settle delay, and carries
+    /// the file number its Trash copy can be found by. A bundle that comes back
+    /// shows up in the next index, which is what withdraws a review opened during
+    /// an update.
     ///
     /// The stream only reports changes made after fseventsd has it running, so
     /// the test proves that with a probe bundle before it moves anything. A fixed
     /// pause was too short on a busy CI runner, and the move was never reported.
+    /// "At once" is checked by order, not by the clock: a wall-clock limit failed
+    /// on busy runners (#189).
     @Test(.timeLimit(.minutes(1)))
     func reportsADepartureAtOnceAndSeesTheAppComeBack() async throws {
         let root = try makeRoot()
@@ -696,8 +699,16 @@ struct ApplicationsFolderWatcherTests {
         let watcher = ApplicationsFolderWatcher(roots: [root])
         var departures: [ApplicationsFolderWatcher.Departure] = []
         var indexes: [ApplicationsFolderWatcher.Index] = []
+        // Whether the departure was already reported when the first index
+        // without the bundle came out.
+        var reportedWithTheIndex: Bool?
         watcher.onDeparture = { departures.append($0) }
-        watcher.onChange = { indexes.append($0) }
+        watcher.onChange = { index in
+            indexes.append(index)
+            if reportedWithTheIndex == nil, !index.bundleIDs.contains("com.test.leaving") {
+                reportedWithTheIndex = !departures.isEmpty
+            }
+        }
         watcher.start()
         defer { watcher.stop() }
 
@@ -718,15 +729,13 @@ struct ApplicationsFolderWatcherTests {
         }
         try #require(isLive)
 
-        let movedAt = Date()
         let moved = elsewhere.appendingPathComponent("Leaving.app")
         try fm.moveItem(at: leaving, to: moved)
-        for _ in 0..<250 where departures.isEmpty {
+        for _ in 0..<1_000 where departures.isEmpty {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         let departure = try #require(departures.first)
-        // Under the old three-second settle delay, with room for a busy runner.
-        #expect(Date().timeIntervalSince(movedAt) < 2.5)
+        #expect(reportedWithTheIndex == true)
         #expect(departure.app.bundleID == "com.test.leaving")
         // The id must not drift once the bundle is gone, or the ignore list and the
         // record path stop matching it.
@@ -754,6 +763,10 @@ struct ApplicationsFolderWatcherTests {
     /// a copy moved and left alone never; a moved copy that is then trashed, or
     /// deleted the way `brew uninstall` purges the Caskroom, when that happens; and
     /// a `brew upgrade` style swap never.
+    ///
+    /// Checked by order and by the policy's own lower bound, not by sub-second
+    /// limits on the clock, which a busy runner can miss (#189). The follow window
+    /// is long enough that a slow runner still trashes the Desktop copy inside it.
     @Test(.timeLimit(.minutes(1)))
     func trashIsReportedAtOnceAndEverythingElseIsFollowed() async throws {
         let root = try makeRoot()
@@ -777,13 +790,24 @@ struct ApplicationsFolderWatcherTests {
 
         let timing = RemovedAppWatchPolicy.FollowTiming(
             quietPeriod: .milliseconds(500),
-            maxDeletedWait: .seconds(5),
-            movedFollowWindow: .seconds(2),
+            maxDeletedWait: .seconds(10),
+            movedFollowWindow: .seconds(5),
             pollInterval: .milliseconds(50)
         )
         let watcher = ApplicationsFolderWatcher(roots: [root], tracksDestinations: true, timing: timing)
-        var departures: [(at: Date, departure: ApplicationsFolderWatcher.Departure)] = []
-        watcher.onDeparture = { departures.append((Date(), $0)) }
+        let clock = ContinuousClock()
+        var departures: [(at: ContinuousClock.Instant, departure: ApplicationsFolderWatcher.Departure)] = []
+        var indexes: [ApplicationsFolderWatcher.Index] = []
+        // Whether the Trash move was already reported when the first index
+        // without the bundle came out.
+        var trashReportedWithTheIndex: Bool?
+        watcher.onDeparture = { departures.append((clock.now, $0)) }
+        watcher.onChange = { index in
+            indexes.append(index)
+            if trashReportedWithTheIndex == nil, !index.bundleIDs.contains("com.test.trashed") {
+                trashReportedWithTheIndex = departures.contains { $0.departure.app.bundleID == "com.test.trashed" }
+            }
+        }
         watcher.start()
         defer { watcher.stop() }
 
@@ -791,19 +815,31 @@ struct ApplicationsFolderWatcherTests {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         #expect(watcher.installedApps.count == 6)
-        try await Task.sleep(nanoseconds: 500_000_000)
+        // The stream only reports changes made once it is running. A fixed pause
+        // here was too short on a busy runner.
+        var isLive = false
+        for attempt in 0..<20 where !isLive {
+            let probeID = "com.test.probe\(attempt)"
+            _ = try makeBundle(in: root, name: "Probe\(attempt)", bundleID: probeID)
+            for _ in 0..<25 where !isLive {
+                try await Task.sleep(nanoseconds: 20_000_000)
+                isLive = indexes.contains { $0.bundleIDs.contains(probeID) }
+            }
+        }
+        try #require(isLive)
 
-        func reported(_ id: String) -> (at: Date, departure: ApplicationsFolderWatcher.Departure)? {
+        func reported(_ id: String) -> (at: ContinuousClock.Instant, departure: ApplicationsFolderWatcher.Departure)? {
             departures.first { $0.departure.app.bundleID == id }
         }
-        func waitFor(_ id: String, seconds: Double) async throws {
-            let deadline = Date().addingTimeInterval(seconds)
-            while reported(id) == nil, Date() < deadline {
+        // Only a failure waits the whole limit.
+        func waitFor(_ id: String, limit: Duration = .seconds(15)) async throws {
+            let deadline = clock.now + limit
+            while reported(id) == nil, clock.now < deadline {
                 try await Task.sleep(nanoseconds: 20_000_000)
             }
         }
 
-        let start = Date()
+        let start = clock.now
         try fm.moveItem(at: trashed, to: trash.appendingPathComponent("Trashed 10.23.45.app"))
         let onDesktop = desktop.appendingPathComponent("Later.app")
         try fm.moveItem(at: moved, to: desktop.appendingPathComponent("Moved.app"))
@@ -817,34 +853,38 @@ struct ApplicationsFolderWatcherTests {
         try makeBundle(in: root, name: "Upgraded", bundleID: "com.test.upgraded")
         try fm.removeItem(at: backup)
 
-        try await waitFor("com.test.trashed", seconds: 1)
+        try await waitFor("com.test.trashed")
         let trashReport = try #require(reported("com.test.trashed"))
         #expect(trashReport.departure.kind == .trashed)
-        #expect(trashReport.at.timeIntervalSince(start) < 0.6)
-        #expect(reported("com.test.deleted") == nil)
+        // Reported by the re-list that saw it go, not followed like the others.
+        #expect(trashReportedWithTheIndex == true)
 
-        try await waitFor("com.test.deleted", seconds: 3)
-        let deleteReport = try #require(reported("com.test.deleted"))
-        #expect(deleteReport.departure.kind == .deleted)
-        #expect(deleteReport.at.timeIntervalSince(start) >= 0.5)
-
-        // Well inside the follow window, the Desktop copy goes to the Trash and
-        // Homebrew purges its Caskroom copy. Both count from that moment.
+        // Inside the follow window, the Desktop copy goes to the Trash and Homebrew
+        // purges its Caskroom copy. Both count from that moment.
         #expect(reported("com.test.later") == nil)
         #expect(reported("com.test.uninstalled") == nil)
-        let laterMovedAt = Date()
         try fm.moveItem(at: onDesktop, to: trash.appendingPathComponent("Later.app"))
         try fm.removeItem(at: inCaskroom)
-        try await waitFor("com.test.later", seconds: 1)
-        try await waitFor("com.test.uninstalled", seconds: 2)
-        let laterReport = try #require(reported("com.test.later"))
-        #expect(laterReport.departure.kind == .trashed)
-        #expect(laterReport.at.timeIntervalSince(laterMovedAt) < 0.5)
+
+        try await waitFor("com.test.deleted")
+        let deleteReport = try #require(reported("com.test.deleted"))
+        #expect(deleteReport.departure.kind == .deleted)
+        // A deletion waits for the roots to go quiet; the Trash move did not.
+        #expect(deleteReport.at - start >= timing.quietPeriod)
+        #expect(trashReport.at < deleteReport.at)
+
+        try await waitFor("com.test.later")
+        try await waitFor("com.test.uninstalled")
+        #expect(reported("com.test.later")?.departure.kind == .trashed)
         #expect(reported("com.test.uninstalled")?.departure.kind == .deleted)
 
-        // Past the follow window: the copy left on the Desktop was a move, and the
-        // upgraded app came back, so neither was ever reported.
-        try await Task.sleep(nanoseconds: 2_200_000_000)
+        // Once nothing is followed, every departure has been decided: the copy
+        // left on the Desktop was a move, and the upgraded app came back, so
+        // neither was ever reported.
+        for _ in 0..<1_000 where watcher.isFollowing {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(!watcher.isFollowing)
         #expect(reported("com.test.moved") == nil)
         #expect(reported("com.test.upgraded") == nil)
     }
@@ -1115,12 +1155,25 @@ struct RemovedAppHandoffTests {
         }
     }
 
+    /// Purge ignores a bundle it moves itself for `ignoreGrace`, and only that
+    /// long: a later removal of the same path by someone else gets its review.
     @Test
     func ignoreExpiresAfterGrace() throws {
         try withTemporaryHandoffRoot {
             let path = "/Applications/Gone.app"
-            RemovedAppHandoff.ignore(paths: [path])
-            #expect(RemovedAppHandoff.isIgnored(path: path))
+            let movedAt = Date()
+            RemovedAppHandoff.ignore(paths: [path], now: movedAt)
+
+            #expect(RemovedAppHandoff.isIgnored(path: path, now: movedAt))
+            #expect(RemovedAppHandoff.isIgnored(path: path, now: movedAt.addingTimeInterval(RemovedAppHandoff.ignoreGrace - 1)))
+            let later = movedAt.addingTimeInterval(RemovedAppHandoff.ignoreGrace + 1)
+            #expect(!RemovedAppHandoff.isIgnored(path: path, now: later))
+            #expect(!RemovedAppHandoff.isIgnored(path: "/Applications/Other.app", now: movedAt))
+
+            // An entry that ran out is dropped when the next one is written.
+            RemovedAppHandoff.ignore(paths: ["/Applications/Next.app"], now: later)
+            #expect(!RemovedAppHandoff.isIgnored(path: path, now: movedAt))
+            #expect(RemovedAppHandoff.isIgnored(path: "/Applications/Next.app", now: later))
         }
     }
 

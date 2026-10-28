@@ -2,12 +2,10 @@ import Foundation
 
 struct OnboardingSizeComparisonItem: Identifiable, Equatable {
   let symbol: String
-  let label: String
-  var localizedLabel: String? = nil
+  /// What the UI shows, already localized: "Photoshop, 4 times over".
+  let displayLabel: String
 
-  var displayLabel: String { localizedLabel ?? NSLocalizedString(label, comment: "Storage size comparison") }
-
-  var id: String { symbol + label }
+  var id: String { symbol + displayLabel }
 }
 
 enum OnboardingSizeComparison {

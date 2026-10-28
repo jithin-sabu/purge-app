@@ -30,6 +30,10 @@ enum ScheduledCleanupNotifier {
     }
 
     private static func deliver(title: String, body: String) async {
+        // The tests run in a hosted copy of the app, which has the user's own
+        // permission to notify. A scheduled clean a test runs must not post a
+        // banner on their Mac (#189).
+        guard !TestHost.isActive() else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

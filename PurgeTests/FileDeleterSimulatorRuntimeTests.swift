@@ -162,17 +162,29 @@ struct FileDeleterSimulatorRuntimeTests {
 
     /// Without the identifier the path is just a folder under /Library, which the
     /// allowlist has never offered. Nothing may touch it.
+    ///
+    /// The mount does not exist here, so a real Trash move would fail with "no such
+    /// file", which the engine drops without a row. The fake Trash records the
+    /// attempt instead, and the refusal has to show as a skipped row (#189).
     @Test func mountPathWithoutAnIdentifierNeverReachesTheRemoverOrTheTrash() async throws {
         let recorder = Recorder()
-        let deleter = FileDeleter(simulatorRuntimeRemover: { id in
-            recorder.record(id)
-            return .removed(freed: .unknown, download: .notKept, isLegacyImage: false)
-        })
+        let trash = FakeTrash()
+        let deleter = FileDeleter(
+            simulatorRuntimeRemover: { id in
+                recorder.record(id)
+                return .removed(freed: .unknown, download: .notKept, isLegacyImage: false)
+            },
+            trash: trash.trash
+        )
         let report = try await deleter.deleteItems(at: [mount])
 
         #expect(recorder.asked.isEmpty)
+        #expect(trash.trashedPaths.isEmpty)
         #expect(report.deletedItems.isEmpty)
         #expect(report.failedItems.isEmpty)
+        let skipped = try #require(report.skippedItems.first)
+        #expect(skipped.path == mount.path)
+        #expect(skipped.isUserVisible)
     }
 
     @Test func retryPassesTheIdentifierThrough() async {

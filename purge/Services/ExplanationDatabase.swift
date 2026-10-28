@@ -149,11 +149,17 @@ enum ExplanationDatabase {
         record(forKey: key)?.cacheKind
     }
 
-    nonisolated static func safetyInfo(from record: BundledExplanationRecord, reinstallCommand: String? = nil) -> SafetyInfo {
+    /// `bundle` is for tests, which read a translation the English test host would
+    /// not show.
+    nonisolated static func safetyInfo(
+        from record: BundledExplanationRecord,
+        reinstallCommand: String? = nil,
+        bundle: Bundle = .main
+    ) -> SafetyInfo {
         SafetyInfo(
             level: record.safetyLevel,
-            headline: Bundle.main.localizedString(forKey: record.displayName, value: record.displayName, table: "Explanations"),
-            explanation: Bundle.main.localizedString(forKey: record.explanation, value: record.explanation, table: "Explanations"),
+            headline: bundle.localizedString(forKey: record.displayName, value: record.displayName, table: "Explanations"),
+            explanation: bundle.localizedString(forKey: record.explanation, value: record.explanation, table: "Explanations"),
             recoverySteps: "",
             reinstallCommand: reinstallCommand
         )

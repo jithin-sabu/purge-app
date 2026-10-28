@@ -18,6 +18,8 @@ private func realisticSizes() -> [Int64] {
     return sizes
 }
 
+/// Every check reads `displayLabel`, the text the chips and lines show. The test
+/// host runs in English, so that is the English text.
 @Suite("Size comparison catalog")
 struct SizeComparisonCatalogTests {
     @Test func returnsNothingForEmptyOrNegativeSizes() {
@@ -36,7 +38,7 @@ struct SizeComparisonCatalogTests {
     @Test("Labels never lead with a count of zero or one")
     func usesSingularPhrasingForOne() {
         for bytes in realisticSizes() {
-            let label = SizeComparisonCatalog.item(for: bytes)?.label ?? ""
+            let label = SizeComparisonCatalog.item(for: bytes)?.displayLabel ?? ""
             #expect(!label.hasPrefix("0 ") && !label.hasPrefix("1 "), "\(label) at \(bytes) bytes")
         }
     }
@@ -44,15 +46,15 @@ struct SizeComparisonCatalogTests {
     /// "Room for" is a promise: the freed space has to hold every copy named.
     @Test("Counts round down so the space really fits them")
     func roundsCountsDown() {
-        #expect(SizeComparisonCatalog.item(for: 11 * gb)?.label != "the next macOS update")
-        #expect(SizeComparisonCatalog.item(for: 99 * mb)?.label == "49 more screenshots")
+        #expect(SizeComparisonCatalog.item(for: 11 * gb)?.displayLabel != "the next macOS update")
+        #expect(SizeComparisonCatalog.item(for: 99 * mb)?.displayLabel == "49 more screenshots")
     }
 
     /// Every chip that renders these is `lineLimit(1)`, so long labels truncate.
     @Test("Labels stay short enough for a single-line chip")
     func keepsLabelsShort() {
         for bytes in realisticSizes() {
-            let label = SizeComparisonCatalog.item(for: bytes)?.label ?? ""
+            let label = SizeComparisonCatalog.item(for: bytes)?.displayLabel ?? ""
             #expect(label.count <= 32, "too long: \(label)")
         }
     }
@@ -70,13 +72,13 @@ struct SizeComparisonCatalogTests {
         (50 * mb, "25 more screenshots"),
         (1 * gb, "Slack, twice over"),
         (15 * gb, "the next macOS update"),
-        (20 * gb, "Photoshop, four times over"),
+        (20 * gb, "Photoshop, 4 times over"),
         (36 * gb, "3 copies of Xcode"),
-        (315 * gb, "GTA V, three times over"),
+        (315 * gb, "GTA V, 3 times over"),
         (1024 * gb, "4 full base MacBook Airs"),
     ])
     func producesExpectedLabels(bytes: Int64, expected: String) {
-        #expect(SizeComparisonCatalog.item(for: bytes)?.label == expected)
+        #expect(SizeComparisonCatalog.item(for: bytes)?.displayLabel == expected)
     }
 
     @Test("Stays quiet below 5 MB")

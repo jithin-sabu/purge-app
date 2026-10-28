@@ -195,10 +195,16 @@ nonisolated final class FileDeleter: Sendable {
     typealias SimulatorDeviceRemover = @Sendable (_ udid: String, _ folder: URL) -> SimulatorDeviceRemoval
     typealias PrivilegedMover = @Sendable (_ urls: [URL]) async -> PrivilegedMoveResult
     typealias Trasher = @Sendable (_ url: URL) throws -> Void
+    typealias ContentsLister = @Sendable (_ folder: URL) throws -> [URL]
 
     /// How one item moves to the Trash. Tests hand in a fake so nothing they make
     /// reaches the user's own Trash (#171).
     private let trash: Trasher
+
+    /// Lists a folder that is emptied entry by entry, such as `~/Library/Caches`.
+    /// Tests hand in a fixed list, so the per-entry gate can be checked without
+    /// listing the user's own folder (#189).
+    private let listContents: ContentsLister
 
     /// The home folder the user-selected gates check against. Tests hand in a
     /// temporary one. The cache route never uses it: `DeletionSafetyPolicy`
@@ -225,7 +231,8 @@ nonisolated final class FileDeleter: Sendable {
         privilegedMover: @escaping PrivilegedMover = { await PrivilegedUninstall.moveToTrash($0) },
         installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() },
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        trash: @escaping Trasher = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+        trash: @escaping Trasher = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
+        listContents: @escaping ContentsLister = { try FileDeleter.visibleContents(of: $0) }
     ) {
         self.simulatorRuntimeRemover = simulatorRuntimeRemover
         self.simulatorDeviceRemover = simulatorDeviceRemover
@@ -233,6 +240,7 @@ nonisolated final class FileDeleter: Sendable {
         self.installLeftoverRule = installLeftoverRule
         self.home = home
         self.trash = trash
+        self.listContents = listContents
     }
 
     /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
@@ -380,11 +388,7 @@ nonisolated final class FileDeleter: Sendable {
                     var movedBytes: Int64 = 0
 
                     do {
-                        let contents = try FileManager.default.contentsOfDirectory(
-                            at: url,
-                            includingPropertiesForKeys: Self.contentsEntryKeys,
-                            options: [.skipsHiddenFiles]
-                        )
+                        let contents = try listContents(url)
                         // Entries move one at a time, and a Telegram media folder can
                         // hold tens of thousands. Each one reports its own size as it
                         // moves, so the progress screen keeps moving, and the total
@@ -842,6 +846,15 @@ nonisolated final class FileDeleter: Sendable {
     private static let contentsEntryKeys: [URLResourceKey] = [
         .isDirectoryKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey
     ]
+
+    /// The entries of a folder emptied entry by entry. Hidden ones are left out.
+    static func visibleContents(of folder: URL) throws -> [URL] {
+        try FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: contentsEntryKeys,
+            options: [.skipsHiddenFiles]
+        )
+    }
 
     /// On-disk size of each entry about to be moved: the allocated size for files and
     /// links, and one batched `du` pass (the scanner's own measure) for folders.
