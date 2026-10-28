@@ -453,8 +453,8 @@
 "Saved build outputs from Turborepo, a build tool for JavaScript monorepos. Safe to delete. Your next build will simply take a little longer as it rebuilds from scratch." = "JavaScript 单仓库构建工具 Turborepo 保存的构建输出。可以安全删除，但下次需从头构建，会稍慢。";
 
 /* mise-cache */
-"Mise Tool Version Cache" = "Mise 工具版本缓存";
-"Cached runtime versions managed by Mise (formerly rtx), a tool version manager. Safe to delete but Mise will need to re-download any tools you use next time." = "工具版本管理器 Mise（原名 rtx）管理的运行时版本缓存。可以安全删除，但下次使用工具时，Mise 需重新下载。";
+"Mise Cache" = "Mise 缓存";
+"Version lists and other data cached by Mise (formerly rtx), a tool version manager. Installed tools stay, and Mise fetches the rest again." = "工具版本管理器 Mise（原名 rtx）缓存的版本列表等数据。已安装的工具会保留，其余内容 Mise 会重新获取。";
 
 /* nextjs-cache */
 "Next.js Build Cache" = "Next.js 构建缓存";
@@ -949,11 +949,11 @@
 "Compiled output produced by sbt for a Scala project. Safe to delete and rebuilt by your next build." = "sbt 为 Scala 项目生成的已编译输出。可以安全删除，下次构建时会重建。";
 
 /* dotnet-bin */
-"NET Build Output" = ".NET 构建输出";
+".NET Build Output" = ".NET 构建输出";
 "Compiled programs and libraries produced by a .NET build. Safe to delete and rebuilt by your next dotnet build." = ".NET 构建生成的已编译程序与代码库。可以安全删除，下次 dotnet build 时会重建。";
 
 /* dotnet-obj */
-"NET Intermediate Files" = ".NET 中间文件";
+".NET Intermediate Files" = ".NET 中间文件";
 "Temporary files .NET creates while compiling. Safe to delete and recreated on your next build." = ".NET 编译时创建的临时文件。可以安全删除，下次构建时会重新创建。";
 
 /* composer-vendor */

@@ -3,9 +3,9 @@ import Testing
 @testable import Purge
 
 /// Elixir/Erlang projects expose two removable folders: `_build` (compiler output)
-/// and `deps` (fetched dependency sources). `_build` is allowed by name like every
-/// other build folder; `deps` is a plain English word, so it is only ever allowed
-/// when a `mix.exs` sits directly beside it.
+/// and `deps` (fetched dependency sources). Neither is allowed by name alone: each
+/// is allowed only when a `mix.exs` sits directly beside it. `deps` is a plain
+/// English word, and other tools use `_build` too.
 private struct MixFixture {
     let root: URL
 

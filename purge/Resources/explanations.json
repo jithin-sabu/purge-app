@@ -1419,9 +1419,9 @@
   },
   {
     "key": "mise-cache",
-    "display_name": "Mise Tool Version Cache",
+    "display_name": "Mise Cache",
     "tag": "safe",
-    "explanation": "Cached runtime versions managed by Mise (formerly rtx), a tool version manager. Safe to delete but Mise will need to re-download any tools you use next time.",
+    "explanation": "Version lists and other data cached by Mise (formerly rtx), a tool version manager. Installed tools stay, and Mise fetches the rest again.",
     "bundle_ids": [],
     "aliases": [
       "mise",
@@ -2975,7 +2975,7 @@
   },
   {
     "key": "dotnet-bin",
-    "display_name": "NET Build Output",
+    "display_name": ".NET Build Output",
     "tag": "safe",
     "explanation": "Compiled programs and libraries produced by a .NET build. Safe to delete and rebuilt by your next dotnet build.",
     "bundle_ids": [],
@@ -2984,7 +2984,7 @@
   },
   {
     "key": "dotnet-obj",
-    "display_name": "NET Intermediate Files",
+    "display_name": ".NET Intermediate Files",
     "tag": "safe",
     "explanation": "Temporary files .NET creates while compiling. Safe to delete and recreated on your next build.",
     "bundle_ids": [],
