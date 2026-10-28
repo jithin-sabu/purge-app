@@ -1603,7 +1603,7 @@ struct LargeFileDeletionConfirmSheet: View {
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
-                Text("Freeing \(formatBytes(totalBytes))")
+                Text(RemovalSizeLine.text(toTrash: totalBytes))
                     .font(AppStyle.Typography.metadataEmphasis.numbers)
                     .foregroundStyle(AppColors.textSecondary)
 
@@ -1798,7 +1798,7 @@ struct DuplicateCleanupSheet: View {
             }
 
             HStack(spacing: AppStyle.Spacing.small) {
-                Text("Keeping \(request.sets.count), freeing \(formatBytes(reclaimedBytes))")
+                Text("Keeping \(request.sets.count), moving \(formatBytes(reclaimedBytes)) to Trash")
                     .font(AppStyle.Typography.metadataEmphasis)
                     .foregroundStyle(AppColors.textSecondary)
 

@@ -1092,10 +1092,18 @@ struct SettingsView: View {
     }
 
     private var scheduleSummary: String {
+        Self.scheduleSummary(
+            every: prefs.frequency.everyPhrase(customAmount: prefs.customIntervalAmount, customUnit: prefs.customIntervalUnit)
+        )
+    }
+
+    /// Says where the items go and what is left alone. It once promised "your
+    /// actual work is never deleted" and never named the Trash (#191).
+    static func scheduleSummary(every: String) -> String {
         String(localized: """
-        \(prefs.frequency.everyPhrase(customAmount: prefs.customIntervalAmount, customUnit: prefs.customIntervalUnit)), we will quietly clean the same safe items as the \
-        Clean Safe Items button - safe caches and stale developer artifacts. Your actual work is \
-        never deleted.
+        \(every), Purge moves what Clean Safe Items would take to the Trash: Safe caches and \
+        Dev Tools items, and build folders in projects you haven't used for a while. It never \
+        takes anything marked Check First, and you can put it all back until you empty the Trash.
         """)
     }
 
