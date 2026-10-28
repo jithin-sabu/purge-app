@@ -70,6 +70,20 @@ struct SimulatorRuntimeStoreTests {
 
         #expect(store.devTools.isEmpty && store.projectGroups.isEmpty && store.simulatorDevices.isEmpty)
         #expect(store.hasLiveDevToolsRows)
+    }
+
+    /// Runtimes listed before any scan has finished end the wait for the first
+    /// scan. The tab said "Dev Tools not scanned yet" over them (#292). The scan
+    /// above can't show this: finishing it ends the wait on its own.
+    @Test func runtimesAloneEndTheFirstScanWait() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        #expect(store.isAwaitingFirstDevToolsScan)
+
+        store.simulatorRuntimes = [runtime()]
+
+        #expect(!store.hasSessionCacheScan)
         #expect(!store.isAwaitingFirstDevToolsScan)
     }
 
