@@ -40,8 +40,8 @@ struct OnboardingResultsCategoriesTests {
         )
     }
 
-    private func bytes(_ title: String, in categories: [OnboardingResultsCategory]) -> Int64? {
-        categories.first { $0.title == title }?.bytes
+    private func bytes(_ kind: OnboardingResultsCategory.Kind, in categories: [OnboardingResultsCategory]) -> Int64? {
+        categories.first { $0.kind == kind }?.bytes
     }
 
     @Test func candidatesAreSortedByTheRowThatHoldsThem() {
@@ -59,9 +59,9 @@ struct OnboardingResultsCategoriesTests {
             candidate("project/node_modules", bytes: 900),
         ])
 
-        #expect(bytes(String(localized: "Browser caches"), in: categories) == 500)
-        #expect(bytes(String(localized: "App caches"), in: categories) == 400)
-        #expect(bytes(PurgeStore.devArtifactCategoryTitle, in: categories) == 900)
+        #expect(bytes(.browserCaches, in: categories) == 500)
+        #expect(bytes(.appCaches, in: categories) == 400)
+        #expect(bytes(.devArtifacts, in: categories) == 900)
         #expect(categories.map(\.bytes) == [900, 500, 400])
     }
 
@@ -77,8 +77,8 @@ struct OnboardingResultsCategoriesTests {
 
         let categories = store.resultsCategories(for: [candidate("shared/Cache", bytes: 700)])
 
-        #expect(bytes(String(localized: "App caches"), in: categories) == 700)
-        #expect(bytes(String(localized: "Browser caches"), in: categories) == nil)
+        #expect(bytes(.appCaches, in: categories) == 700)
+        #expect(bytes(.browserCaches, in: categories) == nil)
     }
 
     /// The candidate's path may be spelled differently from the stored one.
@@ -99,6 +99,6 @@ struct OnboardingResultsCategoriesTests {
         )
         let categories = store.resultsCategories(for: [unstandardized])
 
-        #expect(bytes(String(localized: "App caches"), in: categories) == 250)
+        #expect(bytes(.appCaches, in: categories) == 250)
     }
 }

@@ -208,7 +208,7 @@ struct OnboardingResultsCategoryRow: View {
         .frame(width: 18, alignment: .center)
         .accessibilityHidden(true)
 
-      Text(LocalizedStringKey(title))
+      Text(title)
         .font(AppStyle.Typography.callout)
         .foregroundStyle(AppColors.textSecondary)
 

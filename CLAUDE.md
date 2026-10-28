@@ -32,7 +32,7 @@ Cloud sessions run on Linux, so they can build no Swift code. Run the two Linux 
 
 ## App rules
 
-- **Text.** Wrap every user-facing string in `String(localized:)`. Add the Simplified Chinese text to `purge/zh-Hans.lproj/`, then run the translations check.
+- **Text.** Wrap every user-facing string in `String(localized:)`. Add the Simplified Chinese text to `purge/zh-Hans.lproj/`, then run the translations check. It fails on any localized literal with no zh-Hans entry, so text that reads the same in Chinese, like "5 MB", still gets one. It can't see a `String` variable passed to `Text`, `Button` or `.accessibilityLabel`, which shows as is: localize it before it gets there.
 - **Design.** Take colours, fonts, radii, and spacing from the tokens in `docs/design-system.md`. The design lint fails the build on a raw value.
 - **Tests and real files.** The tests run inside a hosted copy of the app that shares the real user's defaults and files. Use `ThrowawayDefaults` and `FakeScans` from `PurgeTests/Support/`, never real user folders. Code that acts on launch must check `TestHost.isActive()` first.
 - **Enums.** When you switch over `SafetyLevel`, `DeletionSafetyDecision`, or another enum of ours, list every case and leave out `default:`. A new case then fails the build in every place that must handle it.

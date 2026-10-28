@@ -8,6 +8,15 @@ no translation are reported as warnings only: the app falls back to English
 for those, which is safe, so a new explanation never has to wait on a
 translator to land.
 
+It also reads every Swift file under purge/ and fails when a literal the app
+localizes has no entry in a translated Localizable.strings (#187). That covers
+String(localized:), Text, Button, Label and the other SwiftUI initializers and
+modifiers that take a LocalizedStringKey, written with a string literal.
+Interpolations match any placeholder, since the check can't see their types.
+Text built from a variable, or a literal passed as a plain String, is not
+localized at all, and this check can't see it either: pass String(localized:)
+in those places.
+
 Usage: python3 scripts/check-localization.py
 """
 import json
@@ -109,6 +118,136 @@ def placeholders(s):
     return sorted(found)
 
 
+# A string literal right after one of these is a localization key. They are the
+# calls the app uses that take a LocalizedStringKey, String.LocalizationValue
+# or LocalizedStringResource. Text("a" + b) and the like are plain Strings, and
+# `source_keys` skips them.
+LOCALIZED_LITERAL = re.compile(
+    r"(?:(?<![\w.])(?:String\(localized:|NSLocalizedString\(|LocalizedStringKey\(|LocalizedStringResource\("
+    r"|IntentDescription\(|Text\(|Button\(|Label\(|Toggle\(|Picker\(|Menu\(|Section\(|Link\(|TextField\("
+    r"|SecureField\(|LabeledContent\(|GroupBox\(|DisclosureGroup\(|ProgressView\(|CommandMenu\(|Window\("
+    r"|WindowGroup\(|MenuBarExtra\()"
+    r"|\.(?:help|accessibilityLabel|accessibilityHint|accessibilityValue|navigationTitle|alert"
+    r"|confirmationDialog|badge)\("
+    r"|:\s*LocalizedStringResource\s*=)"
+    r"\s*(?=\")"
+)
+TABLE_ARGUMENT = re.compile(r'\s*,\s*table:\s*"(\w+)"')
+# Stands in for each interpolation in a source key and each placeholder in a
+# table key, so "\(size) free" matches "%@ free".
+INTERPOLATION = "\x00"
+SWIFT_ESCAPES = {"0": "\0", "\\": "\\", "t": "\t", "n": "\n", "r": "\r", '"': '"', "'": "'"}
+
+
+def skip_interpolation(text, i):
+    """i is just past `\\(`. Returns the index just past its closing `)`."""
+    depth = 1
+    while i < len(text):
+        c = text[i]
+        if c == '"':
+            i = read_swift_literal(text, i)[1]
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    raise StringsError("unterminated interpolation")
+
+
+def literal_end(text, i, multiline):
+    """Index of the closing quote of the literal whose content starts at i."""
+    close = '"""' if multiline else '"'
+    while i < len(text):
+        if text.startswith(close, i):
+            return i
+        if text[i] == "\\":
+            i = skip_interpolation(text, i + 2) if text.startswith("(", i + 1) else i + 2
+        elif text[i] == "\n" and not multiline:
+            break
+        else:
+            i += 1
+    raise StringsError("unterminated string")
+
+
+def decode_literal(body):
+    out, i = [], 0
+    while i < len(body):
+        c = body[i]
+        if c != "\\":
+            out.append(c)
+            i += 1
+            continue
+        escape = body[i + 1]
+        if escape == "(":
+            out.append(INTERPOLATION)
+            i = skip_interpolation(body, i + 2)
+        elif escape == "\n":
+            i += 2  # Line continuation in a multi-line literal.
+        elif escape == "u":
+            close = body.index("}", i)
+            out.append(chr(int(body[i + 3:close], 16)))
+            i = close + 1
+        elif escape in SWIFT_ESCAPES:
+            out.append(SWIFT_ESCAPES[escape])
+            i += 2
+        else:
+            raise StringsError(f"unknown escape \\{escape}")
+    return "".join(out)
+
+
+def read_swift_literal(text, i):
+    """Reads the Swift string literal starting at text[i]. Returns its text with
+    each interpolation as INTERPOLATION, and the index just past it."""
+    if text.startswith('"""', i):
+        start = text.index("\n", i) + 1
+        close = literal_end(text, start, multiline=True)
+        lines = text[start:close].split("\n")
+        indent = lines.pop()  # The closing delimiter's indentation is stripped from every line.
+        body = "\n".join(line[len(indent):] if line.startswith(indent) else line.lstrip() for line in lines)
+        return decode_literal(body), close + 3
+    close = literal_end(text, i + 1, multiline=False)
+    return decode_literal(text[i + 1:close]), close + 1
+
+
+def source_keys():
+    """Returns [(key, table, path, line)] for each localized literal in purge/."""
+    found = []
+    for path in sorted(APP.rglob("*.swift")):
+        text = path.read_text(encoding="utf-8")
+        for match in LOCALIZED_LITERAL.finditer(text):
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            if "//" in text[line_start:match.start()]:
+                continue  # In a comment.
+            line = text.count("\n", 0, match.start()) + 1
+            try:
+                key, end = read_swift_literal(text, match.end())
+            except (StringsError, ValueError, IndexError) as error:
+                raise StringsError(f"{path.relative_to(ROOT)}:{line}: can't read the string literal: {error}")
+            rest = text[end:].lstrip()
+            if rest[:1] in ("+", "."):
+                continue  # Part of a String expression, not a key on its own.
+            table = TABLE_ARGUMENT.match(text, end)
+            found.append((key, table.group(1) if table else "Localizable", path, line))
+    return found
+
+
+def match_form(key):
+    """A table key with each placeholder as INTERPOLATION and %% as %."""
+    return "%".join(PLACEHOLDER.sub(INTERPOLATION, part) for part in key.split("%%"))
+
+
+def source_match_form(key):
+    """The table key Swift looks up for a source literal, in match_form. A
+    literal with no interpolation is the key as written, and may itself be a
+    format for String(format:). One with interpolations escapes each % as %%."""
+    if INTERPOLATION in key:
+        key = "%%".join(part.replace(INTERPOLATION, "%@") for part in key.split("%"))
+    return match_form(key)
+
+
 def main():
     errors, warnings = [], []
     tables = {}
@@ -140,6 +279,25 @@ def main():
         missing = sorted(wanted - tables.get(table, set()))
         for text in missing:
             warnings.append(f"{table.relative_to(ROOT)}: no translation yet, shows in English: {text[:80]!r}")
+
+    try:
+        keys = source_keys()
+    except StringsError as error:
+        keys = []
+        errors.append(str(error))
+    print(f"purge/**/*.swift: {len(keys)} localized literals")
+    for lproj in sorted(APP.glob("*.lproj")):
+        if not (lproj / "Localizable.strings").exists():
+            continue
+        translated = {}
+        for key, table, path, line in keys:
+            if table not in translated:
+                translated[table] = {match_form(k) for k in tables.get(lproj / f"{table}.strings", set())}
+            # Text that is only placeholders and punctuation reads the same in every language.
+            if source_match_form(key) in translated[table] or not any(c.isalpha() for c in key):
+                continue
+            shown = key.replace(INTERPOLATION, "\\(…)").replace("\n", "\\n")
+            errors.append(f'{path.relative_to(ROOT)}:{line}: no {lproj.stem} text in {table}.strings for "{shown}"')
 
     for warning in warnings:
         print(f"::warning::{warning}" if "GITHUB_ACTIONS" in os.environ else f"warning: {warning}")

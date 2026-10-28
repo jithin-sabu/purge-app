@@ -82,7 +82,8 @@ extension AnyTransition {
 // MARK: - Deletion overlay
 
 struct CleaningOverlay: View {
-    var message: String = "Cleaning…"
+    /// Already translated, so VoiceOver reads the same text the overlay shows.
+    var message = String(localized: "Cleaning…")
 
     var body: some View {
         ZStack {
@@ -91,7 +92,7 @@ struct CleaningOverlay: View {
             VStack(spacing: AppStyle.Spacing.small) {
                 ProgressView()
                     .controlSize(.regular)
-                Text(LocalizedStringKey(message))
+                Text(message)
                     .font(AppStyle.Typography.metadata)
                     .foregroundStyle(AppColors.textSecondary)
             }

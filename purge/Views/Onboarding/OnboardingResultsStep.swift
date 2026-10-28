@@ -1,11 +1,37 @@
 import SwiftUI
 
 struct OnboardingResultsCategory: Identifiable {
-  let title: String
-  let symbol: String
+  /// What the bytes are. "Show me" picks its tab by this, never by the title,
+  /// which is translated (#187).
+  enum Kind {
+    case appCaches
+    case devArtifacts
+    case browserCaches
+    case systemJunk
+  }
+
+  let kind: Kind
   let bytes: Int64
 
-  var id: String { title }
+  var id: Kind { kind }
+
+  var title: String {
+    switch kind {
+    case .appCaches: return String(localized: "App caches")
+    case .devArtifacts: return String(localized: "Dev tool artifacts")
+    case .browserCaches: return String(localized: "Browser caches")
+    case .systemJunk: return String(localized: "System junk")
+    }
+  }
+
+  var symbol: String {
+    switch kind {
+    case .appCaches: return "internaldrive"
+    case .devArtifacts: return "hammer"
+    case .browserCaches: return "globe"
+    case .systemJunk: return "doc.text"
+    }
+  }
 }
 
 struct OnboardingResultsSnapshot {
@@ -14,8 +40,6 @@ struct OnboardingResultsSnapshot {
 }
 
 extension PurgeStore {
-  static let devArtifactCategoryTitle = "Dev tool artifacts"
-
   var onboardingResultsCategories: [OnboardingResultsCategory] {
     resultsCategories(for: manualSafeCleanupCandidates())
   }
@@ -52,10 +76,10 @@ extension PurgeStore {
     }
 
     let categories = [
-      OnboardingResultsCategory(title: String(localized: "App caches"), symbol: "internaldrive", bytes: appCacheBytes),
-      OnboardingResultsCategory(title: Self.devArtifactCategoryTitle, symbol: "hammer", bytes: devArtifactBytes),
-      OnboardingResultsCategory(title: String(localized: "Browser caches"), symbol: "globe", bytes: browserBytes),
-      OnboardingResultsCategory(title: String(localized: "System junk"), symbol: "doc.text", bytes: systemJunkBytes),
+      OnboardingResultsCategory(kind: .appCaches, bytes: appCacheBytes),
+      OnboardingResultsCategory(kind: .devArtifacts, bytes: devArtifactBytes),
+      OnboardingResultsCategory(kind: .browserCaches, bytes: browserBytes),
+      OnboardingResultsCategory(kind: .systemJunk, bytes: systemJunkBytes),
     ]
 
     return categories

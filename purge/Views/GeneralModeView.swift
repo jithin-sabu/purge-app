@@ -448,7 +448,7 @@ struct AppCachesView: View {
                 appName: "Safari",
                 safetyInfo: SafetyInfo(
                     level: .safe,
-                    headline: String(localized: "Safari"),
+                    headline: "Safari",
                     explanation: String(localized: "Cache rebuilds on launch."),
                     recoverySteps: "",
                     reinstallCommand: nil

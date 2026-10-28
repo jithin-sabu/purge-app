@@ -230,6 +230,10 @@ nonisolated enum AppleIntelligenceDownloadBlock {
     static let blockedURL = "https://127.0.0.1:9/purge-blocked/"
     static let managedPreferences = "/Library/Managed Preferences/com.apple.MobileAsset.plist"
 
+    /// The name System Settings lists the profile under. The steps that send the
+    /// user there quote it, so both read this one value (#187).
+    static var profileDisplayName: String { String(localized: "Purge: Apple Intelligence models removed") }
+
     /// The types a new profile has to block: the ones already in force plus the
     /// ones being removed now. The profile keeps one identifier and UUID, so
     /// installing it replaces the earlier one; a profile that named only the
@@ -247,7 +251,7 @@ nonisolated enum AppleIntelligenceDownloadBlock {
             "PayloadVersion": 1,
             "PayloadIdentifier": payloadID,
             "PayloadUUID": stableUUID(payloadID),
-            "PayloadDisplayName": "Block Apple Intelligence model downloads",
+            "PayloadDisplayName": String(localized: "Block Apple Intelligence model downloads"),
             "PayloadContent": [domain: ["Forced": [["mcx_preference_settings": settings]]]],
         ]
         let profile: [String: Any] = [
@@ -255,9 +259,9 @@ nonisolated enum AppleIntelligenceDownloadBlock {
             "PayloadVersion": 1,
             "PayloadIdentifier": profileIdentifier,
             "PayloadUUID": stableUUID(profileIdentifier),
-            "PayloadDisplayName": "Purge: Apple Intelligence models removed",
-            "PayloadDescription":
-                "Stops macOS downloading the Apple Intelligence models Purge removed. Remove this profile, or choose Download Again in Purge, to let them come back.",
+            "PayloadDisplayName": profileDisplayName,
+            "PayloadDescription": String(localized:
+                "Stops macOS downloading the Apple Intelligence models Purge removed. Remove this profile, or choose Download Again in Purge, to let them come back."),
             "PayloadOrganization": "Purge",
             "PayloadScope": "System",
             "PayloadRemovalDisallowed": false,
@@ -402,7 +406,7 @@ nonisolated enum AppleIntelligenceWorker {
         }
         guard let payload = try? JSONSerialization.data(withJSONObject: input),
               let json = String(data: payload, encoding: .utf8)
-        else { return Outcome(ok: false, result: [:], error: "request could not be encoded") }
+        else { return Outcome(ok: false, result: [:], error: String(localized: "request could not be encoded")) }
         guard let output = await ProcessRunner.runAsync(executablePath: path, arguments: [op, json], timeout: timeout + 10)
         else { return Outcome(ok: false, result: [:], error: String(localized: "Purge's asset worker could not be started")) }
         if output.timedOut {
