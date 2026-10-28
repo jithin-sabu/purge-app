@@ -56,6 +56,37 @@ struct SimulatorRuntimeStoreTests {
         #expect(store.devToolsTotals.bytes == 8_393_503_393)
     }
 
+    /// A scan that found only runtimes has something to list. Dev Tools showed
+    /// its empty state for it, because its checks left runtimes out (#292).
+    @Test func runtimesAloneAreSomethingToList() async {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        scans.developerEvents = [.simulatorRuntimeFound(runtime())]
+        let store = scans.makeStore()
+        #expect(!store.hasLiveDevToolsRows)
+        #expect(store.isAwaitingFirstDevToolsScan)
+
+        await store.scanDeveloper()
+
+        #expect(store.devTools.isEmpty && store.projectGroups.isEmpty && store.simulatorDevices.isEmpty)
+        #expect(store.hasLiveDevToolsRows)
+    }
+
+    /// Runtimes listed before any scan has finished end the wait for the first
+    /// scan. The tab said "Dev Tools not scanned yet" over them (#292). The scan
+    /// above can't show this: finishing it ends the wait on its own.
+    @Test func runtimesAloneEndTheFirstScanWait() {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        #expect(store.isAwaitingFirstDevToolsScan)
+
+        store.simulatorRuntimes = [runtime()]
+
+        #expect(!store.hasSessionCacheScan)
+        #expect(!store.isAwaitingFirstDevToolsScan)
+    }
+
     @Test func selectedRuntimeBecomesACandidateAtItsMountPath() async throws {
         let scans = FakeScans()
         defer { scans.cleanUp() }

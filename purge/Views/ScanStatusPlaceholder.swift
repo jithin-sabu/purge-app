@@ -27,8 +27,14 @@ extension PurgeStore {
 
     /// Dev Tools has listed nothing and no cache scan has finished this session.
     var isAwaitingFirstDevToolsScan: Bool {
-        projectGroups.isEmpty && devTools.isEmpty && simulatorDevices.isEmpty
-            && runningSimulatorDevices.isEmpty && !hasSessionCacheScan
+        !hasLiveDevToolsRows && !hasSessionCacheScan
+    }
+
+    /// Any row this session's Dev Tools scan has listed. Every section counts:
+    /// a scan that found only simulator runtimes once showed the empty state (#292).
+    var hasLiveDevToolsRows: Bool {
+        !projectGroups.isEmpty || !devTools.isEmpty || !simulatorDevices.isEmpty
+            || !runningSimulatorDevices.isEmpty || !simulatorRuntimes.isEmpty
     }
 }
 
