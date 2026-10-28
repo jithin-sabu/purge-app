@@ -235,12 +235,21 @@ struct AllowlistExplanationDataTests {
     }
 
     /// These names belong to folders that are not caches: installed Homebrew
-    /// packages, committed git hooks, installed tool versions, git's records of
-    /// its linked worktrees, and tool folders that keep config or the tool itself
-    /// next to a cache (`.moon`, `.nx`, `~/.hex`) (#184).
-    @Test(arguments: ["Cellar", ".husky", ".volta", ".mise", "Devices", "worktrees", ".moon", ".nx", ".hex"])
+    /// packages, committed git hooks, installed tool versions, and tool folders
+    /// that keep config or the tool itself next to a cache (`.moon`, `.nx`,
+    /// `~/.hex`) (#184).
+    @Test(arguments: ["Cellar", ".husky", ".volta", ".mise", "Devices", ".moon", ".nx", ".hex"])
     func nonCacheFolderNamesHaveNoEntry(name: String) {
         #expect(ExplanationDatabase.matchBundledDatabase(folderName: name) == nil)
+    }
+
+    /// A sandboxed app can keep SwiftPM's cache in its own container, and the
+    /// container scan looks that folder up by its name, so the entry stays even
+    /// though Dev Tools owns `~/Library/Caches/org.swift.swiftpm` (#184).
+    @Test
+    func containerSwiftPMCacheKeepsItsEntry() {
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "org.swift.swiftpm") == "swiftpm")
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "org.swift.swiftpm")?.safetyLevel == .safe)
     }
 
     @Test

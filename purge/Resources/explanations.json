@@ -950,6 +950,15 @@
     "kind": "ai"
   },
   {
+    "key": "archives",
+    "display_name": "App Archives",
+    "tag": "medium",
+    "explanation": "Archived builds created by development tools. Check contents before deleting — may contain important project archives.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "build"
+  },
+  {
     "key": "container-managerd",
     "display_name": "App Sandbox Manager",
     "tag": "safe",
@@ -1011,6 +1020,19 @@
     ],
     "explanation": "Temporary files Xcode creates while building apps. Always safe to delete — your next build will just take a little longer.",
     "kind": "build"
+  },
+  {
+    "key": "swiftpm",
+    "display_name": "Swift Package Manager",
+    "tag": "safe",
+    "explanation": "Swift packages downloaded for your projects. Each project downloads its dependencies again the next time you build it.",
+    "bundle_ids": [
+      "org.swift.swiftpm"
+    ],
+    "aliases": [
+      "org.swift.swiftpm"
+    ],
+    "kind": "packages"
   },
   {
     "key": "zen",
@@ -1121,6 +1143,17 @@
       "RevenueCatFonts"
     ],
     "kind": "store"
+  },
+  {
+    "key": "gitworktrees",
+    "display_name": "Git Worktree Checkouts",
+    "tag": "medium",
+    "explanation": "Forgotten branch checkouts created by Git. Safe to remove if you are no longer working on those branches, but check first that you have no unsaved work.",
+    "bundle_ids": [],
+    "aliases": [
+      "worktrees"
+    ],
+    "kind": "code"
   },
   {
     "key": "vscode",
@@ -1397,6 +1430,15 @@
     "kind": "packages"
   },
   {
+    "key": "nextjs-cache",
+    "display_name": "Next.js Build Cache",
+    "tag": "safe",
+    "explanation": "Temporary build files created by Next.js. Safe to delete and will be recreated the next time you build or run your Next.js project.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "build"
+  },
+  {
     "key": "vite-cache",
     "display_name": "Vite Build Cache",
     "tag": "safe",
@@ -1586,6 +1628,17 @@
     "kind": "packages"
   },
   {
+    "key": "swift-build",
+    "display_name": "Swift Build Artifacts",
+    "tag": "safe",
+    "explanation": "Compiled Swift build files. Safe to delete and will be rebuilt the next time you build your Swift project.",
+    "bundle_ids": [],
+    "aliases": [
+      "swift-build"
+    ],
+    "kind": "build"
+  },
+  {
     "key": "rust-target",
     "display_name": "Rust Build Output",
     "tag": "safe",
@@ -1721,6 +1774,17 @@
     "kind": "packages"
   },
   {
+    "key": "husky-cache",
+    "display_name": "Husky Git Hooks",
+    "tag": "safe",
+    "explanation": "Temporary files used by Husky to manage Git hooks in your projects. Safe to delete and will be regenerated automatically.",
+    "bundle_ids": [],
+    "aliases": [
+      "_husky"
+    ],
+    "kind": "build"
+  },
+  {
     "key": "storybook-cache",
     "display_name": "Storybook Cache",
     "tag": "safe",
@@ -1729,6 +1793,28 @@
     "aliases": [
       ".storybook-cache",
       "storybook-static"
+    ],
+    "kind": "build"
+  },
+  {
+    "key": "nx-cache",
+    "display_name": "Nx Monorepo Cache",
+    "tag": "safe",
+    "explanation": "Saved build and test results from Nx, a monorepo build tool. Safe to delete. Your next build will take a little longer as it rebuilds from scratch.",
+    "bundle_ids": [],
+    "aliases": [
+      "nx-cache"
+    ],
+    "kind": "build"
+  },
+  {
+    "key": "moon-cache",
+    "display_name": "Moon Build Cache",
+    "tag": "safe",
+    "explanation": "Saved build outputs from Moon, a build and task runner for monorepos. Safe to delete and will be regenerated on the next run.",
+    "bundle_ids": [],
+    "aliases": [
+      "moon-cache"
     ],
     "kind": "build"
   },
