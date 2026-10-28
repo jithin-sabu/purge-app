@@ -12,16 +12,35 @@ import Testing
 struct SafetyAllowlistSummaryTests {
     private let home = DeletionSafetyPolicy.cachedHomePath
 
+    /// Folder for each label the line can name.
+    private let foldersByLabel = [
+        "keychains": "Library/Keychains", "preferences": "Library/Preferences", "Mail mailboxes": "Library/Mail",
+        "pictures": "Pictures", "music": "Music", "movies": "Movies",
+    ]
+
     @Test
-    func everyNamedFolderIsRefusedWithEverythingInside() {
+    func everyNamedFolderIsRefusedWithEverythingInside() throws {
         let named = SafetyAllowlistSummary.neverCleanedFolderLabels
-        #expect(named == ["keychains", "preferences", "mail", "pictures", "music", "movies"])
-        for folder in ["Library/Keychains", "Library/Preferences", "Library/Mail", "Pictures", "Music", "Movies"] {
+        #expect(named == ["keychains", "preferences", "Mail mailboxes", "pictures", "music"])
+        let allowlisted = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: home)
+        for label in named {
+            let folder = "\(home)/\(try #require(foldersByLabel[label], "\(label)"))"
+            // The allowlist is checked before the never-delete folders, so an
+            // allowlisted path inside one would be cleaned.
+            #expect(!allowlisted.contains { $0 == folder || $0.hasPrefix(folder + "/") }, "\(folder)")
             for inside in ["", "/Caches", "/Caches/com.example.app", "/project/node_modules", "/project/target"] {
-                let url = URL(fileURLWithPath: "\(home)/\(folder)\(inside)")
+                let url = URL(fileURLWithPath: folder + inside)
                 #expect(DeletionSafetyPolicy.evaluate(url) == .blockedNeverDelete, "\(url.path)")
             }
         }
+    }
+
+    /// DaVinci Resolve's `~/Movies/CacheClip` is allowlisted and Safe, so the
+    /// line must not say cleaning never touches movies.
+    @Test
+    func moviesIsNotNamedWhileCacheClipIsCleaned() {
+        #expect(DeletionSafetyPolicy.evaluate(URL(fileURLWithPath: "\(home)/Movies/CacheClip")) == .allow)
+        #expect(!SafetyAllowlistSummary.neverCleanedFolderLabels.contains("movies"))
     }
 
     /// These are refused as folders only. Cleaning reaches inside them, so the

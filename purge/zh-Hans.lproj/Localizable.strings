@@ -43,7 +43,7 @@
 "%@, %@, and %lld more" = "%@、%@，另有 %lld 项";
 "%@, %lld items" = "%@，%lld 项";
 "%@, %lld selected" = "%@，已选择 %lld 项";
-"%@, Purge moves what Clean Safe Items would take to the Trash: Safe caches and Dev Tools items, and build folders in projects you haven't used for a while. It never takes anything marked Check First, and you can put it all back until you empty the Trash." = "%@，Purge 会把“清理安全项目”会清理的内容移到废纸篓：安全的缓存和开发工具项目，以及一段时间没有使用的项目中的构建文件夹。它绝不会处理标为“先检查”的项目；在你清空废纸篓之前，这些内容都可以放回去。";
+"%@, Purge moves what Clean Safe Items would take to the Trash: Safe caches and Dev Tools items, and build and dependency folders, such as node_modules, in projects you haven't used for a while. It never takes anything marked Check First, and you can put it all back until you empty the Trash." = "%@，Purge 会把“清理安全项目”会清理的内容移到废纸篓：安全的缓存和开发工具项目，以及一段时间没有使用的项目中的构建和依赖文件夹（例如 node_modules）。它绝不会处理标为“先检查”的项目；在你清空废纸篓之前，这些内容都可以放回去。";
 "%@." = "%@。";
 "%@. %@" = "%@。%@";
 "%lld" = "%lld";
@@ -213,6 +213,7 @@
 "Last scan: %lld files, %@, %@" = "上次扫描：%lld 个文件，%@，%@";
 "Last scan: 1 file, %@, %@" = "上次扫描：1 个文件，%@，%@";
 "Looking for large files again" = "正在重新查找大文件";
+"Mail mailboxes" = "“邮件”的邮箱";
 "Moving %@ to Trash" = "将 %@ 移到废纸篓";
 "Moving %@ to Trash, freeing %@" = "将 %@ 移到废纸篓，释放 %@";
 "Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "正在运行，因此无法移除。请先在“模拟器”中将其关闭，然后重新扫描。";
@@ -782,7 +783,6 @@
 "macOS protects this one and won't let it be removed." = "此内容受到 macOS 保护，无法移除。";
 "macOS updates" = "份 macOS 更新";
 "macOS, your documents and photos, and files Purge doesn't sort" = "macOS、你的文稿和照片，以及 Purge 未分类的文件";
-"mail" = "邮件";
 "month" = "月";
 "more screenshots" = "张额外截图";
 "more to clean, from places that were locked" = "可以继续清理，来自此前无法访问的位置";

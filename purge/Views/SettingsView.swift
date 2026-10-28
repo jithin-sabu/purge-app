@@ -1102,8 +1102,9 @@ struct SettingsView: View {
     static func scheduleSummary(every: String) -> String {
         String(localized: """
         \(every), Purge moves what Clean Safe Items would take to the Trash: Safe caches and \
-        Dev Tools items, and build folders in projects you haven't used for a while. It never \
-        takes anything marked Check First, and you can put it all back until you empty the Trash.
+        Dev Tools items, and build and dependency folders, such as node_modules, in projects you \
+        haven't used for a while. It never takes anything marked Check First, and you can put it \
+        all back until you empty the Trash.
         """)
     }
 

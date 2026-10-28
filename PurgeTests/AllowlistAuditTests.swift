@@ -483,6 +483,10 @@ struct AllowlistAdditionTests {
         ".expo/state.json",
         ".pyenv/versions",
         ".rbenv/versions",
+        // Mise's installs, which the Safe Mise row's text promises stay (#191).
+        ".local/share/mise",
+        ".local/share/mise/installs",
+        ".local/share/mise/installs/node/22.11.0",
         ".conda/envs",
         "miniforge3/envs",
         "Library/Messages/chat.db",

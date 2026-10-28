@@ -99,16 +99,21 @@ enum SafetyAllowlistSummary {
     /// Folders `evaluate` refuses along with everything inside them. Documents,
     /// Desktop, Downloads and Application Support are refused as folders only,
     /// because the caches and build folders inside them are cleaned, so they are
-    /// never named here.
+    /// never named here. Nor is a never-delete folder with an allowlisted path
+    /// inside it: the allowlist is checked first, so `~/Movies/CacheClip` is
+    /// cleaned although `~/Movies` is protected.
     static var neverCleanedFolderLabels: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let allowlisted = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: home)
 
         func label(for path: String) -> String? {
             guard path.hasPrefix(home + "/") else { return nil }
             switch String(path.dropFirst(home.count + 1)) {
             case "Library/Keychains": return String(localized: "keychains")
             case "Library/Preferences": return String(localized: "preferences")
-            case "Library/Mail": return String(localized: "mail")
+            // Only the mailboxes. Mail's attachment copies in its container are
+            // allowlisted.
+            case "Library/Mail": return String(localized: "Mail mailboxes")
             case "Pictures": return String(localized: "pictures")
             case "Music": return String(localized: "music")
             case "Movies": return String(localized: "movies")
@@ -118,6 +123,7 @@ enum SafetyAllowlistSummary {
 
         var seen = Set<String>()
         return DeletionSafetyPolicy.neverDeletePrefixes(home: home).compactMap { path in
+            guard !allowlisted.contains(where: { $0 == path || $0.hasPrefix(path + "/") }) else { return nil }
             guard let label = label(for: path), seen.insert(label).inserted else { return nil }
             return label
         }

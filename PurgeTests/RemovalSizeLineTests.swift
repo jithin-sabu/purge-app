@@ -75,6 +75,8 @@ struct ScheduleSummaryWordingTests {
         #expect(text.hasPrefix(String(localized: "Every week") + ", "))
         #expect(text.contains("to the Trash"))
         #expect(text.contains("Check First"))
+        // Scheduled cleans take dependency folders like node_modules too, not only build output.
+        #expect(text.contains("dependency folders"))
         #expect(!text.contains("never deleted"))
     }
 }
