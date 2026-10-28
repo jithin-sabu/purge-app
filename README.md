@@ -66,7 +66,7 @@ You do not need to understand any of it to use it. But if you ever want to check
 Scans `~/Library/Caches`, sandbox container caches, and common system junk:
 
 - Per-app cache folders with friendly names, brand icons, and a plain-language explanation if you want to read it
-- System Junk like application logs, crash reports, macOS installers, leftover macOS update files, font cache
+- System Junk like application logs, crash reports, macOS installers, and leftover macOS update files
 - Large media caches from creative apps like Premiere Pro and After Effects
 - Duplicate cache locations for the same app merged into a single row
 - Results stream in as they are found

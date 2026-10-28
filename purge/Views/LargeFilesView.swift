@@ -12,7 +12,6 @@ struct LargeFilesView: View {
     /// view — counts the same rows the list is actually showing. With the query
     /// private to this view the header kept advertising the full unfiltered scan.
     @Binding var searchQuery: String
-    var showsPageHeader = true
     var usesExternalScrollContainer = false
 
     @AppStorage("sort.largeFiles") private var sortRaw: String = SortOption.sizeDesc.rawValue
@@ -197,12 +196,6 @@ struct LargeFilesView: View {
 
     private var standardBody: some View {
         VStack(spacing: 0) {
-            if showsPageHeader {
-                AppSectionPageHeader(title: String(localized: "Large Files"), subtitle: pageSubtitle) {
-                    headerActions
-                }
-            }
-
             if !isAwaitingFirstScan {
                 controlsChrome
             }
@@ -232,23 +225,6 @@ struct LargeFilesView: View {
 
     private var scanWaitStatus: ScanWaitStatus {
         store.scanWaitStatus(for: .largeFiles, isScanning: isLoading)
-    }
-
-    private var headerActions: some View {
-        HStack(spacing: AppStyle.Spacing.xSmall) {
-            Button(action: onScan) {
-                CleaningButtonLabel(
-                    title: isLoading ? "Scanning..." : "Scan",
-                    systemImage: isLoading ? nil : "arrow.clockwise",
-                    isCleaning: isLoading
-                )
-            }
-            .buttonStyle(.purge(.secondary))
-            .disabled(isLoading)
-
-            LargeFileDeleteButton(selection: store.largeFileSelection)
-        }
-        .fixedSize()
     }
 
     private var controlsChrome: some View {
@@ -670,13 +646,6 @@ struct LargeFilesView: View {
         store.setAllLargeFilesSelected(!allOn, ids: ids)
     }
 
-    private var pageSubtitle: String {
-        let count = visibleFiles.count
-        let bytes = visibleFiles.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let itemLabel = count == 1 ? String(localized: "file") : String(localized: "files")
-        return String(localized: "\(count) \(itemLabel) · \(formatBytes(bytes)) to review")
-    }
-
 }
 
 private extension View {
@@ -706,32 +675,10 @@ private extension View {
 
 }
 
-/// Delete button extracted so its count/label/enabled state observe the selection
-/// object directly — updating on selection without re-rendering the results List.
-private struct LargeFileDeleteButton: View {
-    @EnvironmentObject private var store: PurgeStore
-    @ObservedObject var selection: LargeFileSelection
-
-    var body: some View {
-        Button {
-            store.presentLargeFileDeletionSheet()
-        } label: {
-            AnimatedDeleteActionLabel(
-                inactiveTitle: String(localized: "Delete Selected"),
-                activeTitle: String(localized: "Delete Selected"),
-                selectedCount: store.selectedLargeFileCount,
-                selectedBytes: store.selectedLargeFileBytes
-            )
-        }
-        .buttonStyle(.purge(.primary))
-        .disabled(store.selectedLargeFileCount == 0 || store.isDeleting)
-    }
-}
-
 /// Keep Only in iCloud for the selected synced files (#106). It sits beside
 /// Select All under the iCloud chip only, where every row is a synced file, so
 /// it never reads as a second way to delete. Its own view observing the
-/// selection, like the delete button, so a tick never re-renders the List.
+/// selection, so a tick never re-renders the List.
 private struct LargeFileRemoveDownloadButton: View {
     @EnvironmentObject private var store: PurgeStore
     @ObservedObject var selection: LargeFileSelection

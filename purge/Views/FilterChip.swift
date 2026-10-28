@@ -9,16 +9,12 @@ enum FilterChipTier {
     case neutral
     case safe
     case checkFirst
-    case danger
-    case unsure
 
     var selectedBackground: Color {
         switch self {
         case .neutral: return AppColors.surfaceRaised
         case .safe: return AppColors.statusSafeFill
         case .checkFirst: return AppColors.statusCheckFill
-        case .danger: return AppColors.statusDangerFill
-        case .unsure: return AppColors.statusUnsureFill
         }
     }
 
@@ -27,8 +23,6 @@ enum FilterChipTier {
         case .neutral: return AppColors.textPrimary
         case .safe: return AppColors.statusSafeText
         case .checkFirst: return AppColors.statusCheckText
-        case .danger: return AppColors.statusDangerText
-        case .unsure: return AppColors.statusUnsureText
         }
     }
 }

@@ -1,17 +1,6 @@
 import AppKit
 import SwiftUI
 
-private struct ScanRowPlaceholderAppearanceKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var scanRowPlaceholderAppearance: Bool {
-        get { self[ScanRowPlaceholderAppearanceKey.self] }
-        set { self[ScanRowPlaceholderAppearanceKey.self] = newValue }
-    }
-}
-
 /// Observes `ScanSelection` and hands the current selected state to its content, so a
 /// toggle re-renders only this scope (and the row) — never the list container, whose
 /// re-render reverts scroll. Mirrors the LargeFileSelection decoupling.
@@ -66,7 +55,6 @@ struct ScanResultRow: View {
     /// checkbox goes, and no way to select it until the scan finds it again.
     var isFromLastScan: Bool = false
 
-    @Environment(\.scanRowPlaceholderAppearance) private var rendersAsPlaceholder
     @State private var isContextMenuActive = false
 
     private var statusLabel: String {
@@ -275,27 +263,12 @@ struct ScanResultRow: View {
 
     @ViewBuilder
     private var rowIconView: some View {
-        if rendersAsPlaceholder {
-            RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
-                .fill(AppColors.textSecondary.opacity(SkeletonOpacity.light))
-                .frame(width: 28, height: 28)
-                .accessibilityHidden(true)
-                .shimmering()
-        } else if let brandIcon {
+        if let brandIcon {
             AdaptiveBrandIconImage(source: brandIcon)
         }
     }
 
-    @ViewBuilder
     private var rowTextColumn: some View {
-        if rendersAsPlaceholder {
-            rowPlaceholderTextColumn
-        } else {
-            rowLoadedTextColumn
-        }
-    }
-
-    private var rowLoadedTextColumn: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(primaryLabel)
                 .font(AppStyle.Typography.headline)
@@ -311,8 +284,8 @@ struct ScanResultRow: View {
                 badgesRow
             }
         }
-        // Reserve the placeholder's height on the whole column, not the explanation,
-        // so a one-line explanation centres with the title instead of leaving a gap below.
+        // Reserve the height on the whole column, not the explanation, so a
+        // one-line explanation centres with the title instead of leaving a gap below.
         .frame(minHeight: textColumnMinHeight, alignment: .leading)
     }
 
@@ -320,42 +293,7 @@ struct ScanResultRow: View {
         ScanResultRow.headlineOneLineHeight + 4 + explanationMinHeight
     }
 
-    private var rowPlaceholderTextColumn: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            SkeletonFillBar(height: ScanResultRow.headlineOneLineHeight, cornerRadius: AppStyle.Radius.xs)
-
-            VStack(alignment: .leading, spacing: 4) {
-                if usesCompactExplanation {
-                    SkeletonFillBar(height: 10)
-                } else {
-                    SkeletonFillBar(height: 10)
-                    SkeletonFillBar(height: 10)
-                }
-            }
-            .frame(
-                maxWidth: .infinity,
-                minHeight: explanationMinHeight,
-                alignment: .topLeading
-            )
-
-            if hasExtraBadges {
-                SkeletonBar(width: 96, height: 16, cornerRadius: AppStyle.Radius.sm)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .shimmering()
-    }
-
-    @ViewBuilder
     private var trailingColumn: some View {
-        if rendersAsPlaceholder {
-            trailingMetadataSkeleton
-        } else {
-            loadedTrailingColumn
-        }
-    }
-
-    private var loadedTrailingColumn: some View {
         ScanContentCrossfade(isLoading: isMetadataPending, contentAlignment: .topTrailing) {
             trailingMetadataSkeleton
         } loaded: {
@@ -712,101 +650,3 @@ struct ScanRowCardChrome: ViewModifier {
 }
 
 private typealias ScanResultRowChrome = ScanRowCardChrome
-
-// MARK: - Placeholder
-
-extension ScanResultRow {
-    /// Renders a `ScanResultRow` as a redacted, shimmering placeholder that matches
-    /// the geometry of a real loaded row. Used by `ScanListSkeletonPlaceholder` so
-    /// the loading-to-loaded crossfade has no layout shift.
-    ///
-    /// - Parameter showsExtraBadges: When `true`, reserves the optional badges row
-    ///   beneath the subtitle (e.g. project artifact tags). Default `false` matches
-    ///   typical App Cache and dev tool rows.
-    static func placeholder(seed: Int, showsExtraBadges: Bool = false) -> some View {
-        ScanResultRowPlaceholder(seed: seed, showsExtraBadges: showsExtraBadges)
-    }
-}
-
-private struct ScanResultRowPlaceholder: View {
-    let seed: Int
-    var showsExtraBadges: Bool
-
-    var body: some View {
-        ScanResultRow(
-            isSelected: false,
-            primaryLabel: Self.primaryLabel(for: seed),
-            formattedSize: Self.formattedSize(for: seed),
-            safetyInfo: Self.safetyInfo(for: seed, showsExtraBadges: showsExtraBadges),
-            brandIcon: nil,
-            detailCaption: showsExtraBadges ? Self.detailCaption(for: seed) : nil,
-            reinstallSafety: nil,
-            showUncommittedRepoChanges: false,
-            onResetToAutomatic: nil,
-            isUserOverride: false,
-            allowsBulkSelection: true,
-            isMetadataPending: false
-        )
-        .environment(\.scanRowPlaceholderAppearance, true)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private static let primaryLabels: [String] = [
-        "Sample Application",
-        "Another Cache Folder",
-        "A Slightly Longer Item Name",
-        "Short Name",
-        "Medium-Length Title Here",
-        "Yet Another Sample Item",
-        "Compact",
-        "Placeholder Application Title"
-    ]
-
-    private static let explanations: [String] = [
-        "This cache rebuilds automatically the next time the application launches and is generally safe to remove without losing user data.",
-        "Stored derived data and indexes that the tool will regenerate on the next build, so deleting it only costs a one-time rebuild.",
-        "Holds intermediate artifacts that are reproducible from source. Removing them frees disk space at the cost of the next compile or fetch.",
-        "Temporary files that the system or app keeps around for performance. They are recreated on demand and do not contain user content."
-    ]
-
-    private static let detailCaptions: [String] = [
-        "Cache",
-        "Build folder",
-        "Derived data",
-        "Module store"
-    ]
-
-    private static let sizeStrings: [String] = [
-        "123 MB",
-        "1.2 GB",
-        "45 MB",
-        "678 MB",
-        "2.4 GB"
-    ]
-
-    private static func primaryLabel(for seed: Int) -> String {
-        primaryLabels[abs(seed) % primaryLabels.count]
-    }
-
-    private static func detailCaption(for seed: Int) -> String {
-        detailCaptions[abs(seed) % detailCaptions.count]
-    }
-
-    private static func formattedSize(for seed: Int) -> String {
-        sizeStrings[abs(seed) % sizeStrings.count]
-    }
-
-    private static func safetyInfo(for seed: Int, showsExtraBadges: Bool) -> SafetyInfo {
-        let levels: [SafetyLevel] = [.safe, .medium, .unknown]
-        let level = showsExtraBadges ? levels[abs(seed) % levels.count] : .safe
-        let explanation = explanations[abs(seed) % explanations.count]
-        return SafetyInfo(
-            level: level,
-            headline: primaryLabel(for: seed),
-            explanation: explanation,
-            recoverySteps: "",
-            reinstallCommand: nil
-        )
-    }
-}

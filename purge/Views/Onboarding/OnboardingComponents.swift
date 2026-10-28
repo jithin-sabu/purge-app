@@ -44,7 +44,6 @@ struct OnboardingPrimaryButton: View {
   var leadingSystemImage: String? = nil
   /// After the title, for an icon that points onward (arrow).
   var systemImage: String? = nil
-  var isEnabled: Bool = true
   var isLoading: Bool = false
   let action: () -> Void
 
@@ -77,7 +76,7 @@ struct OnboardingPrimaryButton: View {
       }
     }
     .buttonStyle(.purge(.primary, size: .large, width: .fixed(OnboardingLayout.buttonWidth)))
-    .disabled(!isEnabled || isLoading)
+    .disabled(isLoading)
     .keyboardShortcut(.return, modifiers: [])
   }
 }
@@ -426,7 +425,6 @@ private struct OnboardingStepTransition: ViewModifier {
 enum OnboardingTransitions {
   static let dismissDuration: TimeInterval = 0.45
   static let dismissBlurRadius: CGFloat = 12
-  private static let listRowRemovalBlur: CGFloat = 10
 
   static func stepTransition(reduceMotion: Bool) -> AnyTransition {
     if reduceMotion {
@@ -435,19 +433,6 @@ enum OnboardingTransitions {
     return .modifier(
       active: OnboardingStepTransition(blur: 8, opacity: 0),
       identity: OnboardingStepTransition(blur: 0, opacity: 1)
-    )
-  }
-
-  /// Rows leaving a list during onboarding cleaning — blur and fade, no slide.
-  static func listRowRemoval(reduceMotion: Bool) -> AnyTransition {
-    .asymmetric(
-      insertion: .identity,
-      removal: reduceMotion
-        ? .opacity
-        : .modifier(
-          active: OnboardingStepTransition(blur: listRowRemovalBlur, opacity: 0),
-          identity: OnboardingStepTransition(blur: 0, opacity: 1)
-        )
     )
   }
 }

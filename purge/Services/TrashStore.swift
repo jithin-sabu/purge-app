@@ -72,9 +72,6 @@ enum TrashAccess: Equatable {
 final class TrashStore: ObservableObject {
     @Published private(set) var trashBytes: Int64 = 0
     @Published private(set) var access: TrashAccess = .measuring
-    /// Trash total when the app last went to the background, so a drop can be compared
-    /// against the volume's free space on return.
-    private var trashBytesWhenBackgrounded: Int64?
 
     private let trashURLs: [URL]
     /// Sizes the listed trash directories, keyed by path. Tests hand in a fake.
@@ -444,21 +441,6 @@ final class TrashStore: ObservableObject {
             current = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
         }
         return false
-    }
-
-    /// Snapshots the tally so a later foreground return can tell what changed while the
-    /// user was away, e.g. emptying the trash in Finder.
-    func markBackgrounded() {
-        trashBytesWhenBackgrounded = access == .readable ? trashBytes : nil
-        TrashDebugLog.log("markBackgrounded snapshot=\(trashBytesWhenBackgrounded.map(String.init) ?? "nil")")
-    }
-
-    /// How much the trash shrank while the app was in the background. `nil` when nothing
-    /// was snapshotted, the trash is unreadable, or it did not shrink.
-    func trashDropSinceBackgrounded() -> Int64? {
-        guard access == .readable, let before = trashBytesWhenBackgrounded else { return nil }
-        let drop = before - trashBytes
-        return drop > 0 ? drop : nil
     }
 
     /// Opens the trash Finder shows, which is the one place all of these directories appear as

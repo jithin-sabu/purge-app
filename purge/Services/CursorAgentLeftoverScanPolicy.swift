@@ -64,10 +64,6 @@ enum CursorAgentLeftoverScanPolicy {
     /// Whether Purge may trash this path. Unused-ness is a scan filter, not a
     /// delete-time check — once the user has picked a listed folder, the gate
     /// only proves it is a leftover *kind*, never `~/.cursor` itself.
-    nonisolated static func isEligibleForDeletion(_ url: URL, home: URL) -> Bool {
-        isWhitelistedPath(url.standardizedFileURL.path, home: home.standardizedFileURL.path)
-    }
-
     nonisolated static func isWhitelistedPath(_ path: String, home: String) -> Bool {
         let url = URL(fileURLWithPath: path, isDirectory: true)
         guard !containsSymlinkComponent(url, home: home) else { return false }

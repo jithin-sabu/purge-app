@@ -86,15 +86,6 @@ struct ContentView: View {
                 }
             )
         }
-        .sheet(item: $store.pendingUnknownDeletion) { payload in
-            UnknownDeleteConfirmSheet(
-                candidates: payload.candidates,
-                onCancel: { store.dismissUnknownDeletionRequest() },
-                onConfirm: {
-                    Task { await store.userConfirmedUnknownDeletionFlow() }
-                }
-            )
-        }
         .sheet(isPresented: $store.showLargeFileDeletionSheet) {
             LargeFileDeletionConfirmSheet(
                 files: store.selectedTrashableLargeFiles,
@@ -500,17 +491,13 @@ struct ContentView: View {
                     items: $store.cacheItems,
                     isLoading: store.isScanningGeneral || store.isScanningAll,
                     scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
             } else {
                 AppCachesView(
                     items: $store.cacheItems,
                     isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false
+                    scanPhase: store.scanPhase
                 )
             }
         }
@@ -525,16 +512,12 @@ struct ContentView: View {
                 DevToolsView(
                     isLoading: store.isScanningDeveloper || store.isScanningAll,
                     scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
             } else {
                 DevToolsView(
                     isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    onScan: { store.requestScan(.cachesAndDevTools) },
-                    showsPageHeader: false
+                    scanPhase: store.scanPhase
                 )
             }
         }
@@ -552,15 +535,13 @@ struct ContentView: View {
                     isLoading: store.isScanningLargeFiles,
                     onScan: { store.requestScan(.largeFiles) },
                     searchQuery: $largeFilesSearchQuery,
-                    showsPageHeader: false,
                     usesExternalScrollContainer: true
                 )
             } else {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
                     onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery,
-                    showsPageHeader: false
+                    searchQuery: $largeFilesSearchQuery
                 )
             }
         }
@@ -955,12 +936,9 @@ private struct DiskSummaryRefreshModifier: ViewModifier {
             // so the app-level notifications are the only signal that actually fires.
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
                 diskStore.markBackgrounded()
-                trashStore.markBackgrounded()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 Task {
-                    // Size the trash first: the free-space note is only interpretable
-                    // alongside what the trash gave up.
                     await trashStore.refresh(trigger: "foreground-return")
                     await diskStore.refreshAfterForegroundReturn()
                 }

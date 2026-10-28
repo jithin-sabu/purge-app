@@ -56,7 +56,6 @@
 "%lld found, still looking…" = "已找到 %lld 个，仍在查找…";
 "%lld identical copies" = "%lld 份相同副本";
 "%lld items couldn't be cleaned" = "%lld 项无法清理";
-"%lld locations will be removed." = "将移除 %lld 个位置。";
 "%lld not opened in 90 days" = "%lld 个应用在 90 天内未打开";
 "%lld on this Mac, the oldest from %@" = "本机有 %lld 个快照，最早创建于 %@";
 "%lld other %@" = "另有 %lld 份%@";
@@ -133,14 +132,11 @@
 "Big forgotten files" = "被遗忘的大文件";
 "Browser caches" = "浏览器缓存";
 "Browser caches per profile" = "各用户配置的浏览器缓存";
-"Build folder" = "构建文件夹";
 "Buy me a coffee" = "请我喝杯咖啡";
 "CMake build" = "CMake 构建";
 "Cabal build" = "Cabal 构建";
 "Cache rebuilds on launch." = "启动时会重新生成缓存。";
 "Caches" = "缓存";
-"Calculating Dev Tool sizes..." = "正在计算开发工具文件大小…";
-"Calculating sizes..." = "正在计算大小…";
 "Calculating…" = "正在计算…";
 "Can be rebuilt" = "可以重建";
 "Cancel" = "取消";
@@ -169,7 +165,6 @@
 "Cleaning %@…" = "正在清理 %@…";
 "Cleaning History" = "清理历史记录";
 "Cleaning Schedule" = "清理计划";
-"Cleaning safe items…" = "正在清理安全项目…";
 "Cleaning, %@ of %@" = "正在清理，%@ / %@";
 "Cleaning..." = "正在清理…";
 "Cleaning…" = "正在清理…";
@@ -179,7 +174,6 @@
 "Clear search" = "清除搜索";
 "Collapse project" = "折叠项目";
 "Common dev caches" = "常见开发工具缓存";
-"Compact" = "紧凑";
 "Consider stale after" = "超过此时间视为未使用";
 "Containers" = "容器";
 "Continue" = "继续";
@@ -280,7 +274,6 @@
 "In System Settings ▸ Login Items, switch Purge on under \"Background App Activity,\" then come back." = "在“系统设置 ▸ 登录项”中，在“后台 App 活动”下开启 Purge，然后返回。";
 "Installed Apps" = "已安装应用";
 "Installed apps" = "已安装应用";
-"Items being cleaned, %lld" = "正在清理 %lld 项";
 "Items found, %lld" = "发现 %lld 项";
 "Jithin" = "Jithin";
 "Jithin on X" = "Jithin on X";
@@ -323,7 +316,6 @@
 "Limited scan" = "扫描范围受限";
 "Limited scan. Let Purge look deeper." = "扫描范围受限。让 Purge 深入扫描。";
 "List" = "列表";
-"Loading results" = "正在加载结果";
 "Local changes nearby" = "附近有本地修改";
 "Logic Pro and every sound pack" = "Logic Pro 及全部音色包";
 "Logs" = "日志";
@@ -454,7 +446,6 @@
 "Purge" = "Purge";
 "Purge can see everything now" = "Purge 现在可以查看全部内容";
 "Purge couldn't identify every folder you picked. Only continue if you know it's safe to remove. You'll confirm once more before anything moves." = "Purge 无法识别你选择的所有文件夹。请仅在确定可以安全移除时继续。移动前还会要求你再次确认。";
-"Purge couldn't identify this file. Only continue if you know what it is. It goes to the Trash, so you can put it back." = "Purge 无法识别此文件。请仅在了解其用途时继续。它会移到废纸篓，因此可以放回原处。";
 "Purge couldn't move the junk to the Trash. Open Purge to see why." = "Purge 无法将垃圾文件移到废纸篓。请打开 Purge 查看原因。";
 "Purge couldn't start its background watcher, so deleted apps go unnoticed." = "Purge 无法启动后台监测服务，因此无法检测已删除的应用。";
 "Purge couldn't work out what these folders are. Only continue if you know what they hold." = "Purge 无法确定这些文件夹的用途。请仅在了解其中内容时继续。";
@@ -557,15 +548,7 @@
 "Scanned %@" = "%@扫描";
 "Scanning" = "正在扫描";
 "Scanning %@…" = "正在扫描 %@…";
-"Scanning App Caches..." = "正在扫描应用缓存…";
-"Scanning Application Support caches..." = "正在扫描应用支持文件中的缓存…";
-"Scanning Dev Tools..." = "正在扫描开发工具…";
-"Scanning Developer Projects..." = "正在扫描开发项目…";
-"Scanning System Junk..." = "正在扫描系统垃圾文件…";
 "Scanning app caches" = "正在扫描应用缓存";
-"Scanning browser app bundles..." = "正在扫描浏览器应用文件…";
-"Scanning iOS Simulators..." = "正在扫描 iOS 模拟器…";
-"Scanning sandboxed app caches..." = "正在扫描沙盒应用缓存…";
 "Scanning..." = "正在扫描…";
 "Scanning…" = "正在扫描…";
 "Scans for junk and moves the Safe items in App Caches and Dev Tools to the Trash, like Clean in Purge's menu bar. Check First items are left alone." = "扫描垃圾文件，并将应用缓存和开发工具中的安全项目移到废纸篓，与 Purge 菜单栏的“清理”相同。不会处理“先检查”项目。";
@@ -592,12 +575,12 @@
 "Setup didn't complete. Turn it on again to retry." = "设置未完成。请重新开启以重试。";
 "Show Purge in the menu bar" = "在菜单栏显示 Purge";
 "Show all" = "显示全部";
-"Show all items%@ (⌥⌘1)" = "显示全部项目%@（⌥⌘1）";
-"Show check-first items%@ (⌥⌘3)" = "显示需先检查的项目%@（⌥⌘3）";
+"Show all items (⌥⌘1)" = "显示全部项目（⌥⌘1）";
+"Show check-first items (⌥⌘3)" = "显示需先检查的项目（⌥⌘3）";
 "Show in Finder" = "在访达中显示";
 "Show in Finder\n%@" = "在访达中显示\n%@";
 "Show less" = "收起";
-"Show safe items%@ (⌥⌘2)" = "显示安全项目%@（⌥⌘2）";
+"Show safe items (⌥⌘2)" = "显示安全项目（⌥⌘2）";
 "Sifting…" = "正在筛选…";
 "Size (largest first)" = "大小（从大到小）";
 "Size (smallest first)" = "大小（从小到大）";
@@ -713,7 +696,6 @@
 "We are not sure what this is. We recommend leaving it alone." = "无法确定这是什么，建议保留。";
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "找不到用于重新安装此文件夹的说明文件。删除通常不会有问题，但以后重新安装时，下载的版本可能与之前不同。";
 "We could not identify this folder. We recommend leaving it alone." = "无法识别此文件夹，建议保留。";
-"We're not sure what this is" = "无法确定这是什么";
 "Week" = "周";
 "Weekly" = "每周";
 "Weeks" = "周";
@@ -747,8 +729,6 @@
 "app" = "个应用";
 "application support" = "应用支持文件";
 "apps" = "个应用";
-"barely broke a sweat" = "轻松完成";
-"blink and you missed it" = "一眨眼就完成了";
 "buy me a coffee" = "请我喝杯咖啡";
 "by" = "制作 ·";
 "cache" = "缓存";
@@ -767,7 +747,6 @@
 "copies of Xcode" = "份 Xcode";
 "copy" = "副本";
 "day" = "天";
-"deep clean, done" = "深入清理完成";
 "delete" = "删除";
 "delete app" = "删除应用";
 "delete junk" = "删除垃圾文件";
@@ -776,10 +755,8 @@
 "disk space" = "磁盘空间";
 "documents" = "文稿";
 "done in " = "耗时 ";
-"done in %@" = "用时 %@";
 "downloads" = "下载";
 "empty caches" = "清空缓存";
-"faster than your coffee order" = "比点一杯咖啡还快";
 "file" = "个";
 "files" = "个";
 "find junk" = "查找垃圾文件";
@@ -788,11 +765,9 @@
 "full Logic Pro" = "完整 Logic Pro";
 "full base MacBook Airs" = "台装满的基础款 MacBook Air";
 "get rid of" = "移除";
-"heavy lifting, handled" = "繁重工作已完成";
 "how much can i free" = "可以释放多少空间";
 "iOS Simulators" = "iOS 模拟器";
 "in Trash" = "在废纸篓中";
-"in and out" = "迅速完成";
 "installed apps" = "已安装应用";
 "item" = "项";
 "items" = "项";
@@ -818,7 +793,6 @@
 "movies" = "影片";
 "music" = "音乐";
 "mypy cache" = "Mypy 缓存";
-"nice and snappy" = "利落完成";
 "of %@" = "共 %@";
 "one more screenshot" = "再存一张截图";
 "or" = "或";
@@ -835,14 +809,10 @@
 "sbt build" = "sbt 构建";
 "scan" = "扫描";
 "scan my mac" = "扫描我的 Mac";
-"smooth operator" = "顺利搞定";
 "space" = "空间";
 "storage" = "存储";
 "storage full" = "存储空间已满";
 "system" = "System 文件夹";
-"that was a big one" = "这次清理了不少";
-"that was a proper clean" = "清理得很彻底";
-"that was quick" = "完成得真快";
 "the next macOS update" = "下一次 macOS 更新";
 "the selected apps" = "所选应用";
 "today" = "今天";
@@ -856,9 +826,7 @@
 "what purge can clean" = "Purge 可以清理什么";
 "what's taking space" = "什么占用了空间";
 "will be quit first" = "将先退出";
-"worth the wait" = "值得等待";
 "yesterday" = "昨天";
-"your mac says thanks" = "你的 Mac 轻松多了";
 "·" = "·";
 "…and %lld more sets where every copy is selected." = "…另有 %lld 组的所有副本均已选中。";
 "%@ Cache" = "%@ 缓存";
@@ -866,7 +834,6 @@
 "%@ Service Worker Cache" = "%@ Service Worker 缓存";
 "%@ Service Worker Script Cache" = "%@ Service Worker 脚本缓存";
 "%@ Old Version %@" = "%@ 旧版本 %@";
-"Font Cache" = "字体缓存";
 ", " = "、";
 "Show me" = "带我去看看";
 "these files" = "这些文件";

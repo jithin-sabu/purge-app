@@ -221,11 +221,6 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    struct UnknownDeletionPayload: Identifiable {
-        let id = UUID()
-        let candidates: [DeletionCandidate]
-    }
-
     @Published var selectedTab: Tab = .overview {
         didSet {
             if selectedTab != safetyFilterVisitTab { safetyFilterVisitTab = nil }
@@ -248,12 +243,10 @@ final class PurgeStore: ObservableObject {
     @Published var devTools: [DevTool] = [] {
         didSet {
             invalidateSafeCleanupSummary()
-            devToolsRevision &+= 1
             categoryInputsDidChange()
             lastScanListDidChange(.devTools)
         }
     }
-    @Published private(set) var devToolsRevision = 0
     @Published var simulatorDevices: [SimulatorDevice] = [] {
         didSet {
             categoryInputsDidChange()
@@ -418,7 +411,6 @@ final class PurgeStore: ObservableObject {
     /// from waiting to scanning to done exactly once.
     @Published private(set) var cacheScanStage: CacheScanStage = .idle
     @Published private(set) var scanPhase: ScanPhase = .idle
-    @Published private(set) var scanStatusLine = ""
     @Published private(set) var pendingCacheSizePaths: Set<String> = []
     @Published private(set) var pendingDevToolSizeIDs: Set<String> = []
     @Published private(set) var pendingProjectArtifactPaths: Set<String> = []
@@ -427,7 +419,6 @@ final class PurgeStore: ObservableObject {
     @Published var showDeletionSheet = false
     /// When set (e.g. tab-scoped cleanup), the confirmation sheet lists these instead of `deletionCandidates`.
     @Published var deletionSheetCandidates: [DeletionCandidate]?
-    @Published var pendingUnknownDeletion: UnknownDeletionPayload?
     @Published var lastDeletionReport: DeletionReport?
     /// Live session behind the cleanup overlay for manual "Clean Selected" runs.
     /// Presented in `.cleaning` when deletion starts; flips to `.complete` in place.
@@ -882,7 +873,6 @@ final class PurgeStore: ObservableObject {
             || commandLineToolRemovalPlan != nil
             || isBuildingUninstallPlan
             || showDeletionSheet
-            || pendingUnknownDeletion != nil
             || showLargeFileDeletionSheet
             || pendingDuplicateCleanup != nil
             || pendingRemoveDownload != nil
@@ -1031,13 +1021,9 @@ final class PurgeStore: ObservableObject {
         return selectedCaches + selectedTools + selectedSims + selectedRuntimes + selectedProjects
     }
 
-    private func isManualDeletionCandidateEligible(_ safetyInfo: SafetyInfo) -> Bool {
-        true
-    }
-
-    /// Selected caches eligible for manual delete (includes Not Sure when selected).
+    /// Selected caches for manual delete (includes Not Sure when selected).
     var selectedGeneralDeletionCandidates: [DeletionCandidate] {
-        cacheItems.filter { scanSelection.cacheIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
+        cacheItems.filter { scanSelection.cacheIDs.contains($0.id) }
             .flatMap { DeletionCandidate.deletionCandidates(forCache: $0) }
             .sorted { $0.sizeBytes > $1.sizeBytes }
     }
@@ -1050,16 +1036,14 @@ final class PurgeStore: ObservableObject {
                     devToolDeletionCandidate(tool, path: path)
                 }
             }
-            .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
         let sims = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }
             .map(simulatorDeletionCandidate)
-            .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
         let runtimes = selectedSimulatorRuntimeCandidates()
 
         let artifacts = projectGroups.flatMap(\.artifacts)
-            .filter { scanSelection.artifactIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
+            .filter { scanSelection.artifactIDs.contains($0.id) }
             .map(artifactDeletionCandidate)
 
         let merged = tools + sims + runtimes + artifacts
@@ -1068,21 +1052,19 @@ final class PurgeStore: ObservableObject {
     }
 
     var deletionCandidates: [DeletionCandidate] {
-        let caches = cacheItems.filter { scanSelection.cacheIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
+        let caches = cacheItems.filter { scanSelection.cacheIDs.contains($0.id) }
             .flatMap { DeletionCandidate.deletionCandidates(forCache: $0) }
 
         let tools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.filter(\.isDetected)
             .flatMap { tool in tool.paths.map { devToolDeletionCandidate(tool, path: $0) } }
-            .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
         let sims = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }
             .map(simulatorDeletionCandidate)
-            .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
 
         let runtimes = selectedSimulatorRuntimeCandidates()
 
         let artifacts = projectGroups.flatMap(\.artifacts)
-            .filter { scanSelection.artifactIDs.contains($0.id) && isManualDeletionCandidateEligible($0.safetyInfo) }
+            .filter { scanSelection.artifactIDs.contains($0.id) }
             .map(artifactDeletionCandidate)
 
         let unique = Dictionary(grouping: caches + tools + sims + runtimes + artifacts, by: { $0.path }).compactMap { $0.value.first }
@@ -1910,41 +1892,6 @@ final class PurgeStore: ObservableObject {
         where skippedPaths.contains(artifact.path.standardizedFileURL.path) {
             scanSelection.artifactIDs.remove(artifact.id)
         }
-    }
-
-    func requestUnknownDeletion(_ candidate: DeletionCandidate) {
-        requestUnknownDeletion(candidates: [candidate])
-    }
-
-    func requestUnknownDeletion(candidates: [DeletionCandidate]) {
-        guard !candidates.isEmpty else { return }
-        pendingUnknownDeletion = UnknownDeletionPayload(candidates: candidates)
-    }
-
-    /// Unknown dev tool rows map to multiple paths; deleting confirms all paths together.
-    func unknownDeletionCandidates(forDevTool tool: DevTool) -> [DeletionCandidate] {
-        tool.paths.map { devToolDeletionCandidate(tool, path: $0) }
-    }
-
-    func unknownDeletionCandidates(forArtifact artifact: ProjectCacheArtifact) -> [DeletionCandidate] {
-        [artifactDeletionCandidate(artifact)]
-    }
-
-    func dismissUnknownDeletionRequest() {
-        pendingUnknownDeletion = nil
-    }
-
-    func userConfirmedUnknownDeletionFlow() async {
-        guard let payload = pendingUnknownDeletion else { return }
-        pendingUnknownDeletion = nil
-        await gitChecker.setAccess(currentScanAccess())
-        let resolved = await resolvingUnknownGitStatus(payload.candidates)
-        if resolved.contains(where: { $0.safetyInfo.level == .unknown }) {
-            highRiskDeletionStagingCandidates = resolved
-            showHighRiskDeletionSecondConfirm = true
-            return
-        }
-        beginManualDeletionPipeline(with: resolved)
     }
 
     // MARK: - Large & Old Files
@@ -3143,15 +3090,6 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    func setAllAppsSelected(_ selected: Bool, ids: [String]) {
-        if selected {
-            let live = Set(installedApps.map(\.id))
-            selectedAppIDs.formUnion(ids.filter(live.contains))
-        } else {
-            selectedAppIDs.subtract(ids)
-        }
-    }
-
     var selectedApps: [InstalledApp] {
         installedApps.filter { selectedAppIDs.contains($0.id) }
     }
@@ -3845,7 +3783,6 @@ final class PurgeStore: ObservableObject {
                       self.scanGeneration == previousGeneration,
                       self.scanTask != nil else { return }
                 self.scanPhase = .cancelling
-                self.scanStatusLine = "Cancelling..."
             }
             await previousTask.value
             cancellationIndicator.cancel()
@@ -3922,8 +3859,6 @@ final class PurgeStore: ObservableObject {
         for await event in scanSources.general(access) {
             guard scanGeneration == generation, !Task.isCancelled else { return }
             switch event {
-            case .status(let status):
-                scanStatusLine = status
             case .found(let item):
                 cacheItemsFound += 1
                 coalesce.ingestFound(item)
@@ -3985,8 +3920,6 @@ final class PurgeStore: ObservableObject {
         for await event in scanSources.developer(access) {
             guard scanGeneration == generation, !Task.isCancelled else { return }
             switch event {
-            case .status(let status):
-                scanStatusLine = status
             case .devToolFound(let tool):
                 devToolsFound += 1
                 coalesce.ingestDevTool(tool)
@@ -4076,8 +4009,6 @@ final class PurgeStore: ObservableObject {
                     projectGroupsFound += 1
                     coalesce.ingest(group)
                     scheduleProjectGroupFlush(coalesce: coalesce, generation: generation)
-                case .status:
-                    break
                 default:
                     break
                 }
@@ -4123,14 +4054,12 @@ final class PurgeStore: ObservableObject {
         hasSessionCacheScan = true
         stampScanRecords([.appCaches, .devTools], at: completedAt)
         scanPhase = .completed
-        scanStatusLine = "Scan complete"
         scanCompletionHideTask?.cancel()
         scanCompletionHideTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard let self, self.scanGeneration == generation, self.scanPhase == .completed else { return }
             withAnimation(.easeInOut(duration: 0.25)) {
                 self.scanPhase = .idle
-                self.scanStatusLine = ""
             }
         }
     }
@@ -5373,7 +5302,6 @@ final class PurgeStore: ObservableObject {
     private func selectedSimulatorRuntimeCandidates() -> [DeletionCandidate] {
         simulatorRuntimes.filter { scanSelection.simulatorRuntimeIDs.contains($0.id) }
             .map(simulatorRuntimeDeletionCandidate)
-            .filter { isManualDeletionCandidateEligible($0.safetyInfo) }
     }
 
     /// The engine's lookup from a runtime row's path to the identifier `simctl`
@@ -5504,23 +5432,7 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    func setSimulatorGroupSelection(allSelected: Bool) {
-        if allSelected {
-            scanSelection.simulatorIDs.formUnion(simulatorDevices.map(\.id))
-        } else {
-            scanSelection.simulatorIDs.subtract(simulatorDevices.map(\.id))
-        }
-    }
-
-    // MARK: - Categorization (per-row recategorize, manual mark, reset)
-
-    private static func tag(for level: SafetyLevel) -> String {
-        switch level {
-        case .safe: return "safe"
-        case .medium: return "medium"
-        case .unknown: return "unknown"
-        }
-    }
+    // MARK: - Categorization (per-row reset, exclusions)
 
     private func refreshUserOverridePaths() {
         userOverridePaths = UserOverridesStore.allOverriddenPaths()
@@ -5718,82 +5630,6 @@ final class PurgeStore: ObservableObject {
         largeFileDuplicates.removeFiles(ids: removedIDs)
     }
 
-    /// Mark a row with a manual category. Persists `user_overrides.json` keyed
-    /// by the exact path and updates the row in place.
-    func markCacheItem(id: String, as level: SafetyLevel) {
-        guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
-        let item = cacheItems[index]
-        for location in item.locations {
-            UserOverridesStore.write(
-                path: location.path,
-                overrideTag: Self.tag(for: level),
-                originalTag: Self.tag(for: item.safetyInfo.level)
-            )
-        }
-        let info = SafetyInfo(
-            level: level,
-            headline: item.safetyInfo.headline,
-            explanation: manualOverrideExplanation(level: level),
-            recoverySteps: "",
-            reinstallCommand: item.safetyInfo.reinstallCommand
-        )
-        withAnimation {
-            cacheItems[index].safetyInfo = info
-        }
-        refreshUserOverridePaths()
-    }
-
-    func markDevTool(id: String, as level: SafetyLevel) {
-        guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
-        let tool = devTools[index]
-        guard let primary = tool.primaryOverridePath else { return }
-        UserOverridesStore.write(
-            path: primary,
-            overrideTag: Self.tag(for: level),
-            originalTag: Self.tag(for: tool.safetyInfo.level)
-        )
-        let info = SafetyInfo(
-            level: level,
-            headline: tool.safetyInfo.headline,
-            explanation: manualOverrideExplanation(level: level),
-            recoverySteps: "",
-            reinstallCommand: tool.safetyInfo.reinstallCommand
-        )
-        withAnimation {
-            devTools[index].safetyInfo = info
-        }
-        refreshUserOverridePaths()
-    }
-
-    func markProjectArtifact(groupID: String, artifactID: String, as level: SafetyLevel) {
-        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
-        markProjectArtifact(groupIndex: indices.groupIndex, artifactIndex: indices.artifactIndex, as: level)
-    }
-
-    func markProjectArtifact(groupIndex: Int, artifactIndex: Int, as level: SafetyLevel) {
-        guard projectGroups.indices.contains(groupIndex),
-              projectGroups[groupIndex].artifacts.indices.contains(artifactIndex) else { return }
-        let artifact = projectGroups[groupIndex].artifacts[artifactIndex]
-        UserOverridesStore.write(
-            path: artifact.path,
-            overrideTag: Self.tag(for: level),
-            originalTag: Self.tag(for: artifact.safetyInfo.level)
-        )
-        let info = SafetyInfo(
-            level: level,
-            headline: artifact.safetyInfo.headline,
-            explanation: manualOverrideExplanation(level: level),
-            recoverySteps: "",
-            reinstallCommand: artifact.safetyInfo.reinstallCommand
-        )
-        var groups = projectGroups
-        groups[groupIndex].artifacts[artifactIndex].safetyInfo = info
-        withAnimation {
-            projectGroups = groups
-        }
-        refreshUserOverridePaths()
-    }
-
     /// Remove a single override and re-resolve the row using the automatic chain.
     func resetCacheItemToAutomatic(id: String) {
         guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
@@ -5852,78 +5688,4 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Re-resolve a single cache row using the local chain only.
-    func recategorizeCacheItem(id: String) {
-        guard let index = cacheItems.firstIndex(where: { $0.id == id }) else { return }
-        let item = cacheItems[index]
-
-        for location in item.locations {
-            UserOverridesStore.remove(path: location.path)
-        }
-        refreshUserOverridePaths()
-
-        let resolved = resolvedAutomaticSafety(for: item)
-        scanSelection.cacheIDs.remove(item.id)
-        withAnimation {
-            cacheItems[index].safetyInfo = resolved
-            cacheItems[index].appName = resolved.headline
-        }
-    }
-
-    func recategorizeDevTool(id: String) {
-        guard let index = devTools.firstIndex(where: { $0.id == id }) else { return }
-        let tool = devTools[index]
-        guard let primary = tool.primaryOverridePath else { return }
-
-        UserOverridesStore.remove(path: primary)
-        refreshUserOverridePaths()
-
-        let label = tool.toolName
-        let info = DevScanner.automaticSafetyInfo(
-            forDevToolLabel: label,
-            primaryPath: primary
-        )
-        scanSelection.devToolIDs.remove(tool.id)
-        withAnimation {
-            devTools[index].safetyInfo = info
-        }
-    }
-
-    func recategorizeProjectArtifact(groupID: String, artifactID: String) {
-        guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
-        recategorizeProjectArtifact(groupIndex: indices.groupIndex, artifactIndex: indices.artifactIndex)
-    }
-
-    func recategorizeProjectArtifact(groupIndex: Int, artifactIndex: Int) {
-        guard projectGroups.indices.contains(groupIndex),
-              projectGroups[groupIndex].artifacts.indices.contains(artifactIndex) else { return }
-        let artifact = projectGroups[groupIndex].artifacts[artifactIndex]
-
-        UserOverridesStore.remove(path: artifact.path)
-        refreshUserOverridePaths()
-
-        let info = SafetyInfo.forStaleProjectArtifact(
-            kind: artifact.kind,
-            path: artifact.path,
-            reinstallCommand: artifact.safetyInfo.reinstallCommand,
-            checkFirstReason: artifact.checkFirstReason
-        )
-        scanSelection.artifactIDs.remove(artifact.id)
-        var groups = projectGroups
-        groups[groupIndex].artifacts[artifactIndex].safetyInfo = info
-        withAnimation {
-            projectGroups = groups
-        }
-    }
-
-    private func manualOverrideExplanation(level: SafetyLevel) -> String {
-        switch level {
-        case .safe:
-            return String(localized: "You marked this as Safe to Clean.")
-        case .medium:
-            return String(localized: "You marked this as Check First.")
-        case .unknown:
-            return String(localized: "You marked this as Not Sure.")
-        }
-    }
 }

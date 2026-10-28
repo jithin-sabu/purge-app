@@ -2,7 +2,6 @@ import AppKit
 import Foundation
 
 enum CacheScanEvent {
-    case status(String)
     case found(CacheItem)
     case sizeResolved(path: String, sizeBytes: Int64, lastModified: Date)
 }
@@ -38,10 +37,6 @@ nonisolated final class CacheScanner {
         }
     }
 
-    func calculateFolderSize(at url: URL) -> Int64 {
-        FolderSizing.directoryByteSize(at: url)
-    }
-
     private func runGeneralScan(
         access: ScanAccess,
         continuation: AsyncStream<CacheScanEvent>.Continuation
@@ -54,7 +49,6 @@ nonisolated final class CacheScanner {
         // appearing under App Caches and later being pulled out when the dev scan runs.
         var collectedPaths = DevScanner.claimedGlobalCachePaths()
 
-        continuation.yield(.status(String(localized: "Scanning App Caches...")))
         let contents: [URL]
         do {
             contents = try FileManager.default.contentsOfDirectory(
@@ -85,7 +79,6 @@ nonisolated final class CacheScanner {
         // Chromium browsers, Electron apps and Adobe keep their biggest caches, so
         // it belongs in the limited scan. The sensitive roots under it are already
         // skipped by `excludedApplicationSupportRoots`.
-        continuation.yield(.status(String(localized: "Scanning Application Support caches...")))
         let appSupportItems = applicationSupportCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
         for item in appSupportItems {
             if Task.isCancelled {
@@ -141,7 +134,6 @@ nonisolated final class CacheScanner {
                 sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
             }
 
-            continuation.yield(.status(String(localized: "Scanning sandboxed app caches...")))
             let containerItems = allContainerCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
             for item in containerItems {
                 if Task.isCancelled {
@@ -153,7 +145,6 @@ nonisolated final class CacheScanner {
             }
         }
 
-        continuation.yield(.status(String(localized: "Scanning browser app bundles...")))
         let staleFrameworkItems = staleChromiumFrameworkItems(access: access, collectedPaths: &collectedPaths)
         for item in staleFrameworkItems {
             if Task.isCancelled {
@@ -164,7 +155,6 @@ nonisolated final class CacheScanner {
             sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
         }
 
-        continuation.yield(.status(String(localized: "Scanning System Junk...")))
         for item in applicationLogItems(home: home, access: access, collectedPaths: &collectedPaths) {
             if Task.isCancelled {
                 continuation.finish()
@@ -229,7 +219,6 @@ nonisolated final class CacheScanner {
             detail: "\(sizeJobs.count) cache locations queued, \(collectedPaths.count) unique paths"
         )
 
-        continuation.yield(.status(String(localized: "Calculating sizes...")))
         let sizingStart = Date()
         await runSizeJobs(sizeJobs, access: access, continuation: continuation)
         ScanPhaseTiming.finish(
@@ -659,10 +648,6 @@ nonisolated final class CacheScanner {
                     "Library/Logs/DiagnosticReports",
                     isDirectory: true
                 )
-            ),
-            (
-                String(localized: "Font Cache"),
-                home.appendingPathComponent("Library/Caches/com.apple.ATS", isDirectory: true)
             )
         ]
     }

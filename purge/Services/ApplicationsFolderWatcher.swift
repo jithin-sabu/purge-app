@@ -124,6 +124,8 @@ final class ApplicationsFolderWatcher {
         return RemovedAppWatchPolicy.normalizedPath(String(cString: resolved))
     }
 
+    /// The apps in the current index. Only tests read it, to watch the index;
+    /// the app gets each new index through `onChange`.
     var installedApps: [InstalledApp] { Array(index.apps.values) }
 
     /// True while a departure is being followed, so an owner that is about to

@@ -75,7 +75,6 @@ struct LastScanStoreTests {
         store.setAllOrphansSelected(true, ids: [savedLeftover.id])
         store.toggleOrphanSelected(id: savedLeftover.id)
         store.toggleAppSelected(id: savedApp.id)
-        store.setAllAppsSelected(true, ids: [savedApp.id])
 
         #expect(store.scanSelection.cacheIDs.isEmpty)
         #expect(store.scanSelection.devToolIDs.isEmpty)

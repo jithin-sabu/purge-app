@@ -135,11 +135,6 @@ nonisolated struct ScanQueueState: Equatable, Sendable {
     mutating func clearPending() {
         pending.removeAll()
     }
-
-    mutating func reset() {
-        active = nil
-        pending.removeAll()
-    }
 }
 
 /// Which steps run when the window opens: every one that has no results in this

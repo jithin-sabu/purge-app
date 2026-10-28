@@ -30,15 +30,6 @@ enum AppearanceMode: String, CaseIterable {
         }
     }
 
-    /// `nil` means follow the system appearance.
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
-        }
-    }
-
     /// Concrete scheme for SwiftUI, including the current system look in Auto.
     var resolvedColorScheme: ColorScheme {
         switch self {

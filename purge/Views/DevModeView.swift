@@ -1,34 +1,23 @@
 import AppKit
 import SwiftUI
 
-struct DevToolsView<PageHeader: View>: View {
+struct DevToolsView: View {
     @EnvironmentObject private var store: PurgeStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isLoading: Bool
     let scanPhase: PurgeStore.ScanPhase
-    let onScan: () -> Void
-    var showsPageHeader = true
     /// When true, the parent supplies the page header and this view renders only its
     /// controls and scrolling list.
     var usesExternalScrollContainer = false
-    private let pageHeader: () -> PageHeader
 
     init(
         isLoading: Bool,
         scanPhase: PurgeStore.ScanPhase,
-        onScan: @escaping () -> Void,
-        showsPageHeader: Bool = true,
-        usesExternalScrollContainer: Bool = false,
-        initiallyExpandedProjectRoots: Set<String> = [],
-        @ViewBuilder pageHeader: @escaping () -> PageHeader
+        usesExternalScrollContainer: Bool = false
     ) {
-        _expandedProjectRoots = State(initialValue: initiallyExpandedProjectRoots)
         self.isLoading = isLoading
         self.scanPhase = scanPhase
-        self.onScan = onScan
-        self.showsPageHeader = showsPageHeader
         self.usesExternalScrollContainer = usesExternalScrollContainer
-        self.pageHeader = pageHeader
     }
 
     @State private var expandedProjectRoots = Set<String>()
@@ -263,10 +252,6 @@ struct DevToolsView<PageHeader: View>: View {
         return store.simulatorDevices.indices.filter { filter.matches(store.simulatorDevices[$0].safetyInfo) }
     }
 
-    private func simulatorSectionByteTotal() -> Int64 {
-        visibleSimulatorIndices().reduce(Int64(0)) { $0 + (store.simulatorDevices[$1].sizeOnDisk ?? 0) }
-    }
-
     private var runtimeSectionVisible: Bool {
         let filter = currentSafetyFilter
         return store.simulatorRuntimes.contains { filter.matches($0.safetyInfo) }
@@ -297,10 +282,6 @@ struct DevToolsView<PageHeader: View>: View {
     private func visibleRuntimeIndices() -> [Int] {
         let filter = currentSafetyFilter
         return store.simulatorRuntimes.indices.filter { filter.matches(store.simulatorRuntimes[$0].safetyInfo) }
-    }
-
-    private func runtimeSectionByteTotal() -> Int64 {
-        visibleRuntimeIndices().reduce(Int64(0)) { $0 + store.simulatorRuntimes[$1].sizeBytes }
     }
 
     private func mergedStandardRowEntries() -> [MergedDevStandardRow] {
@@ -348,10 +329,6 @@ struct DevToolsView<PageHeader: View>: View {
         return rows
     }
 
-    private func isEligibleForManualBulkSelection(_ info: SafetyInfo) -> Bool {
-        true
-    }
-
     /// Resolves a group by identity rather than by position.
     ///
     /// The row helpers below are read from closures that SwiftUI re-invokes on its own
@@ -390,11 +367,7 @@ struct DevToolsView<PageHeader: View>: View {
         guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
         let filter = currentSafetyFilter
-        return g.artifacts.indices.filter { ai in
-            let art = g.artifacts[ai]
-            guard filter.matches(art.safetyInfo) else { return false }
-            return isEligibleForManualBulkSelection(art.safetyInfo)
-        }
+        return g.artifacts.indices.filter { filter.matches(g.artifacts[$0].safetyInfo) }
     }
 
     private func projectSelectTriState(forGroupIndex gi: Int) -> SelectAllTriState {
@@ -460,12 +433,6 @@ struct DevToolsView<PageHeader: View>: View {
         }
     }
 
-    private func eligibleStandardToolIndices() -> [Int] {
-        filteredStandardToolIndices().filter {
-            isEligibleForManualBulkSelection(store.devTools[$0].safetyInfo)
-        }
-    }
-
     private func eligibleProjectArtifactPairs() -> [(Int, Int)] {
         var pairs: [(Int, Int)] = []
         let filter = currentSafetyFilter
@@ -474,7 +441,6 @@ struct DevToolsView<PageHeader: View>: View {
                 let art = store.projectGroups[gi].artifacts[ai]
                 guard filter.matches(art.safetyInfo) else { continue }
                 guard !store.isVisuallyRemovedBySafeCleanup(art) else { continue }
-                guard isEligibleForManualBulkSelection(art.safetyInfo) else { continue }
                 pairs.append((gi, ai))
             }
         }
@@ -493,7 +459,7 @@ struct DevToolsView<PageHeader: View>: View {
     private var selectAll: SafeFirstSelectAll<SelectAllKey> {
         let sel = store.scanSelection
         var entries: [SafeFirstSelectAll<SelectAllKey>.Entry] = []
-        for ti in eligibleStandardToolIndices() {
+        for ti in filteredStandardToolIndices() {
             let tool = store.devTools[ti]
             entries.append(.init(
                 key: .tool(tool.id),
@@ -549,32 +515,6 @@ struct DevToolsView<PageHeader: View>: View {
         case .runtime(let id):
             store.setSimulatorRuntimeSelected(id: id, isSelected: isSelected)
         }
-    }
-
-    private var selectedInScopeCount: Int {
-        let sel = store.scanSelection
-        let toolIx = eligibleStandardToolIndices().filter { sel.devToolIDs.contains(store.devTools[$0].id) }.count
-        let pairSelected = eligibleProjectArtifactPairs().filter { sel.artifactIDs.contains(store.projectGroups[$0.0].artifacts[$0.1].id) }.count
-        let simSelected = visibleSimulatorIndices().filter { sel.simulatorIDs.contains(store.simulatorDevices[$0].id) }.count
-        let runtimeSelected = visibleRuntimeIndices().filter { sel.simulatorRuntimeIDs.contains(store.simulatorRuntimes[$0].id) }.count
-        return toolIx + pairSelected + simSelected + runtimeSelected
-    }
-
-    private var selectedInScopeBytes: Int64 {
-        let sel = store.scanSelection
-        let toolBytes = eligibleStandardToolIndices()
-            .filter { sel.devToolIDs.contains(store.devTools[$0].id) }
-            .reduce(Int64(0)) { sum, index in sum + store.devTools[index].sizeBytes }
-        let projectBytes = eligibleProjectArtifactPairs()
-            .filter { sel.artifactIDs.contains(store.projectGroups[$0.0].artifacts[$0.1].id) }
-            .reduce(Int64(0)) { sum, pair in sum + store.projectGroups[pair.0].artifacts[pair.1].sizeBytes }
-        let simulatorBytes = visibleSimulatorIndices()
-            .filter { sel.simulatorIDs.contains(store.simulatorDevices[$0].id) }
-            .reduce(Int64(0)) { sum, index in sum + (store.simulatorDevices[index].sizeOnDisk ?? 0) }
-        let runtimeBytes = visibleRuntimeIndices()
-            .filter { sel.simulatorRuntimeIDs.contains(store.simulatorRuntimes[$0].id) }
-            .reduce(Int64(0)) { sum, index in sum + store.simulatorRuntimes[index].sizeBytes }
-        return toolBytes + projectBytes + simulatorBytes + runtimeBytes
     }
 
     private func developerSafetySnapshotsForChipRow() -> [SafetyInfo] {
@@ -654,76 +594,6 @@ struct DevToolsView<PageHeader: View>: View {
             }
     }
 
-    private var developerVisibleItemCount: Int {
-        let tools = filteredStandardToolIndices().count
-        let sims = visibleSimulatorIndices().count
-        let runtimes = visibleRuntimeIndices().count
-        let artifacts = filteredProjectGroupIndices().reduce(0) { sum, gi in
-            sum + sortedVisibleArtifactIndices(forGroup: gi).count
-        }
-        return tools + sims + runtimes + artifacts
-    }
-
-    private var developerTotalByteSize: Int64 {
-        let tools = store.devTools.filter { $0.isDetected && $0.safetyInfo.level != .unknown }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let sims = store.simulatorDevices
-            .filter { $0.safetyInfo.level != .unknown }
-            .reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
-        let runtimes = store.simulatorRuntimes
-            .filter { $0.safetyInfo.level != .unknown }
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
-            sum + group.artifacts.filter { $0.safetyInfo.level != .unknown }
-                .reduce(Int64(0)) { $0 + $1.sizeBytes }
-        }
-        return tools + sims + runtimes + artifacts
-    }
-
-    private var developerVisibleByteSize: Int64 {
-        var sum = Int64(0)
-        for entry in mergedStandardRowEntries() {
-            switch entry {
-            case .tool(_, let i):
-                sum += store.devTools[i].sizeBytes
-            case .savedTool:
-                // Saved rows count in no total.
-                break
-            }
-        }
-        if simulatorSectionVisible {
-            sum += simulatorSectionByteTotal()
-        }
-        if runtimeSectionVisible {
-            sum += runtimeSectionByteTotal()
-        }
-        let filter = currentSafetyFilter
-        for gi in filteredProjectGroupIndices() {
-            let g = store.projectGroups[gi]
-            for ai in g.artifacts.indices where filter.matches(g.artifacts[ai].safetyInfo)
-                && !store.isVisuallyRemovedBySafeCleanup(g.artifacts[ai]) {
-                sum += g.artifacts[ai].sizeBytes
-            }
-        }
-        return sum
-    }
-
-    private var subtitleItemCount: Int {
-        currentSafetyFilter == .all ? developerTotalRowCount : developerVisibleItemCount
-    }
-
-    private var subtitleTotalSize: Int64 {
-        currentSafetyFilter == .all ? developerTotalByteSize : developerVisibleByteSize
-    }
-
-    private var subtitleItemLabel: String {
-        subtitleItemCount == 1 ? String(localized: "item") : String(localized: "items")
-    }
-
-    private var pageSubtitle: String {
-        return String(localized: "\(subtitleItemCount) \(subtitleItemLabel) · \(formatBytes(subtitleTotalSize)) recoverable")
-    }
-
     var body: some View {
         Group {
             if usesExternalScrollContainer {
@@ -737,12 +607,6 @@ struct DevToolsView<PageHeader: View>: View {
 
     private var standardBody: some View {
         VStack(spacing: 0) {
-            if showsPageHeader {
-                AppSectionPageHeader(title: String(localized: "Dev Tools"), subtitle: pageSubtitle) {
-                    AppScanCleanActions(onScan: onScan, scanPhase: scanPhase)
-                }
-            }
-
             if !isAwaitingFirstScan {
                 scanControlsChrome
             }
@@ -784,28 +648,8 @@ struct DevToolsView<PageHeader: View>: View {
     }
 
     private var filterToolbarChrome: some View {
-        // Scoped to scanSelection so the selected count/clean button update on a
-        // toggle without re-rendering DevToolsView (which reverts list scroll).
-        ScanSelectionScope(selection: store.scanSelection, isSelected: { _ in false }) { _ in
-            FilterSortToolbar(
-                safetyFilter: safetyFilterBinding,
-                sortOption: sortOptionBinding,
-                chipCounts: chipCounts,
-                selectedInScopeCount: selectedInScopeCount,
-                selectedInScopeBytes: selectedInScopeBytes,
-                isDeleting: store.isDeleting,
-                onCleanSelected: {
-                    Task {
-                        await store.presentDeletionSheetResolvingGit(
-                            candidates: store.selectedDeveloperDeletionCandidates
-                        )
-                    }
-                },
-                useStackedLayout: true,
-                showsControlsRow: false
-            )
-        }
-        .padding(.horizontal, AppDetailPageLayout.horizontalInset)
+        SafetyFilterChipRow(safetyFilter: safetyFilterBinding, chipCounts: chipCounts)
+            .padding(.horizontal, AppDetailPageLayout.horizontalInset)
     }
 
     /// Bottom edge of the blur zone — list rows fade under this row only.
@@ -1647,30 +1491,10 @@ private extension View {
     }
 }
 
-extension DevToolsView where PageHeader == EmptyView {
-    init(
-        isLoading: Bool,
-        scanPhase: PurgeStore.ScanPhase,
-        onScan: @escaping () -> Void,
-        showsPageHeader: Bool = true,
-        usesExternalScrollContainer: Bool = false
-    ) {
-        self.init(
-            isLoading: isLoading,
-            scanPhase: scanPhase,
-            onScan: onScan,
-            showsPageHeader: showsPageHeader,
-            usesExternalScrollContainer: usesExternalScrollContainer,
-            pageHeader: { EmptyView() }
-        )
-    }
-}
-
 #Preview("Dev Tools — scanning") {
     DevToolsView(
         isLoading: true,
-        scanPhase: .scanning,
-        onScan: {}
+        scanPhase: .scanning
     )
         .environmentObject(PurgeStore())
         .frame(width: 720, height: 560)
@@ -1680,8 +1504,7 @@ extension DevToolsView where PageHeader == EmptyView {
     let store = PurgeStore()
     return DevToolsView(
         isLoading: false,
-        scanPhase: .idle,
-        onScan: {}
+        scanPhase: .idle
     )
         .environmentObject(store)
         .frame(width: 720, height: 560)
