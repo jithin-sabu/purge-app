@@ -38,6 +38,24 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
 
     static func isLegacyImage(kind: String) -> Bool { !kind.hasPrefix("Patchable") }
 
+    /// True for an older-format runtime Purge must neither offer nor delete: it is
+    /// mounted from inside Apple's download, which `simctl runtime delete` can't
+    /// remove, so the space stays used and the runtime is mounted again at the next
+    /// restart (#165). Also true when the build or the downloads could not be read.
+    /// The scan and the delete both ask this.
+    static func isHeldByAppleDownload(kind: String, build: String?, downloadBuilds: Set<String>?) -> Bool {
+        guard isLegacyImage(kind: kind) else { return false }
+        guard let build, let downloadBuilds else { return true }
+        return downloadBuilds.contains { isSameBuild($0, build) }
+    }
+
+    /// `simctl` and MobileAsset are two sources, so case and spacing are not
+    /// trusted to agree.
+    static func isSameBuild(_ one: String, _ other: String) -> Bool {
+        one.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare(other.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+    }
+
     // MARK: - Parsing
 
     /// Builds rows from `simctl runtime list -j`.
@@ -88,13 +106,8 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
             }
             let lastUsedAt = (entry["lastUsedAt"] as? String).flatMap { dateParser.date(from: $0) }
             let kind = entry["kind"] as? String ?? ""
-            // An older-format runtime is mounted from inside Apple's download.
-            // `simctl runtime delete` unmounts it but can't remove that download,
-            // so the space stays used and the runtime is mounted again at the
-            // next restart (#165). Offering it would promise space it can't free.
-            if Self.isLegacyImage(kind: kind) {
-                guard let downloadBuilds, !downloadBuilds.contains(build) else { continue }
-            }
+            // Offering it would promise space the delete can't free.
+            if Self.isHeldByAppleDownload(kind: kind, build: build, downloadBuilds: downloadBuilds) { continue }
             let state = entry["state"] as? String ?? ""
             let platformName = Self.platformName(
                 runtimeIdentifier: runtimeIdentifier,

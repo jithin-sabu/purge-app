@@ -273,6 +273,22 @@ struct SimulatorRuntimeTests {
         #expect(list.map(\.version).sorted() == ["26.3.1", "26.5"])
     }
 
+    /// `simctl` and MobileAsset are two sources, so the match ignores case and
+    /// spacing rather than offer the runtime on a formatting difference.
+    @Test func olderRuntimeMatchesItsDownloadWhateverTheCase() {
+        let list = parsed(downloadBuilds: [" 22e238\n"])
+        #expect(runtime("18.4", in: list) == nil)
+    }
+
+    /// The scan and the delete share this rule, so it holds for a missing build
+    /// too, and never holds a newer runtime back.
+    @Test func theRuleFailsClosedForOlderRuntimesOnly() {
+        #expect(SimulatorRuntime.isHeldByAppleDownload(kind: "Cryptex Disk Image", build: nil, downloadBuilds: []))
+        #expect(SimulatorRuntime.isHeldByAppleDownload(kind: "", build: "22E238", downloadBuilds: ["22E238"]))
+        #expect(!SimulatorRuntime.isHeldByAppleDownload(kind: "Cryptex Disk Image", build: "21A328", downloadBuilds: ["22E238"]))
+        #expect(!SimulatorRuntime.isHeldByAppleDownload(kind: "Patchable Cryptex Disk Image", build: nil, downloadBuilds: nil))
+    }
+
     /// A newer runtime's image is the download itself, and Apple removes both.
     @Test func newerRuntimeWithAnAppleDownloadIsStillOffered() {
         let list = parsed(downloadBuilds: ["22E238", "23D8133", "23F77"])

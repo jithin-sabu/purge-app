@@ -1376,3 +1376,4 @@
 
 /* Simulator runtime download macOS kept after a removal (#165) */
 "macOS kept the %@ download (%@), so that space is still in use." = "macOS 保留了 %1$@ 的下载文件（%2$@），这部分空间仍被占用。";
+"macOS kept the %@ download, so that space is still in use." = "macOS 保留了 %@ 的下载文件，这部分空间仍被占用。";
