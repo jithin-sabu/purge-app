@@ -1,12 +1,12 @@
 # Purge design system
 
-Every colour, button, font and radius in Purge comes from three files:
+Every colour, button, font, radius and gap in Purge comes from three files:
 
 - `purge/Theme/AppColors.swift`: colours
 - `purge/Views/AppStyle.swift`: type scale, radii, spacing, row metrics
 - `purge/Views/PurgeButtonStyle.swift`: the one button style
 
-`node scripts/lint-design-tokens.mjs` (also `npm run lint:design`, and a CI step) fails when a view uses a raw colour, a SwiftUI grey like `.secondary`, a point size or text style on text, a literal corner radius, a hex colour outside the theme file, or a removed button style. Add `design-lint: allow` to a line only when there is a real reason, and say why in a comment.
+`node scripts/lint-design-tokens.mjs` (also `npm run lint:design`, and a CI step) fails when a view uses a raw colour, a SwiftUI grey like `.secondary`, a point size or text style on text, a literal corner radius, a raw gap, a hex colour outside the theme file, or a removed button style. A raw gap is a number in `.padding`, `EdgeInsets`, a stack's `spacing:`, `Spacer(minLength:)`, or a frame on `Spacer()` or `Color.clear`. A radius or gap kept in a named constant counts too, so `let cornerRadius: CGFloat = 6` and `let rowPadding: CGFloat = 10` both fail. A 0 passes, and so does a number that scales a token, like `AppStyle.Spacing.xxxSmall / 2`. Add `design-lint: allow` to a line only when there is a real reason, and say why in a comment. Page geometry that is not a gap on the scale, like the onboarding margins or the clearance under the traffic lights, stays in a named layout constant with an allow comment.
 
 ## Colour
 
@@ -107,7 +107,7 @@ mark. The default tile is 28pt. Use this shape for fills, rims, image clipping,
 and the dashed Free outline so every tile shares the same corners. App artwork
 is scaled to fill the tile before clipping its transparent outer padding.
 
-Spacing: `xxSmall` 4, `xSmall` 8, `small` 12, `medium` 16, `large` 24, `xLarge` 32.
+Spacing: `xxxSmall` 2, `xxSmall` 4, `xxSmallPlus` 6, `xSmall` 8, `small` 12, `medium` 16, `large` 24, `xLarge` 32. A title sits `xxxSmall` above its subtitle, and an icon sits `xxSmallPlus` from its label.
 
 App Caches, Dev Tools and Large Files share `ScanListRowInsets.standard`: `xxSmall`
 above and below each card and `medium` on either side, inside the native List's
