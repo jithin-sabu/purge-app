@@ -5,7 +5,7 @@ struct AppBrandMark: View {
     var iconSize: CGFloat = 22
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             Image(nsImage: NSApplication.shared.applicationIconImage)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -23,18 +23,18 @@ struct AppBrandMark: View {
 /// Sidebar column insets — brand mark and nav selection share the same leading edge.
 enum SidebarLayout {
     static let width: CGFloat = 240
-    static let navRowInnerPadding: CGFloat = 8
-    static let selectionCornerRadius: CGFloat = 8
+    static let navRowInnerPadding: CGFloat = AppStyle.Spacing.xSmall
+    static let selectionCornerRadius: CGFloat = AppStyle.Radius.md
     /// Clears unified title-bar traffic lights with a little breathing room below.
-    static let topContentInset: CGFloat = 42
+    static let topContentInset: CGFloat = 42 // design-lint: allow, page geometry under the traffic lights
 }
 
 /// Shared horizontal inset for Settings-style detail pages (App Caches, Dev Tools, Settings).
 enum AppDetailPageLayout {
-    static let horizontalInset: CGFloat = 24
+    static let horizontalInset: CGFloat = AppStyle.Spacing.large
     /// Space below the title bar before page content begins.
-    static let topContentInset: CGFloat = 20
-    static let verticalPadding: CGFloat = 12
+    static let topContentInset: CGFloat = 20 // design-lint: allow, page geometry every page header hangs from
+    static let verticalPadding: CGFloat = AppStyle.Spacing.small
     /// Remaining clear band below a `safeAreaBar` page header before content begins.
     /// `AppSectionPageHeader` already pads `Spacing.small` under the title, so this tops
     /// that up to `topContentInset` — the gap under the title then matches the one above
@@ -43,7 +43,7 @@ enum AppDetailPageLayout {
     /// it onto the scroll content instead.
     static let clearanceBelowHeader: CGFloat = topContentInset - AppStyle.Spacing.small
     /// Clear band under the Select All row so the first card sits a small gap below it.
-    static let scanTabSelectAllBottomPadding: CGFloat = 14
+    static let scanTabSelectAllBottomPadding: CGFloat = AppStyle.Spacing.small
     /// Approximate height of `AppSectionPageHeader` (top inset + title + bottom padding).
     static let pageTitleChromeHeight: CGFloat = topContentInset + 24 + AppStyle.Spacing.small
     /// Extra line when a subtitle is shown (spacing + subheadline).
@@ -142,7 +142,7 @@ struct AppSectionPageHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: AppStyle.Spacing.medium) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
                 AnimatedPageTitle(title)
 
                 if let subtitle, !subtitle.isEmpty {
@@ -270,7 +270,7 @@ struct CleaningButtonLabel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             if isCleaning {
                 if reduceMotion {
                     Image(systemName: "clock")
@@ -330,7 +330,7 @@ struct AnimatedDeleteActionLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: systemImage)
                 .accessibilityHidden(true)
 
@@ -556,7 +556,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     }
 
                     if reservesTrashDisclaimerSpace {
-                        HStack(spacing: 5) {
+                        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                             Image(systemName: "trash")
                             Text("Empty your Trash to reclaim this space.")
                         }
@@ -568,7 +568,7 @@ struct SafeCleanupCelebrationOverlay: View {
                     // The helper moved a protected app but could not hand every file
                     // back, so say so plainly rather than implying a spotless Trash.
                     if session.phase == .complete, session.trashOwnershipWarning {
-                        HStack(spacing: 5) {
+                        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                             Image(systemName: "key")
                             Text("Emptying the Trash may ask for your password.")
                         }
@@ -605,8 +605,8 @@ struct SafeCleanupCelebrationOverlay: View {
                 }
                 .opacity(footerVisible ? 1 : 0)
             }
-            .padding(.horizontal, 52)
-            .padding(.vertical, 44)
+            .padding(.horizontal, 52) // design-lint: allow, sheet margins
+            .padding(.vertical, 44) // design-lint: allow, sheet margins
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(sheetBackground)
             .accessibilityElement(children: .contain)
@@ -1311,7 +1311,7 @@ private struct SupportNudgeCard: View {
     let onOpenLink: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: "rosette")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.textSecondary)
@@ -1330,7 +1330,7 @@ private struct SupportNudgeCard: View {
                 Text("Thanks, that means a lot.")
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textSecondary)
-                    .padding(.trailing, 6)
+                    .padding(.trailing, AppStyle.Spacing.xxSmallPlus)
             } else {
                 Button(action: onOpenLink) {
                     Label("Buy me a coffee", systemImage: "cup.and.saucer")
@@ -1339,9 +1339,9 @@ private struct SupportNudgeCard: View {
             }
         }
         .lineLimit(1)
-        .padding(.leading, 14)
-        .padding(.trailing, 6)
-        .padding(.vertical, 6)
+        .padding(.leading, AppStyle.Spacing.medium)
+        .padding(.trailing, AppStyle.Spacing.xxSmallPlus)
+        .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
         .background(Capsule(style: .continuous).fill(AppColors.surfaceCard))
         .overlay {
             Capsule(style: .continuous)
@@ -1399,7 +1399,7 @@ private struct CompletionTimeTagline: View {
     }
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             if isFastClean {
                 CompletionBoltAnchor(flashToken: boltFlashToken)
             } else {
@@ -1750,8 +1750,8 @@ private struct NeedsAdministratorPanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 18) {
-            VStack(spacing: 8) {
+        VStack(spacing: AppStyle.Spacing.medium) {
+            VStack(spacing: AppStyle.Spacing.xSmall) {
                 Image(systemName: "lock.shield")
                     .font(.system(size: 30, weight: .regular))
                     .foregroundStyle(AppColors.textSecondary)
@@ -1774,12 +1774,12 @@ private struct NeedsAdministratorPanel: View {
                     .foregroundStyle(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 1)
+                    .padding(.top, AppStyle.Spacing.xxxSmall)
             }
 
             statusLine
 
-            VStack(spacing: 12) {
+            VStack(spacing: AppStyle.Spacing.small) {
                 Button(action: onPrimaryAction) {
                     if isWorking {
                         ProgressView()
@@ -1802,10 +1802,10 @@ private struct NeedsAdministratorPanel: View {
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textTertiary)
                     .multilineTextAlignment(.center)
-                    .padding(.top, 2)
+                    .padding(.top, AppStyle.Spacing.xxxSmall)
             }
         }
-        .padding(24)
+        .padding(AppStyle.Spacing.large)
         .frame(maxWidth: 400)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.xl, style: .continuous)
@@ -2002,7 +2002,7 @@ private struct CompletionCheckmarkBadge: View {
                 .stroke(color.opacity(0.92), lineWidth: 5)
 
             AnimatedCompletionCheckmark(progress: progress, color: color)
-                .padding(22)
+                .padding(22) // design-lint: allow, sizes the checkmark inside its ring
         }
     }
 }
@@ -2086,8 +2086,8 @@ struct AppBadge: View {
         Text(LocalizedStringKey(text))
             .font(AppStyle.Typography.metadataEmphasis)
             .foregroundStyle(foregroundColor)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .padding(.horizontal, AppStyle.Spacing.xxSmallPlus)
+            .padding(.vertical, AppStyle.Spacing.xxxSmall)
             .background(backgroundColor, in: RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
@@ -2220,7 +2220,7 @@ struct AppNavRow: View {
             }
             .foregroundStyle(isSelected ? AppColors.textPrimary : AppColors.textSecondary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
-            .padding(.vertical, 6)
+            .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
             .background(navBackground, in: RoundedRectangle(cornerRadius: SidebarLayout.selectionCornerRadius, style: .continuous))
             .contentShape(Rectangle())
         }

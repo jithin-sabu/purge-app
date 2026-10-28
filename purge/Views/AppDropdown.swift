@@ -68,7 +68,7 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
     }
 
     private var optionList: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
             ForEach(options, id: \.self) { option in
                 AppDropdownRow(
                     label: optionLabel(option),
@@ -81,7 +81,7 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
                 }
             }
         }
-        .padding(6)
+        .padding(AppStyle.Spacing.xxSmallPlus)
         .frame(width: popupWidth)
         .background(AppColors.surfaceRaised)
         .overlay(
@@ -102,7 +102,7 @@ private struct AppDropdownRow: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 6) {
+            HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                 // A label that is all figure, such as "5 MB", is SF Rounded
                 // alone, whose line is shorter than Onest's. The hidden Onest
                 // copy keeps every row the same height.
@@ -123,8 +123,8 @@ private struct AppDropdownRow: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .opacity(isSelected ? 1 : 0)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.horizontal, AppStyle.Spacing.xSmall)
+            .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 isHovered && isEnabled ? AppColors.fillSecondary : .clear,
@@ -165,7 +165,7 @@ private final class AppDropdownPanelController {
     private var observers: [NSObjectProtocol] = []
 
     /// Gap between the button's bottom edge and the list.
-    private let verticalGap: CGFloat = 4
+    private let verticalGap: CGFloat = AppStyle.Spacing.xxSmall
 
     var isVisible: Bool { panel != nil }
 

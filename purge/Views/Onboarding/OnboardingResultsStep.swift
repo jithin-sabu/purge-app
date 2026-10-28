@@ -172,7 +172,7 @@ struct OnboardingResultsStep: View {
 
   var body: some View {
     VStack(alignment: .center, spacing: AppStyle.Spacing.large) {
-      VStack(alignment: .center, spacing: 32) {
+      VStack(alignment: .center, spacing: AppStyle.Spacing.xLarge) {
         VStack(alignment: .center, spacing: 0) {
           Text(formatBytes(totalBytes))
             .font(AppStyle.Typography.display.numbers)

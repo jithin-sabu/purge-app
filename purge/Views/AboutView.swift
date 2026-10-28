@@ -35,7 +35,7 @@ struct AboutView: View {
     }
 
     private var aboutScrollContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.large) {
             appIdentitySection
             lifetimeStatsSection
             actionCardSection
@@ -59,7 +59,7 @@ struct AboutView: View {
     }
 
     private var appIdentitySection: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: AppStyle.Spacing.small) {
             Image(nsImage: NSApplication.shared.applicationIconImage)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
@@ -98,7 +98,7 @@ struct AboutView: View {
                     }
                 }
             }
-            .padding(.top, 6)
+            .padding(.top, AppStyle.Spacing.xxSmallPlus)
         }
         .frame(maxWidth: .infinity)
     }
@@ -120,7 +120,7 @@ struct AboutView: View {
 
     private var lifetimeStatsSection: some View {
         aboutCard {
-            VStack(spacing: 8) {
+            VStack(spacing: AppStyle.Spacing.xSmall) {
                 if showsLifetimeStatsPlaceholder {
                     lifetimeStatsPlaceholder
                 } else {
@@ -128,8 +128,8 @@ struct AboutView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 18)
+            .padding(.horizontal, AppStyle.Spacing.medium)
+            .padding(.vertical, AppStyle.Spacing.medium)
         }
     }
 
@@ -138,7 +138,7 @@ struct AboutView: View {
     }
 
     private var lifetimeStatsPlaceholder: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: "externaldrive.badge.minus")
                 .font(.system(size: 28, weight: .medium))
                 .foregroundStyle(AppColors.textTertiary)
@@ -156,11 +156,11 @@ struct AboutView: View {
                 .foregroundStyle(AppColors.textTertiary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, AppStyle.Spacing.xxSmall)
     }
 
     private var lifetimeStatsContent: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: AppStyle.Spacing.xSmall) {
             Text("Lifetime moved to trash")
                 .font(AppStyle.Typography.metadata.weight(.semibold))
                 .foregroundStyle(AppColors.textSecondary)
@@ -176,7 +176,7 @@ struct AboutView: View {
 
             if let comparisonItem = LifetimeSizeComparison.item(for: store.totalMovedToTrashBytes) {
                 LifetimeSizeComparisonChip(item: comparisonItem)
-                    .padding(.top, 4)
+                    .padding(.top, AppStyle.Spacing.xxSmall)
             }
         }
     }
@@ -223,8 +223,8 @@ struct AboutView: View {
     }
 
     private var footerSection: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 4) {
+        VStack(spacing: AppStyle.Spacing.xxSmallPlus) {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
                 Text("Made with")
                     .foregroundStyle(AppColors.textSecondary)
                 Image(systemName: "heart.fill")
@@ -247,8 +247,8 @@ struct AboutView: View {
                 .foregroundStyle(AppColors.textTertiary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 24)
-        .padding(.bottom, 8)
+        .padding(.top, AppStyle.Spacing.large)
+        .padding(.bottom, AppStyle.Spacing.xSmall)
     }
 
     private var footerVersionText: String {
@@ -330,7 +330,7 @@ private struct LifetimeSizeComparisonChip: View {
     let item: OnboardingSizeComparisonItem
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
             Image(systemName: item.symbol)
                 .imageScale(.small)
                 .accessibilityHidden(true)
@@ -340,8 +340,8 @@ private struct LifetimeSizeComparisonChip: View {
         }
         .font(AppStyle.Typography.rowTitle)
         .foregroundStyle(AppColors.textSecondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, AppStyle.Spacing.small)
+        .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
         .background {
             Capsule(style: .continuous)
                 .fill(AppColors.fillSecondary)
@@ -356,13 +356,13 @@ private struct LifetimeSizeComparisonChip: View {
 
 private struct AboutAllowlistSummaryBlock: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             Text("what purge can clean")
                 .font(AppStyle.Typography.metadata.weight(.semibold))
                 .foregroundStyle(AppColors.textSecondary)
                 .textCase(.uppercase)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
                 ForEach(SafetyAllowlistSummary.allowedCategories) { category in
                     AboutAllowlistCategoryRow(category: category)
                 }
@@ -374,8 +374,8 @@ private struct AboutAllowlistSummaryBlock: View {
                 .foregroundStyle(AppColors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 18)
+        .padding(.horizontal, AppStyle.Spacing.medium)
+        .padding(.vertical, AppStyle.Spacing.medium)
     }
 }
 
@@ -383,13 +383,13 @@ private struct AboutAllowlistCategoryRow: View {
     let category: SafetyAllowlistSummary.Category
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: AppStyle.Spacing.small) {
             Image(systemName: category.icon)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AppColors.textSecondary)
                 .frame(width: 16, height: 16, alignment: .center)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(category.title)
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
@@ -415,7 +415,7 @@ private struct AboutActionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: AppStyle.Spacing.small) {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AppColors.textSecondary)
@@ -431,7 +431,7 @@ private struct AboutActionRow: View {
                     .foregroundStyle(AppColors.textTertiary)
                     .frame(width: 12)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, AppStyle.Spacing.medium)
             .frame(height: AppStyle.Row.compactHeight)
             .contentShape(Rectangle())
             // The plain style doesn't dim a disabled row on its own.

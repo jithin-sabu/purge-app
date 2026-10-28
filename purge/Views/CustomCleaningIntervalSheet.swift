@@ -58,7 +58,7 @@ struct CustomCleaningIntervalSheet: View {
                     .multilineTextAlignment(.center)
                     .focused($amountFieldFocused)
                     .frame(width: 34)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, AppStyle.Spacing.xSmall)
                     .frame(height: AppStyle.Control.height)
                     .background(
                         AppColors.surfaceRaised,

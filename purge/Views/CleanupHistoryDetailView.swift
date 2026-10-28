@@ -10,7 +10,7 @@ struct CleanupHistoryDetailView: View {
             sheetHeader
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
                     summarySection
                     switch entry.kind {
                     case .appleIntelligenceModels?:
@@ -37,7 +37,7 @@ struct CleanupHistoryDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-                .padding(.top, 16)
+                .padding(.top, AppStyle.Spacing.medium)
                 .padding(.bottom, AppDetailPageLayout.verticalPadding)
             }
             .scrollContentBackground(.hidden)
@@ -47,11 +47,11 @@ struct CleanupHistoryDetailView: View {
     }
 
     private var sheetHeader: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             Text(CleanupHistorySummaryRow.title(for: entry))
                 .font(AppStyle.Typography.headline)
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             Button("Done") {
                 dismiss()
@@ -59,20 +59,20 @@ struct CleanupHistoryDetailView: View {
             .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, AppDetailPageLayout.horizontalInset)
-        .padding(.top, 20)
-        .padding(.bottom, 12)
+        .padding(.top, AppStyle.Spacing.large)
+        .padding(.bottom, AppStyle.Spacing.small)
     }
 
     private var summarySection: some View {
         historySectionCard {
             CleanupHistorySummaryRow(entry: entry)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, AppStyle.Spacing.medium)
+                .padding(.vertical, AppStyle.Spacing.small)
         }
     }
 
     private func itemsSection(_ title: String, items: [CleanupHistoryDeletedItemDTO]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             sectionLabel(title)
 
             historySectionCard {
@@ -81,15 +81,15 @@ struct CleanupHistoryDetailView: View {
                         InsetCardDivider()
                     }
                     deletedItemRow(item)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, AppStyle.Spacing.medium)
+                        .padding(.vertical, AppStyle.Spacing.small)
                 }
             }
         }
     }
 
     private var skippedSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             sectionLabel(String(localized: "Skipped"))
 
             historySectionCard {
@@ -98,8 +98,8 @@ struct CleanupHistoryDetailView: View {
                         InsetCardDivider()
                     }
                     skippedItemRow(item)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, AppStyle.Spacing.medium)
+                        .padding(.vertical, AppStyle.Spacing.small)
                 }
             }
         }
@@ -117,8 +117,8 @@ struct CleanupHistoryDetailView: View {
         let isModelSet = entry.kind == .appleIntelligenceModels
         let fileURL = URL(fileURLWithPath: item.path).standardizedFileURL
 
-        return HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+        return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(isModelSet ? item.path : fileURL.lastPathComponent)
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
@@ -132,7 +132,7 @@ struct CleanupHistoryDetailView: View {
                 }
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppStyle.Spacing.small)
 
             if item.sizeBytes > 0 {
                 Text(formatBytes(item.sizeBytes))
@@ -145,8 +145,8 @@ struct CleanupHistoryDetailView: View {
     private func skippedItemRow(_ item: CleanupHistorySkippedItemDTO) -> some View {
         let fileURL = URL(fileURLWithPath: item.path).standardizedFileURL
 
-        return HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+        return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(fileURL.lastPathComponent)
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)

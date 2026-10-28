@@ -322,7 +322,7 @@ struct ContentView: View {
                     .padding(.top, SidebarLayout.topContentInset)
                     .padding(.bottom, AppStyle.Spacing.large)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                     navRow(.overview)
                     sidebarSectionLabel("Clean")
                     ForEach(PurgeStore.Tab.cleanTabs) { navRow($0) }
@@ -335,7 +335,7 @@ struct ContentView: View {
 
             Spacer(minLength: AppStyle.Spacing.medium)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 ForEach(PurgeStore.Tab.utilityTabs) { navRow($0) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -371,7 +371,7 @@ struct ContentView: View {
             .foregroundStyle(AppColors.textTertiary)
             .padding(.horizontal, SidebarLayout.navRowInnerPadding)
             .padding(.top, AppStyle.Spacing.small)
-            .padding(.bottom, 2)
+            .padding(.bottom, AppStyle.Spacing.xxxSmall)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -1008,7 +1008,7 @@ struct SidebarSummaryView: View {
         }
         .font(Self.font)
         .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.xSmall + 2)
+        .padding(.vertical, AppStyle.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
@@ -1022,7 +1022,7 @@ struct SidebarSummaryView: View {
         switch trashStore.access {
         case .measuring:
             // The spinner holds the number's place, so the sentence does not jump.
-            HStack(spacing: 4) {
+            HStack(spacing: AppStyle.Spacing.xxSmall) {
                 trashLoadingIndicator
                 Text("in Trash").foregroundStyle(AppColors.textSecondary)
             }

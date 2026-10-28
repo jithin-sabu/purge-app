@@ -150,7 +150,7 @@ struct OverviewEverythingElseRow: View {
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
             OverviewIconTile(symbol: "ellipsis", color: AppColors.Chart.everythingElse)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text("Everything else")
                     .font(AppStyle.Typography.headline)
                 Text(detail)
@@ -170,7 +170,7 @@ struct OverviewEverythingElseRow: View {
                 .frame(minWidth: 64, alignment: .trailing)
         }
         .padding(.horizontal, AppStyle.Row.scanCardHorizontalPadding)
-        .padding(.vertical, 11)
+        .padding(.vertical, AppStyle.Spacing.small)
         .overviewLinked(linkedState)
         .background(isHovering || linkedState == .emphasized ? AppColors.fillSecondary.opacity(0.5) : .clear)
         .contentShape(Rectangle())
@@ -427,7 +427,7 @@ private struct EverythingElseMapLayout: Equatable {
     /// its card, so every gap on the map is the same two points: between tiles
     /// of one group, between groups, and at the edge. Groups get no inset of
     /// their own, which is what made the gap between groups wider before.
-    static let tileGap: CGFloat = 1
+    static let tileGap: CGFloat = AppStyle.Spacing.xxxSmall / 2
     /// The smallest tile that can carry a name. A folder that would be drawn
     /// smaller joins its group's "smaller folders" tile instead. It is measured
     /// in points, so a bigger window shows more folders on their own.
@@ -564,7 +564,7 @@ private struct EverythingElseNestedMap: View {
     /// A tile this tall but too short for the size still shows its name.
     private static let nameOnlyHeight: CGFloat = 18
     /// The label's distance from the tile's left and right edges.
-    private static let labelInset: CGFloat = 6
+    private static let labelInset: CGFloat = AppStyle.Spacing.xxSmallPlus
     private static let settle = EverythingElseMotion.curve
 
     private var isComplete: Bool { breakdown?.isComplete == true }
@@ -838,7 +838,7 @@ private struct EverythingElseNestedMap: View {
                     // the width it is animating through, so it never re-wraps
                     // mid-move: it rides the tile's corner and is clipped until
                     // the tile has grown to fit it.
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                         Text(EverythingElseMapLabel.title(item))
                             .font(AppStyle.Typography.metadataEmphasis)
                             .lineLimit(titleLines)
@@ -854,7 +854,7 @@ private struct EverythingElseNestedMap: View {
                     .frame(width: max(0, tile.rect.width - 2 * Self.labelInset), alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Self.labelInset)
-                    .padding(.vertical, showsSize ? 5 : 2)
+                    .padding(.vertical, showsSize ? AppStyle.Spacing.xxSmallPlus : AppStyle.Spacing.xxxSmall)
                 }
             }
             .overlay {
@@ -904,7 +904,7 @@ private struct EverythingElseNestedMap: View {
            let tile = layout.tiles.first(where: { $0.id == id }),
            !(tile.rect.width >= Self.labelWidth && tile.rect.height >= Self.labelHeight) {
             let item = tile.item
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(EverythingElseMapLabel.title(item))
                     .font(AppStyle.Typography.headline)
                     .lineLimit(1)
@@ -915,7 +915,7 @@ private struct EverythingElseNestedMap: View {
                     .lineLimit(1)
             }
             .padding(.horizontal, AppStyle.Spacing.xSmall)
-            .padding(.vertical, 6)
+            .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
             .background {
                 RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
                     .fill(AppColors.surfaceRaised)
@@ -940,7 +940,7 @@ private struct EverythingElseNestedMap: View {
     /// the map: it slides left at the right edge and drops below the pointer
     /// at the top edge.
     private static func labelPosition(beside point: CGPoint, labelSize: CGSize, in size: CGSize) -> CGPoint {
-        let gap: CGFloat = 12
+        let gap: CGFloat = AppStyle.Spacing.small
         let edge: CGFloat = 2
         let halfWidth = labelSize.width / 2
         let halfHeight = labelSize.height / 2
@@ -1039,7 +1039,7 @@ private struct EverythingElseGlass: View {
     }
 
     private var textColumn: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
             Text(title)
                 .font(AppStyle.Typography.headline)
                 .contentTransition(reduceMotion ? .identity : .numericText())
@@ -1431,7 +1431,7 @@ private struct EverythingElseDetail: View {
                         .buttonStyle(.purge(.quiet, size: .small, width: .square))
                         .help("Show in Finder")
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, AppStyle.Spacing.xxxSmall)
                     .help(displayDirectoryPath(for: folder.url))
                 }
                 if count > listed.count {

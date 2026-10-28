@@ -32,7 +32,7 @@ struct DeletedAppsWatcherNoticeCard: View {
     var body: some View {
         if health.needsAttention, let message = health.shortMessage, let fixTitle = health.fixTitle {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmallPlus) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppColors.statusCheckText)

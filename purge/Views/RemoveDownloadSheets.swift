@@ -78,7 +78,7 @@ struct RemoveDownloadConfirmSheet: View {
                         )
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 180)
 
@@ -187,7 +187,7 @@ struct RemoveDownloadResultSheet: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AppStyle.Spacing.xxxSmall)
             }
             .frame(minHeight: 180)
 
@@ -229,7 +229,7 @@ private struct ICloudOnlyNote: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: AppStyle.Spacing.xSmall) {
             Image(systemName: "info.circle")
                 .foregroundStyle(AppColors.textSecondary)
                 .accessibilityHidden(true)
@@ -240,7 +240,7 @@ private struct ICloudOnlyNote: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(10)
+        .padding(AppStyle.Spacing.small)
         .background(
             RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
                 .fill(AppColors.fillSecondary)
@@ -265,14 +265,14 @@ private struct RemoveDownloadFileCard: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 Text(name)
                     .font(AppStyle.Typography.rowTitle)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                HStack(spacing: 6) {
+                HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
                     Text(location)
                         .font(AppStyle.Typography.metadata)
                         .foregroundStyle(AppColors.textSecondary)
