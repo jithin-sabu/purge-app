@@ -11,9 +11,18 @@ private final class FakeDu: @unchecked Sendable {
     private var _passes = 0
     private var _bytes: Int64 = 1000
     private let delay: TimeInterval
+    /// With `holdsFirstPass`, the first pass waits here once it has read the size,
+    /// until `releaseFirstPass()`.
+    private let firstPassGate: DispatchSemaphore?
 
-    init(delay: TimeInterval) {
+    init(delay: TimeInterval, holdsFirstPass: Bool = false) {
         self.delay = delay
+        firstPassGate = holdsFirstPass ? DispatchSemaphore(value: 0) : nil
+    }
+
+    /// Safe to call more than once, and before the first pass has started.
+    func releaseFirstPass() {
+        firstPassGate?.signal()
     }
 
     var maxActive: Int { lock.withLock { _maxActive } }
@@ -24,11 +33,14 @@ private final class FakeDu: @unchecked Sendable {
     }
 
     func measure(_ urls: [URL]) -> [String: Int64] {
-        let bytes: Int64 = lock.withLock {
+        let (bytes, pass): (Int64, Int) = lock.withLock {
             _passes += 1
             active += 1
             _maxActive = max(_maxActive, active)
-            return _bytes
+            return (_bytes, _passes)
+        }
+        if pass == 1 {
+            firstPassGate?.wait()
         }
         Thread.sleep(forTimeInterval: delay)
         lock.withLock { active -= 1 }
@@ -42,13 +54,20 @@ private final class FakeDu: @unchecked Sendable {
 @Suite("Trash size passes")
 @MainActor
 struct TrashPassCoalescingTests {
-    /// Up to ten seconds: the first pass starts from a `Task` on the main actor,
-    /// and a shared CI runner under a full test run can take more than two
-    /// seconds to get to it (#174 CI).
-    private func waitUntil(_ condition: () -> Bool) async {
-        for _ in 0..<1000 where !condition() {
-            try? await Task.sleep(for: .milliseconds(10))
+    /// No deadline of its own. A pass is sized in a utility-priority task, and in a
+    /// full parallel test run on a shared CI runner that task can wait longer than
+    /// any fixed deadline. Two seconds failed in #174's CI, and ten seconds failed
+    /// on main afterwards. The test's time limit stops a real hang, and cancelling
+    /// ends the wait.
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        while !condition() {
+            try await Task.sleep(for: .milliseconds(10))
         }
+    }
+
+    /// The 30-second poll is off, so every pass a test counts is one it asked for.
+    private func makeStore(_ urls: [URL], _ du: FakeDu) -> TrashStore {
+        TrashStore(trashURLs: urls, measureSizes: { du.measure($0) }, pollsWhileActive: false)
     }
 
     private func makeTrash() throws -> [URL] {
@@ -66,7 +85,7 @@ struct TrashPassCoalescingTests {
         let urls = try makeTrash()
         defer { try? FileManager.default.removeItem(at: urls[0].deletingLastPathComponent()) }
         let du = FakeDu(delay: 0.15)
-        let store = TrashStore(trashURLs: urls, measureSizes: { du.measure($0) })
+        let store = makeStore(urls, du)
 
         await withTaskGroup(of: Void.self) { group in
             for i in 0..<5 {
@@ -83,16 +102,22 @@ struct TrashPassCoalescingTests {
 
     /// A call made while a pass runs waits for a pass that started after it, so it
     /// sees what the Trash held when it asked, not before.
-    @Test func aCallDuringAPassGetsALaterPass() async throws {
+    @Test(.timeLimit(.minutes(2)))
+    func aCallDuringAPassGetsALaterPass() async throws {
         let urls = try makeTrash()
         defer { try? FileManager.default.removeItem(at: urls[0].deletingLastPathComponent()) }
-        let du = FakeDu(delay: 0.2)
-        let store = TrashStore(trashURLs: urls, measureSizes: { du.measure($0) })
+        let du = FakeDu(delay: 0.2, holdsFirstPass: true)
+        // A pass held forever would keep a pool thread, so let it go on every way out.
+        defer { du.releaseFirstPass() }
+        let store = makeStore(urls, du)
 
-        // Once the `init` pass has started with the old size, change it.
-        await waitUntil { du.passes == 1 }
-        #expect(du.passes == 1)
+        // The `init` pass has read the old size and is held. Change the size.
+        try await waitUntil { du.passes == 1 }
         du.setBytes(4000)
+        // The held pass can finish now, but it reports back on the main actor, which
+        // this test keeps until `refresh` has asked. So the call always lands while
+        // the first pass runs, however long that pass took to start.
+        du.releaseFirstPass()
         await store.refresh(trigger: "after-change")
 
         #expect(store.trashBytes == 4000)
@@ -104,7 +129,7 @@ struct TrashPassCoalescingTests {
         let urls = try makeTrash()
         defer { try? FileManager.default.removeItem(at: urls[0].deletingLastPathComponent()) }
         let du = FakeDu(delay: 0.01)
-        let store = TrashStore(trashURLs: urls, measureSizes: { du.measure($0) })
+        let store = makeStore(urls, du)
 
         await store.refresh(trigger: "first")
         du.setBytes(2000)
