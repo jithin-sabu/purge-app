@@ -142,6 +142,23 @@ struct PrivilegedHelperPathPolicyTests {
             #expect(helper == app, "\(path)")
         }
     }
+
+    /// The helper keeps its own copy of the leftover folders, since it does not
+    /// compile the uninstaller. A folder only the uninstaller has is refused at the
+    /// root move; one only the helper has lets root move more than the app offers.
+    @Test("Helper leftover folders match the uninstaller's")
+    func helperLeftoverRootsMatchUninstaller() {
+        let helper = PurgeHelperConstants.leftoverRoots(homeDirectory: home).map(\.standardizedFileURL.path)
+        let app = AppUninstallScanPolicy.leftoverSearchRoots(home: home).map(\.url.standardizedFileURL.path)
+        #expect(Set(helper) == Set(app))
+        #expect(helper.count == Set(helper).count)
+
+        // And through the check the helper runs: one entry directly inside each.
+        for root in app {
+            let entry = URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent("com.vendor.leftover")
+            #expect(isAllowed(entry.path), "\(root)")
+        }
+    }
 }
 
 /// A leftover keyed by bundle id belongs to every installed app that carries that

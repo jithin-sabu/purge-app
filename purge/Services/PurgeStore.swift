@@ -4297,10 +4297,17 @@ final class PurgeStore: ObservableObject {
 
     @discardableResult
     func performScheduledClean() async -> ScheduledCleaningSummary {
+        await performScheduledClean(preferences: .shared)
+    }
+
+    /// Reads whether scheduled cleaning is on from `preferences`. Tests pass ones
+    /// kept in throwaway defaults, never the user's own.
+    @discardableResult
+    func performScheduledClean(preferences: ScheduledCleaningPreferenceStore) async -> ScheduledCleaningSummary {
         // `performSafeCleanup` reruns the developer scan with the access Purge has
         // now, then checks every candidate with `ProtectedLocations.isReadable`
         // before it moves, so a revoked grant never cleans a locked folder.
-        guard ScheduledCleaningPreferenceStore.shared.isEnabled else {
+        guard preferences.isEnabled else {
             return ScheduledCleaningSummary(deletedCount: 0, bytesMovedToTrash: 0)
         }
         return await performSafeCleanup(

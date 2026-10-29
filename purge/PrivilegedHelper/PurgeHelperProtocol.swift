@@ -65,6 +65,20 @@ enum PurgeHelperConstants {
         "/Library/LaunchAgents"
     ]
 
+    /// Every leftover directory, the user's under `homeDirectory` first. A copy of
+    /// `AppUninstallScanPolicy.leftoverSearchRoots`, which the helper does not
+    /// compile; a test checks the two match (#189).
+    static func leftoverRoots(homeDirectory: URL) -> [URL] {
+        let home = homeDirectory.standardizedFileURL
+        let userRoots = userLeftoverRelativeRoots.map {
+            home.appendingPathComponent($0, isDirectory: true).standardizedFileURL
+        }
+        let machineRoots = systemLeftoverRoots.map {
+            URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL
+        }
+        return userRoots + machineRoots
+    }
+
     /// Returns true only for locations the app-uninstall scanner can produce:
     /// an app bundle in an Applications folder (at any depth, never through
     /// another bundle or package), or one direct child of a known leftover
@@ -76,14 +90,8 @@ enum PurgeHelperConstants {
         guard standardized.path == resolved.path else { return false }
 
         let home = homeDirectory.standardizedFileURL
-        let userRoots = userLeftoverRelativeRoots.map {
-            home.appendingPathComponent($0, isDirectory: true).standardizedFileURL
-        }
-        let machineRoots = systemLeftoverRoots.map {
-            URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL
-        }
         let parent = standardized.deletingLastPathComponent().path
-        if (userRoots + machineRoots).contains(where: { $0.path == parent }) {
+        if leftoverRoots(homeDirectory: homeDirectory).contains(where: { $0.path == parent }) {
             return true
         }
 

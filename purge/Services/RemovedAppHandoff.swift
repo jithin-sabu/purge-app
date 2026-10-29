@@ -120,9 +120,10 @@ nonisolated enum RemovedAppHandoff {
             }
     }
 
-    static func ignore(paths: [String]) {
-        var current = loadIgnored().filter { $0.until > Date() }
-        let until = Date().addingTimeInterval(ignoreGrace)
+    /// `now` is for tests, so they can check an entry runs out after `ignoreGrace`.
+    static func ignore(paths: [String], now: Date = Date()) {
+        var current = loadIgnored().filter { $0.until > now }
+        let until = now.addingTimeInterval(ignoreGrace)
         for path in paths {
             current.removeAll { $0.path == path }
             current.append(Ignored(path: path, until: until))
@@ -130,8 +131,8 @@ nonisolated enum RemovedAppHandoff {
         save(current)
     }
 
-    static func isIgnored(path: String) -> Bool {
-        loadIgnored().contains { $0.path == path && $0.until > Date() }
+    static func isIgnored(path: String, now: Date = Date()) -> Bool {
+        loadIgnored().contains { $0.path == path && $0.until > now }
     }
 
     private static var ignoreFile: URL {

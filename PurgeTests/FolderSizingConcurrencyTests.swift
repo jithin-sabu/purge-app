@@ -129,26 +129,36 @@ struct FolderSizingConcurrencyTests {
         }
     }
 
+    /// Cancels the calling task right after it takes a `du` permit, the one moment a
+    /// cancelled call holds a permit it has to hand back. A task cancelled before it
+    /// starts never takes a permit at all, so it proves nothing about that branch.
+    private static let cancelOnPermit: @Sendable () -> Void = {
+        withUnsafeCurrentTask { $0?.cancel() }
+    }
+
     /// The `du` limiter is process-wide, so a permit abandoned by a cancelled call is lost for
     /// the lifetime of the process — enough cancellations and sizing would wedge permanently.
     /// `directorySizes` bails out on cancellation at two points, one of which happens while
     /// holding a permit, so it has to hand that permit back.
     ///
-    /// Cancelling more times than there are permits and then measuring normally is the check:
-    /// if any path leaked, capacity would be exhausted and the final call would never return.
-    @Test("Cancelled sizing calls do not leak limiter permits")
+    /// Each call is cancelled while it holds a permit, more times than there are permits,
+    /// and then measuring normally is the check. The calls run as child tasks, so a leak
+    /// that leaves one waiting for a permit is cancelled by the time limit and fails the
+    /// test instead of hanging it.
+    @Test("Cancelled sizing calls do not leak limiter permits", .timeLimit(.minutes(1)))
     func cancellationDoesNotLeakLimiterPermits() async throws {
         let (root, paths) = try makeTree(directories: FolderSizing.duChunkSize * 3, bytesEach: 4 * 1024)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        // More iterations than `maxConcurrentDuChunks`.
-        for _ in 0..<14 {
-            let task = Task.detached { _ = FolderSizing.directorySizes(at: paths) }
-            task.cancel()
-            _ = await task.value
+        for attempt in 0..<(FolderSizing.maxConcurrentDuChunks + 4) {
+            async let cancelled = FolderSizing.$afterTakingPermit.withValue(Self.cancelOnPermit) {
+                FolderSizing.directorySizes(at: paths)
+            }
+            // Empty only if the call stopped where it holds a permit, before any `du` ran.
+            let sizes = await cancelled
+            #expect(sizes.isEmpty, "attempt \(attempt) measured \(sizes.count) paths after it was cancelled")
         }
 
-        // Would hang rather than fail if permits had leaked.
         let sizes = FolderSizing.directorySizes(at: paths)
         #expect(sizes.count == paths.count, "measured \(sizes.count) of \(paths.count) after cancellations")
     }
@@ -222,15 +232,18 @@ struct FolderSizingConcurrencyTests {
         }
     }
 
-    @Test("Cancelled chunk sizing calls do not leak limiter permits")
+    /// The same check for `directorySizesForChunk`, which gives its permit back in a `defer`.
+    @Test("Cancelled chunk sizing calls do not leak limiter permits", .timeLimit(.minutes(1)))
     func chunkCancellationDoesNotLeakLimiterPermits() async throws {
         let (root, paths) = try makeTree(directories: FolderSizing.duChunkSize, bytesEach: 4 * 1024)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        for _ in 0..<(FolderSizing.maxConcurrentDuChunks + 4) {
-            let task = Task.detached { _ = FolderSizing.directorySizesForChunk(paths) }
-            task.cancel()
-            _ = await task.value
+        for attempt in 0..<(FolderSizing.maxConcurrentDuChunks + 4) {
+            async let cancelled = FolderSizing.$afterTakingPermit.withValue(Self.cancelOnPermit) {
+                FolderSizing.directorySizesForChunk(paths)
+            }
+            let sizes = await cancelled
+            #expect(sizes.isEmpty, "attempt \(attempt) measured \(sizes.count) paths after it was cancelled")
         }
 
         let sizes = FolderSizing.directorySizes(at: paths)

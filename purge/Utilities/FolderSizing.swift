@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shared folder sizing so scans can call this from background tasks without hopping through `MainActor`.
-enum FolderSizing {
+nonisolated enum FolderSizing {
     nonisolated static let duChunkSize = 64
     /// Process-wide cap on concurrent `du` processes. `CacheScanner.runSizeJobs`
     /// fans out this many Swift tasks, each calling ``directorySizesForChunk``.
@@ -18,6 +18,11 @@ enum FolderSizing {
 
     /// How often a caller queued on `duChunkLimiter` re-checks for cancellation.
     private nonisolated static let limiterPollInterval: DispatchTimeInterval = .milliseconds(100)
+
+    /// Runs right after a call takes a `du` permit. Only tests bind it: they cancel
+    /// the calling task there, the one moment a cancelled call holds a permit it
+    /// has to hand back (#189). Task-local, so it reaches only the task that bound it.
+    @TaskLocal static var afterTakingPermit: (@Sendable () -> Void)? = nil
 
     /// A chunk walking a deep tree can legitimately take minutes, so this is loose. It exists
     /// only so a `du` that never returns cannot wedge the scan permanently.
@@ -41,6 +46,7 @@ enum FolderSizing {
         guard !chunk.isEmpty else { return [:] }
         guard acquireDuPermit() else { return [:] }
         defer { duChunkLimiter.signal() }
+        afterTakingPermit?()
         // Same window `directorySizes` already covers: cancelled between
         // taking a permit and starting work. Skip `du` and let `defer` give
         // the slot back — otherwise a superseded scan still walks for up to
@@ -104,6 +110,7 @@ enum FolderSizing {
             if Task.isCancelled { break }
 
             guard acquireDuPermit() else { break }
+            afterTakingPermit?()
             // Cancelled between acquiring and dispatching: the permit must go back, or a
             // process-wide slot is lost for the lifetime of the app.
             guard !Task.isCancelled else {
