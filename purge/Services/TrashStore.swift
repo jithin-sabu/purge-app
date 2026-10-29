@@ -111,7 +111,8 @@ final class TrashStore: ObservableObject {
 
     init(
         trashURLs: [URL] = TrashStore.trashDirectories(),
-        measureSizes: @escaping @Sendable ([URL]) -> [String: Int64] = { FolderSizing.directorySizes(at: $0) }
+        measureSizes: @escaping @Sendable ([URL]) -> [String: Int64] = { FolderSizing.directorySizes(at: $0) },
+        pollsWhileActive: Bool = true
     ) {
         self.trashURLs = trashURLs
         self.measureSizes = measureSizes
@@ -123,7 +124,12 @@ final class TrashStore: ObservableObject {
         // is right from launch no matter which screen mounts first.
         Task { await refresh(trigger: "init") }
         startWatchingIfNeeded()
-        startPolling()
+        // Tests turn the backstop off, so every pass they count is one they asked for.
+        // The test host's window can be frontmost, and a test held up for 30 seconds
+        // on a busy runner would otherwise get a pass it never asked for.
+        if pollsWhileActive {
+            startPolling()
+        }
     }
 
     /// Every trash directory on this volume, because "the Trash" the user sees in Finder is
