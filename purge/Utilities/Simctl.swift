@@ -45,7 +45,11 @@ nonisolated enum Simctl {
         launcherLock.lock()
         if case .resolved(let cached) = resolution {
             launcherLock.unlock()
-            return cached
+            return stillUsable(
+                cached,
+                developerDirectoryExists: { DeveloperDirectory.exists },
+                isExecutable: { fileManager.isExecutableFile(atPath: $0) }
+            )
         }
         launcherLock.unlock()
 
@@ -80,6 +84,21 @@ nonisolated enum Simctl {
             return .framework
         }
         return nil
+    }
+
+    /// A cached `.xcrun` after the developer directory went away. Purge's own
+    /// uninstaller can trash Xcode while Purge runs, and `xcrun` would then show
+    /// the install prompt for the path left behind. The framework copy stands in,
+    /// as it does at the first resolution; the cache is left alone so a put-back
+    /// Xcode is found again. The developer directory check is a stat once it is
+    /// resolved, so this costs nothing on a Mac that keeps its tools.
+    static func stillUsable(
+        _ cached: Launcher?,
+        developerDirectoryExists: () -> Bool,
+        isExecutable: (_ path: String) -> Bool
+    ) -> Launcher? {
+        guard cached == .xcrun, !developerDirectoryExists() else { return cached }
+        return isExecutable(frameworkPath) ? .framework : nil
     }
 
     /// `false` when nothing CoreSimulator has ever been installed or run for this
