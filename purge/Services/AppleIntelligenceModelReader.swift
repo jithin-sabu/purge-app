@@ -15,6 +15,13 @@ import Foundation
 /// summed figure when the models went (the rest was already counted as
 /// purgeable), so the app shows them as Apple's estimate and records the
 /// measured delta after a removal.
+///
+/// A record can outlive its files. Macs that went through several betas keep
+/// records for model versions macOS has since purged, often under specifiers a
+/// later beta renamed, and their sizes added up to 127 GB where 7.5 GB was on
+/// disk (#305). A record counts only while its asset folder,
+/// `<type folder>/purpose_auto/<assetID>.asset`, exists. macOS refuses to list
+/// these folders but answers for a named path.
 nonisolated enum AppleIntelligenceModelReader {
     static let descriptorsRoot = "/System/Library/AssetsV2/persisted/AutoAssetDescriptors"
     static let assetsRoot = "/System/Library/AssetsV2"
@@ -24,9 +31,21 @@ nonisolated enum AppleIntelligenceModelReader {
         let assetType: String
         let specifier: String
         let version: String
+        /// MobileAsset's id for the asset, which names its folder. Nil unless it
+        /// is 40 hex characters, so a record can't name a path of its own.
+        let assetID: String?
         let bytes: Int64?
-        let isOnFilesystem: Bool
+        /// Nil when a readable descriptor has no such key; the folder decides then.
+        let isOnFilesystem: Bool?
         let isEliminating: Bool
+    }
+
+    /// Whether a record's asset folder is on disk.
+    nonisolated enum AssetState: Equatable, Sendable {
+        case present
+        case missing
+        /// No usable id, or the path couldn't be checked.
+        case unknown
     }
 
     static func read(fileManager: FileManager = .default) -> AppleIntelligenceReading {
@@ -49,17 +68,33 @@ nonisolated enum AppleIntelligenceModelReader {
         return records
     }
 
-    /// Sums only records on the filesystem, newest version of each model.
+    /// Sums only records whose asset folder is on disk, each asset once and the
+    /// newest version of each model. A record that can't be checked makes the
+    /// size unknown and the set present, so a removal is never reported done
+    /// and Download Again never asks for a set on a guess.
     static func measure(_ set: AppleIntelligenceModelSet, records: [Record],
                         fileManager: FileManager = .default, root: String = assetsRoot) -> AppleIntelligenceSetReading {
-        let onDisk = records.filter(\.isOnFilesystem)
+        var onDisk: [Record] = []
+        var counted = Set<String>()
+        var anyUnchecked = false
+        for record in records where record.isOnFilesystem != false {
+            switch assetState(record, root: root) {
+            case .present:
+                if let id = record.assetID, counted.insert(id).inserted { onDisk.append(record) }
+            case .missing:
+                continue
+            case .unknown:
+                anyUnchecked = true
+                onDisk.append(record)
+            }
+        }
         var latest: [String: Record] = [:]
         for record in onDisk {
             if let known = latest[record.specifier], !versionIsOrdered(known.version, before: record.version) { continue }
             latest[record.specifier] = record
         }
         var total: Int64 = 0
-        var allKnown = true
+        var allKnown = !anyUnchecked
         for record in latest.values {
             if let bytes = record.bytes { total += bytes } else { allKnown = false }
         }
@@ -109,14 +144,29 @@ nonisolated enum AppleIntelligenceModelReader {
             descriptor = root
         }
         let bytes = (descriptor["downloadedFilesystemBytes"] as? NSNumber)?.int64Value
+        let assetID = (descriptor["assetID"] as? String).flatMap { id in
+            id.utf8.count == 40 && id.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) || (65...70).contains($0) }
+                ? id : nil
+        }
         return Record(
             assetType: identity.type,
             specifier: identity.specifier,
             version: identity.version,
+            assetID: assetID,
             bytes: bytes,
-            isOnFilesystem: (descriptor["isOnFilesystem"] as? Bool) ?? !descriptor.isEmpty,
+            // A record whose descriptor can't be read says nothing is there.
+            isOnFilesystem: descriptor.isEmpty ? false : descriptor["isOnFilesystem"] as? Bool,
             isEliminating: (descriptor["secureOperationEliminating"] as? Bool) ?? false
         )
+    }
+
+    /// Checks the one named path, as `folderState` does, without listing.
+    static func assetState(_ record: Record, root: String = assetsRoot) -> AssetState {
+        guard let id = record.assetID else { return .unknown }
+        let folder = record.assetType.replacingOccurrences(of: ".", with: "_")
+        var info = stat()
+        if lstat(root + "/" + folder + "/purpose_auto/" + id + ".asset", &info) == 0 { return .present }
+        return errno == ENOENT ? .missing : .unknown
     }
 
     /// Orders versions like `600.0.81600.13.202072,0` numerically, component
