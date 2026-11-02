@@ -268,7 +268,16 @@ actor GitStatusChecker {
 
     /// Returns `.unknown` if Git is unavailable or the repository could make it run
     /// a program; empty porcelain means `.clean`.
-    nonisolated static func invokeGit(repository: URL) -> GitWorktreeStatus {
+    ///
+    /// `/usr/bin/git` is a shim. On a Mac without a developer directory it does not
+    /// fail but asks to install the command line developer tools (#298), so git is
+    /// only run once `DeveloperDirectory` says there is one. That check comes
+    /// first: `repositoryDefinesFilters` runs git too.
+    nonisolated static func invokeGit(
+        repository: URL,
+        developerDirectoryExists: () -> Bool = { DeveloperDirectory.exists }
+    ) -> GitWorktreeStatus {
+        guard developerDirectoryExists() else { return .unknown }
         // Submodule config is not covered by the filter check, so a repository
         // with submodules is not run at all.
         if FileManager.default.fileExists(atPath: repository.appendingPathComponent(".gitmodules").path) {

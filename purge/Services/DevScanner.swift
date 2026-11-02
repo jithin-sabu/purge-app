@@ -239,8 +239,15 @@ nonisolated final class DevScanner {
     /// Every deletable runtime image `simctl` knows about, sized by `simctl` itself.
     /// Needs no Full Disk Access: the images live outside the home folder and the
     /// listing comes from CoreSimulator, not a directory walk. Works without Xcode
-    /// too, through the framework's own `simctl` (see `Simctl`).
-    func discoverSimulatorRuntimes(now: Date = Date()) async -> [SimulatorRuntime] {
+    /// too, through the framework's own `simctl` (see `Simctl`). On a Mac with no
+    /// trace of CoreSimulator it launches nothing: the launch scan runs this on
+    /// every Mac, and a `/usr/bin` shim run there asks to install the developer
+    /// tools (#298).
+    func discoverSimulatorRuntimes(
+        now: Date = Date(),
+        coreSimulatorPresent: Bool = Simctl.coreSimulatorPresent()
+    ) async -> [SimulatorRuntime] {
+        guard coreSimulatorPresent else { return [] }
         guard let listing = await Simctl.runAsync(["runtime", "list", "-j"], timeout: Self.simctlListTimeout),
               listing.succeeded else { return [] }
 
