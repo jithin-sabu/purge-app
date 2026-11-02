@@ -13,6 +13,12 @@ nonisolated struct PrivilegedMoveResult: Sendable {
     /// helper is not set up yet, so a still-present item is a one-time-setup prompt,
     /// not a failure of an escalated attempt.
     var helperAvailable: Bool = true
+    /// Why the helper turned the whole request down, as it said (#299).
+    var refusal: HelperMoveRefusal = .accepted
+    /// For each item in `failed` the helper tried, its errno, or
+    /// `PurgeHelperConstants.outsideAllowedLocationsCode`. An item it never reached,
+    /// because the request was refused, has none.
+    var failureCodes: [URL: Int] = [:]
 }
 
 /// The single entry point the deletion engine uses to escalate a stuck uninstall.

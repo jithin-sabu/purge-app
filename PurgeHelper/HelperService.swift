@@ -37,13 +37,28 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         reply(outcome.moved, outcome.ownershipIncomplete)
     }
 
+    func moveToTrashReportingFailures(
+        paths: [String],
+        withReply reply: @escaping ([String], [String], [String: Int], Int) -> Void
+    ) {
+        let outcome = performMove(paths: paths)
+        reply(outcome.moved, outcome.ownershipIncomplete, outcome.failureCodes, outcome.refusal.rawValue)
+    }
+
     /// The result of a move request: which paths left their source, and which of those
     /// moved items the helper could not fully hand back to the user. An item in
     /// `ownershipIncomplete` is also in `moved` — it is in the Trash, but emptying it
-    /// may prompt for a password.
+    /// may prompt for a password. `refusal` says why the whole request was turned
+    /// down, and `failureCodes` why each tried path stayed (#299).
     private struct MoveOutcome {
         var moved: [String] = []
         var ownershipIncomplete: [String] = []
+        var failureCodes: [String: Int] = [:]
+        var refusal: HelperMoveRefusal = .accepted
+
+        init(refusal: HelperMoveRefusal = .accepted) {
+            self.refusal = refusal
+        }
     }
 
     /// The one privileged operation, shared by both reply shapes. The peer identity
@@ -57,13 +72,13 @@ final class HelperService: NSObject, PurgeHelperProtocol {
 
         guard let connection = NSXPCConnection.current() else {
             Self.log.error("refusing request without a current XPC connection")
-            return MoveOutcome()
+            return MoveOutcome(refusal: .invalidPeer)
         }
         let ownerUID = connection.effectiveUserIdentifier
         let ownerGID = connection.effectiveGroupIdentifier
         guard ownerUID != 0, let homeDirectory = homeDirectory(for: ownerUID) else {
             Self.log.error("refusing request with invalid peer uid \(ownerUID, privacy: .public)")
-            return MoveOutcome()
+            return MoveOutcome(refusal: .invalidPeer)
         }
 
         // The caller being the genuine Purge app is not enough: this helper is shared by
@@ -73,14 +88,14 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         // Purge, and is told to ask an administrator to run the removal.
         guard isAdministrator(uid: ownerUID) else {
             Self.log.error("refusing non-administrator peer uid \(ownerUID, privacy: .public)")
-            return MoveOutcome()
+            return MoveOutcome(refusal: .notAdministrator)
         }
 
         let trashDirectory = homeDirectory.appendingPathComponent(".Trash", isDirectory: true)
         guard let trashFD = HelperDirectory.openWithoutFollowingSymlinks(trashDirectory),
               validatedTrashDirectory(fileDescriptor: trashFD, ownerUID: ownerUID) else {
             Self.log.error("refusing invalid Trash directory \(trashDirectory.path, privacy: .public)")
-            return MoveOutcome()
+            return MoveOutcome(refusal: .invalidTrash)
         }
         defer { close(trashFD) }
 
@@ -99,6 +114,7 @@ final class HelperService: NSObject, PurgeHelperProtocol {
                 installLeftoverRuleHolds: installLeftoverRuleHolds
             ) else {
                 Self.log.error("refusing source outside allowed locations \(source.path, privacy: .public)")
+                outcome.failureCodes[path] = PurgeHelperConstants.outsideAllowedLocationsCode
                 continue
             }
 
@@ -113,6 +129,7 @@ final class HelperService: NSObject, PurgeHelperProtocol {
                 if !result.ownershipComplete { outcome.ownershipIncomplete.append(path) }
             } else {
                 Self.log.error("move failed for \(path, privacy: .public) (errno \(result.failureErrno, privacy: .public))")
+                outcome.failureCodes[path] = Int(result.failureErrno)
             }
         }
         return outcome
