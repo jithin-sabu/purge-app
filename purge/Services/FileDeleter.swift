@@ -764,8 +764,9 @@ nonisolated final class FileDeleter: Sendable {
                 return true
             case .needsFullDiskAccess:
                 return privilegedBundlePaths.contains(key)
-            case .needsAdministrator, .inUse, .systemProtected, .safetySkipped, .keptForOtherApp,
-                 .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing:
+            case .needsAdministrator, .needsAdministratorAccount, .inUse, .systemProtected, .safetySkipped,
+                 .keptForOtherApp, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart,
+                 .simulatorToolsMissing:
                 return false
             }
         }
@@ -786,8 +787,9 @@ nonisolated final class FileDeleter: Sendable {
 
     /// Folds a helper result back into the run. Moved items are credited; an item
     /// the helper may still be finishing counts only if it is gone from disk. A
-    /// candidate still present is a real failure when the helper tried, and one-time
-    /// setup (`.needsAdministrator`) when it isn't on. Other failures pass through.
+    /// candidate still present is a real failure when the helper tried, with the
+    /// reason the helper gave, and one-time setup (`.needsAdministrator`) when it
+    /// isn't on. Other failures pass through.
     private func foldPrivilegedResult(
         _ result: PrivilegedMoveResult,
         candidateIDs: Set<UUID>,
@@ -801,6 +803,20 @@ nonisolated final class FileDeleter: Sendable {
         let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
         let indeterminatePaths = Set(result.indeterminate.map { $0.standardizedFileURL.path })
         let ownershipIncompletePaths = Set(result.ownershipIncomplete.map { $0.standardizedFileURL.path })
+        let failureCodes = Dictionary(
+            result.failureCodes.map { ($0.key.standardizedFileURL.path, $0.value) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        func replacing(_ item: FailedDeletionItem, with reason: CleanFailureReason) -> FailedDeletionItem {
+            FailedDeletionItem(
+                path: item.path,
+                displayName: item.displayName,
+                reason: reason,
+                sizeBytes: item.sizeBytes,
+                route: item.route
+            )
+        }
 
         // Records a moved item: credits its bytes, lists it as deleted, advances
         // progress, and carries forward any "emptying may ask for a password" note.
@@ -826,33 +842,60 @@ nonisolated final class FileDeleter: Sendable {
                 // The helper timed out and may still be finishing. If the source is
                 // already gone, the move did land — credit it rather than leaving a
                 // removal button stuck forever. If it is still on disk, keep the
-                // honest original error and let the uncertainty stand.
+                // honest original error and let the uncertainty stand. An app's
+                // "needs Full Disk Access" was never the cause, so it reads as unknown.
                 if FileManager.default.fileExists(atPath: item.path) {
-                    stillFailed.append(item)
+                    stillFailed.append(item.reason == .needsFullDiskAccess ? replacing(item, with: .unknown) : item)
                 } else {
                     recordMoved(item, standardized: standardized)
                 }
             } else if candidateIDs.contains(item.id) {
                 if result.helperAvailable {
                     // An enabled helper attempted the move and the item is still here:
-                    // that is a real failure, not a missing permission. Keep the honest
-                    // original reason so the user sees "Retry", not "Set Up" again.
-                    stillFailed.append(item)
+                    // a real failure, not one-time setup, so the user never sees
+                    // "Set Up" again. The row says what the helper ran into (#299).
+                    stillFailed.append(replacing(item, with: Self.reasonAfterHelperFailure(
+                        path: item.path,
+                        code: failureCodes[standardized],
+                        refusal: result.refusal
+                    )))
                 } else {
                     // Helper isn't enabled yet: present it as one-time setup.
-                    stillFailed.append(FailedDeletionItem(
-                        path: item.path,
-                        displayName: item.displayName,
-                        reason: .needsAdministrator,
-                        sizeBytes: item.sizeBytes,
-                        route: item.route
-                    ))
+                    stillFailed.append(replacing(item, with: .needsAdministrator))
                 }
             } else {
                 stillFailed.append(item)
             }
         }
         failedItems = stillFailed
+    }
+
+    /// The reason for an item an enabled helper tried and left in place, from what it
+    /// said (#299). Never "needs Full Disk Access": the helper runs without it.
+    /// - Parameter code: The item's errno from the helper, or
+    ///   `PurgeHelperConstants.outsideAllowedLocationsCode`; `nil` when it gave none.
+    static func reasonAfterHelperFailure(
+        path: String,
+        code: Int?,
+        refusal: HelperMoveRefusal
+    ) -> CleanFailureReason {
+        switch refusal {
+        case .notAdministrator:
+            return .needsAdministratorAccount
+        case .invalidTrash, .invalidPeer:
+            return .unknown
+        case .accepted:
+            break
+        }
+        guard let code else { return .unknown }
+        if code == Int(EBUSY) { return .inUse }
+        // EPERM can come from a flag, SIP or a privacy check, so the flags are read
+        // on disk before the row claims that macOS protects it.
+        if code == Int(EPERM) || code == Int(EACCES),
+           FileProtection.blocksRemoval(URL(fileURLWithPath: path)) {
+            return .systemProtected
+        }
+        return .unknown
     }
 
     /// True when `deleteItems` removes this URL for good instead of moving it to the

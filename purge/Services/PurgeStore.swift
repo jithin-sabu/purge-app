@@ -555,6 +555,11 @@ final class PurgeStore: ObservableObject {
     var homebrewCleanup: (HomebrewCask) async -> Void = { cask in
         await HomebrewCaskCatalog.cleanup(cask)
     }
+    /// Whether the secure removal helper is on. Tests swap in a fixed answer, so
+    /// none ever registers the real helper (#299).
+    var helperIsEnabled: () -> Bool = { PrivilegedHelperPreferenceStore.shared.isEnabled }
+    /// Turns the helper on: the one-time setup a held app's first tap starts.
+    var enableHelper: () -> Void = { PrivilegedHelperPreferenceStore.shared.setEnabled(true) }
     private let uninstallScanner = AppUninstallScanner()
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
@@ -1358,8 +1363,8 @@ final class PurgeStore: ObservableObject {
         case .userSelected(isAIModel: _, privilegedEligible: true) where item.reason == .needsAdministrator:
             // A leftover only the helper can move. As for a held app, the first tap
             // is the setup step; the engine tries the helper on the next one.
-            guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
-                PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+            guard helperIsEnabled() else {
+                enableHelper()
                 return nil
             }
         case .cache, .userSelected:
@@ -1409,8 +1414,8 @@ final class PurgeStore: ObservableObject {
     /// on yet, this tap is the setup step, as it is for a locked app.
     func retryInstallLeftoverFailures(_ items: [CleanFailureItem], session: DeletionSession) async -> Int64? {
         guard !items.isEmpty else { return nil }
-        guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
-            PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+        guard helperIsEnabled() else {
+            enableHelper()
             return nil
         }
 
@@ -1617,14 +1622,30 @@ final class PurgeStore: ObservableObject {
         orphanSelectedIDs.subtract(clearedIDs)
     }
 
+    /// What a held app's row says, read from its bundle's own attempt (#299). One-time
+    /// setup (`.needsAdministrator`) only when the helper isn't on, since the engine
+    /// says so only then. A bundle the gate refused is skipped for safety. "Needs
+    /// Full Disk Access" never: it guards user data, not app folders, and the helper
+    /// runs without it. A bundle with no record of its own reads as unknown.
+    static func heldAppReason(bundlePath: String, in report: DeletionReport?) -> CleanFailureReason {
+        func isBundle(_ path: String) -> Bool {
+            URL(fileURLWithPath: path).standardizedFileURL.path == bundlePath
+        }
+        guard let report else { return .unknown }
+        if report.skippedItems.contains(where: { isBundle($0.path) }) { return .safetySkipped }
+        guard let failure = report.failedItems.first(where: { isBundle($0.path) }) else { return .unknown }
+        return failure.reason == .needsFullDiskAccess ? .unknown : failure.reason
+    }
+
     /// Finishes a deferred locked-app uninstall once the helper is set up. Removes the
     /// bundle first; only if it actually moves are the leftovers held with it trashed,
     /// so an app is never gutted while it stays put. If the helper isn't enabled yet,
     /// this tap is the setup step and the app stays pending until the user approves it;
-    /// if the bundle still won't move, the whole pending unit is left untouched.
+    /// if the bundle still won't move, the whole pending unit is left untouched and
+    /// the row says why.
     private func completeLockedUninstall(for item: CleanFailureItem, session: DeletionSession) async -> Int64? {
-        guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
-            PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+        guard helperIsEnabled() else {
+            enableHelper()
             return nil
         }
 
@@ -1656,9 +1677,13 @@ final class PurgeStore: ObservableObject {
             URL(fileURLWithPath: $0.path).standardizedFileURL.path == bundleKey
         }
         guard bundleMoved else {
-            // Still can't move the bundle — helper not enabled yet, or a move that
-            // failed. Leave the whole pending unit intact so no leftover is trashed
-            // while the app stays put, and keep the "needs your OK" row as it is.
+            // Still can't move the bundle. Leave the whole pending unit intact so no
+            // leftover is trashed while the app stays put. The row now says what the
+            // move ran into, so a tap that changed nothing still shows why (#299).
+            let reason = Self.heldAppReason(bundlePath: bundleKey, in: bundleReport)
+            if reason != item.reason {
+                session.replaceFailure(id: item.id, with: [item.replacingReason(reason)])
+            }
             return nil
         }
 
@@ -3626,13 +3651,17 @@ final class PurgeStore: ObservableObject {
         removeLastScanRows { removedSpellings.contains($0.path) }
         forgetInLastScanFile(paths: removedSpellings)
 
-        // Held apps moved nothing; surface each as one "needs your OK" row so the
-        // panel can offer setup and then remove the whole app at once.
+        // Held apps moved nothing; surface each as one row for the whole app. It
+        // offers setup when the helper isn't on, and otherwise says what the bundle's
+        // move ran into (#299). Either way Retry removes the whole app at once.
         let heldFailures = heldApps.map { app, items in
             CleanFailureItem(
                 path: app.bundleURL.path,
                 displayName: app.name,
-                reason: .needsAdministrator,
+                reason: Self.heldAppReason(
+                    bundlePath: app.bundleURL.standardizedFileURL.path,
+                    in: bundleReport
+                ),
                 sizeBytes: items.reduce(0) { $0 + $1.sizeBytes },
                 route: .lockedUninstall
             )

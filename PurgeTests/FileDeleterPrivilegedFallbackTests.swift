@@ -291,4 +291,59 @@ struct FileDeleterPrivilegedFallbackTests {
         #expect(helper.calls == [[key]])
         #expect(report.failedItems.map(\.reason) == [.needsAdministrator])
     }
+
+    /// One bundle the helper tried and left, with the answer `result` gives it.
+    private func reasonAfterHelper(
+        _ name: String,
+        result: @escaping @Sendable (URL) -> PrivilegedMoveResult
+    ) async throws -> CleanFailureReason? {
+        let home = try Home()
+        defer { home.remove() }
+        let bundle = try home.app(name)
+        let key = bundle.standardizedFileURL.path
+        let helper = Helper { urls in result(urls[0]) }
+
+        let report = try await deleter(home: home, helper: helper, trash: Self.noPermission, fullDiskAccess: false)
+            .deleteUserSelectedFiles(at: [bundle], privilegedEligiblePaths: [key], privilegedBundlePaths: [key])
+        return report.failedItems.first?.reason
+    }
+
+    /// A standard account is refused by the helper (#182). The row says only an
+    /// administrator can remove it, and offers no Retry that could never work.
+    @Test func aStandardAccountIsToldOnlyAnAdministratorCanRemoveIt() async throws {
+        let reason = try await reasonAfterHelper("Refused") { url in
+            PrivilegedMoveResult(moved: [], failed: [url], indeterminate: [], refusal: .notAdministrator)
+        }
+        #expect(reason == .needsAdministratorAccount)
+        #expect(reason?.showsRetry == false)
+    }
+
+    @Test func aBundleInUseSaysSo() async throws {
+        let reason = try await reasonAfterHelper("Busy") { url in
+            PrivilegedMoveResult(moved: [], failed: [url], indeterminate: [], failureCodes: [url: Int(EBUSY)])
+        }
+        #expect(reason == .inUse)
+    }
+
+    /// An EPERM names macOS protection only when the flags on disk say so.
+    @Test func aPermissionErrorFromTheHelperClaimsProtectionOnlyForAFlaggedBundle() async throws {
+        let plain = try await reasonAfterHelper("Plain") { url in
+            PrivilegedMoveResult(moved: [], failed: [url], indeterminate: [], failureCodes: [url: Int(EPERM)])
+        }
+        #expect(plain == .unknown)
+        #expect(FileDeleter.reasonAfterHelperFailure(path: "/nonexistent/Locked.app", code: Int(EPERM), refusal: .accepted) == .unknown)
+    }
+
+    /// The bundle's first error read as needing Full Disk Access. After the helper
+    /// tried, that is never the reason shown, timed out or not.
+    @Test func aBundleTheHelperLeftNeverAsksForFullDiskAccess() async throws {
+        let failed = try await reasonAfterHelper("Failed") { url in
+            PrivilegedMoveResult(moved: [], failed: [url], indeterminate: [])
+        }
+        let timedOut = try await reasonAfterHelper("TimedOut") { url in
+            PrivilegedMoveResult(moved: [], failed: [], indeterminate: [url])
+        }
+        #expect(failed == .unknown)
+        #expect(timedOut == .unknown)
+    }
 }
