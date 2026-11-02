@@ -939,14 +939,6 @@ struct SafeCleanupCelebrationOverlay: View {
             .keyboardShortcut(.defaultAction)
             .disabled(!footerVisible || !retryingFailureIDs.isEmpty)
 
-            // A held app that Retry may not move can still go in Finder, as the
-            // setup panel offers too (#299).
-            if case .retry(let item) = footerAction, item.offersFinderRemoval {
-                Button("Remove in Finder instead") { showFailureInFinder(item) }
-                    .buttonStyle(.purge(.secondary, size: .large, width: .fixed(300)))
-                    .disabled(!footerVisible)
-            }
-
             Button(LocalizedStringKey(doneTitle), action: onDone)
                 .buttonStyle(.purge(.secondary, size: .large, width: .fixed(300)))
                 .keyboardShortcut(.cancelAction)
