@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 
 /// The root-side implementation of the one privileged operation Purge performs:
 /// moving an approved uninstall path, or a leftover macOS update file, into the
@@ -8,6 +9,10 @@ import Foundation
 /// redirect a checked path while the move runs.
 final class HelperService: NSObject, PurgeHelperProtocol {
     private let idleTracker: HelperIdleTracker
+
+    /// Paths and error numbers are public: an app path is not private, and without
+    /// them a failed removal can't be explained from the log (#299).
+    private static let log = Logger(subsystem: PurgeHelperConstants.machServiceName, category: "move")
 
     init(idleTracker: HelperIdleTracker) {
         self.idleTracker = idleTracker
@@ -51,13 +56,13 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         defer { idleTracker.release() }
 
         guard let connection = NSXPCConnection.current() else {
-            NSLog("PurgeHelper: refusing request without a current XPC connection")
+            Self.log.error("refusing request without a current XPC connection")
             return MoveOutcome()
         }
         let ownerUID = connection.effectiveUserIdentifier
         let ownerGID = connection.effectiveGroupIdentifier
         guard ownerUID != 0, let homeDirectory = homeDirectory(for: ownerUID) else {
-            NSLog("PurgeHelper: refusing request with invalid peer uid %u", ownerUID)
+            Self.log.error("refusing request with invalid peer uid \(ownerUID, privacy: .public)")
             return MoveOutcome()
         }
 
@@ -67,14 +72,14 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         // be an administrator too. A standard account is refused even through a real
         // Purge, and is told to ask an administrator to run the removal.
         guard isAdministrator(uid: ownerUID) else {
-            NSLog("PurgeHelper: refusing non-administrator peer uid %u", ownerUID)
+            Self.log.error("refusing non-administrator peer uid \(ownerUID, privacy: .public)")
             return MoveOutcome()
         }
 
         let trashDirectory = homeDirectory.appendingPathComponent(".Trash", isDirectory: true)
         guard let trashFD = HelperDirectory.openWithoutFollowingSymlinks(trashDirectory),
               validatedTrashDirectory(fileDescriptor: trashFD, ownerUID: ownerUID) else {
-            NSLog("PurgeHelper: refusing invalid Trash directory %@", trashDirectory.path)
+            Self.log.error("refusing invalid Trash directory \(trashDirectory.path, privacy: .public)")
             return MoveOutcome()
         }
         defer { close(trashFD) }
@@ -93,7 +98,7 @@ final class HelperService: NSObject, PurgeHelperProtocol {
                 homeDirectory: homeDirectory,
                 installLeftoverRuleHolds: installLeftoverRuleHolds
             ) else {
-                NSLog("PurgeHelper: refusing source outside allowed locations %@", source.path)
+                Self.log.error("refusing source outside allowed locations \(source.path, privacy: .public)")
                 continue
             }
 
@@ -107,7 +112,7 @@ final class HelperService: NSObject, PurgeHelperProtocol {
                 outcome.moved.append(path)
                 if !result.ownershipComplete { outcome.ownershipIncomplete.append(path) }
             } else {
-                NSLog("PurgeHelper: move failed for %@ (errno %d)", path, errno)
+                Self.log.error("move failed for \(path, privacy: .public) (errno \(result.failureErrno, privacy: .public))")
             }
         }
         return outcome
@@ -181,14 +186,20 @@ final class HelperService: NSObject, PurgeHelperProtocol {
     private struct SecureMoveResult {
         let moved: Bool
         let ownershipComplete: Bool
+        /// The errno of the step that failed, read right after that call, or 0 when
+        /// the item moved. Reading the global `errno` later gives whatever the
+        /// cleanup calls left there.
+        var failureErrno: Int32 = 0
     }
 
     /// Atomically renames the source relative to already-open source and Trash
     /// directories. This means path components cannot be swapped after validation.
     private func secureMoveToTrash(_ source: URL, trashFD: Int32, uid: uid_t, gid: gid_t) -> SecureMoveResult {
-        let notMoved = SecureMoveResult(moved: false, ownershipComplete: false)
+        func notMoved(_ code: Int32) -> SecureMoveResult {
+            SecureMoveResult(moved: false, ownershipComplete: false, failureErrno: code)
+        }
         guard let sourceParentFD = HelperDirectory.openWithoutFollowingSymlinks(source.deletingLastPathComponent()) else {
-            return notMoved
+            return notMoved(errno)
         }
         defer { close(sourceParentFD) }
 
@@ -196,37 +207,39 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         let sourceFD = sourceName.withCString {
             openat(sourceParentFD, $0, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         }
-        guard sourceFD >= 0 else { return notMoved }
+        guard sourceFD >= 0 else { return notMoved(errno) }
         defer { close(sourceFD) }
 
         var sourceInfo = stat()
-        guard fstat(sourceFD, &sourceInfo) == 0 else { return notMoved }
+        guard fstat(sourceFD, &sourceInfo) == 0 else { return notMoved(errno) }
         let sourceType = sourceInfo.st_mode & S_IFMT
-        guard sourceType == S_IFDIR || sourceType == S_IFREG else { return notMoved }
+        guard sourceType == S_IFDIR || sourceType == S_IFREG else { return notMoved(EFTYPE) }
 
-        guard renameToUniqueDestination(
+        let renameErrno = renameToUniqueDestination(
             source,
             sourceParentFD: sourceParentFD,
             sourceName: sourceName,
             trashFD: trashFD
-        ) else { return notMoved }
+        )
+        guard renameErrno == 0 else { return notMoved(renameErrno) }
 
         let ownershipComplete = chownRecursively(fileDescriptor: sourceFD, uid: uid, gid: gid)
         if !ownershipComplete {
-            NSLog("PurgeHelper: moved %@ but could not update every owner", source.path)
+            Self.log.error("moved \(source.path, privacy: .public) but could not update every owner")
         }
         return SecureMoveResult(moved: true, ownershipComplete: ownershipComplete)
     }
 
     /// Renames to a unique Trash name with `RENAME_EXCL`, which makes the collision
     /// check and move one atomic operation. A different process cannot create an item
-    /// between those two steps and have it overwritten.
+    /// between those two steps and have it overwritten. Returns 0 on success, or the
+    /// rename's errno.
     private func renameToUniqueDestination(
         _ source: URL,
         sourceParentFD: Int32,
         sourceName: String,
         trashFD: Int32
-    ) -> Bool {
+    ) -> Int32 {
         let name = source.lastPathComponent
         let ext = source.pathExtension
         let base = ext.isEmpty ? name : String(name.dropLast(ext.count + 1))
@@ -250,10 +263,11 @@ final class HelperService: NSObject, PurgeHelperProtocol {
                     )
                 }
             }
-            if result == 0 { return true }
-            if errno != EEXIST { return false }
+            if result == 0 { return 0 }
+            let code = errno
+            if code != EEXIST { return code }
         }
-        return false
+        return EEXIST
     }
 
     /// Changes descendants first and the containing directory last. The operation
