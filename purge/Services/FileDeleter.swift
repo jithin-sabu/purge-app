@@ -225,6 +225,10 @@ nonisolated final class FileDeleter: Sendable {
     /// Whether `macOS Install Data` still holds only leftovers from a finished update.
     private let installLeftoverRule: @Sendable () -> Bool
 
+    /// Whether Purge has Full Disk Access, asked only after a permission error. Tests
+    /// hand in a fixed answer, since it changes how such an error reads (#299).
+    private let fullDiskAccessGranted: @Sendable () -> Bool
+
     init(
         simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = { await FileDeleter.removeSimulatorRuntime(identifier: $0) },
         simulatorDeviceRemover: @escaping SimulatorDeviceRemover = { FileDeleter.removeSimulatorDevice(udid: $0, folder: $1) },
@@ -232,7 +236,8 @@ nonisolated final class FileDeleter: Sendable {
         installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() },
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         trash: @escaping Trasher = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
-        listContents: @escaping ContentsLister = { try FileDeleter.visibleContents(of: $0) }
+        listContents: @escaping ContentsLister = { try FileDeleter.visibleContents(of: $0) },
+        fullDiskAccessGranted: @escaping @Sendable () -> Bool = { PermissionChecker().hasFullDiskAccess() }
     ) {
         self.simulatorRuntimeRemover = simulatorRuntimeRemover
         self.simulatorDeviceRemover = simulatorDeviceRemover
@@ -241,6 +246,7 @@ nonisolated final class FileDeleter: Sendable {
         self.home = home
         self.trash = trash
         self.listContents = listContents
+        self.fullDiskAccessGranted = fullDiskAccessGranted
     }
 
     /// - Parameter pathToDisplayName: Keys should be standardized file paths (`URL.standardizedFileURL.path`).
@@ -602,12 +608,17 @@ nonisolated final class FileDeleter: Sendable {
     /// the uninstall gate admits any path, so the model gate's refusals (a
     /// store root, GPT4All's local-documents database) would never hold if
     /// another gate could still say yes (#157).
+    ///
+    /// `privilegedBundlePaths` are the `.app` bundles the user chose to uninstall,
+    /// also in `privilegedEligiblePaths`. They may go to the helper after any
+    /// permission error, not only one macOS gave no reason for (#299).
     @concurrent func deleteUserSelectedFiles(
         at urls: [URL],
         pathToDisplayName: [String: String] = [:],
         pathToExpectedSizeBytes: [String: Int64] = [:],
         aiModelPaths: Set<String> = [],
         privilegedEligiblePaths: Set<String> = [],
+        privilegedBundlePaths: Set<String> = [],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
         var bytesMovedToTrash: Int64 = 0
@@ -684,6 +695,7 @@ nonisolated final class FileDeleter: Sendable {
                 failedItems: &failedItems,
                 ownershipWarningPaths: &ownershipWarningPaths,
                 privilegedEligiblePaths: privilegedEligiblePaths,
+                privilegedBundlePaths: privilegedBundlePaths,
                 pathToDisplayName: pathToDisplayName,
                 onProgress: onProgress
             )
@@ -704,26 +716,72 @@ nonisolated final class FileDeleter: Sendable {
         return report
     }
 
-    /// Escalates only explicit uninstall paths whose ordinary move failed and whose
-    /// parent folder is not writable. When the helper is enabled, successful moves
-    /// fold into `deletedItems`; otherwise the result screen can offer one-time setup.
-    /// Nothing here shows a system prompt on its own.
+    /// Escalates only explicit uninstall paths whose ordinary move failed: the app
+    /// bundles the user chose, and leftovers whose parent folder is not writable.
+    /// When the helper is enabled, successful moves fold into `deletedItems`;
+    /// otherwise the result screen can offer one-time setup. Nothing here shows a
+    /// system prompt on its own.
     private func applyPrivilegedFallback(
         bytesMovedToTrash: inout Int64,
         deletedItems: inout [DeletedItem],
         failedItems: inout [FailedDeletionItem],
         ownershipWarningPaths: inout [String],
         privilegedEligiblePaths: Set<String>,
+        privilegedBundlePaths: Set<String>,
         pathToDisplayName: [String: String],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)?
     ) async {
+        // A root-owned bundle and a locked one fail the same way without Full Disk
+        // Access (Cocoa 513, OSStatus -5000, measured for #299), and both read as
+        // needing it. Only a look at the flags tells them apart, so a locked or
+        // SIP-marked bundle is named as protected and never sent.
+        // A path counts as a chosen bundle only when the caller named it one *and*
+        // it is a real `.app` in an app root. The helper also accepts a leftover
+        // root's direct children (`~/Library/Containers/<id>`), so this never rests
+        // on every caller keeping leftovers out of `privilegedBundlePaths`.
+        func isChosenBundle(_ path: String) -> Bool {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            guard privilegedBundlePaths.contains(url.path),
+                  url.pathExtension == "app",
+                  AppUninstallScanPolicy.isRealAppBundle(url) else { return false }
+            let appRoots = AppUninstallScanPolicy.installedAppRoots(home: home).map { $0.standardizedFileURL.path }
+            return AppBundleReach.folderDepth(ofAppAtPath: url.path, roots: appRoots) != nil
+        }
+
+        failedItems = failedItems.map { item in
+            guard item.reason == .needsFullDiskAccess,
+                  isChosenBundle(item.path),
+                  FileProtection.blocksRemoval(URL(fileURLWithPath: item.path)) else { return item }
+            return FailedDeletionItem(
+                path: item.path,
+                displayName: item.displayName,
+                reason: .systemProtected,
+                sizeBytes: item.sizeBytes,
+                route: item.route
+            )
+        }
+
         // With Full Disk Access granted, an ownership denial resolves to `.unknown`.
-        // Busy, system-protected, and privacy-protected failures keep their original
-        // handling and are never silently retried as root.
-        let candidates = failedItems.filter {
-            $0.reason == .unknown
-                && privilegedEligiblePaths.contains(URL(fileURLWithPath: $0.path).standardizedFileURL.path)
-                && FileManager.default.fileExists(atPath: $0.path)
+        // Without it, the same denial reads as needing Full Disk Access, which says
+        // nothing about an app bundle: Full Disk Access guards user data, not app
+        // folders, and the helper moves a root-owned bundle without it (#299). So a
+        // chosen bundle goes to the helper either way. A leftover still goes only on
+        // `.unknown`, so one in a privacy-protected folder is never moved as root.
+        // Busy and system-protected failures keep their own handling.
+        let candidates = failedItems.filter { item in
+            let key = URL(fileURLWithPath: item.path).standardizedFileURL.path
+            guard privilegedEligiblePaths.contains(key),
+                  FileManager.default.fileExists(atPath: item.path) else { return false }
+            switch item.reason {
+            case .unknown:
+                return true
+            case .needsFullDiskAccess:
+                return isChosenBundle(item.path)
+            case .needsAdministrator, .needsAdministratorAccount, .inUse, .systemProtected, .safetySkipped,
+                 .keptForOtherApp, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart,
+                 .simulatorToolsMissing:
+                return false
+            }
         }
         guard !candidates.isEmpty else { return }
 
@@ -742,8 +800,9 @@ nonisolated final class FileDeleter: Sendable {
 
     /// Folds a helper result back into the run. Moved items are credited; an item
     /// the helper may still be finishing counts only if it is gone from disk. A
-    /// candidate still present is a real failure when the helper tried, and one-time
-    /// setup (`.needsAdministrator`) when it isn't on. Other failures pass through.
+    /// candidate still present is a real failure when the helper tried, with the
+    /// reason the helper gave, and one-time setup (`.needsAdministrator`) when it
+    /// isn't on. Other failures pass through.
     private func foldPrivilegedResult(
         _ result: PrivilegedMoveResult,
         candidateIDs: Set<UUID>,
@@ -757,6 +816,20 @@ nonisolated final class FileDeleter: Sendable {
         let movedPaths = Set(result.moved.map { $0.standardizedFileURL.path })
         let indeterminatePaths = Set(result.indeterminate.map { $0.standardizedFileURL.path })
         let ownershipIncompletePaths = Set(result.ownershipIncomplete.map { $0.standardizedFileURL.path })
+        let failureCodes = Dictionary(
+            result.failureCodes.map { ($0.key.standardizedFileURL.path, $0.value) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        func replacing(_ item: FailedDeletionItem, with reason: CleanFailureReason) -> FailedDeletionItem {
+            FailedDeletionItem(
+                path: item.path,
+                displayName: item.displayName,
+                reason: reason,
+                sizeBytes: item.sizeBytes,
+                route: item.route
+            )
+        }
 
         // Records a moved item: credits its bytes, lists it as deleted, advances
         // progress, and carries forward any "emptying may ask for a password" note.
@@ -782,33 +855,60 @@ nonisolated final class FileDeleter: Sendable {
                 // The helper timed out and may still be finishing. If the source is
                 // already gone, the move did land — credit it rather than leaving a
                 // removal button stuck forever. If it is still on disk, keep the
-                // honest original error and let the uncertainty stand.
+                // honest original error and let the uncertainty stand. An app's
+                // "needs Full Disk Access" was never the cause, so it reads as unknown.
                 if FileManager.default.fileExists(atPath: item.path) {
-                    stillFailed.append(item)
+                    stillFailed.append(item.reason == .needsFullDiskAccess ? replacing(item, with: .unknown) : item)
                 } else {
                     recordMoved(item, standardized: standardized)
                 }
             } else if candidateIDs.contains(item.id) {
                 if result.helperAvailable {
                     // An enabled helper attempted the move and the item is still here:
-                    // that is a real failure, not a missing permission. Keep the honest
-                    // original reason so the user sees "Retry", not "Set Up" again.
-                    stillFailed.append(item)
+                    // a real failure, not one-time setup, so the user never sees
+                    // "Set Up" again. The row says what the helper ran into (#299).
+                    stillFailed.append(replacing(item, with: Self.reasonAfterHelperFailure(
+                        path: item.path,
+                        code: failureCodes[standardized],
+                        refusal: result.refusal
+                    )))
                 } else {
                     // Helper isn't enabled yet: present it as one-time setup.
-                    stillFailed.append(FailedDeletionItem(
-                        path: item.path,
-                        displayName: item.displayName,
-                        reason: .needsAdministrator,
-                        sizeBytes: item.sizeBytes,
-                        route: item.route
-                    ))
+                    stillFailed.append(replacing(item, with: .needsAdministrator))
                 }
             } else {
                 stillFailed.append(item)
             }
         }
         failedItems = stillFailed
+    }
+
+    /// The reason for an item an enabled helper tried and left in place, from what it
+    /// said (#299). Never "needs Full Disk Access": the helper runs without it.
+    /// - Parameter code: The item's errno from the helper, or
+    ///   `PurgeHelperConstants.outsideAllowedLocationsCode`; `nil` when it gave none.
+    static func reasonAfterHelperFailure(
+        path: String,
+        code: Int?,
+        refusal: HelperMoveRefusal
+    ) -> CleanFailureReason {
+        switch refusal {
+        case .notAdministrator:
+            return .needsAdministratorAccount
+        case .invalidTrash, .invalidPeer:
+            return .unknown
+        case .accepted:
+            break
+        }
+        guard let code else { return .unknown }
+        if code == Int(EBUSY) { return .inUse }
+        // EPERM can come from a flag, SIP or a privacy check, so the flags are read
+        // on disk before the row claims that macOS protects it.
+        if code == Int(EPERM) || code == Int(EACCES),
+           FileProtection.blocksRemoval(URL(fileURLWithPath: path)) {
+            return .systemProtected
+        }
+        return .unknown
     }
 
     /// True when `deleteItems` removes this URL for good instead of moving it to the
@@ -1140,9 +1240,9 @@ nonisolated final class FileDeleter: Sendable {
 
     /// Probes Full Disk Access the first time a run needs to know, then reuses the
     /// answer. A folder whose contents all fail used to probe once per entry (#190).
-    private static func fullDiskAccess(cachedIn cached: inout Bool?) -> Bool {
+    private func knownFullDiskAccess(cachedIn cached: inout Bool?) -> Bool {
         if let cached { return cached }
-        let granted = PermissionChecker().hasFullDiskAccess()
+        let granted = fullDiskAccessGranted()
         cached = granted
         return granted
     }
@@ -1159,7 +1259,7 @@ nonisolated final class FileDeleter: Sendable {
         guard let reason = CleanFailureReason.resolved(
             from: error,
             path: path,
-            fullDiskAccessGranted: Self.fullDiskAccess(cachedIn: &fullDiskAccess)
+            fullDiskAccessGranted: knownFullDiskAccess(cachedIn: &fullDiskAccess)
         ) else {
             NSLog("Purge: item already gone, skipping %@", path)
             return

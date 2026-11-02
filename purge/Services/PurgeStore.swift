@@ -555,6 +555,11 @@ final class PurgeStore: ObservableObject {
     var homebrewCleanup: (HomebrewCask) async -> Void = { cask in
         await HomebrewCaskCatalog.cleanup(cask)
     }
+    /// Whether the secure removal helper is on. Tests swap in a fixed answer, so
+    /// none ever registers the real helper (#299).
+    var helperIsEnabled: () -> Bool = { PrivilegedHelperPreferenceStore.shared.isEnabled }
+    /// Turns the helper on: the one-time setup a held app's first tap starts.
+    var enableHelper: () -> Void = { PrivilegedHelperPreferenceStore.shared.setEnabled(true) }
     private let uninstallScanner = AppUninstallScanner()
     private let orphanScanner = OrphanLeftoverScanner()
     private let duplicateDetector = DuplicateFileDetector()
@@ -1358,8 +1363,8 @@ final class PurgeStore: ObservableObject {
         case .userSelected(isAIModel: _, privilegedEligible: true) where item.reason == .needsAdministrator:
             // A leftover only the helper can move. As for a held app, the first tap
             // is the setup step; the engine tries the helper on the next one.
-            guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
-                PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+            guard helperIsEnabled() else {
+                enableHelper()
                 return nil
             }
         case .cache, .userSelected:
@@ -1409,8 +1414,8 @@ final class PurgeStore: ObservableObject {
     /// on yet, this tap is the setup step, as it is for a locked app.
     func retryInstallLeftoverFailures(_ items: [CleanFailureItem], session: DeletionSession) async -> Int64? {
         guard !items.isEmpty else { return nil }
-        guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
-            PrivilegedHelperPreferenceStore.shared.setEnabled(true)
+        guard helperIsEnabled() else {
+            enableHelper()
             return nil
         }
 
@@ -1617,17 +1622,29 @@ final class PurgeStore: ObservableObject {
         orphanSelectedIDs.subtract(clearedIDs)
     }
 
-    /// Finishes a deferred locked-app uninstall once the helper is set up. Removes the
-    /// bundle first; only if it actually moves are the leftovers held with it trashed,
-    /// so an app is never gutted while it stays put. If the helper isn't enabled yet,
-    /// this tap is the setup step and the app stays pending until the user approves it;
-    /// if the bundle still won't move, the whole pending unit is left untouched.
-    private func completeLockedUninstall(for item: CleanFailureItem, session: DeletionSession) async -> Int64? {
-        guard PrivilegedHelperPreferenceStore.shared.isEnabled else {
-            PrivilegedHelperPreferenceStore.shared.setEnabled(true)
-            return nil
+    /// What a held app's row says, read from its bundle's own attempt (#299). One-time
+    /// setup (`.needsAdministrator`) only when the helper isn't on, since the engine
+    /// says so only then. A bundle the gate refused is skipped for safety. "Needs
+    /// Full Disk Access" never: it guards user data, not app folders, and the helper
+    /// runs without it. A bundle with no record of its own reads as unknown.
+    static func heldAppReason(bundlePath: String, in report: DeletionReport?) -> CleanFailureReason {
+        func isBundle(_ path: String) -> Bool {
+            URL(fileURLWithPath: path).standardizedFileURL.path == bundlePath
         }
+        guard let report else { return .unknown }
+        if report.skippedItems.contains(where: { isBundle($0.path) }) { return .safetySkipped }
+        guard let failure = report.failedItems.first(where: { isBundle($0.path) }) else { return .unknown }
+        return failure.reason == .needsFullDiskAccess ? .unknown : failure.reason
+    }
 
+    /// Finishes a deferred locked-app uninstall. Removes the bundle first; only if it
+    /// actually moves are the leftovers held with it trashed, so an app is never gutted
+    /// while it stays put. A row waiting on setup makes this tap the setup step, and the
+    /// app stays pending until the user approves it. Any other row tries the move again,
+    /// so the tap does what its Retry says (#299). If the bundle still won't move, the
+    /// whole pending unit is left untouched and the row says why. A bundle the user
+    /// already removed in Finder counts as moved.
+    private func completeLockedUninstall(for item: CleanFailureItem, session: DeletionSession) async -> Int64? {
         let bundleKey = URL(fileURLWithPath: item.path).standardizedFileURL.path
         // Only a held app the uninstaller planned may run bundle first. A leftover
         // row carries its own route and never comes here (#174).
@@ -1635,28 +1652,63 @@ final class PurgeStore: ObservableObject {
             return nil
         }
         let leftovers = pending.items.filter { $0.category != .bundle }
+        let bundleURL = pending.app.bundleURL
+        let bundleName = pending.app.name
+
+        // The row offers Finder, so the bundle may be gone by the time Retry is
+        // tapped. Gone counts as removed only when no live copy of the app is left
+        // anywhere: a copy the user dragged elsewhere still reads these leftovers,
+        // so the whole unit stays.
+        let removedInFinder = !FileManager.default.fileExists(atPath: bundleKey)
+        if removedInFinder, RemovedAppWatchPolicy.otherCopyExists(of: pending.app) { return nil }
+
+        if !removedInFinder, item.reason == .needsAdministrator, !helperIsEnabled() {
+            enableHelper()
+            return nil
+        }
 
         // Pass 1 — the bundle, on its own. It is always helper-eligible: the validated
         // .app the user chose to remove, which a managed installer can protect even in
-        // a writable /Applications. Not one leftover is touched until the bundle moves.
-        let bundleURL = pending.app.bundleURL
-        let bundleName = pending.app.name
+        // a writable /Applications, with or without Full Disk Access (#299). Not one
+        // leftover is touched until the bundle moves.
         let bundleSize = pending.items.first(where: { $0.category == .bundle })?.sizeBytes ?? item.sizeBytes
-        RemovedAppMonitor.shared.noteRemovalByPurge(of: [bundleURL])
-        guard let bundleReport = try? await fileDeleter.deleteUserSelectedFiles(
-            at: [bundleURL],
-            pathToDisplayName: [bundleKey: bundleName],
-            pathToExpectedSizeBytes: [bundleKey: bundleSize],
-            privilegedEligiblePaths: [bundleKey]
-        ) else { return nil }
+        let bundleReport: DeletionReport
+        if removedInFinder {
+            bundleReport = DeletionReport(
+                bytesMovedToTrash: 0,
+                bytesRemovedDirectly: 0,
+                deletedItems: [],
+                failedItems: [],
+                skippedItems: [],
+                capacityBefore: nil,
+                capacityAfter: nil,
+                timestamp: Date()
+            )
+            removeLastScanRows { $0.path == bundleKey || $0.path == item.path }
+            forgetInLastScanFile(paths: [bundleKey, item.path])
+        } else {
+            RemovedAppMonitor.shared.noteRemovalByPurge(of: [bundleURL])
+            guard let report = try? await fileDeleter.deleteUserSelectedFiles(
+                at: [bundleURL],
+                pathToDisplayName: [bundleKey: bundleName],
+                pathToExpectedSizeBytes: [bundleKey: bundleSize],
+                privilegedEligiblePaths: [bundleKey],
+                privilegedBundlePaths: [bundleKey]
+            ) else { return nil }
+            bundleReport = report
+        }
 
-        let bundleMoved = bundleReport.deletedItems.contains {
+        let bundleMoved = removedInFinder || bundleReport.deletedItems.contains {
             URL(fileURLWithPath: $0.path).standardizedFileURL.path == bundleKey
         }
         guard bundleMoved else {
-            // Still can't move the bundle — helper not enabled yet, or a move that
-            // failed. Leave the whole pending unit intact so no leftover is trashed
-            // while the app stays put, and keep the "needs your OK" row as it is.
+            // Still can't move the bundle. Leave the whole pending unit intact so no
+            // leftover is trashed while the app stays put. The row now says what the
+            // move ran into, so a tap that changed nothing still shows why (#299).
+            let reason = Self.heldAppReason(bundlePath: bundleKey, in: bundleReport)
+            if reason != item.reason {
+                session.replaceFailure(id: item.id, with: [item.replacingReason(reason)])
+            }
             return nil
         }
 
@@ -1748,9 +1800,10 @@ final class PurgeStore: ObservableObject {
         let failedReplacements = failedLeftovers.map { leftover -> CleanFailureItem in
             let key = leftover.path.standardizedFileURL.path
             let reported = reportReasons[key] ?? .unknown
-            // The helper is on by now, so "needs administrator" only means its move
-            // failed. Retry on the plain row tries the helper again.
-            let reason: CleanFailureReason = reported == .needsAdministrator ? .unknown : reported
+            // With the helper on, "needs administrator" only means its move failed, and
+            // Retry on the plain row tries the helper again. With it off (the bundle
+            // moved without it), the row keeps offering setup.
+            let reason: CleanFailureReason = reported == .needsAdministrator && helperIsEnabled() ? .unknown : reported
             return CleanFailureItem(
                 path: leftover.path.path,
                 displayName: "\(bundleName) \(leftover.category.displayName)",
@@ -3463,7 +3516,8 @@ final class PurgeStore: ObservableObject {
         // Pass 1 — bundles first. A validated .app the user picked is always eligible
         // for the administrator helper: a managed bundle needs authorization to move
         // even when its parent directory (/Applications) is writable, so parent-dir
-        // writability is the wrong test for the bundle itself.
+        // writability is the wrong test for the bundle itself. It goes to the helper
+        // after any permission error, with or without Full Disk Access (#299).
         var bundleReport: DeletionReport?
         var movedBundlePaths = homebrewGonePaths
         if !trashBundleApps.isEmpty {
@@ -3485,6 +3539,7 @@ final class PurgeStore: ObservableObject {
                     pathToDisplayName: names,
                     pathToExpectedSizeBytes: sizes,
                     privilegedEligiblePaths: eligible,
+                    privilegedBundlePaths: eligible,
                     onProgress: { @Sendable event in progressBuffer.ingest(event) }
                 )
                 bundleReport = report
@@ -3622,13 +3677,17 @@ final class PurgeStore: ObservableObject {
         removeLastScanRows { removedSpellings.contains($0.path) }
         forgetInLastScanFile(paths: removedSpellings)
 
-        // Held apps moved nothing; surface each as one "needs your OK" row so the
-        // panel can offer setup and then remove the whole app at once.
+        // Held apps moved nothing; surface each as one row for the whole app. It
+        // offers setup when the helper isn't on, and otherwise says what the bundle's
+        // move ran into (#299). Either way Retry removes the whole app at once.
         let heldFailures = heldApps.map { app, items in
             CleanFailureItem(
                 path: app.bundleURL.path,
                 displayName: app.name,
-                reason: .needsAdministrator,
+                reason: Self.heldAppReason(
+                    bundlePath: app.bundleURL.standardizedFileURL.path,
+                    in: bundleReport
+                ),
                 sizeBytes: items.reduce(0) { $0 + $1.sizeBytes },
                 route: .lockedUninstall
             )

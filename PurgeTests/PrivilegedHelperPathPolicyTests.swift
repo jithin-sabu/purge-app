@@ -69,7 +69,18 @@ struct PrivilegedHelperPathPolicyTests {
 
     @Test("Helper behavior version is current")
     func helperVersionIsCurrent() {
-        #expect(PurgeHelperConstants.version == "6")
+        #expect(PurgeHelperConstants.version == "7")
+    }
+
+    /// These numbers cross XPC between an app and a helper that may come from
+    /// different builds of this file, so they never change meaning (#299).
+    @Test("Helper failure codes keep their wire values")
+    func helperFailureCodesKeepTheirWireValues() {
+        #expect(HelperMoveRefusal.accepted.rawValue == 0)
+        #expect(HelperMoveRefusal.notAdministrator.rawValue == 1)
+        #expect(HelperMoveRefusal.invalidTrash.rawValue == 2)
+        #expect(HelperMoveRefusal.invalidPeer.rawValue == 3)
+        #expect(PurgeHelperConstants.outsideAllowedLocationsCode == -1)
     }
 
     private func isAllowedMove(_ path: String, ruleHolds: Bool) -> Bool {

@@ -266,4 +266,48 @@ struct FileDeleterRetryRouteTests {
         #expect(failed.route == .userSelected(isAIModel: false, privilegedEligible: true))
         #expect(CleanFailureItem(failed: failed).route == failed.route)
     }
+
+    /// Only the uninstaller's bundle pass may send an item to the helper after a
+    /// permission error that reads as needing Full Disk Access (#299). A Retry on a
+    /// leftover row carries only `privilegedEligible`, so a leftover in a privacy-
+    /// protected folder is never moved as root, on the first try or the second.
+    @MainActor
+    @Test("A leftover retry never takes the bundle rule to the helper")
+    func leftoverRetryNeverTakesTheBundleRule() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let leftover = try home.file("Library/Containers/com.purgetest.private/Data/state.plist", bytes: 512)
+        let calls = Calls()
+        let deleter = FileDeleter(
+            privilegedMover: { urls in
+                calls.add()
+                return PrivilegedMoveResult(moved: urls, failed: [], indeterminate: [])
+            },
+            home: home.url,
+            trash: { _ in throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError, userInfo: nil) },
+            fullDiskAccessGranted: { false }
+        )
+
+        let outcome = await deleter.retryDeleteItem(
+            at: leftover,
+            displayName: "PurgeTest Container",
+            expectedSizeBytes: 512,
+            route: .userSelected(isAIModel: false, privilegedEligible: true)
+        )
+
+        #expect(calls.count == 0)
+        guard case .failed(let reason) = outcome else {
+            Issue.record("Expected the retry to fail, got \(outcome)")
+            return
+        }
+        #expect(reason == .needsFullDiskAccess)
+        #expect(FileManager.default.fileExists(atPath: leftover.path))
+    }
+
+    private final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func add() { lock.lock(); value += 1; lock.unlock() }
+        var count: Int { lock.lock(); defer { lock.unlock() }; return value }
+    }
 }

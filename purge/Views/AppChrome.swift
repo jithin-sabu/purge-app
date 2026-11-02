@@ -875,7 +875,8 @@ struct SafeCleanupCelebrationOverlay: View {
                 retryFailedIDs: retryFailedIDs,
                 onOpenSettings: openFullDiskAccessSettings,
                 onRetry: retryFailure,
-                onRetryAll: retryAllFailures
+                onRetryAll: retryAllFailures,
+                onShowInFinder: showFailureInFinder
             )
             .transition(.opacity)
         }
@@ -888,6 +889,7 @@ struct SafeCleanupCelebrationOverlay: View {
         case retry(CleanFailureItem)
         case retryAll(Int)
         case openSettings
+        case showInFinder(CleanFailureItem)
     }
 
     private var footerAction: FooterAction? {
@@ -895,6 +897,7 @@ struct SafeCleanupCelebrationOverlay: View {
         if otherFailures.count == 1, let only = otherFailures.first {
             if only.reason.showsRetry { return .retry(only) }
             if only.reason.showsOpenSettings { return .openSettings }
+            if only.offersFinderRemoval { return .showInFinder(only) }
             return nil
         }
         let retryable = otherFailures.filter(\.reason.showsRetry).count
@@ -906,6 +909,7 @@ struct SafeCleanupCelebrationOverlay: View {
         case .retry(let item): item.reason.retryTitle
         case .retryAll(let count): String(localized: "Retry \(count) items")
         case .openSettings: String(localized: "Open Settings")
+        case .showInFinder: String(localized: "Remove in Finder instead")
         case nil: ""
         }
     }
@@ -915,6 +919,7 @@ struct SafeCleanupCelebrationOverlay: View {
         case .retry(let item): retryFailure(item)
         case .retryAll: retryAllFailures()
         case .openSettings: openFullDiskAccessSettings()
+        case .showInFinder(let item): showFailureInFinder(item)
         case nil: break
         }
     }
@@ -1097,6 +1102,12 @@ struct SafeCleanupCelebrationOverlay: View {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
             headerAnchoredToTop = wantsHeaderAtTop
         }
+    }
+
+    /// A held app Purge couldn't move can still go in Finder, the route the user in
+    /// #299 took, so its row selects it there.
+    private func showFailureInFinder(_ item: CleanFailureItem) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: item.path)])
     }
 
     private func revealAdministratorItemInFinder() {
@@ -1539,6 +1550,7 @@ struct CleanFailureCard: View {
     let onOpenSettings: () -> Void
     let onRetry: (CleanFailureItem) -> Void
     let onRetryAll: () -> Void
+    var onShowInFinder: (CleanFailureItem) -> Void = { _ in }
 
     /// Rows shown before the list scrolls. Four one-line rows fit under the
     /// header at the sheet's usual height; the fifth peeks, so the scroll shows.
@@ -1611,7 +1623,8 @@ struct CleanFailureCard: View {
                     isRetrying: retryingIDs.contains(failure.id),
                     retryChangedNothing: retryFailedIDs.contains(failure.id),
                     onOpenSettings: onOpenSettings,
-                    onRetry: onRetry
+                    onRetry: onRetry,
+                    onShowInFinder: onShowInFinder
                 )
             }
         }
@@ -1631,7 +1644,7 @@ private extension CleanFailureReason {
         switch self {
         case .safetySkipped, .keptForOtherApp:
             .warning
-        case .needsFullDiskAccess, .needsAdministrator, .systemProtected:
+        case .needsFullDiskAccess, .needsAdministrator, .needsAdministratorAccount, .systemProtected:
             .neutral
         case .inUse, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
             .danger
@@ -1665,8 +1678,8 @@ private extension CleanFailureReason {
         case .safetySkipped: String(localized: "Skipped")
         case .keptForOtherApp: String(localized: "Kept")
         case .systemProtected: String(localized: "Protected")
-        case .needsFullDiskAccess, .needsAdministrator, .inUse, .xcodeLicenseNotAccepted,
-             .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
+        case .needsFullDiskAccess, .needsAdministrator, .needsAdministratorAccount, .inUse,
+             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
             nil
         }
     }
@@ -1855,6 +1868,7 @@ struct CleanFailureCardRow: View {
     var retryChangedNothing = false
     let onOpenSettings: () -> Void
     let onRetry: (CleanFailureItem) -> Void
+    var onShowInFinder: (CleanFailureItem) -> Void = { _ in }
 
     var body: some View {
         HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
@@ -1889,6 +1903,10 @@ struct CleanFailureCardRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            if failure.offersFinderRemoval {
+                Button("Show in Finder") { onShowInFinder(failure) }
+                    .buttonStyle(.purge(.secondary, size: .small))
+            }
             if failure.reason.showsOpenSettings {
                 Button("Open Settings", action: onOpenSettings)
                     .buttonStyle(.purge(.secondary, size: .small))

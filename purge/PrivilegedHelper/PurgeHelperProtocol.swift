@@ -21,7 +21,13 @@ enum PurgeHelperConstants {
     /// through a package, symlink, or hidden folder (#143).
     /// v6 also accepts the entries a finished macOS update left in `macOS Install
     /// Data`, and only while they are older than the installed system (#127).
-    static let version = "6"
+    /// v7 says why a move did not happen: a refusal for the whole request, and an
+    /// errno for each path that stayed (#299).
+    static let version = "7"
+
+    /// The failure code for a path outside the places the helper may move from. Every
+    /// other code in a reply's `failureCodes` is an errno, which is never negative.
+    static let outsideAllowedLocationsCode = -1
 
     /// The daemon property list bundled at `Contents/Library/LaunchDaemons/`, named
     /// to `SMAppService.daemon(plistName:)`.
@@ -135,6 +141,19 @@ enum PurgeHelperConstants {
     }
 }
 
+/// Why the helper refused a whole move request, sent as the raw value. Both targets
+/// compile this file, so the numbers can't drift apart (#299).
+nonisolated enum HelperMoveRefusal: Int, Sendable {
+    /// The helper took the request. Some paths may still have failed.
+    case accepted = 0
+    /// The connecting account is not an administrator (#182).
+    case notAdministrator = 1
+    /// The account's `~/.Trash` is missing, a symlink, or not its own.
+    case invalidTrash = 2
+    /// No connection to read the caller from, or the caller is root or has no home.
+    case invalidPeer = 3
+}
+
 /// The privileged operations the helper exposes over XPC. Deliberately tiny: the
 /// helper runs as root, so every method here is attack surface. It does exactly one
 /// thing — move already-chosen paths into a Trash directory and hand ownership back
@@ -159,6 +178,21 @@ enum PurgeHelperConstants {
     func moveToTrashReportingOwnership(
         paths: [String],
         withReply reply: @escaping (_ movedPaths: [String], _ ownershipIncompletePaths: [String]) -> Void
+    )
+
+    /// Same move as `moveToTrashReportingOwnership`, and the reply also says why
+    /// anything stayed. `refusal` is a `HelperMoveRefusal` raw value for the whole
+    /// request. `failureCodes` maps each path that was tried and stayed to its errno,
+    /// or to `PurgeHelperConstants.outsideAllowedLocationsCode` (#299). Only an app
+    /// that found a v7 helper calls this.
+    func moveToTrashReportingFailures(
+        paths: [String],
+        withReply reply: @escaping (
+            _ movedPaths: [String],
+            _ ownershipIncompletePaths: [String],
+            _ failureCodes: [String: Int],
+            _ refusal: Int
+        ) -> Void
     )
 
     /// Round-trips the helper's build version so the app can tell whether an older

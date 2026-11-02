@@ -38,6 +38,9 @@ nonisolated enum FileProtection {
 nonisolated enum CleanFailureReason: Equatable, Error {
     case needsFullDiskAccess
     case needsAdministrator
+    /// The helper is on, but the account using Purge is not an administrator, and
+    /// the helper only moves things for one (#182, #299).
+    case needsAdministratorAccount
     case inUse
     case systemProtected
     case safetySkipped
@@ -56,6 +59,8 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             String(localized: "Purge needs Full Disk Access to remove this.")
         case .needsAdministrator:
             String(localized: "This app was installed by an administrator, so macOS won't let it be moved on its own. Set up secure removal once and Purge can finish it.")
+        case .needsAdministratorAccount:
+            String(localized: "Only an administrator account can remove this. Remove it in Finder with an administrator's name and password.")
         case .inUse:
             String(localized: "An app is still using this. Quit it and clean again.")
         case .systemProtected:
@@ -81,6 +86,8 @@ nonisolated enum CleanFailureReason: Equatable, Error {
             "lock.fill"
         case .needsAdministrator:
             "lock.fill"
+        case .needsAdministratorAccount:
+            "person.badge.key.fill"
         case .inUse:
             "app.badge.fill"
         case .systemProtected:
@@ -110,8 +117,8 @@ nonisolated enum CleanFailureReason: Equatable, Error {
         switch self {
         case .inUse, .unknown, .needsAdministrator, .xcodeLicenseNotAccepted:
             true
-        case .needsFullDiskAccess, .systemProtected, .safetySkipped, .keptForOtherApp,
-             .simulatorServiceNeedsRestart, .simulatorToolsMissing:
+        case .needsFullDiskAccess, .needsAdministratorAccount, .systemProtected, .safetySkipped,
+             .keptForOtherApp, .simulatorServiceNeedsRestart, .simulatorToolsMissing:
             false
         }
     }
@@ -264,6 +271,20 @@ struct CleanFailureItem: Identifiable, Equatable {
             sizeBytes: sizeBytes,
             route: route
         )
+    }
+
+    /// A whole app Purge couldn't move, for a reason Finder can still get past: an
+    /// administrator's password, a quit app, or a second try. Not a protected or
+    /// skipped one, and not one waiting on setup, which has its own panel (#299).
+    var offersFinderRemoval: Bool {
+        guard route == .lockedUninstall else { return false }
+        switch reason {
+        case .needsAdministratorAccount, .inUse, .unknown:
+            return true
+        case .needsFullDiskAccess, .needsAdministrator, .systemProtected, .safetySkipped, .keptForOtherApp,
+             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing:
+            return false
+        }
     }
 
     /// An entry a finished macOS update left in `macOS Install Data` (#127). These go

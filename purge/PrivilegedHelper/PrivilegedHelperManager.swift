@@ -145,19 +145,27 @@ final class PrivilegedHelperManager: ObservableObject {
                 return
             }
 
-            proxy.moveToTrashReportingOwnership(
+            // `reconcileVersion` above made sure the helper speaks v7, which says why
+            // a path stayed (#299).
+            proxy.moveToTrashReportingFailures(
                 paths: sentPaths
-            ) { movedPaths, ownershipIncompletePaths in
+            ) { movedPaths, ownershipIncompletePaths, failureCodes, refusal in
                 let movedSet = Set(movedPaths)
                 let incompleteSet = Set(ownershipIncompletePaths)
                 let moved = urls.filter { movedSet.contains($0.path) }
                 let failed = urls.filter { !movedSet.contains($0.path) }
                 let ownershipIncomplete = urls.filter { incompleteSet.contains($0.path) }
+                var codes: [URL: Int] = [:]
+                for url in failed {
+                    if let code = failureCodes[url.path] { codes[url] = code }
+                }
                 box.resume(PrivilegedMoveResult(
                     moved: moved,
                     failed: failed,
                     indeterminate: [],
-                    ownershipIncomplete: ownershipIncomplete
+                    ownershipIncomplete: ownershipIncomplete,
+                    refusal: HelperMoveRefusal(rawValue: refusal) ?? .accepted,
+                    failureCodes: codes
                 ))
             }
         }
