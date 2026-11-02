@@ -12,7 +12,6 @@ import Testing
 @Suite("Developer tools install prompt")
 struct DeveloperToolsPromptTests {
     private static let xcodeDirectory = "/Applications/Xcode.app/Contents/Developer"
-    private static let xcodeTools = xcodeDirectory + "/usr/bin/xcrun"
 
     private static func output(_ status: Int32, stdout: String = "", stderr: String = "", timedOut: Bool = false) -> ProcessRunner.Output {
         ProcessRunner.Output(status: status, stdout: Data(stdout.utf8), stderr: Data(stderr.utf8), timedOut: timedOut)
@@ -34,10 +33,10 @@ struct DeveloperToolsPromptTests {
         }
     }
 
-    private func resolve(_ fake: FakeLaunches, toolsExist: Bool = true) -> DeveloperDirectory.Lookup {
+    private func resolve(_ fake: FakeLaunches, directoryExists: Bool = true) -> DeveloperDirectory.Lookup {
         DeveloperDirectory.resolve(
             launch: { fake.launch($0, $1, $2) },
-            isExecutable: { fake.checked.append($0); return toolsExist }
+            isDirectory: { fake.checked.append($0); return directoryExists }
         )
     }
 
@@ -48,7 +47,7 @@ struct DeveloperToolsPromptTests {
         #expect(resolve(fake) == .found(Self.xcodeDirectory))
         #expect(fake.launched.map(\.path) == [DeveloperDirectory.xcodeSelectPath])
         #expect(fake.launched.first?.arguments == ["-p"])
-        #expect(fake.checked == [Self.xcodeTools])
+        #expect(fake.checked == [Self.xcodeDirectory])
     }
 
     /// `xcode-select -p` exits 2 with this text on a Mac with no developer tools.
@@ -62,13 +61,12 @@ struct DeveloperToolsPromptTests {
         #expect(resolve(empty) == .missing)
     }
 
-    /// An Xcode that was trashed leaves its path selected, and a Command Line
-    /// Tools folder a macOS upgrade emptied is still a folder. The shims ask to
-    /// install the tools for both just as they do for no path, so both count as
-    /// none.
-    @Test func selectedDirectoryWithoutToolsCountsAsNone() {
+    /// An Xcode that was trashed leaves its path selected. The shims ask to
+    /// install the tools for it just as they do for no path, so it counts as
+    /// missing.
+    @Test func selectedDirectoryThatIsGoneCountsAsMissing() {
         let fake = FakeLaunches(Self.output(0, stdout: Self.xcodeDirectory + "\n"))
-        #expect(resolve(fake, toolsExist: false) == .missing)
+        #expect(resolve(fake, directoryExists: false) == .missing)
     }
 
     /// A launch that failed or timed out says nothing about the Mac.
@@ -81,10 +79,10 @@ struct DeveloperToolsPromptTests {
 
     // MARK: - Cache
 
-    private func active(_ cache: DeveloperDirectory.Cache, _ fake: FakeLaunches, toolsExist: Bool = true) -> String? {
+    private func active(_ cache: DeveloperDirectory.Cache, _ fake: FakeLaunches, directoryExists: Bool = true) -> String? {
         cache.active(
             launch: { fake.launch($0, $1, $2) },
-            isExecutable: { fake.checked.append($0); return toolsExist }
+            isDirectory: { fake.checked.append($0); return directoryExists }
         )
     }
 
@@ -124,7 +122,7 @@ struct DeveloperToolsPromptTests {
         let cache = DeveloperDirectory.Cache()
         let fake = FakeLaunches(Self.output(0, stdout: Self.xcodeDirectory))
         #expect(active(cache, fake) == Self.xcodeDirectory)
-        #expect(active(cache, fake, toolsExist: false) == nil)
+        #expect(active(cache, fake, directoryExists: false) == nil)
         #expect(active(cache, fake) == Self.xcodeDirectory)
         #expect(fake.launched.count == 1)
     }
