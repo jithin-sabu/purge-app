@@ -227,4 +227,21 @@ struct LockedUninstallRetryTests {
         #expect(trash.movedPaths == [fixture.leftover.path])
         #expect(store.installedApps.isEmpty)
     }
+
+    /// Finder is offered only for a whole app that Finder can still remove: not one
+    /// waiting on setup, protected by macOS, or kept back for safety, and never for
+    /// a plain file row.
+    @Test func onlyAHeldAppFinderCanRemoveOffersFinder() {
+        func offers(_ reason: CleanFailureReason, route: DeletionRoute = .lockedUninstall) -> Bool {
+            CleanFailureItem(path: "/Applications/Example.app", displayName: "Example", reason: reason, route: route)
+                .offersFinderRemoval
+        }
+        #expect(offers(.unknown))
+        #expect(offers(.inUse))
+        #expect(offers(.needsAdministratorAccount))
+        #expect(!offers(.needsAdministrator))
+        #expect(!offers(.systemProtected))
+        #expect(!offers(.safetySkipped))
+        #expect(!offers(.unknown, route: .userSelected(isAIModel: false, privilegedEligible: true)))
+    }
 }

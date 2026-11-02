@@ -273,6 +273,20 @@ struct CleanFailureItem: Identifiable, Equatable {
         )
     }
 
+    /// A whole app Purge couldn't move, for a reason Finder can still get past: an
+    /// administrator's password, a quit app, or a second try. Not a protected or
+    /// skipped one, and not one waiting on setup, which has its own panel (#299).
+    var offersFinderRemoval: Bool {
+        guard route == .lockedUninstall else { return false }
+        switch reason {
+        case .needsAdministratorAccount, .inUse, .unknown:
+            return true
+        case .needsFullDiskAccess, .needsAdministrator, .systemProtected, .safetySkipped, .keptForOtherApp,
+             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing:
+            return false
+        }
+    }
+
     /// An entry a finished macOS update left in `macOS Install Data` (#127). These go
     /// through the helper together, never one by one. Read in view bodies, so it
     /// checks the string only: the clean already standardized every path.
