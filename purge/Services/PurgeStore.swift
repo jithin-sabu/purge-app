@@ -1638,7 +1638,8 @@ final class PurgeStore: ObservableObject {
 
         // Pass 1 — the bundle, on its own. It is always helper-eligible: the validated
         // .app the user chose to remove, which a managed installer can protect even in
-        // a writable /Applications. Not one leftover is touched until the bundle moves.
+        // a writable /Applications, with or without Full Disk Access (#299). Not one
+        // leftover is touched until the bundle moves.
         let bundleURL = pending.app.bundleURL
         let bundleName = pending.app.name
         let bundleSize = pending.items.first(where: { $0.category == .bundle })?.sizeBytes ?? item.sizeBytes
@@ -1647,7 +1648,8 @@ final class PurgeStore: ObservableObject {
             at: [bundleURL],
             pathToDisplayName: [bundleKey: bundleName],
             pathToExpectedSizeBytes: [bundleKey: bundleSize],
-            privilegedEligiblePaths: [bundleKey]
+            privilegedEligiblePaths: [bundleKey],
+            privilegedBundlePaths: [bundleKey]
         ) else { return nil }
 
         let bundleMoved = bundleReport.deletedItems.contains {
@@ -3463,7 +3465,8 @@ final class PurgeStore: ObservableObject {
         // Pass 1 — bundles first. A validated .app the user picked is always eligible
         // for the administrator helper: a managed bundle needs authorization to move
         // even when its parent directory (/Applications) is writable, so parent-dir
-        // writability is the wrong test for the bundle itself.
+        // writability is the wrong test for the bundle itself. It goes to the helper
+        // after any permission error, with or without Full Disk Access (#299).
         var bundleReport: DeletionReport?
         var movedBundlePaths = homebrewGonePaths
         if !trashBundleApps.isEmpty {
@@ -3485,6 +3488,7 @@ final class PurgeStore: ObservableObject {
                     pathToDisplayName: names,
                     pathToExpectedSizeBytes: sizes,
                     privilegedEligiblePaths: eligible,
+                    privilegedBundlePaths: eligible,
                     onProgress: { @Sendable event in progressBuffer.ingest(event) }
                 )
                 bundleReport = report
