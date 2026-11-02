@@ -735,9 +735,22 @@ nonisolated final class FileDeleter: Sendable {
         // Access (Cocoa 513, OSStatus -5000, measured for #299), and both read as
         // needing it. Only a look at the flags tells them apart, so a locked or
         // SIP-marked bundle is named as protected and never sent.
+        // A path counts as a chosen bundle only when the caller named it one *and*
+        // it is a real `.app` in an app root. The helper also accepts a leftover
+        // root's direct children (`~/Library/Containers/<id>`), so this never rests
+        // on every caller keeping leftovers out of `privilegedBundlePaths`.
+        func isChosenBundle(_ path: String) -> Bool {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            guard privilegedBundlePaths.contains(url.path),
+                  url.pathExtension == "app",
+                  AppUninstallScanPolicy.isRealAppBundle(url) else { return false }
+            let appRoots = AppUninstallScanPolicy.installedAppRoots(home: home).map { $0.standardizedFileURL.path }
+            return AppBundleReach.folderDepth(ofAppAtPath: url.path, roots: appRoots) != nil
+        }
+
         failedItems = failedItems.map { item in
             guard item.reason == .needsFullDiskAccess,
-                  privilegedBundlePaths.contains(URL(fileURLWithPath: item.path).standardizedFileURL.path),
+                  isChosenBundle(item.path),
                   FileProtection.blocksRemoval(URL(fileURLWithPath: item.path)) else { return item }
             return FailedDeletionItem(
                 path: item.path,
@@ -763,7 +776,7 @@ nonisolated final class FileDeleter: Sendable {
             case .unknown:
                 return true
             case .needsFullDiskAccess:
-                return privilegedBundlePaths.contains(key)
+                return isChosenBundle(item.path)
             case .needsAdministrator, .needsAdministratorAccount, .inUse, .systemProtected, .safetySkipped,
                  .keptForOtherApp, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart,
                  .simulatorToolsMissing:

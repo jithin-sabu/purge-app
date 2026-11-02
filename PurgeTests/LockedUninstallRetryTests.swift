@@ -48,16 +48,23 @@ struct LockedUninstallRetryTests {
         return Fixture(home: home, bundle: bundle, leftover: leftover)
     }
 
-    /// The Trash refuses any app bundle with the error a root-owned one gets, and
-    /// takes everything else without touching the disk.
+    /// The Trash refuses any app bundle with `bundleError`, by default the error a
+    /// root-owned one gets, and takes everything else without touching the disk.
+    /// With `bundleError` nil it takes the bundle too.
     private final class Trash: @unchecked Sendable {
         private let lock = NSLock()
         private var moved: [String] = []
+        private var error: NSError? = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError, userInfo: nil)
+
+        var bundleError: NSError? {
+            get { lock.lock(); defer { lock.unlock() }; return error }
+            set { lock.lock(); error = newValue; lock.unlock() }
+        }
 
         var trasher: FileDeleter.Trasher {
             { [self] url in
-                if url.pathExtension == "app" {
-                    throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError, userInfo: nil)
+                if url.pathExtension == "app", let error = bundleError {
+                    throw error
                 }
                 lock.lock()
                 moved.append(url.standardizedFileURL.path)
@@ -223,6 +230,65 @@ struct LockedUninstallRetryTests {
 
         let movedBytes: Int64 = try #require(moved)
         #expect(movedBytes == 4096 + 512)
+        #expect(!session.failedItems.contains { $0.id == held.id })
+        #expect(trash.movedPaths == [fixture.leftover.path])
+        #expect(store.installedApps.isEmpty)
+    }
+
+    /// With the helper off, a held app that was only in use says so, and Retry tries
+    /// the move again rather than running setup the row never offered.
+    @Test func withTheHelperOffAnInUseAppRetriesTheMove() async throws {
+        let fixture = try makeFixture()
+        defer { try? fm.removeItem(at: fixture.home) }
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = Trash()
+        trash.bundleError = NSError(domain: NSPOSIXErrorDomain, code: Int(EBUSY), userInfo: nil)
+        let helperSwitch = Switch()
+        let store = makeStore(fixture, scans: scans, trash: trash, helper: Helper(), helperSwitch: helperSwitch)
+        let held = try await uninstall(store, fixture)
+        let session = try #require(store.manualDeletionSession)
+        #expect(held.reason == .inUse)
+
+        // The user quits the app and taps Retry.
+        trash.bundleError = nil
+        let moved = try await withTemporaryHandoffRoot {
+            await store.retryCleanFailure(held, session: session)
+        }
+
+        #expect(helperSwitch.setupRequests == 0)
+        let movedBytes: Int64 = try #require(moved)
+        #expect(movedBytes == 4096 + 512)
+        #expect(!session.failedItems.contains { $0.id == held.id })
+        #expect(trash.movedPaths == [fixture.bundle.path, fixture.leftover.path])
+        #expect(store.installedApps.isEmpty)
+    }
+
+    /// A held app the user removed in Finder: Retry finishes the uninstall with the
+    /// leftovers held with it, and asks for no setup.
+    @Test func aRetryAfterFinderRemovedTheAppTakesItsLeftovers() async throws {
+        let fixture = try makeFixture()
+        defer { try? fm.removeItem(at: fixture.home) }
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = Trash()
+        let helper = Helper()
+        let helperSwitch = Switch()
+        let store = makeStore(fixture, scans: scans, trash: trash, helper: helper, helperSwitch: helperSwitch)
+        let held = try await uninstall(store, fixture)
+        let session = try #require(store.manualDeletionSession)
+        #expect(held.reason == .needsAdministrator)
+
+        try fm.removeItem(at: fixture.bundle)
+        let callsBefore = helper.callCount
+        let moved = try await withTemporaryHandoffRoot {
+            await store.retryCleanFailure(held, session: session)
+        }
+
+        #expect(helperSwitch.setupRequests == 0)
+        #expect(helper.callCount == callsBefore)
+        let movedBytes: Int64 = try #require(moved)
+        #expect(movedBytes == 512)
         #expect(!session.failedItems.contains { $0.id == held.id })
         #expect(trash.movedPaths == [fixture.leftover.path])
         #expect(store.installedApps.isEmpty)

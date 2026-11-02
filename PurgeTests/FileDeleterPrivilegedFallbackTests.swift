@@ -250,6 +250,29 @@ struct FileDeleterPrivilegedFallbackTests {
         #expect(report.failedItems.map(\.reason) == [.needsFullDiskAccess])
     }
 
+    /// A leftover a caller wrongly lists as a bundle still never reaches the helper
+    /// on that error. The helper would take a container folder, so the check on what
+    /// is really an app bundle sits here, not only in each caller.
+    @Test func aContainerListedAsABundleNeverReachesTheHelper() async throws {
+        let home = try Home()
+        defer { home.remove() }
+        let container = home.url.appendingPathComponent("Library/Containers/com.purgetest.x", isDirectory: true)
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        let key = container.standardizedFileURL.path
+        let helper = Helper { PrivilegedMoveResult(moved: $0, failed: [], indeterminate: []) }
+
+        let report = try await deleter(home: home, helper: helper, trash: Self.noPermission, fullDiskAccess: false)
+            .deleteUserSelectedFiles(
+                at: [container],
+                privilegedEligiblePaths: [key],
+                privilegedBundlePaths: [key]
+            )
+
+        #expect(helper.calls.isEmpty)
+        #expect(report.deletedItems.isEmpty)
+        #expect(report.failedItems.map(\.reason) == [.needsFullDiskAccess])
+    }
+
     /// A locked bundle fails the same way as a root-owned one. It is named as
     /// protected and never sent, since the helper's move would fail too.
     @Test func aLockedBundleIsProtectedAndNeverSent() async throws {
