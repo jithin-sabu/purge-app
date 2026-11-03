@@ -74,17 +74,25 @@ nonisolated enum AppleIntelligenceModelReader {
     /// and Download Again never asks for a set on a guess.
     static func measure(_ set: AppleIntelligenceModelSet, records: [Record],
                         fileManager: FileManager = .default, root: String = assetsRoot) -> AppleIntelligenceSetReading {
+        let folder = folderState(set.assetType, root: root, fileManager: fileManager)
         var onDisk: [Record] = []
-        var counted = Set<String>()
+        var slot: [String: Int] = [:]
         var anyUnchecked = false
         for record in records where record.isOnFilesystem != false {
-            switch assetState(record, root: root) {
-            case .present:
-                if let id = record.assetID, counted.insert(id).inserted { onDisk.append(record) }
-            case .missing:
-                continue
-            case .unknown:
-                anyUnchecked = true
+            var state = assetState(record, root: root)
+            // A missing path is only believed while the set's own folder reads,
+            // so a layout Purge doesn't know never makes a set look removed.
+            if state == .missing, folder == .unknown { state = .unknown }
+            switch state {
+            case .present: break
+            case .missing: continue
+            case .unknown: anyUnchecked = true
+            }
+            guard let id = record.assetID else { onDisk.append(record); continue }
+            if let index = slot[id] {
+                onDisk[index] = newer(onDisk[index], record)
+            } else {
+                slot[id] = onDisk.count
                 onDisk.append(record)
             }
         }
@@ -98,7 +106,6 @@ nonisolated enum AppleIntelligenceModelReader {
         for record in latest.values {
             if let bytes = record.bytes { total += bytes } else { allKnown = false }
         }
-        let folder = folderState(set.assetType, root: root, fileManager: fileManager)
         // No readable record but files in the folder: a size nobody knows, not zero.
         let bytes: Int64?
         if onDisk.isEmpty {
@@ -167,6 +174,16 @@ nonisolated enum AppleIntelligenceModelReader {
         var info = stat()
         if lstat(root + "/" + folder + "/purpose_auto/" + id + ".asset", &info) == 0 { return .present }
         return errno == ENOENT ? .missing : .unknown
+    }
+
+    /// Of two records for one asset, the newer version, whatever order the
+    /// records were read in. Same version with different sizes: size unknown.
+    static func newer(_ known: Record, _ other: Record) -> Record {
+        if versionIsOrdered(known.version, before: other.version) { return other }
+        if versionIsOrdered(other.version, before: known.version) || known.bytes == other.bytes { return known }
+        return Record(assetType: known.assetType, specifier: known.specifier, version: known.version,
+                      assetID: known.assetID, bytes: nil, isOnFilesystem: known.isOnFilesystem,
+                      isEliminating: known.isEliminating)
     }
 
     /// Orders versions like `600.0.81600.13.202072,0` numerically, component

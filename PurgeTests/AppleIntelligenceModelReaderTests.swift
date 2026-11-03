@@ -214,6 +214,60 @@ struct AppleIntelligenceModelReaderTests {
         #expect(reading.recordsOnDisk == 1)
     }
 
+    /// Which record for an asset counts doesn't depend on the order the
+    /// records were read in. Same version, different sizes: unknown.
+    @Test func theNewerRecordForOneAssetCountsInEitherOrder() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = record("model.a", "1.0,0", 100, id: id(1)), new = record("model.a", "2.0,0", 150, id: id(1))
+        for records in [[old, new], [new, old]] {
+            let reading = AppleIntelligenceModelReader.measure(visual, records: records, root: root.path)
+            #expect(reading.latestBytes == 150)
+            #expect(reading.recordsOnDisk == 1)
+        }
+        let other = record("model.a", "1.0,0", 120, id: id(1))
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [old, other], root: root.path)
+        #expect(reading.latestBytes == nil)
+        #expect(reading.recordsOnDisk == 1)
+    }
+
+    /// Two records for one asset that can't be checked still count once, so a
+    /// recount never looks like a download arriving.
+    @Test func twoRecordsForOneUncheckedAssetCountOnce() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        let purpose = root.appendingPathComponent(visual.folderName).appendingPathComponent("purpose_auto")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: purpose.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: purpose.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [
+            record("model.a", "1.0,0", 100, id: id(1)), record("model.a.renamed", "1.0,0", 100, id: id(1)),
+        ], root: root.path)
+        #expect(reading.recordsOnDisk == 1)
+        #expect(reading.latestBytes == nil)
+        #expect(reading.isPresent)
+    }
+
+    /// When the set's own folder can't be read, a missing asset path proves
+    /// nothing: the files may sit in a layout Purge doesn't know. The set stays
+    /// present, so a Remove is never reported done on a guess.
+    @Test func aMissingPathIsNotBelievedWhileTheSetFolderCantBeRead() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge-assets-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // A link to nowhere: lstat reads it, but its entries can't be counted.
+        try FileManager.default.createSymbolicLink(
+            atPath: root.appendingPathComponent(visual.folderName).path, withDestinationPath: root.path + "/nowhere")
+        let unread = record("model.a", "1.0,0", 100, id: id(1))
+        #expect(AppleIntelligenceModelReader.assetState(unread, root: root.path) == .missing)
+        #expect(AppleIntelligenceModelReader.folderState(visual.assetType, root: root.path) == .unknown)
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [unread], root: root.path)
+        #expect(reading.isPresent)
+        #expect(reading.recordsOnDisk == 1)
+        #expect(reading.latestBytes == nil)
+    }
+
     @Test func aPartialSumIsNeverShownAsTheWhole() {
         let known = AppleIntelligenceSetReading(set: visual, recordsOnDisk: 1, eliminating: 0, latestBytes: 10, folder: .holdsFiles)
         let unknown = AppleIntelligenceSetReading(set: AppleIntelligenceCatalog.sets[0], recordsOnDisk: 1, eliminating: 0, latestBytes: nil, folder: .holdsFiles)
