@@ -85,7 +85,7 @@ nonisolated struct AppDotFolderCatalog: Equatable, Sendable {
             }
         }
         for parent in all {
-            for child in all where child.hasPrefix(parent + "/") {
+            for child in all where PathContainment.isInside(child, parent) {
                 throw ValidationError.sharedParent(parent: parent, child: child)
             }
         }

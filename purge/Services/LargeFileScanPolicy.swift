@@ -142,8 +142,8 @@ enum LargeFileScanPolicy {
 
         let homePath = home.resolvingSymlinksInPath().standardizedFileURL.path
         let volumesPath = volumes.resolvingSymlinksInPath().standardizedFileURL.path
-        guard path.hasPrefix(homePath + "/") || path.hasPrefix(volumesPath + "/") else { return nil }
-        if homePath == path || homePath.hasPrefix(path + "/") { return nil }
+        guard PathContainment.isInside(path, homePath) || PathContainment.isInside(path, volumesPath) else { return nil }
+        if PathContainment.isSameOrInside(homePath, path) { return nil }
         // Without case: a link can spell it `~/library/CloudStorage`, which is
         // `~/Library` on the default volume, and macOS 13 and 14 keep the
         // link's spelling when resolving it.

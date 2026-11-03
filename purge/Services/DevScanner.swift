@@ -393,7 +393,7 @@ nonisolated final class DevScanner {
                     folderURL = devicesRoot.appendingPathComponent(udidString, isDirectory: true)
                 }
 
-                guard folderURL.standardizedFileURL.path.hasPrefix(devicesRoot.standardizedFileURL.path) else { continue }
+                guard PathContainment.isInside(folderURL.standardizedFileURL.path, devicesRoot.standardizedFileURL.path) else { continue }
                 guard FileManager.default.fileExists(atPath: folderURL.path) else { continue }
 
                 let safety = isBooted

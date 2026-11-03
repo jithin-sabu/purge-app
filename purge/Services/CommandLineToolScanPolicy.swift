@@ -144,7 +144,7 @@ nonisolated enum CommandLineToolScanPolicy {
         return folders
             .filter { path, _ in
                 let lower = path.lowercased()
-                return !modelStores.contains { $0 == lower || $0.hasPrefix(lower + "/") }
+                return !modelStores.contains { PathContainment.isSameOrInside($0, lower) }
             }
             .map { path, value in
                 let folder = URL(fileURLWithPath: path, isDirectory: true)
@@ -309,10 +309,10 @@ nonisolated enum CommandLineToolScanPolicy {
     /// Whether the program a shim runs, and every path it names, sit inside
     /// `folder`. A script may also name the system interpreters.
     static func leadsOnlyInto(_ lead: ShimLead, folder: String) -> Bool {
-        guard let program = lead.program, program.hasPrefix(folder + "/") else { return false }
+        guard let program = lead.program, PathContainment.isInside(program, folder) else { return false }
         for path in lead.paths {
             if lead.isScript, isSystemPath(path) { continue }
-            guard path == folder || path.hasPrefix(folder + "/"), !path.contains(".app/") else { return false }
+            guard PathContainment.isSameOrInside(path, folder), !path.contains(".app/") else { return false }
         }
         return !program.contains(".app/")
     }
@@ -359,7 +359,7 @@ nonisolated enum CommandLineToolScanPolicy {
                       let label = contents["Label"] as? String, !label.isEmpty else { return nil }
                 guard let program = startedProgram(contents) else { return nil }
                 let starts = program.hasPrefix("/")
-                    && URL(fileURLWithPath: program).standardizedFileURL.path.hasPrefix(folderPath + "/")
+                    && PathContainment.isInside(URL(fileURLWithPath: program).standardizedFileURL.path, folderPath)
                 return starts ? LaunchAgentJob(label: label, plist: plist) : nil
             }
     }

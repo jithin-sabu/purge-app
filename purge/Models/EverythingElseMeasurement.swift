@@ -97,7 +97,7 @@ nonisolated enum EverythingElseRootPlan {
         let path = url.path
         for relative in limitedWalkSkips {
             let skipped = "\(homePath)/\(relative)"
-            if path == skipped || path.hasPrefix(skipped + "/") { return false }
+            if PathContainment.isSameOrInside(path, skipped) { return false }
         }
         // A media library anywhere under the media folders, by its bundle name.
         let name = url.lastPathComponent

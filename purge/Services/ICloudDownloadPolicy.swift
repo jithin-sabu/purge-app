@@ -140,7 +140,7 @@ nonisolated enum ICloudDownloadPolicy {
         let path = url.standardizedFileURL.path
         if LargeFileScanPolicy.isInsideExcludedDirectory(url) { return false }
         let roots = LargeFileScanPolicy.scanRoots(home: home) + [LargeFileScanPolicy.iCloudDriveRoot(home: home)]
-        return roots.contains { path.hasPrefix($0.standardizedFileURL.path + "/") }
+        return roots.contains { PathContainment.isInside(path, $0.standardizedFileURL.path) }
     }
 
     /// The decision for a file as `state` describes it. Pure, so tests can walk
