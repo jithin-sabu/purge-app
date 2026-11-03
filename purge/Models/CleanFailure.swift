@@ -35,7 +35,9 @@ nonisolated enum FileProtection {
     }
 }
 
-nonisolated enum CleanFailureReason: Equatable, Error {
+/// The raw values are saved in Cleanup History (#303), so renaming a case turns
+/// its old entries into `.unknown`.
+nonisolated enum CleanFailureReason: String, Equatable, Error {
     case needsFullDiskAccess
     case needsAdministrator
     /// The helper is on, but the account using Purge is not an administrator, and

@@ -202,6 +202,8 @@ final class CleanupLedgerStore {
         let bytesMovedToTrash: Int64
         let bytesReclaimedOnVolume: Int64?
         let skippedForSafetyCount: Int
+        /// Zero for entries written before #303, which did not keep failures.
+        let failedCount: Int
         let items: [(path: String, bytes: Int64)]
         /// False for entries whose items are not files moved to the Trash, so the
         /// import never files them as a clean.
@@ -214,6 +216,7 @@ final class CleanupLedgerStore {
             bytesMovedToTrash = entry.bytesMovedToTrash
             bytesReclaimedOnVolume = entry.bytesReclaimedOnVolume
             skippedForSafetyCount = entry.skippedItems.filter(\.isUserVisible).count
+            failedCount = entry.failedItems.count
             items = entry.deletedItems.map { ($0.path, $0.sizeBytes) }
             belongsInLedger = Self.importsIntoLedger(entry.kind)
         }
@@ -295,7 +298,7 @@ final class CleanupLedgerStore {
             bytesRemovedDirectly: 0,
             bytesReclaimedOnVolume: entry.bytesReclaimedOnVolume,
             skippedForSafetyCount: entry.skippedForSafetyCount,
-            failedCount: 0,
+            failedCount: entry.failedCount,
             importedFromHistory: true,
             items: items
         )

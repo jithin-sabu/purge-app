@@ -27,9 +27,14 @@ struct CleanupHistoryDetailView: View {
                         if !permanent.isEmpty {
                             itemsSection(String(localized: "Deleted permanently"), items: permanent)
                         }
-                        if !trashed.isEmpty || permanent.isEmpty {
+                        // A clean where everything failed lists only what failed,
+                        // not an empty "Moved to Trash" card (#303).
+                        if !trashed.isEmpty || (permanent.isEmpty && entry.failedItems.isEmpty) {
                             itemsSection(String(localized: "Moved to Trash"), items: trashed)
                         }
+                    }
+                    if !entry.failedItems.isEmpty {
+                        failedSection
                     }
                     if !entry.skippedItems.isEmpty {
                         skippedSection
@@ -81,6 +86,24 @@ struct CleanupHistoryDetailView: View {
                         InsetCardDivider()
                     }
                     deletedItemRow(item)
+                        .padding(.horizontal, AppStyle.Spacing.medium)
+                        .padding(.vertical, AppStyle.Spacing.small)
+                }
+            }
+        }
+    }
+
+    /// What the clean tried and couldn't remove, each with why. Still in place (#303).
+    private var failedSection: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            sectionLabel(String(localized: "Not removed"))
+
+            historySectionCard {
+                ForEach(Array(entry.failedItems.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 {
+                        InsetCardDivider()
+                    }
+                    failedItemRow(item)
                         .padding(.horizontal, AppStyle.Spacing.medium)
                         .padding(.vertical, AppStyle.Spacing.small)
                 }
@@ -164,6 +187,37 @@ struct CleanupHistoryDetailView: View {
             }
 
             Spacer(minLength: 0)
+        }
+    }
+
+    private func failedItemRow(_ item: CleanupHistoryFailedItemDTO) -> some View {
+        let fileURL = URL(fileURLWithPath: item.path).standardizedFileURL
+
+        return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                Text(fileURL.lastPathComponent)
+                    .font(AppStyle.Typography.body)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Text(item.failureReason.explanation)
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(locationText(for: fileURL))
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textTertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.small)
+
+            if item.sizeBytes > 0 {
+                Text(formatBytes(item.sizeBytes))
+                    .font(AppStyle.Typography.rowTitle.numbers)
+                    .foregroundStyle(AppColors.textSecondary)
+            }
         }
     }
 
