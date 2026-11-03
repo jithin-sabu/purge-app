@@ -23,7 +23,7 @@ struct OnboardingFlowView: View {
     case review
   }
 
-  @AppStorage("onboarding.pendingCelebration") private var pendingCelebration = false
+  @AppStorage(PurgeStore.pendingOnboardingCelebrationKey) private var pendingCelebration = false
   /// Set when the flow reaches the look-deeper step. A relaunch comes back to it:
   /// macOS may offer to quit and reopen Purge after the Settings toggle, where the
   /// reveal picks up the grant, and someone who quits there before opening
@@ -203,7 +203,7 @@ struct OnboardingFlowView: View {
       finishOnboarding()
     case .review:
       pendingCelebration = true
-      UserDefaults.standard.set(SafetyFilter.all.rawValue, forKey: "filter.appCaches")
+      UserDefaults.standard.set(SafetyFilter.all.rawValue, forKey: SafetyFilter.appCachesKey)
       store.selectedTab = .appCaches
       beginExitToHome()
     }

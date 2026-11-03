@@ -79,7 +79,7 @@ nonisolated struct CommandLineToolCatalog: Equatable, Sendable {
             guard !folders.contains(entry.folder) else { throw ValidationError.duplicateFolder(entry.folder) }
             folders.append(entry.folder)
             for app in appFolders where app == entry.folder
-                || app.hasPrefix(entry.folder + "/") || entry.folder.hasPrefix(app + "/") {
+                || PathContainment.isInside(app, entry.folder) || PathContainment.isInside(entry.folder, app) {
                 throw ValidationError.overlapsAppCatalog(entry.folder)
             }
             for shim in entry.shims {
@@ -91,14 +91,14 @@ nonisolated struct CommandLineToolCatalog: Equatable, Sendable {
             }
             for kept in entry.kept {
                 guard isPlainHiddenHomePath(kept) else { throw ValidationError.notAHiddenHomePath(kept) }
-                guard kept != entry.folder, !kept.hasPrefix(entry.folder + "/"),
-                      !entry.folder.hasPrefix(kept + "/") else {
+                guard kept != entry.folder, !PathContainment.isInside(kept, entry.folder),
+                      !PathContainment.isInside(entry.folder, kept) else {
                     throw ValidationError.keptInsideFolder(kept)
                 }
             }
         }
         for parent in folders {
-            for child in folders where child.hasPrefix(parent + "/") {
+            for child in folders where PathContainment.isInside(child, parent) {
                 throw ValidationError.nested(parent: parent, child: child)
             }
         }

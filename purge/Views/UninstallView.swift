@@ -438,7 +438,12 @@ struct UninstallView: View {
                 HStack(spacing: AppStyle.Spacing.small) {
                     sortMenu
                     Spacer(minLength: AppStyle.Spacing.xSmall)
-                    UninstallSearchField(query: $appSearchQuery)
+                    CapsuleSearchField(
+                        query: $appSearchQuery,
+                        prompt: "Search apps",
+                        accessibilityLabel: "Search apps by name",
+                        width: 180
+                    )
                     viewModePicker
                 }
                 .transition(.opacity.animation(reduceMotion ? nil : Self.sectionFade))
@@ -1371,39 +1376,37 @@ struct UninstallReviewSheet: View {
     /// plan with every app set the way it says. With three, Cancel takes the
     /// far left where the size line was, and the two real choices sit together
     /// on the right.
+    @ViewBuilder
     private var footer: some View {
-        let secondary = Self.secondaryButtonTitle(for: plan)
-        return HStack(spacing: AppStyle.Spacing.small) {
-            if secondary == nil {
-                Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
-                    .font(AppStyle.Typography.metadataEmphasis.numbers)
-                    .foregroundStyle(AppColors.textSecondary)
-            } else {
+        if let secondary = Self.secondaryButtonTitle(for: plan) {
+            HStack(spacing: AppStyle.Spacing.small) {
                 Button("Cancel", action: onCancel)
                     .buttonStyle(.purge(.secondary))
                     .keyboardShortcut(.cancelAction)
-            }
 
-            Spacer()
+                Spacer()
 
-            if let secondary {
                 Button(secondary) {
                     onConfirm(Self.plan(plan, removingThroughHomebrew: false))
                 }
                 .buttonStyle(.purge(.secondary))
                 .disabled(plan.totalSelectedItems == 0)
-            } else {
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(.purge(.secondary))
-                    .keyboardShortcut(.cancelAction)
-            }
 
-            Button(Self.primaryButtonTitle(for: plan)) {
-                onConfirm(Self.plan(plan, removingThroughHomebrew: true))
+                Button(Self.primaryButtonTitle(for: plan)) {
+                    onConfirm(Self.plan(plan, removingThroughHomebrew: true))
+                }
+                .buttonStyle(.purge(.destructive))
+                .keyboardShortcut(.defaultAction)
+                .disabled(plan.totalSelectedItems == 0)
             }
-            .buttonStyle(.purge(.destructive))
-            .keyboardShortcut(.defaultAction)
-            .disabled(plan.totalSelectedItems == 0)
+        } else {
+            RemovalSheetFooter(
+                sizeLine: RemovalSizeLine.text(toTrash: plan.totalSelectedBytes),
+                confirmTitle: Self.primaryButtonTitle(for: plan),
+                itemCount: plan.totalSelectedItems,
+                onCancel: onCancel,
+                onConfirm: { onConfirm(Self.plan(plan, removingThroughHomebrew: true)) }
+            )
         }
     }
 }
@@ -1463,24 +1466,13 @@ struct OrphanReviewSheet: View {
     }
 
     private var footer: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
-                .font(AppStyle.Typography.metadataEmphasis.numbers)
-                .foregroundStyle(AppColors.textSecondary)
-
-            Spacer()
-
-            Button("Cancel", action: onCancel)
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
-
-            Button("Move \(plan.totalSelectedItems) to Trash") {
-                onConfirm(plan)
-            }
-            .buttonStyle(.purge(.destructive))
-            .keyboardShortcut(.defaultAction)
-            .disabled(plan.totalSelectedItems == 0)
-        }
+        RemovalSheetFooter(
+            sizeLine: RemovalSizeLine.text(toTrash: plan.totalSelectedBytes),
+            confirmTitle: String(localized: "Move \(plan.totalSelectedItems) to Trash"),
+            itemCount: plan.totalSelectedItems,
+            onCancel: onCancel,
+            onConfirm: { onConfirm(plan) }
+        )
     }
 }
 
@@ -1554,145 +1546,13 @@ struct RemovedAppLeftoverSheet: View {
     }
 
     private var footer: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
-                .font(AppStyle.Typography.metadataEmphasis.numbers)
-                .foregroundStyle(AppColors.textSecondary)
-
-            Spacer()
-
-            Button("Keep Files", action: onCancel)
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
-
-            Button("Move \(plan.totalSelectedItems) to Trash") {
-                onConfirm(plan)
-            }
-            .buttonStyle(.purge(.destructive))
-            .keyboardShortcut(.defaultAction)
-            .disabled(plan.totalSelectedItems == 0)
-        }
-    }
-}
-
-// MARK: - Search field
-
-private struct UninstallSearchField: View {
-    @Binding var query: String
-    @FocusState private var isFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Local mouse-down monitor installed only while focused; see
-    /// `installOutsideClickResign`.
-    @State private var outsideClickMonitor: Any?
-    /// Set by Edit > Find when the field was not focused: the selection has to wait
-    /// for `isFocused` to land, or it would run before AppKit has a field editor.
-    @State private var selectsAllOnFocus = false
-
-    private var hasText: Bool { !query.isEmpty }
-
-    var body: some View {
-        HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
-            Image(systemName: "magnifyingglass")
-                .imageScale(.small)
-                .foregroundStyle(AppColors.textSecondary)
-                .frame(width: 14, height: 14)
-                .accessibilityHidden(true)
-
-            TextField("Search apps", text: $query)
-                .textFieldStyle(.plain)
-                .font(AppStyle.Typography.body)
-                .foregroundStyle(AppColors.textPrimary)
-                .focused($isFocused)
-                .focusEffectDisabledIfAvailable()
-                .accessibilityLabel("Search apps by name")
-                .onExitCommand {
-                    if hasText { query = "" } else { isFocused = false }
-                }
-
-            if hasText {
-                Button {
-                    query = ""
-                    isFocused = true
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .imageScale(.small)
-                        .foregroundStyle(AppColors.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .help("Clear search")
-                .accessibilityLabel("Clear search")
-                .transition(.opacity)
-            }
-        }
-        .padding(.horizontal, AppStyle.Spacing.small)
-        .padding(.vertical, AppStyle.Spacing.xxSmallPlus)
-        .frame(width: 180)
-        .background {
-            Capsule(style: .continuous).fill(AppColors.fillSecondary)
-        }
-        .overlay {
-            Capsule(style: .continuous)
-                .strokeBorder(
-                    isFocused ? AppColors.actionPrimary : AppColors.borderSubtle,
-                    lineWidth: 1
-                )
-        }
-        .contentShape(Capsule(style: .continuous))
-        .onTapGesture { isFocused = true }
-        .focusedSceneValue(\.findAction, FindAction {
-            if isFocused {
-                FindAction.selectAllInFieldEditor()
-            } else {
-                selectsAllOnFocus = true
-                isFocused = true
-            }
-        })
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isFocused)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: hasText)
-        .onChange(of: isFocused) { focused in
-            if focused {
-                installOutsideClickResign()
-                if selectsAllOnFocus { FindAction.selectAllInFieldEditor() }
-            } else {
-                removeOutsideClickResign()
-            }
-            selectsAllOnFocus = false
-        }
-        .onDisappear { removeOutsideClickResign() }
-    }
-
-    /// SwiftUI leaves a focused TextField's first responder in place when a click
-    /// lands on anything non-focusable (tiles, empty space), so the capsule border
-    /// and caret used to stick. While focused, a local monitor resigns first
-    /// responder for any mouse-down that didn't land on the field editor itself.
-    private func installOutsideClickResign() {
-        guard outsideClickMonitor == nil else { return }
-        outsideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-            guard let window = event.window,
-                  let hitView = window.contentView?.hitTest(event.locationInWindow),
-                  hitView !== window.firstResponder
-            else { return event }
-            window.makeFirstResponder(nil)
-            return event
-        }
-    }
-
-    private func removeOutsideClickResign() {
-        if let monitor = outsideClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            outsideClickMonitor = nil
-        }
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func focusEffectDisabledIfAvailable() -> some View {
-        if #available(macOS 14.0, *) {
-            focusEffectDisabled()
-        } else {
-            self
-        }
+        RemovalSheetFooter(
+            sizeLine: RemovalSizeLine.text(toTrash: plan.totalSelectedBytes),
+            cancelTitle: "Keep Files",
+            confirmTitle: String(localized: "Move \(plan.totalSelectedItems) to Trash"),
+            itemCount: plan.totalSelectedItems,
+            onCancel: onCancel,
+            onConfirm: { onConfirm(plan) }
+        )
     }
 }

@@ -63,7 +63,7 @@ nonisolated enum OpenFileCheck {
                 command = value
             case "n":
                 guard let pid, !counted else { continue }
-                if folders.contains(where: { value == $0 || value.hasPrefix($0 + "/") }) {
+                if folders.contains(where: { PathContainment.isSameOrInside(value, $0) }) {
                     result.append(Holder(pid: pid, command: command))
                     counted = true
                 }

@@ -41,16 +41,7 @@ final class CleanupLedgerStore {
     }
 
     private static func defaultDirectory() -> URL {
-        // Tests run inside a hosted copy of the app. A clean a test drives must
-        // never land in the user's permanent record, so they get a scratch folder.
-        if TestHost.isActive() {
-            return FileManager.default.temporaryDirectory
-                .appendingPathComponent("PurgeTestLedger-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
-        }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("io.getpurge.app", isDirectory: true)
-            ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("ledger", isDirectory: true)
+        AppSupportFolder.url().appendingPathComponent("ledger", isDirectory: true)
     }
 
     // MARK: - Recording
@@ -428,12 +419,6 @@ final class CleanupLedgerStore {
     }
 
     nonisolated private static func homeRelative(_ path: String, home homePath: String) -> String {
-        let home = homePath.hasSuffix("/") ? String(homePath.dropLast()) : homePath
-        guard !home.isEmpty, path.hasPrefix(home) else { return path }
-        let remainder = path.dropFirst(home.count)
-        if remainder.isEmpty { return "~" }
-        // `/Users/alice2` must not become `~2`: only a match on a path boundary counts.
-        guard remainder.hasPrefix("/") else { return path }
-        return "~" + remainder
+        abbreviatingHome(in: path, home: homePath)
     }
 }

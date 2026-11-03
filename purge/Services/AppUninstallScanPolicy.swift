@@ -60,7 +60,7 @@ enum AppUninstallScanPolicy {
     ) -> UninstallCategory? {
         let path = url.standardizedFileURL.path
         return leftoverSearchRoots(home: home)
-            .first { path.hasPrefix($0.url.standardizedFileURL.path + "/") }?
+            .first { PathContainment.isInside(path, $0.url.standardizedFileURL.path) }?
             .category
     }
 
@@ -127,7 +127,7 @@ enum AppUninstallScanPolicy {
         for root in leftoverSearchRoots(home: home) {
             let rootPath = root.url.standardizedFileURL.path
             if path == rootPath { return false }
-            guard path.hasPrefix(rootPath + "/") else { continue }
+            guard PathContainment.isInside(path, rootPath) else { continue }
             if std.pathExtension == "app" {
                 guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
                       !isRealAppBundle(std) else { return false }
@@ -169,7 +169,7 @@ enum AppUninstallScanPolicy {
     nonisolated static func staysInsideHomeWithoutLinks(_ url: URL, home: URL) -> Bool {
         let std = url.standardizedFileURL
         let homePath = home.standardizedFileURL.path
-        guard std.path.hasPrefix(homePath + "/") else { return false }
+        guard PathContainment.isInside(std.path, homePath) else { return false }
         let relative = String(std.path.dropFirst(homePath.count))
         let resolvedHome = home.standardizedFileURL.resolvingSymlinksInPath().path
         return std.resolvingSymlinksInPath().path == resolvedHome + relative

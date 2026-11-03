@@ -15,7 +15,7 @@ struct MenuLaunchScanTests {
 
         model.attach(store: store)
 
-        #expect(await Self.eventually { fake.generalAccesses.count == 1 })
+        #expect(await eventually { fake.generalAccesses.count == 1 })
         fake.cleanUp()
     }
 
@@ -34,8 +34,8 @@ struct MenuLaunchScanTests {
         #expect(model.state == .checking)
 
         model.menuDidOpen()
-        #expect(await Self.eventually { fake.generalAccesses.count == 1 })
-        #expect(await Self.eventually { model.state != .checking })
+        #expect(await eventually { fake.generalAccesses.count == 1 })
+        #expect(await eventually { model.state != .checking })
         fake.cleanUp()
     }
 
@@ -54,11 +54,11 @@ struct MenuLaunchScanTests {
         store.requestScan(.cachesAndDevTools)
         // Held once the scan has reached the fake, so the release below has
         // something to release.
-        #expect(await Self.eventually { fake.generalAccesses.count == 1 })
+        #expect(await eventually { fake.generalAccesses.count == 1 })
         try? await Task.sleep(for: .milliseconds(400))
         fake.finishHeldGeneral()
-        #expect(await Self.eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
-        #expect(await Self.eventually { model.state != .checking })
+        #expect(await eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
+        #expect(await eventually { model.state != .checking })
 
         model.menuDidOpen()
         // Had the skipped scan still been pending, this open would have gone back
@@ -80,7 +80,7 @@ struct MenuLaunchScanTests {
         model.attach(store: store, scansAtLaunch: false)
 
         store.requestScan(.cachesAndDevTools)
-        #expect(await Self.eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
+        #expect(await eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
 
         model.menuDidOpen()
         #expect(model.state != .checking)
@@ -88,20 +88,5 @@ struct MenuLaunchScanTests {
         #expect(model.state != .checking)
         #expect(fake.generalAccesses.count == 1)
         fake.cleanUp()
-    }
-
-    /// Counts only the time this loop was running, as `IntentRouterTests` does:
-    /// on CI the test host can stall with every suite waiting.
-    private static func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
-        var waited: TimeInterval = 0
-        var last = Date()
-        while !condition() {
-            guard waited < timeout else { return false }
-            try? await Task.sleep(for: .milliseconds(10))
-            let now = Date()
-            waited += min(now.timeIntervalSince(last), 0.25)
-            last = now
-        }
-        return true
     }
 }

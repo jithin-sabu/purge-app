@@ -57,18 +57,6 @@ struct ScanResultRow: View {
 
     @State private var isContextMenuActive = false
 
-    private var statusLabel: String {
-        safetyInfo.level.displayName
-    }
-
-    private var statusTone: AppBadge.Tone {
-        switch safetyInfo.level {
-        case .safe: return .safe
-        case .medium: return .warning
-        case .unknown: return .neutral
-        }
-    }
-
     private var canSelectForBulk: Bool {
         allowsBulkSelection && !isFromLastScan
     }
@@ -299,7 +287,7 @@ struct ScanResultRow: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .monospacedDigit()
 
-                AppBadge(text: statusLabel, tone: statusTone)
+                AppBadge(level: safetyInfo.level)
             }
         }
     }

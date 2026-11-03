@@ -174,7 +174,7 @@ extension PurgeStore {
     /// Returns when the step finishes or its patience runs out, whichever comes first.
     static func waitForStep(_ task: Task<Void, Never>, patience: TimeInterval) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let gate = StepWaitGate(continuation)
+            let gate = ResumeOnce(continuation)
             let timeout = Task { @MainActor in
                 try? await Task.sleep(nanoseconds: UInt64(patience * 1_000_000_000))
                 gate.resume()
@@ -237,20 +237,5 @@ extension PurgeStore {
                 await scanCommandLineToolsIfNeeded()
             }
         }
-    }
-}
-
-/// Resumes a continuation once, from whichever of the step or its timeout ends first.
-@MainActor
-private final class StepWaitGate {
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    init(_ continuation: CheckedContinuation<Void, Never>) {
-        self.continuation = continuation
-    }
-
-    func resume() {
-        continuation?.resume()
-        continuation = nil
     }
 }

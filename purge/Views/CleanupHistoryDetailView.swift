@@ -69,7 +69,7 @@ struct CleanupHistoryDetailView: View {
     }
 
     private var summarySection: some View {
-        historySectionCard {
+        InsetCard {
             CleanupHistorySummaryRow(entry: entry)
                 .padding(.horizontal, AppStyle.Spacing.medium)
                 .padding(.vertical, AppStyle.Spacing.small)
@@ -80,7 +80,7 @@ struct CleanupHistoryDetailView: View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             sectionLabel(title)
 
-            historySectionCard {
+            InsetCard {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
                         InsetCardDivider()
@@ -99,7 +99,7 @@ struct CleanupHistoryDetailView: View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             sectionLabel(String(localized: "Not removed"))
 
-            historySectionCard {
+            InsetCard {
                 ForEach(Array(entry.failedItems.enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
                         InsetCardDivider()
@@ -116,7 +116,7 @@ struct CleanupHistoryDetailView: View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             sectionLabel(String(localized: "Skipped"))
 
-            historySectionCard {
+            InsetCard {
                 ForEach(Array(entry.skippedItems.enumerated()), id: \.element.id) { index, item in
                     if index > 0 {
                         InsetCardDivider()
@@ -226,20 +226,5 @@ struct CleanupHistoryDetailView: View {
     private func locationText(for fileURL: URL) -> String {
         let folder = fileURL.deletingLastPathComponent()
         return LargeFile.iCloudDriveLocation(for: folder) ?? displayDirectoryPath(for: folder)
-    }
-
-    private func historySectionCard<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 0, content: content)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                AppColors.fillSecondary,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
-            }
     }
 }

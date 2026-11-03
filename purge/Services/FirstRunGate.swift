@@ -49,15 +49,15 @@ enum FirstRunGate {
         "ScheduledCleaningRegistrar.lastFailedAttempt",
         "cleanCompletion.lastShownTimeQuip",
         "largeFiles.minSizeMB",
-        "filter.appCaches",
-        "filter.devTools",
+        SafetyFilter.appCachesKey,
+        SafetyFilter.devToolsKey,
         "filter.largeFiles",
         "filter.largeFiles.size",
         "filter.largeFiles.lastUsed",
-        "sort.appCaches",
-        "sort.devTools",
+        SortOption.appCachesKey,
+        SortOption.devToolsKey,
         "sort.largeFiles",
-        "onboarding.pendingCelebration",
+        PurgeStore.pendingOnboardingCelebrationKey,
     ]
 
     private static let supportFilenames = [
@@ -80,10 +80,10 @@ enum FirstRunGate {
         // already has Purge state, which is otherwise indistinguishable from an update.
         if defaults.bool(forKey: "purge.resetFirstRun") {
             defaults.set(false, forKey: onboardingCompletedKey)
-            defaults.set(false, forKey: "onboarding.pendingCelebration")
-            defaults.set(false, forKey: "onboarding.pendingDeeperScan")
-            defaults.removeObject(forKey: "onboarding.lookDeeperExit")
-            defaults.removeObject(forKey: "onboarding.didCleanBeforeLookDeeper")
+            defaults.set(false, forKey: PurgeStore.pendingOnboardingCelebrationKey)
+            defaults.set(false, forKey: OnboardingFlowView.pendingDeeperScanKey)
+            defaults.removeObject(forKey: OnboardingFlowView.lookDeeperExitKey)
+            defaults.removeObject(forKey: OnboardingFlowView.didCleanBeforeLookDeeperKey)
             defaults.set(appVersion, forKey: firstSeenVersionKey)
             defaults.set(now, forKey: firstSeenAtKey)
             return .freshInstall
@@ -107,8 +107,7 @@ enum FirstRunGate {
     }
 
     static func defaultSupportDirectory() -> URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("io.getpurge.app", isDirectory: true)
+        AppSupportFolder.url()
     }
 
     static func currentAppVersion() -> String {

@@ -329,7 +329,7 @@ nonisolated struct LargeFile: Identifiable, Hashable {
         let root = LargeFileScanPolicy.iCloudDriveRoot(home: home).standardizedFileURL.path
         let path = folder.standardizedFileURL.path
         if path == root { return String(localized: "iCloud Drive") }
-        guard path.hasPrefix(root + "/") else { return nil }
+        guard PathContainment.isInside(path, root) else { return nil }
         return String(localized: "iCloud Drive") + "/" + path.dropFirst(root.count + 1)
     }
 }

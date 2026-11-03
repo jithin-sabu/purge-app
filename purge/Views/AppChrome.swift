@@ -469,7 +469,7 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var supportFooterLine: SupportNudge.Line?
     @State private var supportLinkOpened = false
 
-    private static let confettiThresholdBytes: Int64 = 2 * 1024 * 1024 * 1024
+    private static let confettiThresholdBytes = SupportNudge.significantCleanBytes
     private static let minimumCleaningDwell: TimeInterval = 1.2
 
     private let celebrationAccent = AppColors.textPrimary
@@ -2141,6 +2141,24 @@ struct AppBadge: View {
         case .safe: return AppColors.statusSafeText.opacity(0.22)
         case .warning: return AppColors.statusCheckText.opacity(0.22)
         case .danger: return AppColors.statusDangerText.opacity(0.22)
+        }
+    }
+}
+
+extension AppBadge {
+    /// A safety level's badge. Scan rows, project rows and the delete sheet all
+    /// draw it, so a level reads the same wherever it shows (#185).
+    init(level: SafetyLevel) {
+        self.init(text: level.displayName, tone: Tone(level))
+    }
+}
+
+extension AppBadge.Tone {
+    init(_ level: SafetyLevel) {
+        switch level {
+        case .safe: self = .safe
+        case .medium: self = .warning
+        case .unknown: self = .neutral
         }
     }
 }

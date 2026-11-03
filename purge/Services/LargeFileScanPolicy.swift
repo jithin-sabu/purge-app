@@ -84,9 +84,13 @@ enum LargeFileScanPolicy {
         if name.hasPrefix(".") { return true }
         if excludedFolderNames.contains(name) { return true }
         if projectArtifactFolderNames.contains(name) { return true }
-        let ext = url.pathExtension.lowercased()
-        return ["app", "photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater", "bundle"].contains(ext)
+        return excludedBundleExtensions.contains(url.pathExtension.lowercased())
     }
+
+    /// Packages walked as one item, never into: apps, media libraries and bundles.
+    private nonisolated static let excludedBundleExtensions: Set<String> = [
+        "app", "photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater", "bundle"
+    ]
 
     nonisolated static func isInsideExcludedDirectory(_ url: URL) -> Bool {
         url.standardizedFileURL.pathComponents.dropLast().contains(where: isExcludedComponent)
@@ -98,9 +102,7 @@ enum LargeFileScanPolicy {
         if excludedFolderNames.contains(component) { return true }
         if projectArtifactFolderNames.contains(component) { return true }
         let ext = (component as NSString).pathExtension.lowercased()
-        if ["app", "photoslibrary", "imovielibrary", "tvlibrary", "musiclibrary", "theater", "bundle"].contains(ext) {
-            return true
-        }
+        if excludedBundleExtensions.contains(ext) { return true }
         // A file inside a VM is part of its disk. Only the whole bundle goes.
         return LargeFileKind.virtualMachineExtensions.contains(ext)
     }
@@ -142,8 +144,8 @@ enum LargeFileScanPolicy {
 
         let homePath = home.resolvingSymlinksInPath().standardizedFileURL.path
         let volumesPath = volumes.resolvingSymlinksInPath().standardizedFileURL.path
-        guard path.hasPrefix(homePath + "/") || path.hasPrefix(volumesPath + "/") else { return nil }
-        if homePath == path || homePath.hasPrefix(path + "/") { return nil }
+        guard PathContainment.isInside(path, homePath) || PathContainment.isInside(path, volumesPath) else { return nil }
+        if PathContainment.isSameOrInside(homePath, path) { return nil }
         // Without case: a link can spell it `~/library/CloudStorage`, which is
         // `~/Library` on the default volume, and macOS 13 and 14 keep the
         // link's spelling when resolving it.

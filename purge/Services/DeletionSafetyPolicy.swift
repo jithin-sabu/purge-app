@@ -265,14 +265,14 @@ enum DeletionSafetyPolicy {
         home == cachedHomePath ? cachedWhitelistedPrefixes : whitelistedAbsolutePrefixes(home: home)
     }
 
-    /// Absolute paths (and their descendants) we are explicitly authorized to delete.
+    /// Absolute paths, with everything inside them, that may be offered for
+    /// cleaning. Being listed decides only that: the tier comes from the path's
+    /// entry in explanations.json, and Clean Safe Items takes Safe rows alone.
     ///
-    /// Audit note: every entry below resolves to a regenerable cache, build
-    /// artifact, or log directory — nothing here holds non-recoverable user
-    /// data. A handful of entries are flagged `AUDIT` where the folder holds
-    /// re-creatable but not-instantly-regenerated state; those are surfaced as
-    /// "Check First" by their classifiers (never silently downgraded to Safe),
-    /// and are called out here so the risk stays visible.
+    /// Most entries are caches and logs their owner rebuilds. Those flagged
+    /// `AUDIT` hold things that come back only slowly or by hand, and their
+    /// explanations keep them at Check First. An entry inside another one adds
+    /// nothing, so none is listed (#185).
     nonisolated static func whitelistedAbsolutePrefixes(home: String) -> [String] {
         [
             "\(home)/Library/Caches",
@@ -283,8 +283,6 @@ enum DeletionSafetyPolicy {
             // user data, but not auto-regenerated — treat as Check First, never Safe.
             "\(home)/Library/Developer/Xcode/Archives",
             "\(home)/.npm",
-            "\(home)/.npm/_npx",
-            "\(home)/.npm/_logs",
             "\(home)/.cache/node/corepack",
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
@@ -305,7 +303,6 @@ enum DeletionSafetyPolicy {
             // (`1.0/global.sbt`, `1.0/plugins`) next to the launcher jars.
             "\(home)/.ivy2/cache",
             "\(home)/.cache/act",
-            "\(home)/.zcompdump",
             "\(home)/.cargo/registry",
             // Downloaded packages only. `~/.pub-cache/bin` and `global_packages` hold
             // tools installed with `dart pub global activate`, which are not a cache.
@@ -322,7 +319,6 @@ enum DeletionSafetyPolicy {
             "\(home)/.nuget/packages",
             "\(home)/.bun/install/cache",
             "\(home)/.cabal/packages",
-            "\(home)/Library/Caches/org.swift.swiftpm",
             "\(home)/.swiftpm/cache",
             // AUDIT: Stack's package store, and `~/.cache/bazel`, can be tens of GB.
             // Both re-download rather than being lost, but the next build is very
@@ -337,7 +333,6 @@ enum DeletionSafetyPolicy {
             // backups) is deliberately NOT on the allowlist. Those backups are
             // non-recoverable, so they must never be scanned, sized, or shown.
             "\(home)/Library/Logs",
-            "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/.m2/repository",
             // `~/.gem` as a whole is NOT listed: `gem install --user-install` puts
             // installed gems and their commands (CocoaPods, fastlane) under
@@ -359,14 +354,11 @@ enum DeletionSafetyPolicy {
             // by name alone. `isWhitelistedApplicationSupportCachePath` allows them
             // by their Chromium shape (#226).
             "\(home)/Library/Application Support/Code/CachedExtensionVSIXs",
-            "\(home)/Library/Caches/JetBrains",
             // NOTE: `~/Library/Application Support/JetBrains` is deliberately NOT on
             // the allowlist. It holds installed plugins and all IDE settings (not a
             // cache), so it must never be scanned, sized, or deleted.
             // NOTE: `~/Library/Application Support/Zed/db` is deliberately NOT listed.
             // It is Zed's workspace state database, not a cache.
-            "\(home)/Library/Caches/Zed",
-            "\(home)/Library/Caches/ms-playwright",
             "\(home)/.cache/ms-playwright",
             "\(home)/Library/Developer/CoreSimulator/Devices",
             // Adobe stores its heavy caches under Application Support rather than
@@ -569,7 +561,7 @@ enum DeletionSafetyPolicy {
     nonisolated static func requiresAdminPrivileges(for url: URL) -> Bool {
         let path = url.standardizedFileURL.path
         return systemCacheDeletionPrefixes.contains { prefix in
-            path == prefix || path.hasPrefix(prefix + "/")
+            PathContainment.isSameOrInside(path, prefix)
         }
     }
 
@@ -588,7 +580,7 @@ enum DeletionSafetyPolicy {
         let home = cachedHomePath
         let cachesPrefix = "\(home)/Library/Caches"
         let path = standardized.path
-        guard path.hasPrefix(cachesPrefix + "/") else { return false }
+        guard PathContainment.isInside(path, cachesPrefix) else { return false }
 
         let relative = String(path.dropFirst(cachesPrefix.count + 1))
         let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
@@ -609,7 +601,7 @@ enum DeletionSafetyPolicy {
         let home = cachedHomePath
         let logsPrefix = "\(home)/Library/Logs"
         let path = standardized.path
-        guard path == logsPrefix || path.hasPrefix(logsPrefix + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, logsPrefix) else { return false }
 
         let relative = path == logsPrefix ? "" : String(path.dropFirst(logsPrefix.count + 1))
         let topFolder = relative.split(separator: "/").first.map(String.init) ?? ""
@@ -664,7 +656,7 @@ enum DeletionSafetyPolicy {
     /// profile folder and everything else in it are refused.
     nonisolated static func isWhitelistedChromiumUserDataCachePath(_ path: String, home: String) -> Bool {
         for root in chromiumUserDataRoots(home: home) {
-            guard path.hasPrefix(root + "/") else { continue }
+            guard PathContainment.isInside(path, root) else { continue }
             let parts = String(path.dropFirst(root.count + 1)).split(separator: "/").map(String.init)
             // The cache folder itself, or anything inside one, in the shape
             // `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists.
@@ -787,7 +779,7 @@ enum DeletionSafetyPolicy {
         let home = cachedHomePath
         let cache = spotifyCachePath(home: home)
         let path = url.standardizedFileURL.path
-        guard path == cache || path.hasPrefix(cache + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, cache) else { return false }
         return spotifyOfflineIndexShowsDownloads(home: home)
     }
 
@@ -805,7 +797,7 @@ enum DeletionSafetyPolicy {
     ) -> (versionsRoot: String, command: String, version: String)? {
         for store in cliVersionStores {
             let root = "\(home)/\(store.versions)"
-            guard path.hasPrefix(root + "/") else { continue }
+            guard PathContainment.isInside(path, root) else { continue }
             guard let version = path.dropFirst(root.count + 1).split(separator: "/").first.map(String.init),
                   !version.isEmpty else { return nil }
             return (root, "\(home)/\(store.command)", version)
@@ -820,7 +812,7 @@ enum DeletionSafetyPolicy {
         guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: command) else { return nil }
         let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: command).deletingLastPathComponent())
             .standardizedFileURL.path
-        guard resolved.hasPrefix(versionsRoot + "/"),
+        guard PathContainment.isInside(resolved, versionsRoot),
               let inUse = resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init) else {
             return nil
         }
@@ -850,7 +842,7 @@ enum DeletionSafetyPolicy {
     nonisolated static func mailRunningRefusesDeletion(_ url: URL) -> Bool {
         let downloads = "\(cachedHomePath)/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"
         let path = url.standardizedFileURL.path
-        guard path == downloads || path.hasPrefix(downloads + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, downloads) else { return false }
         return isAppRunning(bundleID: "com.apple.mail")
     }
 
@@ -1060,7 +1052,7 @@ enum DeletionSafetyPolicy {
 
     nonisolated static func isProtectedJetBrainsCachePath(_ path: String, home: String) -> Bool {
         let root = "\(home)/Library/Caches/JetBrains"
-        guard path == root || path.hasPrefix(root + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, root) else { return false }
         let parts = path.dropFirst(root.count).split(separator: "/").map(String.init)
         // The JetBrains folder itself, or one IDE folder whole.
         if parts.count < 2 { return true }
@@ -1128,7 +1120,7 @@ enum DeletionSafetyPolicy {
     nonisolated static func isWhitelistedProjectArtifactPath(_ url: URL, home: String) -> Bool {
         let standardized = url.standardizedFileURL
         let path = standardized.path
-        guard path == home || path.hasPrefix(home + "/") else { return false }
+        guard PathContainment.isSameOrInside(path, home) else { return false }
 
         guard let candidates = ProjectArtifactCatalog.rulesByFolderName[standardized.lastPathComponent] else {
             return false
@@ -1140,7 +1132,7 @@ enum DeletionSafetyPolicy {
             let depth = rule.folder.split(separator: "/").count
             var root = standardized
             for _ in 0..<depth { root = root.deletingLastPathComponent() }
-            guard root.path.hasPrefix(home + "/") || root.path == home else { continue }
+            guard PathContainment.isSameOrInside(root.path, home) else { continue }
             guard rule.matchesRoot(root) else { continue }
             // Checked here rather than only in the scanner so that no caller can route
             // around it: a `.terraform` folder holding state is never deletable.
@@ -1167,7 +1159,7 @@ enum DeletionSafetyPolicy {
         // ends in "Cache" (e.g. a plugin's own cache dir). ~/Library/Caches/JetBrains
         // is the real, rebuildable cache and is unaffected by this guard.
         let jetBrainsAppSupport = "\(home)/Library/Application Support/JetBrains"
-        if path == jetBrainsAppSupport || path.hasPrefix(jetBrainsAppSupport + "/") {
+        if PathContainment.isSameOrInside(path, jetBrainsAppSupport) {
             return .blockedNeverDelete
         }
         if isProtectedJetBrainsCachePath(path, home: home) {
@@ -1184,7 +1176,7 @@ enum DeletionSafetyPolicy {
         }
 
         for allowed in whitelistedPrefixes(home: home) {
-            if path == allowed || path.hasPrefix(allowed + "/") {
+            if PathContainment.isSameOrInside(path, allowed) {
                 return .allow
             }
         }
@@ -1236,7 +1228,7 @@ enum DeletionSafetyPolicy {
         }
 
         for blocked in neverDeletePrefixes(home: home) {
-            if path == blocked || path.hasPrefix(blocked + "/") {
+            if PathContainment.isSameOrInside(path, blocked) {
                 return .blockedNeverDelete
             }
         }
@@ -1245,7 +1237,7 @@ enum DeletionSafetyPolicy {
             return .blockedNeverDelete
         }
 
-        let inHome = path == home || path.hasPrefix(home + "/")
+        let inHome = PathContainment.isSameOrInside(path, home)
         if inHome && whitelistedFolderNames.contains(standardized.lastPathComponent) {
             return .allow
         }

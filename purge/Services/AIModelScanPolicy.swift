@@ -215,7 +215,7 @@ nonisolated enum AIModelScanPolicy {
     nonisolated static func isAppModelCachePath(_ path: String, home: String) -> Bool {
         let folder = "\(home)/Library/Caches/huggingface".lowercased()
         let path = path.lowercased()
-        return path == folder || path.hasPrefix(folder + "/")
+        return PathContainment.isSameOrInside(path, folder)
     }
 
     // MARK: - Loose weights
@@ -366,7 +366,7 @@ nonisolated enum AIModelScanPolicy {
         // real folder behind it pass as a model.
         guard !hasLinkInPath(standardized) else { return false }
 
-        func isInside(_ root: URL) -> Bool { path.hasPrefix(root.path + "/") }
+        func isInside(_ root: URL) -> Bool { PathContainment.isInside(path, root.path) }
 
         // Ollama: a manifest, or a blob the manifest names. Both are plain
         // files the scanner picked out of the store.
@@ -423,7 +423,7 @@ nonisolated enum AIModelScanPolicy {
         sizeFloor: Int64 = looseWeightSizeFloorBytes
     ) -> Bool {
         let path = url.path
-        guard let root = looseWeightRoots(home: home).first(where: { path.hasPrefix($0.path + "/") })
+        guard let root = looseWeightRoots(home: home).first(where: { PathContainment.isInside(path, $0.path) })
         else { return false }
 
         let relative = path.dropFirst(root.path.count + 1).split(separator: "/").map(String.init)

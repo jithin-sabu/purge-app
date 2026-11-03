@@ -16,16 +16,7 @@ final class CleanupHistoryStore: ObservableObject {
     }
 
     nonisolated static func fileURL() -> URL {
-        let baseDir: URL
-        if TestHost.isActive() {
-            // Tests run inside a hosted copy of the app. A clean a test drives must
-            // never reach the user's History, so they get a scratch folder (#171).
-            baseDir = TestHost.supportDirectory()
-        } else {
-            baseDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("io.getpurge.app", isDirectory: true)
-                ?? FileManager.default.temporaryDirectory
-        }
+        let baseDir = AppSupportFolder.url()
         if !FileManager.default.fileExists(atPath: baseDir.path) {
             try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
         }

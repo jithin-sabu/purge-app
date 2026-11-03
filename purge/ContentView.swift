@@ -14,10 +14,10 @@ struct ContentView: View {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
+    @AppStorage(PurgeStore.pendingOnboardingCelebrationKey) private var pendingOnboardingCelebration = false
     // Same defaults as the tabs, so the subtitle counts what the list shows.
-    @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.safe.rawValue
-    @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage(SafetyFilter.appCachesKey) private var appCachesFilterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage(SafetyFilter.devToolsKey) private var devToolsFilterRaw: String = SafetyFilter.safe.rawValue
 
     /// Large Files search text. Held here rather than inside `LargeFilesView` so the
     /// page header subtitle can be filtered by it too, and deliberately `@State`
@@ -483,44 +483,30 @@ struct ContentView: View {
         .background(AppColors.surfaceBase)
     }
 
-    @ViewBuilder
+    /// On macOS 26 the scan tabs scroll under the page header's soft edge, so they
+    /// hand their scrolling to it.
+    private var tabsUseExternalScrollContainer: Bool {
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+
     private var appCachesTabBody: some View {
-        Group {
-            if #available(macOS 26.0, *) {
-                AppCachesView(
-                    items: $store.cacheItems,
-                    isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    usesExternalScrollContainer: true
-                )
-            } else {
-                AppCachesView(
-                    items: $store.cacheItems,
-                    isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase
-                )
-            }
-        }
+        AppCachesView(
+            items: $store.cacheItems,
+            isLoading: store.isScanningGeneral || store.isScanningAll,
+            scanPhase: store.scanPhase,
+            usesExternalScrollContainer: tabsUseExternalScrollContainer
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .underDetailPageHeader(includesSubtitle: true)
     }
 
-    @ViewBuilder
     private var devToolsTabBody: some View {
-        Group {
-            if #available(macOS 26.0, *) {
-                DevToolsView(
-                    isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    usesExternalScrollContainer: true
-                )
-            } else {
-                DevToolsView(
-                    isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase
-                )
-            }
-        }
+        DevToolsView(
+            isLoading: store.isScanningDeveloper || store.isScanningAll,
+            scanPhase: store.scanPhase,
+            usesExternalScrollContainer: tabsUseExternalScrollContainer
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .underDetailPageHeader(includesSubtitle: true)
     }
@@ -530,18 +516,12 @@ struct ContentView: View {
         Group {
             if !store.hasFullDiskAccess {
                 LockedFeatureView(feature: .largeFiles)
-            } else if #available(macOS 26.0, *) {
-                LargeFilesView(
-                    isLoading: store.isScanningLargeFiles,
-                    onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery,
-                    usesExternalScrollContainer: true
-                )
             } else {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
                     onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery
+                    searchQuery: $largeFilesSearchQuery,
+                    usesExternalScrollContainer: tabsUseExternalScrollContainer
                 )
             }
         }
@@ -736,8 +716,7 @@ struct ContentView: View {
     }
 
     private func pageSubtitle(count: Int, bytes: Int64) -> String {
-        let itemLabel = count == 1 ? String(localized: "item") : String(localized: "items")
-        return String(localized: "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable")
+        String(localized: "\(count) items · \(formatBytes(bytes)) recoverable")
     }
 
     /// Mirrors the filtering `LargeFilesView` applies to its list, so the subtitle
@@ -771,8 +750,7 @@ struct ContentView: View {
         }
         let files = largeFilesVisibleForSubtitle
         let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let fileLabel = files.count == 1 ? String(localized: "file") : String(localized: "files")
-        return String(localized: "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review")
+        return String(localized: "\(files.count) files · \(formatBytes(bytes)) to review")
     }
 
     /// Follows the active segment, with one shared shape so the two read the same:
@@ -784,7 +762,7 @@ struct ContentView: View {
             guard !items.isEmpty else { return nil }
             return uninstallSubtitle(
                 count: items.count,
-                unit: (String(localized: "item"), String(localized: "items")),
+                counted: { String(localized: "\($0) items") },
                 totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
                 selectedCount: store.selectedOrphanCount,
                 selectedBytes: store.selectedOrphanBytes,
@@ -796,7 +774,7 @@ struct ContentView: View {
             guard !tools.isEmpty else { return nil }
             return uninstallSubtitle(
                 count: tools.standalone.count + tools.managed.count,
-                unit: (String(localized: "tool"), String(localized: "tools")),
+                counted: { String(localized: "\($0) tools") },
                 totalBytes: tools.totalBytes,
                 selectedCount: store.selectedCommandLineToolCount,
                 selectedBytes: store.selectedCommandLineToolBytes,
@@ -813,7 +791,7 @@ struct ContentView: View {
         guard !store.installedApps.isEmpty else { return nil }
         return uninstallSubtitle(
             count: store.installedApps.count,
-            unit: (String(localized: "app"), String(localized: "apps")),
+            counted: { String(localized: "\($0) apps") },
             totalBytes: store.installedApps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) },
             selectedCount: store.selectedAppIDs.count,
             selectedBytes: store.selectedAppsRemovableBytes,
@@ -825,13 +803,13 @@ struct ContentView: View {
 
     private func uninstallSubtitle(
         count: Int,
-        unit: (singular: String, plural: String),
+        counted: (Int) -> String,
         totalBytes: Int64,
         selectedCount: Int,
         selectedBytes: Int64,
         measuring: Bool
     ) -> String {
-        let base = String(localized: "\(count) \(count == 1 ? unit.singular : unit.plural)")
+        let base = counted(count)
         if selectedCount > 0 {
             return String(localized: "\(base) · \(selectedCount) selected · \(formatBytes(selectedBytes))")
         }
@@ -846,9 +824,8 @@ struct ContentView: View {
     }
 
     private var appCachesVisibleItems: [CacheItem] {
-        store.cacheItems.filter {
-            appCachesSafetyFilter.matches($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
-        }
+        let filter = appCachesSafetyFilter
+        return store.cacheItems.filter { store.showsRow($0, under: filter) }
     }
 
     // With no filter the subtitle quotes the shared totals the sidebar and Overview use.
@@ -903,14 +880,11 @@ struct ContentView: View {
     }
 
     private func devToolVisible(_ tool: DevTool) -> Bool {
-        tool.isDetected &&
-            devToolsSafetyFilter.matches(tool.safetyInfo) &&
-            !store.isVisuallyRemovedBySafeCleanup(tool)
+        store.showsRow(tool, under: devToolsSafetyFilter)
     }
 
     private func projectArtifactVisible(_ artifact: ProjectCacheArtifact) -> Bool {
-        devToolsSafetyFilter.matches(artifact.safetyInfo) &&
-            !store.isVisuallyRemovedBySafeCleanup(artifact)
+        store.showsRow(artifact, under: devToolsSafetyFilter)
     }
 
 }

@@ -194,7 +194,7 @@ final class PurgeStore: ObservableObject {
                     safetyInfo: item.safetyInfo,
                     reinstallCommand: item.safetyInfo.reinstallCommand,
                     subtitle: cacheLocationLabel(location),
-                    reinstallSafety: cacheReinstallStatus(forPath: location.path),
+                    reinstallSafety: PurgeStore.cacheReinstallStatus(forPath: location.path),
                     gitStatus: item.gitStatus
                 )
             }
@@ -212,12 +212,6 @@ final class PurgeStore: ObservableObject {
                     && components[$0 + 2] == location.folderName
             }), index + 3 < components.count else { return location.folderName }
             return components[(index + 3)...].joined(separator: "/")
-        }
-
-        private static func cacheReinstallStatus(forPath url: URL) -> ReinstallSafetyStatus {
-            let name = url.lastPathComponent.lowercased()
-            if name == "deriveddata" { return .notApplicable }
-            return ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
         }
     }
 
@@ -734,6 +728,10 @@ final class PurgeStore: ObservableObject {
         return summary
     }
 
+    // The one rule for what Clean Safe Items and scheduled cleans take
+    // (`manualSafeCleanupCandidates`). The Overview's safe totals and its
+    // pre-selection read the same rule, so they count what a clean moves (#185).
+
     private func countsAsSafeCleanup(_ item: CacheItem) -> Bool {
         item.safetyInfo.level == .safe
             && item.reinstallSafety != .missingLockfile
@@ -743,11 +741,13 @@ final class PurgeStore: ObservableObject {
             && !item.standardizedPaths.contains { MacOSInstallLeftovers.isEntryPath($0) }
     }
 
+    /// Every path must have answered clean. Dirty, unknown and not yet checked all
+    /// keep the tool out, as the clean-time git check would.
     private func countsAsSafeCleanup(_ tool: DevTool) -> Bool {
         tool.isDetected
             && tool.safetyInfo.level == .safe
             && tool.reinstallSafety != .missingLockfile
-            && !tool.paths.contains(where: { devToolRepoStatusByPath[$0.standardizedFileURL.path] == .dirty })
+            && tool.standardizedPaths.allSatisfy { devToolRepoStatusByPath[$0] == .clean }
     }
 
     private func countsAsSafeCleanup(_ artifact: ProjectCacheArtifact) -> Bool {
@@ -837,6 +837,21 @@ final class PurgeStore: ObservableObject {
         let path = artifact.path.standardizedFileURL.path
         return interactiveSafeCleanupTargetPaths.contains(path)
             && interactiveSafeCleanupRemovedPaths.contains(path)
+    }
+
+    // Whether a row shows in its tab under `filter`. The tab lists and the page
+    // subtitle read these same rules, so the header counts the rows on screen (#185).
+
+    func showsRow(_ item: CacheItem, under filter: SafetyFilter) -> Bool {
+        filter.matches(item.safetyInfo) && !isVisuallyRemovedBySafeCleanup(item)
+    }
+
+    func showsRow(_ tool: DevTool, under filter: SafetyFilter) -> Bool {
+        tool.isDetected && filter.matches(tool.safetyInfo) && !isVisuallyRemovedBySafeCleanup(tool)
+    }
+
+    func showsRow(_ artifact: ProjectCacheArtifact, under filter: SafetyFilter) -> Bool {
+        filter.matches(artifact.safetyInfo) && !isVisuallyRemovedBySafeCleanup(artifact)
     }
 
     /// `true` while the cleanup overlay is in its cleaning phase — used to gate
@@ -965,26 +980,18 @@ final class PurgeStore: ObservableObject {
         }
 
         let artifacts = includingProjects ? projectGroups.flatMap(\.artifacts) : []
-        for artifact in artifacts {
+        for artifact in artifacts where countsAsSafeCleanup(artifact) {
             guard isReachable(artifact.path) else { continue }
-            guard artifact.safetyInfo.level == .safe else { continue }
-            guard artifact.reinstallSafety != .missingLockfile else { continue }
-            guard artifact.gitStatus == .clean else { continue }
             candidates.append(artifactDeletionCandidate(artifact))
         }
 
-        for tool in devTools where tool.isDetected && tool.safetyInfo.level == .safe {
-            guard tool.reinstallSafety != .missingLockfile else { continue }
+        for tool in devTools where countsAsSafeCleanup(tool) {
             for url in tool.paths where isReachable(url) {
-                let candidate = devToolDeletionCandidate(tool, path: url)
-                guard candidate.gitStatus == .clean else { continue }
-                candidates.append(candidate)
+                candidates.append(devToolDeletionCandidate(tool, path: url))
             }
         }
 
-        for item in cacheItems where item.safetyInfo.level == .safe {
-            guard item.reinstallSafety != .missingLockfile else { continue }
-            guard item.gitStatus == .clean else { continue }
+        for item in cacheItems where countsAsSafeCleanup(item) {
             for location in item.locations where isReachable(location.path) {
                 let path = location.path.standardizedFileURL
                 guard DeletionSafetyPolicy.isOfferedForCleanup(path) else { continue }
@@ -1099,11 +1106,21 @@ final class PurgeStore: ObservableObject {
 
     /// The candidates Clean Safe Items and scheduled cleans may move: those whose git
     /// check answered clean. Dirty, unknown and no answer at all are left alone.
+    ///
+    /// `keptTogether` lists the paths of each dev tool. A tool goes whole or not at
+    /// all, as `countsAsSafeCleanup` decides at scan time: one path that no longer
+    /// answers clean keeps every path of its tool (#185).
     static func gitCleanCandidates(
         _ candidates: [DeletionCandidate],
-        statuses: [String: GitWorktreeStatus]
+        statuses: [String: GitWorktreeStatus],
+        keptTogether groups: [[String]] = []
     ) -> [DeletionCandidate] {
-        candidates.filter { statuses[$0.path.standardizedFileURL.path] == .clean }
+        let isClean: (DeletionCandidate) -> Bool = { statuses[$0.path.standardizedFileURL.path] == .clean }
+        let offered = Set(candidates.map { $0.path.standardizedFileURL.path })
+        let held = Set(groups.filter { group in
+            group.contains { offered.contains($0) && statuses[$0] != .clean }
+        }.joined())
+        return candidates.filter { isClean($0) && !held.contains($0.path.standardizedFileURL.path) }
     }
 
     /// Fills in the git status of every candidate that has none, with one check for
@@ -1254,13 +1271,7 @@ final class PurgeStore: ObservableObject {
             let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
             manualDeletionSession = liveSession
             session = liveSession
-            progressPoller = Task { @MainActor [weak liveSession] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 120_000_000)
-                    guard let liveSession, liveSession.phase == .cleaning else { return }
-                    liveSession.applyProgress(progressBuffer.snapshot())
-                }
-            }
+            progressPoller = liveSession.pollProgress(from: progressBuffer)
         }
 
         isDeleting = true
@@ -2304,20 +2315,48 @@ final class PurgeStore: ObservableObject {
             }
         }
 
-        // Present the cleanup overlay in its cleaning phase and poll per-item
-        // progress, mirroring the caches / dev-tools manual deletion flow so
-        // large-file deletions get the same progress + completion screen.
+        await runUserSelectedDeletion(
+            urls: urls,
+            pathToDisplayName: pathToDisplayName,
+            pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+            aiModelPaths: aiModelPaths,
+            totalBytes: targets.reduce(Int64(0)) { $0 + $1.sizeBytes },
+            source: .largeFiles,
+            removeRows: { deletedPaths in
+                // A row is gone only when every path it stood for is gone. Matching
+                // on `id` alone would drop a model as soon as its manifest trashed,
+                // even if a multi-gigabyte blob failed and still occupies the disk —
+                // and since blobs are only ever discovered through their manifest, a
+                // later scan could never surface it again. Rows that deleted
+                // partially stay listed and stay selected, so a retry can finish the
+                // job (the already-trashed manifest is skipped as non-existent).
+                removeClearedLargeFileRows(largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) })
+            },
+            failureMessage: String(localized: "Unable to delete the selected files. Please try again.")
+        )
+    }
+
+    /// The delete Large Files and leftovers share: the user's own picks through
+    /// `deleteUserSelectedFiles`, with the live overlay, the Trash total and a
+    /// History entry. `removeRows` gets the standardized paths that went.
+    /// When the engine throws, `beforeFailureCloses` runs, the overlay closes and
+    /// `failureMessage` shows.
+    private func runUserSelectedDeletion(
+        urls: [URL],
+        pathToDisplayName: [String: String],
+        pathToExpectedSizeBytes: [String: Int64],
+        aiModelPaths: Set<String> = [],
+        privilegedEligiblePaths: Set<String> = [],
+        totalBytes: Int64,
+        source: CleanupSource,
+        removeRows: (Set<String>) -> Void,
+        failureMessage: String,
+        beforeFailureCloses: () -> Void = {}
+    ) async {
         let progressBuffer = DeletionProgressBuffer()
-        let totalBytes = targets.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
         manualDeletionSession = liveSession
-        let progressPoller = Task { @MainActor [weak liveSession] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 120_000_000)
-                guard let liveSession, liveSession.phase == .cleaning else { return }
-                liveSession.applyProgress(progressBuffer.snapshot())
-            }
-        }
+        let progressPoller = liveSession.pollProgress(from: progressBuffer)
 
         isDeleting = true
         errorMessage = nil
@@ -2333,22 +2372,15 @@ final class PurgeStore: ObservableObject {
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes,
                 aiModelPaths: aiModelPaths,
+                privilegedEligiblePaths: privilegedEligiblePaths,
                 onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
             incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
             lastDeletionReport = report
-            let deletedPaths = Set(report.deletedItems.map {
+            removeRows(Set(report.deletedItems.map {
                 URL(fileURLWithPath: $0.path).standardizedFileURL.path
-            })
-            // A row is gone only when every path it stood for is gone. Matching
-            // on `id` alone would drop a model as soon as its manifest trashed,
-            // even if a multi-gigabyte blob failed and still occupies the disk —
-            // and since blobs are only ever discovered through their manifest, a
-            // later scan could never surface it again. Rows that deleted
-            // partially stay listed and stay selected, so a retry can finish the
-            // job (the already-trashed manifest is skipped as non-existent).
-            removeClearedLargeFileRows(largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) })
+            }))
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,
@@ -2357,10 +2389,11 @@ final class PurgeStore: ObservableObject {
                 movedToTrashCount: report.movedToTrashCount
             )
             if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
-            recordCleanup(report, trigger: .manual, source: .largeFiles)
+            recordCleanup(report, trigger: .manual, source: source)
         } catch {
+            beforeFailureCloses()
             manualDeletionSession = nil
-            errorMessage = String(localized: "Unable to delete the selected files. Please try again.")
+            errorMessage = failureMessage
         }
     }
 
@@ -2796,57 +2829,19 @@ final class PurgeStore: ObservableObject {
             if pathNeedsPrivilege(item.path) { privilegedEligiblePaths.insert(key) }
         }
 
-        let progressBuffer = DeletionProgressBuffer()
-        let totalBytes = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
-        manualDeletionSession = liveSession
-        let progressPoller = Task { @MainActor [weak liveSession] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 120_000_000)
-                guard let liveSession, liveSession.phase == .cleaning else { return }
-                liveSession.applyProgress(progressBuffer.snapshot())
-            }
-        }
-
-        isDeleting = true
-        errorMessage = nil
         leftoverCleanupFailed = false
-        defer {
-            isDeleting = false
-            progressPoller.cancel()
-        }
-
-        let engineStart = Date()
-        do {
-            let report = try await fileDeleter.deleteUserSelectedFiles(
-                at: urls,
-                pathToDisplayName: pathToDisplayName,
-                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
-                privilegedEligiblePaths: privilegedEligiblePaths,
-                onProgress: { @Sendable event in progressBuffer.ingest(event) }
-            )
-            let elapsedSeconds = Date().timeIntervalSince(engineStart)
-            incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
-            lastDeletionReport = report
-            let deletedPaths = Set(report.deletedItems.map {
-                URL(fileURLWithPath: $0.path).standardizedFileURL.path
-            })
-            removeOrphanLeftoverRows(deletedPaths: deletedPaths)
-            progressPoller.cancel()
-            liveSession.completeRun(
-                bytesMovedToTrash: report.bytesMovedToTrash,
-                elapsedSeconds: elapsedSeconds,
-                failedItems: report.userVisibleFailures,
-                movedToTrashCount: report.movedToTrashCount
-            )
-            if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
-            recordCleanup(report, trigger: .manual, source: .leftovers)
-        } catch {
+        await runUserSelectedDeletion(
+            urls: urls,
+            pathToDisplayName: pathToDisplayName,
+            pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+            privilegedEligiblePaths: privilegedEligiblePaths,
+            totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
+            source: .leftovers,
+            removeRows: { deletedPaths in removeOrphanLeftoverRows(deletedPaths: deletedPaths) },
+            failureMessage: String(localized: "Unable to remove the selected leftovers. Please try again."),
             // Before the session clears: the monitor reads this as it does.
-            leftoverCleanupFailed = true
-            manualDeletionSession = nil
-            errorMessage = String(localized: "Unable to remove the selected leftovers. Please try again.")
-        }
+            beforeFailureCloses: { leftoverCleanupFailed = true }
+        )
     }
 
     // MARK: - Command-line tools (#225)
@@ -3426,13 +3421,7 @@ final class PurgeStore: ObservableObject {
         }
         let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: totalItems)
         manualDeletionSession = liveSession
-        let progressPoller = Task { @MainActor [weak liveSession] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 120_000_000)
-                guard let liveSession, liveSession.phase == .cleaning else { return }
-                liveSession.applyProgress(progressBuffer.snapshot())
-            }
-        }
+        let progressPoller = liveSession.pollProgress(from: progressBuffer)
 
         errorMessage = nil
         // `isDeleting` is already set and cleared by the outer defer above; here we
@@ -4421,7 +4410,7 @@ final class PurgeStore: ObservableObject {
 
         if presentsLiveSession {
             // Same choreography as manual deletion: present the overlay in its
-            // cleaning phase now and poll engine progress into it (~120ms).
+            // cleaning phase now and poll engine progress into it.
             var seenPaths = Set<String>()
             var totalBytes: Int64 = 0
             for candidate in candidates {
@@ -4438,13 +4427,7 @@ final class PurgeStore: ObservableObject {
             interactiveSafeCleanupSession = liveSession
             let buffer = DeletionProgressBuffer()
             interactiveSafeCleanupProgressBuffer = buffer
-            interactiveSafeCleanupProgressPoller = Task { @MainActor [weak liveSession] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 120_000_000)
-                    guard let liveSession, liveSession.phase == .cleaning else { return }
-                    liveSession.applyProgress(buffer.snapshot())
-                }
-            }
+            interactiveSafeCleanupProgressPoller = liveSession.pollProgress(from: buffer)
         }
 
         if reduceMotion {
@@ -4596,7 +4579,8 @@ final class PurgeStore: ObservableObject {
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
-        for candidate in Self.gitCleanCandidates(readable, statuses: gitStatuses) {
+        let toolPaths = devTools.map(\.standardizedPaths)
+        for candidate in Self.gitCleanCandidates(readable, statuses: gitStatuses, keptTogether: toolPaths) {
             let std = candidate.path.standardizedFileURL
             combined.append(std)
             pathToDisplayName[std.path] = candidate.title
@@ -5519,11 +5503,18 @@ final class PurgeStore: ObservableObject {
         exclusionRevision &+= 1
     }
 
+    /// Saves one exclusion. It holds for this run either way; when the list could
+    /// not be written, the user hears that it lasts only until Purge quits (#185).
+    private func writeExclusion(path: URL, displayName: String) {
+        guard !ExcludedPathsStore.write(path: path, displayName: displayName) else { return }
+        errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
+    }
+
     /// Subtracts every location from future scans and drops the row. Only removes paths
     /// the allowlist already approved.
     func excludeFromScans(_ item: CacheItem) {
         for url in item.paths {
-            ExcludedPathsStore.write(path: url, displayName: item.appName)
+            writeExclusion(path: url, displayName: item.appName)
         }
         refreshExcludedPaths()
 
@@ -5555,7 +5546,7 @@ final class PurgeStore: ObservableObject {
     /// allowlist already approved.
     func excludeFromScans(_ tool: DevTool) {
         for url in tool.paths {
-            ExcludedPathsStore.write(path: url, displayName: tool.toolName)
+            writeExclusion(path: url, displayName: tool.toolName)
         }
         refreshExcludedPaths()
 
@@ -5574,7 +5565,7 @@ final class PurgeStore: ObservableObject {
     /// Subtracts a simulator device folder and drops it. Only removes paths the allowlist
     /// already approved.
     func excludeFromScans(_ device: SimulatorDevice) {
-        ExcludedPathsStore.write(
+        writeExclusion(
             path: device.folderURL,
             displayName: "\(device.deviceName) — \(device.runtimeVersion)"
         )
@@ -5591,7 +5582,7 @@ final class PurgeStore: ObservableObject {
     }
 
     func excludeFromScans(_ runtime: SimulatorRuntime) {
-        ExcludedPathsStore.write(
+        writeExclusion(
             path: runtime.locationURL,
             displayName: runtime.safetyInfo.headline
         )
@@ -5610,7 +5601,7 @@ final class PurgeStore: ObservableObject {
         guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
         let group = projectGroups[indices.groupIndex]
         let artifact = group.artifacts[indices.artifactIndex]
-        ExcludedPathsStore.write(
+        writeExclusion(
             path: artifact.path,
             displayName: "\(group.displayName) — \(artifact.kind.rowTag)"
         )
@@ -5628,7 +5619,7 @@ final class PurgeStore: ObservableObject {
     /// removes paths the allowlist already approved.
     func excludeProjectGroupFromScans(groupID: String) {
         guard let group = projectGroups.first(where: { $0.id == groupID }) else { return }
-        ExcludedPathsStore.write(path: group.rootPath, displayName: group.displayName)
+        writeExclusion(path: group.rootPath, displayName: group.displayName)
         refreshExcludedPaths()
 
         scanSelection.artifactIDs.subtract(group.artifacts.map(\.id))
@@ -5640,14 +5631,16 @@ final class PurgeStore: ObservableObject {
     /// Drop an exclusion. The item reappears on the next scan, but only if it still
     /// passes the normal allowlist gate.
     func removeExclusion(path: URL) {
-        ExcludedPathsStore.remove(path: path)
+        if !ExcludedPathsStore.remove(path: path) {
+            errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
+        }
         refreshExcludedPaths()
     }
 
     /// Subtracts one Large Files row from future scans and drops it. For an AI model
     /// that is its manifest, the path the model is discovered through.
     func excludeLargeFileFromScans(_ file: LargeFile) {
-        ExcludedPathsStore.write(path: file.path, displayName: file.displayName)
+        writeExclusion(path: file.path, displayName: file.displayName)
         refreshExcludedPaths()
         pruneExcludedResults()
     }
@@ -5664,7 +5657,7 @@ final class PurgeStore: ObservableObject {
     func excludeFoldersFromScans(_ folders: [URL]) {
         var added = false
         for folder in folders where !ExcludedPathsStore.isExcluded(folder) {
-            ExcludedPathsStore.write(
+            writeExclusion(
                 path: folder,
                 displayName: FileManager.default.displayName(atPath: folder.path)
             )

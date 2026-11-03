@@ -170,7 +170,7 @@ nonisolated enum AppleIntelligenceModelReader {
     /// Checks the one named path, as `folderState` does, without listing.
     static func assetState(_ record: Record, root: String = assetsRoot) -> AssetState {
         guard let id = record.assetID else { return .unknown }
-        let folder = record.assetType.replacingOccurrences(of: ".", with: "_")
+        let folder = folderName(for: record.assetType)
         var info = stat()
         if lstat(root + "/" + folder + "/purpose_auto/" + id + ".asset", &info) == 0 { return .present }
         return errno == ENOENT ? .missing : .unknown
@@ -203,7 +203,7 @@ nonisolated enum AppleIntelligenceModelReader {
     /// `.purged` copy; anything else counts as files (RemoveMacAI's rule).
     static func folderState(_ assetType: String, root: String = assetsRoot,
                             fileManager: FileManager = .default) -> AppleIntelligenceFolderState {
-        let name = assetType.replacingOccurrences(of: ".", with: "_")
+        let name = folderName(for: assetType)
         let folder = root + "/" + name
         var info = stat()
         if lstat(folder, &info) != 0 { return errno == ENOENT ? .missing : .unknown }
@@ -213,6 +213,12 @@ nonisolated enum AppleIntelligenceModelReader {
         guard let inner = entryCount(purpose) else { return .unknown }
         let catalog = [name + ".xml", name + ".xml.purged"].filter { fileManager.fileExists(atPath: purpose + "/" + $0) }
         return (top > 1 || inner > catalog.count) ? .holdsFiles : .empty
+    }
+
+    /// The folder an asset type's files sit in: `com.apple.MobileAsset.X` is
+    /// `com_apple_MobileAsset_X`.
+    static func folderName(for assetType: String) -> String {
+        assetType.replacingOccurrences(of: ".", with: "_")
     }
 
     /// Entries in a folder from its attributes rather than a listing, or nil.
@@ -363,9 +369,7 @@ nonisolated enum AppleIntelligenceDownloadBlock {
     /// Empty when no profile is in force. Read from the file `mobileassetd`
     /// itself reads, so it says what the daemon sees.
     static func installedBlocks(path: String = managedPreferences, fileManager: FileManager = .default) -> [String] {
-        guard let data = fileManager.contents(atPath: path),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        else { return [] }
+        guard let plist = readPlistDictionary(atPath: path, fileManager: fileManager) else { return [] }
         return plist.compactMap { key, value -> String? in
             guard key.hasPrefix(keyPrefix), value as? String == blockedURL else { return nil }
             return String(key.dropFirst(keyPrefix.count))
@@ -442,9 +446,7 @@ nonisolated enum AppleIntelligenceAccounts {
         guard fileManager.isReadableFile(atPath: path) else {
             return fileManager.isReadableFile(atPath: home + "/Library/Preferences") ? .off : .unknown
         }
-        guard let data = fileManager.contents(atPath: path),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
-        else { return .unknown }
+        guard let plist = readPlistDictionary(atPath: path, fileManager: fileManager) else { return .unknown }
         for (key, value) in plist {
             guard let flag = value as? Bool, flag else { continue }
             if key.lowercased().contains("opt_out") || key.lowercased().contains("opted_out") { continue }
@@ -505,4 +507,10 @@ nonisolated enum VolumeRawCapacityReader {
         else { return nil }
         return Int64(available)
     }
+}
+
+/// A property list file read as a dictionary, or nil when it can't be read.
+private nonisolated func readPlistDictionary(atPath path: String, fileManager: FileManager) -> [String: Any]? {
+    guard let data = fileManager.contents(atPath: path) else { return nil }
+    return try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
 }

@@ -109,4 +109,21 @@ nonisolated enum AppBundleReach {
         let plistURL = bundleURL.appendingPathComponent("Contents/Info.plist")
         return NSDictionary(contentsOf: plistURL) as? [String: Any] ?? [:]
     }
+
+    /// The bundle's `CFBundleIdentifier`, or nil when it has none. Reads the three
+    /// layouts `Bundle(url:)` reads: a Mac app's `Contents/Info.plist`, an iPhone
+    /// or iPad app wrapped for the Mac (`WrappedBundle/Info.plist`), and a flat
+    /// bundle's `Info.plist`. A wrapped app with no id would stop claiming the
+    /// container it shares with a Mac app of the same id (#185).
+    static func bundleID(at bundleURL: URL) -> String? {
+        for relative in ["Contents/Info.plist", "WrappedBundle/Info.plist", "Info.plist"] {
+            let info = NSDictionary(contentsOf: bundleURL.appendingPathComponent(relative)) as? [String: Any] ?? [:]
+            if let id = bundleID(in: info) { return id }
+        }
+        return nil
+    }
+
+    static func bundleID(in info: [String: Any]) -> String? {
+        (info["CFBundleIdentifier"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
 }

@@ -18,7 +18,7 @@ nonisolated struct OverviewSizedItem: Equatable, Sendable {
         while trimmed.count > 1, trimmed.hasSuffix("/") {
             trimmed.removeLast()
         }
-        for root in ["/var", "/tmp", "/etc"] where trimmed == root || trimmed.hasPrefix(root + "/") {
+        for root in ["/var", "/tmp", "/etc"] where PathContainment.isSameOrInside(trimmed, root) {
             return "/private" + trimmed
         }
         return trimmed

@@ -94,7 +94,7 @@ nonisolated enum ExternalUninstallRequest {
             return .appleApp(name: name)
         }
         let rootPaths = roots.map { $0.standardizedFileURL.path }
-        guard rootPaths.contains(where: { path.hasPrefix($0 + "/") }) else {
+        guard rootPaths.contains(where: { PathContainment.isInside(path, $0) }) else {
             return .outsideApplications(name: name)
         }
         // The same reach the uninstaller's list uses (`AppBundleReach`).

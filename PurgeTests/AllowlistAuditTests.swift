@@ -847,3 +847,30 @@ struct EverythingElseCacheAuditTests {
         #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "Antigravity Browser Cache", primaryPath: nil).level == .safe)
     }
 }
+
+// MARK: - The list itself
+
+@Suite("Allowlist audit: one entry per place")
+struct AllowlistEntryShapeTests {
+    /// A second copy, or an entry inside another, changes nothing `evaluate`
+    /// decides, so it only hides what the list really allows (#185).
+    @Test
+    func noEntryRepeatsOrSitsInsideAnother() {
+        let entries = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: AuditPaths.home)
+        #expect(Set(entries).count == entries.count)
+        for entry in entries {
+            let outer = entries.filter { $0 != entry && PathContainment.isInside(entry, $0) }
+            #expect(outer.isEmpty, "\(entry) is inside \(outer)")
+        }
+    }
+
+    @Test
+    func droppedEntriesAreStillAllowedThroughTheirParent() {
+        for relative in [
+            ".npm/_npx", ".npm/_logs", ".zcompdump", "Library/Caches/org.swift.swiftpm",
+            "Library/Logs/DiagnosticReports", "Library/Caches/Zed", "Library/Caches/ms-playwright",
+        ] {
+            #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
+        }
+    }
+}

@@ -66,7 +66,7 @@ enum CursorAgentLeftoverScanPolicy {
     /// only proves it is a leftover *kind*, never `~/.cursor` itself.
     nonisolated static func isWhitelistedPath(_ path: String, home: String) -> Bool {
         let url = URL(fileURLWithPath: path, isDirectory: true)
-        guard !containsSymlinkComponent(url, home: home) else { return false }
+        guard !PathContainment.containsSymlinkComponent(url, home: home) else { return false }
         guard staysInsideIntendedCursorRoot(url, home: home) else { return false }
 
         let projectsRoot = "\(home)/.cursor/projects/"
@@ -249,36 +249,10 @@ enum CursorAgentLeftoverScanPolicy {
         return readOpenWindows(from: support).status != .available
     }
 
-    nonisolated static func containsSymlinkComponent(_ url: URL, home: String) -> Bool {
-        let path = url.standardizedFileURL.path
-        guard path == home || path.hasPrefix(home + "/") else { return true }
-        var current = URL(fileURLWithPath: home, isDirectory: true)
-        let remainder = path.dropFirst(home.count)
-            .split(separator: "/", omittingEmptySubsequences: true)
-            .map(String.init)
-        for part in remainder {
-            current.appendPathComponent(part)
-            if isSymlink(current) { return true }
-        }
-        return false
-    }
-
     private nonisolated static func staysInsideIntendedCursorRoot(_ url: URL, home: String) -> Bool {
-        let path = url.standardizedFileURL.path
         let lexicalRoot = "\(home)/.cursor/projects"
-        guard path == lexicalRoot || path.hasPrefix(lexicalRoot + "/") else { return false }
-
-        let rootURL = URL(fileURLWithPath: lexicalRoot, isDirectory: true)
-        if containsSymlinkComponent(rootURL, home: home) { return false }
-
-        let resolved = url.resolvingSymlinksInPath().standardizedFileURL.path
-        let resolvedRoot = rootURL.resolvingSymlinksInPath().standardizedFileURL.path
-        guard resolvedRoot == lexicalRoot else { return false }
-        return resolved == resolvedRoot || resolved.hasPrefix(resolvedRoot + "/")
-    }
-
-    private nonisolated static func isSymlink(_ url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
+        guard PathContainment.isSameOrInside(url.standardizedFileURL.path, lexicalRoot) else { return false }
+        return PathContainment.staysInside(root: lexicalRoot, url: url, home: home, includingRoot: true)
     }
 
     private nonisolated static func path(fromFileURI uri: String) -> String? {

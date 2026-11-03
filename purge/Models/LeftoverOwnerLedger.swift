@@ -69,7 +69,7 @@ nonisolated struct LeftoverOwnerLedger: Codable, Equatable, Sendable {
     static func relativePath(_ url: URL, home: URL) -> String? {
         let path = url.standardizedFileURL.path
         let homePath = home.standardizedFileURL.path
-        guard path.hasPrefix(homePath + "/") else { return nil }
+        guard PathContainment.isInside(path, homePath) else { return nil }
         return "~" + path.dropFirst(homePath.count)
     }
 

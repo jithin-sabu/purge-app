@@ -90,6 +90,26 @@ struct CleanTimeGitBatchTests {
         #expect(kept.map(\.path) == [clean.path])
     }
 
+    /// A dev tool goes whole or not at all (#185). A path that turned dirty after
+    /// the scan keeps every path of its tool, not only itself.
+    @Test func aToolWithOneUncleanPathAtCleanTimeStaysWhole() {
+        let base = URL(fileURLWithPath: "/private/tmp/purge-git-tool-test", isDirectory: true)
+        let first = candidate(base.appendingPathComponent("tool/first", isDirectory: true))
+        let second = candidate(base.appendingPathComponent("tool/second", isDirectory: true))
+        let other = candidate(base.appendingPathComponent("other", isDirectory: true))
+        let key: (PurgeStore.DeletionCandidate) -> String = { $0.path.standardizedFileURL.path }
+        let tool = [key(first), key(second)]
+
+        let allClean: [String: GitWorktreeStatus] = [key(first): .clean, key(second): .clean, key(other): .clean]
+        let whole = PurgeStore.gitCleanCandidates([first, second, other], statuses: allClean, keptTogether: [tool])
+        #expect(whole.map(\.path) == [first.path, second.path, other.path])
+
+        var oneDirty = allClean
+        oneDirty[key(second)] = .dirty
+        let held = PurgeStore.gitCleanCandidates([first, second, other], statuses: oneDirty, keptTogether: [tool])
+        #expect(held.map(\.path) == [other.path])
+    }
+
     /// A candidate that already knows its status is not asked again.
     @Test func knownStatusesAreKept() async throws {
         let parent = try makeRepositories(["alpha", "bravo"])

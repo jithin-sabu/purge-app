@@ -80,7 +80,7 @@ struct AboutView: View {
                     .foregroundStyle(AppColors.textSecondary)
             }
 
-            aboutCard {
+            InsetCard {
                 if let version = updater.readyUpdateVersion {
                     AboutActionRow(
                         icon: "arrow.clockwise",
@@ -119,7 +119,7 @@ struct AboutView: View {
     }
 
     private var lifetimeStatsSection: some View {
-        aboutCard {
+        InsetCard {
             VStack(spacing: AppStyle.Spacing.xSmall) {
                 if showsLifetimeStatsPlaceholder {
                     lifetimeStatsPlaceholder
@@ -182,7 +182,7 @@ struct AboutView: View {
     }
 
     private var actionCardSection: some View {
-        aboutCard {
+        InsetCard {
             VStack(spacing: 0) {
                 AboutAllowlistSummaryBlock()
 
@@ -256,19 +256,6 @@ struct AboutView: View {
             return String(localized: "Version \(appVersion)")
         }
         return String(localized: "Version \(appVersion) · \(Self.buildDateFormatter.string(from: buildDate))")
-    }
-
-    private func aboutCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 0, content: content)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                AppColors.fillSecondary,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
-            }
     }
 
     private var appVersion: String {

@@ -261,7 +261,7 @@ struct DeletionConfirmSheet: View {
                         .font(AppStyle.Typography.metadataEmphasis.numbers)
                         .foregroundStyle(AppColors.textSecondary)
                         .monospacedDigit()
-                    safetyTag(for: item.safetyInfo.level)
+                    AppBadge(level: item.safetyInfo.level)
                 }
             }
 
@@ -286,49 +286,13 @@ struct DeletionConfirmSheet: View {
         )
     }
 
-    private func safetyTag(for level: SafetyLevel) -> some View {
-        let text: String
-        let fg: Color
-        let bg: Color
-        switch level {
-        case .safe:
-            text = "Safe"
-            fg = AppColors.statusSafeText
-            bg = AppColors.statusSafeFill
-        case .medium:
-            text = "Check first"
-            fg = AppColors.statusCheckText
-            bg = AppColors.statusCheckFill
-        case .unknown:
-            text = "Not sure"
-            fg = AppColors.statusDangerText
-            bg = AppColors.statusDangerFill
-        }
-        return Text(LocalizedStringKey(text))
-            .font(AppStyle.Typography.metadataEmphasis)
-            .foregroundStyle(fg)
-            .padding(.horizontal, AppStyle.Spacing.xSmall)
-            .padding(.vertical, AppStyle.Spacing.xxxSmall)
-            .background(Capsule(style: .continuous).fill(bg))
-    }
-
     private func footer(primaryTitle: String) -> some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Text(sizeLine)
-                .font(AppStyle.Typography.metadataEmphasis.numbers)
-                .foregroundStyle(AppColors.textSecondary)
-
-            Spacer()
-
-            Button("Cancel", action: onCancel)
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
-
-            Button(primaryTitle) {
-                onConfirm()
-            }
-            .buttonStyle(.purge(.destructive))
-            .keyboardShortcut(.defaultAction)
-        }
+        RemovalSheetFooter(
+            sizeLine: sizeLine,
+            confirmTitle: primaryTitle,
+            itemCount: candidates.count,
+            onCancel: onCancel,
+            onConfirm: onConfirm
+        )
     }
 }

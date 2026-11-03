@@ -44,7 +44,7 @@ nonisolated struct AppleIntelligenceModelSet: Equatable, Sendable, Identifiable 
     let recovery: AppleIntelligenceRecovery
 
     var id: String { name }
-    var folderName: String { assetType.replacingOccurrences(of: ".", with: "_") }
+    var folderName: String { AppleIntelligenceModelReader.folderName(for: assetType) }
 }
 
 /// The five asset sets behind Apple Intelligence. Names, types and recovery

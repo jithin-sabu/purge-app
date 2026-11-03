@@ -24,7 +24,7 @@ nonisolated enum EditorWorkspaceStoragePolicy {
     /// A folder directly inside one of the roots. Pure string check.
     static func isEntryPath(_ path: String, home: String) -> Bool {
         for root in roots(home: home) {
-            guard path.hasPrefix(root + "/") else { continue }
+            guard PathContainment.isInside(path, root) else { continue }
             let rest = path.dropFirst(root.count + 1)
             return !rest.isEmpty && !rest.contains("/")
         }

@@ -32,7 +32,7 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
         commandLineTools: [String: String] = [:]
     ) -> EverythingElseFolderHint? {
         let homePath = OverviewSizedItem.normalized(home.path)
-        let relative: String? = path.hasPrefix(homePath + "/") ? String(path.dropFirst(homePath.count + 1)) : nil
+        let relative: String? = PathContainment.isInside(path, homePath) ? String(path.dropFirst(homePath.count + 1)) : nil
 
         if let name = commandLineTools[path] {
             return EverythingElseFolderHint(

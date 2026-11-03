@@ -35,7 +35,7 @@ enum SafetyAllowlistSummary {
         let logsPrefix = "\(home)/Library/Logs"
         // Plus the one rule for leftover macOS update files (#127).
         let systemJunkCount = whitelistedPrefixes.filter {
-            $0 == logsPrefix || $0.hasPrefix(logsPrefix + "/")
+            PathContainment.isSameOrInside($0, logsPrefix)
         }.count + 1
 
         return [
@@ -107,7 +107,7 @@ enum SafetyAllowlistSummary {
         let allowlisted = DeletionSafetyPolicy.whitelistedAbsolutePrefixes(home: home)
 
         func label(for path: String) -> String? {
-            guard path.hasPrefix(home + "/") else { return nil }
+            guard PathContainment.isInside(path, home) else { return nil }
             switch String(path.dropFirst(home.count + 1)) {
             case "Library/Keychains": return String(localized: "keychains")
             case "Library/Preferences": return String(localized: "preferences")
@@ -123,7 +123,7 @@ enum SafetyAllowlistSummary {
 
         var seen = Set<String>()
         return DeletionSafetyPolicy.neverDeletePrefixes(home: home).compactMap { path in
-            guard !allowlisted.contains(where: { $0 == path || $0.hasPrefix(path + "/") }) else { return nil }
+            guard !allowlisted.contains(where: { PathContainment.isSameOrInside($0, path) }) else { return nil }
             guard let label = label(for: path), seen.insert(label).inserted else { return nil }
             return label
         }

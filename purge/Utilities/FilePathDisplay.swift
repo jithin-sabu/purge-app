@@ -2,18 +2,22 @@ import AppKit
 import Foundation
 
 nonisolated func displayDirectoryPath(for directoryURL: URL) -> String {
-    let directory = directoryURL.standardizedFileURL
-    let path = directory.path
-    let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
-    guard path.hasPrefix(home) else { return path }
-    let remainder = String(path.dropFirst(home.count))
-    if remainder.isEmpty { return "~" }
+    abbreviatingHome(
+        in: directoryURL.standardizedFileURL.path,
+        home: FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+    )
+}
+
+/// `path` with `home` written as `~`, or `path` as it is when it is not in `home`.
+nonisolated func abbreviatingHome(in path: String, home homePath: String) -> String {
+    let home = homePath.hasSuffix("/") ? String(homePath.dropLast()) : homePath
+    guard !home.isEmpty else { return path }
+    if path == home { return "~" }
     // A string prefix is not a path prefix: with home `/Users/alice`, the sibling
-    // home `/Users/alice2/cache` also passes `hasPrefix` and would abbreviate to
-    // `~2/cache`, naming a folder that does not exist. Only substitute when the
-    // match ends on a path boundary.
-    guard remainder.hasPrefix("/") else { return path }
-    return "~" + remainder
+    // home `/Users/alice2/cache` would abbreviate to `~2/cache`, naming a folder
+    // that does not exist. Only a match on a path boundary counts.
+    guard PathContainment.isInside(path, home) else { return path }
+    return "~" + path.dropFirst(home.count)
 }
 
 /// The folder an item sits in, short enough for a row's one detail line:

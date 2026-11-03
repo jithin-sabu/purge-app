@@ -142,18 +142,4 @@ struct LargeFilesLastScanTests {
     private func file(_ path: String, bytes: Int64, category: LargeFileCategory) -> LargeFile {
         LargeFile(path: URL(fileURLWithPath: path), sizeBytes: bytes, lastUsed: Date(), category: category)
     }
-
-    /// Counts only the time this loop ran, as `ScanQueueStoreTests` does.
-    private func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
-        var waited: TimeInterval = 0
-        var last = Date()
-        while !condition() {
-            guard waited < timeout else { return false }
-            try? await Task.sleep(for: .milliseconds(10))
-            let now = Date()
-            waited += min(now.timeIntervalSince(last), 0.25)
-            last = now
-        }
-        return true
-    }
 }

@@ -140,7 +140,7 @@ nonisolated enum ProtectedLocations {
         let path = path.lowercased()
         return roots.contains { root in
             let root = root.lowercased()
-            return path == root || path.hasPrefix(root + "/")
+            return PathContainment.isSameOrInside(path, root)
         }
     }
 
