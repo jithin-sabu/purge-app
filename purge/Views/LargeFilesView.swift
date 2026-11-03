@@ -400,7 +400,7 @@ struct LargeFilesView: View {
             sort: sortOptionBinding,
             onToggleAll: toggleSelectAll,
             onKeepOneOfEach: isDuplicatesFilterActive
-                ? { store.requestDuplicateCleanup() }
+                ? { store.requestDuplicateCleanup(searchQuery: searchQuery) }
                 : nil,
             onRemoveDownload: isICloudFilterActive
                 ? { store.requestRemoveDownloads() }

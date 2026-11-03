@@ -2246,15 +2246,19 @@ final class PurgeStore: ObservableObject {
     /// and shows the kept copy against the trashed ones, and the keeper is
     /// changeable, so the app never removes a copy the user hasn't seen and agreed
     /// to (issue #17).
-    func requestDuplicateCleanup() {
+    ///
+    /// Takes only the sets the Duplicates list shows for `searchQuery`, so a
+    /// search narrows the review to what is on screen (#190).
+    func requestDuplicateCleanup(searchQuery: String = "") {
         let index = largeFileDuplicates.index
         guard !index.isEmpty else { return }
-        let byID = Dictionary(largeFiles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let sets: [DuplicateCopySet] = index.groups.compactMap { group in
-            let copies = group.fileIDs.compactMap { byID[$0] }
-            guard copies.count > 1 else { return nil }
+        let sections = LargeFileCategoryFilter.duplicateSections(
+            in: largeFiles, query: searchQuery, duplicates: index
+        )
+        let sets: [DuplicateCopySet] = sections.map { section in
+            let copies = section.memberIndices.map { largeFiles[$0] }
             let keeper = DuplicateKeeper.suggestedKeeperID(among: copies) ?? copies[0].id
-            return DuplicateCopySet(id: group.id, copies: copies, suggestedKeeperID: keeper)
+            return DuplicateCopySet(id: section.groupID, copies: copies, suggestedKeeperID: keeper)
         }
         guard !sets.isEmpty else { return }
         pendingDuplicateCleanup = DuplicateCleanupRequest(sets: sets)
