@@ -136,13 +136,15 @@ nonisolated enum AppleIntelligenceFolderState: String, Sendable {
 /// One set as read from MobileAsset's records.
 nonisolated struct AppleIntelligenceSetReading: Equatable, Sendable {
     let set: AppleIntelligenceModelSet
-    /// Records whose descriptor says the files are on the filesystem.
+    /// Records whose asset folder is on disk, or that couldn't be checked.
+    /// A record left from a purged version doesn't count (#305).
     let recordsOnDisk: Int
     /// Records macOS is removing right now.
     let eliminating: Int
     /// Apple's own byte count, newest version of each model only. Several
     /// versions of one model can be on the filesystem at once, and summing them
-    /// all overstates what a removal frees. Nil when a record had no readable size.
+    /// all overstates what a removal frees. Nil when a record had no readable
+    /// size or its asset folder couldn't be checked.
     let latestBytes: Int64?
     let folder: AppleIntelligenceFolderState
 

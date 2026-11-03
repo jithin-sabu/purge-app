@@ -45,6 +45,7 @@ struct AppleIntelligenceModelReaderTests {
         let descriptor: NSDictionary = [
             "downloadedFilesystemBytes": 7_000_000_000,
             "isOnFilesystem": true,
+            "assetID": "08374e7f4e45f0b786eb612f47e598686761c644",
             "secureOperationEliminating": false,
             "metadata": ["_UnarchivedSize": 7_000_000_000] as NSDictionary,
         ]
@@ -57,7 +58,8 @@ struct AppleIntelligenceModelReaderTests {
         let record = AppleIntelligenceModelReader.record(
             identity: ("com.apple.MobileAsset.UAF.FM.GenerativeModels", "com.apple.fm.language.base", "1.2.3"), data: data)
         #expect(record.bytes == 7_000_000_000)
-        #expect(record.isOnFilesystem)
+        #expect(record.isOnFilesystem == true)
+        #expect(record.assetID == "08374e7f4e45f0b786eb612f47e598686761c644")
         #expect(!record.isEliminating)
     }
 
@@ -65,15 +67,19 @@ struct AppleIntelligenceModelReaderTests {
         let record = AppleIntelligenceModelReader.record(
             identity: ("com.apple.MobileAsset.UAF.FM.Visual", "x", "1"), data: Data("not a plist".utf8))
         #expect(record.bytes == nil)
-        #expect(!record.isOnFilesystem)
+        #expect(record.isOnFilesystem == false)
+        #expect(record.assetID == nil)
     }
 
-    private func record(_ specifier: String, _ version: String, _ bytes: Int64?, onDisk: Bool = true, eliminating: Bool = false)
-        -> AppleIntelligenceModelReader.Record {
+    private func record(_ specifier: String, _ version: String, _ bytes: Int64?, id: String?,
+                        onDisk: Bool? = true, eliminating: Bool = false) -> AppleIntelligenceModelReader.Record {
         AppleIntelligenceModelReader.Record(
             assetType: "com.apple.MobileAsset.UAF.FM.Visual", specifier: specifier, version: version,
-            bytes: bytes, isOnFilesystem: onDisk, isEliminating: eliminating)
+            assetID: id, bytes: bytes, isOnFilesystem: onDisk, isEliminating: eliminating)
     }
+
+    /// An asset id in MobileAsset's shape: 40 hex characters.
+    private func id(_ seed: Int) -> String { String(format: "%040x", seed) }
 
     private var visual: AppleIntelligenceModelSet {
         AppleIntelligenceCatalog.sets.first { $0.name == "com.apple.MobileAsset.UAF.FM.Visual" }!
@@ -83,24 +89,183 @@ struct AppleIntelligenceModelReaderTests {
     /// the same as CI.
     private let noAssets = FileManager.default.temporaryDirectory.appendingPathComponent("purge-assets-\(UUID().uuidString)").path
 
+    /// A throwaway root laid out like /System/Library/AssetsV2, holding an
+    /// asset folder for each id given.
+    private func assetsRoot(holding ids: [String]) throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge-assets-\(UUID().uuidString)")
+        let purpose = root.appendingPathComponent(visual.folderName).appendingPathComponent("purpose_auto")
+        try FileManager.default.createDirectory(at: purpose, withIntermediateDirectories: true)
+        for id in ids {
+            try FileManager.default.createDirectory(at: purpose.appendingPathComponent(id + ".asset"), withIntermediateDirectories: false)
+        }
+        return root
+    }
+
     /// Several versions of one model can be on the filesystem at once; only the
     /// newest counts, or a removal is promised more than it frees.
-    @Test func onlyTheNewestVersionOfEachModelIsCounted() {
+    @Test func onlyTheNewestVersionOfEachModelIsCounted() throws {
+        let root = try assetsRoot(holding: [id(1), id(2), id(3), id(4), id(5)])
+        defer { try? FileManager.default.removeItem(at: root) }
         let reading = AppleIntelligenceModelReader.measure(visual, records: [
-            record("model.a", "1.0,0", 100), record("model.a", "2.0,0", 150), record("model.b", "1.0,0", 20),
-            record("model.c", "1.0,0", 999, onDisk: false), record("model.d", "1.0,0", 5, eliminating: true),
-        ], root: noAssets)
+            record("model.a", "1.0,0", 100, id: id(1)), record("model.a", "2.0,0", 150, id: id(2)),
+            record("model.b", "1.0,0", 20, id: id(3)),
+            record("model.c", "1.0,0", 999, id: id(4), onDisk: false), record("model.d", "1.0,0", 5, id: id(5), eliminating: true),
+        ], root: root.path)
         #expect(reading.latestBytes == 175)
         #expect(reading.recordsOnDisk == 4)
         #expect(reading.eliminating == 1)
     }
 
-    @Test func aRecordWithoutASizeMakesTheSetUnknownNotZero() {
-        let reading = AppleIntelligenceModelReader.measure(visual, records: [record("model.a", "1.0,0", nil)], root: noAssets)
+    @Test func aRecordWithoutASizeMakesTheSetUnknownNotZero() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [record("model.a", "1.0,0", nil, id: id(1))], root: root.path)
         #expect(reading.latestBytes == nil)
         #expect(reading.recordsOnDisk == 1)
         let empty = AppleIntelligenceModelReader.measure(visual, records: [], root: noAssets)
         #expect(empty.latestBytes == 0)
+    }
+
+    /// A Mac that went through several betas keeps records for versions macOS
+    /// has purged, often under a specifier a later beta renamed, so "newest per
+    /// specifier" keeps them too. Their sizes made 127 GB out of 7.5 GB (#305).
+    /// Only records whose asset folder is there count.
+    @Test func recordsLeftFromOlderPurgedVersionsAreNotCounted() throws {
+        let root = try assetsRoot(holding: [id(3), id(4)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [
+            record("com.apple.fm.code.generate_small_v1.base", "600.0.81600.13.202072,0", 8_000_000_000, id: id(1)),
+            record("com.apple.fm.code.generate_small_v2.base", "700.0.1,0", 8_000_000_000, id: id(2)),
+            record("com.apple.fm.code.generate_small_v3.base", "1.6.81607.13.204870,0", 2_000_000_000, id: id(3)),
+            record("com.apple.fm.code.generate_small_v3.tokenizer", "1.6.81607.13.204870,0", 1_000_000, id: id(4)),
+        ], root: root.path)
+        #expect(reading.latestBytes == 2_001_000_000)
+        #expect(reading.recordsOnDisk == 2)
+        #expect(reading.isPresent)
+    }
+
+    /// Once every model's folder is gone, leftover records don't make the set
+    /// look present, so a removal that worked reads as one.
+    @Test func aSetWhoseFoldersAreAllGoneIsAbsent() throws {
+        let root = try assetsRoot(holding: [])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [
+            record("model.a", "1.0,0", 100, id: id(1)), record("model.b", "1.0,0", 50, id: id(2), onDisk: nil),
+        ], root: root.path)
+        #expect(reading.latestBytes == 0)
+        #expect(reading.recordsOnDisk == 0)
+        #expect(!reading.isPresent)
+    }
+
+    /// A descriptor with no isOnFilesystem key used to count as on disk. Now
+    /// the folder decides.
+    @Test func aRecordWithNoOnDiskFlagCountsOnlyWithItsFolder() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [
+            record("model.a", "1.0,0", 100, id: id(1), onDisk: nil), record("model.b", "1.0,0", 50, id: id(2), onDisk: nil),
+        ], root: root.path)
+        #expect(reading.latestBytes == 100)
+        #expect(reading.recordsOnDisk == 1)
+    }
+
+    /// When a folder can't be checked the size is unknown and the set stays
+    /// present: never 0, so a removal isn't reported done on a guess.
+    @Test func aFolderThatCantBeCheckedMakesTheSizeUnknown() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        let purpose = root.appendingPathComponent(visual.folderName).appendingPathComponent("purpose_auto")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: purpose.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: purpose.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let unchecked = record("model.a", "1.0,0", 100, id: id(1))
+        #expect(AppleIntelligenceModelReader.assetState(unchecked, root: root.path) == .unknown)
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [unchecked], root: root.path)
+        #expect(reading.latestBytes == nil)
+        #expect(reading.isPresent)
+    }
+
+    /// A record's id goes into a path, so only MobileAsset's 40 hex characters
+    /// are taken. Anything else can't be checked.
+    @Test func anIdThatIsNotFortyHexCharactersIsNeverLookedUp() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        for bad in ["../../" + id(1).dropFirst(6), id(1) + "/..", String(id(1).dropLast()), "", String(repeating: "g", count: 40)] {
+            let descriptor: NSDictionary = ["isOnFilesystem": true, "assetID": bad, "downloadedFilesystemBytes": 1]
+            let blob = try NSKeyedArchiver.archivedData(withRootObject: descriptor, requiringSecureCoding: false)
+            let data = try PropertyListSerialization.data(
+                fromPropertyList: ["SUCorePersistedStatePolicySecureCodedObjectsFields": ["assetDescriptor": blob]],
+                format: .binary, options: 0)
+            let parsed = AppleIntelligenceModelReader.record(identity: (visual.assetType, "model.a", "1.0,0"), data: data)
+            #expect(parsed.assetID == nil)
+            #expect(AppleIntelligenceModelReader.assetState(parsed, root: root.path) == .unknown)
+        }
+    }
+
+    /// Two records for one asset are one set of files.
+    @Test func twoRecordsForOneAssetCountOnce() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [
+            record("model.a", "1.0,0", 100, id: id(1)), record("model.a.renamed", "1.0,0", 100, id: id(1)),
+        ], root: root.path)
+        #expect(reading.latestBytes == 100)
+        #expect(reading.recordsOnDisk == 1)
+    }
+
+    /// Which record for an asset counts doesn't depend on the order the
+    /// records were read in. Same version, different sizes: unknown.
+    @Test func theNewerRecordForOneAssetCountsInEitherOrder() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = record("model.a", "1.0,0", 100, id: id(1)), new = record("model.a", "2.0,0", 150, id: id(1))
+        for records in [[old, new], [new, old]] {
+            let reading = AppleIntelligenceModelReader.measure(visual, records: records, root: root.path)
+            #expect(reading.latestBytes == 150)
+            #expect(reading.recordsOnDisk == 1)
+        }
+        let other = record("model.a", "1.0,0", 120, id: id(1))
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [old, other], root: root.path)
+        #expect(reading.latestBytes == nil)
+        #expect(reading.recordsOnDisk == 1)
+    }
+
+    /// Two records for one asset that can't be checked still count once, so a
+    /// recount never looks like a download arriving.
+    @Test func twoRecordsForOneUncheckedAssetCountOnce() throws {
+        let root = try assetsRoot(holding: [id(1)])
+        let purpose = root.appendingPathComponent(visual.folderName).appendingPathComponent("purpose_auto")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: purpose.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: purpose.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [
+            record("model.a", "1.0,0", 100, id: id(1)), record("model.a.renamed", "1.0,0", 100, id: id(1)),
+        ], root: root.path)
+        #expect(reading.recordsOnDisk == 1)
+        #expect(reading.latestBytes == nil)
+        #expect(reading.isPresent)
+    }
+
+    /// When the set's own folder can't be read, a missing asset path proves
+    /// nothing: the files may sit in a layout Purge doesn't know. The set stays
+    /// present, so a Remove is never reported done on a guess.
+    @Test func aMissingPathIsNotBelievedWhileTheSetFolderCantBeRead() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge-assets-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // A link to nowhere: lstat reads it, but its entries can't be counted.
+        try FileManager.default.createSymbolicLink(
+            atPath: root.appendingPathComponent(visual.folderName).path, withDestinationPath: root.path + "/nowhere")
+        let unread = record("model.a", "1.0,0", 100, id: id(1))
+        #expect(AppleIntelligenceModelReader.assetState(unread, root: root.path) == .missing)
+        #expect(AppleIntelligenceModelReader.folderState(visual.assetType, root: root.path) == .unknown)
+        let reading = AppleIntelligenceModelReader.measure(visual, records: [unread], root: root.path)
+        #expect(reading.isPresent)
+        #expect(reading.recordsOnDisk == 1)
+        #expect(reading.latestBytes == nil)
     }
 
     @Test func aPartialSumIsNeverShownAsTheWhole() {
