@@ -265,14 +265,14 @@ enum DeletionSafetyPolicy {
         home == cachedHomePath ? cachedWhitelistedPrefixes : whitelistedAbsolutePrefixes(home: home)
     }
 
-    /// Absolute paths (and their descendants) we are explicitly authorized to delete.
+    /// Absolute paths, with everything inside them, that may be offered for
+    /// cleaning. Being listed decides only that: the tier comes from the path's
+    /// entry in explanations.json, and Clean Safe Items takes Safe rows alone.
     ///
-    /// Audit note: every entry below resolves to a regenerable cache, build
-    /// artifact, or log directory — nothing here holds non-recoverable user
-    /// data. A handful of entries are flagged `AUDIT` where the folder holds
-    /// re-creatable but not-instantly-regenerated state; those are surfaced as
-    /// "Check First" by their classifiers (never silently downgraded to Safe),
-    /// and are called out here so the risk stays visible.
+    /// Most entries are caches and logs their owner rebuilds. Those flagged
+    /// `AUDIT` hold things that come back only slowly or by hand, and their
+    /// explanations keep them at Check First. An entry inside another one adds
+    /// nothing, so none is listed (#185).
     nonisolated static func whitelistedAbsolutePrefixes(home: String) -> [String] {
         [
             "\(home)/Library/Caches",
@@ -283,8 +283,6 @@ enum DeletionSafetyPolicy {
             // user data, but not auto-regenerated — treat as Check First, never Safe.
             "\(home)/Library/Developer/Xcode/Archives",
             "\(home)/.npm",
-            "\(home)/.npm/_npx",
-            "\(home)/.npm/_logs",
             "\(home)/.cache/node/corepack",
             "\(home)/.yarn/cache",
             "\(home)/.pnpm-store",
@@ -305,7 +303,6 @@ enum DeletionSafetyPolicy {
             // (`1.0/global.sbt`, `1.0/plugins`) next to the launcher jars.
             "\(home)/.ivy2/cache",
             "\(home)/.cache/act",
-            "\(home)/.zcompdump",
             "\(home)/.cargo/registry",
             // Downloaded packages only. `~/.pub-cache/bin` and `global_packages` hold
             // tools installed with `dart pub global activate`, which are not a cache.
@@ -322,7 +319,6 @@ enum DeletionSafetyPolicy {
             "\(home)/.nuget/packages",
             "\(home)/.bun/install/cache",
             "\(home)/.cabal/packages",
-            "\(home)/Library/Caches/org.swift.swiftpm",
             "\(home)/.swiftpm/cache",
             // AUDIT: Stack's package store, and `~/.cache/bazel`, can be tens of GB.
             // Both re-download rather than being lost, but the next build is very
@@ -337,7 +333,6 @@ enum DeletionSafetyPolicy {
             // backups) is deliberately NOT on the allowlist. Those backups are
             // non-recoverable, so they must never be scanned, sized, or shown.
             "\(home)/Library/Logs",
-            "\(home)/Library/Logs/DiagnosticReports",
             "\(home)/.m2/repository",
             // `~/.gem` as a whole is NOT listed: `gem install --user-install` puts
             // installed gems and their commands (CocoaPods, fastlane) under
@@ -359,14 +354,11 @@ enum DeletionSafetyPolicy {
             // by name alone. `isWhitelistedApplicationSupportCachePath` allows them
             // by their Chromium shape (#226).
             "\(home)/Library/Application Support/Code/CachedExtensionVSIXs",
-            "\(home)/Library/Caches/JetBrains",
             // NOTE: `~/Library/Application Support/JetBrains` is deliberately NOT on
             // the allowlist. It holds installed plugins and all IDE settings (not a
             // cache), so it must never be scanned, sized, or deleted.
             // NOTE: `~/Library/Application Support/Zed/db` is deliberately NOT listed.
             // It is Zed's workspace state database, not a cache.
-            "\(home)/Library/Caches/Zed",
-            "\(home)/Library/Caches/ms-playwright",
             "\(home)/.cache/ms-playwright",
             "\(home)/Library/Developer/CoreSimulator/Devices",
             // Adobe stores its heavy caches under Application Support rather than
