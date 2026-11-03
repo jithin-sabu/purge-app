@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.13.2</title>
+      <pubDate>Tue, 03 Nov 2026 13:55:49 +0000</pubDate>
+      <sparkle:version>38</sparkle:version>
+      <sparkle:shortVersionString>1.13.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>The last scan shows while Purge scans again</strong>: Reopening Purge shows what the last scan found, dimmed and dated, and each row updates in place as the new scan reaches it.</li>
+          <li><strong>No Command Line Tools prompt at launch</strong>: On a Mac without Xcode or the Command Line Tools, opening Purge no longer asks you to install them.</li>
+          <li><strong>Admin-locked apps come out without Full Disk Access</strong>: With secure removal on, Purge's helper moves an app an administrator installed even without Full Disk Access. When it can't, the row says why.</li>
+          <li><strong>Apple Intelligence models count only what's on disk</strong>: The row no longer adds up records for models macOS already removed.</li>
+          <li><strong>Cleanup History lists what couldn't be removed</strong>: Each entry keeps the items a clean couldn't remove, with the reason. Older simulator runtimes that macOS keeps are no longer offered.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.13.2/Purgev1.13.2.dmg"
+        sparkle:edSignature="jW2Lr+ErkkdgO62lHEoimqNXe2VoEGUJOptyt/PQ22RkVB3hAsAoCmN19QgHgAJGBaWzGVc5uv23uMCiY6VhDw=="
+        length="11142225"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.13.1</title>
       <pubDate>Mon, 26 Oct 2026 23:32:46 +0000</pubDate>
       <sparkle:version>37</sparkle:version>
