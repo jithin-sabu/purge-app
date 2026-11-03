@@ -1252,13 +1252,7 @@ final class PurgeStore: ObservableObject {
             let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
             manualDeletionSession = liveSession
             session = liveSession
-            progressPoller = Task { @MainActor [weak liveSession] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 120_000_000)
-                    guard let liveSession, liveSession.phase == .cleaning else { return }
-                    liveSession.applyProgress(progressBuffer.snapshot())
-                }
-            }
+            progressPoller = liveSession.pollProgress(from: progressBuffer)
         }
 
         isDeleting = true
@@ -2302,20 +2296,48 @@ final class PurgeStore: ObservableObject {
             }
         }
 
-        // Present the cleanup overlay in its cleaning phase and poll per-item
-        // progress, mirroring the caches / dev-tools manual deletion flow so
-        // large-file deletions get the same progress + completion screen.
+        await runUserSelectedDeletion(
+            urls: urls,
+            pathToDisplayName: pathToDisplayName,
+            pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+            aiModelPaths: aiModelPaths,
+            totalBytes: targets.reduce(Int64(0)) { $0 + $1.sizeBytes },
+            source: .largeFiles,
+            removeRows: { deletedPaths in
+                // A row is gone only when every path it stood for is gone. Matching
+                // on `id` alone would drop a model as soon as its manifest trashed,
+                // even if a multi-gigabyte blob failed and still occupies the disk —
+                // and since blobs are only ever discovered through their manifest, a
+                // later scan could never surface it again. Rows that deleted
+                // partially stay listed and stay selected, so a retry can finish the
+                // job (the already-trashed manifest is skipped as non-existent).
+                removeClearedLargeFileRows(largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) })
+            },
+            failureMessage: String(localized: "Unable to delete the selected files. Please try again.")
+        )
+    }
+
+    /// The delete Large Files and leftovers share: the user's own picks through
+    /// `deleteUserSelectedFiles`, with the live overlay, the Trash total and a
+    /// History entry. `removeRows` gets the standardized paths that went.
+    /// When the engine throws, `beforeFailureCloses` runs, the overlay closes and
+    /// `failureMessage` shows.
+    private func runUserSelectedDeletion(
+        urls: [URL],
+        pathToDisplayName: [String: String],
+        pathToExpectedSizeBytes: [String: Int64],
+        aiModelPaths: Set<String> = [],
+        privilegedEligiblePaths: Set<String> = [],
+        totalBytes: Int64,
+        source: CleanupSource,
+        removeRows: (Set<String>) -> Void,
+        failureMessage: String,
+        beforeFailureCloses: () -> Void = {}
+    ) async {
         let progressBuffer = DeletionProgressBuffer()
-        let totalBytes = targets.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
         manualDeletionSession = liveSession
-        let progressPoller = Task { @MainActor [weak liveSession] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 120_000_000)
-                guard let liveSession, liveSession.phase == .cleaning else { return }
-                liveSession.applyProgress(progressBuffer.snapshot())
-            }
-        }
+        let progressPoller = liveSession.pollProgress(from: progressBuffer)
 
         isDeleting = true
         errorMessage = nil
@@ -2331,22 +2353,15 @@ final class PurgeStore: ObservableObject {
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes,
                 aiModelPaths: aiModelPaths,
+                privilegedEligiblePaths: privilegedEligiblePaths,
                 onProgress: { @Sendable event in progressBuffer.ingest(event) }
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
             incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
             lastDeletionReport = report
-            let deletedPaths = Set(report.deletedItems.map {
+            removeRows(Set(report.deletedItems.map {
                 URL(fileURLWithPath: $0.path).standardizedFileURL.path
-            })
-            // A row is gone only when every path it stood for is gone. Matching
-            // on `id` alone would drop a model as soon as its manifest trashed,
-            // even if a multi-gigabyte blob failed and still occupies the disk —
-            // and since blobs are only ever discovered through their manifest, a
-            // later scan could never surface it again. Rows that deleted
-            // partially stay listed and stay selected, so a retry can finish the
-            // job (the already-trashed manifest is skipped as non-existent).
-            removeClearedLargeFileRows(largeFiles.filter { $0.isFullyRemoved(byDeleting: deletedPaths) })
+            }))
             progressPoller.cancel()
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,
@@ -2355,10 +2370,11 @@ final class PurgeStore: ObservableObject {
                 movedToTrashCount: report.movedToTrashCount
             )
             if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
-            recordCleanup(report, trigger: .manual, source: .largeFiles)
+            recordCleanup(report, trigger: .manual, source: source)
         } catch {
+            beforeFailureCloses()
             manualDeletionSession = nil
-            errorMessage = String(localized: "Unable to delete the selected files. Please try again.")
+            errorMessage = failureMessage
         }
     }
 
@@ -2794,57 +2810,19 @@ final class PurgeStore: ObservableObject {
             if pathNeedsPrivilege(item.path) { privilegedEligiblePaths.insert(key) }
         }
 
-        let progressBuffer = DeletionProgressBuffer()
-        let totalBytes = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: urls.count)
-        manualDeletionSession = liveSession
-        let progressPoller = Task { @MainActor [weak liveSession] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 120_000_000)
-                guard let liveSession, liveSession.phase == .cleaning else { return }
-                liveSession.applyProgress(progressBuffer.snapshot())
-            }
-        }
-
-        isDeleting = true
-        errorMessage = nil
         leftoverCleanupFailed = false
-        defer {
-            isDeleting = false
-            progressPoller.cancel()
-        }
-
-        let engineStart = Date()
-        do {
-            let report = try await fileDeleter.deleteUserSelectedFiles(
-                at: urls,
-                pathToDisplayName: pathToDisplayName,
-                pathToExpectedSizeBytes: pathToExpectedSizeBytes,
-                privilegedEligiblePaths: privilegedEligiblePaths,
-                onProgress: { @Sendable event in progressBuffer.ingest(event) }
-            )
-            let elapsedSeconds = Date().timeIntervalSince(engineStart)
-            incrementMovedToTrashTotal(by: report.bytesMovedToTrash)
-            lastDeletionReport = report
-            let deletedPaths = Set(report.deletedItems.map {
-                URL(fileURLWithPath: $0.path).standardizedFileURL.path
-            })
-            removeOrphanLeftoverRows(deletedPaths: deletedPaths)
-            progressPoller.cancel()
-            liveSession.completeRun(
-                bytesMovedToTrash: report.bytesMovedToTrash,
-                elapsedSeconds: elapsedSeconds,
-                failedItems: report.userVisibleFailures,
-                movedToTrashCount: report.movedToTrashCount
-            )
-            if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
-            recordCleanup(report, trigger: .manual, source: .leftovers)
-        } catch {
+        await runUserSelectedDeletion(
+            urls: urls,
+            pathToDisplayName: pathToDisplayName,
+            pathToExpectedSizeBytes: pathToExpectedSizeBytes,
+            privilegedEligiblePaths: privilegedEligiblePaths,
+            totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
+            source: .leftovers,
+            removeRows: { deletedPaths in removeOrphanLeftoverRows(deletedPaths: deletedPaths) },
+            failureMessage: String(localized: "Unable to remove the selected leftovers. Please try again."),
             // Before the session clears: the monitor reads this as it does.
-            leftoverCleanupFailed = true
-            manualDeletionSession = nil
-            errorMessage = String(localized: "Unable to remove the selected leftovers. Please try again.")
-        }
+            beforeFailureCloses: { leftoverCleanupFailed = true }
+        )
     }
 
     // MARK: - Command-line tools (#225)
@@ -3424,13 +3402,7 @@ final class PurgeStore: ObservableObject {
         }
         let liveSession = DeletionSession(totalBytes: totalBytes, totalItems: totalItems)
         manualDeletionSession = liveSession
-        let progressPoller = Task { @MainActor [weak liveSession] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 120_000_000)
-                guard let liveSession, liveSession.phase == .cleaning else { return }
-                liveSession.applyProgress(progressBuffer.snapshot())
-            }
-        }
+        let progressPoller = liveSession.pollProgress(from: progressBuffer)
 
         errorMessage = nil
         // `isDeleting` is already set and cleared by the outer defer above; here we
@@ -4419,7 +4391,7 @@ final class PurgeStore: ObservableObject {
 
         if presentsLiveSession {
             // Same choreography as manual deletion: present the overlay in its
-            // cleaning phase now and poll engine progress into it (~120ms).
+            // cleaning phase now and poll engine progress into it.
             var seenPaths = Set<String>()
             var totalBytes: Int64 = 0
             for candidate in candidates {
@@ -4436,13 +4408,7 @@ final class PurgeStore: ObservableObject {
             interactiveSafeCleanupSession = liveSession
             let buffer = DeletionProgressBuffer()
             interactiveSafeCleanupProgressBuffer = buffer
-            interactiveSafeCleanupProgressPoller = Task { @MainActor [weak liveSession] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 120_000_000)
-                    guard let liveSession, liveSession.phase == .cleaning else { return }
-                    liveSession.applyProgress(buffer.snapshot())
-                }
-            }
+            interactiveSafeCleanupProgressPoller = liveSession.pollProgress(from: buffer)
         }
 
         if reduceMotion {

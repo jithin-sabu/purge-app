@@ -137,6 +137,22 @@ final class DeletionSession: ObservableObject, Identifiable {
         return session
     }
 
+    /// How often a live run's progress reaches the overlay.
+    static let progressPollInterval: Duration = .milliseconds(120)
+
+    /// Copies the engine's progress from `buffer` into this session until the run
+    /// completes or the task is cancelled. Every clean that shows the overlay
+    /// while it runs starts one (#185).
+    func pollProgress(from buffer: DeletionProgressBuffer) -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.progressPollInterval)
+                guard let self, self.phase == .cleaning else { return }
+                self.applyProgress(buffer.snapshot())
+            }
+        }
+    }
+
     func applyProgress(_ snapshot: DeletionProgressBuffer.Snapshot) {
         guard phase == .cleaning else { return }
         if bytesMovedToTrash != snapshot.bytesMovedToTrash { bytesMovedToTrash = snapshot.bytesMovedToTrash }
