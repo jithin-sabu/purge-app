@@ -88,13 +88,12 @@ nonisolated final class AppUninstallScanner {
     /// Access.
     static func discoverInstalledApps() -> [DiscoveredApp] {
         discoverAppBundleURLs().compactMap { bundleURL in
-            let bundle = Bundle(url: bundleURL)
-            let bundleID = bundle?.bundleIdentifier
+            let bundleID = AppBundleReach.bundleID(at: bundleURL)
             guard !AppUninstallScanPolicy.isProtectedApp(bundleURL: bundleURL, bundleID: bundleID) else {
                 return nil
             }
             return DiscoveredApp(
-                name: displayName(for: bundleURL, bundle: bundle),
+                name: displayName(for: bundleURL, bundle: Bundle(url: bundleURL)),
                 bundleURL: bundleURL,
                 bundleID: bundleID
             )
@@ -115,15 +114,14 @@ nonisolated final class AppUninstallScanner {
     /// an Apple bundle id never takes the system app's settings with it.
     static func protectedApps(systemRoots: [URL] = systemAppRoots) -> [InstalledApp] {
         let protectedInRoots = discoverAppBundleURLs().filter { url in
-            AppUninstallScanPolicy.isProtectedApp(bundleURL: url, bundleID: Bundle(url: url)?.bundleIdentifier)
+            AppUninstallScanPolicy.isProtectedApp(bundleURL: url, bundleID: AppBundleReach.bundleID(at: url))
         }
         let system = systemRoots.flatMap { AppBundleReach.appBundleURLs(in: $0) ?? [] }
         return (system + protectedInRoots).map { url in
-            let bundle = Bundle(url: url)
-            return InstalledApp(
-                name: displayName(for: url, bundle: bundle),
+            InstalledApp(
+                name: displayName(for: url, bundle: Bundle(url: url)),
                 bundleURL: url,
-                bundleID: bundle?.bundleIdentifier,
+                bundleID: AppBundleReach.bundleID(at: url),
                 bundleSizeBytes: 0,
                 isRunning: false
             )
@@ -152,6 +150,9 @@ nonisolated final class AppUninstallScanner {
     /// Also read by `OrphanLeftoverScanPolicy.makeInstalledAppIndex`, so the
     /// Leftovers scan knows installed apps by the same names the uninstaller
     /// matches with.
+    /// Names come through `Bundle`, which localizes them the way Finder shows
+    /// them. Bundle ids, which the gates read, come from `AppBundleReach` fresh
+    /// from disk, since `Bundle` caches per path for the life of the process.
     static func displayName(for bundleURL: URL, bundle: Bundle?) -> String {
         if let display = bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
            !display.isEmpty {

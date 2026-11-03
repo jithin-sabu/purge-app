@@ -109,4 +109,13 @@ nonisolated enum AppBundleReach {
         let plistURL = bundleURL.appendingPathComponent("Contents/Info.plist")
         return NSDictionary(contentsOf: plistURL) as? [String: Any] ?? [:]
     }
+
+    /// The bundle's `CFBundleIdentifier`, or nil when it has none.
+    static func bundleID(at bundleURL: URL) -> String? {
+        bundleID(in: readInfoPlist(at: bundleURL))
+    }
+
+    static func bundleID(in info: [String: Any]) -> String? {
+        (info["CFBundleIdentifier"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
 }

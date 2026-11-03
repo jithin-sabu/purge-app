@@ -26,35 +26,25 @@ enum OrphanLeftoverScanPolicy {
     /// launch-item roots are also left out — they are tiny, noisy, and full of
     /// daemon/helper identifiers that never appear as apps, which is exactly
     /// where a wrong "orphaned" call is most likely.
-    nonisolated struct OrphanRoot {
-        let url: URL
-        let category: UninstallCategory
-    }
+    typealias OrphanRoot = AppUninstallScanPolicy.LeftoverRoot
 
+    /// The home Library folders, by name, whose entries the orphan scan inspects.
+    nonisolated static let orphanRootNames: Set<String> = [
+        "Application Support",
+        "Containers",
+        "Group Containers",
+        "HTTPStorages",
+        "Saved Application State"
+    ]
+
+    /// Picked from the uninstaller's own leftover roots rather than listed again,
+    /// so every orphan root is one the delete gate accepts (#185).
     nonisolated static func orphanRoots(home: URL) -> [OrphanRoot] {
-        let lib = home.appendingPathComponent("Library", isDirectory: true)
-        return [
-            OrphanRoot(
-                url: lib.appendingPathComponent("Application Support", isDirectory: true),
-                category: .applicationSupport
-            ),
-            OrphanRoot(
-                url: lib.appendingPathComponent("Containers", isDirectory: true),
-                category: .containers
-            ),
-            OrphanRoot(
-                url: lib.appendingPathComponent("Group Containers", isDirectory: true),
-                category: .groupContainers
-            ),
-            OrphanRoot(
-                url: lib.appendingPathComponent("HTTPStorages", isDirectory: true),
-                category: .caches
-            ),
-            OrphanRoot(
-                url: lib.appendingPathComponent("Saved Application State", isDirectory: true),
-                category: .savedState
-            )
-        ]
+        let lib = home.appendingPathComponent("Library", isDirectory: true).standardizedFileURL.path
+        return AppUninstallScanPolicy.leftoverSearchRoots(home: home).filter { root in
+            root.url.deletingLastPathComponent().standardizedFileURL.path == lib
+                && orphanRootNames.contains(root.url.lastPathComponent)
+        }
     }
 
     // MARK: Installed set
@@ -176,7 +166,7 @@ enum OrphanLeftoverScanPolicy {
             for url in bundles {
                 appBundles.append(url)
                 let bundle = Bundle(url: url)
-                if let id = bundle?.bundleIdentifier, !id.isEmpty {
+                if let id = AppBundleReach.bundleID(at: url) {
                     ids.insert(id.lowercased())
                 }
                 names.insert(AppUninstallScanner.displayName(for: url, bundle: bundle).lowercased())

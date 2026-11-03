@@ -585,13 +585,12 @@ final class ApplicationsFolderWatcher {
         return result
     }
 
-    /// Reads `Info.plist` directly rather than through `Bundle(url:)`, which caches
+    /// Reads `Info.plist` through `AppBundleReach`, not `Bundle(url:)`, which caches
     /// per path for the life of the process and would keep describing a bundle that
     /// has since been replaced.
     private nonisolated static func readApp(at url: URL) -> InstalledApp {
-        let plistURL = url.appendingPathComponent("Contents/Info.plist")
-        let info = NSDictionary(contentsOf: plistURL) as? [String: Any] ?? [:]
-        let bundleID = (info["CFBundleIdentifier"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let info = AppBundleReach.readInfoPlist(at: url)
+        let bundleID = AppBundleReach.bundleID(in: info)
         let name = [info["CFBundleDisplayName"], info["CFBundleName"]]
             .compactMap { $0 as? String }
             .first { !$0.isEmpty }
