@@ -26,8 +26,8 @@ struct AppCachesView: View {
         self.usesExternalScrollContainer = usesExternalScrollContainer
     }
 
-    @AppStorage("filter.appCaches") private var filterRaw: String = SafetyFilter.safe.rawValue
-    @AppStorage("sort.appCaches") private var sortRaw: String = SortOption.sizeDesc.rawValue
+    @AppStorage(SafetyFilter.appCachesKey) private var filterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage(SortOption.appCachesKey) private var sortRaw: String = SortOption.sizeDesc.rawValue
 
     /// Safe while the Overview has this tab open for a visit, the saved filter otherwise.
     private var currentSafetyFilter: SafetyFilter {
@@ -90,7 +90,6 @@ struct AppCachesView: View {
         guard !items.isEmpty || !saved.isEmpty else { return plan }
 
         let filter = currentSafetyFilter
-        let hidesRemovedRows = !store.interactiveSafeCleanupTargetPaths.isEmpty
         var chips: [SafetyFilter: Int] = [:]
         var visible: [Int] = []
         visible.reserveCapacity(items.count)
@@ -103,8 +102,7 @@ struct AppCachesView: View {
                 chips[candidate, default: 0] += 1
             }
 
-            guard filter.matches(info) else { continue }
-            if hidesRemovedRows, store.isVisuallyRemovedBySafeCleanup(item) { continue }
+            guard store.showsRow(item, under: filter) else { continue }
             visible.append(index)
         }
 

@@ -14,10 +14,10 @@ struct ContentView: View {
     @EnvironmentObject private var store: PurgeStore
     @EnvironmentObject private var diskStore: DiskSummaryStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("onboarding.pendingCelebration") private var pendingOnboardingCelebration = false
+    @AppStorage(PurgeStore.pendingOnboardingCelebrationKey) private var pendingOnboardingCelebration = false
     // Same defaults as the tabs, so the subtitle counts what the list shows.
-    @AppStorage("filter.appCaches") private var appCachesFilterRaw: String = SafetyFilter.safe.rawValue
-    @AppStorage("filter.devTools") private var devToolsFilterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage(SafetyFilter.appCachesKey) private var appCachesFilterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage(SafetyFilter.devToolsKey) private var devToolsFilterRaw: String = SafetyFilter.safe.rawValue
 
     /// Large Files search text. Held here rather than inside `LargeFilesView` so the
     /// page header subtitle can be filtered by it too, and deliberately `@State`
@@ -483,44 +483,30 @@ struct ContentView: View {
         .background(AppColors.surfaceBase)
     }
 
-    @ViewBuilder
+    /// On macOS 26 the scan tabs scroll under the page header's soft edge, so they
+    /// hand their scrolling to it.
+    private var tabsUseExternalScrollContainer: Bool {
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+
     private var appCachesTabBody: some View {
-        Group {
-            if #available(macOS 26.0, *) {
-                AppCachesView(
-                    items: $store.cacheItems,
-                    isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    usesExternalScrollContainer: true
-                )
-            } else {
-                AppCachesView(
-                    items: $store.cacheItems,
-                    isLoading: store.isScanningGeneral || store.isScanningAll,
-                    scanPhase: store.scanPhase
-                )
-            }
-        }
+        AppCachesView(
+            items: $store.cacheItems,
+            isLoading: store.isScanningGeneral || store.isScanningAll,
+            scanPhase: store.scanPhase,
+            usesExternalScrollContainer: tabsUseExternalScrollContainer
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .underDetailPageHeader(includesSubtitle: true)
     }
 
-    @ViewBuilder
     private var devToolsTabBody: some View {
-        Group {
-            if #available(macOS 26.0, *) {
-                DevToolsView(
-                    isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase,
-                    usesExternalScrollContainer: true
-                )
-            } else {
-                DevToolsView(
-                    isLoading: store.isScanningDeveloper || store.isScanningAll,
-                    scanPhase: store.scanPhase
-                )
-            }
-        }
+        DevToolsView(
+            isLoading: store.isScanningDeveloper || store.isScanningAll,
+            scanPhase: store.scanPhase,
+            usesExternalScrollContainer: tabsUseExternalScrollContainer
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .underDetailPageHeader(includesSubtitle: true)
     }
@@ -530,18 +516,12 @@ struct ContentView: View {
         Group {
             if !store.hasFullDiskAccess {
                 LockedFeatureView(feature: .largeFiles)
-            } else if #available(macOS 26.0, *) {
-                LargeFilesView(
-                    isLoading: store.isScanningLargeFiles,
-                    onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery,
-                    usesExternalScrollContainer: true
-                )
             } else {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
                     onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery
+                    searchQuery: $largeFilesSearchQuery,
+                    usesExternalScrollContainer: tabsUseExternalScrollContainer
                 )
             }
         }
@@ -846,9 +826,8 @@ struct ContentView: View {
     }
 
     private var appCachesVisibleItems: [CacheItem] {
-        store.cacheItems.filter {
-            appCachesSafetyFilter.matches($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
-        }
+        let filter = appCachesSafetyFilter
+        return store.cacheItems.filter { store.showsRow($0, under: filter) }
     }
 
     // With no filter the subtitle quotes the shared totals the sidebar and Overview use.
@@ -903,14 +882,11 @@ struct ContentView: View {
     }
 
     private func devToolVisible(_ tool: DevTool) -> Bool {
-        tool.isDetected &&
-            devToolsSafetyFilter.matches(tool.safetyInfo) &&
-            !store.isVisuallyRemovedBySafeCleanup(tool)
+        store.showsRow(tool, under: devToolsSafetyFilter)
     }
 
     private func projectArtifactVisible(_ artifact: ProjectCacheArtifact) -> Bool {
-        devToolsSafetyFilter.matches(artifact.safetyInfo) &&
-            !store.isVisuallyRemovedBySafeCleanup(artifact)
+        store.showsRow(artifact, under: devToolsSafetyFilter)
     }
 
 }

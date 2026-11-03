@@ -194,7 +194,7 @@ final class PurgeStore: ObservableObject {
                     safetyInfo: item.safetyInfo,
                     reinstallCommand: item.safetyInfo.reinstallCommand,
                     subtitle: cacheLocationLabel(location),
-                    reinstallSafety: cacheReinstallStatus(forPath: location.path),
+                    reinstallSafety: PurgeStore.cacheReinstallStatus(forPath: location.path),
                     gitStatus: item.gitStatus
                 )
             }
@@ -212,12 +212,6 @@ final class PurgeStore: ObservableObject {
                     && components[$0 + 2] == location.folderName
             }), index + 3 < components.count else { return location.folderName }
             return components[(index + 3)...].joined(separator: "/")
-        }
-
-        private static func cacheReinstallStatus(forPath url: URL) -> ReinstallSafetyStatus {
-            let name = url.lastPathComponent.lowercased()
-            if name == "deriveddata" { return .notApplicable }
-            return ReinstallSafetyEvaluator.evaluateByFolderNameDeleting(path: url)
         }
     }
 
@@ -843,6 +837,21 @@ final class PurgeStore: ObservableObject {
         let path = artifact.path.standardizedFileURL.path
         return interactiveSafeCleanupTargetPaths.contains(path)
             && interactiveSafeCleanupRemovedPaths.contains(path)
+    }
+
+    // Whether a row shows in its tab under `filter`. The tab lists and the page
+    // subtitle read these same rules, so the header counts the rows on screen (#185).
+
+    func showsRow(_ item: CacheItem, under filter: SafetyFilter) -> Bool {
+        filter.matches(item.safetyInfo) && !isVisuallyRemovedBySafeCleanup(item)
+    }
+
+    func showsRow(_ tool: DevTool, under filter: SafetyFilter) -> Bool {
+        tool.isDetected && filter.matches(tool.safetyInfo) && !isVisuallyRemovedBySafeCleanup(tool)
+    }
+
+    func showsRow(_ artifact: ProjectCacheArtifact, under filter: SafetyFilter) -> Bool {
+        filter.matches(artifact.safetyInfo) && !isVisuallyRemovedBySafeCleanup(artifact)
     }
 
     /// `true` while the cleanup overlay is in its cleaning phase — used to gate

@@ -70,8 +70,8 @@ struct DevToolsView: View {
         }
     }
 
-    @AppStorage("filter.devTools") private var filterRaw: String = SafetyFilter.safe.rawValue
-    @AppStorage("sort.devTools") private var sortRaw: String = SortOption.sizeDesc.rawValue
+    @AppStorage(SafetyFilter.devToolsKey) private var filterRaw: String = SafetyFilter.safe.rawValue
+    @AppStorage(SortOption.devToolsKey) private var sortRaw: String = SortOption.sizeDesc.rawValue
 
     /// Safe while the Overview has this tab open for a visit, the saved filter otherwise.
     private var currentSafetyFilter: SafetyFilter {
@@ -104,9 +104,7 @@ struct DevToolsView: View {
     /// goes through `@AppStorage`, and reading it per row made every Dev Tools
     /// render read it thousands of times (#190).
     private func groupHasVisibleArtifacts(_ group: ProjectGroup, filter: SafetyFilter) -> Bool {
-        group.artifacts.contains {
-            filter.matches($0.safetyInfo) && !store.isVisuallyRemovedBySafeCleanup($0)
-        }
+        group.artifacts.contains { store.showsRow($0, under: filter) }
     }
 
     private func filteredProjectGroupIndices() -> [Int] {
@@ -188,9 +186,7 @@ struct DevToolsView: View {
     }
 
     private func standardToolVisible(_ index: Int, filter: SafetyFilter) -> Bool {
-        guard store.devTools[index].isDetected else { return false }
-        return filter.matches(store.devTools[index].safetyInfo)
-            && !store.isVisuallyRemovedBySafeCleanup(store.devTools[index])
+        store.showsRow(store.devTools[index], under: filter)
     }
 
     private func filteredStandardToolIndices() -> [Int] {
@@ -410,10 +406,7 @@ struct DevToolsView: View {
         guard store.projectGroups.indices.contains(gi) else { return [] }
         let g = store.projectGroups[gi]
         let filter = currentSafetyFilter
-        let raw = g.artifacts.indices.filter {
-            filter.matches(g.artifacts[$0].safetyInfo)
-                && !store.isVisuallyRemovedBySafeCleanup(g.artifacts[$0])
-        }
+        let raw = g.artifacts.indices.filter { store.showsRow(g.artifacts[$0], under: filter) }
         switch currentSort {
         case .sizeDesc:
             return raw.sorted { g.artifacts[$0].sizeBytes > g.artifacts[$1].sizeBytes }
@@ -442,9 +435,7 @@ struct DevToolsView: View {
         let filter = currentSafetyFilter
         for gi in filteredProjectGroupIndices() {
             for ai in store.projectGroups[gi].artifacts.indices {
-                let art = store.projectGroups[gi].artifacts[ai]
-                guard filter.matches(art.safetyInfo) else { continue }
-                guard !store.isVisuallyRemovedBySafeCleanup(art) else { continue }
+                guard store.showsRow(store.projectGroups[gi].artifacts[ai], under: filter) else { continue }
                 pairs.append((gi, ai))
             }
         }
