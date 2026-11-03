@@ -10,38 +10,11 @@ import Testing
 @Suite("AppWindowPresenter decides between raising and creating a window")
 struct AppWindowPresenterTests {
 
-    private static func makeAppWindow() -> NSWindow {
-        NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: true
-        )
-    }
-
-    private static func makeStatusBarStyleWindow() -> NSWindow {
-        NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 400),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: true
-        )
-    }
-
-    private static func makeMenuBarPanel() -> NSPanel {
-        NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 400),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: true
-        )
-    }
-
     @Test("An existing window is raised, never duplicated")
     func existingWindowIsRevealed() {
         let windows: [NSWindow] = [
-            Self.makeStatusBarStyleWindow(),
-            Self.makeAppWindow(),
+            WindowFixtures.statusBarStyleWindow(),
+            WindowFixtures.appWindow(),
         ]
         #expect(!AppWindowPresenter.needsNewWindow(windows: windows))
     }
@@ -50,7 +23,7 @@ struct AppWindowPresenterTests {
     /// raised rather than rebuilt — opening a second one is the visible bug.
     @Test("A closed window still counts as one to raise")
     func closedWindowIsStillRevealable() {
-        let window = Self.makeAppWindow()
+        let window = WindowFixtures.appWindow()
         #expect(!window.isVisible)
         #expect(!AppWindowPresenter.needsNewWindow(windows: [window]))
     }
@@ -59,9 +32,9 @@ struct AppWindowPresenterTests {
     @Test("Menu bar chrome alone means a window has to be created")
     func menuBarChromeAloneRequiresCreation() {
         let windows: [NSWindow] = [
-            Self.makeStatusBarStyleWindow(),
-            Self.makeMenuBarPanel(),
-            Self.makeStatusBarStyleWindow(),
+            WindowFixtures.statusBarStyleWindow(),
+            WindowFixtures.menuBarPanel(),
+            WindowFixtures.statusBarStyleWindow(),
         ]
         #expect(AppWindowPresenter.needsNewWindow(windows: windows))
     }

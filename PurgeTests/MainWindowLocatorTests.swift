@@ -9,46 +9,15 @@ import Testing
 @Suite("MainWindowLocator finds the app window in every state")
 struct MainWindowLocatorTests {
 
-    /// Mirrors the real SwiftUI window: `.hiddenTitleBar` keeps `.titled` and
-    /// adds `.fullSizeContentView` (observed styleMask 32783).
-    private static func makeAppWindow() -> NSWindow {
-        NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 980, height: 700),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: true
-        )
-    }
-
-    /// Mirrors `NSStatusBarWindow` / `_NSGlassTrackingWindow`: borderless.
-    private static func makeStatusBarStyleWindow() -> NSWindow {
-        NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 400),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: true
-        )
-    }
-
-    /// Mirrors `MenuBarExtraWindow`, which is an `NSPanel`.
-    private static func makeMenuBarPanel() -> NSPanel {
-        NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 400),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: true
-        )
-    }
-
     @Test
     func titledWindowIsRecognisedAsTheAppWindow() {
-        #expect(MainWindowLocator.isAppWindow(Self.makeAppWindow()))
+        #expect(MainWindowLocator.isAppWindow(WindowFixtures.appWindow()))
     }
 
     @Test
     func menuBarChromeIsNotMistakenForTheAppWindow() {
-        #expect(!MainWindowLocator.isAppWindow(Self.makeStatusBarStyleWindow()))
-        #expect(!MainWindowLocator.isAppWindow(Self.makeMenuBarPanel()))
+        #expect(!MainWindowLocator.isAppWindow(WindowFixtures.statusBarStyleWindow()))
+        #expect(!MainWindowLocator.isAppWindow(WindowFixtures.menuBarPanel()))
     }
 
     /// Regression: the previous implementation filtered on `canBecomeMain`.
@@ -58,7 +27,7 @@ struct MainWindowLocatorTests {
     /// both states.
     @Test
     func offScreenAppWindowIsStillFoundEvenThoughItCannotBecomeMain() {
-        let window = Self.makeAppWindow()
+        let window = WindowFixtures.appWindow()
         #expect(!window.isVisible)
         #expect(!window.canBecomeMain, "precondition: this is the state that broke the old filter")
         #expect(MainWindowLocator.isAppWindow(window))
@@ -66,13 +35,13 @@ struct MainWindowLocatorTests {
 
     @Test
     func appWindowIsPickedOutOfMenuBarChrome() {
-        let appWindow = Self.makeAppWindow()
+        let appWindow = WindowFixtures.appWindow()
         // Menu-bar windows deliberately come first: `NSApp.windows` ordering is
         // not guaranteed, so selection must not depend on position.
         let windows: [NSWindow] = [
-            Self.makeStatusBarStyleWindow(),
-            Self.makeMenuBarPanel(),
-            Self.makeStatusBarStyleWindow(),
+            WindowFixtures.statusBarStyleWindow(),
+            WindowFixtures.menuBarPanel(),
+            WindowFixtures.statusBarStyleWindow(),
             appWindow,
         ]
         #expect(MainWindowLocator.appWindow(in: windows) === appWindow)
@@ -81,8 +50,8 @@ struct MainWindowLocatorTests {
     @Test
     func noAppWindowYieldsNil() {
         let windows: [NSWindow] = [
-            Self.makeStatusBarStyleWindow(),
-            Self.makeMenuBarPanel(),
+            WindowFixtures.statusBarStyleWindow(),
+            WindowFixtures.menuBarPanel(),
         ]
         #expect(MainWindowLocator.appWindow(in: windows) == nil)
     }
@@ -91,7 +60,7 @@ struct MainWindowLocatorTests {
     /// there when the app is activated, so the menu item appears to do nothing.
     @Test
     func prepareForRevealOptsTheWindowIntoFollowingTheUser() {
-        let window = Self.makeAppWindow()
+        let window = WindowFixtures.appWindow()
         #expect(!window.collectionBehavior.contains(.moveToActiveSpace))
 
         MainWindowLocator.prepareForReveal(window)
@@ -102,7 +71,7 @@ struct MainWindowLocatorTests {
     /// 66048). Revealing it must add a bit, not replace the mask.
     @Test
     func prepareForRevealPreservesExistingCollectionBehavior() {
-        let window = Self.makeAppWindow()
+        let window = WindowFixtures.appWindow()
         window.collectionBehavior = [.primary, .fullScreenNone]
 
         MainWindowLocator.prepareForReveal(window)
@@ -114,7 +83,7 @@ struct MainWindowLocatorTests {
 
     @Test
     func prepareForRevealIsIdempotent() {
-        let window = Self.makeAppWindow()
+        let window = WindowFixtures.appWindow()
         MainWindowLocator.prepareForReveal(window)
         let afterFirst = window.collectionBehavior
 

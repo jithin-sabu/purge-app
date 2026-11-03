@@ -303,20 +303,4 @@ struct OverviewPresentationTests {
     @Test func overviewIsTheFirstTab() {
         #expect(PurgeStore.Tab.allCases.first == .overview)
     }
-
-    /// Waits for the store to settle; counts only the time this loop ran, as in
-    /// `ScanQueueStoreTests`, so a stalled test host doesn't expire it.
-    @MainActor
-    private func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
-        var waited: TimeInterval = 0
-        var last = Date()
-        while !condition() {
-            guard waited < timeout else { return false }
-            try? await Task.sleep(for: .milliseconds(10))
-            let now = Date()
-            waited += min(now.timeIntervalSince(last), 0.25)
-            last = now
-        }
-        return true
-    }
 }

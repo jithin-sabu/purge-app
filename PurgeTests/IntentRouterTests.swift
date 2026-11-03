@@ -51,7 +51,7 @@ struct IntentRouterTests {
         _ = await router.scanMac()
 
         #expect(fake.generalAccesses == [.full])
-        #expect(await Self.eventually { fake.log == ["step largeFiles", "step apps", "step leftovers"] })
+        #expect(await eventually { fake.log == ["step largeFiles", "step apps", "step leftovers"] })
         fake.cleanUp()
     }
 
@@ -62,7 +62,7 @@ struct IntentRouterTests {
         let router = Self.makeRouter(store: store, reveals: RevealCounter())
         fake.holdsGeneral = true
         store.startLaunchScans()
-        #expect(await Self.eventually { fake.generalAccesses.count == 1 })
+        #expect(await eventually { fake.generalAccesses.count == 1 })
 
         let answer = Task { await router.scanMac() }
         // Give the intent a chance to queue anything it wrongly would.
@@ -188,7 +188,7 @@ struct IntentRouterTests {
         let store = fake.makeStore()
         let router = Self.makeRouter(store: store, reveals: RevealCounter())
         store.requestScan(.cachesAndDevTools)
-        #expect(await Self.eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
+        #expect(await eventually { store.hasSessionResults(for: .cachesAndDevTools) && !store.scanQueue.isRunning })
         #expect(fake.generalAccesses.count == 1)
 
         let later = Date().addingTimeInterval(MenuViewModel.stalenessWindow + 60)
@@ -510,24 +510,5 @@ struct IntentRouterTests {
         #expect(InstalledAppIndex.matching("tinyspeck", in: apps).map(\.name) == ["Slack"])
         #expect(InstalledAppIndex.matching("  ", in: apps).count == 2)
         #expect(InstalledAppIndex.matching("figma", in: apps).isEmpty)
-    }
-
-    /// Waits for the store to settle. The deadline only stops a hang: other suites
-    /// fill the cooperative thread pool on purpose for several seconds at a time,
-    /// and a 5-second wait ran out on a 3-core CI runner while the scan was starved.
-    private static func eventually(timeout: TimeInterval = 30, _ condition: () -> Bool) async -> Bool {
-        // Counts only the time this loop was running: on CI the test host can
-        // stall for tens of seconds with every suite waiting, and a wall-clock
-        // deadline expires during the stall through no fault of the condition.
-        var waited: TimeInterval = 0
-        var last = Date()
-        while !condition() {
-            guard waited < timeout else { return false }
-            try? await Task.sleep(for: .milliseconds(10))
-            let now = Date()
-            waited += min(now.timeIntervalSince(last), 0.25)
-            last = now
-        }
-        return true
     }
 }
