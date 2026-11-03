@@ -54,7 +54,9 @@ final class CleanupHistoryStore: ObservableObject {
     }
 
     /// The entry a clean's report becomes. Each item keeps whether it went to the
-    /// Trash, so History never lists a simulator as moved there (#170).
+    /// Trash, so History never lists a simulator as moved there (#170), and the
+    /// failed items keep why, so a clean where everything failed is not an empty
+    /// entry (#303).
     static func entry(id: UUID, trigger: CleanupTrigger, report: DeletionReport) -> CleanupHistoryEntry {
         let items = report.deletedItems.map {
             CleanupHistoryDeletedItemDTO(path: $0.path, sizeBytes: $0.sizeBytes, movedToTrash: $0.movedToTrash)
@@ -62,6 +64,10 @@ final class CleanupHistoryStore: ObservableObject {
 
         let skipped = report.skippedItems.map {
             CleanupHistorySkippedItemDTO(path: $0.path, reason: $0.reason, isUserVisible: $0.isUserVisible)
+        }
+
+        let failed = report.failedItems.map {
+            CleanupHistoryFailedItemDTO(path: $0.path, sizeBytes: $0.sizeBytes, reason: $0.reason)
         }
 
         // Reclaimed is recorded only when the volume actually moved. A clean that only
@@ -74,7 +80,8 @@ final class CleanupHistoryStore: ObservableObject {
             bytesMovedToTrash: report.bytesMovedToTrash,
             bytesReclaimedOnVolume: report.reportableBytesReclaimedOnVolume,
             deletedItems: items,
-            skippedItems: skipped
+            skippedItems: skipped,
+            failedItems: failed
         )
     }
 

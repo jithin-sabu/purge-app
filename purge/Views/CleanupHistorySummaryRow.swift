@@ -60,7 +60,9 @@ struct CleanupHistorySummaryRow: View {
     /// cleans that only trashed files have nothing measured to show, so they stay
     /// described as moved. Simulators and runtimes are counted as deleted, never as
     /// moved to the Trash (#170). Removed iCloud downloads say the files stay in
-    /// iCloud, so nobody looks for them in the Trash (#106).
+    /// iCloud, so nobody looks for them in the Trash (#106). Failed items are
+    /// counted, so a clean where everything failed doesn't read "0 items to
+    /// trash" (#303).
     var detailText: String {
         switch entry.kind {
         case .appleIntelligenceModels?:
@@ -80,13 +82,20 @@ struct CleanupHistorySummaryRow: View {
         let noun = trashed == 1 ? String(localized: "item") : String(localized: "items")
         let toTrash = String(localized: "\(trashed) \(noun) to trash")
         let permanent = String(localized: "\(deleted) deleted permanently")
-        let items: String
+        let failed = entry.failedItems.count
+        let failures = failed == 1
+            ? String(localized: "1 item couldn't be cleaned")
+            : String(localized: "\(failed) items couldn't be cleaned")
+        var items: String
         if deleted == 0 {
             items = toTrash
         } else if trashed == 0 {
             items = permanent
         } else {
             items = String(localized: "\(toTrash), \(permanent)")
+        }
+        if failed > 0 {
+            items = trashed + deleted == 0 ? failures : String(localized: "\(items), \(failures)")
         }
         guard let reclaimed = entry.bytesReclaimedOnVolume else { return items }
         return String(localized: "\(items), \(formatBytes(reclaimed)) reclaimed")

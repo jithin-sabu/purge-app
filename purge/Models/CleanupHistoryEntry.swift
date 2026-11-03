@@ -40,6 +40,29 @@ struct CleanupHistorySkippedItemDTO: Codable, Hashable, Identifiable {
     let isUserVisible: Bool
 }
 
+/// An item the clean tried and could not remove (#303). A record of that clean:
+/// a later Retry is not written to History, so the item may be gone since.
+struct CleanupHistoryFailedItemDTO: Codable, Hashable, Identifiable {
+    var id: String { path }
+
+    let path: String
+    /// Bytes recorded before the attempt.
+    let sizeBytes: Int64
+    /// A `CleanFailureReason` raw value.
+    let reason: String
+
+    init(path: String, sizeBytes: Int64, reason: CleanFailureReason) {
+        self.path = path
+        self.sizeBytes = sizeBytes
+        self.reason = reason.rawValue
+    }
+
+    /// A reason a newer version saved reads as unknown.
+    var failureReason: CleanFailureReason {
+        CleanFailureReason(rawValue: reason) ?? .unknown
+    }
+}
+
 /// What a history entry removed, when it was not an ordinary clean. Absent on
 /// every entry written before this existed, and on ordinary cleans since.
 nonisolated enum CleanupHistoryKind: String, Codable, Hashable {
@@ -67,6 +90,8 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
     let bytesReclaimedOnVolume: Int64?
     let deletedItems: [CleanupHistoryDeletedItemDTO]
     let skippedItems: [CleanupHistorySkippedItemDTO]
+    /// Empty on entries written before #303, which did not keep them.
+    let failedItems: [CleanupHistoryFailedItemDTO]
 
     init(
         id: UUID = UUID(),
@@ -76,6 +101,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         bytesReclaimedOnVolume: Int64? = nil,
         deletedItems: [CleanupHistoryDeletedItemDTO],
         skippedItems: [CleanupHistorySkippedItemDTO] = [],
+        failedItems: [CleanupHistoryFailedItemDTO] = [],
         kind: CleanupHistoryKind? = nil
     ) {
         self.id = id
@@ -86,6 +112,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         self.bytesReclaimedOnVolume = bytesReclaimedOnVolume
         self.deletedItems = deletedItems
         self.skippedItems = skippedItems
+        self.failedItems = failedItems
     }
 
     /// An ordinary clean's items, split by where they went (#170).
@@ -115,7 +142,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, date, trigger, bytesMovedToTrash, bytesReclaimedOnVolume, deletedItems, skippedItems, kind
+        case id, date, trigger, bytesMovedToTrash, bytesReclaimedOnVolume, deletedItems, skippedItems, failedItems, kind
         /// Pre-measurement field. Held a sum of moved sizes that was labelled as freed
         /// space, so it decodes into `bytesMovedToTrash` and never into reclaimed.
         case totalFreedBytes
@@ -136,6 +163,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         self.bytesReclaimedOnVolume = try container.decodeIfPresent(Int64.self, forKey: .bytesReclaimedOnVolume)
         self.deletedItems = try container.decode([CleanupHistoryDeletedItemDTO].self, forKey: .deletedItems)
         self.skippedItems = try container.decodeIfPresent([CleanupHistorySkippedItemDTO].self, forKey: .skippedItems) ?? []
+        self.failedItems = try container.decodeIfPresent([CleanupHistoryFailedItemDTO].self, forKey: .failedItems) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -148,6 +176,7 @@ struct CleanupHistoryEntry: Codable, Identifiable, Hashable {
         try container.encodeIfPresent(bytesReclaimedOnVolume, forKey: .bytesReclaimedOnVolume)
         try container.encode(deletedItems, forKey: .deletedItems)
         try container.encode(skippedItems, forKey: .skippedItems)
+        try container.encode(failedItems, forKey: .failedItems)
     }
 }
 

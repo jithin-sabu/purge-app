@@ -3705,7 +3705,11 @@ final class PurgeStore: ObservableObject {
         )
         if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
         homebrewNotes.forEach { liveSession.addNote($0) }
-        recordCleanup(report, trigger: .manual, source: .uninstall)
+        // History and the ledger keep the held apps and the leftovers kept for
+        // another app too, so an uninstall where no bundle moved is not saved as
+        // an empty entry (#303). Only the recorded copy gets them: the completion
+        // screen above already adds them to the report's own failures.
+        recordCleanup(report.addingFailures(heldFailures + keptSharedFailures), trigger: .manual, source: .uninstall)
 
         // Apps that declined to quit stay installed and selected, so the user can
         // quit them and retry. Surfaced after the success summary.

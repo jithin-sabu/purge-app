@@ -35,7 +35,9 @@ nonisolated enum FileProtection {
     }
 }
 
-nonisolated enum CleanFailureReason: Equatable, Error {
+/// The raw values are saved in Cleanup History (#303), so renaming a case turns
+/// its old entries into `.unknown`.
+nonisolated enum CleanFailureReason: String, Equatable, Error {
     case needsFullDiskAccess
     case needsAdministrator
     /// The helper is on, but the account using Purge is not an administrator, and
@@ -322,5 +324,26 @@ extension DeletionReport {
         let failed = failedItems.map(CleanFailureItem.init(failed:))
         let skipped = skippedItems.lazy.filter(\.isUserVisible).map(CleanFailureItem.init(skipped:))
         return failed + skipped
+    }
+
+    /// The same report with more failed items, for a caller that keeps some
+    /// failures outside the engine's report, as the uninstaller does for held apps.
+    func addingFailures(_ items: [CleanFailureItem]) -> DeletionReport {
+        guard !items.isEmpty else { return self }
+        var report = DeletionReport(
+            bytesMovedToTrash: bytesMovedToTrash,
+            bytesRemovedDirectly: bytesRemovedDirectly,
+            deletedItems: deletedItems,
+            failedItems: failedItems + items.map {
+                FailedDeletionItem(path: $0.path, displayName: $0.displayName, reason: $0.reason, sizeBytes: $0.sizeBytes, route: $0.route)
+            },
+            skippedItems: skippedItems,
+            capacityBefore: capacityBefore,
+            capacityAfter: capacityAfter,
+            timestamp: timestamp
+        )
+        report.ownershipWarningPaths = ownershipWarningPaths
+        report.keptRuntimeDownloads = keptRuntimeDownloads
+        return report
     }
 }
