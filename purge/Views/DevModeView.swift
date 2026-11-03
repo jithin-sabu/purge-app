@@ -1135,6 +1135,7 @@ struct DevToolsView: View {
                     TriStateCheckbox(title: "", state: projectSelectTriState(forGroupID: group.id)) {
                         toggleProjectEligibleSelection(groupID: group.id)
                     }
+                    .accessibilityLabel("Select all \(group.displayName) items")
                 }
                 .frame(width: 24)
 

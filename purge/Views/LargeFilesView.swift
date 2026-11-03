@@ -378,6 +378,7 @@ struct LargeFilesView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     private func selectCategory(_ id: String) {

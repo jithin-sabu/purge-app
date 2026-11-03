@@ -210,7 +210,9 @@ private struct AnimatedPageTitle: View {
         }
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
+        // Translated like the text on screen: a plain String label is read as is.
+        .accessibilityLabel(Text(LocalizedStringKey(title)))
+        .accessibilityAddTraits(.isHeader)
         .onChange(of: title) { newTitle in
             animateTitleChange(to: newTitle)
         }

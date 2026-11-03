@@ -85,6 +85,8 @@ struct FilterChip: View {
                 .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
         }
         .contentShape(Capsule(style: .continuous))
+        // The selected tab is shown only by its fill, which VoiceOver can't see.
+        .accessibilityAddTraits(style == .tab && isSelected ? .isSelected : [])
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isSelected)
     }
 
