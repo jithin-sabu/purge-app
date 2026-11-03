@@ -180,6 +180,25 @@ extension View {
     }
 }
 
+/// The grouped card Settings, About and a History entry draw their rows on: a
+/// filled, outlined rounded rectangle, rows stacked edge to edge (#185).
+struct InsetCard<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) { content }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                AppColors.fillSecondary,
+                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
+            }
+    }
+}
+
 /// Hairline separator inset from card edges (matches card content horizontal padding).
 struct InsetCardDivider: View {
     var horizontalInset: CGFloat = AppStyle.Spacing.medium

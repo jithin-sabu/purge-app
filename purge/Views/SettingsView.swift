@@ -492,7 +492,7 @@ struct SettingsView: View {
             .buttonStyle(.purge(.secondary))
         } content: {
             let entries = excludedEntries
-            settingsSectionCard {
+            InsetCard {
                 if entries.isEmpty {
                     Text("Nothing excluded")
                         .font(scheduleStatusPrimaryFont)
@@ -530,7 +530,7 @@ struct SettingsView: View {
             .buttonStyle(.purge(.quiet, size: .small))
             .disabled(history.archive.entries.isEmpty)
         } content: {
-            settingsSectionCard {
+            InsetCard {
                 if history.archive.entries.isEmpty {
                     Text("No cleans recorded yet. Automatic and manual cleans will show up here.")
                         .font(scheduleStatusSecondaryFont)
@@ -899,7 +899,7 @@ struct SettingsView: View {
                 .padding(.horizontal, AppStyle.Spacing.xxSmall)
                 .accessibilityAddTraits(.isHeader)
 
-            settingsSectionCard(content: content)
+            InsetCard(content: content)
         }
     }
 
@@ -1074,21 +1074,6 @@ struct SettingsView: View {
 
     private var settingsSectionDivider: some View {
         InsetCardDivider()
-    }
-
-    private func settingsSectionCard<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 0, content: content)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                AppColors.fillSecondary,
-                in: RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
-                    .strokeBorder(AppColors.borderSubtle, lineWidth: 0.5)
-            }
     }
 
     private var scheduleSummary: String {
