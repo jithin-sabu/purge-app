@@ -734,6 +734,10 @@ final class PurgeStore: ObservableObject {
         return summary
     }
 
+    // The one rule for what Clean Safe Items and scheduled cleans take
+    // (`manualSafeCleanupCandidates`). The Overview's safe totals and its
+    // pre-selection read the same rule, so they count what a clean moves (#185).
+
     private func countsAsSafeCleanup(_ item: CacheItem) -> Bool {
         item.safetyInfo.level == .safe
             && item.reinstallSafety != .missingLockfile
@@ -743,11 +747,13 @@ final class PurgeStore: ObservableObject {
             && !item.standardizedPaths.contains { MacOSInstallLeftovers.isEntryPath($0) }
     }
 
+    /// Every path must have answered clean. Dirty, unknown and not yet checked all
+    /// keep the tool out, as the clean-time git check would.
     private func countsAsSafeCleanup(_ tool: DevTool) -> Bool {
         tool.isDetected
             && tool.safetyInfo.level == .safe
             && tool.reinstallSafety != .missingLockfile
-            && !tool.paths.contains(where: { devToolRepoStatusByPath[$0.standardizedFileURL.path] == .dirty })
+            && tool.standardizedPaths.allSatisfy { devToolRepoStatusByPath[$0] == .clean }
     }
 
     private func countsAsSafeCleanup(_ artifact: ProjectCacheArtifact) -> Bool {
@@ -965,26 +971,18 @@ final class PurgeStore: ObservableObject {
         }
 
         let artifacts = includingProjects ? projectGroups.flatMap(\.artifacts) : []
-        for artifact in artifacts {
+        for artifact in artifacts where countsAsSafeCleanup(artifact) {
             guard isReachable(artifact.path) else { continue }
-            guard artifact.safetyInfo.level == .safe else { continue }
-            guard artifact.reinstallSafety != .missingLockfile else { continue }
-            guard artifact.gitStatus == .clean else { continue }
             candidates.append(artifactDeletionCandidate(artifact))
         }
 
-        for tool in devTools where tool.isDetected && tool.safetyInfo.level == .safe {
-            guard tool.reinstallSafety != .missingLockfile else { continue }
+        for tool in devTools where countsAsSafeCleanup(tool) {
             for url in tool.paths where isReachable(url) {
-                let candidate = devToolDeletionCandidate(tool, path: url)
-                guard candidate.gitStatus == .clean else { continue }
-                candidates.append(candidate)
+                candidates.append(devToolDeletionCandidate(tool, path: url))
             }
         }
 
-        for item in cacheItems where item.safetyInfo.level == .safe {
-            guard item.reinstallSafety != .missingLockfile else { continue }
-            guard item.gitStatus == .clean else { continue }
+        for item in cacheItems where countsAsSafeCleanup(item) {
             for location in item.locations where isReachable(location.path) {
                 let path = location.path.standardizedFileURL
                 guard DeletionSafetyPolicy.isOfferedForCleanup(path) else { continue }
