@@ -419,12 +419,6 @@ final class CleanupLedgerStore {
     }
 
     nonisolated private static func homeRelative(_ path: String, home homePath: String) -> String {
-        let home = homePath.hasSuffix("/") ? String(homePath.dropLast()) : homePath
-        guard !home.isEmpty, path.hasPrefix(home) else { return path }
-        let remainder = path.dropFirst(home.count)
-        if remainder.isEmpty { return "~" }
-        // `/Users/alice2` must not become `~2`: only a match on a path boundary counts.
-        guard remainder.hasPrefix("/") else { return path }
-        return "~" + remainder
+        abbreviatingHome(in: path, home: homePath)
     }
 }

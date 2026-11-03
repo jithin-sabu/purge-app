@@ -469,7 +469,7 @@ struct SafeCleanupCelebrationOverlay: View {
     @State private var supportFooterLine: SupportNudge.Line?
     @State private var supportLinkOpened = false
 
-    private static let confettiThresholdBytes: Int64 = 2 * 1024 * 1024 * 1024
+    private static let confettiThresholdBytes = SupportNudge.significantCleanBytes
     private static let minimumCleaningDwell: TimeInterval = 1.2
 
     private let celebrationAccent = AppColors.textPrimary

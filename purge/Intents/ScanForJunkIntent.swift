@@ -39,11 +39,7 @@ extension IntentRouter.ScanOutcome {
     /// The answer Spotlight shows, with the size in bold.
     var styledAnswer: AttributedString {
         guard case .scanned(let bytes) = self, bytes > 0 else { return AttributedString(dialog) }
-        var answer = AttributedString(dialog)
-        if let sizeRange = answer.range(of: formatBytes(bytes)) {
-            answer[sizeRange].inlinePresentationIntent = .stronglyEmphasized
-        }
-        return answer
+        return IntentAnswer.bolding(bytes, in: dialog)
     }
 
     var dialog: String {

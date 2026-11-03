@@ -8,6 +8,10 @@ enum SafetyFilter: String, CaseIterable, Identifiable {
     case safe
     case checkFirst
 
+    /// The defaults keys the scan tabs save their filter under.
+    static let appCachesKey = "filter.appCaches"
+    static let devToolsKey = "filter.devTools"
+
     var id: String { rawValue }
 
     var displayName: String {
@@ -60,6 +64,10 @@ enum SortOption: String, CaseIterable, Identifiable {
     case sizeAsc
     case dateNewest
     case dateOldest
+
+    /// The defaults keys the scan tabs save their sort under.
+    static let appCachesKey = "sort.appCaches"
+    static let devToolsKey = "sort.devTools"
     case nameAZ
 
     var id: String { rawValue }
