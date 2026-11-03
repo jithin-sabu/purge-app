@@ -21,7 +21,7 @@ struct OverviewAppleIntelligenceRow: View {
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "appleIntelligenceModels"
 
-    private static let info = String(localized: "These are the on-device models Apple Intelligence uses. macOS counts them as System Data. Remove asks macOS to delete them and installs a profile that stops them downloading again. Download Again removes the profile and downloads them again. The size is Apple's number. You'll usually get back less than that.")
+    private static let info = String(localized: "These are the on-device models Apple Intelligence uses. macOS counts them as System Data. Remove has you install a profile that stops them downloading again, then asks macOS to delete them. Download Again has you remove the profile, then asks macOS to download them again. The size is Apple's number. You'll usually get back less than that.")
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {

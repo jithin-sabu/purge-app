@@ -900,7 +900,7 @@
 "Apple Intelligence models" = "Apple 智能模型";
 "What are the Apple Intelligence models?" = "什么是 Apple 智能模型？";
 "About the Apple Intelligence models" = "关于 Apple 智能模型";
-"These are the on-device models Apple Intelligence uses. macOS counts them as System Data. Remove asks macOS to delete them and installs a profile that stops them downloading again. Download Again removes the profile and downloads them again. The size is Apple's number. You'll usually get back less than that." = "这些是 Apple 智能使用的设备端模型，macOS 将其计入“系统数据”。“移除”会请 macOS 删除它们，并安装一个描述文件，阻止它们重新下载。“重新下载”会移除该描述文件并重新下载模型。这里的大小是 Apple 给出的数字，实际腾出的空间通常会更少。";
+"These are the on-device models Apple Intelligence uses. macOS counts them as System Data. Remove has you install a profile that stops them downloading again, then asks macOS to delete them. Download Again has you remove the profile, then asks macOS to download them again. The size is Apple's number. You'll usually get back less than that." = "这些是 Apple 智能使用的设备端模型，macOS 将其计入“系统数据”。“移除”会先请你安装一个描述文件，阻止它们重新下载，然后请 macOS 删除它们。“重新下载”会先请你移除该描述文件，然后请 macOS 重新下载模型。这里的大小是 Apple 给出的数字，实际腾出的空间通常会更少。";
 "Remove the models and stop macOS downloading them again" = "移除模型并阻止 macOS 重新下载";
 "Remove the profile and ask macOS to download the models again" = "移除描述文件并请 macOS 重新下载模型";
 "Download Again" = "重新下载";
