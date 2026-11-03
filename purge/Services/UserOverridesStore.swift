@@ -1,6 +1,6 @@
 import Foundation
 
-struct UserOverrideEntry: Codable, Sendable {
+nonisolated struct UserOverrideEntry: Codable, Sendable {
     let overrideTag: String
     let overrideDate: Date
     let originalTag: String
@@ -15,62 +15,10 @@ struct UserOverrideEntry: Codable, Sendable {
 /// Persists user-chosen safety categories keyed by exact filesystem path.
 /// Overrides take absolute priority over AI cache, bundled database, and tier list.
 enum UserOverridesStore {
-    nonisolated private static let lock = NSLock()
-    nonisolated(unsafe) private static var loadedEntries: [String: UserOverrideEntry]?
-
-    nonisolated private static func supportURL() -> URL {
-        // Tests run inside a hosted copy of the app. A safety level a test sets must
-        // never reach the user's own choices, so they get a scratch folder.
-        if TestHost.isActive() { return TestHost.supportDirectory() }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("io.getpurge.app", isDirectory: true)
-    }
+    nonisolated private static let store = JSONPathStore<UserOverrideEntry>(fileName: "user_overrides.json")
 
     nonisolated static func fileURL() -> URL {
-        supportURL().appendingPathComponent("user_overrides.json", isDirectory: false)
-    }
-
-    nonisolated private static func ensureDirectory() {
-        try? FileManager.default.createDirectory(at: supportURL(), withIntermediateDirectories: true)
-    }
-
-    nonisolated private static func makeDecoder() -> JSONDecoder {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
-        return d
-    }
-
-    nonisolated private static func makeEncoder() -> JSONEncoder {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        e.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return e
-    }
-
-    nonisolated private static func readFromDisk() -> [String: UserOverrideEntry] {
-        ensureDirectory()
-        let url = fileURL()
-        guard let data = try? Data(contentsOf: url),
-              let decoded = try? makeDecoder().decode([String: UserOverrideEntry].self, from: data)
-        else {
-            return [:]
-        }
-        return decoded
-    }
-
-    nonisolated private static func loadEntriesLocked() -> [String: UserOverrideEntry] {
-        if let loadedEntries { return loadedEntries }
-        let disk = readFromDisk()
-        loadedEntries = disk
-        return disk
-    }
-
-    nonisolated private static func persistLocked(_ entries: [String: UserOverrideEntry]) {
-        ensureDirectory()
-        if let data = try? makeEncoder().encode(entries) {
-            try? data.write(to: fileURL(), options: [.atomic])
-        }
-        loadedEntries = entries
+        store.fileURL
     }
 
     nonisolated private static func canonicalKey(forPath url: URL) -> String {
@@ -78,38 +26,27 @@ enum UserOverridesStore {
     }
 
     nonisolated static func read(path: URL) -> UserOverrideEntry? {
-        lock.lock()
-        defer { lock.unlock() }
-        return loadEntriesLocked()[canonicalKey(forPath: path)]
+        store.read { $0[canonicalKey(forPath: path)] }
     }
 
-    nonisolated static func remove(path: URL) {
-        lock.lock()
-        defer { lock.unlock() }
-        var entries = loadEntriesLocked()
-        guard entries.removeValue(forKey: canonicalKey(forPath: path)) != nil else { return }
-        persistLocked(entries)
+    /// Returns false when the change could not be saved.
+    @discardableResult
+    nonisolated static func remove(path: URL) -> Bool {
+        let key = canonicalKey(forPath: path)
+        return store.update { $0.removeValue(forKey: key) != nil }
     }
 
     nonisolated static func allOverriddenPaths() -> Set<String> {
-        lock.lock()
-        defer { lock.unlock() }
-        return Set(loadEntriesLocked().keys)
+        store.read { Set($0.keys) }
     }
 
     nonisolated static func count() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return loadEntriesLocked().count
+        store.read(\.count)
     }
 
     /// Modification date of `user_overrides.json`, if the file exists on disk.
     nonisolated static func lastUpdated() -> Date? {
-        let url = fileURL()
-        guard FileManager.default.fileExists(atPath: url.path),
-              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
-        else { return nil }
-        return attrs[.modificationDate] as? Date
+        store.lastUpdated
     }
 
     /// Resolves a stored override into a `SafetyInfo` that takes priority over

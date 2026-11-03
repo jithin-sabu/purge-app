@@ -41,16 +41,7 @@ final class CleanupLedgerStore {
     }
 
     private static func defaultDirectory() -> URL {
-        // Tests run inside a hosted copy of the app. A clean a test drives must
-        // never land in the user's permanent record, so they get a scratch folder.
-        if TestHost.isActive() {
-            return FileManager.default.temporaryDirectory
-                .appendingPathComponent("PurgeTestLedger-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
-        }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("io.getpurge.app", isDirectory: true)
-            ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("ledger", isDirectory: true)
+        AppSupportFolder.url().appendingPathComponent("ledger", isDirectory: true)
     }
 
     // MARK: - Recording

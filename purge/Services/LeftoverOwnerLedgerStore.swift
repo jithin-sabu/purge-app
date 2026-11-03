@@ -25,13 +25,7 @@ nonisolated final class LeftoverOwnerLedgerStore: @unchecked Sendable {
     }
 
     static func defaultFileURL() -> URL {
-        if TestHost.isActive() {
-            return TestHost.supportDirectory().appendingPathComponent(fileName)
-        }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("io.getpurge.app", isDirectory: true)
-            ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent(fileName)
+        AppSupportFolder.url().appendingPathComponent(fileName)
     }
 
     /// The ledger as written, with nothing dropped.

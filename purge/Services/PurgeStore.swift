@@ -5483,11 +5483,18 @@ final class PurgeStore: ObservableObject {
         exclusionRevision &+= 1
     }
 
+    /// Saves one exclusion. It holds for this run either way; when the list could
+    /// not be written, the user hears that it lasts only until Purge quits (#185).
+    private func writeExclusion(path: URL, displayName: String) {
+        guard !ExcludedPathsStore.write(path: path, displayName: displayName) else { return }
+        errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
+    }
+
     /// Subtracts every location from future scans and drops the row. Only removes paths
     /// the allowlist already approved.
     func excludeFromScans(_ item: CacheItem) {
         for url in item.paths {
-            ExcludedPathsStore.write(path: url, displayName: item.appName)
+            writeExclusion(path: url, displayName: item.appName)
         }
         refreshExcludedPaths()
 
@@ -5519,7 +5526,7 @@ final class PurgeStore: ObservableObject {
     /// allowlist already approved.
     func excludeFromScans(_ tool: DevTool) {
         for url in tool.paths {
-            ExcludedPathsStore.write(path: url, displayName: tool.toolName)
+            writeExclusion(path: url, displayName: tool.toolName)
         }
         refreshExcludedPaths()
 
@@ -5538,7 +5545,7 @@ final class PurgeStore: ObservableObject {
     /// Subtracts a simulator device folder and drops it. Only removes paths the allowlist
     /// already approved.
     func excludeFromScans(_ device: SimulatorDevice) {
-        ExcludedPathsStore.write(
+        writeExclusion(
             path: device.folderURL,
             displayName: "\(device.deviceName) — \(device.runtimeVersion)"
         )
@@ -5555,7 +5562,7 @@ final class PurgeStore: ObservableObject {
     }
 
     func excludeFromScans(_ runtime: SimulatorRuntime) {
-        ExcludedPathsStore.write(
+        writeExclusion(
             path: runtime.locationURL,
             displayName: runtime.safetyInfo.headline
         )
@@ -5574,7 +5581,7 @@ final class PurgeStore: ObservableObject {
         guard let indices = projectArtifactIndices(groupID: groupID, artifactID: artifactID) else { return }
         let group = projectGroups[indices.groupIndex]
         let artifact = group.artifacts[indices.artifactIndex]
-        ExcludedPathsStore.write(
+        writeExclusion(
             path: artifact.path,
             displayName: "\(group.displayName) — \(artifact.kind.rowTag)"
         )
@@ -5592,7 +5599,7 @@ final class PurgeStore: ObservableObject {
     /// removes paths the allowlist already approved.
     func excludeProjectGroupFromScans(groupID: String) {
         guard let group = projectGroups.first(where: { $0.id == groupID }) else { return }
-        ExcludedPathsStore.write(path: group.rootPath, displayName: group.displayName)
+        writeExclusion(path: group.rootPath, displayName: group.displayName)
         refreshExcludedPaths()
 
         scanSelection.artifactIDs.subtract(group.artifacts.map(\.id))
@@ -5604,14 +5611,16 @@ final class PurgeStore: ObservableObject {
     /// Drop an exclusion. The item reappears on the next scan, but only if it still
     /// passes the normal allowlist gate.
     func removeExclusion(path: URL) {
-        ExcludedPathsStore.remove(path: path)
+        if !ExcludedPathsStore.remove(path: path) {
+            errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
+        }
         refreshExcludedPaths()
     }
 
     /// Subtracts one Large Files row from future scans and drops it. For an AI model
     /// that is its manifest, the path the model is discovered through.
     func excludeLargeFileFromScans(_ file: LargeFile) {
-        ExcludedPathsStore.write(path: file.path, displayName: file.displayName)
+        writeExclusion(path: file.path, displayName: file.displayName)
         refreshExcludedPaths()
         pruneExcludedResults()
     }
@@ -5628,7 +5637,7 @@ final class PurgeStore: ObservableObject {
     func excludeFoldersFromScans(_ folders: [URL]) {
         var added = false
         for folder in folders where !ExcludedPathsStore.isExcluded(folder) {
-            ExcludedPathsStore.write(
+            writeExclusion(
                 path: folder,
                 displayName: FileManager.default.displayName(atPath: folder.path)
             )

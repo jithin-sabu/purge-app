@@ -230,10 +230,7 @@ enum AppFonts {
     }
 
     private static var stableFolder: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support
-            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "io.getpurge.app", isDirectory: true)
-            .appendingPathComponent("Fonts", isDirectory: true)
+        AppSupportFolder.url().appendingPathComponent("Fonts", isDirectory: true)
     }
 
     /// The font at `bundled`, copied into `folder` when the copy there is

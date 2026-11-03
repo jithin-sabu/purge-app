@@ -23,9 +23,7 @@ nonisolated enum TrashDebugLog {
         return formatter
     }()
 
-    private static let directoryURL: URL = FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("io.getpurge.app", isDirectory: true)
+    private static let directoryURL: URL = AppSupportFolder.url()
 
     static let fileURL: URL = directoryURL.appendingPathComponent("trash-debug.log")
 
