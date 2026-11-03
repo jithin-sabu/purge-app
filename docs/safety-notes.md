@@ -11,6 +11,51 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-11-03: Project folders could be judged by the wrong path
+
+**Found internally** in review of [#313](https://github.com/jithin-sabu/purge-app/pull/313) ([#190](https://github.com/jithin-sabu/purge-app/issues/190)), no report. **Fixed:** [#313](https://github.com/jithin-sabu/purge-app/pull/313). **Affected:** `~/.gradle` from v1.1.0, linked folders from v1.4.0, to v1.13.2.
+
+### What happened
+
+There were two ways in, both through Dev Tools project folders.
+
+A stray `settings.gradle` or `build.gradle` in the home folder, such as one
+`gradle init` leaves behind, made home itself look like a Gradle project. Its
+`.gradle` folder is Gradle's own folder: installed JDKs, `gradle.properties`
+(often signing or repository keys) and `init.d`. Purge offered it whole as
+Safe to Clean, so Clean Safe Items or a scheduled clean could move it to the
+Trash.
+
+A project folder such as `ios` can be a link. Purge checked the path as
+written, and project folders like `.gradle`, `Pods` or `node_modules` are
+allowed by name anywhere in home. Moving one to the Trash follows the link,
+so a link into `~/Pictures` or another protected place would have moved the
+folder inside it.
+
+### Who was affected
+
+Nobody reported a loss. Both need an unusual setup: a Gradle file loose in
+home, or a project folder linked into a protected place. Anything moved went
+to the Trash and could be put back.
+
+### What changed
+
+`~/.gradle` itself is never deleted. Its caches are still offered as their
+own rows. A project folder is judged again where its link leads, and refused
+when that is a never-delete place. A project on a linked drive still cleans.
+A rule for a nested folder now also checks the folder's full name, so the
+`android/.gradle` rule cannot unlock `ios/.gradle`.
+
+### What would have caught it earlier
+
+`neighboursStayOut` in
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+now lists `.gradle`. `LinkedArtifactTests` and `nestedRuleChecksEveryComponent`
+in
+[`PurgeTests/ProjectArtifactCatalogTests.swift`](../PurgeTests/ProjectArtifactCatalogTests.swift)
+check a link into `/Library`, a link inside home, and a nested rule's name.
+Every earlier fixture used plain folders and a home with no Gradle files.
+
 ## 2026-10-22: A project in use stayed listed under its other spelling
 
 **Found internally** in a code audit ([#175](https://github.com/jithin-sabu/purge-app/issues/175)), no report. **Fixed:** [#255](https://github.com/jithin-sabu/purge-app/pull/255), shipped in v1.13.0 (2026-10-24). **Affected:** v1.7.1 to v1.12.0.
