@@ -93,7 +93,8 @@ struct CleanupHistoryDetailView: View {
         }
     }
 
-    /// What the clean tried and couldn't remove, each with why. Still in place (#303).
+    /// What the clean tried and couldn't remove, each with why (#303). As of that
+    /// clean: a later Retry doesn't change the entry.
     private var failedSection: some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
             sectionLabel(String(localized: "Not removed"))

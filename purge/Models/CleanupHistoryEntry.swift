@@ -40,7 +40,8 @@ struct CleanupHistorySkippedItemDTO: Codable, Hashable, Identifiable {
     let isUserVisible: Bool
 }
 
-/// An item the clean tried and could not remove (#303). It is still where it was.
+/// An item the clean tried and could not remove (#303). A record of that clean:
+/// a later Retry is not written to History, so the item may be gone since.
 struct CleanupHistoryFailedItemDTO: Codable, Hashable, Identifiable {
     var id: String { path }
 

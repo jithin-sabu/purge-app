@@ -151,6 +151,28 @@ struct LockedUninstallRetryTests {
         #expect(trash.movedPaths.isEmpty)
     }
 
+    /// The #303 case: every bundle stayed, so nothing moved. History still keeps
+    /// the held app with its reason, and the completion screen lists it once.
+    @Test func historyKeepsAHeldAppWithItsReason() async throws {
+        let fixture = try makeFixture()
+        defer { try? fm.removeItem(at: fixture.home) }
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = makeStore(fixture, scans: scans, trash: Trash(), helper: Helper(), helperSwitch: Switch())
+
+        _ = try await uninstall(store, fixture)
+
+        let entry = try #require(CleanupHistoryStore.shared.archive.entries.first {
+            $0.failedItems.contains { $0.path == fixture.bundle.path }
+        })
+        #expect(entry.deletedItems.isEmpty)
+        #expect(entry.failedItems.map(\.failureReason) == [.needsAdministrator])
+        #expect(entry.failedItems.map(\.sizeBytes) == [Int64(4096 + 512)])
+        #expect(CleanupHistorySummaryRow(entry: entry).detailText == String(localized: "1 item couldn't be cleaned"))
+        let rows = store.manualDeletionSession?.failedItems ?? []
+        #expect(rows.filter { $0.path == fixture.bundle.path }.count == 1)
+    }
+
     @Test func aStandardAccountIsToldOnlyAnAdministratorCanRemoveIt() async throws {
         let fixture = try makeFixture()
         defer { try? fm.removeItem(at: fixture.home) }

@@ -325,4 +325,25 @@ extension DeletionReport {
         let skipped = skippedItems.lazy.filter(\.isUserVisible).map(CleanFailureItem.init(skipped:))
         return failed + skipped
     }
+
+    /// The same report with more failed items, for a caller that keeps some
+    /// failures outside the engine's report, as the uninstaller does for held apps.
+    func addingFailures(_ items: [CleanFailureItem]) -> DeletionReport {
+        guard !items.isEmpty else { return self }
+        var report = DeletionReport(
+            bytesMovedToTrash: bytesMovedToTrash,
+            bytesRemovedDirectly: bytesRemovedDirectly,
+            deletedItems: deletedItems,
+            failedItems: failedItems + items.map {
+                FailedDeletionItem(path: $0.path, displayName: $0.displayName, reason: $0.reason, sizeBytes: $0.sizeBytes, route: $0.route)
+            },
+            skippedItems: skippedItems,
+            capacityBefore: capacityBefore,
+            capacityAfter: capacityAfter,
+            timestamp: timestamp
+        )
+        report.ownershipWarningPaths = ownershipWarningPaths
+        report.keptRuntimeDownloads = keptRuntimeDownloads
+        return report
+    }
 }
