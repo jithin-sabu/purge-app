@@ -124,7 +124,8 @@ and the one change it makes that outlasts the app:
 - **One configuration profile**, which you install yourself in System
   Settings. It only points the model downloads at a dead local address so
   macOS does not fetch them again. It stays in Device Management until you
-  choose Download Again or remove it there; either brings the models back.
+  choose Download Again or remove it there. Download Again also asks macOS
+  for the models back.
 - **Nothing automatic.** Neither scheduled cleaning nor Clean Safe Items ever
   touches the models.
 

@@ -21,7 +21,7 @@ struct OverviewAppleIntelligenceRow: View {
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "appleIntelligenceModels"
 
-    private static let info = String(localized: "Apple Intelligence keeps its models on this Mac, counted under System Data. Remove releases them through Apple's own asset service and installs a profile so macOS doesn't download them again. Download Again removes that profile and asks macOS for them back. The size shown is Apple's figure; macOS already treats part of it as available, so the disk gains less than that.")
+    private static let info = String(localized: "These are the on-device models Apple Intelligence uses. macOS counts them as System Data. Remove has you install a profile that stops them downloading again, then asks macOS to delete them. Download Again has you remove the profile, then asks macOS to download them again. The size is Apple's number. You'll usually get back less than that.")
 
     var body: some View {
         HStack(spacing: AppStyle.Spacing.small) {
@@ -209,7 +209,7 @@ struct OverviewAppleIntelligenceRow: View {
             // Apple's figure goes here rather than at the row's end, so it isn't
             // read as what removing them gives back.
             if let bytes = reading.latestBytes {
-                return String(localized: "\(formatStorageBytes(bytes)) by Apple's count; the disk gains less") + blocked
+                return String(localized: "About \(formatStorageBytes(bytes)) (Apple's number)") + blocked
             }
             return String(localized: "On this Mac, size unknown") + blocked
         }
@@ -328,7 +328,7 @@ struct OverviewAppleIntelligenceConfirmation: View {
                 .foregroundStyle(AppColors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("macOS will ask you to install a profile that stops the models downloading again. It stays in Device Management until you choose Download Again, which also brings the models back.")
+            Text("macOS will ask you to install a profile. It stops the models from downloading again. To get them back, click Download Again. The profile is listed in System Settings > General > Device Management.")
                 .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -348,9 +348,9 @@ struct OverviewAppleIntelligenceConfirmation: View {
 
     private var sizeLine: String {
         guard let bytes = plan.bytes else {
-            return String(localized: "Apple's records don't say how much they take. Purge measures what the disk gives back.")
+            return String(localized: "Apple doesn't say how much space these take. Purge will show what you got back after removing them.")
         }
-        return String(localized: "Apple counts \(formatBytes(bytes)). macOS already treats part of that as available, so the disk gains less. Purge measures what it really gives back.")
+        return String(localized: "Apple says these take \(formatBytes(bytes)). You'll likely get back less, because macOS already counts some of it as free space. Purge will show what you actually got back.")
     }
 
     private var accountsLine: String {
