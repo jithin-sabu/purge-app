@@ -716,8 +716,7 @@ struct ContentView: View {
     }
 
     private func pageSubtitle(count: Int, bytes: Int64) -> String {
-        let itemLabel = count == 1 ? String(localized: "item") : String(localized: "items")
-        return String(localized: "\(count) \(itemLabel) · \(formatBytes(bytes)) recoverable")
+        String(localized: "\(count) items · \(formatBytes(bytes)) recoverable")
     }
 
     /// Mirrors the filtering `LargeFilesView` applies to its list, so the subtitle
@@ -751,8 +750,7 @@ struct ContentView: View {
         }
         let files = largeFilesVisibleForSubtitle
         let bytes = files.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let fileLabel = files.count == 1 ? String(localized: "file") : String(localized: "files")
-        return String(localized: "\(files.count) \(fileLabel) · \(formatBytes(bytes)) to review")
+        return String(localized: "\(files.count) files · \(formatBytes(bytes)) to review")
     }
 
     /// Follows the active segment, with one shared shape so the two read the same:
@@ -764,7 +762,7 @@ struct ContentView: View {
             guard !items.isEmpty else { return nil }
             return uninstallSubtitle(
                 count: items.count,
-                unit: (String(localized: "item"), String(localized: "items")),
+                counted: { String(localized: "\($0) items") },
                 totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
                 selectedCount: store.selectedOrphanCount,
                 selectedBytes: store.selectedOrphanBytes,
@@ -776,7 +774,7 @@ struct ContentView: View {
             guard !tools.isEmpty else { return nil }
             return uninstallSubtitle(
                 count: tools.standalone.count + tools.managed.count,
-                unit: (String(localized: "tool"), String(localized: "tools")),
+                counted: { String(localized: "\($0) tools") },
                 totalBytes: tools.totalBytes,
                 selectedCount: store.selectedCommandLineToolCount,
                 selectedBytes: store.selectedCommandLineToolBytes,
@@ -793,7 +791,7 @@ struct ContentView: View {
         guard !store.installedApps.isEmpty else { return nil }
         return uninstallSubtitle(
             count: store.installedApps.count,
-            unit: (String(localized: "app"), String(localized: "apps")),
+            counted: { String(localized: "\($0) apps") },
             totalBytes: store.installedApps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) },
             selectedCount: store.selectedAppIDs.count,
             selectedBytes: store.selectedAppsRemovableBytes,
@@ -805,13 +803,13 @@ struct ContentView: View {
 
     private func uninstallSubtitle(
         count: Int,
-        unit: (singular: String, plural: String),
+        counted: (Int) -> String,
         totalBytes: Int64,
         selectedCount: Int,
         selectedBytes: Int64,
         measuring: Bool
     ) -> String {
-        let base = String(localized: "\(count) \(count == 1 ? unit.singular : unit.plural)")
+        let base = counted(count)
         if selectedCount > 0 {
             return String(localized: "\(base) · \(selectedCount) selected · \(formatBytes(selectedBytes))")
         }

@@ -406,10 +406,10 @@ private struct OverviewCategoryRow: View {
             }.count
             return unused > 0
                 ? String(localized: "\(unused) not opened in 90 days")
-                : String(localized: "\(totals.count) \(totals.count == 1 ? String(localized: "app") : String(localized: "apps"))")
+                : String(localized: "\(totals.count) apps")
         case .leftovers:
             guard totals.count > 0 else { return String(localized: "Nothing left behind") }
-            return String(localized: "\(totals.count) \(totals.count == 1 ? String(localized: "item") : String(localized: "items"))")
+            return String(localized: "\(totals.count) items")
         }
     }
 
@@ -428,14 +428,14 @@ private struct OverviewCategoryRow: View {
             if let safeBytes = record.safeBytes {
                 return cacheDetail(safeBytes: safeBytes)
             }
-            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "item") : String(localized: "items"))")
+            return String(localized: "\(record.count) items")
         case .leftovers:
             guard record.count > 0 else { return String(localized: "Nothing left behind") }
-            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "item") : String(localized: "items"))")
+            return String(localized: "\(record.count) items")
         case .largeFiles:
             return largeFilesDetail(count: record.count)
         case .apps:
-            return String(localized: "\(record.count) \(record.count == 1 ? String(localized: "app") : String(localized: "apps"))")
+            return String(localized: "\(record.count) apps")
         }
     }
 
@@ -845,15 +845,14 @@ enum OverviewMotion {
 nonisolated enum OverviewLargeFilesLine {
     static func text(count: Int, filter: LargeFileFilterSnapshot) -> String {
         let size = filter.size.label
-        let word = count == 1 ? String(localized: "file") : String(localized: "files")
         if let span = filter.age.rowSpan {
             return count == 0
                 ? String(localized: "No files over \(size) not used in \(span)")
-                : String(localized: "\(count) \(word) over \(size) not used in \(span)")
+                : String(localized: "\(count) files over \(size) not used in \(span)")
         }
         return count == 0
             ? String(localized: "No files over \(size)")
-            : String(localized: "\(count) \(word) over \(size)")
+            : String(localized: "\(count) files over \(size)")
     }
 }
 

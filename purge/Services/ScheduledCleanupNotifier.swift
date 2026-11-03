@@ -15,10 +15,9 @@ enum ScheduledCleanupNotifier {
 
     static func notifyScheduledCleanFinished(bytesMovedToTrash: Int64, deletedCount: Int) async {
         let space = formatBytes(bytesMovedToTrash)
-        let noun = deletedCount == 1 ? String(localized: "item") : String(localized: "items")
         await deliver(
             title: String(localized: "Scheduled clean finished"),
-            body: String(localized: "Moved \(deletedCount) \(noun) to Trash, about \(space). Empty the trash to reclaim the space.")
+            body: String(localized: "Moved \(deletedCount) items to Trash, about \(space). Empty the trash to reclaim the space.")
         )
     }
 

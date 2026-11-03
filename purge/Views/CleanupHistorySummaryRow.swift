@@ -79,8 +79,7 @@ struct CleanupHistorySummaryRow: View {
         }
         let trashed = entry.trashedItems.count
         let deleted = entry.permanentlyDeletedItems.count
-        let noun = trashed == 1 ? String(localized: "item") : String(localized: "items")
-        let toTrash = String(localized: "\(trashed) \(noun) to trash")
+        let toTrash = String(localized: "\(trashed) items to trash")
         let permanent = String(localized: "\(deleted) deleted permanently")
         let failed = entry.failedItems.count
         let failures = failed == 1

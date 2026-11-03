@@ -471,8 +471,7 @@ struct SettingsView: View {
             wasn't anything safe to clean yet.
             """)
         }
-        let noun = summary.deletedCount == 1 ? String(localized: "item") : String(localized: "items")
-        return String(localized: "Moved \(summary.deletedCount) \(noun) to Trash, about \(formatBytes(summary.bytesMovedToTrash)). Empty the trash to reclaim the space.")
+        return String(localized: "Moved \(summary.deletedCount) items to Trash, about \(formatBytes(summary.bytesMovedToTrash)). Empty the trash to reclaim the space.")
     }
 
     // MARK: - Sheets

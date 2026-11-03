@@ -11,7 +11,6 @@
 "%.1f seconds" = "%.1f 秒";
 "%@" = "%@";
 "%@ %@" = "%@ %@";
-"%@ %lld Check First %@ (%@)" = "%@ %lld %@需先检查的内容（%@）";
 "%@ (%@)" = "%@ (%@)";
 "%@ and %@" = "%@ 和 %@";
 "%@ appearance" = "%@外观";
@@ -48,10 +47,6 @@
 "%@. %@" = "%@。%@";
 "%lld" = "%lld";
 "%lld %@" = "%lld %@";
-"%lld %@ over %@" = "%lld %@超过 %@ 的文件";
-"%lld %@ to trash" = "%lld %@ 移到废纸篓";
-"%lld %@ · %@ recoverable" = "%lld %@ · %@ 可释放";
-"%lld %@ · %@ to review" = "%lld %@文件 · %@ 待检查";
 "%lld bytes" = "%lld 字节";
 "%lld files in this scan have identical contents, including this one." = "本次扫描中有 %lld 个文件内容完全相同，包含此文件。";
 "%lld found, still looking…" = "已找到 %lld 个，仍在查找…";
@@ -59,8 +54,6 @@
 "%lld items couldn't be cleaned" = "%lld 项无法清理";
 "%lld not opened in 90 days" = "%lld 个应用在 90 天内未打开";
 "%lld on this Mac, the oldest from %@" = "本机有 %lld 个快照，最早创建于 %@";
-"%lld other %@" = "另有 %lld 份%@";
-"%lld other identical %@ found" = "发现另外 %lld 份相同的%@";
 "%lld percent" = "百分之 %lld";
 "%lld seconds" = "%lld 秒";
 "%lldd ago" = "%lld 天前";
@@ -146,7 +139,6 @@
 "Check First" = "先检查";
 "Check First items may hold something you'd miss. Look them over before cleaning." = "“先检查”项目可能包含你需要的内容。请在清理前检查。";
 "Check back later." = "稍后再来检查。";
-"Check first" = "先检查";
 "Check for Updates…" = "检查更新…";
 "Check for updates" = "检查更新";
 "Check for updates automatically" = "自动检查更新";
@@ -359,7 +351,6 @@
 "Moved %@ of junk to the Trash." = "已将 %@ 垃圾文件移到废纸篓。";
 "Moved %@ to Trash" = "已将 %@ 移到废纸篓";
 "Moved %@ to trash" = "已将 %@ 移到废纸篓";
-"Moved %lld %@ to Trash, about %@. Empty the trash to reclaim the space." = "已将 %lld %@内容移到废纸篓，约 %@。清空废纸篓后才能释放空间。";
 "Moved to Trash" = "已移到废纸篓";
 "Moved to the Trash, not deleted. Restore it anytime." = "已移到废纸篓，未永久删除。可随时恢复。";
 "Moved to the Trash, not deleted. Restore them anytime." = "已移到废纸篓，未永久删除。可随时恢复。";
@@ -392,7 +383,6 @@
 "Not opened" = "尚未打开";
 "Not scanned yet" = "尚未扫描";
 "Not selected" = "未选择";
-"Not sure" = "无法确定";
 "Nothing cleaned yet" = "尚未清理";
 "Nothing excluded" = "没有排除项";
 "Nothing here." = "这里没有内容。";
@@ -538,7 +528,6 @@
 "Run your usual project build so Android or Java tools fetch what they need again." = "运行你常用的项目构建，Android 或 Java 工具会重新获取所需内容。";
 "Running your first scan" = "正在进行首次扫描";
 "Rust build" = "Rust 构建";
-"Safe" = "安全";
 "Safe Junk" = "安全垃圾文件";
 "Safe to Clean" = "可安全清理";
 "Save" = "保存";
@@ -729,8 +718,6 @@
 "a fresh copy of Xcode" = "一份新的 Xcode";
 "a full base MacBook Air" = "一台装满的基础款 MacBook Air";
 "all of GTA V" = "完整 GTA V";
-"app" = "个应用";
-"apps" = "个应用";
 "buy me a coffee" = "请我喝杯咖啡";
 "by" = "制作 ·";
 "cache" = "缓存";
@@ -744,10 +731,8 @@
 "clear cache" = "清除缓存";
 "clear caches" = "清除缓存";
 "clear junk" = "清除垃圾文件";
-"copies" = "副本";
 "copies of Chrome" = "份 Chrome";
 "copies of Xcode" = "份 Xcode";
-"copy" = "副本";
 "day" = "天";
 "delete" = "删除";
 "delete app" = "删除应用";
@@ -756,8 +741,6 @@
 "disk space" = "磁盘空间";
 "done in " = "耗时 ";
 "empty caches" = "清空缓存";
-"file" = "个";
-"files" = "个";
 "find junk" = "查找垃圾文件";
 "free space" = "释放空间";
 "free up space" = "腾出空间";
@@ -768,8 +751,6 @@
 "iOS Simulators" = "iOS 模拟器";
 "in Trash" = "在废纸篓中";
 "installed apps" = "已安装应用";
-"item" = "项";
-"items" = "项";
 "junk" = "垃圾文件";
 "just now" = "刚刚";
 "keychains" = "钥匙串";
@@ -1218,8 +1199,6 @@
 "%@ finished, but %@ is still there." = "%1$@ 已完成，但 %2$@ 仍然存在。";
 "%@ stopped with an error." = "%@ 出错并已停止。";
 "launchctl stopped with an error." = "launchctl 出错并已停止。";
-"tool" = "个工具";
-"tools" = "个工具";
 "%@ is a command-line tool. The uninstaller lists it under Command-Line Tools with its commands, and can move them all to the Trash." = "%@ 是一个命令行工具。卸载器会在“命令行工具”下列出它及其命令，并可将它们全部移到废纸篓。";
 "Show in Uninstaller" = "在卸载器中显示";
 "1 command" = "1 个命令";
@@ -1364,7 +1343,6 @@
 "This file is also linked from another place on this Mac." = "此文件在这台 Mac 上的其他位置也有链接。";
 
 /* Overview Large Files row (#279) */
-"%lld %@ over %@ not used in %@" = "%lld %@超过 %@ 且 %@ 未使用的文件";
 "Change filter" = "更改筛选";
 "No files over %@ not used in %@" = "没有超过 %@ 且 %@ 未使用的文件";
 "No files over %@" = "没有超过 %@ 的文件";
@@ -1387,3 +1365,15 @@
 "request could not be encoded" = "请求无法编码";
 "Purge couldn't look up %@, so it left them alone: %@" = "Purge 无法查询 %@，因此未作处理：%@";
 "Purge couldn't save your exclusions. This change lasts until Purge quits." = "Purge 无法保存排除列表。此更改仅在 Purge 退出前有效。";
+"%lld items" = "%lld 项";
+"%lld apps" = "%lld 个应用";
+"%lld tools" = "%lld 个工具";
+"%lld other copies" = "另有 %lld 份副本";
+"%lld items to trash" = "%lld 项移到废纸篓";
+"%lld items · %@ recoverable" = "%lld 项 · %@ 可释放";
+"%lld files · %@ to review" = "%lld 个文件 · %@ 待检查";
+"%lld files over %@" = "%lld 个超过 %@ 的文件";
+"%lld files over %@ not used in %@" = "%lld 个超过 %@ 且 %@ 未使用的文件";
+"%@ %lld Check First items (%@)" = "%@ %lld 项需先检查的内容（%@）";
+"Moved %lld items to Trash, about %@. Empty the trash to reclaim the space." = "已将 %lld 项内容移到废纸篓，约 %@。清空废纸篓后才能释放空间。";
+"%lld other identical copies found" = "发现另外 %lld 份相同的副本";
