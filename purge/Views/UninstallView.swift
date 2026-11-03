@@ -1371,39 +1371,37 @@ struct UninstallReviewSheet: View {
     /// plan with every app set the way it says. With three, Cancel takes the
     /// far left where the size line was, and the two real choices sit together
     /// on the right.
+    @ViewBuilder
     private var footer: some View {
-        let secondary = Self.secondaryButtonTitle(for: plan)
-        return HStack(spacing: AppStyle.Spacing.small) {
-            if secondary == nil {
-                Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
-                    .font(AppStyle.Typography.metadataEmphasis.numbers)
-                    .foregroundStyle(AppColors.textSecondary)
-            } else {
+        if let secondary = Self.secondaryButtonTitle(for: plan) {
+            HStack(spacing: AppStyle.Spacing.small) {
                 Button("Cancel", action: onCancel)
                     .buttonStyle(.purge(.secondary))
                     .keyboardShortcut(.cancelAction)
-            }
 
-            Spacer()
+                Spacer()
 
-            if let secondary {
                 Button(secondary) {
                     onConfirm(Self.plan(plan, removingThroughHomebrew: false))
                 }
                 .buttonStyle(.purge(.secondary))
                 .disabled(plan.totalSelectedItems == 0)
-            } else {
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(.purge(.secondary))
-                    .keyboardShortcut(.cancelAction)
-            }
 
-            Button(Self.primaryButtonTitle(for: plan)) {
-                onConfirm(Self.plan(plan, removingThroughHomebrew: true))
+                Button(Self.primaryButtonTitle(for: plan)) {
+                    onConfirm(Self.plan(plan, removingThroughHomebrew: true))
+                }
+                .buttonStyle(.purge(.destructive))
+                .keyboardShortcut(.defaultAction)
+                .disabled(plan.totalSelectedItems == 0)
             }
-            .buttonStyle(.purge(.destructive))
-            .keyboardShortcut(.defaultAction)
-            .disabled(plan.totalSelectedItems == 0)
+        } else {
+            RemovalSheetFooter(
+                sizeLine: RemovalSizeLine.text(toTrash: plan.totalSelectedBytes),
+                confirmTitle: Self.primaryButtonTitle(for: plan),
+                itemCount: plan.totalSelectedItems,
+                onCancel: onCancel,
+                onConfirm: { onConfirm(Self.plan(plan, removingThroughHomebrew: true)) }
+            )
         }
     }
 }
@@ -1463,24 +1461,13 @@ struct OrphanReviewSheet: View {
     }
 
     private var footer: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
-                .font(AppStyle.Typography.metadataEmphasis.numbers)
-                .foregroundStyle(AppColors.textSecondary)
-
-            Spacer()
-
-            Button("Cancel", action: onCancel)
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
-
-            Button("Move \(plan.totalSelectedItems) to Trash") {
-                onConfirm(plan)
-            }
-            .buttonStyle(.purge(.destructive))
-            .keyboardShortcut(.defaultAction)
-            .disabled(plan.totalSelectedItems == 0)
-        }
+        RemovalSheetFooter(
+            sizeLine: RemovalSizeLine.text(toTrash: plan.totalSelectedBytes),
+            confirmTitle: String(localized: "Move \(plan.totalSelectedItems) to Trash"),
+            itemCount: plan.totalSelectedItems,
+            onCancel: onCancel,
+            onConfirm: { onConfirm(plan) }
+        )
     }
 }
 
@@ -1554,24 +1541,14 @@ struct RemovedAppLeftoverSheet: View {
     }
 
     private var footer: some View {
-        HStack(spacing: AppStyle.Spacing.small) {
-            Text(RemovalSizeLine.text(toTrash: plan.totalSelectedBytes))
-                .font(AppStyle.Typography.metadataEmphasis.numbers)
-                .foregroundStyle(AppColors.textSecondary)
-
-            Spacer()
-
-            Button("Keep Files", action: onCancel)
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut(.cancelAction)
-
-            Button("Move \(plan.totalSelectedItems) to Trash") {
-                onConfirm(plan)
-            }
-            .buttonStyle(.purge(.destructive))
-            .keyboardShortcut(.defaultAction)
-            .disabled(plan.totalSelectedItems == 0)
-        }
+        RemovalSheetFooter(
+            sizeLine: RemovalSizeLine.text(toTrash: plan.totalSelectedBytes),
+            cancelTitle: "Keep Files",
+            confirmTitle: String(localized: "Move \(plan.totalSelectedItems) to Trash"),
+            itemCount: plan.totalSelectedItems,
+            onCancel: onCancel,
+            onConfirm: { onConfirm(plan) }
+        )
     }
 }
 

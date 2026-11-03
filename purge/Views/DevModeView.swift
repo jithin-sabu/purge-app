@@ -1308,19 +1308,11 @@ struct DevToolsView: View {
     private func projectBadge(level: SafetyLevel) -> some View {
         ZStack(alignment: .trailing) {
             ForEach(SafetyLevel.allCases, id: \.self) { slot in
-                AppBadge(text: slot.displayName, tone: Self.badgeTone(for: slot)).hidden()
+                AppBadge(level: slot).hidden()
             }
-            AppBadge(text: level.displayName, tone: Self.badgeTone(for: level))
+            AppBadge(level: level)
         }
         .accessibilityHidden(true)
-    }
-
-    private static func badgeTone(for level: SafetyLevel) -> AppBadge.Tone {
-        switch level {
-        case .safe: return .safe
-        case .medium: return .warning
-        case .unknown: return .neutral
-        }
     }
 
     @ViewBuilder

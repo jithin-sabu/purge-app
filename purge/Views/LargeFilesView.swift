@@ -1602,23 +1602,13 @@ struct LargeFileDeletionConfirmSheet: View {
                 LargeFileCautionNote { Text(iCloudWarning) }
             }
 
-            HStack(spacing: AppStyle.Spacing.small) {
-                Text(RemovalSizeLine.text(toTrash: totalBytes))
-                    .font(AppStyle.Typography.metadataEmphasis.numbers)
-                    .foregroundStyle(AppColors.textSecondary)
-
-                Spacer()
-
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(.purge(.secondary))
-                    .keyboardShortcut(.cancelAction)
-
-                Button("Move \(files.count) to Trash") {
-                    onConfirm()
-                }
-                .buttonStyle(.purge(.destructive))
-                .keyboardShortcut(.defaultAction)
-            }
+            RemovalSheetFooter(
+                sizeLine: RemovalSizeLine.text(toTrash: totalBytes),
+                confirmTitle: String(localized: "Move \(files.count) to Trash"),
+                itemCount: files.count,
+                onCancel: onCancel,
+                onConfirm: onConfirm
+            )
         }
         .padding(AppStyle.Spacing.large)
         .frame(minWidth: 580, minHeight: 500)

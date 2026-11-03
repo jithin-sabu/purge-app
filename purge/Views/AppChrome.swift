@@ -2145,6 +2145,24 @@ struct AppBadge: View {
     }
 }
 
+extension AppBadge {
+    /// A safety level's badge. Scan rows, project rows and the delete sheet all
+    /// draw it, so a level reads the same wherever it shows (#185).
+    init(level: SafetyLevel) {
+        self.init(text: level.displayName, tone: Tone(level))
+    }
+}
+
+extension AppBadge.Tone {
+    init(_ level: SafetyLevel) {
+        switch level {
+        case .safe: self = .safe
+        case .medium: self = .warning
+        case .unknown: self = .neutral
+        }
+    }
+}
+
 /// Drives the outline→filled swap on the selected sidebar icon. The selected row
 /// owns the only animated state change; deselection is applied in a nil transaction
 /// so the previous row does not play the same replacement effect in reverse.
