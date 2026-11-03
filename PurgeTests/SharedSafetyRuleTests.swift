@@ -53,6 +53,56 @@ struct SharedSafetyRuleTests {
         }
     }
 
+    @Test("Each orphan root keeps its category")
+    func orphanRootCategories() {
+        let roots = OrphanLeftoverScanPolicy.orphanRoots(home: URL(fileURLWithPath: "/Users/someone", isDirectory: true))
+        let categories = Dictionary(uniqueKeysWithValues: roots.map { ($0.url.lastPathComponent, $0.category) })
+        #expect(categories == [
+            "Application Support": .applicationSupport,
+            "Containers": .containers,
+            "Group Containers": .groupContainers,
+            "HTTPStorages": .caches,
+            "Saved Application State": .savedState,
+        ])
+    }
+
+    /// Read as `Bundle(url:)` reads them, so an iPhone or iPad app wrapped for the
+    /// Mac still claims the container it shares with a Mac app of the same id.
+    @Test("Bundle ids come from every layout Bundle reads")
+    func bundleIDLayouts() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bundle-ids-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        func app(_ name: String, plistAt relative: String?, id: String?) throws -> URL {
+            let bundle = root.appendingPathComponent(name, isDirectory: true)
+            try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+            guard let relative else { return bundle }
+            let plist = bundle.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var info: [String: Any] = ["CFBundleName": name]
+            if let id { info["CFBundleIdentifier"] = id }
+            try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: plist)
+            return bundle
+        }
+
+        let mac = try app("Mac.app", plistAt: "Contents/Info.plist", id: "com.example.mac")
+        let flat = try app("Flat.app", plistAt: "Info.plist", id: "com.example.flat")
+        let wrapped = try app("Wrapped.app", plistAt: "Wrapper/Inner.app/Info.plist", id: "com.example.ipad")
+        // Relative, as in a real wrapped app.
+        try FileManager.default.createSymbolicLink(
+            atPath: wrapped.appendingPathComponent("WrappedBundle").path,
+            withDestinationPath: "Wrapper/Inner.app"
+        )
+        let noID = try app("NoID.app", plistAt: "Contents/Info.plist", id: nil)
+        let empty = try app("Empty.app", plistAt: nil, id: nil)
+
+        #expect(AppBundleReach.bundleID(at: mac) == "com.example.mac")
+        #expect(AppBundleReach.bundleID(at: flat) == "com.example.flat")
+        #expect(AppBundleReach.bundleID(at: wrapped) == "com.example.ipad")
+        #expect(AppBundleReach.bundleID(at: noID) == nil)
+        #expect(AppBundleReach.bundleID(at: empty) == nil)
+    }
+
     @Test("The git warning skips exactly the folders the policy allows by name")
     func gitWarningUsesThePolicyFolderNames() {
         for name in DeletionSafetyPolicy.whitelistedFolderNames {

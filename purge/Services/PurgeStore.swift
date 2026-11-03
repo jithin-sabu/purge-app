@@ -1106,11 +1106,21 @@ final class PurgeStore: ObservableObject {
 
     /// The candidates Clean Safe Items and scheduled cleans may move: those whose git
     /// check answered clean. Dirty, unknown and no answer at all are left alone.
+    ///
+    /// `keptTogether` lists the paths of each dev tool. A tool goes whole or not at
+    /// all, as `countsAsSafeCleanup` decides at scan time: one path that no longer
+    /// answers clean keeps every path of its tool (#185).
     static func gitCleanCandidates(
         _ candidates: [DeletionCandidate],
-        statuses: [String: GitWorktreeStatus]
+        statuses: [String: GitWorktreeStatus],
+        keptTogether groups: [[String]] = []
     ) -> [DeletionCandidate] {
-        candidates.filter { statuses[$0.path.standardizedFileURL.path] == .clean }
+        let isClean: (DeletionCandidate) -> Bool = { statuses[$0.path.standardizedFileURL.path] == .clean }
+        let offered = Set(candidates.map { $0.path.standardizedFileURL.path })
+        let held = Set(groups.filter { group in
+            group.contains { offered.contains($0) && statuses[$0] != .clean }
+        }.joined())
+        return candidates.filter { isClean($0) && !held.contains($0.path.standardizedFileURL.path) }
     }
 
     /// Fills in the git status of every candidate that has none, with one check for
@@ -4569,7 +4579,8 @@ final class PurgeStore: ObservableObject {
         var combined: [URL] = []
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
-        for candidate in Self.gitCleanCandidates(readable, statuses: gitStatuses) {
+        let toolPaths = devTools.map(\.standardizedPaths)
+        for candidate in Self.gitCleanCandidates(readable, statuses: gitStatuses, keptTogether: toolPaths) {
             let std = candidate.path.standardizedFileURL
             combined.append(std)
             pathToDisplayName[std.path] = candidate.title

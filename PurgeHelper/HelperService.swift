@@ -167,20 +167,28 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         }
     }
 
-    /// The gid of the local `admin` group, read from its directory record.
+    /// The gid of the local `admin` group, read from its directory record. The
+    /// record lists the group's members, so a big group needs a bigger buffer:
+    /// `ERANGE` grows it and asks again, up to 1 MB.
     private func adminGroupID() -> gid_t? {
         let suggestedSize = sysconf(_SC_GETGR_R_SIZE_MAX)
-        let bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
-        var record = group()
-        var result: UnsafeMutablePointer<group>?
-        var buffer = [CChar](repeating: 0, count: bufferSize)
-
-        let status = buffer.withUnsafeMutableBufferPointer { storage -> Int32 in
-            guard let baseAddress = storage.baseAddress else { return -1 }
-            return getgrnam_r("admin", &record, baseAddress, storage.count, &result)
+        var bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
+        while bufferSize <= 1_048_576 {
+            var record = group()
+            var result: UnsafeMutablePointer<group>?
+            var buffer = [CChar](repeating: 0, count: bufferSize)
+            let status = buffer.withUnsafeMutableBufferPointer { storage -> Int32 in
+                guard let baseAddress = storage.baseAddress else { return -1 }
+                return getgrnam_r("admin", &record, baseAddress, storage.count, &result)
+            }
+            if status == ERANGE {
+                bufferSize *= 2
+                continue
+            }
+            guard status == 0, result != nil else { return nil }
+            return record.gr_gid
         }
-        guard status == 0, result != nil else { return nil }
-        return record.gr_gid
+        return nil
     }
 
     /// True only when the account is a member of the local `admin` group. Any
