@@ -51,29 +51,11 @@ enum GitRepositoryFinder {
 
 /// Folder names that are always safe to remove without consulting git.
 /// These rebuildable artifacts must never trigger the dirty-repo warning even
-/// when they live inside a repository with uncommitted edits.
+/// when they live inside a repository with uncommitted edits. The list is the
+/// safety policy's own, so a folder it allows is never flagged here (#185).
 enum GitWarningPolicy {
-    nonisolated static let rebuildableFolderNames: Set<String> = [
-        "node_modules",
-        "venv",
-        ".venv",
-        "target",
-        "Pods",
-        ".gradle",
-        "DerivedData",
-        "build",
-        "dist",
-        "out",
-        ".next",
-        ".nuxt",
-        ".cache",
-        "__pycache__",
-        ".turbo",
-        ".parcel-cache"
-    ]
-
     nonisolated static func isRebuildableFolder(_ url: URL) -> Bool {
-        rebuildableFolderNames.contains(url.lastPathComponent)
+        DeletionSafetyPolicy.whitelistedFolderNames.contains(url.lastPathComponent)
     }
 }
 
