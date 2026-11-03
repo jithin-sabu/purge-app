@@ -900,7 +900,7 @@
 "Apple Intelligence models" = "Apple 智能模型";
 "What are the Apple Intelligence models?" = "什么是 Apple 智能模型？";
 "About the Apple Intelligence models" = "关于 Apple 智能模型";
-"Apple Intelligence keeps its models on this Mac, counted under System Data. Remove releases them through Apple's own asset service and installs a profile so macOS doesn't download them again. Download Again removes that profile and asks macOS for them back. The size shown is Apple's figure; macOS already treats part of it as available, so the disk gains less than that." = "Apple 智能会把模型保存在这台 Mac 上，计入“系统数据”。“移除”会通过 Apple 自己的资源服务释放它们，并安装一个描述文件，让 macOS 不再重新下载。“重新下载”会移除该描述文件并请 macOS 重新获取模型。显示的大小是 Apple 的数字；macOS 已将其中一部分视为可用空间，所以实际腾出的空间会少于此数。";
+"These are the on-device models Apple Intelligence uses. macOS counts them as System Data. Remove asks macOS to delete them and installs a profile that stops them downloading again. Download Again removes the profile and downloads them again. The size is Apple's number. You'll usually get back less than that." = "这些是 Apple 智能使用的设备端模型，macOS 将其计入“系统数据”。“移除”会请 macOS 删除它们，并安装一个描述文件，阻止它们重新下载。“重新下载”会移除该描述文件并重新下载模型。这里的大小是 Apple 给出的数字，实际腾出的空间通常会更少。";
 "Remove the models and stop macOS downloading them again" = "移除模型并阻止 macOS 重新下载";
 "Remove the profile and ask macOS to download the models again" = "移除描述文件并请 macOS 重新下载模型";
 "Download Again" = "重新下载";
@@ -931,10 +931,10 @@
 "Xcode's predictive code completion" = "Xcode 的预测性代码补全";
 "Apps that use Apple's on-device models, such as Lightroom's AI Denoise" = "使用 Apple 设备端模型的 App，例如 Lightroom 的 AI 降噪";
 "The models don't go to the Trash. macOS deletes them permanently, and Download Again fetches them from Apple." = "这些模型不会移到废纸篓，macOS 会将其永久删除。“重新下载”会从 Apple 重新获取。";
-"macOS will ask you to install a profile that stops the models downloading again. It stays in Device Management until you choose Download Again, which also brings the models back." = "macOS 会请你安装一个阻止模型重新下载的描述文件。它会一直保留在“设备管理”中，直到你选择“重新下载”，届时模型也会恢复。";
+"macOS will ask you to install a profile. It stops the models from downloading again. To get them back, click Download Again. The profile is listed in System Settings > General > Device Management." = "macOS 会请你安装一个描述文件，用来阻止模型重新下载。要恢复模型，请点按“重新下载”。该描述文件列在“系统设置”>“通用”>“设备管理”中。";
 "Remove Models" = "移除模型";
-"Apple's records don't say how much they take. Purge measures what the disk gives back." = "Apple 的记录没有说明它们占用多少空间。Purge 会测量磁盘实际腾出的空间。";
-"Apple counts %@. macOS already treats part of that as available, so the disk gains less. Purge measures what it really gives back." = "Apple 计为 %@。macOS 已将其中一部分视为可用空间，所以磁盘实际腾出的会更少。Purge 会测量真正腾出的空间。";
+"Apple doesn't say how much space these take. Purge will show what you got back after removing them." = "Apple 没有说明这些模型占用多少空间。移除后，Purge 会显示实际腾出的空间。";
+"Apple says these take %@. You'll likely get back less, because macOS already counts some of it as free space. Purge will show what you actually got back." = "Apple 显示这些模型占用 %@。实际腾出的空间可能更少，因为 macOS 已把其中一部分算作可用空间。Purge 会显示实际腾出的空间。";
 "%@ (uses Apple Intelligence)" = "%@（使用 Apple 智能）";
 "%@ (can't tell)" = "%@（无法判断）";
 "The models are shared by every account on this Mac: %@." = "这台 Mac 上的所有账户共用这些模型：%@。";
@@ -966,7 +966,7 @@
 "Models on disk" = "磁盘上的模型";
 "None" = "无";
 "Unknown" = "未知";
-"%@ by Apple's count; the disk gains less" = "Apple 计为 %@；磁盘实际腾出的会更少";
+"About %@ (Apple's number)" = "约 %@（Apple 给出的数字）";
 "Hidden in System Data" = "藏在“系统数据”中";
 "Removed: Settings shows %@ more, %@ freed on the disk" = "已移除：“系统设置”多显示 %@ 可用，磁盘实际腾出 %@";
 "Removed, %@ freed on the disk that macOS already counted as available" = "已移除，磁盘腾出 %@，但 macOS 原本已将其计为可用";
