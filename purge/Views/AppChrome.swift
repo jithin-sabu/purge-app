@@ -100,8 +100,9 @@ private struct DetailPageScrollEdgeModifier: ViewModifier {
             .safeAreaBar(edge: .top, spacing: 0) {
                 AppSectionPageHeader(title: title, subtitle: includesSubtitle ? " " : nil)
                     .padding(.bottom, AppDetailPageLayout.clearanceBelowHeader)
-                    .opacity(0)
-                    .accessibilityHidden(true)
+                    // Hidden, not just see-through: `accessibilityHidden` doesn't
+                    // reach a `safeAreaBar`, so VoiceOver read the page title twice.
+                    .hidden()
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity)
                     .background {
@@ -209,10 +210,12 @@ private struct AnimatedPageTitle: View {
                 .id(animationToken)
         }
         .fixedSize(horizontal: true, vertical: false)
-        .accessibilityElement(children: .ignore)
-        // Translated like the text on screen: a plain String label is read as is.
-        .accessibilityLabel(Text(LocalizedStringKey(title)))
-        .accessibilityAddTraits(.isHeader)
+        // One heading, translated like the text on screen. A plain String label
+        // is read as is.
+        .accessibilityRepresentation {
+            Text(LocalizedStringKey(title))
+                .accessibilityAddTraits(.isHeader)
+        }
         .onChange(of: title) { newTitle in
             animateTitleChange(to: newTitle)
         }
