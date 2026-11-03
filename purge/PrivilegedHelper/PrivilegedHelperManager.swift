@@ -122,13 +122,13 @@ final class PrivilegedHelperManager: ObservableObject {
 
         let sentPaths = urls.map(\.path)
         return await withCheckedContinuation { (continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) in
-            let box = ContinuationBox(continuation)
+            let box = ResumeOnce(continuation)
 
             // The helper may already have moved one or more paths before a timeout.
             // Preserve that uncertainty so callers do not report a false failure or
             // immediately retry an operation that may still be finishing.
             DispatchQueue.global().asyncAfter(deadline: .now() + Self.moveTimeout) {
-                box.resume(PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
+                box.resume(returning: PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
             }
 
             let proxy = connection.remoteObjectProxyWithErrorHandler { error in
@@ -137,11 +137,11 @@ final class PrivilegedHelperManager: ObservableObject {
                 // caller keeps the honest original error instead of demoting an enabled
                 // helper to a "needs administrator setup" retry.
                 NSLog("Purge: helper XPC error — %@", error.localizedDescription)
-                box.resume(PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
+                box.resume(returning: PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
             } as? PurgeHelperProtocol
 
             guard let proxy else {
-                box.resume(nil)
+                box.resume(returning: nil)
                 return
             }
 
@@ -159,7 +159,7 @@ final class PrivilegedHelperManager: ObservableObject {
                 for url in failed {
                     if let code = failureCodes[url.path] { codes[url] = code }
                 }
-                box.resume(PrivilegedMoveResult(
+                box.resume(returning: PrivilegedMoveResult(
                     moved: moved,
                     failed: failed,
                     indeterminate: [],
@@ -179,15 +179,15 @@ final class PrivilegedHelperManager: ObservableObject {
         defer { connection.invalidate() }
 
         return await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
-            let box = VersionBox(continuation)
+            let box = ResumeOnce(continuation)
             DispatchQueue.global().asyncAfter(deadline: .now() + Self.versionTimeout) {
-                box.resume(nil)
+                box.resume(returning: nil)
             }
             let proxy = connection.remoteObjectProxyWithErrorHandler { _ in
-                box.resume(nil)
+                box.resume(returning: nil)
             } as? PurgeHelperProtocol
-            guard let proxy else { box.resume(nil); return }
-            proxy.helperVersion { version in box.resume(version) }
+            guard let proxy else { box.resume(returning: nil); return }
+            proxy.helperVersion { version in box.resume(returning: version) }
         }
     }
 
@@ -313,43 +313,5 @@ enum HelperReconciler {
             expectedVersion
         )
         return afterReload == nil ? .unresponsive : .staleVersion
-    }
-}
-
-/// Guards a checked continuation so the XPC error handler and the reply block — which
-/// can race on different queues — resume it exactly once.
-private final class ContinuationBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<PrivilegedMoveResult?, Never>?
-
-    init(_ continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) {
-        self.continuation = continuation
-    }
-
-    func resume(_ value: PrivilegedMoveResult?) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let continuation else { return }
-        self.continuation = nil
-        continuation.resume(returning: value)
-    }
-}
-
-/// The version-query counterpart of `ContinuationBox`: the reply and the timeout race
-/// on different queues, so this resumes the continuation exactly once.
-private final class VersionBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<String?, Never>?
-
-    init(_ continuation: CheckedContinuation<String?, Never>) {
-        self.continuation = continuation
-    }
-
-    func resume(_ value: String?) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let continuation else { return }
-        self.continuation = nil
-        continuation.resume(returning: value)
     }
 }
