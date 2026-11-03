@@ -76,7 +76,7 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         }
         let ownerUID = connection.effectiveUserIdentifier
         let ownerGID = connection.effectiveGroupIdentifier
-        guard ownerUID != 0, let homeDirectory = homeDirectory(for: ownerUID) else {
+        guard ownerUID != 0, let account = userAccount(for: ownerUID) else {
             Self.log.error("refusing request with invalid peer uid \(ownerUID, privacy: .public)")
             return MoveOutcome(refusal: .invalidPeer)
         }
@@ -86,11 +86,12 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         // protected apps is an administrator action, so require the connecting user to
         // be an administrator too. A standard account is refused even through a real
         // Purge, and is told to ask an administrator to run the removal.
-        guard isAdministrator(uid: ownerUID) else {
+        guard isAdministrator(account) else {
             Self.log.error("refusing non-administrator peer uid \(ownerUID, privacy: .public)")
             return MoveOutcome(refusal: .notAdministrator)
         }
 
+        let homeDirectory = account.home
         let trashDirectory = homeDirectory.appendingPathComponent(".Trash", isDirectory: true)
         guard let trashFD = HelperDirectory.openWithoutFollowingSymlinks(trashDirectory),
               validatedTrashDirectory(fileDescriptor: trashFD, ownerUID: ownerUID) else {
@@ -135,56 +136,72 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         return outcome
     }
 
-    /// True only when `uid` is a member of the local administrators group (gid 80).
-    /// The lookup uses the directory record, never the daemon's own environment.
-    private func isAdministrator(uid: uid_t) -> Bool {
-        let suggestedSize = sysconf(_SC_GETPW_R_SIZE_MAX)
-        let bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
-        var record = passwd()
-        var result: UnsafeMutablePointer<passwd>?
-        var buffer = [CChar](repeating: 0, count: bufferSize)
-
-        let identity: (name: String, primaryGID: Int32)? = buffer.withUnsafeMutableBufferPointer { storage in
-            guard let baseAddress = storage.baseAddress else { return nil }
-            let status = getpwuid_r(uid, &record, baseAddress, storage.count, &result)
-            guard status == 0, result != nil, let namePointer = record.pw_name else { return nil }
-            return (String(cString: namePointer), Int32(record.pw_gid))
-        }
-        guard let identity else { return false }
-
-        let adminGID: Int32 = 80
-        var count: Int32 = 32
-        var groups = [Int32](repeating: 0, count: Int(count))
-        let queried = identity.name.withCString {
-            getgrouplist($0, identity.primaryGID, &groups, &count)
-        }
-        if queried == -1 {
-            // The buffer was too small; `count` now holds the real group count.
-            groups = [Int32](repeating: 0, count: Int(count))
-            _ = identity.name.withCString {
-                getgrouplist($0, identity.primaryGID, &groups, &count)
-            }
-        }
-        return groups.prefix(Int(count)).contains(adminGID)
+    /// The connecting user's directory record, read once per request.
+    private struct UserAccount {
+        let name: String
+        let primaryGID: gid_t
+        let home: URL
     }
 
-    /// Looks up the connecting user's home without consulting the daemon's own
-    /// environment, which belongs to root. The returned string is copied while the
+    /// Looks up the connecting user without consulting the daemon's own
+    /// environment, which belongs to root. The strings are copied while the
     /// re-entrant lookup buffer is alive.
-    private func homeDirectory(for uid: uid_t) -> URL? {
+    private func userAccount(for uid: uid_t) -> UserAccount? {
         let suggestedSize = sysconf(_SC_GETPW_R_SIZE_MAX)
         let bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
         var record = passwd()
         var result: UnsafeMutablePointer<passwd>?
         var buffer = [CChar](repeating: 0, count: bufferSize)
 
-        let path: String? = buffer.withUnsafeMutableBufferPointer { storage in
+        return buffer.withUnsafeMutableBufferPointer { storage in
             guard let baseAddress = storage.baseAddress else { return nil }
             let status = getpwuid_r(uid, &record, baseAddress, storage.count, &result)
-            guard status == 0, result != nil, let directory = record.pw_dir else { return nil }
-            return String(cString: directory)
+            guard status == 0, result != nil,
+                  let namePointer = record.pw_name,
+                  let directory = record.pw_dir else { return nil }
+            return UserAccount(
+                name: String(cString: namePointer),
+                primaryGID: record.pw_gid,
+                home: URL(fileURLWithPath: String(cString: directory), isDirectory: true).standardizedFileURL
+            )
         }
-        return path.map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL }
+    }
+
+    /// The gid of the local `admin` group, read from its directory record.
+    private func adminGroupID() -> gid_t? {
+        let suggestedSize = sysconf(_SC_GETGR_R_SIZE_MAX)
+        let bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
+        var record = group()
+        var result: UnsafeMutablePointer<group>?
+        var buffer = [CChar](repeating: 0, count: bufferSize)
+
+        let status = buffer.withUnsafeMutableBufferPointer { storage -> Int32 in
+            guard let baseAddress = storage.baseAddress else { return -1 }
+            return getgrnam_r("admin", &record, baseAddress, storage.count, &result)
+        }
+        guard status == 0, result != nil else { return nil }
+        return record.gr_gid
+    }
+
+    /// True only when the account is a member of the local `admin` group. Any
+    /// lookup that fails refuses.
+    private func isAdministrator(_ account: UserAccount) -> Bool {
+        guard let adminGID = adminGroupID() else { return false }
+        var capacity: Int32 = 32
+        // A short buffer makes `getgrouplist` return -1, so it grows and asks
+        // again. A list that never fits refuses.
+        while capacity <= 4_096 {
+            var groups = [Int32](repeating: 0, count: Int(capacity))
+            var count = capacity
+            let status = account.name.withCString {
+                getgrouplist($0, Int32(bitPattern: account.primaryGID), &groups, &count)
+            }
+            if status == 0 {
+                return groups.prefix(Int(count)).contains(Int32(bitPattern: adminGID))
+            }
+            capacity = max(capacity * 2, count)
+        }
+        return false
     }
 
     /// Requires the real, user-owned ~/.Trash directory. The descriptor was opened
