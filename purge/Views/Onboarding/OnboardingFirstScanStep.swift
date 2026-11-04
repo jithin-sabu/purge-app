@@ -64,7 +64,9 @@ struct OnboardingFirstScanStep: View {
   }
 
   private var combinedProgress: Double {
-    let scanProgress: Double = store.isScanningAll ? 0.65 : 1
+    // Enrichment runs after the scan itself, and the step waits for it too.
+    let isWorking = store.isScanningAll || store.isEnrichingGeneral || store.isEnrichingDeveloper
+    let scanProgress: Double = isWorking ? 0.65 : 1
     return min(1, max(revealController.simulatedProgress, scanProgress * 0.35 + revealController.simulatedProgress * 0.65))
   }
 

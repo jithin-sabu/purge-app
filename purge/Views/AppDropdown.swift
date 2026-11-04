@@ -53,6 +53,21 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
         )
         .background(AppDropdownAnchor { anchorView = $0 })
         .onPreferenceChange(AppDropdownSizeKey.self) { triggerSize = $0 }
+        // The open list is hosted apart from this view, so it would keep the
+        // rows it was opened with. An option that becomes available while the
+        // list is open, such as a size sort once measuring ends, stayed greyed
+        // out until the list was opened again (#183). The new values go in as
+        // plain values: this action sees the view from before the change, and
+        // a list rebuilt from its closures would look unchanged to SwiftUI.
+        .onChange(of: options.map(isOptionEnabled)) { enabled in
+            panel.update(width: popupWidth, content: AnyView(optionList(enabled: enabled, selection: selection)))
+        }
+        .onChange(of: selection) { newSelection in
+            panel.update(
+                width: popupWidth,
+                content: AnyView(optionList(enabled: options.map(isOptionEnabled), selection: newSelection))
+            )
+        }
         .onDisappear { panel.dismiss() }
     }
 
@@ -63,17 +78,17 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
         }
         guard let anchorView else { return }
         panel.present(from: anchorView, width: popupWidth) {
-            AnyView(optionList)
+            AnyView(optionList(enabled: options.map(isOptionEnabled), selection: selection))
         }
     }
 
-    private var optionList: some View {
+    private func optionList(enabled: [Bool], selection: Option) -> some View {
         VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-            ForEach(options, id: \.self) { option in
+            ForEach(Array(options.enumerated()), id: \.element) { index, option in
                 AppDropdownRow(
                     label: optionLabel(option),
                     isSelected: option == selection,
-                    isEnabled: isOptionEnabled(option)
+                    isEnabled: enabled.indices.contains(index) && enabled[index]
                 ) {
                     guard isOptionEnabled(option) else { return }
                     onSelect(option)
@@ -160,6 +175,7 @@ private struct AppDropdownAnchor: NSViewRepresentable {
 @MainActor
 private final class AppDropdownPanelController {
     private var panel: NSPanel?
+    private var hosting: NSHostingView<AnyView>?
     private weak var anchor: NSView?
     private var monitors: [Any] = []
     private var observers: [NSObjectProtocol] = []
@@ -199,7 +215,19 @@ private final class AppDropdownPanelController {
         panel.invalidateShadow()
 
         self.panel = panel
+        self.hosting = hosting
         startWatching(parent: parent)
+    }
+
+    /// Redraws the open list with `content`. Does nothing while it is closed.
+    func update(width: CGFloat, content: AnyView) {
+        guard let panel, let hosting, let anchor, let parent = anchor.window else { return }
+        hosting.rootView = content
+        let size = NSSize(width: width, height: hosting.fittingSize.height)
+        hosting.frame.size = size
+        panel.setContentSize(size)
+        panel.setFrameOrigin(origin(for: anchor, in: parent, size: size))
+        panel.invalidateShadow()
     }
 
     func dismiss() {
@@ -209,6 +237,7 @@ private final class AppDropdownPanelController {
         observers.removeAll()
 
         anchor = nil
+        hosting = nil
         guard let panel else { return }
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)

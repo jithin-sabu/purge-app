@@ -57,8 +57,6 @@ nonisolated final class DevScanner {
         "npm Logs": "npm-logs",
         "Xcode Documentation Cache": "xcode-docs-cache",
         "Corepack Cache": "corepack-cache",
-        "Obsolete Cursor Extension": "obsolete-cursor-extension",
-        "Obsolete VS Code Extension": "obsolete-vscode-extension",
         "Cursor Agent Leftovers": "cursor-agent-leftover",
         "Orphaned Git Worktrees": "orphaned-git-worktree",
         "Deno Cache": "deno-cache",
@@ -700,8 +698,11 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent("Library/Caches/Zed", isDirectory: true)
             ]),
 
+            // Go keeps its build cache in `~/Library/Caches/go-build` on macOS.
+            // `~/.cache/go-build` is only used when `GOCACHE` points there.
             ("Go Module Cache", [
                 home.appendingPathComponent("go/pkg/mod/cache", isDirectory: true),
+                home.appendingPathComponent("Library/Caches/go-build", isDirectory: true),
                 home.appendingPathComponent(".cache/go-build", isDirectory: true)
             ]),
 
@@ -778,7 +779,6 @@ nonisolated final class DevScanner {
     private func scanGlobalCachePlaceholders(access: ScanAccess) -> ([DevTool], [DevToolSizeJob]) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         var staticDefinitions = Self.globalCacheDefinitions()
-            + discoverObsoleteEditorExtensionDefinitions(home: home, access: access)
             + discoverOrphanedEditorWorkspaceDefinitions(home: home, access: access)
             + Self.oldCLIVersionDefinitions(home: home)
         // Agent worktrees are judged by reading the git dir their `.git` file points
@@ -882,88 +882,6 @@ nonisolated final class DevScanner {
             )
             return entries.isEmpty ? nil : ("\(root.editor) Old Workspace Data", entries)
         }
-    }
-
-    private func discoverObsoleteEditorExtensionDefinitions(
-        home: URL,
-        access: ScanAccess
-    ) -> [(label: String, paths: [URL])] {
-        let cursor = obsoleteExtensionPaths(
-            in: home.appendingPathComponent(".cursor/extensions", isDirectory: true),
-            label: "Obsolete Cursor Extension",
-            access: access
-        )
-        let vscode = obsoleteExtensionPaths(
-            in: home.appendingPathComponent(".vscode/extensions", isDirectory: true),
-            label: "Obsolete VS Code Extension",
-            access: access
-        )
-        return cursor + vscode
-    }
-
-    private func obsoleteExtensionPaths(
-        in extensionsRoot: URL,
-        label: String,
-        access: ScanAccess
-    ) -> [(label: String, paths: [URL])] {
-        let fm = FileManager.default
-        // Listing would follow a `~/.cursor` linked into Documents.
-        guard ProtectedLocations.isReadable(extensionsRoot, access: access) else { return [] }
-        guard let entries = try? fm.contentsOfDirectory(
-            at: extensionsRoot,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-
-        var grouped: [String: [(version: String, url: URL)]] = [:]
-        for entry in entries {
-            // `standardizedFileURL` below would follow an entry that links out.
-            guard ProtectedLocations.isReadable(entry, access: access) else { continue }
-            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-            let folderName = entry.lastPathComponent
-            if let parsed = Self.parseExtensionFolderName(folderName) {
-                grouped[parsed.base, default: []].append((parsed.version, entry.standardizedFileURL))
-            } else {
-                grouped[folderName, default: []].append(("0", entry.standardizedFileURL))
-            }
-        }
-
-        var results: [(label: String, paths: [URL])] = []
-        for (_, versions) in grouped {
-            guard versions.count > 1 else { continue }
-            let sorted = versions.sorted { Self.compareExtensionVersions($0.version, $1.version) == .orderedDescending }
-            for obsolete in sorted.dropFirst() {
-                let folderName = obsolete.url.lastPathComponent
-                results.append(("\(label): \(folderName)", [obsolete.url]))
-            }
-        }
-        return results
-    }
-
-    nonisolated static func parseExtensionFolderName(_ folderName: String) -> (base: String, version: String)? {
-        let pattern = #"^(.+)-(\d+\.\d+\.\d+(?:[-.][A-Za-z0-9]+)*)$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: folderName, range: NSRange(folderName.startIndex..., in: folderName)),
-              match.numberOfRanges == 3,
-              let baseRange = Range(match.range(at: 1), in: folderName),
-              let versionRange = Range(match.range(at: 2), in: folderName) else {
-            return nil
-        }
-        return (String(folderName[baseRange]), String(folderName[versionRange]))
-    }
-
-    nonisolated static func compareExtensionVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
-        let left = lhs.split(separator: "-").first.map(String.init) ?? lhs
-        let right = rhs.split(separator: "-").first.map(String.init) ?? rhs
-        let leftParts = left.split(separator: ".").compactMap { Int($0) }
-        let rightParts = right.split(separator: ".").compactMap { Int($0) }
-        let maxCount = max(leftParts.count, rightParts.count)
-        for index in 0..<maxCount {
-            let l = index < leftParts.count ? leftParts[index] : 0
-            let r = index < rightParts.count ? rightParts[index] : 0
-            if l != r { return l < r ? .orderedAscending : .orderedDescending }
-        }
-        return .orderedSame
     }
 
     private func groupDevToolsByDefinitionKey(_ tools: [DevTool]) -> [DevTool] {
@@ -1352,6 +1270,12 @@ nonisolated final class DevScanner {
             result.insert(type)
         }
 
+        // React Native and Flutter keep their CocoaPods setup in `ios/`, which the
+        // walk never enters, so `ios/Podfile` is what unlocks the `ios/Pods` rule.
+        if anyExists(["ios/Podfile"]) {
+            result.insert(.xcode)
+        }
+
         let hasGradleMarker = anyExists([
             "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts",
             "android/build.gradle", "android/build.gradle.kts",
@@ -1594,7 +1518,13 @@ nonisolated final class DevScanner {
         for a in artifacts {
             unique[a.path.path] = a
         }
-        return Array(unique.values)
+        // One rule's folder can sit inside another's (`node_modules/.vite` in
+        // `node_modules`, `vendor/bundle` in `vendor`). Both rows would size the
+        // inner folder, so it would be counted twice. The outer folder covers it.
+        let paths = Array(unique.keys)
+        return unique.values.filter { artifact in
+            !paths.contains { PathContainment.isInside(artifact.path.path, $0) }
+        }
     }
 
     private nonisolated static func reinstallCommand(rule: ProjectArtifactRule, root: URL) -> String? {

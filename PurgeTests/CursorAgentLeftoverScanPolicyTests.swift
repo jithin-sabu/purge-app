@@ -159,6 +159,52 @@ struct CursorAgentLeftoverScanPolicyTests {
         #expect(stillThere.isEmpty)
     }
 
+    /// `/tmp/<uuid>` becomes `tmp-<uuid>` or `private-tmp-<uuid>`. Their
+    /// workspace was looked for in `$TMPDIR`, so a live one was listed (#183).
+    @Test(arguments: ["tmp-", "private-tmp-"])
+    func systemTempNamespaceIsListedOnlyWhenItsWorkspaceIsGone(prefix: String) throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let userTemp = home.appendingPathComponent("user-tmp", isDirectory: true)
+        let systemTemp = home.appendingPathComponent("system-tmp", isDirectory: true)
+        let uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        let slug = "\(prefix)\(uuid)"
+        try FileManager.default.createDirectory(
+            at: home.appendingPathComponent(".cursor/projects/\(slug)", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        var live = idleLive(tmp: userTemp)
+        live.systemTemporaryDirectory = systemTemp
+        #expect(CursorAgentLeftoverScanPolicy.unusedJunkProjectNamespaces(home: home, live: live).map(\.lastPathComponent) == [slug])
+
+        try FileManager.default.createDirectory(
+            at: systemTemp.appendingPathComponent(uuid, isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        #expect(CursorAgentLeftoverScanPolicy.unusedJunkProjectNamespaces(home: home, live: live).isEmpty)
+    }
+
+    /// Without Cursor's working directories Purge cannot tell a namespace an
+    /// agent is using from an unused one, so it lists none (#183).
+    @Test
+    func nothingIsListedWithoutTheProcessSnapshot() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let slug = "var-folders-h2-y5tm6qr53cn71z-gdvdns9lm0000gn-T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        try FileManager.default.createDirectory(
+            at: home.appendingPathComponent(".cursor/projects/\(slug)", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+
+        var live = idleLive(tmp: home.appendingPathComponent("tmp", isDirectory: true))
+        live.cursorProcessSnapshot = .unavailable
+        #expect(CursorAgentLeftoverScanPolicy.unusedJunkProjectNamespaces(home: home, live: live).isEmpty)
+
+        live.cursorProcessSnapshot = .available
+        #expect(CursorAgentLeftoverScanPolicy.unusedJunkProjectNamespaces(home: home, live: live).count == 1)
+    }
+
     @Test
     func numericNamespaceStillBackedUpIsNotListed() throws {
         let home = try makeHome()

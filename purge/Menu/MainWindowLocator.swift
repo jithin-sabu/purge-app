@@ -14,9 +14,16 @@ enum MainWindowLocator {
     /// a `canBecomeMain` filter silently matches nothing and "Open Purge" does
     /// nothing at all. `.titled` is set in both the open and closed state, and
     /// none of the status-bar or MenuBarExtra panels carry it.
+    ///
+    /// `.titled` alone also matched Sparkle's update window, alerts and open
+    /// panels, so one of those could stand in for Purge's window (#183). The
+    /// window must also be an `NSWindow`, not a panel, from Purge's `WindowGroup`,
+    /// which SwiftUI names `<id>-AppWindow-<n>`.
     @MainActor
     static func isAppWindow(_ window: NSWindow) -> Bool {
         window.styleMask.contains(.titled)
+            && !(window is NSPanel)
+            && window.identifier?.rawValue.hasPrefix(AppWindowID.main + "-") == true
     }
 
     @MainActor

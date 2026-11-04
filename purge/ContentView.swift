@@ -520,8 +520,7 @@ struct ContentView: View {
                 LargeFilesView(
                     isLoading: store.isScanningLargeFiles,
                     onScan: { store.requestScan(.largeFiles) },
-                    searchQuery: $largeFilesSearchQuery,
-                    usesExternalScrollContainer: tabsUseExternalScrollContainer
+                    searchQuery: $largeFilesSearchQuery
                 )
             }
         }

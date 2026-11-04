@@ -503,6 +503,46 @@ struct ArtifactCollectionTests {
         defer { fixture.cleanUp() }
         #expect(gradleFolders(fixture) == [".gradle"])
     }
+
+    /// `node_modules/.vite` and `vendor/bundle` sit inside folders another rule
+    /// offers. Listing both counted the inner folder twice (#183).
+    @Test(arguments: [
+        (["package.json", "package-lock.json"], ["node_modules/.vite"], [ProjectType.node], DeletableArtifactKind.nodeModules),
+        (["composer.json", "composer.lock", "Gemfile", "Gemfile.lock"], ["vendor/bundle"], [.composer, .bundler], .composerVendor),
+    ])
+    func aFolderInsideAnotherArtifactIsNotListedAgain(
+        files: [String], folders: [String], types: [ProjectType], outer: DeletableArtifactKind
+    ) throws {
+        let fixture = try HomeScopedFixture(files: files, folders: folders)
+        defer { fixture.cleanUp() }
+        #expect(collect(fixture, types) == [outer])
+    }
+
+    /// The walk never enters `ios/`, so before #183 nothing named the project
+    /// `.xcode` and the `ios/Pods` rule never ran.
+    @Test(arguments: ["package.json", "pubspec.yaml"])
+    func iosPodsAreFoundForReactNativeAndFlutter(marker: String) throws {
+        let fixture = try HomeScopedFixture(
+            files: [marker, "ios/Podfile", "ios/Podfile.lock"], folders: ["ios/Pods"]
+        )
+        defer { fixture.cleanUp() }
+        let types = DevScanner.projectTypes(at: fixture.root, listing: nil)
+        let pods = DevScanner.collectArtifacts(projectRoot: fixture.root, types: types)
+            .filter { $0.kind == .pods }
+        #expect(pods.map { $0.path.lastPathComponent } == ["Pods"])
+        #expect(pods.first?.path.deletingLastPathComponent().lastPathComponent == "ios")
+        #expect(pods.first?.reinstallSafety == .reinstallable)
+    }
+
+    /// Clean Safe Items takes `ios/Pods` only when `pod install` can bring it
+    /// back exactly: `ios/Podfile.lock` must sit beside it.
+    @Test func iosPodsWithoutALockfileAreNotReinstallable() throws {
+        let fixture = try HomeScopedFixture(files: ["package.json", "ios/Podfile"], folders: ["ios/Pods"])
+        defer { fixture.cleanUp() }
+        let types = DevScanner.projectTypes(at: fixture.root, listing: nil)
+        let pods = DevScanner.collectArtifacts(projectRoot: fixture.root, types: types).filter { $0.kind == .pods }
+        #expect(pods.map(\.reinstallSafety) == [.missingLockfile])
+    }
 }
 
 @Suite("Artifacts behind a linked folder are judged where they lead")

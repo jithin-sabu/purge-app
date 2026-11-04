@@ -12,7 +12,6 @@ struct LargeFilesView: View {
     /// view — counts the same rows the list is actually showing. With the query
     /// private to this view the header kept advertising the full unfiltered scan.
     @Binding var searchQuery: String
-    var usesExternalScrollContainer = false
 
     @AppStorage("sort.largeFiles") private var sortRaw: String = SortOption.sizeDesc.rawValue
     @AppStorage(LargeFileSizeThreshold.userDefaultsKey) private var minSizeMB: Int = LargeFileSizeThreshold.defaultOption.rawValue
@@ -181,38 +180,21 @@ struct LargeFilesView: View {
     }
 
     var body: some View {
-        Group {
-            if usesExternalScrollContainer {
-                externalScrollBody
-            } else {
-                standardBody
-            }
-        }
-        .background(AppColors.surfaceBase)
-        .onReceive(store.largeFileDuplicates.indexPublisher) { index in
-            duplicateIndex = index
-        }
-    }
-
-    private var standardBody: some View {
-        VStack(spacing: 0) {
-            if !isAwaitingFirstScan {
-                controlsChrome
-            }
-            listStack
-        }
-    }
-
-    private var externalScrollBody: some View {
         // Controls and the Select All row sit above the list as opaque chrome; the
         // list cuts off cleanly at its own edge with no scroll-edge blur, matching
-        // the App Uninstaller tab.
+        // the App Uninstaller tab. Every macOS version gets the Select All row:
+        // before macOS 26 it was left out, and with it Select All, the sort menu
+        // and Delete extra copies (#183).
         VStack(spacing: 0) {
             if !isAwaitingFirstScan {
                 controlsChrome
                 selectAllRowChrome
             }
             listStack
+        }
+        .background(AppColors.surfaceBase)
+        .onReceive(store.largeFileDuplicates.indexPublisher) { index in
+            duplicateIndex = index
         }
     }
 
@@ -233,13 +215,6 @@ struct LargeFilesView: View {
                 thresholdMenu
                 ageMenu
                 Spacer(minLength: AppStyle.Spacing.small)
-                // Before macOS 26 this layout has no Select All bar, which is
-                // where Keep Only in iCloud sits otherwise, so it goes here (#106).
-                if !usesExternalScrollContainer, isICloudFilterActive {
-                    LargeFileRemoveDownloadButton(selection: store.largeFileSelection) {
-                        store.requestRemoveDownloads()
-                    }
-                }
                 CapsuleSearchField(
                     query: $searchQuery,
                     prompt: "Search",
@@ -1212,13 +1187,7 @@ private struct LargeFileRow: View {
             LargeFileThumbnailIcon(file: file)
                 .contentShape(Rectangle())
                 .onTapGesture(perform: quickLook)
-                .onHover { hovering in
-                    if hovering {
-                        NSCursor.pointingHand.push()
-                    } else {
-                        NSCursor.pop()
-                    }
-                }
+                .modifier(PointingHandOnHover())
                 .help("Quick Look")
                 .accessibilityLabel("Quick Look \(file.displayName)")
                 .accessibilityAddTraits(.isButton)
@@ -1296,6 +1265,30 @@ private struct ExcludeFolderAccessibilityAction: ViewModifier {
 /// otherwise the category icon with a small extension badge. The fallback renders immediately so
 /// scrolling never blocks; the thumbnail loads off the main thread and fades in once ready, and
 /// `.task` cancels in-flight generation when the row scrolls off-screen.
+/// Shows the pointing hand over the view. A row the List rebuilds while the
+/// pointer is on it never gets its hover-out, so a bare push and pop left the
+/// hand on screen everywhere (#183). This pops on the way out too, and pushes
+/// at most once, as the Overview rows do.
+private struct PointingHandOnHover: ViewModifier {
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover(perform: setHovering)
+            .onDisappear { setHovering(false) }
+    }
+
+    private func setHovering(_ hovering: Bool) {
+        guard hovering != isHovering else { return }
+        isHovering = hovering
+        if hovering {
+            NSCursor.pointingHand.push()
+        } else {
+            NSCursor.pop()
+        }
+    }
+}
+
 private struct LargeFileThumbnailIcon: View {
     let file: LargeFile
 

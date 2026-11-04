@@ -78,19 +78,29 @@ final class OnboardingScanRevealController: ObservableObject {
     bufferOrder.first { !revealedIDs.contains($0) }
   }
 
-  /// Publishes a single buffered item and advances the progress bar toward the
-  /// share of discovered items revealed so far.
+  /// Publishes a single buffered item and moves the progress bar on.
   private func revealItem(id: String) {
     guard let item = bufferedByID[id] else { return }
     revealedIDs.insert(id)
 
-    let targetProgress = min(1, Double(revealedIDs.count) / Double(max(bufferOrder.count, 1)))
     withAnimation(.easeOut(duration: 0.4)) {
       revealedItems.append(item)
     }
     withAnimation(.linear(duration: 0.55)) {
-      simulatedProgress = max(simulatedProgress, targetProgress)
+      simulatedProgress = Self.progress(afterRevealingFrom: simulatedProgress)
     }
+  }
+
+  /// The bar never fills while the scan runs: only `scanFinished` sets 1.
+  nonisolated static let runningProgressCeiling = 0.9
+
+  /// Where the bar goes when a row is revealed while the scan runs. It used to
+  /// go to the share of found rows already shown. The reveal catches up with
+  /// the scan after the first row, so that share was 1 and the bar sat full
+  /// while the scan went on (#183). Each row now closes part of the gap to
+  /// `runningProgressCeiling`: about two thirds of the way after 8 rows.
+  nonisolated static func progress(afterRevealingFrom current: Double) -> Double {
+    current + (runningProgressCeiling - current) * 0.12
   }
 
   func markSourceScanFinished() {

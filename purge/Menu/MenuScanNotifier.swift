@@ -27,6 +27,10 @@ enum MenuScanNotifier {
     }
 
     static func notifyScanResult(readyBytes bytes: Int64) async {
+        // The tests run in a hosted copy of the app, which has the user's own
+        // permission to notify. A menu clean a test runs must not post a banner
+        // on their Mac, or ask for that permission (#183).
+        guard !TestHost.isActive() else { return }
         guard await ScheduledCleanupNotifier.requestAuthorizationIfNeeded() else { return }
         let content = UNMutableNotificationContent()
         content.title = String(localized: "Scan complete")
@@ -41,6 +45,7 @@ enum MenuScanNotifier {
     }
 
     static func notifyCleaned(bytesMovedToTrash bytes: Int64) async {
+        guard !TestHost.isActive() else { return }
         guard await ScheduledCleanupNotifier.requestAuthorizationIfNeeded() else { return }
         let content = UNMutableNotificationContent()
         content.title = String(localized: "Moved \(formatBytes(bytes)) to Trash")

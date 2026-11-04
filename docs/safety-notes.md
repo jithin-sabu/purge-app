@@ -11,6 +11,41 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-11-04: A Cursor agent folder in use could be listed as a leftover
+
+**Found internally** in a code audit ([#183](https://github.com/jithin-sabu/purge-app/issues/183)), no report. **Fixed:** in the pull request for [#183](https://github.com/jithin-sabu/purge-app/issues/183). **Affected:** v1.5.3 to v1.13.2.
+
+### What happened
+
+Cursor keeps a folder in `~/.cursor/projects` for each place an agent works.
+Dev Tools lists the ones whose work is over as Cursor Agent Leftovers. For an
+agent working in `/tmp/<id>`, the folder is `tmp-<id>` or `private-tmp-<id>`,
+and Purge decides it is over when `/tmp/<id>` is gone.
+
+It looked in the wrong place. It checked `$TMPDIR/<id>`, which is a different
+folder, found nothing, and listed the folder while the agent was still using
+it. The second check, which reads the working folders of Cursor's processes,
+could fail without Purge noticing. A failed read counted as no agent running.
+
+### Who was affected
+
+Nobody reported a loss. The row is Check First, so it was only moved when the
+user picked it and confirmed. It went to the Trash and could be put back. It
+holds Cursor's notes for that agent, not the user's files.
+
+### What changed
+
+`tmp-` and `private-tmp-` folders are checked against `/private/tmp`. When the
+process read fails, no folder is listed.
+
+### What would have caught it earlier
+
+A test for each slug shape, not only `var-folders-`, and one for a failed
+process read.
+[`PurgeTests/CursorAgentLeftoverScanPolicyTests.swift`](../PurgeTests/CursorAgentLeftoverScanPolicyTests.swift)
+now lists a `tmp-` and a `private-tmp-` folder only while its `/tmp` folder is
+gone, and lists nothing when the process read fails.
+
 ## 2026-11-03: Project folders could be judged by the wrong path
 
 **Found internally** in review of [#313](https://github.com/jithin-sabu/purge-app/pull/313) ([#190](https://github.com/jithin-sabu/purge-app/issues/190)), no report. **Fixed:** [#313](https://github.com/jithin-sabu/purge-app/pull/313). **Affected:** `~/.gradle` from v1.1.0, linked folders from v1.4.0, to v1.13.2.

@@ -40,8 +40,18 @@ struct OnboardingResultsSnapshot {
 }
 
 extension PurgeStore {
-  var onboardingResultsCategories: [OnboardingResultsCategory] {
-    resultsCategories(for: manualSafeCleanupCandidates())
+  /// The big number, its rows and the Clean button all come from the list the
+  /// clean takes, so they show what it moves. The number used to be the sidebar
+  /// total, worked out by other rules (#183).
+  var onboardingResultsSnapshot: OnboardingResultsSnapshot {
+    onboardingResultsSnapshot(for: manualSafeCleanupCandidates())
+  }
+
+  func onboardingResultsSnapshot(for candidates: [DeletionCandidate]) -> OnboardingResultsSnapshot {
+    OnboardingResultsSnapshot(
+      totalBytes: candidates.reduce(Int64(0)) { $0 + $1.sizeBytes },
+      categories: resultsCategories(for: candidates)
+    )
   }
 
   func resultsCategories(for candidates: [DeletionCandidate]) -> [OnboardingResultsCategory] {
@@ -156,18 +166,20 @@ extension PurgeStore {
     "com.apple.ATS",
   ]
 
+  /// By definition key and folder, never by row name, which is translated: in
+  /// Chinese no row name says "browser" (#183). Entries marked `kind: browser`
+  /// in explanations.json count, so a new browser entry needs no change here.
   private static func isBrowserCacheItem(_ item: CacheItem) -> Bool {
     if let key = item.definitionKey, browserDefinitionKeys.contains(key) {
       return true
     }
-
-    let folder = item.bundleID.lowercased()
-    if browserBundlePrefixes.contains(where: { folder.hasPrefix($0.lowercased()) }) {
+    if let key = item.definitionKey ?? ExplanationDatabase.definitionKey(forFolderName: item.bundleID),
+       ExplanationDatabase.kind(forKey: key) == .browser {
       return true
     }
 
-    let name = item.appName.lowercased()
-    return name.contains("browser")
+    let folder = item.bundleID.lowercased()
+    return browserBundlePrefixes.contains(where: { folder.hasPrefix($0.lowercased()) })
   }
 
   private static func isSystemJunkCacheItem(_ item: CacheItem) -> Bool {
@@ -186,15 +198,10 @@ struct OnboardingResultsStep: View {
     self.snapshot = snapshot
   }
 
-  private var totalBytes: Int64 {
-    snapshot?.totalBytes ?? store.safeRecoverableBytes
-  }
-
-  private var categories: [OnboardingResultsCategory] {
-    snapshot?.categories ?? store.onboardingResultsCategories
-  }
-
   var body: some View {
+    let shown = snapshot ?? store.onboardingResultsSnapshot
+    let totalBytes = shown.totalBytes
+    let categories = shown.categories
     VStack(alignment: .center, spacing: AppStyle.Spacing.large) {
       VStack(alignment: .center, spacing: AppStyle.Spacing.xLarge) {
         VStack(alignment: .center, spacing: 0) {

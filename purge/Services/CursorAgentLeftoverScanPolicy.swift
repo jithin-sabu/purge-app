@@ -38,7 +38,12 @@ enum CursorAgentLeftoverScanPolicy {
         /// Whether `storage.json` was present and parsed. Missing or invalid
         /// data is unavailable, not "no windows".
         var windowsSnapshot: SnapshotStatus
+        /// `$TMPDIR`, where a `var-folders-…` namespace's workspace lives.
         var temporaryDirectory: URL
+        /// `/private/tmp`, where a `tmp-…` or `private-tmp-…` namespace's
+        /// workspace lives. Those were looked for in `$TMPDIR`, found missing,
+        /// and listed while the workspace was in use (#183).
+        var systemTemporaryDirectory = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
 
         nonisolated static func current(
             home: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -120,6 +125,10 @@ enum CursorAgentLeftoverScanPolicy {
         live: LiveContext,
         fileManager: FileManager = .default
     ) -> [URL] {
+        // Without Cursor's working directories, a namespace an agent is working
+        // in looks unused. The snapshot's status was never read, so a failed one
+        // counted as no agent running anywhere (#183).
+        guard live.cursorProcessSnapshot == .available else { return [] }
         let root = home.appendingPathComponent(".cursor/projects", isDirectory: true)
         guard let entries = try? fileManager.contentsOfDirectory(
             at: root,
@@ -138,14 +147,18 @@ enum CursorAgentLeftoverScanPolicy {
                live.cursorIsRunning && live.windowsSnapshot != .available {
                 return nil
             }
-            guard !isLiveJunkProject(slug: slug, live: live) else { return nil }
+            guard !isLiveJunkProject(slug: slug, live: live, fileManager: fileManager) else { return nil }
             return url
         }
     }
 
     // MARK: - Live detection
 
-    nonisolated static func isLiveJunkProject(slug: String, live: LiveContext) -> Bool {
+    nonisolated static func isLiveJunkProject(
+        slug: String,
+        live: LiveContext,
+        fileManager: FileManager = .default
+    ) -> Bool {
         if live.emptyWindowBackupIDs.contains(slug) {
             return true
         }
@@ -153,7 +166,7 @@ enum CursorAgentLeftoverScanPolicy {
             return true
         }
         if let temp = resolvedTemporaryWorkspace(slug: slug, live: live),
-           FileManager.default.fileExists(atPath: temp.path) {
+           fileManager.fileExists(atPath: temp.path) {
             return true
         }
         if live.processWorkingDirectories.contains(where: { encodedProjectSlug(for: $0) == slug }) {
@@ -173,13 +186,17 @@ enum CursorAgentLeftoverScanPolicy {
             .replacingOccurrences(of: "_", with: "-")
     }
 
-    /// `var-folders-…-T-<uuid>` maps back onto `$TMPDIR/<uuid>` when the uuid
-    /// is still a real temp workspace. Other junk slugs have no source path.
+    /// The temp workspace a junk slug was made for: `var-folders-…-T-<uuid>`
+    /// is `$TMPDIR/<uuid>`, and `tmp-<uuid>` and `private-tmp-<uuid>` are
+    /// `/private/tmp/<uuid>`. Other junk slugs have no source path.
     nonisolated static func resolvedTemporaryWorkspace(slug: String, live: LiveContext) -> URL? {
         let uuid = uuidSuffix(in: slug)
         guard let uuid else { return nil }
-        if slug.hasPrefix("var-folders-") || slug.hasPrefix("tmp-") || slug.hasPrefix("private-tmp-") {
+        if slug.hasPrefix("var-folders-") {
             return live.temporaryDirectory.appendingPathComponent(uuid, isDirectory: true)
+        }
+        if slug.hasPrefix("tmp-") || slug.hasPrefix("private-tmp-") {
+            return live.systemTemporaryDirectory.appendingPathComponent(uuid, isDirectory: true)
         }
         return nil
     }

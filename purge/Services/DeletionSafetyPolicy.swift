@@ -1082,17 +1082,6 @@ enum DeletionSafetyPolicy {
         EditorWorkspaceStoragePolicy.isEntryPath(path, home: home)
     }
 
-    nonisolated static func isWhitelistedEditorExtensionPath(_ path: String, home: String) -> Bool {
-        let prefixes = [
-            "\(home)/.cursor/extensions/",
-            "\(home)/.vscode/extensions/"
-        ]
-        guard let matched = prefixes.first(where: { path.hasPrefix($0) }) else { return false }
-        let relative = String(path.dropFirst(matched.count))
-        guard !relative.isEmpty, !relative.contains("/") else { return false }
-        return true
-    }
-
     /// Cursor agent leftovers only: a junk temp/empty-window namespace under
     /// `~/.cursor/projects`. Never the `.cursor` root, settings, login, or a
     /// real project folder.
@@ -1227,9 +1216,6 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedUnfinishedDownloadPath(path, home: home) {
-            return .allow
-        }
-        if isWhitelistedEditorExtensionPath(path, home: home) {
             return .allow
         }
         if isWhitelistedGemDownloadCachePath(path, home: home) {

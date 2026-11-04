@@ -157,6 +157,37 @@ struct EditorWorkspaceStoragePolicyTests {
         let entry = try makeEntry(in: root, json: #"{"folder":"\#(inDocuments.absoluteString)"}"#)
         #expect(!EditorWorkspaceStoragePolicy.isOrphaned(entry: entry, access: .limited))
     }
+
+    /// Records every path it is asked about.
+    private final class SpyFileManager: FileManager, @unchecked Sendable {
+        private(set) var paths: [String] = []
+        override func fileExists(atPath path: String) -> Bool {
+            paths.append(path)
+            return super.fileExists(atPath: path)
+        }
+        override func fileExists(atPath path: String, isDirectory: UnsafeMutablePointer<ObjCBool>?) -> Bool {
+            paths.append(path)
+            return super.fileExists(atPath: path, isDirectory: isDirectory)
+        }
+        override func destinationOfSymbolicLink(atPath path: String) throws -> String {
+            paths.append(path)
+            return try super.destinationOfSymbolicLink(atPath: path)
+        }
+    }
+
+    /// Looking at a removable or network volume can ask for permission, so a
+    /// limited scan never looks under `/Volumes` (#183).
+    @Test
+    func aLimitedScanNeverLooksAtAVolume() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let entry = try makeEntry(in: root, json: #"{"folder":"file:///Volumes/Purge-Test-\#(UUID().uuidString)/app"}"#)
+        let spy = SpyFileManager()
+
+        #expect(!EditorWorkspaceStoragePolicy.isOrphaned(entry: entry, access: .limited, fileManager: spy))
+        #expect(!spy.paths.contains { $0.hasPrefix("/Volumes") })
+    }
 }
 
 // MARK: - Part 2: Check First rows that were too broad or never safe to offer
@@ -288,6 +319,41 @@ struct AllowlistExplanationDataTests {
     @Test(arguments: ["dotnet-bin", "dotnet-obj"])
     func dotNetNamesKeepTheirDot(key: String) {
         #expect(ExplanationDatabase.record(forKey: key)?.displayName.hasPrefix(".NET ") == true)
+    }
+
+    /// "Comet" is the Comet browser's own folder name. As an alias of the
+    /// updater entry it gave the browser's caches the updater's name and tier (#183).
+    @Test
+    func cometBrowserIsNotTheUpdater() {
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "Comet") != "perplexity-updater")
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "ai.perplexity.CometUpdater") == "perplexity-updater")
+    }
+
+    /// The rows picked the "newest" extension by folder name alone and never
+    /// resolved to a tier, so they were sized on every scan and never shown (#183).
+    @Test(arguments: ["obsolete-cursor-extension", "obsolete-vscode-extension"])
+    func obsoleteExtensionEntriesAreGone(key: String) {
+        #expect(ExplanationDatabase.record(forKey: key) == nil)
+    }
+
+    /// Their allow rule went too. It let through any folder directly inside the
+    /// extensions folder, installed extensions included, and its tier rule
+    /// called them Safe (#183).
+    @Test(arguments: [".vscode/extensions/ms-python.python-2026.1.0", ".cursor/extensions/esbenp.prettier-vscode-11.0.0"])
+    func installedExtensionsAreNeverAllowed(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow)
+        #expect(SafetyTierList.evaluate(folderName: (relative as NSString).lastPathComponent, path: AuditPaths.url(relative)) != .safe)
+    }
+
+    /// Go's build cache is `~/Library/Caches/go-build` on macOS. Dev Tools listed
+    /// only `~/.cache/go-build`, so the real one showed again under App Caches (#183).
+    @Test
+    func goBuildCacheIsOneDevToolsRow() {
+        let path = AuditPaths.url("Library/Caches/go-build").standardizedFileURL.path
+        #expect(DevScanner.claimedGlobalCachePaths().contains(path))
+        #expect(AuditPaths.evaluate("Library/Caches/go-build") == .allow)
+        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: "Go Module Cache", primaryPath: nil)
+        #expect(info.level == .safe)
     }
 }
 

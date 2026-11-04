@@ -718,13 +718,32 @@ final class PurgeStore: ObservableObject {
         return summary
     }
 
+    /// Adds up what `manualSafeCleanupCandidates` would move, path by path and in
+    /// the same order, so a folder two rows list is counted once, for the first
+    /// row, as the clean takes it once (#183). Only paths the rows already hold
+    /// are read: this runs on every scan flush, so it does not ask the disk or
+    /// the safety policy again. The scan has applied both to every row.
     private func computeSafeCleanupSummary() -> SafeCleanupSummary {
         var summary = SafeCleanupSummary()
-        summary.appCacheBytes = cacheItems.filter(countsAsSafeCleanup).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        summary.devToolBytes = devTools.filter(countsAsSafeCleanup).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        summary.projectArtifactBytes = projectGroups.flatMap(\.artifacts)
-            .filter(countsAsSafeCleanup)
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        var seenPaths = Set<String>()
+
+        for artifact in projectGroups.flatMap(\.artifacts) where countsAsSafeCleanup(artifact) {
+            guard seenPaths.insert(artifact.path.path).inserted else { continue }
+            summary.projectArtifactBytes += artifact.sizeBytes
+        }
+
+        for tool in devTools where countsAsSafeCleanup(tool) {
+            for path in tool.standardizedPaths where seenPaths.insert(path).inserted {
+                summary.devToolBytes += tool.pathSizeBytesByPath[path] ?? (tool.paths.count == 1 ? tool.sizeBytes : 0)
+            }
+        }
+
+        for item in cacheItems where countsAsSafeCleanup(item) {
+            for (path, location) in zip(item.standardizedPaths, item.locations) {
+                guard !MacOSInstallLeftovers.isEntryPath(path), seenPaths.insert(path).inserted else { continue }
+                summary.appCacheBytes += location.sizeBytes
+            }
+        }
         return summary
     }
 
@@ -1540,6 +1559,20 @@ final class PurgeStore: ObservableObject {
         }
         if !clearedRows.isEmpty { removeClearedLargeFileRows(clearedRows) }
         removeOrphanLeftoverRows(deletedPaths: deletedPaths)
+    }
+
+    /// Takes trashed paths off every tab, not only the one the clean started from.
+    /// An app's caches also show in App Caches and Dev Tools, and an uninstall or
+    /// leftover cleanup left those rows up (#183). A row inside a trashed folder
+    /// goes too: it went to the Trash with the folder. `deletedPaths` are
+    /// standardized.
+    private func removeTrashedRowsEverywhere(deletedPaths: Set<String>) {
+        guard !deletedPaths.isEmpty else { return }
+        removeScanRows { url in
+            let path = url.standardizedFileURL.path
+            return deletedPaths.contains { PathContainment.isSameOrInside(path, $0) }
+        }
+        removeUserSelectedRows(deletedPaths: deletedPaths)
     }
 
     /// Whether an app claims a leftover now. The clean checked that before anything
@@ -2841,7 +2874,7 @@ final class PurgeStore: ObservableObject {
             privilegedEligiblePaths: privilegedEligiblePaths,
             totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
             source: .leftovers,
-            removeRows: { deletedPaths in removeOrphanLeftoverRows(deletedPaths: deletedPaths) },
+            removeRows: { deletedPaths in removeTrashedRowsEverywhere(deletedPaths: deletedPaths) },
             failureMessage: String(localized: "Unable to remove the selected leftovers. Please try again."),
             // Before the session clears: the monitor reads this as it does.
             beforeFailureCloses: { leftoverCleanupFailed = true }
@@ -3669,6 +3702,7 @@ final class PurgeStore: ObservableObject {
         let removedSpellings = deletedPaths.union(report.deletedItems.map(\.path))
         removeLastScanRows { removedSpellings.contains($0.path) }
         forgetInLastScanFile(paths: removedSpellings)
+        removeTrashedRowsEverywhere(deletedPaths: deletedPaths)
 
         // Held apps moved nothing; surface each as one row for the whole app. It
         // offers setup when the helper isn't on, and otherwise says what the bundle's
