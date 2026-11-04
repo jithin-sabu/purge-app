@@ -53,7 +53,17 @@ struct AppDropdown<Option: Hashable, Trigger: View>: View {
         )
         .background(AppDropdownAnchor { anchorView = $0 })
         .onPreferenceChange(AppDropdownSizeKey.self) { triggerSize = $0 }
+        // The open list is hosted apart from this view, so it would keep the
+        // rows it was opened with. An option that becomes available while the
+        // list is open, such as a size sort once measuring ends, stayed greyed
+        // out until the list was opened again (#183).
+        .onChange(of: options.map(isOptionEnabled)) { _ in refreshOpenList() }
+        .onChange(of: selection) { _ in refreshOpenList() }
         .onDisappear { panel.dismiss() }
+    }
+
+    private func refreshOpenList() {
+        panel.update(width: popupWidth, content: AnyView(optionList))
     }
 
     private func toggle() {
@@ -160,6 +170,7 @@ private struct AppDropdownAnchor: NSViewRepresentable {
 @MainActor
 private final class AppDropdownPanelController {
     private var panel: NSPanel?
+    private var hosting: NSHostingView<AnyView>?
     private weak var anchor: NSView?
     private var monitors: [Any] = []
     private var observers: [NSObjectProtocol] = []
@@ -199,7 +210,19 @@ private final class AppDropdownPanelController {
         panel.invalidateShadow()
 
         self.panel = panel
+        self.hosting = hosting
         startWatching(parent: parent)
+    }
+
+    /// Redraws the open list with `content`. Does nothing while it is closed.
+    func update(width: CGFloat, content: AnyView) {
+        guard let panel, let hosting, let anchor, let parent = anchor.window else { return }
+        hosting.rootView = content
+        let size = NSSize(width: width, height: hosting.fittingSize.height)
+        hosting.frame.size = size
+        panel.setContentSize(size)
+        panel.setFrameOrigin(origin(for: anchor, in: parent, size: size))
+        panel.invalidateShadow()
     }
 
     func dismiss() {
@@ -209,6 +232,7 @@ private final class AppDropdownPanelController {
         observers.removeAll()
 
         anchor = nil
+        hosting = nil
         guard let panel else { return }
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)

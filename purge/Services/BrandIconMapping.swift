@@ -159,6 +159,22 @@ enum BrandIconMapping {
         .pods: "swift",
         .dartTool: "flutter",
         .flutterBuild: "flutter",
+        // These came from matching the artifact's path, which also read the
+        // user's own folder names (#183).
+        .nextBuild: "nextdotjs",
+        .viteCache: "vite",
+        .turboCache: "turbo",
+        .parcelCache: "react",
+        .pytestCache: "python",
+        .mypyCache: "python",
+        .ruffCache: "ruff",
+        .toxEnvironments: "python",
+        .swiftPMBuild: "swift",
+        .mavenTarget: "openjdk",
+        .gradleBuild: "gradle",
+        .composerVendor: "php",
+        .bundlerVendor: "ruby",
+        .terraformPlugins: "terraform",
     ]
 
     private static let projectTypeToSlug: [ProjectType: String] = [
@@ -241,13 +257,11 @@ enum BrandIconMapping {
         projectTypeToSlug[type]
     }
 
+    /// The whole folder name must equal a pattern. A substring match found
+    /// "nx" in `phoenix` and "bun" in `bunny`, and was tried on the whole path
+    /// too, so the user's own folder names picked the icon (#183).
     static func slug(forPathComponent name: String) -> String? {
         let lower = name.lowercased()
-        for entry in pathPatternToSlug {
-            if lower.contains(entry.pattern.lowercased()) {
-                return entry.slug
-            }
-        }
-        return nil
+        return pathPatternToSlug.first { $0.pattern.lowercased() == lower }?.slug
     }
 }

@@ -47,6 +47,17 @@ struct MainWindowLocatorTests {
         #expect(MainWindowLocator.appWindow(in: windows) === appWindow)
     }
 
+    /// `.titled` alone let Sparkle's update window or an alert stand in for
+    /// Purge's own window (#183).
+    @Test
+    func otherTitledWindowsAreNotTheAppWindow() {
+        #expect(!MainWindowLocator.isAppWindow(WindowFixtures.titledWindow()))
+        #expect(!MainWindowLocator.isAppWindow(WindowFixtures.titledPanel()))
+        let appWindow = WindowFixtures.appWindow()
+        let windows: [NSWindow] = [WindowFixtures.titledWindow(), WindowFixtures.titledPanel(), appWindow]
+        #expect(MainWindowLocator.appWindow(in: windows) === appWindow)
+    }
+
     @Test
     func noAppWindowYieldsNil() {
         let windows: [NSWindow] = [

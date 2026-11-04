@@ -99,9 +99,8 @@ final class BrandIconService {
                let image = brandGlyph(slug: slug) {
                 return .glyph(image)
             }
-            let pathSlug = BrandIconMapping.slug(forPathComponent: dominant.path.lastPathComponent)
-                ?? BrandIconMapping.slug(forPathComponent: dominant.path.path)
-            if let pathSlug, let image = brandGlyph(slug: pathSlug) {
+            if let pathSlug = BrandIconMapping.slug(forPathComponent: dominant.path.lastPathComponent),
+               let image = brandGlyph(slug: pathSlug) {
                 return .glyph(image)
             }
         }

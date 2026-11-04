@@ -2348,23 +2348,54 @@ enum CleaningQuitGuard {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    /// Shared gate for `windowShouldClose` / `applicationShouldTerminate`.
+    /// The gate for `applicationShouldTerminate`.
     static func shouldAllowTermination() -> Bool {
         guard isCleaningActive() else { return true }
         return confirmInterruption()
     }
+
+    enum WindowCloseDecision: Equatable {
+        case close
+        /// Keep the window and quit instead, so the quit confirmation asks once.
+        case quitThroughTerminate
+    }
+
+    /// What closing the window does while a clean may be running. A close that
+    /// does not quit Purge leaves the clean running, so it asks nothing. One that
+    /// would quit goes through `NSApp.terminate`, which asks once. The window used
+    /// to ask too, so on-demand mode asked twice, and the menu bar mode offered
+    /// Quit Anyway when nothing quit (#183).
+    static func windowCloseDecision(isCleaning: Bool, closeQuitsApp: Bool) -> WindowCloseDecision {
+        isCleaning && closeQuitsApp ? .quitThroughTerminate : .close
+    }
 }
 
 /// Clamps live resize attempts; SwiftUI often overrides `minSize` / `maxSize` alone.
-private final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
+final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
     let fixedWidth: CGFloat
     let minHeight: CGFloat
-    private weak var chainedDelegate: NSWindowDelegate?
+    /// The delegate this one took the window from, normally SwiftUI's own.
+    weak var chainedDelegate: NSWindowDelegate?
 
     init(fixedWidth: CGFloat, minHeight: CGFloat, chainedDelegate: NSWindowDelegate?) {
         self.fixedWidth = fixedWidth
         self.minHeight = minHeight
         self.chainedDelegate = chainedDelegate
+    }
+
+    // SwiftUI's delegate answers far more than the two calls below: key and main
+    // changes, full screen, occlusion, the undo manager. Taking the window's
+    // delegate dropped all of them (#183). Every call this class does not
+    // answer itself goes on to the delegate it took over from.
+    override func responds(to aSelector: Selector!) -> Bool {
+        super.responds(to: aSelector) || chainedDelegate?.responds(to: aSelector) == true
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        if let chainedDelegate, chainedDelegate.responds(to: aSelector) {
+            return chainedDelegate
+        }
+        return super.forwardingTarget(for: aSelector)
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
@@ -2380,9 +2411,17 @@ private final class FixedWindowWidthDelegate: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard MainActor.assumeIsolated({ CleaningQuitGuard.shouldAllowTermination() }) else {
-            return false
+        let quitsInstead = MainActor.assumeIsolated { () -> Bool in
+            let decision = CleaningQuitGuard.windowCloseDecision(
+                isCleaning: CleaningQuitGuard.isCleaningActive(),
+                closeQuitsApp: WindowCloseQuitter.closeWouldQuit(sender)
+            )
+            guard decision == .quitThroughTerminate else { return false }
+            // Keep Cleaning leaves the window where it was; Quit Anyway quits.
+            onNextRunloopTurn { NSApp.terminate(nil) }
+            return true
         }
+        guard !quitsInstead else { return false }
         if let chainedDelegate,
            chainedDelegate.responds(to: #selector(NSWindowDelegate.windowShouldClose(_:))) {
             return chainedDelegate.windowShouldClose!(sender)
@@ -2419,6 +2458,10 @@ private struct FixedWindowWidthConfigurator: NSViewRepresentable {
                 &FixedWindowWidthStorage.delegateKey
             ) as? FixedWindowWidthDelegate {
                 if window.delegate !== existing {
+                    // SwiftUI set a delegate of its own again. Pass calls on to
+                    // that one now, and assign afresh so AppKit asks
+                    // `responds(to:)` again for the new chain.
+                    existing.chainedDelegate = window.delegate
                     window.delegate = existing
                 }
             } else {
