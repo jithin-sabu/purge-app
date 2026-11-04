@@ -76,7 +76,7 @@ Items.
 The helper does one thing: it moves an approved path into your Trash and hands
 ownership of it back to you. It never deletes anything. The code is
 in [`PurgeHelper/HelperService.swift`](PurgeHelper/HelperService.swift), and
-it checks every request four ways:
+it checks every request five ways:
 
 - **Only the real Purge app can connect.** macOS checks each connection
   through `NSXPCConnection.setCodeSigningRequirement` and refuses any caller
@@ -92,6 +92,8 @@ it checks every request four ways:
   define the right first with a rule that asks for nothing
   (`removalRightDefinition` in
   [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift)).
+  The dialog can stay open for minutes, so the helper checks every path again
+  once it closes.
 - **Only known locations.** The helper checks every path itself instead of
   trusting the app. It accepts an app bundle in `/Applications` or
   `~/Applications` at any depth, never inside another bundle or package, or a
@@ -110,6 +112,11 @@ it checks every request four ways:
   a `.` or `..` part is refused, not resolved. Folders on the way are opened
   only to pass through, never to list, so the helper does not read your Trash
   ([`purge/PrivilegedHelper/HelperSupport.swift`](purge/PrivilegedHelper/HelperSupport.swift)).
+- **No hard-link tricks.** Any account can give a root-owned file, such as a
+  LaunchDaemon's plist, a second name in a folder it owns. The helper never
+  moves a file that has a second name, never changes the owner of one inside a
+  folder it moves, and only moves an app that is a folder (`HelperLinkPolicy` in
+  the same file).
 
 The helper also runs only while it is needed. It quits after 30 idle seconds,
 and macOS starts it again for the next request, so an update never leaves an

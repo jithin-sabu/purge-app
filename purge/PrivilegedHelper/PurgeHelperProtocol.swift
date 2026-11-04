@@ -24,7 +24,9 @@ enum PurgeHelperConstants {
     /// v7 says why a move did not happen: a refusal for the whole request, and an
     /// errno for each path that stayed (#299).
     /// v8 moves for a standard account once an administrator types their name and
-    /// password into the macOS dialog the helper asks for (#314).
+    /// password into the macOS dialog the helper asks for, checks every path again
+    /// after the dialog, and never moves or hands back a file with a second name
+    /// (#314).
     static let version = "8"
 
     /// The authorization right the helper asks for before it moves anything for a
@@ -52,11 +54,13 @@ enum PurgeHelperConstants {
             "allow-root": false,
             "session-owner": false,
             "tries": 10_000,
-            "comment": "Lets Purge move an app an administrator installed to the Trash of a standard account.",
+            "comment": "Lets Purge move apps an administrator installed, and their files, to the Trash of a standard account.",
+            // A request can hold several apps, their leftovers in system folders, or
+            // a finished macOS update's files, so the prompt names no single app.
             "default-prompt": [
-                "": "Purge wants to move an app an administrator installed to the Trash.",
-                "zh-Hans": "Purge 想要将管理员安装的应用移到废纸篓。",
-                "zh_CN": "Purge 想要将管理员安装的应用移到废纸篓。"
+                "": "Purge wants to move apps or files an administrator installed to the Trash.",
+                "zh-Hans": "Purge 想要将管理员安装的应用或文件移到废纸篓。",
+                "zh_CN": "Purge 想要将管理员安装的应用或文件移到废纸篓。"
             ]
         ]
     }

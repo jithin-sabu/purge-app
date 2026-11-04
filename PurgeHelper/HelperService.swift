@@ -103,27 +103,8 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         }
         defer { close(trashFD) }
 
-        // Decided once, before anything moves: moving an entry out changes the
-        // folder's date, which would refuse the rest of the same request.
-        let installLeftoverRuleHolds = paths.contains {
-            PurgeHelperConstants.isAllowedInstallLeftoverLocation(URL(fileURLWithPath: $0))
-        } && MacOSInstallLeftovers.isLeftover()
-
         var outcome = MoveOutcome()
-        var allowedPaths: [String] = []
-        for path in paths {
-            let source = URL(fileURLWithPath: path)
-            guard PurgeHelperConstants.isAllowedMoveSource(
-                source,
-                homeDirectory: homeDirectory,
-                installLeftoverRuleHolds: installLeftoverRuleHolds
-            ) else {
-                Self.log.error("refusing source outside allowed locations \(source.path, privacy: .public)")
-                outcome.failureCodes[path] = PurgeHelperConstants.outsideAllowedLocationsCode
-                continue
-            }
-            allowedPaths.append(path)
-        }
+        var allowedPaths = allowedSources(paths, homeDirectory: homeDirectory, outcome: &outcome)
         // Nothing to move, so nobody is asked for a password.
         guard !allowedPaths.isEmpty else { return outcome }
 
@@ -139,6 +120,10 @@ final class HelperService: NSObject, PurgeHelperProtocol {
                 return MoveOutcome(refusal: approval)
             }
             Self.log.notice("an administrator approved the request of peer uid \(ownerUID, privacy: .public)")
+            // The dialog can stay open for minutes, and the paths can change on disk
+            // while it does, so every check runs again now, right before the moves.
+            outcome = MoveOutcome()
+            allowedPaths = allowedSources(paths, homeDirectory: homeDirectory, outcome: &outcome)
         }
 
         for path in allowedPaths {
@@ -157,6 +142,32 @@ final class HelperService: NSObject, PurgeHelperProtocol {
             }
         }
         return outcome
+    }
+
+    /// The paths the helper may move, in order. Each one outside the allowed places
+    /// gets its failure code in `outcome`. The macOS update rule is decided here, once
+    /// for the request and before anything moves: moving an entry out changes the
+    /// folder's date, which would refuse the rest of the same request.
+    private func allowedSources(_ paths: [String], homeDirectory: URL, outcome: inout MoveOutcome) -> [String] {
+        let installLeftoverRuleHolds = paths.contains {
+            PurgeHelperConstants.isAllowedInstallLeftoverLocation(URL(fileURLWithPath: $0))
+        } && MacOSInstallLeftovers.isLeftover()
+
+        var allowed: [String] = []
+        for path in paths {
+            let source = URL(fileURLWithPath: path)
+            guard PurgeHelperConstants.isAllowedMoveSource(
+                source,
+                homeDirectory: homeDirectory,
+                installLeftoverRuleHolds: installLeftoverRuleHolds
+            ) else {
+                Self.log.error("refusing source outside allowed locations \(source.path, privacy: .public)")
+                outcome.failureCodes[path] = PurgeHelperConstants.outsideAllowedLocationsCode
+                continue
+            }
+            allowed.append(path)
+        }
+        return allowed
     }
 
     /// Asks an administrator to approve a standard account's request, in a macOS
@@ -264,16 +275,24 @@ final class HelperService: NSObject, PurgeHelperProtocol {
         defer { close(sourceParentFD) }
 
         let sourceName = source.lastPathComponent
+        // `O_NONBLOCK` so a FIFO in the source's place can't stall the helper on open.
         let sourceFD = sourceName.withCString {
-            openat(sourceParentFD, $0, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+            openat(sourceParentFD, $0, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         }
         guard sourceFD >= 0 else { return notMoved(errno) }
         defer { close(sourceFD) }
 
+        // Judged on the open descriptor, which the move and the owner change then use.
         var sourceInfo = stat()
         guard fstat(sourceFD, &sourceInfo) == 0 else { return notMoved(errno) }
-        let sourceType = sourceInfo.st_mode & S_IFMT
-        guard sourceType == S_IFDIR || sourceType == S_IFREG else { return notMoved(EFTYPE) }
+        if let refusal = HelperLinkPolicy.refusal(
+            forSourceMode: sourceInfo.st_mode,
+            linkCount: sourceInfo.st_nlink,
+            isAppBundlePath: source.pathExtension.lowercased() == "app"
+        ) {
+            Self.log.error("refusing \(source.path, privacy: .public) (type \(sourceInfo.st_mode & S_IFMT, privacy: .public), links \(sourceInfo.st_nlink, privacy: .public))")
+            return notMoved(refusal)
+        }
 
         let renameErrno = renameToUniqueDestination(
             source,
@@ -331,7 +350,9 @@ final class HelperService: NSObject, PurgeHelperProtocol {
     }
 
     /// Changes descendants first and the containing directory last. The operation
-    /// stays attached to open descriptors, even if the item is renamed in Trash.
+    /// stays attached to open descriptors, even if the item is renamed in Trash. A
+    /// file with a second name keeps its owner, since that name may be a root file
+    /// somewhere else (`HelperLinkPolicy`), and the item reads as not fully handed back.
     private func chownRecursively(fileDescriptor: Int32, uid: uid_t, gid: gid_t) -> Bool {
         var info = stat()
         guard fstat(fileDescriptor, &info) == 0 else { return false }
@@ -354,7 +375,7 @@ final class HelperService: NSObject, PurgeHelperProtocol {
                 if name == "." || name == ".." { continue }
 
                 let childFD = name.withCString {
-                    openat(fileDescriptor, $0, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+                    openat(fileDescriptor, $0, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
                 }
                 if childFD >= 0 {
                     if !chownRecursively(fileDescriptor: childFD, uid: uid, gid: gid) {
@@ -373,6 +394,10 @@ final class HelperService: NSObject, PurgeHelperProtocol {
             }
         }
 
+        guard HelperLinkPolicy.mayChangeOwner(mode: info.st_mode, linkCount: info.st_nlink) else {
+            Self.log.error("kept the owner of a file with \(info.st_nlink, privacy: .public) links")
+            return false
+        }
         if fchown(fileDescriptor, uid, gid) != 0 { succeeded = false }
         return succeeded
     }

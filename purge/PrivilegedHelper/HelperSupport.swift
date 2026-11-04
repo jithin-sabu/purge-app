@@ -40,6 +40,35 @@ nonisolated enum HelperDirectory {
     }
 }
 
+/// What the root helper may move and hand back to the user, judged from the item's
+/// own `stat`. Both the app and the helper compile this file, so the app's tests
+/// cover the exact rule the helper runs.
+///
+/// A hard link is not a symlink, so `O_NOFOLLOW` does not stop one. Any account can
+/// hard-link a root-owned file it can read, such as a plist in
+/// `/Library/LaunchDaemons`, into a folder it owns. Moved and handed back as root,
+/// that link would give the account the original file, and with it root at the
+/// next boot. So the helper never moves a file with a second name, and never
+/// changes the owner of one inside a folder it moves (#314).
+nonisolated enum HelperLinkPolicy {
+    /// The errno to refuse a move source with, or `nil` when it may move. A source
+    /// must be a folder or a regular file with one name, and a `.app` must be a folder.
+    static func refusal(forSourceMode mode: mode_t, linkCount: nlink_t, isAppBundlePath: Bool) -> Int32? {
+        let type = mode & S_IFMT
+        guard type == S_IFDIR || type == S_IFREG else { return EFTYPE }
+        if isAppBundlePath, type != S_IFDIR { return EFTYPE }
+        if type == S_IFREG, linkCount > 1 { return EMLINK }
+        return nil
+    }
+
+    /// Whether the helper may hand this item to the user. A folder's link count
+    /// counts its subfolders, so only a non-folder with a second name is kept as
+    /// it is.
+    static func mayChangeOwner(mode: mode_t, linkCount: nlink_t) -> Bool {
+        (mode & S_IFMT) == S_IFDIR || linkCount <= 1
+    }
+}
+
 /// Lets the root helper quit once nobody needs it, so the next request starts a fresh
 /// copy from the app bundle that is installed now.
 ///
