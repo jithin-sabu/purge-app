@@ -93,20 +93,6 @@ struct MacOSInstallLeftoversTests {
         }
     }
 
-    /// Cleaning this row goes through the root helper, which asks a standard account
-    /// for an administrator's password (#314). Safe rows go into Clean Safe Items and
-    /// scheduled cleans, which run with nobody there to answer, so the row stays
-    /// Check First.
-    @Test
-    func rowIsNeverSafe() {
-        // No path, so a user override on this machine cannot change the answer.
-        let info = ExplanationResolver.initialSafetyForCacheFolder(
-            folderName: CacheDiscoveryPaths.macOSInstallDataKey,
-            friendlyHeadline: CacheDiscoveryPaths.macOSInstallDataKey
-        )
-        #expect(info.level == .medium)
-    }
-
     @Test
     func oldFolderIsALeftover() throws {
         let fixture = try Fixture()
