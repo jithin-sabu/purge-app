@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.13.3</title>
+      <pubDate>Wed, 04 Nov 2026 14:38:12 +0000</pubDate>
+      <sparkle:version>39</sparkle:version>
+      <sparkle:shortVersionString>1.13.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Standard accounts can remove admin-locked apps</strong>: On a Mac where you aren't an administrator, Purge asks for an administrator's name and password, the way Finder does.</li>
+          <li><strong>Gradle caches in React Native and Flutter projects</strong>: Dev Tools now finds the .gradle folder inside a project's android folder.</li>
+          <li><strong>Duplicates keep the original in every language</strong>: Purge recognises Finder's copy names in every language macOS ships.</li>
+          <li><strong>Totals that match the clean</strong>: A folder two rows list is counted once, and the menu says "You're all clear" only when Clean has nothing left to take.</li>
+          <li><strong>Plainer Apple Intelligence text</strong>: The popover and confirmation say in short sentences what Remove and Download Again do.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.13.3/Purgev1.13.3.dmg"
+        sparkle:edSignature="u5+7FhfgvgexQ1gwSC1lrELrzAaW2Zo819m92jyE8588yWuMZa4a/LQNfwzYUQ7jw7lapqf1/JFVritqtLdWCg=="
+        length="11089485"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.13.2</title>
       <pubDate>Tue, 03 Nov 2026 13:55:49 +0000</pubDate>
       <sparkle:version>38</sparkle:version>
