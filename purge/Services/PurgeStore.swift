@@ -1561,6 +1561,20 @@ final class PurgeStore: ObservableObject {
         removeOrphanLeftoverRows(deletedPaths: deletedPaths)
     }
 
+    /// Takes trashed paths off every tab, not only the one the clean started from.
+    /// An app's caches also show in App Caches and Dev Tools, and an uninstall or
+    /// leftover cleanup left those rows up (#183). A row inside a trashed folder
+    /// goes too: it went to the Trash with the folder. `deletedPaths` are
+    /// standardized.
+    private func removeTrashedRowsEverywhere(deletedPaths: Set<String>) {
+        guard !deletedPaths.isEmpty else { return }
+        removeScanRows { url in
+            let path = url.standardizedFileURL.path
+            return deletedPaths.contains { PathContainment.isSameOrInside(path, $0) }
+        }
+        removeUserSelectedRows(deletedPaths: deletedPaths)
+    }
+
     /// Whether an app claims a leftover now. The clean checked that before anything
     /// moved. A retry can come minutes later, after the app was put back or another
     /// app that shares its files was installed, so it checks again, against a fresh
@@ -2860,7 +2874,7 @@ final class PurgeStore: ObservableObject {
             privilegedEligiblePaths: privilegedEligiblePaths,
             totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
             source: .leftovers,
-            removeRows: { deletedPaths in removeOrphanLeftoverRows(deletedPaths: deletedPaths) },
+            removeRows: { deletedPaths in removeTrashedRowsEverywhere(deletedPaths: deletedPaths) },
             failureMessage: String(localized: "Unable to remove the selected leftovers. Please try again."),
             // Before the session clears: the monitor reads this as it does.
             beforeFailureCloses: { leftoverCleanupFailed = true }
@@ -3688,6 +3702,7 @@ final class PurgeStore: ObservableObject {
         let removedSpellings = deletedPaths.union(report.deletedItems.map(\.path))
         removeLastScanRows { removedSpellings.contains($0.path) }
         forgetInLastScanFile(paths: removedSpellings)
+        removeTrashedRowsEverywhere(deletedPaths: deletedPaths)
 
         // Held apps moved nothing; surface each as one row for the whole app. It
         // offers setup when the helper isn't on, and otherwise says what the bundle's
