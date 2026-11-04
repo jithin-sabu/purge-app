@@ -718,13 +718,32 @@ final class PurgeStore: ObservableObject {
         return summary
     }
 
+    /// Adds up what `manualSafeCleanupCandidates` would move, path by path and in
+    /// the same order, so a folder two rows list is counted once, for the first
+    /// row, as the clean takes it once (#183). Only paths the rows already hold
+    /// are read: this runs on every scan flush, so it does not ask the disk or
+    /// the safety policy again. The scan has applied both to every row.
     private func computeSafeCleanupSummary() -> SafeCleanupSummary {
         var summary = SafeCleanupSummary()
-        summary.appCacheBytes = cacheItems.filter(countsAsSafeCleanup).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        summary.devToolBytes = devTools.filter(countsAsSafeCleanup).reduce(Int64(0)) { $0 + $1.sizeBytes }
-        summary.projectArtifactBytes = projectGroups.flatMap(\.artifacts)
-            .filter(countsAsSafeCleanup)
-            .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        var seenPaths = Set<String>()
+
+        for artifact in projectGroups.flatMap(\.artifacts) where countsAsSafeCleanup(artifact) {
+            guard seenPaths.insert(artifact.path.path).inserted else { continue }
+            summary.projectArtifactBytes += artifact.sizeBytes
+        }
+
+        for tool in devTools where countsAsSafeCleanup(tool) {
+            for path in tool.standardizedPaths where seenPaths.insert(path).inserted {
+                summary.devToolBytes += tool.pathSizeBytesByPath[path] ?? (tool.paths.count == 1 ? tool.sizeBytes : 0)
+            }
+        }
+
+        for item in cacheItems where countsAsSafeCleanup(item) {
+            for (path, location) in zip(item.standardizedPaths, item.locations) {
+                guard !MacOSInstallLeftovers.isEntryPath(path), seenPaths.insert(path).inserted else { continue }
+                summary.appCacheBytes += location.sizeBytes
+            }
+        }
         return summary
     }
 

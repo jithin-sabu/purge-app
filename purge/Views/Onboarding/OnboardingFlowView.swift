@@ -166,7 +166,7 @@ struct OnboardingFlowView: View {
   }
 
   private var cleanNowTitle: String {
-    let bytes = resultsSnapshot?.totalBytes ?? store.safeRecoverableBytes
+    let bytes = (resultsSnapshot ?? store.onboardingResultsSnapshot).totalBytes
     if bytes > 0 {
       return String(localized: "Move \(formatBytes(bytes)) to Trash")
     }
@@ -225,10 +225,7 @@ struct OnboardingFlowView: View {
       return
     }
 
-    resultsSnapshot = OnboardingResultsSnapshot(
-      totalBytes: candidates.reduce(Int64(0)) { $0 + $1.sizeBytes },
-      categories: store.onboardingResultsCategories
-    )
+    resultsSnapshot = store.onboardingResultsSnapshot(for: candidates)
     isResultsCleaning = true
     guard store.beginInteractiveSafeCleanup(candidates: candidates, reduceMotion: reduceMotion) else {
       isResultsCleaning = false
