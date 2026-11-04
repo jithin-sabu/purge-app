@@ -176,6 +176,32 @@ struct AnchoredArtifactTests {
         )
     }
 
+    @Test("a React Native or Flutter android/.gradle anchors on the project root")
+    func androidGradleAnchorsOnRoot() throws {
+        let fixture = try ProjectFixture(
+            files: ["package.json", "android/build.gradle"], folders: ["android/.gradle"]
+        )
+        defer { fixture.cleanUp() }
+        #expect(
+            DeletionSafetyPolicy.isWhitelistedProjectArtifactPath(
+                fixture.url("android/.gradle"), home: fixture.containingHome
+            )
+        )
+        #expect(
+            ReinstallSafetyEvaluator.evaluate(artifactKind: .dotGradle, artifactURL: fixture.url("android/.gradle"))
+                == .reinstallable
+        )
+    }
+
+    @Test("a nested rule only unlocks its own folder")
+    func nestedRuleChecksEveryComponent() throws {
+        // `android/build.gradle` proves `android/.gradle`, not a `.gradle` in `ios`.
+        let fixture = try ProjectFixture(files: ["android/build.gradle"], folders: ["ios/.gradle", "android/.gradle"])
+        defer { fixture.cleanUp() }
+        #expect(!DeletionSafetyPolicy.isWhitelistedProjectArtifactPath(fixture.url("ios/.gradle"), home: fixture.containingHome))
+        #expect(DeletionSafetyPolicy.isWhitelistedProjectArtifactPath(fixture.url("android/.gradle"), home: fixture.containingHome))
+    }
+
     @Test("the wrong marker does not unlock an unrelated folder")
     func wrongMarkerIsRejected() throws {
         // A Go project keeps `vendor` under version control, so a `go.mod` must never
@@ -439,6 +465,69 @@ struct ArtifactCollectionTests {
         )
         defer { fixture.cleanUp() }
         #expect(collect(fixture, [.terraform]).isEmpty)
+    }
+
+    private func gradleFolders(_ fixture: HomeScopedFixture) -> [String] {
+        let types = DevScanner.projectTypes(at: fixture.root, listing: nil)
+        return DevScanner.collectArtifacts(projectRoot: fixture.root, types: types)
+            .filter { $0.kind == .dotGradle }
+            .map { String($0.path.standardizedFileURL.path.dropFirst(fixture.root.standardizedFileURL.path.count + 1)) }
+            .sorted()
+    }
+
+    /// React Native and Flutter run Gradle in `android/`, so that is where its
+    /// `.gradle` folder is. Before #190 only the root was looked at, where these
+    /// projects have none.
+    @Test(arguments: [
+        ["package.json", "android/build.gradle"],
+        ["pubspec.yaml", "android/build.gradle.kts"],
+    ])
+    func androidFolderGradleCacheIsFound(files: [String]) throws {
+        let fixture = try HomeScopedFixture(files: files, folders: ["android/.gradle", ".gradle"])
+        defer { fixture.cleanUp() }
+        // The root `.gradle` sits beside no Gradle build, so it is not offered.
+        #expect(gradleFolders(fixture) == ["android/.gradle"])
+    }
+
+    @Test("an android/.gradle with no Gradle build beside it is not offered")
+    func androidGradleNeedsItsBuildFile() throws {
+        let fixture = try HomeScopedFixture(files: ["package.json"], folders: ["android/.gradle"])
+        defer { fixture.cleanUp() }
+        #expect(gradleFolders(fixture).isEmpty)
+        #expect(collect(fixture, [.androidGradle, .node]).isDisjoint(with: [.dotGradle]))
+    }
+
+    @Test("a Gradle project at the root still offers its root .gradle")
+    func rootGradleCacheIsFound() throws {
+        let fixture = try HomeScopedFixture(files: ["settings.gradle.kts"], folders: [".gradle"])
+        defer { fixture.cleanUp() }
+        #expect(gradleFolders(fixture) == [".gradle"])
+    }
+}
+
+@Suite("Artifacts behind a linked folder are judged where they lead")
+struct LinkedArtifactTests {
+    /// Moving `app/android/.gradle` to the Trash follows `android` when it is a
+    /// link. One into a never-delete place must not make the folder there
+    /// deletable (#190). `/Library` stands in for Pictures or Mail, which the
+    /// tests must not write to.
+    @Test func aLinkIntoANeverDeletePlaceIsRefused() throws {
+        let fixture = try HomeScopedFixture(files: ["package.json"])
+        defer { fixture.cleanUp() }
+        try FileManager.default.createSymbolicLink(
+            at: fixture.url("android"), withDestinationURL: URL(fileURLWithPath: "/Library/Application Support")
+        )
+        #expect(DeletionSafetyPolicy.evaluate(fixture.url("android/.gradle")) == .blockedNeverDelete)
+        #expect(DeletionSafetyPolicy.evaluate(fixture.url("android/node_modules")) == .blockedNeverDelete)
+    }
+
+    /// A project folder moved to another place in home, with a link left behind,
+    /// still cleans.
+    @Test func aLinkToAnOrdinaryFolderStillCleans() throws {
+        let fixture = try HomeScopedFixture(files: ["package.json"], folders: ["real-android/.gradle"])
+        defer { fixture.cleanUp() }
+        try FileManager.default.createSymbolicLink(at: fixture.url("android"), withDestinationURL: fixture.url("real-android"))
+        #expect(DeletionSafetyPolicy.evaluate(fixture.url("android/.gradle")) == .allow)
     }
 }
 

@@ -378,6 +378,7 @@ struct LargeFilesView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     private func selectCategory(_ id: String) {
@@ -400,7 +401,7 @@ struct LargeFilesView: View {
             sort: sortOptionBinding,
             onToggleAll: toggleSelectAll,
             onKeepOneOfEach: isDuplicatesFilterActive
-                ? { store.requestDuplicateCleanup() }
+                ? { store.requestDuplicateCleanup(searchQuery: searchQuery) }
                 : nil,
             onRemoveDownload: isICloudFilterActive
                 ? { store.requestRemoveDownloads() }

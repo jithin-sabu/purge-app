@@ -499,6 +499,9 @@ struct AllowlistAdditionTests {
         "Downloads/X.crdownload/inner.bin",
         ".oh-my-zsh/custom",
         "Movies/My Film.mov",
+        // Gradle's own folder, which a stray `~/settings.gradle` made a project
+        // artifact (#190). Its caches are separate rows.
+        ".gradle",
     ])
     func neighboursStayOut(relative: String) {
         #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")

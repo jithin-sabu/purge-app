@@ -246,7 +246,12 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/Application Support",
             "\(home)/Documents",
             "\(home)/Desktop",
-            "\(home)/Downloads"
+            "\(home)/Downloads",
+            // Gradle's own folder: installed JDKs, `gradle.properties` (often
+            // signing or repository keys) and `init.d`. Its caches are offered as
+            // subfolders. A stray `~/settings.gradle` made home a project whose
+            // `.gradle` the project rule offered whole (#190).
+            "\(home)/.gradle"
         ]
     }
 
@@ -1117,6 +1122,19 @@ enum DeletionSafetyPolicy {
         return candidates.contains { $0.refusesArtifact(at: standardized) }
     }
 
+    /// A folder allowed by its name or a project marker can sit under a linked
+    /// folder, and the move to the Trash follows the link: `app/android` linked
+    /// into `~/Pictures` would trash a `.gradle` in Pictures (#190). The folder
+    /// is judged again where it really is. Only a never-delete place refuses it,
+    /// so a project on a linked drive still cleans.
+    private nonisolated static func resolvesIntoNeverDelete(_ url: URL) -> Bool {
+        let resolved = url.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(url.lastPathComponent).standardizedFileURL
+        // A resolved path has no links left, so the second `evaluate` stops here.
+        guard resolved.path != url.path else { return false }
+        return evaluate(resolved) == .blockedNeverDelete
+    }
+
     nonisolated static func isWhitelistedProjectArtifactPath(_ url: URL, home: String) -> Bool {
         let standardized = url.standardizedFileURL
         let path = standardized.path
@@ -1129,6 +1147,9 @@ enum DeletionSafetyPolicy {
         for rule in candidates {
             // Walk back up by however many components the rule's folder spans, so
             // `ios/Pods` anchors on the Xcode project root rather than on `ios`.
+            // The path must end in the whole folder: `P/ios/.gradle` is not the
+            // `android/.gradle` rule's folder (#190).
+            guard path.hasSuffix("/" + rule.folder) else { continue }
             let depth = rule.folder.split(separator: "/").count
             var root = standardized
             for _ in 0..<depth { root = root.deletingLastPathComponent() }
@@ -1239,13 +1260,13 @@ enum DeletionSafetyPolicy {
 
         let inHome = PathContainment.isSameOrInside(path, home)
         if inHome && whitelistedFolderNames.contains(standardized.lastPathComponent) {
-            return .allow
+            return resolvesIntoNeverDelete(standardized) ? .blockedNeverDelete : .allow
         }
         // Deliberately below the never-delete guards, exactly like the folder-name rule
         // above it: this matches on a name plus nearby evidence, not on an audited
         // absolute path, so the protections for Pictures, Music, Mail and the rest win.
         if isWhitelistedProjectArtifactPath(standardized, home: home) {
-            return .allow
+            return resolvesIntoNeverDelete(standardized) ? .blockedNeverDelete : .allow
         }
         // Claude Code's `<project>/.claude/worktrees/<name>`. Below the never-delete
         // guards for the same reason as project artifacts: the project can be anywhere.
