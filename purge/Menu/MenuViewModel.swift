@@ -158,6 +158,8 @@ final class MenuViewModel: ObservableObject {
     /// Only falls back to a blocking scan when there is nothing to show yet.
     func menuDidOpen() {
         guard let store else { return }
+        // The user has the panel now, with its own Clean button.
+        notificationCleanAwaitsScan = false
         // A finished scan can be invisible here: completion arrives via a
         // debounced sink on RunLoop.main, and menu tracking stalls the main
         // queue — opening the menu inside that window (or holding it open
@@ -212,9 +214,22 @@ final class MenuViewModel: ObservableObject {
     /// an answer instead of silence, and no flag is left set for a later clean
     /// from the panel to pick up (#183).
     func performCleanFromNotification() {
-        if case .checking = state {
-            notificationCleanAwaitsScan = true
+        switch state {
+        case .cleaning, .cleaned:
+            // A clean is running already. It says how it went when it ends, and
+            // this tap must not change that: clearing the flag here dropped the
+            // banner of a clean another tap started.
             return
+        case .checking:
+            // Only a scan that is running is worth waiting for. A windowless
+            // launch has run none, and waiting for whichever scan comes next
+            // could start a clean hours after the tap.
+            if isCachesScanInFlight {
+                notificationCleanAwaitsScan = true
+            }
+            return
+        case .clear, .ready:
+            break
         }
         cleanFromNotification = true
         guard clean() else {
@@ -228,6 +243,26 @@ final class MenuViewModel: ObservableObject {
 
     private var isPanelVisible: Bool {
         panelWindow?.isVisible ?? false
+    }
+
+    private var isCachesScanInFlight: Bool {
+        guard let store else { return false }
+        return store.isScanningAll
+            || store.scanQueue.active == .cachesAndDevTools
+            || store.isScanQueued(.cachesAndDevTools)
+    }
+
+    /// Settles on what a clean would take now. The sidebar total also counts
+    /// rows the clean refuses on the spot, such as the CLI version a link now
+    /// points at, so Ready from that total could sit beside a Clean that does
+    /// nothing (#183).
+    private func settleOnCleanableBytes() {
+        guard let store, let date = store.lastScanCompletedAt else {
+            resolveFromCache()
+            return
+        }
+        let bytes = store.manualSafeCleanupCandidates().reduce(Int64(0)) { $0 + $1.sizeBytes }
+        setState(bytes > 0 ? .ready(bytes: bytes, lastScanned: date) : .clear(lastScanned: date))
     }
 
     private func resolveFromCache(animated: Bool = true) {
@@ -345,7 +380,7 @@ final class MenuViewModel: ObservableObject {
         let candidates = store.manualSafeCleanupCandidates()
         let total = candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
         guard total > 0 else {
-            resolveAfterScan()
+            settleOnCleanableBytes()
             return false
         }
 
@@ -385,7 +420,7 @@ final class MenuViewModel: ObservableObject {
         // Nothing moved: no "cleaned" beat and no "Moved 0 KB" notification.
         // The menu shows what the scan still holds.
         guard !summary.skippedForAnotherClean, !summary.failed, summary.bytesMovedToTrash > 0 else {
-            resolveFromCache()
+            settleOnCleanableBytes()
             return
         }
 
@@ -399,7 +434,7 @@ final class MenuViewModel: ObservableObject {
         // is left (#183).
         try? await Task.sleep(nanoseconds: Self.cleanedDwellNanoseconds)
         guard !Task.isCancelled else { return }
-        resolveFromCache()
+        settleOnCleanableBytes()
     }
 
     private func mirrorCleaningProgress(_ movedBytes: Int64) {

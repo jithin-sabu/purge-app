@@ -336,6 +336,15 @@ struct AllowlistExplanationDataTests {
         #expect(ExplanationDatabase.record(forKey: key) == nil)
     }
 
+    /// Their allow rule went too. It let through any folder directly inside the
+    /// extensions folder, installed extensions included, and its tier rule
+    /// called them Safe (#183).
+    @Test(arguments: [".vscode/extensions/ms-python.python-2026.1.0", ".cursor/extensions/esbenp.prettier-vscode-11.0.0"])
+    func installedExtensionsAreNeverAllowed(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow)
+        #expect(SafetyTierList.evaluate(folderName: (relative as NSString).lastPathComponent, path: AuditPaths.url(relative)) != .safe)
+    }
+
     /// Go's build cache is `~/Library/Caches/go-build` on macOS. Dev Tools listed
     /// only `~/.cache/go-build`, so the real one showed again under App Caches (#183).
     @Test

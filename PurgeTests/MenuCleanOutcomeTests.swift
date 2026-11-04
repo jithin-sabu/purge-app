@@ -60,13 +60,13 @@ struct MenuCleanOutcomeTests {
         let trash = FakeTrash()
         trash.failNextCalls(1)
         let (store, model) = try await readyMenu(scans, trash: trash, rows: [Self.row()])
+        // The model holds the store weakly, as the app does.
+        defer { withExtendedLifetime(store) {} }
         var states: [MenuState] = []
         let watch = model.$state.sink { states.append($0) }
         defer { watch.cancel() }
 
-        let stateBefore = model.state
-        let started = model.clean()
-        #expect(started, "\(stateBefore) -> \(model.state) deleting=\(store.isDeleting) interactive=\(store.isInteractiveSafeCleanupInProgress) rows=\(store.cacheItems.map { "\($0.gitStatus)/\($0.reinstallSafety)/\($0.safetyInfo.level)" }) candidates=\(store.manualSafeCleanupCandidates().count) summary=\(store.safeRecoverableBytes)")
+        #expect(model.clean())
 
         #expect(await eventually { !store.isDeleting && isReady(model.state, bytes: 1_000_000) })
         #expect(!states.contains { if case .cleaned = $0 { return true }; return false })
@@ -79,12 +79,12 @@ struct MenuCleanOutcomeTests {
         let trash = FakeTrash()
         trash.failNextCalls(1)
         let (store, model) = try await readyMenu(scans, trash: trash, rows: [Self.row(), Self.row()])
+        // The model holds the store weakly, as the app does.
+        defer { withExtendedLifetime(store) {} }
         var states: [MenuState] = []
         let watch = model.$state.sink { states.append($0) }
         defer { watch.cancel() }
-        let stateBefore = model.state
-        let started = model.clean()
-        #expect(started, "\(stateBefore) -> \(model.state) deleting=\(store.isDeleting) interactive=\(store.isInteractiveSafeCleanupInProgress) rows=\(store.cacheItems.map { "\($0.gitStatus)/\($0.reinstallSafety)/\($0.safetyInfo.level)" }) candidates=\(store.manualSafeCleanupCandidates().count) summary=\(store.safeRecoverableBytes)")
+        #expect(model.clean())
 
         #expect(await eventually { states.contains(.cleaned(bytes: 1_000_000)) })
         #expect(await eventually { isReady(model.state, bytes: 1_000_000) })
@@ -96,10 +96,10 @@ struct MenuCleanOutcomeTests {
         defer { scans.cleanUp() }
         let trash = FakeTrash()
         let (store, model) = try await readyMenu(scans, trash: trash, rows: [Self.row()])
+        // The model holds the store weakly, as the app does.
+        defer { withExtendedLifetime(store) {} }
 
-        let stateBefore = model.state
-        let started = model.clean()
-        #expect(started, "\(stateBefore) -> \(model.state) deleting=\(store.isDeleting) interactive=\(store.isInteractiveSafeCleanupInProgress) rows=\(store.cacheItems.map { "\($0.gitStatus)/\($0.reinstallSafety)/\($0.safetyInfo.level)" }) candidates=\(store.manualSafeCleanupCandidates().count) summary=\(store.safeRecoverableBytes)")
+        #expect(model.clean())
 
         #expect(await eventually { model.state == .cleaned(bytes: 1_000_000) })
         #expect(await eventually { if case .clear = model.state { return true }; return false })
@@ -128,6 +128,84 @@ struct MenuCleanOutcomeTests {
 
         #expect(await eventually { trash.trashedPaths == [row.path.standardizedFileURL.path] })
         #expect(await eventually { !model.cleanFromNotification })
+    }
+
+    /// A windowless launch runs no scan. A tap then must not wait for whichever
+    /// scan comes next and start a clean long after it.
+    @Test func aNotificationCleanWithNoScanRunningDoesNotWaitForTheNextOne() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        scans.hasAccess = true
+        let row = Self.row()
+        scans.generalEvents = [
+            .found(row),
+            .sizeResolved(path: row.path.standardizedFileURL.path, sizeBytes: 1_000_000, lastModified: .distantPast),
+        ]
+        let trash = FakeTrash()
+        let store = scans.makeStore(fileDeleter: FileDeleter(trash: trash.trash))
+        let model = MenuViewModel()
+        model.attach(store: store, scansAtLaunch: false)
+        try? await Task.sleep(for: .milliseconds(300))
+        try #require(model.state == .checking)
+
+        model.performCleanFromNotification()
+        // Held past the menu's 200 ms debounce, so it sees the scan run.
+        scans.holdsGeneral = true
+        store.requestScan(.cachesAndDevTools)
+        #expect(await eventually { scans.generalAccesses.count == 1 })
+        try? await Task.sleep(for: .milliseconds(400))
+        scans.finishHeldGeneral()
+
+        #expect(await eventually { isReady(model.state, bytes: 1_000_000) })
+        try? await Task.sleep(for: .milliseconds(500))
+        #expect(trash.trashedPaths.isEmpty)
+    }
+
+    /// Two banners can be up at once. A tap on the second while the first one's
+    /// clean runs used to clear the flag, and the clean then posted no banner.
+    @Test func aSecondTapDuringACleanKeepsTheFirstTapsBanner() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        let (store, model) = try await readyMenu(scans, trash: trash, rows: [Self.row()])
+        // The model holds the store weakly, as the app does.
+        defer { withExtendedLifetime(store) {} }
+
+        model.performCleanFromNotification()
+        try #require(model.cleanFromNotification)
+        model.performCleanFromNotification()
+
+        #expect(model.cleanFromNotification)
+    }
+
+    /// A row the clean refuses on the spot is still in the sidebar total. The
+    /// menu used to stay on Ready beside a Clean that did nothing.
+    @Test func aRowTheCleanRefusesDoesNotKeepTheMenuOnReady() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = FakeTrash()
+        // Account daemon caches are never offered, whatever their row says.
+        let refused = CacheItem(
+            definitionKey: "com.apple.akd",
+            location: CacheLocation(
+                path: URL(fileURLWithPath: DeletionSafetyPolicy.cachedHomePath)
+                    .appendingPathComponent("Library/Caches/com.apple.akd", isDirectory: true),
+                sizeBytes: 1_000_000,
+                lastModified: .distantPast,
+                folderName: "com.apple.akd"
+            ),
+            appName: "akd",
+            safetyInfo: SafetyInfo(level: .safe, headline: "akd", explanation: "", recoverySteps: "", reinstallCommand: nil),
+            gitStatus: .clean
+        )
+        let (store, model) = try await readyMenu(scans, trash: trash, rows: [refused])
+        // The model holds the store weakly, as the app does.
+        defer { withExtendedLifetime(store) {} }
+
+        #expect(!model.clean())
+
+        #expect({ if case .clear = model.state { return true }; return false }())
+        #expect(trash.trashedPaths.isEmpty)
     }
 
     /// With nothing to clean, the action used to leave its flag set, so a later

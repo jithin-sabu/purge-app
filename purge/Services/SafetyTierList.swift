@@ -145,10 +145,6 @@ enum SafetyTierList {
             if pathLower.contains(".app/contents/frameworks/") && pathLower.contains("/versions/") {
                 return .medium
             }
-            if pathLower.contains("/.cursor/extensions/")
-                || pathLower.contains("/.vscode/extensions/") {
-                return .safe
-            }
             if pathLower.contains("/.cursor/projects/")
                 || AgentWorktreeScanPolicy.looksLikeAgentWorktreePath(
                     path,
