@@ -1080,9 +1080,10 @@ struct SafeCleanupCelebrationOverlay: View {
 
     /// A retry that came back with nothing to show: the row is still there with
     /// the reason it had. A row whose reason changed already reads differently,
-    /// and a locked app's tap was the setup step, so neither gets the note.
+    /// a locked app's tap was the setup step, and a standard account's ends when
+    /// the administrator dialog is cancelled (#314), so none of them gets the note.
     private func noteRetryChangedNothing(_ items: [CleanFailureItem]) {
-        for item in items where item.reason != .needsAdministrator {
+        for item in items where item.reason != .needsAdministrator && item.reason != .needsAdministratorAccount {
             guard let row = session.failedItems.first(where: { $0.id == item.id }),
                   row.reason == item.reason else { continue }
             retryFailedIDs.insert(item.id)

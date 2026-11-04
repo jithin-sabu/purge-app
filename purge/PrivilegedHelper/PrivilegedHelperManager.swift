@@ -90,6 +90,9 @@ final class PrivilegedHelperManager: ObservableObject {
     /// user can take minutes. A timeout is therefore an unknown result, never proof
     /// that nothing moved.
     private static let moveTimeout: TimeInterval = 300
+    /// A standard account's request first waits on an administrator, who may have to
+    /// be found, so it gets this much longer before the app stops waiting (#314).
+    private static let approvalTimeout: TimeInterval = 1_800
     private static let versionTimeout: TimeInterval = 10
 
     /// Builds a connection to the helper and applies the code-signing requirement so
@@ -106,10 +109,27 @@ final class PrivilegedHelperManager: ObservableObject {
         return connection
     }
 
+    /// The move that runs now or ran last. The next one waits for it.
+    private var lastMove: Task<PrivilegedMoveResult?, Never>?
+
     /// Moves `urls` to the connecting user's Trash through the helper. Returns `nil`
     /// when the helper is not enabled or the connection fails, so the caller knows
     /// escalation did not happen. Never throws: escalation is best-effort.
+    ///
+    /// Moves run one at a time. For a standard account each one shows the
+    /// administrator dialog, and Retry on several rows would otherwise put up all
+    /// of them at once (#314).
     func moveToTrash(_ urls: [URL]) async -> PrivilegedMoveResult? {
+        let previous = lastMove
+        let move = Task { () -> PrivilegedMoveResult? in
+            _ = await previous?.value
+            return await self.moveToTrashNow(urls)
+        }
+        lastMove = move
+        return await move.value
+    }
+
+    private func moveToTrashNow(_ urls: [URL]) async -> PrivilegedMoveResult? {
         // A helper can be approved after app launch. Check again here so an old,
         // newly-approved copy is replaced before it receives the current protocol.
         // A definite, un-fixable version mismatch reports "not ready" rather than
@@ -128,13 +148,16 @@ final class PrivilegedHelperManager: ObservableObject {
         defer { approval.free() }
 
         let sentPaths = urls.map(\.path)
+        let timeout = AdministratorMembership.currentUserIsAdministrator()
+            ? Self.moveTimeout
+            : Self.moveTimeout + Self.approvalTimeout
         return await withCheckedContinuation { (continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) in
             let box = ResumeOnce(continuation)
 
             // The helper may already have moved one or more paths before a timeout.
             // Preserve that uncertainty so callers do not report a false failure or
             // immediately retry an operation that may still be finishing.
-            DispatchQueue.global().asyncAfter(deadline: .now() + Self.moveTimeout) {
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
                 box.resume(returning: PrivilegedMoveResult(moved: [], failed: [], indeterminate: urls))
             }
 
