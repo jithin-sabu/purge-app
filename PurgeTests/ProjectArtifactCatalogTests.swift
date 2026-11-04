@@ -531,6 +531,17 @@ struct ArtifactCollectionTests {
             .filter { $0.kind == .pods }
         #expect(pods.map { $0.path.lastPathComponent } == ["Pods"])
         #expect(pods.first?.path.deletingLastPathComponent().lastPathComponent == "ios")
+        #expect(pods.first?.reinstallSafety == .reinstallable)
+    }
+
+    /// Clean Safe Items takes `ios/Pods` only when `pod install` can bring it
+    /// back exactly: `ios/Podfile.lock` must sit beside it.
+    @Test func iosPodsWithoutALockfileAreNotReinstallable() throws {
+        let fixture = try HomeScopedFixture(files: ["package.json", "ios/Podfile"], folders: ["ios/Pods"])
+        defer { fixture.cleanUp() }
+        let types = DevScanner.projectTypes(at: fixture.root, listing: nil)
+        let pods = DevScanner.collectArtifacts(projectRoot: fixture.root, types: types).filter { $0.kind == .pods }
+        #expect(pods.map(\.reinstallSafety) == [.missingLockfile])
     }
 }
 
