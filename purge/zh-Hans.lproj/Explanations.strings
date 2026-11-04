@@ -844,14 +844,6 @@
 "Orphaned Git Worktrees" = "孤立 Git 工作树";
 "Agent checkouts Git no longer tracks. Look inside first for uncommitted work." = "Git 已不再追踪的智能体检出目录。请先检查其中是否有未提交的工作。";
 
-/* obsolete-cursor-extension */
-"Obsolete Cursor Extension" = "旧版 Cursor 扩展";
-"An older version of a Cursor extension superseded by a newer install. Safe to delete." = "已被新安装版本替代的旧版 Cursor 扩展。可以安全删除。";
-
-/* obsolete-vscode-extension */
-"Obsolete VS Code Extension" = "旧版 VS Code 扩展";
-"An older version of a VS Code extension superseded by a newer install. Safe to delete." = "已被新安装版本替代的旧版 VS Code 扩展。可以安全删除。";
-
 /* orphaned-editor-workspace-storage */
 "Old Editor Workspace Data" = "旧编辑器工作区数据";
 "Saved state, including AI chats, for VS Code or Cursor projects whose folders no longer exist. If you moved or renamed a project, its chats are in here." = "VS Code 或 Cursor 中文件夹已不存在的项目所保存的状态，包括 AI 聊天记录。如果你只是移动或重命名了项目，其聊天记录在这里。";

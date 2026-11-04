@@ -52,7 +52,6 @@
     ],
     "aliases": [
       "ai.perplexity.CometUpdater",
-      "Comet",
       "CometUpdater"
     ],
     "kind": "updater"
@@ -2699,24 +2698,6 @@
     "aliases": [
       "orphaned-git-worktree"
     ],
-    "kind": "code"
-  },
-  {
-    "key": "obsolete-cursor-extension",
-    "display_name": "Obsolete Cursor Extension",
-    "tag": "safe",
-    "explanation": "An older version of a Cursor extension superseded by a newer install. Safe to delete.",
-    "bundle_ids": [],
-    "aliases": [],
-    "kind": "code"
-  },
-  {
-    "key": "obsolete-vscode-extension",
-    "display_name": "Obsolete VS Code Extension",
-    "tag": "safe",
-    "explanation": "An older version of a VS Code extension superseded by a newer install. Safe to delete.",
-    "bundle_ids": [],
-    "aliases": [],
     "kind": "code"
   },
   {

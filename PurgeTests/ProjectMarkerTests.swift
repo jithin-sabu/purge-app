@@ -55,6 +55,8 @@ struct ProjectMarkerTests {
         ("CMakeLists.txt", .cmake),
         ("project.godot", .godot),
         ("ProjectSettings/ProjectVersion.txt", .unity),
+        // React Native and Flutter keep CocoaPods in `ios/` (#183).
+        ("ios/Podfile", .xcode),
         ("App.csproj", .dotnet),
         ("Lib.fsproj", .dotnet),
         ("Old.vbproj", .dotnet),

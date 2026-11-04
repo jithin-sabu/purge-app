@@ -289,6 +289,32 @@ struct AllowlistExplanationDataTests {
     func dotNetNamesKeepTheirDot(key: String) {
         #expect(ExplanationDatabase.record(forKey: key)?.displayName.hasPrefix(".NET ") == true)
     }
+
+    /// "Comet" is the Comet browser's own folder name. As an alias of the
+    /// updater entry it gave the browser's caches the updater's name and tier (#183).
+    @Test
+    func cometBrowserIsNotTheUpdater() {
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "Comet") != "perplexity-updater")
+        #expect(ExplanationDatabase.definitionKey(forFolderName: "ai.perplexity.CometUpdater") == "perplexity-updater")
+    }
+
+    /// The rows picked the "newest" extension by folder name alone and never
+    /// resolved to a tier, so they were sized on every scan and never shown (#183).
+    @Test(arguments: ["obsolete-cursor-extension", "obsolete-vscode-extension"])
+    func obsoleteExtensionEntriesAreGone(key: String) {
+        #expect(ExplanationDatabase.record(forKey: key) == nil)
+    }
+
+    /// Go's build cache is `~/Library/Caches/go-build` on macOS. Dev Tools listed
+    /// only `~/.cache/go-build`, so the real one showed again under App Caches (#183).
+    @Test
+    func goBuildCacheIsOneDevToolsRow() {
+        let path = AuditPaths.url("Library/Caches/go-build").standardizedFileURL.path
+        #expect(DevScanner.claimedGlobalCachePaths().contains(path))
+        #expect(AuditPaths.evaluate("Library/Caches/go-build") == .allow)
+        let info = DevScanner.automaticSafetyInfo(forDevToolLabel: "Go Module Cache", primaryPath: nil)
+        #expect(info.level == .safe)
+    }
 }
 
 // MARK: - Part 4: bugs

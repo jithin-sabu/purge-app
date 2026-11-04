@@ -120,7 +120,6 @@ enum BrandIconMapping {
         "npm-npx-cache": "nodedotjs",
         "npm-logs": "nodedotjs",
         "corepack-cache": "nodedotjs",
-        "obsolete-cursor-extension": "cursor",
         "orphaned-editor-workspace-storage": "cursor",
         "cursor-agent-leftover": "cursor",
         "orphaned-git-worktree": "git",
@@ -134,7 +133,6 @@ enum BrandIconMapping {
     /// greyscale, found by the definition's bundle IDs first and then by this name.
     private static let definitionKeyToApplicationName: [String: String] = [
         "vscode": "Visual Studio Code",
-        "obsolete-vscode-extension": "Visual Studio Code",
         "microsoft-teams": "Microsoft Teams",
         "microsoft-word": "Microsoft Word",
         "microsoft-excel": "Microsoft Excel",

@@ -158,10 +158,6 @@ enum SafetyTierList {
             }
         }
 
-        if lower.contains("obsolete") && lower.contains("extension") {
-            return .safe
-        }
-
         if lower == "stale-browser-framework" {
             return .medium
         }
