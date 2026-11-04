@@ -83,8 +83,15 @@ it checks every request four ways:
   that is not the notarized Purge app signed by the same Apple developer team
   ([`PurgeHelper/HelperListenerDelegate.swift`](PurgeHelper/HelperListenerDelegate.swift)).
   The app runs the same check in reverse before it trusts the helper.
-- **Only administrators.** A standard account is refused, even through a
-  genuine copy of Purge.
+- **Only with an administrator.** An administrator's own request goes ahead.
+  A standard account's goes ahead only after an administrator types their name
+  and password into the macOS dialog the helper asks for, once per request, as
+  Finder does. The helper asks for its own authorization right, which needs an
+  administrator, is not shared with other apps, and expires at once. It writes
+  that rule itself, as root, before every check, so another program can't
+  define the right first with a rule that asks for nothing
+  (`removalRightDefinition` in
+  [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift)).
 - **Only known locations.** The helper checks every path itself instead of
   trusting the app. It accepts an app bundle in `/Applications` or
   `~/Applications` at any depth, never inside another bundle or package, or a
