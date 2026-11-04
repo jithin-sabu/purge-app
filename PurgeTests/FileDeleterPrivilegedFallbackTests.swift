@@ -339,7 +339,7 @@ struct FileDeleterPrivilegedFallbackTests {
         }
         #expect(reason == .needsAdministratorAccount)
         #expect(reason?.showsRetry == true)
-        #expect(reason?.retryTitle == String(localized: "Enter Administrator Password"))
+        #expect(reason?.retryTitle == String(localized: "Enter Password"))
     }
 
     /// The helper couldn't ask an administrator at all (#314). That is no reason the

@@ -127,14 +127,14 @@ nonisolated enum CleanFailureReason: String, Equatable, Error {
     }
 
     /// The retry button's label. The administrator cases say what the tap will do —
-    /// set up the helper, or show the password dialog (#314) — rather than the bare
+    /// set up the helper, or show the administrator dialog (#314) — rather than the bare
     /// "Retry" that fits the transient failures.
     var retryTitle: String {
         switch self {
         case .needsAdministrator:
             String(localized: "Set Up Secure Removal")
         case .needsAdministratorAccount:
-            String(localized: "Enter Administrator Password")
+            String(localized: "Enter Password")
         case .needsFullDiskAccess, .inUse, .systemProtected, .safetySkipped, .keptForOtherApp,
              .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
             String(localized: "Retry")
