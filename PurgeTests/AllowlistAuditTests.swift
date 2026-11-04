@@ -157,6 +157,37 @@ struct EditorWorkspaceStoragePolicyTests {
         let entry = try makeEntry(in: root, json: #"{"folder":"\#(inDocuments.absoluteString)"}"#)
         #expect(!EditorWorkspaceStoragePolicy.isOrphaned(entry: entry, access: .limited))
     }
+
+    /// Records every path it is asked about.
+    private final class SpyFileManager: FileManager, @unchecked Sendable {
+        private(set) var paths: [String] = []
+        override func fileExists(atPath path: String) -> Bool {
+            paths.append(path)
+            return super.fileExists(atPath: path)
+        }
+        override func fileExists(atPath path: String, isDirectory: UnsafeMutablePointer<ObjCBool>?) -> Bool {
+            paths.append(path)
+            return super.fileExists(atPath: path, isDirectory: isDirectory)
+        }
+        override func destinationOfSymbolicLink(atPath path: String) throws -> String {
+            paths.append(path)
+            return try super.destinationOfSymbolicLink(atPath: path)
+        }
+    }
+
+    /// Looking at a removable or network volume can ask for permission, so a
+    /// limited scan never looks under `/Volumes` (#183).
+    @Test
+    func aLimitedScanNeverLooksAtAVolume() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let entry = try makeEntry(in: root, json: #"{"folder":"file:///Volumes/Purge-Test-\#(UUID().uuidString)/app"}"#)
+        let spy = SpyFileManager()
+
+        #expect(!EditorWorkspaceStoragePolicy.isOrphaned(entry: entry, access: .limited, fileManager: spy))
+        #expect(!spy.paths.contains { $0.hasPrefix("/Volumes") })
+    }
 }
 
 // MARK: - Part 2: Check First rows that were too broad or never safe to offer

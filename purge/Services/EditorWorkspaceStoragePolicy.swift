@@ -58,6 +58,9 @@ nonisolated enum EditorWorkspaceStoragePolicy {
         guard let project = projectURL(forEntry: entry, fileManager: fileManager) else { return false }
         let projectPath = project.path
         if projectPath.hasPrefix("/Volumes/") {
+            // Looking at a removable or network volume can ask for permission to
+            // reach it, and a limited scan must not ask for anything (#183).
+            guard access == .full else { return false }
             let parts = projectPath.split(separator: "/")
             guard parts.count >= 2 else { return false }
             let volume = "/Volumes/\(parts[1])"
