@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import Purge
 
@@ -32,6 +33,22 @@ struct HelperReplyWireTests {
                     "/Users/example/Desktop/Elsewhere": PurgeHelperConstants.outsideAllowedLocationsCode
                 ],
                 HelperMoveRefusal.notAdministrator.rawValue
+            )
+        }
+
+        /// Accepts only an authorization the size of `AuthorizationExternalForm`, so
+        /// the test sees whether the bytes crossed whole (#314).
+        func moveToTrashWithAuthorization(
+            paths: [String],
+            authorization: Data,
+            withReply reply: @escaping ([String], [String], [String: Int], Int) -> Void
+        ) {
+            let whole = authorization.count == MemoryLayout<AuthorizationExternalForm>.size
+            reply(
+                whole ? paths : [],
+                [],
+                [:],
+                (whole ? HelperMoveRefusal.accepted : .approvalUnavailable).rawValue
             )
         }
 
@@ -109,5 +126,41 @@ struct HelperReplyWireTests {
             "/Users/example/Desktop/Elsewhere": -1
         ])
         #expect(reply.refusal.flatMap(HelperMoveRefusal.init(rawValue:)) == .notAdministrator)
+    }
+
+    /// The v8 call carries the app's authorization to the helper (#314).
+    @Test func anAuthorizationCrossesWhole() async throws {
+        let delegate = ListenerDelegate()
+        let listener = NSXPCListener.anonymous()
+        listener.delegate = delegate
+        listener.resume()
+        defer { listener.invalidate() }
+
+        let connection = NSXPCConnection(listenerEndpoint: listener.endpoint)
+        connection.remoteObjectInterface = NSXPCInterface(with: PurgeHelperProtocol.self)
+        connection.resume()
+        defer { connection.invalidate() }
+
+        let form = Data(repeating: 0x5A, count: MemoryLayout<AuthorizationExternalForm>.size)
+        let reply = await withCheckedContinuation { (continuation: CheckedContinuation<Reply, Never>) in
+            let once = Once(continuation)
+            let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+                once.resume(Reply(error: error.localizedDescription))
+            } as? PurgeHelperProtocol
+            guard let proxy else {
+                once.resume(Reply(error: "no proxy"))
+                return
+            }
+            proxy.moveToTrashWithAuthorization(
+                paths: ["/Applications/Locked.app"],
+                authorization: form
+            ) { moved, incomplete, codes, refusal in
+                once.resume(Reply(moved: moved, ownershipIncomplete: incomplete, failureCodes: codes, refusal: refusal))
+            }
+        }
+
+        #expect(reply.error == nil)
+        #expect(reply.moved == ["/Applications/Locked.app"])
+        #expect(reply.refusal.flatMap(HelperMoveRefusal.init(rawValue:)) == .accepted)
     }
 }

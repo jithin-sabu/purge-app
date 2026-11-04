@@ -895,7 +895,7 @@ nonisolated final class FileDeleter: Sendable {
         switch refusal {
         case .notAdministrator:
             return .needsAdministratorAccount
-        case .invalidTrash, .invalidPeer:
+        case .invalidTrash, .invalidPeer, .approvalUnavailable:
             return .unknown
         case .accepted:
             break

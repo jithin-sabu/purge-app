@@ -69,7 +69,7 @@ struct PrivilegedHelperPathPolicyTests {
 
     @Test("Helper behavior version is current")
     func helperVersionIsCurrent() {
-        #expect(PurgeHelperConstants.version == "7")
+        #expect(PurgeHelperConstants.version == "8")
     }
 
     /// These numbers cross XPC between an app and a helper that may come from
@@ -80,7 +80,27 @@ struct PrivilegedHelperPathPolicyTests {
         #expect(HelperMoveRefusal.notAdministrator.rawValue == 1)
         #expect(HelperMoveRefusal.invalidTrash.rawValue == 2)
         #expect(HelperMoveRefusal.invalidPeer.rawValue == 3)
+        #expect(HelperMoveRefusal.approvalUnavailable.rawValue == 4)
         #expect(PurgeHelperConstants.outsideAllowedLocationsCode == -1)
+    }
+
+    /// The right a standard account's move needs (#314). It must take an
+    /// administrator's name and password typed for this request: not a password
+    /// shared from elsewhere in the session, not one kept from an earlier request,
+    /// and never granted to a root caller without asking.
+    @Test("The removal right asks an administrator every time")
+    func removalRightAsksAnAdministratorEveryTime() {
+        let rule = PurgeHelperConstants.removalRightDefinition
+        #expect(rule["class"] as? String == "user")
+        #expect(rule["group"] as? String == "admin")
+        #expect(rule["authenticate-user"] as? Bool == true)
+        #expect(rule["shared"] as? Bool == false)
+        #expect(rule["timeout"] as? Int == 0)
+        #expect(rule["allow-root"] as? Bool == false)
+        #expect(rule["session-owner"] as? Bool == false)
+        #expect(rule["rule"] == nil)
+        #expect(rule["k-of-n"] == nil)
+        #expect(PurgeHelperConstants.removalRightName.hasPrefix(PurgeHelperConstants.machServiceName + "."))
     }
 
     private func isAllowedMove(_ path: String, ruleHolds: Bool) -> Bool {

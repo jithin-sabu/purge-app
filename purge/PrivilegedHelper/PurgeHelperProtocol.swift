@@ -23,7 +23,47 @@ enum PurgeHelperConstants {
     /// Data`, and only while they are older than the installed system (#127).
     /// v7 says why a move did not happen: a refusal for the whole request, and an
     /// errno for each path that stayed (#299).
-    static let version = "7"
+    /// v8 moves for a standard account once an administrator types their name and
+    /// password into the macOS dialog the helper asks for, checks every path again
+    /// after the dialog, and never moves or hands back a file with a second name
+    /// (#314).
+    static let version = "8"
+
+    /// The authorization right the helper asks for before it moves anything for a
+    /// standard account (#314). An administrator approves it in the macOS dialog.
+    static let removalRightName = "io.getpurge.helper.remove-admin-locked-app"
+
+    /// What `removalRightName` requires: an administrator's name and password, typed
+    /// for this request alone. `shared` false keeps a password typed elsewhere in the
+    /// session from counting, and a `timeout` of 0 makes every request ask again.
+    ///
+    /// Any process may add a right macOS doesn't know yet, so another process could
+    /// define this name first with a rule that asks for nothing. The helper therefore
+    /// writes this definition as root before every check, and changing a right that
+    /// exists takes an administrator or root.
+    ///
+    /// The prompt is not in the app's string catalog: the helper has no bundle, and
+    /// the authorization database takes its translations as a dictionary.
+    nonisolated static var removalRightDefinition: [String: Any] {
+        [
+            "class": "user",
+            "group": "admin",
+            "authenticate-user": true,
+            "shared": false,
+            "timeout": 0,
+            "allow-root": false,
+            "session-owner": false,
+            "tries": 10_000,
+            "comment": "Lets Purge move apps an administrator installed, and their files, to the Trash of a standard account.",
+            // A request can hold several apps, their leftovers in system folders, or
+            // a finished macOS update's files, so the prompt names no single app.
+            "default-prompt": [
+                "": "Purge wants to move apps or files an administrator installed to the Trash.",
+                "zh-Hans": "Purge 想要将管理员安装的应用或文件移到废纸篓。",
+                "zh_CN": "Purge 想要将管理员安装的应用或文件移到废纸篓。"
+            ]
+        ]
+    }
 
     /// The failure code for a path outside the places the helper may move from. Every
     /// other code in a reply's `failureCodes` is an errno, which is never negative.
@@ -146,12 +186,16 @@ enum PurgeHelperConstants {
 nonisolated enum HelperMoveRefusal: Int, Sendable {
     /// The helper took the request. Some paths may still have failed.
     case accepted = 0
-    /// The connecting account is not an administrator (#182).
+    /// The connecting account is not an administrator (#182), and no administrator
+    /// approved this request: the dialog was cancelled, or the request had none (#314).
     case notAdministrator = 1
     /// The account's `~/.Trash` is missing, a symlink, or not its own.
     case invalidTrash = 2
     /// No connection to read the caller from, or the caller is root or has no home.
     case invalidPeer = 3
+    /// The helper could not ask for an administrator's approval: it could not set up
+    /// its authorization right, or could not read the app's authorization (#314).
+    case approvalUnavailable = 4
 }
 
 /// The privileged operations the helper exposes over XPC. Deliberately tiny: the
@@ -187,6 +231,23 @@ nonisolated enum HelperMoveRefusal: Int, Sendable {
     /// that found a v7 helper calls this.
     func moveToTrashReportingFailures(
         paths: [String],
+        withReply reply: @escaping (
+            _ movedPaths: [String],
+            _ ownershipIncompletePaths: [String],
+            _ failureCodes: [String: Int],
+            _ refusal: Int
+        ) -> Void
+    )
+
+    /// Same move and reply as `moveToTrashReportingFailures`. When the connecting
+    /// account is not an administrator, the helper first asks for an administrator's
+    /// name and password, through `authorization`: the external form of an empty
+    /// `AuthorizationRef` the app made, which shows the dialog in the app's session.
+    /// An administrator's request never asks (#314). Only an app that found a v8
+    /// helper calls this.
+    func moveToTrashWithAuthorization(
+        paths: [String],
+        authorization: Data,
         withReply reply: @escaping (
             _ movedPaths: [String],
             _ ownershipIncompletePaths: [String],

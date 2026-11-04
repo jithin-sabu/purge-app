@@ -314,7 +314,9 @@ struct SettingsView: View {
             // between states. Turning it on registers the helper (which then waits on
             // approval in System Settings); turning it off unregisters it.
             settingsToggleRow(
-                title: String(localized: "Remove admin-locked apps without a password"),
+                title: Self.accountIsAdministrator
+                    ? String(localized: "Remove admin-locked apps without a password")
+                    : String(localized: "Remove admin-locked apps"),
                 info: helperCaption,
                 status: helperStatus,
                 isOn: helperEnabledBinding
@@ -617,13 +619,21 @@ struct SettingsView: View {
         .background(AppColors.surfaceBase)
     }
 
+    /// Read once: an account's admin membership doesn't change while Settings is
+    /// open, and the lookup reads the directory service.
+    private static let accountIsAdministrator = AdministratorMembership.currentUserIsAdministrator()
+
     private var helperCaption: String {
-        String(localized: """
+        let caption = String(localized: """
         Some apps are installed under an administrator and can't be moved to the Trash on their \
         own, and neither can the files a finished macOS update leaves behind. Purge asks you to \
         enable its secure removal helper only when something needs it. Items still go to the \
         Trash, and you can turn it off here at any time.
         """)
+        // A standard account is asked for an administrator's password on every
+        // removal, so the switch can't promise "without a password" (#314).
+        guard !Self.accountIsAdministrator else { return caption }
+        return caption + " " + String(localized: "Your account isn't an administrator, so Purge asks for an administrator's name and password each time.")
     }
 
     /// The switch reads on for both `.on` and `.awaitingApproval`: once the user asks

@@ -173,7 +173,7 @@ struct LockedUninstallRetryTests {
         #expect(rows.filter { $0.path == fixture.bundle.path }.count == 1)
     }
 
-    @Test func aStandardAccountIsToldOnlyAnAdministratorCanRemoveIt() async throws {
+    @Test func aStandardAccountThatCancelsTheDialogIsAskedForAPassword() async throws {
         let fixture = try makeFixture()
         defer { try? fm.removeItem(at: fixture.home) }
         let scans = FakeScans()
@@ -225,6 +225,44 @@ struct LockedUninstallRetryTests {
         #expect(row.route == .lockedUninstall)
         #expect(trash.movedPaths.isEmpty)
         #expect(fm.fileExists(atPath: fixture.leftover.path))
+    }
+
+    /// A standard account cancelled the administrator dialog. Retry asks the helper
+    /// again, which shows the dialog again, and never runs setup (#314). Once an
+    /// administrator approves, the whole app goes.
+    @Test func aStandardAccountsRetryAsksTheHelperAgain() async throws {
+        let fixture = try makeFixture()
+        defer { try? fm.removeItem(at: fixture.home) }
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let trash = Trash()
+        let helper = Helper()
+        helper.answer { url in
+            PrivilegedMoveResult(moved: [], failed: [url], indeterminate: [], refusal: .notAdministrator)
+        }
+        let helperSwitch = Switch()
+        helperSwitch.isOn = true
+        let store = makeStore(fixture, scans: scans, trash: trash, helper: helper, helperSwitch: helperSwitch)
+        let held = try await uninstall(store, fixture)
+        #expect(held.reason == .needsAdministratorAccount)
+        #expect(held.reason.showsRetry)
+        let session = try #require(store.manualDeletionSession)
+
+        helper.answer { url in
+            try? FileManager.default.removeItem(at: url)
+            return PrivilegedMoveResult(moved: [url], failed: [], indeterminate: [])
+        }
+        let callsBefore = helper.callCount
+        let moved = try await withTemporaryHandoffRoot {
+            await store.retryCleanFailure(held, session: session)
+        }
+
+        #expect(helper.callCount == callsBefore + 1)
+        #expect(helperSwitch.setupRequests == 0)
+        let movedBytes: Int64 = try #require(moved)
+        #expect(movedBytes == 4096 + 512)
+        #expect(!session.failedItems.contains { $0.id == held.id })
+        #expect(trash.movedPaths == [fixture.leftover.path])
     }
 
     /// Once the helper moves the bundle, the leftovers held with it go too and the

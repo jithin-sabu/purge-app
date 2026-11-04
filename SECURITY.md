@@ -76,15 +76,24 @@ Items.
 The helper does one thing: it moves an approved path into your Trash and hands
 ownership of it back to you. It never deletes anything. The code is
 in [`PurgeHelper/HelperService.swift`](PurgeHelper/HelperService.swift), and
-it checks every request four ways:
+it checks every request five ways:
 
 - **Only the real Purge app can connect.** macOS checks each connection
   through `NSXPCConnection.setCodeSigningRequirement` and refuses any caller
   that is not the notarized Purge app signed by the same Apple developer team
   ([`PurgeHelper/HelperListenerDelegate.swift`](PurgeHelper/HelperListenerDelegate.swift)).
   The app runs the same check in reverse before it trusts the helper.
-- **Only administrators.** A standard account is refused, even through a
-  genuine copy of Purge.
+- **Only with an administrator.** An administrator's own request goes ahead.
+  A standard account's goes ahead only after an administrator types their name
+  and password into the macOS dialog the helper asks for, once per request, as
+  Finder does. The helper asks for its own authorization right, which needs an
+  administrator, is not shared with other apps, and expires at once. It writes
+  that rule itself, as root, before every check, so another program can't
+  define the right first with a rule that asks for nothing
+  (`removalRightDefinition` in
+  [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift)).
+  The dialog can stay open for minutes, so the helper checks every path again
+  once it closes.
 - **Only known locations.** The helper checks every path itself instead of
   trusting the app. It accepts an app bundle in `/Applications` or
   `~/Applications` at any depth, never inside another bundle or package, or a
@@ -103,6 +112,11 @@ it checks every request four ways:
   a `.` or `..` part is refused, not resolved. Folders on the way are opened
   only to pass through, never to list, so the helper does not read your Trash
   ([`purge/PrivilegedHelper/HelperSupport.swift`](purge/PrivilegedHelper/HelperSupport.swift)).
+- **No hard-link tricks.** Any account can give a root-owned file, such as a
+  LaunchDaemon's plist, a second name in a folder it owns. The helper never
+  moves a file that has a second name, never changes the owner of one inside a
+  folder it moves, and only moves an app that is a folder (`HelperLinkPolicy` in
+  the same file).
 
 The helper also runs only while it is needed. It quits after 30 idle seconds,
 and macOS starts it again for the next request, so an update never leaves an
