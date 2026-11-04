@@ -331,14 +331,24 @@ struct FileDeleterPrivilegedFallbackTests {
         return report.failedItems.first?.reason
     }
 
-    /// A standard account is refused by the helper (#182). The row says only an
-    /// administrator can remove it, and offers no Retry that could never work.
-    @Test func aStandardAccountIsToldOnlyAnAdministratorCanRemoveIt() async throws {
+    /// No administrator approved a standard account's request (#182, #314). The row
+    /// says it takes an administrator's password, and its Retry shows the dialog again.
+    @Test func aStandardAccountWithoutApprovalIsAskedForAPassword() async throws {
         let reason = try await reasonAfterHelper("Refused") { url in
             PrivilegedMoveResult(moved: [], failed: [url], indeterminate: [], refusal: .notAdministrator)
         }
         #expect(reason == .needsAdministratorAccount)
-        #expect(reason?.showsRetry == false)
+        #expect(reason?.showsRetry == true)
+        #expect(reason?.retryTitle == String(localized: "Enter Administrator Password"))
+    }
+
+    /// The helper couldn't ask an administrator at all (#314). That is no reason the
+    /// user can act on, so the row reads as unknown and Retry tries again.
+    @Test func aHelperThatCannotAskReadsAsUnknown() async throws {
+        let reason = try await reasonAfterHelper("NoApproval") { url in
+            PrivilegedMoveResult(moved: [], failed: [url], indeterminate: [], refusal: .approvalUnavailable)
+        }
+        #expect(reason == .unknown)
     }
 
     @Test func aBundleInUseSaysSo() async throws {

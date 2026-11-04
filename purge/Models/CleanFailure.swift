@@ -40,8 +40,9 @@ nonisolated enum FileProtection {
 nonisolated enum CleanFailureReason: String, Equatable, Error {
     case needsFullDiskAccess
     case needsAdministrator
-    /// The helper is on, but the account using Purge is not an administrator, and
-    /// the helper only moves things for one (#182, #299).
+    /// The helper is on, the account using Purge is not an administrator, and no
+    /// administrator approved the move: the password dialog was cancelled (#182,
+    /// #299, #314).
     case needsAdministratorAccount
     case inUse
     case systemProtected
@@ -62,7 +63,7 @@ nonisolated enum CleanFailureReason: String, Equatable, Error {
         case .needsAdministrator:
             String(localized: "This app was installed by an administrator, so macOS won't let it be moved on its own. Set up secure removal once and Purge can finish it.")
         case .needsAdministratorAccount:
-            String(localized: "Only an administrator account can remove this. Remove it in Finder with an administrator's name and password.")
+            String(localized: "An administrator installed this, so removing it takes an administrator's name and password.")
         case .inUse:
             String(localized: "An app is still using this. Quit it and clean again.")
         case .systemProtected:
@@ -117,19 +118,27 @@ nonisolated enum CleanFailureReason: String, Equatable, Error {
     /// the Xcode license takes a minute; a restart or a reinstall does not fit.
     var showsRetry: Bool {
         switch self {
-        case .inUse, .unknown, .needsAdministrator, .xcodeLicenseNotAccepted:
+        case .inUse, .unknown, .needsAdministrator, .needsAdministratorAccount, .xcodeLicenseNotAccepted:
             true
-        case .needsFullDiskAccess, .needsAdministratorAccount, .systemProtected, .safetySkipped,
-             .keptForOtherApp, .simulatorServiceNeedsRestart, .simulatorToolsMissing:
+        case .needsFullDiskAccess, .systemProtected, .safetySkipped, .keptForOtherApp,
+             .simulatorServiceNeedsRestart, .simulatorToolsMissing:
             false
         }
     }
 
-    /// The retry button's label. The administrator case says what the tap will do —
-    /// summon the password prompt — rather than the bare "Retry" that fits the
-    /// transient failures.
+    /// The retry button's label. The administrator cases say what the tap will do —
+    /// set up the helper, or show the password dialog (#314) — rather than the bare
+    /// "Retry" that fits the transient failures.
     var retryTitle: String {
-        self == .needsAdministrator ? String(localized: "Set Up Secure Removal") : String(localized: "Retry")
+        switch self {
+        case .needsAdministrator:
+            String(localized: "Set Up Secure Removal")
+        case .needsAdministratorAccount:
+            String(localized: "Enter Administrator Password")
+        case .needsFullDiskAccess, .inUse, .systemProtected, .safetySkipped, .keptForOtherApp,
+             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
+            String(localized: "Retry")
+        }
     }
 
     /// Returns `nil` for file-not-found / already-gone errors that should be dropped silently.

@@ -491,6 +491,8 @@
 "Remove 1 Time Machine snapshot?" = "移除 1 个时间机器快照？";
 "Remove Snapshots" = "移除快照";
 "Remove admin-locked apps without a password" = "移除管理员锁定的应用，无需重复输入密码";
+"Remove admin-locked apps" = "移除管理员锁定的应用";
+"Your account isn't an administrator, so Purge asks for an administrator's name and password each time." = "你的账户不是管理员，因此 Purge 每次都会要求输入管理员的名称和密码。";
 "Remove from exclusions. %@ is scanned again next time." = "从排除列表移除。下次扫描将再次检查 %@。";
 "Remove in Finder instead" = "改用访达删除";
 "Remove leftovers from removed apps?" = "移除已删除应用的残留文件？";
@@ -629,7 +631,8 @@
 "This %@ folder belongs to an app that is no longer installed. It is app data, not a rebuildable cache, so it will not come back on its own. Remove it only if you are sure you will not reinstall this app." = "此%@文件夹属于已卸载的应用。它包含应用数据，而非可重建的缓存，不会自动恢复。请仅在确定不会重新安装此应用时移除。";
 "This %@ folder is named after %@, but was matched by name rather than identifier. Check it belongs to this app before removing." = "此%@文件夹以 %@ 命名，但按名称而非应用标识符匹配。移除前请检查是否属于此应用。";
 "This app was installed by an administrator, so macOS won't let it be moved on its own. Set up secure removal once and Purge can finish it." = "此应用由管理员安装，macOS 不允许直接移动它。完成一次安全移除设置后，Purge 即可继续处理。";
-"Only an administrator account can remove this. Remove it in Finder with an administrator's name and password." = "只有管理员账户才能移除此项。请在访达中输入管理员的名称和密码来移除它。";
+"An administrator installed this, so removing it takes an administrator's name and password." = "此项由管理员安装，移除它需要输入管理员的名称和密码。";
+"Enter Administrator Password" = "输入管理员密码";
 "This file was skipped for safety" = "出于安全考虑，已跳过此文件";
 "This folder may involve synced or user-facing app data. Deleting it can be safe, but it may cause inconvenience." = "此文件夹可能包含同步数据或应用中可见的数据。删除可能是安全的，但也可能影响使用。";
 "This is a known cache folder that apps or developer tools recreate automatically." = "这是已知的缓存文件夹，应用或开发工具会自动重新生成。";
