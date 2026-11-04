@@ -126,3 +126,91 @@ nonisolated final class HelperIdleTracker: @unchecked Sendable {
         }
     }
 }
+
+/// Whether an account is in the local `admin` group. Both the app and the helper
+/// compile this file, so Settings and the root helper always agree on who is an
+/// administrator (#314).
+nonisolated enum AdministratorMembership {
+    /// True only when `userName`, whose primary group is `primaryGID`, is a member of
+    /// the local `admin` group. Any lookup that fails says no.
+    static func includes(userName: String, primaryGID: gid_t) -> Bool {
+        guard let adminGID = adminGroupID() else { return false }
+        var capacity: Int32 = 32
+        // A short buffer makes `getgrouplist` return -1, so it grows and asks
+        // again. A list that never fits says no.
+        while capacity <= 4_096 {
+            var groups = [Int32](repeating: 0, count: Int(capacity))
+            var count = capacity
+            let status = userName.withCString {
+                getgrouplist($0, Int32(bitPattern: primaryGID), &groups, &count)
+            }
+            if status == 0 {
+                return groups.prefix(Int(count)).contains(Int32(bitPattern: adminGID))
+            }
+            capacity = max(capacity * 2, count)
+        }
+        return false
+    }
+
+    /// Whether the account running this process is an administrator. Settings reads
+    /// it to say whether removing an admin-locked app will ask for a password.
+    static func currentUserIsAdministrator() -> Bool {
+        guard let account = UserRecord.lookUp(uid: getuid()) else { return false }
+        return includes(userName: account.name, primaryGID: account.primaryGID)
+    }
+
+    /// The gid of the local `admin` group, read from its directory record. The
+    /// record lists the group's members, so a big group needs a bigger buffer:
+    /// `ERANGE` grows it and asks again, up to 1 MB.
+    private static func adminGroupID() -> gid_t? {
+        let suggestedSize = sysconf(_SC_GETGR_R_SIZE_MAX)
+        var bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
+        while bufferSize <= 1_048_576 {
+            var record = group()
+            var result: UnsafeMutablePointer<group>?
+            var buffer = [CChar](repeating: 0, count: bufferSize)
+            let status = buffer.withUnsafeMutableBufferPointer { storage -> Int32 in
+                guard let baseAddress = storage.baseAddress else { return -1 }
+                return getgrnam_r("admin", &record, baseAddress, storage.count, &result)
+            }
+            if status == ERANGE {
+                bufferSize *= 2
+                continue
+            }
+            guard status == 0, result != nil else { return nil }
+            return record.gr_gid
+        }
+        return nil
+    }
+}
+
+/// An account's directory record, read once per request.
+nonisolated struct UserRecord {
+    let name: String
+    let primaryGID: gid_t
+    let home: URL
+
+    /// Looks up the account without consulting this process's environment, which
+    /// belongs to root in the helper. The strings are copied while the re-entrant
+    /// lookup buffer is alive.
+    static func lookUp(uid: uid_t) -> UserRecord? {
+        let suggestedSize = sysconf(_SC_GETPW_R_SIZE_MAX)
+        let bufferSize = suggestedSize > 0 ? Int(suggestedSize) : 16_384
+        var record = passwd()
+        var result: UnsafeMutablePointer<passwd>?
+        var buffer = [CChar](repeating: 0, count: bufferSize)
+
+        return buffer.withUnsafeMutableBufferPointer { storage in
+            guard let baseAddress = storage.baseAddress else { return nil }
+            let status = getpwuid_r(uid, &record, baseAddress, storage.count, &result)
+            guard status == 0, result != nil,
+                  let namePointer = record.pw_name,
+                  let directory = record.pw_dir else { return nil }
+            return UserRecord(
+                name: String(cString: namePointer),
+                primaryGID: record.pw_gid,
+                home: URL(fileURLWithPath: String(cString: directory), isDirectory: true).standardizedFileURL
+            )
+        }
+    }
+}

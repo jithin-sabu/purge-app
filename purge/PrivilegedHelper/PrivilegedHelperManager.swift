@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import Security
 import ServiceManagement
 
 /// The app's side of the privileged helper: registers the root daemon through
@@ -120,6 +121,12 @@ final class PrivilegedHelperManager: ObservableObject {
         let connection = vettedConnection()
         defer { connection.invalidate() }
 
+        // For a standard account the helper asks an administrator to approve the move,
+        // in a dialog shown through this authorization (#314). An administrator is
+        // never asked. It stays alive until the helper has answered.
+        let approval = AdministratorApproval()
+        defer { approval.free() }
+
         let sentPaths = urls.map(\.path)
         return await withCheckedContinuation { (continuation: CheckedContinuation<PrivilegedMoveResult?, Never>) in
             let box = ResumeOnce(continuation)
@@ -145,10 +152,11 @@ final class PrivilegedHelperManager: ObservableObject {
                 return
             }
 
-            // `reconcileVersion` above made sure the helper speaks v7, which says why
-            // a path stayed (#299).
-            proxy.moveToTrashReportingFailures(
-                paths: sentPaths
+            // `reconcileVersion` above made sure the helper speaks v8, which says why
+            // a path stayed (#299) and asks an administrator for a standard account (#314).
+            proxy.moveToTrashWithAuthorization(
+                paths: sentPaths,
+                authorization: approval.externalForm
             ) { movedPaths, ownershipIncompletePaths, failureCodes, refusal in
                 let movedSet = Set(movedPaths)
                 let incompleteSet = Set(ownershipIncompletePaths)
@@ -313,5 +321,36 @@ enum HelperReconciler {
             expectedVersion
         )
         return afterReload == nil ? .unresponsive : .staleVersion
+    }
+}
+
+/// An empty `AuthorizationRef` the helper uses to show the administrator dialog in
+/// this app's session (#314). It holds no rights until the helper asks for one, and
+/// its rights are destroyed once the move is done, so an approval covers one request.
+private final class AdministratorApproval {
+    private var authorization: AuthorizationRef?
+
+    /// The form the helper reads back. Empty when no authorization could be made: the
+    /// helper then refuses a standard account and still serves an administrator.
+    let externalForm: Data
+
+    init() {
+        var created: AuthorizationRef?
+        var form = AuthorizationExternalForm()
+        if AuthorizationCreate(nil, nil, [], &created) == errAuthorizationSuccess,
+           let created,
+           AuthorizationMakeExternalForm(created, &form) == errAuthorizationSuccess {
+            authorization = created
+            externalForm = withUnsafeBytes(of: &form) { Data($0) }
+        } else {
+            if let created { AuthorizationFree(created, []) }
+            externalForm = Data()
+        }
+    }
+
+    func free() {
+        guard let authorization else { return }
+        AuthorizationFree(authorization, [.destroyRights])
+        self.authorization = nil
     }
 }
