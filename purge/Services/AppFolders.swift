@@ -54,12 +54,22 @@ nonisolated enum AppFolders {
     ///   an `Applications` link of its own;
     /// - another Mac's system or data volume, or a Time Machine drive;
     /// - an `Applications` that is a link.
+    ///
+    /// On the real `/Volumes` the drives come from the mount table, read without
+    /// waiting on any file system, so a network share that stopped answering
+    /// is never asked anything: a `stat` there can hang until it times out.
     static func driveRoots(
         volumes: URL = AppFolders.volumes,
         isLocalDisk: (URL) -> Bool = { AppFolders.isOnLocalDisk($0) }
     ) -> [URL] {
         let fm = FileManager.default
-        guard let names = try? fm.contentsOfDirectory(atPath: volumes.path) else { return [] }
+        let names: [String]
+        if volumes.standardizedFileURL.path == "/Volumes" {
+            names = localWritableMountNames()
+        } else {
+            guard let listed = try? fm.contentsOfDirectory(atPath: volumes.path) else { return [] }
+            names = listed
+        }
         return names.sorted().compactMap { name -> URL? in
             guard !name.hasPrefix(".") else { return nil }
             let volume = volumes.appendingPathComponent(name, isDirectory: true)
@@ -236,6 +246,30 @@ nonisolated enum AppFolders {
             $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0) }
         }
         return localFileSystems.contains(type)
+    }
+
+    /// The names under `/Volumes` of the mounts that are local, of a file
+    /// system macOS trashes on, and writable. `MNT_NOWAIT` returns what the
+    /// kernel already holds, without asking any file system.
+    private static func localWritableMountNames() -> [String] {
+        var mounts: UnsafeMutablePointer<statfs>?
+        let count = getmntinfo(&mounts, MNT_NOWAIT)
+        guard count > 0, let mounts else { return [] }
+        var names: [String] = []
+        for index in 0..<Int(count) {
+            var info = mounts[index]
+            guard info.f_flags & UInt32(MNT_LOCAL) != 0, info.f_flags & UInt32(MNT_RDONLY) == 0 else { continue }
+            let type = withUnsafePointer(to: &info.f_fstypename) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0) }
+            }
+            let path = withUnsafePointer(to: &info.f_mntonname) {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+            }
+            guard localFileSystems.contains(type),
+                  (path as NSString).deletingLastPathComponent == "/Volumes" else { continue }
+            names.append((path as NSString).lastPathComponent)
+        }
+        return names
     }
 
     static func isReadOnly(_ url: URL) -> Bool {
