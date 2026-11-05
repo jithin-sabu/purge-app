@@ -174,18 +174,10 @@ enum LargeFileScanPolicy {
     /// folder holding one of them is not a folder someone moved.
     private nonisolated static let wholeDiskMarkers = ["System", "Users", "Library", "Backups.backupdb"]
 
-    /// File systems macOS trashes on by itself, on a disk attached to this Mac.
-    /// A network share or a cloud drive mounted as a disk (rclone, macFUSE)
-    /// can pass a move to its Trash on as a delete on every device.
-    private nonisolated static let localFileSystems: Set<String> = ["apfs", "hfs", "exfat", "msdos"]
-
+    /// A disk attached to this Mac, with a file system macOS trashes on by
+    /// itself. The uninstaller's drive folders use the same rule (#99).
     nonisolated static func isOnLocalDisk(_ url: URL) -> Bool {
-        var info = statfs()
-        guard statfs(url.path, &info) == 0, info.f_flags & UInt32(MNT_LOCAL) != 0 else { return false }
-        let type = withUnsafePointer(to: &info.f_fstypename) {
-            $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0) }
-        }
-        return localFileSystems.contains(type)
+        AppFolders.isOnLocalDisk(url)
     }
 
     /// The folder and every folder above it, by file identity.

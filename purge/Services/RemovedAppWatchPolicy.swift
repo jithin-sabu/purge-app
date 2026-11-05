@@ -351,13 +351,9 @@ nonisolated enum RemovedAppWatchPolicy {
         return !name.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
     }
 
-    /// `/Applications` and `~/Applications`, the same roots the uninstaller
-    /// enumerates. Duplicated here so the agent binary does not need that policy.
+    /// The folders the uninstaller lists apps from (`AppFolders`), which the
+    /// agent binary compiles too.
     static func installedAppRoots() -> [URL] {
-        [
-            URL(fileURLWithPath: "/Applications", isDirectory: true),
-            FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Applications", isDirectory: true)
-        ]
+        AppFolders.roots()
     }
 }

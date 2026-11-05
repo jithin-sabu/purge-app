@@ -9,16 +9,14 @@ enum AppUninstallScanPolicy {
 
     // MARK: App roots
 
-    /// Folders the picker enumerates. `/System/Applications` and
-    /// `/System/Library` are deliberately absent, so Apple's built-in apps are
-    /// never listed, never matched, and never deletable.
+    /// Folders the picker enumerates (`AppFolders`): the two Applications
+    /// folders, each attached drive's, and the ones the user added (#99).
+    /// `/System/Applications` and `/System/Library` are deliberately absent, so
+    /// Apple's built-in apps are never listed, never matched, and never deletable.
     nonisolated static func installedAppRoots(
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> [URL] {
-        [
-            URL(fileURLWithPath: "/Applications", isDirectory: true),
-            home.appendingPathComponent("Applications", isDirectory: true)
-        ]
+        AppFolders.roots(home: home)
     }
 
     /// True for a bundle that must never be offered for uninstall: anything under

@@ -214,7 +214,7 @@ final class BrandIconService {
         if let cached = installedAppIconCache[cacheKey] {
             return cached
         }
-        let roots = ["/Applications", "/System/Applications", NSHomeDirectory() + "/Applications"]
+        let roots = ["/System/Applications"] + AppFolders.roots().map(\.path)
         let image = roots
             .map { ($0 as NSString).appendingPathComponent("\(appName).app") }
             .first { FileManager.default.fileExists(atPath: $0) }
