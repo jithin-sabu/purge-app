@@ -36,6 +36,16 @@ struct ExcludedPathsTotalTests {
         #expect(total == ExcludedPathsTotal(bytes: 5, isComplete: true, hasUnmeasured: true))
     }
 
+    /// Excluded simulator runtimes add the size `simctl` gave when they were
+    /// excluded; with no folders listed that is the whole total (#178).
+    @Test
+    func runtimeBytesAddToTheFolders() {
+        let total = ExcludedPathsTotal.compute(paths: ["/a"], sizes: ["/a": .measured(5)], knownBytes: 9_000)
+        #expect(total == ExcludedPathsTotal(bytes: 9_005, isComplete: true, hasUnmeasured: false))
+        let runtimesOnly = ExcludedPathsTotal.compute(paths: [], sizes: [:], knownBytes: 9_000)
+        #expect(runtimesOnly == ExcludedPathsTotal(bytes: 9_000, isComplete: true, hasUnmeasured: false))
+    }
+
     /// While a row is still loading, the total must not look final.
     @Test
     func loadingPathKeepsTheTotalIncomplete() {

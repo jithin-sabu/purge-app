@@ -10,6 +10,7 @@ struct SimulatorRuntimeStoreTests {
     private func runtime(
         id: String = "7AE1D6B6-5524-4FAD-B793-1D1C911E5269",
         version: String = "26.3.1",
+        build: String = "23D8133",
         deviceCount: Int = 0,
         sizeBytes: Int64 = 8_393_503_393,
         level: SafetyLevel? = nil
@@ -32,7 +33,7 @@ struct SimulatorRuntimeStoreTests {
             runtimeIdentifier: "com.apple.CoreSimulator.SimRuntime.iOS-26-3",
             platformName: "iOS",
             version: version,
-            build: "23D8133",
+            build: build,
             kind: "Patchable Cryptex Disk Image",
             state: "Ready",
             sizeBytes: sizeBytes,
@@ -124,11 +125,14 @@ struct SimulatorRuntimeStoreTests {
         #expect(store.manualSafeCleanupCandidates().isEmpty)
     }
 
+    /// The exclusion is kept by identifier, not by the path the row showed, which
+    /// changes when macOS mounts the image (#178). Its own id and build, so the
+    /// other tests here never see it.
     @Test func excludingARuntimeDropsItsRow() async {
         let scans = FakeScans()
         defer { scans.cleanUp() }
-        let row = runtime()
-        defer { ExcludedPathsStore.remove(path: row.locationURL) }
+        let row = runtime(id: "178D0001-0000-4000-8000-000000000001", build: "178STORE1")
+        defer { ExcludedSimulatorRuntimesStore.remove(imageID: row.id) }
         scans.developerEvents = [.simulatorRuntimeFound(row)]
         let store = scans.makeStore()
         await store.scanDeveloper()
@@ -138,6 +142,33 @@ struct SimulatorRuntimeStoreTests {
 
         #expect(store.simulatorRuntimes.isEmpty)
         #expect(store.selectedCount == 0)
+        #expect(store.excludedSimulatorRuntimes.map(\.imageID).contains(row.id))
+        #expect(!ExcludedPathsStore.contains(path: row.locationURL))
+    }
+
+    /// Excluded after the sheet opened: the clean checks again and leaves it.
+    @Test func aRuntimeExcludedBeforeTheCleanRunsIsLeftAlone() async {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let row = runtime(id: "178D0002-0000-4000-8000-000000000002", build: "178STORE2")
+        defer { ExcludedSimulatorRuntimesStore.remove(imageID: row.id) }
+        scans.developerEvents = [.simulatorRuntimeFound(row)]
+        let attempts = Attempts()
+        let deleter = FileDeleter(simulatorRuntimeRemover: { _ in
+            _ = attempts.next()
+            return .removed(freed: .unknown, download: .notKept, isLegacyImage: false)
+        })
+        let store = scans.makeStore(fileDeleter: deleter)
+        await store.scanDeveloper()
+        store.setSimulatorRuntimeSelected(id: row.id, isSelected: true)
+        store.presentDeletionSheet(candidates: store.deletionCandidates)
+
+        ExcludedSimulatorRuntimesStore.write(row)
+        store.userConfirmedDeletionFromPrimarySheet()
+        try? await Task.sleep(for: .milliseconds(200))
+
+        #expect(!store.isDeleting)
+        #expect(attempts.next() == 1)
     }
 
     /// When Apple keeps a runtime's download, the completion screen says so, and

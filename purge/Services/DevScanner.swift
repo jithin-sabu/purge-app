@@ -292,7 +292,7 @@ nonisolated final class DevScanner {
             now: now
         )
         .filter { $0.safetyInfo.level.canSurfaceInScanResults }
-        .filter { !ExcludedPathsStore.isExcluded($0.locationURL) }
+        .filter { !ExcludedSimulatorRuntimesStore.isExcluded($0) }
     }
 
     // MARK: - iOS Simulators

@@ -1013,6 +1013,8 @@
 "Purge didn't measure this part of the disk, so it can't say what is in it." = "Purge 没有统计磁盘的这一部分，所以无法说明其中有什么。";
 "1 folder" = "1 个文件夹";
 "%lld folders" = "%lld 个文件夹";
+"1 runtime" = "1 个运行时";
+"%lld runtimes" = "%lld 个运行时";
 "Loose files · %@" = "零散文件 · %@";
 "1 smaller folder" = "1 个较小的文件夹";
 "%lld smaller folders" = "%lld 个较小的文件夹";

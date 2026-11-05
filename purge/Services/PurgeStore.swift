@@ -455,6 +455,10 @@ final class PurgeStore: ObservableObject {
     /// Paths the user excluded from scans. Purely subtractive: the scanner drops these
     /// after the allowlist gate, so nothing new ever becomes scannable or cleanable.
     @Published private(set) var excludedPaths: Set<String> = ExcludedPathsStore.allExcludedPaths()
+    /// Simulator runtimes the user excluded, kept by identifier because a runtime's
+    /// path changes when macOS mounts it (#178).
+    @Published private(set) var excludedSimulatorRuntimes: [ExcludedSimulatorRuntimeEntry] =
+        ExcludedSimulatorRuntimesStore.allEntries()
     /// Bumped whenever `excludedPaths` changes, so a Large Files scan already under way
     /// can tell that the list it started with is out of date.
     private var exclusionRevision = 0
@@ -1263,8 +1267,12 @@ final class PurgeStore: ObservableObject {
         // Same rule as safe cleanup: a row from a full scan whose access has since
         // been turned off stays where it is. Moving it would prompt.
         let access = currentScanAccess()
+        let excludedRuntimePaths = Set(simulatorRuntimes
+            .filter { ExcludedSimulatorRuntimesStore.isExcluded(imageID: $0.id, build: $0.build) }
+            .map { $0.locationURL.standardizedFileURL.path })
         let candidates = staged.filter {
             ProtectedLocations.isReadable($0.path, access: access) && !ExcludedPathsStore.isExcluded($0.path)
+                && !excludedRuntimePaths.contains($0.path.standardizedFileURL.path)
         }
         let urls = candidates.map(\.path).map(\.standardizedFileURL)
         guard !urls.isEmpty else { return }
@@ -5538,6 +5546,7 @@ final class PurgeStore: ObservableObject {
 
     func refreshExcludedPaths() {
         excludedPaths = ExcludedPathsStore.allExcludedPaths()
+        excludedSimulatorRuntimes = ExcludedSimulatorRuntimesStore.allEntries()
         exclusionRevision &+= 1
     }
 
@@ -5619,11 +5628,12 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Saved by image identifier and build, not path: the path changes when macOS
+    /// mounts or unmounts the image, which brought the runtime back (#178).
     func excludeFromScans(_ runtime: SimulatorRuntime) {
-        writeExclusion(
-            path: runtime.locationURL,
-            displayName: runtime.safetyInfo.headline
-        )
+        if !ExcludedSimulatorRuntimesStore.write(runtime) {
+            errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
+        }
         refreshExcludedPaths()
 
         let runtimeID = runtime.id
@@ -5670,6 +5680,15 @@ final class PurgeStore: ObservableObject {
     /// passes the normal allowlist gate.
     func removeExclusion(path: URL) {
         if !ExcludedPathsStore.remove(path: path) {
+            errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
+        }
+        refreshExcludedPaths()
+    }
+
+    /// Drop a runtime exclusion. The runtime reappears on the next scan if `simctl`
+    /// still lists it as deletable.
+    func removeSimulatorRuntimeExclusion(imageID: String) {
+        if !ExcludedSimulatorRuntimesStore.remove(imageID: imageID) {
             errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
         }
         refreshExcludedPaths()
