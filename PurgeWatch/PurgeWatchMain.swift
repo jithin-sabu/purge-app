@@ -26,6 +26,8 @@ enum PurgeWatchMain {
     private static var replacedChecks = 0
     /// Nil while dormant.
     private static var watcher: ApplicationsFolderWatcher?
+    /// The folders `watcher` was started on.
+    private static var watchedRoots: [String] = []
 
     static func main() {
         raiseOpenFileLimit()
@@ -38,11 +40,14 @@ enum PurgeWatchMain {
         }
         startWatching()
         watchOwnExecutable()
+        listenForAppFolderChanges()
         RunLoop.main.run()
     }
 
     private static func startWatching() {
-        let watcher = ApplicationsFolderWatcher(tracksDestinations: true)
+        let roots = RemovedAppWatchPolicy.installedAppRoots()
+        watchedRoots = roots.map(\.path)
+        let watcher = ApplicationsFolderWatcher(roots: roots, tracksDestinations: true)
         watcher.onDeparture = { departure in
             handle(departure)
         }
@@ -89,6 +94,42 @@ enum PurgeWatchMain {
             withApplicationAt: appURL,
             configuration: configuration
         )
+    }
+
+    // MARK: App folders
+
+    /// A drive brings its `Applications` folder with it, and the user can add
+    /// folders in Settings (#99). The watcher is started again on the new list,
+    /// so an ejected drive drops out instead of reading as every app removed.
+    private static func listenForAppFolderChanges() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
+            workspace.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { appFoldersMayHaveChanged() }
+            }
+        }
+        DistributedNotificationCenter.default().addObserver(
+            forName: RemovedAppHandoff.appFoldersChangedNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { appFoldersMayHaveChanged() }
+        }
+    }
+
+    private static func appFoldersMayHaveChanged() {
+        // Dormant: its Purge is gone, and it watches nothing.
+        guard let current = watcher else { return }
+        guard RemovedAppWatchPolicy.installedAppRoots().map(\.path) != watchedRoots else { return }
+        // A removal being followed is reported within a minute; let it finish.
+        guard !current.isFollowing else {
+            Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { _ in
+                MainActor.assumeIsolated { appFoldersMayHaveChanged() }
+            }
+            return
+        }
+        current.stop()
+        startWatching()
     }
 
     // MARK: Staying current

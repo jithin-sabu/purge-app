@@ -53,6 +53,10 @@ nonisolated enum RemovedAppHandoff {
     /// as allowed while nothing runs: it crashed, launchd gave up restarting it,
     /// or the user switched it off in System Settings. Only an answer proves it.
     static let agentPingNotification = Notification.Name("io.getpurge.watch.ping")
+    /// Posted by Purge when the user adds or removes an app folder (#99), so the
+    /// watcher starts again on the new list.
+    static let appFoldersChangedNotification = Notification.Name("io.getpurge.watch.appFoldersChanged")
+
     /// The watcher's answer, sent only while it is watching. The object is the
     /// path of the agent executable that answered.
     static let agentPongNotification = Notification.Name("io.getpurge.watch.pong")
