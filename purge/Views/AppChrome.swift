@@ -1650,7 +1650,8 @@ private extension CleanFailureReason {
         switch self {
         case .safetySkipped, .keptForOtherApp:
             .warning
-        case .needsFullDiskAccess, .needsAdministrator, .needsAdministratorAccount, .systemProtected:
+        case .needsFullDiskAccess, .needsAdministrator, .needsAdministratorAccount, .systemProtected,
+             .moveOnDriveInFinder:
             .neutral
         case .inUse, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
             .danger
@@ -1685,7 +1686,8 @@ private extension CleanFailureReason {
         case .keptForOtherApp: String(localized: "Kept")
         case .systemProtected: String(localized: "Protected")
         case .needsFullDiskAccess, .needsAdministrator, .needsAdministratorAccount, .inUse,
-             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
+             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing,
+             .moveOnDriveInFinder, .unknown:
             nil
         }
     }

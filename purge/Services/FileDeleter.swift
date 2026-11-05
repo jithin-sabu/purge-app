@@ -739,18 +739,21 @@ nonisolated final class FileDeleter: Sendable {
         // it is a real `.app` in an app root. The helper also accepts a leftover
         // root's direct children (`~/Library/Containers/<id>`), so this never rests
         // on every caller keeping leftovers out of `privilegedBundlePaths`.
-        func isChosenBundle(_ path: String) -> Bool {
+        // Only a bundle on the home volume counts, unless `onAnyVolume`: the
+        // helper can't move one anywhere else (#99).
+        func isChosenBundle(_ path: String, onAnyVolume: Bool = false) -> Bool {
             let url = URL(fileURLWithPath: path).standardizedFileURL
             guard privilegedBundlePaths.contains(url.path),
                   url.pathExtension == "app",
                   AppUninstallScanPolicy.isRealAppBundle(url) else { return false }
+            guard onAnyVolume || AppFolders.isOnHomeVolume(url, home: home) else { return false }
             let appRoots = AppUninstallScanPolicy.installedAppRoots(home: home).map { $0.standardizedFileURL.path }
             return AppBundleReach.folderDepth(ofAppAtPath: url.path, roots: appRoots) != nil
         }
 
         failedItems = failedItems.map { item in
             guard item.reason == .needsFullDiskAccess,
-                  isChosenBundle(item.path),
+                  isChosenBundle(item.path, onAnyVolume: true),
                   FileProtection.blocksRemoval(URL(fileURLWithPath: item.path)) else { return item }
             return FailedDeletionItem(
                 path: item.path,
@@ -768,10 +771,32 @@ nonisolated final class FileDeleter: Sendable {
         // chosen bundle goes to the helper either way. A leftover still goes only on
         // `.unknown`, so one in a privacy-protected folder is never moved as root.
         // Busy and system-protected failures keep their own handling.
+        // The helper renames into `~/.Trash`, which can't reach another volume,
+        // so an app on a drive is never sent (#99). Its row says why instead.
+        failedItems = failedItems.map { item in
+            guard isChosenBundle(item.path, onAnyVolume: true),
+                  !AppFolders.isOnHomeVolume(URL(fileURLWithPath: item.path), home: home) else { return item }
+            switch item.reason {
+            case .needsFullDiskAccess, .needsAdministrator, .unknown:
+                return FailedDeletionItem(
+                    path: item.path,
+                    displayName: item.displayName,
+                    reason: .moveOnDriveInFinder,
+                    sizeBytes: item.sizeBytes,
+                    route: item.route
+                )
+            case .needsAdministratorAccount, .inUse, .systemProtected, .safetySkipped, .keptForOtherApp,
+                 .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing,
+                 .moveOnDriveInFinder:
+                return item
+            }
+        }
+
         let candidates = failedItems.filter { item in
             let key = URL(fileURLWithPath: item.path).standardizedFileURL.path
             guard privilegedEligiblePaths.contains(key),
-                  FileManager.default.fileExists(atPath: item.path) else { return false }
+                  FileManager.default.fileExists(atPath: item.path),
+                  AppFolders.isOnHomeVolume(URL(fileURLWithPath: item.path), home: home) else { return false }
             switch item.reason {
             case .unknown:
                 return true
@@ -779,7 +804,7 @@ nonisolated final class FileDeleter: Sendable {
                 return isChosenBundle(item.path)
             case .needsAdministrator, .needsAdministratorAccount, .inUse, .systemProtected, .safetySkipped,
                  .keptForOtherApp, .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart,
-                 .simulatorToolsMissing:
+                 .simulatorToolsMissing, .moveOnDriveInFinder:
                 return false
             }
         }

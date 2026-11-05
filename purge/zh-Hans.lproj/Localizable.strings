@@ -1383,3 +1383,6 @@
 "%@ %lld Check First items (%@)" = "%@ %lld 项需先检查的内容（%@）";
 "Moved %lld items to Trash, about %@. Empty the trash to reclaim the space." = "已将 %lld 项内容移到废纸篓，约 %@。清空废纸篓后才能释放空间。";
 "%lld other identical copies found" = "发现另外 %lld 份相同的副本";
+
+/* An app on an external drive that macOS would not let Purge move (#99) */
+"macOS won't let Purge move this app on your drive. Drag it to the Trash in Finder, then retry to remove what it left behind." = "macOS 不允许 Purge 移动这个位于外接磁盘上的应用。请在“访达”中把它拖到废纸篓，然后重试以移除它留下的文件。";
