@@ -153,23 +153,21 @@ struct FileDeleterDriveAppTests {
 
         #expect(helper.calls.isEmpty)
         #expect(report.deletedItems.isEmpty)
-        #expect(report.failedItems.map(\.reason) == [.moveOnDriveInFinder])
+        #expect(report.failedItems.map(\.reason) == [.moveInFinder])
         // Retry finishes the leftovers once the app is dragged out in Finder.
         #expect(report.failedItems.first?.reason.showsRetry == true)
     }
 
-    @Test("The same app on the home folder's volume still goes to the helper")
-    func appOnTheHomeVolumeUsesTheHelper() async throws {
-        let fixture = try Fixture()
-        defer { fixture.remove() }
-        let app = try fixture.app("Volumes/SSD/Applications/Tool.app")
+    /// Runs one stuck bundle through the deleter with `home` as the home folder.
+    private func removeStuck(_ app: URL, home: URL, fixture: Fixture, helper: Helper) async throws -> DeletionReport {
         let key = app.standardizedFileURL.path
-        let helper = Helper()
-
-        let report = try await withDrives(fixture) {
-            try await FileDeleter(
+        return try await withDrives(fixture) {
+            if app.path.hasPrefix(fixture.home.appendingPathComponent("Apps").path) {
+                #expect(AppFolders.add(fixture.home.appendingPathComponent("Apps"), home: home).refusal == nil)
+            }
+            return try await FileDeleter(
                 privilegedMover: { helper.move($0) },
-                home: fixture.home,
+                home: home,
                 trash: Self.noPermission,
                 fullDiskAccessGranted: { true }
             ).deleteUserSelectedFiles(
@@ -178,8 +176,34 @@ struct FileDeleterDriveAppTests {
                 privilegedBundlePaths: [key]
             )
         }
+    }
 
-        #expect(helper.calls == [[key]])
+    @Test("An app in a folder the user added never goes to the helper, even on the home folder's volume")
+    func appInAnAddedFolderSkipsTheHelper() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let helper = Helper()
+        let inAdded = try fixture.app("home/Apps/Tool.app")
+        let onDrive = try fixture.app("Volumes/SSD/Applications/Other.app")
+
+        let added = try await removeStuck(inAdded, home: fixture.home, fixture: fixture, helper: helper)
+        let drive = try await removeStuck(onDrive, home: fixture.home, fixture: fixture, helper: helper)
+
+        #expect(helper.calls.isEmpty)
+        #expect(added.failedItems.map(\.reason) == [.moveInFinder])
+        #expect(drive.failedItems.map(\.reason) == [.moveInFinder])
+    }
+
+    @Test("An app in ~/Applications still goes to the helper")
+    func appInApplicationsUsesTheHelper() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let helper = Helper()
+        let app = try fixture.app("home/Applications/Tool.app")
+
+        let report = try await removeStuck(app, home: fixture.home, fixture: fixture, helper: helper)
+
+        #expect(helper.calls == [[app.standardizedFileURL.path]])
         #expect(report.failedItems.isEmpty)
     }
 

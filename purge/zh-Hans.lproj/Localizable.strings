@@ -1384,8 +1384,8 @@
 "Moved %lld items to Trash, about %@. Empty the trash to reclaim the space." = "已将 %lld 项内容移到废纸篓，约 %@。清空废纸篓后才能释放空间。";
 "%lld other identical copies found" = "发现另外 %lld 份相同的副本";
 
-/* An app on an external drive that macOS would not let Purge move (#99) */
-"macOS won't let Purge move this app on your drive. Drag it to the Trash in Finder, then retry to remove what it left behind." = "macOS 不允许 Purge 移动这个位于外接磁盘上的应用。请在“访达”中把它拖到废纸篓，然后重试以移除它留下的文件。";
+/* An app on a drive or in an added folder that macOS would not let Purge move (#99) */
+"macOS won't let Purge move this app from where it is. Drag it to the Trash in Finder, then retry to remove what it left behind." = "macOS 不允许 Purge 从当前位置移动这个应用。请在“访达”中把它拖到废纸篓，然后重试以移除它留下的文件。";
 
 /* App folders in Settings > Uninstalling (#99) */
 "App folders" = "应用文件夹";
