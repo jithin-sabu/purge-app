@@ -48,6 +48,21 @@ final class LocalSnapshotStore: ObservableObject {
     /// reading never replaces a newer one.
     private var latestPass = 0
 
+    private let readSnapshots: @Sendable () async -> LocalSnapshots?
+    private let deleteStamps: @Sendable ([String]) async -> Void
+    private let readCapacity: @Sendable () -> VolumeCapacity?
+
+    /// `tmutil` and the startup volume by default; tests pass their own.
+    init(
+        read: @escaping @Sendable () async -> LocalSnapshots? = { await LocalSnapshotReader.read() },
+        delete: @escaping @Sendable ([String]) async -> Void = { await LocalSnapshotReader.delete(stamps: $0) },
+        readCapacity: @escaping @Sendable () -> VolumeCapacity? = { VolumeCapacityReader.read() }
+    ) {
+        readSnapshots = read
+        deleteStamps = delete
+        self.readCapacity = readCapacity
+    }
+
     /// The last removal's outcome while the list is still the one it saw.
     var currentRemovalOutcome: SnapshotRemovalOutcome? {
         guard let lastRemoval, lastRemoval.listed == (snapshots?.all.map(\.name) ?? []) else { return nil }
@@ -63,7 +78,7 @@ final class LocalSnapshotStore: ObservableObject {
     private func readLatest() async -> LocalSnapshots? {
         latestPass += 1
         let pass = latestPass
-        let reading = await LocalSnapshotReader.read()
+        let reading = await readSnapshots()
         hasTriedReading = true
         // A failed reading keeps the last good one.
         if pass == latestPass, let reading {
@@ -89,13 +104,13 @@ final class LocalSnapshotStore: ObservableObject {
         let targeted = planned.filter { present.contains($0.name) && !kept.contains($0.stamp) }
         guard !targeted.isEmpty else { return }
 
-        let capacityBefore = VolumeCapacityReader.read()
+        let capacityBefore = readCapacity()
         var stamps: [String] = []
         for snapshot in targeted where !stamps.contains(snapshot.stamp) {
             stamps.append(snapshot.stamp)
         }
-        await LocalSnapshotReader.delete(stamps: stamps)
-        let freed = await Self.freedBytes(since: capacityBefore)
+        await deleteStamps(stamps)
+        let freed = await freedBytes(since: capacityBefore)
 
         let reading = await readLatest()
         let outcome = SnapshotRemovalOutcome.judge(targeted: targeted, after: reading, freedBytes: freed)
@@ -106,9 +121,10 @@ final class LocalSnapshotStore: ObservableObject {
     /// volume is read until two readings a second apart agree. The figure still covers
     /// everything else written meanwhile, so it is only claimed once it has settled and
     /// clears the noise floor; a figure still moving is not claimed at all.
-    private static func freedBytes(since before: VolumeCapacity?) async -> Int64? {
-        await VolumeCapacityReader.settledGain(since: before?.availableBytes) {
-            VolumeCapacityReader.read()?.availableBytes
+    private func freedBytes(since before: VolumeCapacity?) async -> Int64? {
+        let readCapacity = self.readCapacity
+        return await VolumeCapacityReader.settledGain(since: before?.availableBytes) {
+            readCapacity()?.availableBytes
         }
     }
 }
