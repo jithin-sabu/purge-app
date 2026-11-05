@@ -1778,7 +1778,7 @@ final class PurgeStore: ObservableObject {
         let owner = pending.app
         let survivors = installedApps
         let appGroupClaims = await AppGroupClaims.gatherOffMain(for: survivors, leftovers: leftovers)
-        let claimants = await survivorsWithProtectedApps(survivors)
+        let claimants = await survivorsWithProtectedApps(survivors, removing: [bundleKey])
         let deletableLeftovers = leftovers.filter { leftover in
             if let otherApp = Self.appStillUsing(
                 leftover: leftover,
@@ -2521,6 +2521,8 @@ final class PurgeStore: ObservableObject {
         guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         installedApps = collected
         hasCompletedInstalledAppsScan = true
+        let bundles = collected.map(\.bundleURL)
+        Task.detached(priority: .utility) { DriveAppMemory.record(bundles: bundles) }
         // Every app on the Mac is listed now; saved apps not among them are gone.
         // The file waits for the totals, which the next lines measure.
         lastScanListsFinished([.apps], savable: false)
@@ -3233,7 +3235,7 @@ final class PurgeStore: ObservableObject {
             for: survivors,
             leftovers: appPlans.flatMap(\.items)
         )
-        let claimants = await survivorsWithProtectedApps(survivors)
+        let claimants = await survivorsWithProtectedApps(survivors, removing: removingIDs)
         if Task.isCancelled { return }
         Self.markSharedWithSurvivors(in: &appPlans, survivors: claimants, appGroupClaims: appGroupClaims)
 
@@ -3311,14 +3313,32 @@ final class PurgeStore: ObservableObject {
     }
 
     /// `survivors` plus the apps the uninstaller never lists, Apple's among them
-    /// (#176), so they hold back leftovers that are theirs too. They claim by
-    /// bundle id and name only: their app groups are not read, which would mean
-    /// reading the signatures of some 60 system bundles on every review.
-    private func survivorsWithProtectedApps(_ survivors: [InstalledApp]) async -> [InstalledApp] {
-        let protected = await Task.detached(priority: .userInitiated) {
-            AppUninstallScanner.protectedApps()
+    /// (#176), and apps on drives that are unplugged (#99), so they hold back
+    /// leftovers that are theirs too. They claim by bundle id and name only:
+    /// their app groups are not read, which would mean reading the signatures
+    /// of some 60 system bundles on every review. `removing` holds the bundle
+    /// paths of the apps going now.
+    private func survivorsWithProtectedApps(
+        _ survivors: [InstalledApp],
+        removing: Set<String>
+    ) async -> [InstalledApp] {
+        let (protected, remembered) = await Task.detached(priority: .userInitiated) {
+            (AppUninstallScanner.protectedApps(), DriveAppMemory.apps())
         }.value
         return survivors + protected
+            + Self.unlistedDriveApps(besides: survivors, removing: removing, remembered: remembered)
+    }
+
+    /// Remembered apps on drives the list doesn't hold now, most often because
+    /// the drive is unplugged (#99). They claim their leftovers like any app
+    /// the user keeps. An app being removed never counts.
+    nonisolated static func unlistedDriveApps(
+        besides listed: [InstalledApp],
+        removing: Set<String>,
+        remembered: [InstalledApp] = DriveAppMemory.apps()
+    ) -> [InstalledApp] {
+        let listedIDs = Set(listed.map(\.id))
+        return remembered.filter { !listedIDs.contains($0.id) && !removing.contains($0.id) }
     }
 
     /// The other still-installed app, if any, that a leftover also belongs to.
@@ -3640,7 +3660,7 @@ final class PurgeStore: ObservableObject {
                 for: remainingApps,
                 leftovers: leftoverBatch.flatMap { $0.1 }
             )
-            let claimants = await survivorsWithProtectedApps(remainingApps)
+            let claimants = await survivorsWithProtectedApps(remainingApps, removing: movedBundlePaths)
             var urls: [URL] = []
             var names: [String: String] = [:]
             var sizes: [String: Int64] = [:]

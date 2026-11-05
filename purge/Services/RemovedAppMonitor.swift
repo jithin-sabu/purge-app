@@ -900,9 +900,12 @@ nonisolated enum RemovedAppPresence {
         let index = currentIndex()
         let trash = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".Trash", isDirectory: true)
+        let remembered = DriveAppMemory.apps(excluding: app.id)
         return ReviewContext(
             stillRemoved: isStillRemoved(app, installedBundleIDs: index.bundleIDs),
-            survivors: Array(index.apps.values),
+            survivors: PurgeStore.unlistedDriveApps(
+                besides: Array(index.apps.values), removing: [app.id], remembered: remembered
+            ) + Array(index.apps.values),
             trashedBundleURL: RemovedAppWatchPolicy.trashedCopy(fileNumber: fileNumber, in: trash)
         )
     }
@@ -920,7 +923,12 @@ nonisolated enum RemovedAppPresence {
     @concurrent static func revalidate(_ plan: RemovedAppLeftoverPlan) async -> RemovedAppLeftoverPlan? {
         let index = currentIndex()
         guard isStillRemoved(plan.app, installedBundleIDs: index.bundleIDs) else { return nil }
-        let survivors = Array(index.apps.values)
+        // Apps on drives that are unplugged keep what they share too (#99).
+        let survivors = Array(index.apps.values) + PurgeStore.unlistedDriveApps(
+            besides: Array(index.apps.values),
+            removing: [plan.app.id],
+            remembered: DriveAppMemory.apps(excluding: plan.app.id)
+        )
         let appGroupClaims = AppGroupClaims.gather(for: survivors, leftovers: plan.items)
         var checked = plan
         checked.items = plan.items.filter { item in

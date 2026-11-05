@@ -1,0 +1,135 @@
+import Foundation
+import Testing
+@testable import Purge
+
+/// An app on a drive that is unplugged still owns its leftovers (#99). The
+/// drives are folders in a stand-in for `/Volumes`, and the remembered list is
+/// written to a temporary folder, never the user's own.
+@Suite("Apps remembered on drives that are unplugged (#99)")
+struct DriveAppMemoryTests {
+    private struct Fixture {
+        let base: URL
+        var home: URL { base.appendingPathComponent("home", isDirectory: true) }
+        var volumes: URL { base.appendingPathComponent("Volumes", isDirectory: true) }
+
+        init() throws {
+            base = FileManager.default.temporaryDirectory
+                .appendingPathComponent("purge-drive-memory-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: volumes, withIntermediateDirectories: true)
+        }
+
+        func app(_ relative: String, id: String) throws -> URL {
+            let bundle = base.appendingPathComponent(relative, isDirectory: true)
+            let contents = bundle.appendingPathComponent("Contents", isDirectory: true)
+            try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+            let info: NSDictionary = ["CFBundleIdentifier": id]
+            info.write(to: contents.appendingPathComponent("Info.plist"), atomically: true)
+            return bundle
+        }
+
+        func remove() { try? FileManager.default.removeItem(at: base) }
+    }
+
+    private func withDrives<T>(_ fixture: Fixture, _ body: () throws -> T) throws -> T {
+        try withTemporaryHandoffRoot {
+            try AppFolders.$volumes.withValue(fixture.volumes) { try body() }
+        }
+    }
+
+    @Test("Apps in a drive's Applications folder are remembered, apps in /Applications are not")
+    func onlyDriveAppsAreRemembered() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.app("Volumes/SSD/Applications/Luminar Neo.app", id: "com.skylum.luminarneo")
+        let builtIn = try fixture.app("home/Applications/Tool.app", id: "com.purgetest.tool")
+
+        try withDrives(fixture) {
+            DriveAppMemory.record(bundles: [drive, builtIn], home: fixture.home, isTestHost: false)
+            let entries = DriveAppMemory.entries()
+            #expect(entries.map(\.bundlePath) == [drive.standardizedFileURL.path])
+            #expect(entries.first?.bundleID == "com.skylum.luminarneo")
+            #expect(entries.first?.name == "Luminar Neo")
+        }
+    }
+
+    @Test("A remembered app on a drive that is unplugged still counts")
+    func unpluggedDriveAppStillCounts() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.app("Volumes/SSD/Applications/Luminar Neo.app", id: "com.skylum.luminarneo")
+
+        try withDrives(fixture) {
+            DriveAppMemory.record(bundles: [drive], home: fixture.home, isTestHost: false)
+            // Ejected: the whole drive folder is gone.
+            try FileManager.default.removeItem(at: fixture.volumes.appendingPathComponent("SSD"))
+            DriveAppMemory.record(bundles: [], home: fixture.home, isTestHost: false)
+
+            #expect(DriveAppMemory.apps().map(\.bundleID) == ["com.skylum.luminarneo"])
+        }
+    }
+
+    @Test("An app gone from a drive that is still plugged in is forgotten")
+    func removedDriveAppIsForgotten() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.app("Volumes/SSD/Applications/Tool.app", id: "com.purgetest.tool")
+
+        try withDrives(fixture) {
+            DriveAppMemory.record(bundles: [drive], home: fixture.home, isTestHost: false)
+            try FileManager.default.removeItem(at: drive)
+
+            #expect(DriveAppMemory.apps().isEmpty)
+            DriveAppMemory.record(bundles: [], home: fixture.home, isTestHost: false)
+            #expect(DriveAppMemory.entries().isEmpty)
+        }
+    }
+
+    @Test("The test host never writes the list")
+    func testHostNeverWrites() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.app("Volumes/SSD/Applications/Tool.app", id: "com.purgetest.tool")
+
+        try withDrives(fixture) {
+            DriveAppMemory.record(bundles: [drive], home: fixture.home, isTestHost: true)
+            #expect(!FileManager.default.fileExists(atPath: DriveAppMemory.file.path))
+        }
+    }
+
+    @Test("An app judged for removal never counts as its own survivor")
+    func appIsNotItsOwnSurvivor() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.app("Volumes/SSD/Applications/Tool.app", id: "com.purgetest.tool")
+
+        try withDrives(fixture) {
+            DriveAppMemory.record(bundles: [drive], home: fixture.home, isTestHost: false)
+            #expect(DriveAppMemory.apps(excluding: drive.standardizedFileURL.path).isEmpty)
+            #expect(DriveAppMemory.apps().count == 1)
+        }
+    }
+
+    @Test("Unlisted drive apps join the survivors, but not ones already listed or being removed")
+    func unlistedDriveAppsJoinSurvivors() {
+        func app(_ path: String) -> InstalledApp {
+            InstalledApp(
+                name: (path as NSString).lastPathComponent,
+                bundleURL: URL(fileURLWithPath: path, isDirectory: true),
+                bundleID: "com.purgetest.\((path as NSString).lastPathComponent)",
+                bundleSizeBytes: 0,
+                isRunning: false
+            )
+        }
+        let listed = app("/Volumes/SSD/Applications/Listed.app")
+        let unplugged = app("/Volumes/Old/Applications/Unplugged.app")
+        let going = app("/Volumes/Old/Applications/Going.app")
+
+        let extra = PurgeStore.unlistedDriveApps(
+            besides: [listed],
+            removing: [going.id],
+            remembered: [listed, unplugged, going]
+        )
+        #expect(extra.map(\.id) == [unplugged.id])
+    }
+}
