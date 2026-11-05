@@ -267,12 +267,21 @@ struct SettingsView: View {
     }
 
     private var excludedFoldersSummary: String {
-        let count = excludedEntries.count
-        switch count {
-        case 0: return String(localized: "None")
-        case 1: return String(localized: "1 folder")
-        default: return String(localized: "\(count) folders")
+        var parts: [String] = []
+        let folders = excludedEntries.count
+        switch folders {
+        case 0: break
+        case 1: parts.append(String(localized: "1 folder"))
+        default: parts.append(String(localized: "\(folders) folders"))
         }
+        // Runtimes have a list of their own, so a runtime alone doesn't read as None (#178).
+        let runtimes = store.excludedSimulatorRuntimes.count
+        switch runtimes {
+        case 0: break
+        case 1: parts.append(String(localized: "1 runtime"))
+        default: parts.append(String(localized: "\(runtimes) runtimes"))
+        }
+        return parts.isEmpty ? String(localized: "None") : ListFormatter.localizedString(byJoining: parts)
     }
 
     // MARK: - Uninstalling
@@ -493,8 +502,9 @@ struct SettingsView: View {
             .buttonStyle(.purge(.secondary))
         } content: {
             let entries = excludedEntries
+            let runtimes = store.excludedSimulatorRuntimes
             InsetCard {
-                if entries.isEmpty {
+                if entries.isEmpty && runtimes.isEmpty {
                     Text("Nothing excluded")
                         .font(scheduleStatusPrimaryFont)
                         .foregroundStyle(AppColors.textSecondary)
@@ -507,9 +517,18 @@ struct SettingsView: View {
                         excludedPathRow(entry: entry)
                     }
 
+                    // Runtimes have no fixed path, so they are listed by name and
+                    // build after the folders (#178).
+                    ForEach(Array(runtimes.enumerated()), id: \.element.imageID) { index, runtime in
+                        if index > 0 || !entries.isEmpty {
+                            settingsSectionDivider
+                        }
+                        excludedRuntimeRow(runtime)
+                    }
+
                     settingsSectionDivider
 
-                    excludedTotalRow(entries: entries)
+                    excludedTotalRow(entries: entries, runtimes: runtimes)
                 }
             }
         }
@@ -807,6 +826,40 @@ struct SettingsView: View {
         }
     }
 
+    private func excludedRuntimeRow(_ runtime: ExcludedSimulatorRuntimeEntry) -> some View {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                Text(runtime.displayName)
+                    .font(scheduleStatusPrimaryFont)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Text("Build \(runtime.build)")
+                    .font(AppStyle.Typography.micro.weight(.regular).monospaced())
+                    .foregroundStyle(AppColors.textSecondary)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.small)
+
+            // The size simctl gave when it was excluded. The image may not be
+            // mounted now, so there is nothing to measure.
+            excludedSizeText(formatBytes(runtime.sizeBytes))
+
+            Button {
+                store.removeSimulatorRuntimeExclusion(imageID: runtime.imageID)
+            } label: {
+                Label("Remove \(runtime.displayName)", systemImage: "xmark")
+                    .labelStyle(.iconOnly)
+                    .imageScale(.small)
+            }
+            .buttonStyle(.purge(.secondary, size: .small, width: .square))
+            .help("Remove from exclusions. \(runtime.displayName) is scanned again next time.")
+        }
+        .padding(AppStyle.Spacing.medium)
+    }
+
     @ViewBuilder
     private func excludedSizeLabel(forPath path: String) -> some View {
         switch excludedPathSizes[path] {
@@ -830,7 +883,10 @@ struct SettingsView: View {
             .monospacedDigit()
     }
 
-    private func excludedTotalRow(entries: [ExcludedPathEntry]) -> some View {
+    private func excludedTotalRow(
+        entries: [ExcludedPathEntry],
+        runtimes: [ExcludedSimulatorRuntimeEntry]
+    ) -> some View {
         HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
             Text("Total")
                 .font(scheduleStatusPrimaryFont)
@@ -838,7 +894,11 @@ struct SettingsView: View {
 
             Spacer(minLength: AppStyle.Spacing.small)
 
-            let total = ExcludedPathsTotal.compute(paths: entries.map(\.path), sizes: excludedPathSizes)
+            let total = ExcludedPathsTotal.compute(
+                paths: entries.map(\.path),
+                sizes: excludedPathSizes,
+                knownBytes: runtimes.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            )
             if total.isComplete {
                 // A folder `du` couldn't read makes the sum a floor, not a total.
                 Text(total.hasUnmeasured ? String(localized: "At least \(formatBytes(total.bytes))") : formatBytes(total.bytes))

@@ -20,9 +20,15 @@ nonisolated struct ExcludedPathsTotal: Equatable, Sendable {
 
     /// Counts each byte once. A path inside another listed path is already part of
     /// that folder's size, which happens when someone excludes a file and later its
-    /// folder, so only paths with no listed ancestor are added up.
-    static func compute(paths: [String], sizes: [String: ExcludedPathSize]) -> ExcludedPathsTotal {
-        var bytes: Int64 = 0
+    /// folder, so only paths with no listed ancestor are added up. `knownBytes` is
+    /// added as it is: excluded simulator runtimes, whose size was recorded when
+    /// they were excluded (#178).
+    static func compute(
+        paths: [String],
+        sizes: [String: ExcludedPathSize],
+        knownBytes: Int64 = 0
+    ) -> ExcludedPathsTotal {
+        var bytes = knownBytes
         var isComplete = true
         var hasUnmeasured = false
         for path in topLevel(paths) {

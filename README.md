@@ -153,7 +153,7 @@ The labels and explanations are there to be checked, not read cover to cover. Se
 - **Appearance**: Light, Dark, or System
 - **Cleaning**: automatic safe cleanup with a frequency, the next-clean date, and a summary of the last clean
 - **Developer Projects**: stale-project threshold for developer artifact scanning
-- **Excluded from scans**: folders you've told Purge to leave alone, each with its current size. Right-click any scan result and choose **Exclude from scans** to add one. Excluding only ever narrows what Purge looks at
+- **Excluded from scans**: folders you've told Purge to leave alone, each with its current size. Right-click any scan result and choose **Exclude from scans** to add one. An excluded simulator runtime is listed by name and build, with the size it had when you excluded it. Excluding only ever narrows what Purge looks at
 - **Cleaning History**: every automatic and manual clean, with the space freed and the item count. Open one to see what was moved to the Trash and what was skipped
 
 ### More

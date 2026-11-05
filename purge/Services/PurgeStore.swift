@@ -179,6 +179,9 @@ final class PurgeStore: ObservableObject {
         let subtitle: String?
         var reinstallSafety: ReinstallSafetyStatus
         var gitStatus: GitWorktreeStatus
+        /// Set on a simulator runtime row, so the clean can check the runtime
+        /// exclusion list after the row itself is gone (#178).
+        var simulatorRuntime: SimulatorRuntimeHandle? = nil
 
         var formattedSize: String { formatBytes(sizeBytes) }
 
@@ -247,7 +250,8 @@ final class PurgeStore: ObservableObject {
             lastScanListDidChange(.simulators)
         }
     }
-    /// Booted simulators, shown without a checkbox so the space they take is not a
+    /// Simulators that are not shut down (booted, booting, shutting down, being
+    /// created), shown without a checkbox so the space they take is not a
     /// mystery. Never selected, never counted as recoverable, never deleted.
     @Published var runningSimulatorDevices: [SimulatorDevice] = [] {
         didSet { confirmLastScanRows(.simulators) }
@@ -455,6 +459,10 @@ final class PurgeStore: ObservableObject {
     /// Paths the user excluded from scans. Purely subtractive: the scanner drops these
     /// after the allowlist gate, so nothing new ever becomes scannable or cleanable.
     @Published private(set) var excludedPaths: Set<String> = ExcludedPathsStore.allExcludedPaths()
+    /// Simulator runtimes the user excluded, kept by identifier because a runtime's
+    /// path changes when macOS mounts it (#178).
+    @Published private(set) var excludedSimulatorRuntimes: [ExcludedSimulatorRuntimeEntry] =
+        ExcludedSimulatorRuntimesStore.allEntries()
     /// Bumped whenever `excludedPaths` changes, so a Large Files scan already under way
     /// can tell that the list it started with is out of date.
     private var exclusionRevision = 0
@@ -1265,6 +1273,7 @@ final class PurgeStore: ObservableObject {
         let access = currentScanAccess()
         let candidates = staged.filter {
             ProtectedLocations.isReadable($0.path, access: access) && !ExcludedPathsStore.isExcluded($0.path)
+                && !($0.simulatorRuntime?.isExcluded ?? false)
         }
         let urls = candidates.map(\.path).map(\.standardizedFileURL)
         guard !urls.isEmpty else { return }
@@ -1370,7 +1379,10 @@ final class PurgeStore: ObservableObject {
         }
         // Every clean checks this before it starts. A retry is no exception, and
         // the row says so rather than keeping a Retry that does nothing.
-        guard !ExcludedPathsStore.isExcluded(url) else {
+        let runtime = simulatorRuntimes.first { $0.locationURL.standardizedFileURL.path == key }
+        guard !ExcludedPathsStore.isExcluded(url),
+              !(runtime.map { ExcludedSimulatorRuntimesStore.isExcluded(imageID: $0.id, build: $0.build) } ?? false)
+        else {
             if item.reason != .safetySkipped {
                 session.replaceFailure(id: item.id, with: [item.replacingReason(.safetySkipped)])
             }
@@ -4048,6 +4060,9 @@ final class PurgeStore: ObservableObject {
         }
         coalesce.debounceTask?.cancel()
         flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
+        // The scan moves a runtime excluded by path before #178 to the runtime
+        // list, so Settings would show neither until the lists are read again.
+        refreshExclusionListsIfChanged()
         ScanPhaseTiming.finish(
             "runDeveloperScan stream",
             since: streamStart,
@@ -5393,7 +5408,8 @@ final class PurgeStore: ObservableObject {
             reinstallCommand: nil,
             subtitle: String(localized: "Build \(runtime.build)"),
             reinstallSafety: .notApplicable,
-            gitStatus: .clean
+            gitStatus: .clean,
+            simulatorRuntime: SimulatorRuntimeHandle(imageID: runtime.id, build: runtime.build)
         )
     }
 
@@ -5536,8 +5552,16 @@ final class PurgeStore: ObservableObject {
         userOverridePaths = UserOverridesStore.allOverriddenPaths()
     }
 
+    /// Reads both exclusion lists again, and publishes only when one changed.
+    private func refreshExclusionListsIfChanged() {
+        guard ExcludedPathsStore.allExcludedPaths() != excludedPaths
+            || ExcludedSimulatorRuntimesStore.allEntries() != excludedSimulatorRuntimes else { return }
+        refreshExcludedPaths()
+    }
+
     func refreshExcludedPaths() {
         excludedPaths = ExcludedPathsStore.allExcludedPaths()
+        excludedSimulatorRuntimes = ExcludedSimulatorRuntimesStore.allEntries()
         exclusionRevision &+= 1
     }
 
@@ -5619,11 +5643,12 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Saved by image identifier and build, not path: the path changes when macOS
+    /// mounts or unmounts the image, which brought the runtime back (#178).
     func excludeFromScans(_ runtime: SimulatorRuntime) {
-        writeExclusion(
-            path: runtime.locationURL,
-            displayName: runtime.safetyInfo.headline
-        )
+        if !ExcludedSimulatorRuntimesStore.write(runtime) {
+            errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
+        }
         refreshExcludedPaths()
 
         let runtimeID = runtime.id
@@ -5670,6 +5695,15 @@ final class PurgeStore: ObservableObject {
     /// passes the normal allowlist gate.
     func removeExclusion(path: URL) {
         if !ExcludedPathsStore.remove(path: path) {
+            errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
+        }
+        refreshExcludedPaths()
+    }
+
+    /// Drop a runtime exclusion. The runtime reappears on the next scan if `simctl`
+    /// still lists it as deletable.
+    func removeSimulatorRuntimeExclusion(imageID: String) {
+        if !ExcludedSimulatorRuntimesStore.remove(imageID: imageID) {
             errorMessage = String(localized: "Purge couldn't save your exclusions. This change lasts until Purge quits.")
         }
         refreshExcludedPaths()

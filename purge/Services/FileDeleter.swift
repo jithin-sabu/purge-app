@@ -1019,14 +1019,9 @@ nonisolated final class FileDeleter: Sendable {
     private static func isSimulatorDeviceListed(_ udid: String, runSimctl: Simctl.Runner) -> Bool? {
         guard let listing = runSimctl(["list", "devices", "--json"], simctlDeviceListTimeout),
               listing.succeeded,
-              let root = try? JSONSerialization.jsonObject(with: listing.stdout) as? [String: Any],
-              let devicesByRuntime = root["devices"] as? [String: Any]
+              let devices = SimulatorDeviceList.parse(listing.stdout)
         else { return nil }
-        return devicesByRuntime.values.contains { runtimeDevices in
-            (runtimeDevices as? [[String: Any]])?.contains {
-                ($0["udid"] as? String)?.caseInsensitiveCompare(udid) == .orderedSame
-            } == true
-        }
+        return devices.contains(udid: udid)
     }
 
     /// `simctl runtime delete` hands the work to simdiskimaged and returns at once

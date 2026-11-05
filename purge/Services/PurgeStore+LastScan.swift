@@ -168,6 +168,9 @@ extension PurgeStore {
                 || !ProtectedLocations.isReadable(url, access: access)
                 || ExcludedPathsStore.isExcluded(url)
         }
+        snapshot.runtimes?.rows.removeAll {
+            ExcludedSimulatorRuntimesStore.isExcluded(imageID: $0.id, build: $0.build)
+        }
         return snapshot
     }
 

@@ -17,14 +17,17 @@ nonisolated struct SimulatorDevice: Identifiable, Hashable {
         return formatBytes(sizeOnDisk)
     }
 
-    /// A booted device is listed so its space is accounted for, but never offered:
-    /// a test run or the Simulator app may be using it. The row has no checkbox, so
-    /// the explanation says how to make it removable.
-    static func runningSafetyInfo(deviceName: String, runtimeVersion: String) -> SafetyInfo {
+    /// A device that is not shut down is listed so its space is accounted for, but
+    /// never offered: a test run or the Simulator app may be using it, and one that
+    /// is booting, shutting down or being created is changing under `simctl` (#178).
+    /// The row has no checkbox, so the explanation says how to make it removable.
+    static func runningSafetyInfo(deviceName: String, runtimeVersion: String, isBooted: Bool) -> SafetyInfo {
         SafetyInfo(
             level: .medium,
             headline: "\(deviceName) · \(runtimeVersion)",
-            explanation: String(localized: "Running now, so it can't be removed. Shut it down in Simulator, then scan again."),
+            explanation: isBooted
+                ? String(localized: "Running now, so it can't be removed. Shut it down in Simulator, then scan again.")
+                : String(localized: "Busy right now, so it can't be removed. Scan again in a moment."),
             recoverySteps: "",
             reinstallCommand: nil
         )
