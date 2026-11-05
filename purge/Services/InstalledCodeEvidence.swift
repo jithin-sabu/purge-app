@@ -334,13 +334,22 @@ nonisolated struct AppGroupClaims: Equatable {
     /// only category these claims apply to, so most uninstalls skip the reads:
     /// every app's signature and a walk of its nested code took 0.5 s for 28
     /// apps on a dev Mac, 0.17 s of it Xcode's walk.
+    ///
+    /// An app on a drive that is unplugged has no signature to read, so the
+    /// groups it listed while the drive was in stand in (#99). `remembered`
+    /// only adds claims, for apps whose bundle is not there now.
     static func gather(
         for apps: [InstalledApp],
         leftovers: [UninstallItem],
-        readSignature: (URL) -> CodeSignature? = CodeSignature.read(at:)
+        readSignature: (URL) -> CodeSignature? = CodeSignature.read(at:),
+        remembered: [DriveAppMemory.Entry] = DriveAppMemory.presentEntries()
     ) -> AppGroupClaims {
         var claims = AppGroupClaims()
         guard leftovers.contains(where: { $0.category == .groupContainers }) else { return claims }
+        for entry in remembered where !entry.appGroups.isEmpty
+            && !FileManager.default.fileExists(atPath: entry.bundlePath) {
+            claims.groupsByAppID[entry.bundlePath] = Set(entry.appGroups.map { $0.lowercased() })
+        }
         for app in apps {
             let code = [app.bundleURL] + InstalledCodeEvidence.nestedCodeBundleURLs(in: app.bundleURL)
             let groups = Set(code.flatMap { readSignature($0)?.appGroups ?? [] }.map { $0.lowercased() })

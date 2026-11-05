@@ -20,6 +20,16 @@ nonisolated enum DriveAppMemory {
         /// The app folder it was found in.
         var rootPath: String
         var lastSeen: Date
+        /// `CFBundleVersion` when the claims below were read, so they are read
+        /// again only after an update.
+        var version: String?
+        /// What the app and the code inside it claim, read from their
+        /// signatures: the ids of nested helpers and extensions, the signing
+        /// team, and the app groups. A group container is named after an app
+        /// group, not the app (#197), so these keep one while the drive is out.
+        var codeIDs: [String] = []
+        var teamIDs: [String] = []
+        var appGroups: [String] = []
     }
 
     static var file: URL {
@@ -37,9 +47,7 @@ nonisolated enum DriveAppMemory {
     /// its folder is not, so Purge can't tell. `excluding` is the bundle path of
     /// an app being judged, which never counts as its own survivor.
     static func apps(excluding path: String? = nil) -> [InstalledApp] {
-        entries().filter { entry in
-            entry.bundlePath != path && mayStillBeInstalled(entry)
-        }.map { entry in
+        presentEntries(excluding: path).map { entry in
             InstalledApp(
                 name: entry.name,
                 bundleURL: URL(fileURLWithPath: entry.bundlePath, isDirectory: true),
@@ -65,7 +73,7 @@ nonisolated enum DriveAppMemory {
             .map(\.standardizedFileURL.path)
             .filter { !builtIn.contains($0) }
         let current = entries()
-        let updated = merged(current, seen: seenEntries(bundles, roots: extraRoots, now: now))
+        let updated = merged(current, seen: seenEntries(bundles, roots: extraRoots, now: now, known: current))
         guard updated != current else { return }
         save(updated)
     }
@@ -82,18 +90,48 @@ nonisolated enum DriveAppMemory {
         return byPath.values.sorted { $0.bundlePath < $1.bundlePath }
     }
 
-    static func seenEntries(_ bundles: [URL], roots: [String], now: Date) -> [Entry] {
-        bundles.compactMap { bundle -> Entry? in
+    /// `known` entries keep the claims they read for the same version, so a
+    /// scan reads only new and updated apps' signatures.
+    static func seenEntries(
+        _ bundles: [URL],
+        roots: [String],
+        now: Date,
+        known: [Entry] = [],
+        readClaims: (URL) -> InstalledCodeEvidence = {
+            InstalledCodeEvidence.gather(userAppBundles: [$0], systemAppRoots: [], runningApps: [], launchdJobRoots: [])
+        }
+    ) -> [Entry] {
+        let knownByPath = Dictionary(known.map { ($0.bundlePath, $0) }, uniquingKeysWith: { first, _ in first })
+        return bundles.compactMap { bundle -> Entry? in
             let path = bundle.standardizedFileURL.path
             guard let root = roots.first(where: { path.hasPrefix($0 + "/") }) else { return nil }
-            return Entry(
+            let version = AppBundleReach.readInfoPlist(at: bundle)["CFBundleVersion"] as? String
+            var entry = Entry(
                 bundlePath: path,
                 bundleID: AppBundleReach.bundleID(at: bundle),
                 name: bundle.deletingPathExtension().lastPathComponent,
                 rootPath: root,
-                lastSeen: now
+                lastSeen: now,
+                version: version
             )
+            if let old = knownByPath[path], old.version == version, old.bundleID == entry.bundleID {
+                entry.codeIDs = old.codeIDs
+                entry.teamIDs = old.teamIDs
+                entry.appGroups = old.appGroups
+            } else {
+                let claims = readClaims(bundle)
+                entry.codeIDs = claims.bundleIDs.sorted()
+                entry.teamIDs = claims.teamIDs.sorted()
+                entry.appGroups = claims.appGroups.sorted()
+            }
+            return entry
         }
+    }
+
+    /// The entries `apps(excluding:)` would return, for callers that need the
+    /// claims as well.
+    static func presentEntries(excluding path: String? = nil) -> [Entry] {
+        entries().filter { $0.bundlePath != path && mayStillBeInstalled($0) }
     }
 
     /// False only when the folder it was found in is there and the bundle is not.

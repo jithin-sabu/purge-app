@@ -110,6 +110,33 @@ struct DriveAppMemoryTests {
         }
     }
 
+    @Test("Signatures are read once per version of a drive app")
+    func claimsAreReadOncePerVersion() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.app("Volumes/SSD/Applications/Editor.app", id: "com.vendor.editor")
+        let root = fixture.volumes.appendingPathComponent("SSD/Applications").standardizedFileURL.path
+        var reads = 0
+        let readClaims: (URL) -> InstalledCodeEvidence = { _ in
+            reads += 1
+            var claims = InstalledCodeEvidence()
+            claims.add(CodeSignature(identifier: "com.vendor.editor", teamID: "TEAM123456", appGroups: ["TEAM123456.com.vendor.shared"]))
+            return claims
+        }
+
+        let first = DriveAppMemory.seenEntries([drive], roots: [root], now: Date(), readClaims: readClaims)
+        #expect(first.first?.teamIDs == ["TEAM123456"])
+        #expect(first.first?.appGroups == ["team123456.com.vendor.shared"])
+        _ = DriveAppMemory.seenEntries([drive], roots: [root], now: Date(), known: first, readClaims: readClaims)
+        #expect(reads == 1)
+
+        // An update changes the version, and the claims are read again.
+        let info: NSDictionary = ["CFBundleIdentifier": "com.vendor.editor", "CFBundleVersion": "2"]
+        info.write(to: drive.appendingPathComponent("Contents/Info.plist"), atomically: true)
+        _ = DriveAppMemory.seenEntries([drive], roots: [root], now: Date(), known: first, readClaims: readClaims)
+        #expect(reads == 2)
+    }
+
     @Test("Unlisted drive apps join the survivors, but not ones already listed or being removed")
     func unlistedDriveAppsJoinSurvivors() {
         func app(_ path: String) -> InstalledApp {

@@ -173,6 +173,29 @@ struct InstalledCodeEvidenceTests {
         #expect(!claims.app(app, claims: "TEAM123456.com.vendor.other"))
     }
 
+    /// An app on a drive that is unplugged has no signature to read. The groups
+    /// it listed while the drive was in still claim their containers (#99).
+    @Test
+    func unpluggedDriveAppKeepsItsAppGroups() {
+        let entry = DriveAppMemory.Entry(
+            bundlePath: "/Volumes/purge-tests-\(UUID().uuidString)/Applications/Editor.app",
+            bundleID: "com.vendor.editor",
+            name: "Editor",
+            rootPath: "/Volumes/purge-tests-gone/Applications",
+            lastSeen: Date(),
+            appGroups: ["TEAM123456.com.vendor.Shared"]
+        )
+        let unplugged = installedApp(at: URL(fileURLWithPath: entry.bundlePath))
+
+        let claims = AppGroupClaims.gather(
+            for: [],
+            leftovers: [groupContainer("TEAM123456.com.vendor.shared")],
+            readSignature: { _ in nil },
+            remembered: [entry]
+        )
+        #expect(claims.app(unplugged, claims: "TEAM123456.com.vendor.shared"))
+    }
+
     /// Without a group container among the leftovers there is nothing to
     /// claim, so no signature is read.
     @Test

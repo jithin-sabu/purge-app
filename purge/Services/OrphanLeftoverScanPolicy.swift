@@ -177,17 +177,22 @@ enum OrphanLeftoverScanPolicy {
                 }
             }
         }
-        // An app on a drive that is unplugged still owns its leftovers (#99).
+        // An app on a drive that is unplugged still owns its leftovers, and
+        // what its code claims, read while the drive was in (#99).
         DriveAppMemory.record(bundles: appBundles)
-        for app in DriveAppMemory.apps() {
-            if let id = app.bundleID { ids.insert(id.lowercased()) }
-            names.insert(app.name.lowercased())
+        var evidence = InstalledCodeEvidence.gather(userAppBundles: appBundles)
+        for entry in DriveAppMemory.presentEntries() {
+            if let id = entry.bundleID { ids.insert(id.lowercased()) }
+            names.insert(entry.name.lowercased())
+            evidence.bundleIDs.formUnion(entry.codeIDs.map { $0.lowercased() })
+            evidence.teamIDs.formUnion(entry.teamIDs.map { $0.uppercased() })
+            evidence.appGroups.formUnion(entry.appGroups.map { $0.lowercased() })
         }
         return InstalledAppIndex(
             diskBundleIDs: ids,
             diskAppNames: names,
             rootsReadable: rootsReadable,
-            evidence: InstalledCodeEvidence.gather(userAppBundles: appBundles)
+            evidence: evidence
         )
     }
 
