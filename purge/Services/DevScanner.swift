@@ -175,6 +175,10 @@ nonisolated final class DevScanner {
             continuation.yield(.devToolFound(tool))
         }
 
+        // The device rows and the runtime rows' counts read the same device list,
+        // so `simctl` lists devices once per scan (#178).
+        let deviceListing = DeviceListingOnce.live()
+
         await withTaskGroup(of: Void.self) { group in
             group.addTask { [toolSizeJobs] in
                 let sizingStart = Date()
@@ -190,7 +194,7 @@ nonisolated final class DevScanner {
             group.addTask {
                 if Task.isCancelled { return }
                 let simDiscoveryStart = Date()
-                let listing = await self.discoverSimulatorsWithoutSizes(access: access)
+                let listing = await self.discoverSimulatorsWithoutSizes(access: access, deviceListing: deviceListing)
                 let simulators = listing.shutdown
                 ScanPhaseTiming.finish(
                     "simulator discovery",
@@ -216,7 +220,7 @@ nonisolated final class DevScanner {
             group.addTask {
                 if Task.isCancelled { return }
                 let runtimeStart = Date()
-                let runtimes = await self.discoverSimulatorRuntimes()
+                let runtimes = await self.discoverSimulatorRuntimes(deviceListing: deviceListing)
                 ScanPhaseTiming.finish(
                     "simulator runtime discovery",
                     since: runtimeStart,
@@ -243,7 +247,8 @@ nonisolated final class DevScanner {
     /// tools (#298).
     func discoverSimulatorRuntimes(
         now: Date = Date(),
-        coreSimulatorPresent: Bool = Simctl.coreSimulatorPresent()
+        coreSimulatorPresent: Bool = Simctl.coreSimulatorPresent(),
+        deviceListing: DeviceListingOnce = .live()
     ) async -> [SimulatorRuntime] {
         guard coreSimulatorPresent else { return [] }
         guard let listing = await Simctl.runAsync(["runtime", "list", "-j"], timeout: Self.simctlListTimeout),
@@ -252,8 +257,7 @@ nonisolated final class DevScanner {
         // Device counts decide Safe versus Check First, so a failed device listing
         // is passed on as "unknown" rather than "none".
         var deviceCounts: [String: Int]?
-        if let devices = await Simctl.runAsync(["list", "devices", "-j"], timeout: Self.simctlListTimeout),
-           devices.succeeded {
+        if let devices = await deviceListing.output(), devices.succeeded {
             deviceCounts = SimulatorRuntime.deviceCounts(fromDevicesList: devices.stdout)
         }
 
@@ -311,14 +315,17 @@ nonisolated final class DevScanner {
         await discoverSimulatorsWithoutSizes(access: access).shutdown
     }
 
-    func discoverSimulatorsWithoutSizes(access: ScanAccess = .full) async -> SimulatorListing {
+    func discoverSimulatorsWithoutSizes(
+        access: ScanAccess = .full,
+        deviceListing: DeviceListingOnce = .live()
+    ) async -> SimulatorListing {
         let devicesRoot = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Developer/CoreSimulator/Devices", isDirectory: true)
         guard ProtectedLocations.isReadable(devicesRoot, access: access),
               FileManager.default.fileExists(atPath: devicesRoot.path) else { return SimulatorListing() }
 
         // `nil` here also covers `Simctl.launcher()` finding no simctl at all.
-        let listing = await Simctl.runAsync(["list", "devices", "--json"], timeout: Self.simctlListTimeout)
+        let listing = await deviceListing.output()
         var result = simulatorListing(fromListing: listing, devicesRoot: devicesRoot)
         result.shutdown.removeAll { ExcludedPathsStore.isExcluded($0.folderURL) }
         result.running.removeAll { ExcludedPathsStore.isExcluded($0.folderURL) }
@@ -336,7 +343,32 @@ nonisolated final class DevScanner {
 
     /// CoreSimulator can take a while to answer on a cold first call; past this the plist
     /// fallback is a better answer than a stalled scan.
-    private static let simctlListTimeout: TimeInterval = 30
+    fileprivate static let simctlListTimeout: TimeInterval = 30
+
+    /// Runs `simctl list devices -j` the first time it is asked and hands every
+    /// later asker the same answer. Nothing runs until someone asks, so a part of
+    /// the scan that stops early (no CoreSimulator, no devices folder) launches
+    /// nothing (#298).
+    actor DeviceListingOnce {
+        private let run: @Sendable () async -> ProcessRunner.Output?
+        private var listing: Task<ProcessRunner.Output?, Never>?
+
+        init(run: @escaping @Sendable () async -> ProcessRunner.Output?) {
+            self.run = run
+        }
+
+        static func live() -> DeviceListingOnce {
+            DeviceListingOnce { await Simctl.runAsync(["list", "devices", "-j"], timeout: DevScanner.simctlListTimeout) }
+        }
+
+        func output() async -> ProcessRunner.Output? {
+            if let listing { return await listing.value }
+            let run = self.run
+            let started = Task { await run() }
+            listing = started
+            return await started.value
+        }
+    }
 
     /// Devices come only from a `simctl` that can also delete them, because the
     /// delete goes through the same `simctl`. The `device.plist` files stand in
@@ -355,36 +387,22 @@ nonisolated final class DevScanner {
     }
 
     private func parseSimulatorList(_ data: Data, devicesRoot: URL) -> SimulatorListing? {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let devicesMap = root["devices"] as? [String: Any] else {
-            return nil
-        }
+        guard let list = SimulatorDeviceList.parse(data) else { return nil }
 
         var built: [SimulatorDevice] = []
         var running: [SimulatorDevice] = []
-        for (runtimeKey, rawList) in devicesMap {
-            guard let deviceDicts = rawList as? [[String: Any]] else { continue }
+        for (runtimeKey, devices) in list.devicesByRuntime {
             let runtimeVersion = Self.runtimeVersionLabel(from: runtimeKey)
 
-            for dict in deviceDicts {
-                guard let udidString = dict["udid"] as? String,
+            for entry in devices {
+                guard let udidString = entry.udid,
                       let id = UUID(uuidString: udidString) else { continue }
 
-                let stateString = dict["state"] as? String ?? ""
-                let isBooted = stateString == "Booted"
-
-                let name = dict["name"] as? String ?? String(localized: "Simulator")
-                let isAvailable = (dict["isAvailable"] as? Bool) ?? true
-
-                let lastBootedAt: Date?
-                if let iso = dict["lastBootedAt"] as? String {
-                    lastBootedAt = ISO8601DateFormatter().date(from: iso)
-                } else {
-                    lastBootedAt = nil
-                }
+                let isBooted = entry.state == "Booted"
+                let name = entry.name ?? String(localized: "Simulator")
 
                 let folderURL: URL
-                if let dataPathStr = dict["dataPath"] as? String {
+                if let dataPathStr = entry.dataPath {
                     let dataURL = URL(fileURLWithPath: dataPathStr, isDirectory: true)
                     folderURL = dataURL.deletingLastPathComponent()
                 } else {
@@ -397,8 +415,8 @@ nonisolated final class DevScanner {
                 let safety = isBooted
                     ? SimulatorDevice.runningSafetyInfo(deviceName: name, runtimeVersion: runtimeVersion)
                     : SimulatorDevice.safetyInfo(
-                        isAvailable: isAvailable,
-                        lastBootedAt: lastBootedAt,
+                        isAvailable: entry.isAvailable,
+                        lastBootedAt: entry.lastBootedAt,
                         deviceName: name,
                         runtimeVersion: runtimeVersion
                     )
@@ -407,8 +425,8 @@ nonisolated final class DevScanner {
                     id: id,
                     deviceName: name,
                     runtimeVersion: runtimeVersion,
-                    isAvailable: isAvailable,
-                    lastBootedAt: lastBootedAt,
+                    isAvailable: entry.isAvailable,
+                    lastBootedAt: entry.lastBootedAt,
                     sizeOnDisk: nil,
                     folderURL: folderURL,
                     isSelected: false,

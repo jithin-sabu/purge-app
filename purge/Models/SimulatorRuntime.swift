@@ -152,13 +152,7 @@ nonisolated struct SimulatorRuntime: Identifiable, Hashable {
     /// Simulators per runtime from `simctl list devices -j`, every state included.
     /// `nil` when the JSON is not a device list.
     static func deviceCounts(fromDevicesList data: Data) -> [String: Int]? {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let devices = root["devices"] as? [String: Any] else { return nil }
-        var counts: [String: Int] = [:]
-        for (runtimeIdentifier, rawList) in devices {
-            counts[runtimeIdentifier] = (rawList as? [[String: Any]])?.count ?? 0
-        }
-        return counts
+        SimulatorDeviceList.parse(data)?.countsByRuntime
     }
 
     /// Runtime builds the selected Xcode picks for each SDK, from
