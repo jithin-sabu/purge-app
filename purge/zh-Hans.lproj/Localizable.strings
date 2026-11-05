@@ -209,6 +209,7 @@
 "Moving %@ to Trash" = "将 %@ 移到废纸篓";
 "Moving %@ to Trash, freeing %@" = "将 %@ 移到废纸篓，释放 %@";
 "Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "正在运行，因此无法移除。请先在“模拟器”中将其关闭，然后重新扫描。";
+"Busy right now, so it can't be removed. Scan again in a moment." = "正忙，因此暂时无法移除。请稍后重新扫描。";
 "Dependencies" = "依赖项";
 "Dev Tools" = "开发工具";
 "Dev tool artifacts" = "开发工具生成文件";

@@ -241,7 +241,7 @@ struct DevToolsView: View {
         return sorted.map(\.id)
     }
 
-    /// Booted simulators, shown under the ones that can be removed.
+    /// Simulators that are not shut down, shown under the ones that can be removed.
     private var visibleRunningSimulators: [SimulatorDevice] {
         let filter = currentSafetyFilter
         return store.runningSimulatorDevices.filter { filter.matches($0.safetyInfo) }
@@ -883,7 +883,7 @@ struct DevToolsView: View {
                         }
                     }
 
-                    // No checkbox: a running device is never offered for removal.
+                    // No checkbox: a device that is not shut down is never offered for removal.
                     ForEach(visibleRunningSimulators) { device in
                         ScanResultRow(
                             isSelected: false,

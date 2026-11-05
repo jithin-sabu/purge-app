@@ -247,7 +247,8 @@ final class PurgeStore: ObservableObject {
             lastScanListDidChange(.simulators)
         }
     }
-    /// Booted simulators, shown without a checkbox so the space they take is not a
+    /// Simulators that are not shut down (booted, booting, shutting down, being
+    /// created), shown without a checkbox so the space they take is not a
     /// mystery. Never selected, never counted as recoverable, never deleted.
     @Published var runningSimulatorDevices: [SimulatorDevice] = [] {
         didSet { confirmLastScanRows(.simulators) }

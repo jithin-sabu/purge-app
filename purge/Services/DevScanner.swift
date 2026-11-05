@@ -301,9 +301,10 @@ nonisolated final class DevScanner {
 
     // MARK: - iOS Simulators
 
-    /// Shut-down simulators, which can be deleted, and booted ones, which are only
-    /// shown. A booted device is skipped rather than offered, because something (a
-    /// test run, the Simulator app) may be using it.
+    /// Shut-down simulators, which can be deleted, and every other one, which is
+    /// only shown. A booted device is skipped rather than offered, because something
+    /// (a test run, the Simulator app) may be using it; one booting, shutting down
+    /// or being created is skipped too, and so is a state Purge doesn't know (#178).
     struct SimulatorListing: Equatable {
         var shutdown: [SimulatorDevice] = []
         var running: [SimulatorDevice] = []
@@ -398,7 +399,7 @@ nonisolated final class DevScanner {
                 guard let udidString = entry.udid,
                       let id = UUID(uuidString: udidString) else { continue }
 
-                let isBooted = entry.state == "Booted"
+                let isShutDown = entry.state == "Shutdown"
                 let name = entry.name ?? String(localized: "Simulator")
 
                 let folderURL: URL
@@ -412,8 +413,12 @@ nonisolated final class DevScanner {
                 guard PathContainment.isInside(folderURL.standardizedFileURL.path, devicesRoot.standardizedFileURL.path) else { continue }
                 guard FileManager.default.fileExists(atPath: folderURL.path) else { continue }
 
-                let safety = isBooted
-                    ? SimulatorDevice.runningSafetyInfo(deviceName: name, runtimeVersion: runtimeVersion)
+                let safety = !isShutDown
+                    ? SimulatorDevice.runningSafetyInfo(
+                        deviceName: name,
+                        runtimeVersion: runtimeVersion,
+                        isBooted: entry.state == "Booted"
+                    )
                     : SimulatorDevice.safetyInfo(
                         isAvailable: entry.isAvailable,
                         lastBootedAt: entry.lastBootedAt,
@@ -432,10 +437,10 @@ nonisolated final class DevScanner {
                     isSelected: false,
                     safetyInfo: safety
                 )
-                if isBooted {
-                    running.append(device)
-                } else {
+                if isShutDown {
                     built.append(device)
+                } else {
+                    running.append(device)
                 }
             }
         }
@@ -477,6 +482,10 @@ nonisolated final class DevScanner {
             let plistURL = folder.appendingPathComponent("device.plist")
             guard let plist = NSDictionary(contentsOf: plistURL) as? [String: Any] else { continue }
 
+            // CoreSimulator's numbers: 0 creating, 1 shut down, 2 booting, 3 booted,
+            // 4 shutting down. Only a shut-down device is offered, and a missing
+            // state is not taken for one (#178).
+            let isShutDown = (plist["state"] as? Int) == 1 || (plist["state"] as? String) == "Shutdown"
             let isBooted = (plist["state"] as? Int) == 3 || (plist["state"] as? String) == "Booted"
 
             let name = plist["name"] as? String ?? String(localized: "Simulator")
@@ -489,8 +498,8 @@ nonisolated final class DevScanner {
             let isAvailable = !folder.path.contains("/Devices/unavailable/")
 
             let shownVersion = runtimeVersion.isEmpty ? String(localized: "Unknown runtime") : runtimeVersion
-            let safety = isBooted
-                ? SimulatorDevice.runningSafetyInfo(deviceName: name, runtimeVersion: shownVersion)
+            let safety = !isShutDown
+                ? SimulatorDevice.runningSafetyInfo(deviceName: name, runtimeVersion: shownVersion, isBooted: isBooted)
                 : SimulatorDevice.safetyInfo(
                     isAvailable: isAvailable,
                     lastBootedAt: lastBootedAt,
@@ -509,10 +518,10 @@ nonisolated final class DevScanner {
                 isSelected: false,
                 safetyInfo: safety
             )
-            if isBooted {
-                running.append(device)
-            } else {
+            if isShutDown {
                 built.append(device)
+            } else {
+                running.append(device)
             }
         }
 
