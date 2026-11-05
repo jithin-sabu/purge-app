@@ -1,7 +1,7 @@
 import Foundation
 
-/// Where the App Uninstaller looks for apps inside `/Applications` and
-/// `~/Applications`: at any depth, but never inside another app or package,
+/// Where the App Uninstaller looks for apps inside each app folder
+/// (`AppFolders`): at any depth, but never inside another app or package,
 /// never through a symlink, and never through a hidden folder.
 ///
 /// Vendors nest their apps, like

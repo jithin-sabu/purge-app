@@ -215,10 +215,10 @@ extension PurgeStore {
         case .largeFiles:
             return Self.overviewItems(forLargeFiles: largeFiles)
         case .apps:
-            return installedApps.flatMap { app in
+            return Self.onThisDisk(installedApps.flatMap { app in
                 appFootprintItemsByAppID[app.id]
                     ?? [OverviewSizedItem(path: app.bundleURL.path, bytes: app.bundleSizeBytes)]
-            }
+            })
         case .leftovers:
             return orphanLeftovers.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
         }
@@ -229,9 +229,13 @@ extension PurgeStore {
     /// `/Volumes/…` path (#273), and counted they would push the bar past the
     /// used space. String work only, like `OverviewSizedItem.normalized`.
     nonisolated static func overviewItems(forLargeFiles files: [LargeFile]) -> [OverviewSizedItem] {
-        files
-            .filter { !$0.path.path.hasPrefix("/Volumes/") }
-            .map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) }
+        onThisDisk(files.map { OverviewSizedItem(path: $0.path.path, bytes: $0.sizeBytes) })
+    }
+
+    /// Leaves out what sits on another drive. An app on a drive (#99) counts its
+    /// leftovers, which are in `~/Library` on this disk, and not its bundle.
+    nonisolated static func onThisDisk(_ items: [OverviewSizedItem]) -> [OverviewSizedItem] {
+        items.filter { !$0.path.hasPrefix("/Volumes/") }
     }
 
     /// A tool can span several folders. Each gets its own measured size where known;

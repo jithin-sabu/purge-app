@@ -579,7 +579,7 @@ struct UninstallView: View {
                 emptyState(
                     symbol: "app.badge",
                     title: String(localized: "No apps found"),
-                    detail: String(localized: "Purge looks in Applications and your home Applications folder.")
+                    detail: String(localized: "Purge looks in Applications, your home Applications folder, the Applications folder on each drive, and folders you add in Settings.")
                 )
             } else {
                 ScanStatusPlaceholder(
@@ -965,11 +965,12 @@ private struct AppListRow: View {
     @State private var isContextMenuActive = false
 
     /// The folder, plus who installed it when Homebrew did (#254), so the
-    /// review sheet's Homebrew choice is no surprise.
+    /// review sheet's Homebrew choice is no surprise, or the drive it is on (#99).
     private var locationLine: String {
         let folder = app.bundleURL.deletingLastPathComponent().path
-        guard app.homebrewCask != nil else { return folder }
-        return String(localized: "\(folder) · Installed by Homebrew")
+        if app.homebrewCask != nil { return String(localized: "\(folder) · Installed by Homebrew") }
+        if let drive = app.volumeName { return String(localized: "\(folder) · On \(drive)") }
+        return folder
     }
 
     var body: some View {
@@ -1108,6 +1109,7 @@ private struct AppTile: View {
 
     private var totalBytes: Int64 { size.bytes }
     private var isSizePending: Bool { size.isPending }
+    private var driveLabel: String? { app.volumeName.map { String(localized: "On \($0)") } }
 
     @State private var isHovering = false
     @State private var isContextMenuActive = false
@@ -1117,6 +1119,16 @@ private struct AppTile: View {
             Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
                 .resizable()
                 .frame(width: 56, height: 56)
+                // An app on a drive keeps the tile's height: the drive shows as a
+                // badge, and its name in the tooltip (#99).
+                .overlay(alignment: .bottomTrailing) {
+                    if app.volumeName != nil {
+                        Image(systemName: "externaldrive.fill")
+                            .font(AppStyle.Typography.metadata)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .frame(maxWidth: .infinity)
 
             VStack(spacing: AppStyle.Spacing.xxxSmall) {
@@ -1171,10 +1183,10 @@ private struct AppTile: View {
         .onTapGesture { if !isFromLastScan { onToggle() } }
         .onHover { isHovering = $0 && !isFromLastScan }
         // Full name on hover, since the tile truncates longer ones.
-        .help(isFromLastScan ? LastScanRowMarker.help : activityLabel.map { "\(app.name), \($0)" } ?? app.name)
+        .help(isFromLastScan ? LastScanRowMarker.help : [app.name, driveLabel, activityLabel].compactMap { $0 }.joined(separator: ", "))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
+            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(driveLabel.map { ", \($0)" } ?? "")\(activityLabel.map { ", \($0)" } ?? "")"
         )
         .accessibilityValue(isFromLastScan ? LocalizedStringKey(LastScanRowMarker.help) : isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -1537,7 +1549,7 @@ struct RemovedAppLeftoverSheet: View {
                 Text("\(plan.app.name) left files behind")
                     .font(AppStyle.Typography.pageTitle)
                     .foregroundStyle(AppColors.textPrimary)
-                Text("\(plan.app.name) was removed from Applications, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it.")
+                Text("\(plan.app.name) was removed, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it.")
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -46,8 +46,8 @@ nonisolated enum ExternalUninstallRequest {
                 )
             case .outsideApplications(let name):
                 return (
-                    String(localized: "\(name) is outside the Applications folder"),
-                    String(localized: "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move \(name) there first, or drag it to the Trash yourself.")
+                    String(localized: "\(name) isn't in a folder Purge lists apps from"),
+                    String(localized: "Purge's App Uninstaller lists apps in the Applications folders, on drives, and in folders you add in Settings > App folders. Add the folder \(name) is in there, or drag it to the Trash yourself.")
                 )
             case .insideAnotherApp(let name):
                 return (

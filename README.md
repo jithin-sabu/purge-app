@@ -119,12 +119,12 @@ Purge understands Ollama's content-addressed storage, so a model's size counts o
 
 Dragging an app to the Trash leaves most of it behind: caches, preferences, containers, saved state, logs, and login helpers pile up on disk. The Uninstaller removes the app and those leftovers in one pass.
 
-- Lists the apps you installed in **Applications** and **~/Applications**, skipping system apps and Purge itself. Each tile shows what an uninstall would free: the app bundle plus its removable leftovers
+- Lists the apps you installed in **Applications** and **~/Applications**, in the **Applications** folder at the top of any drive you plug in, and in folders you add under Settings > App folders, skipping system apps and Purge itself. Each tile shows what an uninstall would free: the app bundle plus its removable leftovers
 - Select one or more apps, then review a per-app sheet that lists every item with its path and size and a safety label
 - Matching is strict, so uninstalling one app can't sweep in files shared across a vendor's apps. Exact bundle-id and app-group matches arrive checked; looser name-only matches arrive unchecked for you to confirm
 - A running app is asked to quit first, and only gracefully. If it won't, it's left installed and the rest of the batch still goes through
 - Everything confirmed moves to **Trash** through the same delete engine as the rest of Purge, so it can all come back. The one exception is an app Homebrew installed as a cask: the review sheet offers two buttons, Remove with Homebrew and Move All to Trash, and says that Homebrew deletes the app permanently and runs the cask's own uninstall steps, which can stop its background services and delete its helper tools and installer files permanently too. A cask that installs several apps is never offered to Homebrew. Its leftovers still go to the Trash, and if Homebrew refuses, the app goes to the Trash instead
-- Optional, off by default: turn on **Review leftovers when an app is deleted** in Settings. A small background watcher then notices when an app leaves **Applications** or **~/Applications** — even if Purge is quit — opens Purge with just that app's leftovers, and gets out of the way after you confirm or dismiss. Nothing moves without that review
+- Optional, off by default: turn on **Review leftovers when an app is deleted** in Settings. A small background watcher then notices when an app leaves one of those folders — even if Purge is quit — opens Purge with just that app's leftovers, and gets out of the way after you confirm or dismiss. Nothing moves without that review
 
 ### Safety labels
 

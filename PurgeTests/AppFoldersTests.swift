@@ -274,6 +274,29 @@ struct AppFoldersTests {
         }
     }
 
+    @Test("Settings lists the built-in folders, each drive's, and added ones, unplugged ones marked")
+    func settingsListing() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/SSD/Applications")
+        let added = try fixture.folder("Volumes/SSD/Apps")
+        let gone = try fixture.folder("Volumes/Old/Apps")
+
+        try withTemporaryHandoffRoot {
+            try AppFolders.$volumes.withValue(fixture.volumes) {
+                #expect(AppFolders.add(added, home: fixture.home).refusal == nil)
+                #expect(AppFolders.add(gone, home: fixture.home).refusal == nil)
+                try FileManager.default.removeItem(at: fixture.url("Volumes/Old"))
+
+                let rows = AppFolderListing.load(home: fixture.home).rows
+                #expect(rows.map(\.kind) == [.builtIn, .builtIn, .drive, .added, .added])
+                #expect(rows[2].path == fixture.url("Volumes/SSD/Applications").path)
+                #expect(rows[3].isAvailable)
+                #expect(!rows[4].isAvailable)
+            }
+        }
+    }
+
     @Test("The roots start with the two built-in Applications folders")
     func builtInRootsComeFirst() throws {
         let fixture = try Fixture()
