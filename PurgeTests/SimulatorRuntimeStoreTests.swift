@@ -146,29 +146,66 @@ struct SimulatorRuntimeStoreTests {
         #expect(!ExcludedPathsStore.contains(path: row.locationURL))
     }
 
-    /// Excluded after the sheet opened: the clean checks again and leaves it.
-    @Test func aRuntimeExcludedBeforeTheCleanRunsIsLeftAlone() async {
+    /// Excluded from the list while the confirm sheet is open, as from a second
+    /// window: the clean leaves that runtime alone and takes the other one, and
+    /// the excluded one is not reported as skipped (#178).
+    @Test func aRuntimeExcludedWhileTheSheetIsOpenIsLeftAlone() async throws {
         let scans = FakeScans()
         defer { scans.cleanUp() }
-        let row = runtime(id: "178D0002-0000-4000-8000-000000000002", build: "178STORE2")
-        defer { ExcludedSimulatorRuntimesStore.remove(imageID: row.id) }
-        scans.developerEvents = [.simulatorRuntimeFound(row)]
-        let attempts = Attempts()
-        let deleter = FileDeleter(simulatorRuntimeRemover: { _ in
-            _ = attempts.next()
+        let excluded = runtime(id: "178D0002-0000-4000-8000-000000000002", version: "26.2", build: "178STORE2")
+        let kept = runtime(id: "178D0003-0000-4000-8000-000000000003", version: "26.1", build: "178STORE3")
+        defer { ExcludedSimulatorRuntimesStore.remove(imageID: excluded.id) }
+        scans.developerEvents = [.simulatorRuntimeFound(excluded), .simulatorRuntimeFound(kept)]
+        let removed = RemovedIDs()
+        let deleter = FileDeleter(simulatorRuntimeRemover: { id in
+            removed.add(id)
             return .removed(freed: .unknown, download: .notKept, isLegacyImage: false)
         })
         let store = scans.makeStore(fileDeleter: deleter)
         await store.scanDeveloper()
-        store.setSimulatorRuntimeSelected(id: row.id, isSelected: true)
+        store.setSimulatorRuntimeSelected(id: excluded.id, isSelected: true)
+        store.setSimulatorRuntimeSelected(id: kept.id, isSelected: true)
         store.presentDeletionSheet(candidates: store.deletionCandidates)
 
-        ExcludedSimulatorRuntimesStore.write(row)
+        store.excludeFromScans(excluded)
         store.userConfirmedDeletionFromPrimarySheet()
-        try? await Task.sleep(for: .milliseconds(200))
 
-        #expect(!store.isDeleting)
-        #expect(attempts.next() == 1)
+        #expect(await eventually { store.manualDeletionSession?.phase == .complete })
+        let session = try #require(store.manualDeletionSession)
+        #expect(removed.ids == [kept.id])
+        #expect(session.failedItems.isEmpty)
+        #expect(session.removedPermanentlyCount == 1)
+    }
+
+    /// The scan moves a runtime excluded by path before #178 to the runtime list.
+    /// Settings reads that list from the store, so the store reads it again once
+    /// the scan ends; otherwise Settings showed nothing excluded.
+    @Test func aScanThatMovesAnOldExclusionUpdatesSettings() async {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let row = runtime(id: "178D0004-0000-4000-8000-000000000004", build: "178STORE4")
+        defer {
+            ExcludedSimulatorRuntimesStore.remove(imageID: row.id)
+            ExcludedPathsStore.remove(path: row.locationURL)
+        }
+        ExcludedPathsStore.write(path: row.locationURL, displayName: "iOS 26.3.1 Runtime")
+        let store = scans.makeStore()
+        #expect(!store.excludedSimulatorRuntimes.contains { $0.imageID == row.id })
+
+        // What DevScanner does with the runtime it lists.
+        #expect(ExcludedSimulatorRuntimesStore.isExcluded(row))
+        await store.scanDeveloper()
+
+        #expect(store.excludedSimulatorRuntimes.contains { $0.imageID == row.id })
+        #expect(!store.excludedPaths.contains(row.locationURL.path))
+    }
+
+    private final class RemovedIDs: @unchecked Sendable {
+        private let lock = NSLock()
+        private var list: [String] = []
+
+        func add(_ id: String) { lock.withLock { list.append(id) } }
+        var ids: [String] { lock.withLock { list } }
     }
 
     /// When Apple keeps a runtime's download, the completion screen says so, and

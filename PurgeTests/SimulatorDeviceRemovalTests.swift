@@ -479,4 +479,22 @@ struct SimulatorDeviceListingTests {
         #expect(listing.shutdown.isEmpty)
         #expect(listing.running.map(\.id.uuidString) == [udid])
     }
+
+    /// A runtime whose list holds something that is not a device entry offers
+    /// none of its devices, shut down or not, as before #178.
+    @Test(arguments: ["Shutdown", "Booted"])
+    func aDeviceBesideAnUnreadableEntryIsNotListed(state: String) throws {
+        let root = try makeDevicesRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let dataPath = root.appendingPathComponent("\(udid)/data").path
+        let json = """
+            {"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+              null,
+              {"udid": "\(udid)", "state": "\(state)", "name": "iPhone 17", "isAvailable": true, "dataPath": "\(dataPath)"}
+            ]}}
+            """
+        let listing = DevScanner().simulatorListing(fromListing: output(0, stdout: json), devicesRoot: root)
+        #expect(listing.shutdown.isEmpty)
+        #expect(listing.running.isEmpty)
+    }
 }

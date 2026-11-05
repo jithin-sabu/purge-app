@@ -179,6 +179,9 @@ final class PurgeStore: ObservableObject {
         let subtitle: String?
         var reinstallSafety: ReinstallSafetyStatus
         var gitStatus: GitWorktreeStatus
+        /// Set on a simulator runtime row, so the clean can check the runtime
+        /// exclusion list after the row itself is gone (#178).
+        var simulatorRuntime: SimulatorRuntimeHandle? = nil
 
         var formattedSize: String { formatBytes(sizeBytes) }
 
@@ -1268,12 +1271,9 @@ final class PurgeStore: ObservableObject {
         // Same rule as safe cleanup: a row from a full scan whose access has since
         // been turned off stays where it is. Moving it would prompt.
         let access = currentScanAccess()
-        let excludedRuntimePaths = Set(simulatorRuntimes
-            .filter { ExcludedSimulatorRuntimesStore.isExcluded(imageID: $0.id, build: $0.build) }
-            .map { $0.locationURL.standardizedFileURL.path })
         let candidates = staged.filter {
             ProtectedLocations.isReadable($0.path, access: access) && !ExcludedPathsStore.isExcluded($0.path)
-                && !excludedRuntimePaths.contains($0.path.standardizedFileURL.path)
+                && !($0.simulatorRuntime?.isExcluded ?? false)
         }
         let urls = candidates.map(\.path).map(\.standardizedFileURL)
         guard !urls.isEmpty else { return }
@@ -1379,7 +1379,10 @@ final class PurgeStore: ObservableObject {
         }
         // Every clean checks this before it starts. A retry is no exception, and
         // the row says so rather than keeping a Retry that does nothing.
-        guard !ExcludedPathsStore.isExcluded(url) else {
+        let runtime = simulatorRuntimes.first { $0.locationURL.standardizedFileURL.path == key }
+        guard !ExcludedPathsStore.isExcluded(url),
+              !(runtime.map { ExcludedSimulatorRuntimesStore.isExcluded(imageID: $0.id, build: $0.build) } ?? false)
+        else {
             if item.reason != .safetySkipped {
                 session.replaceFailure(id: item.id, with: [item.replacingReason(.safetySkipped)])
             }
@@ -4057,6 +4060,9 @@ final class PurgeStore: ObservableObject {
         }
         coalesce.debounceTask?.cancel()
         flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
+        // The scan moves a runtime excluded by path before #178 to the runtime
+        // list, so Settings would show neither until the lists are read again.
+        refreshExclusionListsIfChanged()
         ScanPhaseTiming.finish(
             "runDeveloperScan stream",
             since: streamStart,
@@ -5402,7 +5408,8 @@ final class PurgeStore: ObservableObject {
             reinstallCommand: nil,
             subtitle: String(localized: "Build \(runtime.build)"),
             reinstallSafety: .notApplicable,
-            gitStatus: .clean
+            gitStatus: .clean,
+            simulatorRuntime: SimulatorRuntimeHandle(imageID: runtime.id, build: runtime.build)
         )
     }
 
@@ -5543,6 +5550,13 @@ final class PurgeStore: ObservableObject {
 
     private func refreshUserOverridePaths() {
         userOverridePaths = UserOverridesStore.allOverriddenPaths()
+    }
+
+    /// Reads both exclusion lists again, and publishes only when one changed.
+    private func refreshExclusionListsIfChanged() {
+        guard ExcludedPathsStore.allExcludedPaths() != excludedPaths
+            || ExcludedSimulatorRuntimesStore.allEntries() != excludedSimulatorRuntimes else { return }
+        refreshExcludedPaths()
     }
 
     func refreshExcludedPaths() {

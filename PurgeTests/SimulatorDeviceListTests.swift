@@ -54,6 +54,27 @@ struct SimulatorDeviceListTests {
         #expect(!list.contains(udid: "00000000-0000-0000-0000-000000000000"))
     }
 
+    /// A list with something that is not a device entry is marked unreadable,
+    /// and every entry still counts toward the runtime.
+    @Test func aListWithAnUnreadableEntryIsMarked() throws {
+        let json = """
+        {"devices": {
+          "com.apple.CoreSimulator.SimRuntime.iOS-26-3": [null, {"udid": "5B0A7C1E-2F4D-4E8A-9C3B-1D2E3F405162", "state": "Shutdown"}],
+          "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [{"udid": "6C1B8D2F-3A5E-4F9B-8D4C-2E3F40516273", "state": "Shutdown"}],
+          "com.apple.CoreSimulator.SimRuntime.iOS-26-6": "not a list"
+        }}
+        """
+        let list = try #require(SimulatorDeviceList.parse(Data(json.utf8)))
+
+        #expect(list.unreadableRuntimes == [
+            "com.apple.CoreSimulator.SimRuntime.iOS-26-3",
+            "com.apple.CoreSimulator.SimRuntime.iOS-26-6",
+        ])
+        #expect(list.countsByRuntime["com.apple.CoreSimulator.SimRuntime.iOS-26-3"] == 2)
+        // Still found, so a delete is never judged done because of its neighbour.
+        #expect(list.contains(udid: "5B0A7C1E-2F4D-4E8A-9C3B-1D2E3F405162"))
+    }
+
     @Test func somethingElseIsNotADeviceList() {
         #expect(SimulatorDeviceList.parse(Data("{}".utf8)) == nil)
         #expect(SimulatorDeviceList.parse(Data("not json".utf8)) == nil)

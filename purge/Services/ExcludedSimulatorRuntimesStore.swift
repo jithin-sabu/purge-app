@@ -11,6 +11,17 @@ nonisolated struct ExcludedSimulatorRuntimeEntry: Codable, Sendable, Equatable {
     let dateAdded: Date
 }
 
+/// What the clean needs to check a runtime row against the exclusion list once
+/// the row itself may be gone.
+nonisolated struct SimulatorRuntimeHandle: Hashable, Sendable {
+    let imageID: String
+    let build: String
+
+    var isExcluded: Bool {
+        ExcludedSimulatorRuntimesStore.isExcluded(imageID: imageID, build: build)
+    }
+}
+
 /// Simulator runtimes the user excluded from scans, kept apart from the path list
 /// because a runtime has no fixed path. `simctl` reports the mounted volume while
 /// macOS has the image mounted and the image file when it hasn't, so an exclusion

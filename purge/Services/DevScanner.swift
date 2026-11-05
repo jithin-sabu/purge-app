@@ -392,7 +392,9 @@ nonisolated final class DevScanner {
 
         var built: [SimulatorDevice] = []
         var running: [SimulatorDevice] = []
-        for (runtimeKey, devices) in list.devicesByRuntime {
+        // Like before #178, a runtime whose list Purge can't read whole offers none
+        // of its devices.
+        for (runtimeKey, devices) in list.devicesByRuntime where !list.unreadableRuntimes.contains(runtimeKey) {
             let runtimeVersion = Self.runtimeVersionLabel(from: runtimeKey)
 
             for entry in devices {

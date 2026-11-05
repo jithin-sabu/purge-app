@@ -18,6 +18,11 @@ nonisolated struct SimulatorDeviceList: Equatable, Sendable {
 
     /// Devices by the runtime identifier they run on.
     let devicesByRuntime: [String: [Device]]
+    /// Entries per runtime, readable or not.
+    let countsByRuntime: [String: Int]
+    /// Runtimes whose list is not an array of device entries. None of their
+    /// devices is offered: a list Purge can't read whole is not trusted (#178).
+    let unreadableRuntimes: Set<String>
 
     /// `nil` when the JSON is not a device list.
     static func parse(_ data: Data) -> SimulatorDeviceList? {
@@ -25,8 +30,15 @@ nonisolated struct SimulatorDeviceList: Equatable, Sendable {
               let devices = root["devices"] as? [String: Any] else { return nil }
         let dateParser = ISO8601DateFormatter()
         var byRuntime: [String: [Device]] = [:]
+        var counts: [String: Int] = [:]
+        var unreadable: Set<String> = []
         for (runtimeIdentifier, rawList) in devices {
-            let entries = (rawList as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
+            let list = rawList as? [Any] ?? []
+            let entries = list.compactMap { $0 as? [String: Any] }
+            counts[runtimeIdentifier] = list.count
+            if !(rawList is [Any]) || entries.count != list.count {
+                unreadable.insert(runtimeIdentifier)
+            }
             byRuntime[runtimeIdentifier] = entries.map { entry in
                 Device(
                     udid: entry["udid"] as? String,
@@ -38,14 +50,11 @@ nonisolated struct SimulatorDeviceList: Equatable, Sendable {
                 )
             }
         }
-        return SimulatorDeviceList(devicesByRuntime: byRuntime)
+        return SimulatorDeviceList(devicesByRuntime: byRuntime, countsByRuntime: counts, unreadableRuntimes: unreadable)
     }
 
-    /// Simulators per runtime, every state included.
-    var countsByRuntime: [String: Int] {
-        devicesByRuntime.mapValues(\.count)
-    }
-
+    /// Searches unreadable lists too, so a device is never taken for gone just
+    /// because an entry beside it could not be read.
     func contains(udid: String) -> Bool {
         devicesByRuntime.values.contains { devices in
             devices.contains { $0.udid?.caseInsensitiveCompare(udid) == .orderedSame }

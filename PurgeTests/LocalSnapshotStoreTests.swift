@@ -29,6 +29,8 @@ struct LocalSnapshotStoreTests {
         var deleteCalls: [[String]] { lock.withLock { deleted } }
 
         func failReadings() { lock.withLock { readable = false } }
+        /// Time Machine dropping a snapshot on its own.
+        func expire(_ name: String) { lock.withLock { names.removeAll { $0 == name } } }
         func refuse(stamp: String) { lock.withLock { _ = stuck.insert(stamp) } }
 
         func read() -> LocalSnapshots? {
@@ -85,10 +87,12 @@ struct LocalSnapshotStoreTests {
     /// The confirmation showed two, then Time Machine dropped the newer ones: the
     /// older of the two is now the newest and is kept.
     @Test func sparesOneThatBecameTheNewest() async {
-        let mac = FakeTimeMachine([Self.oldest, Self.older])
+        let mac = FakeTimeMachine([Self.oldest, Self.older, Self.newest])
         let store = mac.makeStore()
+        let confirmed = planned([Self.oldest, Self.older])
 
-        await store.remove(planned([Self.oldest, Self.older]))
+        mac.expire(Self.newest)
+        await store.remove(confirmed)
 
         #expect(mac.deleteCalls == [[stamp(Self.oldest)]])
         #expect(store.lastRemoval?.outcome == .removed(count: 1, freedBytes: nil))
