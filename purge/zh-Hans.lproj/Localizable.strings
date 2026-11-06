@@ -838,7 +838,6 @@
 "%@ is no longer there" = "%@ 已不在原处";
 "Purge could not find %@ where it was. It may have been moved or already removed." = "Purge 在原来的位置找不到 %@。它可能已被移动或移除。";
 "Purge could not find %@ in its app list" = "Purge 的应用列表中找不到 %@";
-"Purge's App Uninstaller lists apps in the Applications folders, on drives, and in folders you add in Settings > App folders, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具会列出“应用程序”文件夹、外接磁盘上以及你在“设置”>“应用文件夹”中添加的文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
 "%@ is inside another app or package, so Purge does not list it on its own. To remove it, uninstall the app it belongs to." = "%@ 位于另一个应用或软件包内，因此 Purge 不会单独列出它。要移除它，请卸载它所属的应用。";
 "%lld simulators use it. %@" = "有 %lld 个模拟器在使用它。%@";
 ", syncs with iCloud" = "，与 iCloud 同步";
@@ -865,7 +864,6 @@
 "Purge never removes Apple's built-in apps." = "Purge 从不移除 Apple 内置应用。";
 "Purge uninstalls apps. Select an app in Finder and try again." = "Purge 只能卸载应用。请在访达中选择一个应用后重试。";
 "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller." = "从访达一次只能卸载一个应用。如需一次移除多个应用，请在 Purge 的卸载工具中勾选。";
-"Purge's App Uninstaller lists apps in the Applications folders, on drives, and in folders you add in Settings > App folders. Add the folder %@ is in there, or drag it to the Trash yourself." = "Purge 的卸载工具会列出“应用程序”文件夹、外接磁盘上以及你在“设置”>“应用文件夹”中添加的文件夹里的应用。请在那里添加 %@ 所在的文件夹，或自行将它拖到废纸篓。";
 "Purge's secure removal helper isn't responding. Move the app to the Trash in Finder instead." = "Purge 的安全移除助手没有响应。请改用访达将应用移到废纸篓。";
 "Purge's secure removal helper isn't responding. Try again later." = "Purge 的安全移除助手没有响应。请稍后再试。";
 "Restart to Update to Purge %@" = "重新启动以更新到 Purge %@";
@@ -1388,7 +1386,6 @@
 "macOS won't let Purge move this app from where it is. Drag it to the Trash in Finder, then retry to remove what it left behind." = "macOS 不允许 Purge 从当前位置移动这个应用。请在“访达”中把它拖到废纸篓，然后重试以移除它留下的文件。";
 
 /* App folders in Settings > Uninstalling (#99) */
-"App folders" = "应用文件夹";
 "Purge lists apps from these folders. When you plug in a drive, the Applications folder at its top is added for as long as the drive stays connected." = "Purge 会列出这些文件夹中的应用。插入外接磁盘后，其顶层的“应用程序”文件夹会在磁盘保持连接期间一并加入。";
 "Purge can’t add that folder" = "Purge 无法添加该文件夹";
 "Built in" = "内置";
@@ -1410,3 +1407,9 @@
 "That folder holds one Purge already looks in. Remove that one first." = "该文件夹包含一个 Purge 已在检查的文件夹。请先移除那个文件夹。";
 "%@ · On %@" = "%@ · 位于 %@";
 "On %@" = "位于 %@";
+"Where Purge looks for apps" = "Purge 在哪里查找应用";
+"Applications, drives you plug in, and folders you add." = "“应用程序”文件夹、你插入的外接磁盘，以及你添加的文件夹。";
+"Missing an app? Purge looks in Applications and on drives you plug in." = "找不到某个应用？Purge 会在“应用程序”文件夹和你插入的外接磁盘上查找。";
+"Purge lists apps in Applications, on drives you plug in, and in folders you add. Add “%@” to uninstall %@ here, or drag it to the Trash yourself." = "Purge 会列出“应用程序”文件夹、你插入的外接磁盘以及你添加的文件夹中的应用。添加“%@”即可在这里卸载 %@，或自行将它拖到废纸篓。";
+"Add Folder" = "添加文件夹";
+"Purge's App Uninstaller lists apps in Applications, on drives you plug in, and in folders you add in Settings, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具会列出“应用程序”文件夹、你插入的外接磁盘以及你在设置中添加的文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";

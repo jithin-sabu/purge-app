@@ -223,7 +223,7 @@ final class IntentRouter {
             case .notListed(let name):
                 return (
                     String(localized: "Purge could not find \(name) in its app list"),
-                    String(localized: "Purge's App Uninstaller lists apps in the Applications folders, on drives, and in folders you add in Settings > App folders, and never Apple's built-in apps. Check where \(name) is installed and try again.")
+                    String(localized: "Purge's App Uninstaller lists apps in Applications, on drives you plug in, and in folders you add in Settings, and never Apple's built-in apps. Check where \(name) is installed and try again.")
                 )
             }
         }

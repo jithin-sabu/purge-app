@@ -89,13 +89,21 @@ struct ExternalUninstallRequestTests {
     @Test("An app on the Desktop is turned down by name")
     func appOutsideApplications() {
         let app = URL(fileURLWithPath: "/tmp/purge-tests/Desktop/Thing.app")
-        #expect(resolve([app], info: info(name: "Thing")) == .outsideApplications(name: "Thing"))
+        #expect(resolve([app], info: info(name: "Thing")) == .outsideApplications(name: "Thing", folder: "/tmp/purge-tests/Desktop"))
+    }
+
+    @Test("The refusal for an app outside the folders names the folder it can add (#99)")
+    func refusalNamesTheFolderToAdd() throws {
+        let outcome = ExternalUninstallRequest.Outcome.outsideApplications(name: "Luminar Neo", folder: "/Volumes/SSD/Photo Apps")
+        let refusal = try #require(outcome.refusal)
+        #expect(refusal.detail.contains("\u{201C}Photo Apps\u{201D}"))
+        #expect(refusal.detail.contains("Luminar Neo"))
     }
 
     @Test("The name falls back to the bundle's file name without an Info.plist")
     func nameFallsBackToFileName() {
         let app = URL(fileURLWithPath: "/tmp/purge-tests/Desktop/Thing.app")
-        #expect(resolve([app]) == .outsideApplications(name: "Thing"))
+        #expect(resolve([app]) == .outsideApplications(name: "Thing", folder: "/tmp/purge-tests/Desktop"))
     }
 
     @Test("The display name wins over the bundle name")
@@ -164,7 +172,7 @@ struct ExternalUninstallRequestTests {
     @Test("Every refusal has an alert; the uninstall outcome has none")
     func refusals() {
         let outcomes: [ExternalUninstallRequest.Outcome] = [
-            .noApp, .severalApps(count: 2), .outsideApplications(name: "X"), .insideAnotherApp(name: "X"), .appleApp(name: "X"), .purgeItself,
+            .noApp, .severalApps(count: 2), .outsideApplications(name: "X", folder: "/tmp/X"), .insideAnotherApp(name: "X"), .appleApp(name: "X"), .purgeItself,
         ]
         for outcome in outcomes {
             #expect(outcome.refusal != nil)

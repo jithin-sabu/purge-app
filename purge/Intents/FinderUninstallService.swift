@@ -17,9 +17,34 @@ enum ExternalUninstallHandler {
         switch outcome {
         case .uninstall(let appID, let name):
             Task { await IntentRouter.shared.showUninstaller(appID: appID, name: name) }
+        case .outsideApplications(_, let folder):
+            guard let refusal = outcome.refusal else { return }
+            offerToAddFolder(folder, title: refusal.title, detail: refusal.detail, urls: urls)
         default:
             guard let refusal = outcome.refusal else { return }
             showRefusal(title: refusal.title, detail: refusal.detail)
+        }
+    }
+
+    /// An app outside the folders Purge lists: rather than a dead end, the alert
+    /// offers to add the folder it is in, and then goes on to the app (#99). A
+    /// folder the rules refuse, like a whole drive, says why instead.
+    static func offerToAddFolder(_ folder: String, title: String, detail: String, urls: [URL]) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: String(localized: "Add Folder"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task {
+            let folderURL = URL(fileURLWithPath: folder, isDirectory: true)
+            if let message = await AppFolderAdding.add(folderURL, store: AppEnvironment.store) {
+                showRefusal(title: AppFolderAdding.refusalTitle, detail: message)
+                return
+            }
+            handle(urls: urls)
         }
     }
 

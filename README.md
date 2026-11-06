@@ -119,7 +119,7 @@ Purge understands Ollama's content-addressed storage, so a model's size counts o
 
 Dragging an app to the Trash leaves most of it behind: caches, preferences, containers, saved state, logs, and login helpers pile up on disk. The Uninstaller removes the app and those leftovers in one pass.
 
-- Lists the apps you installed in **Applications** and **~/Applications**, in the **Applications** folder at the top of any drive you plug in, and in folders you add under Settings > App folders, skipping system apps and Purge itself. Each tile shows what an uninstall would free: the app bundle plus its removable leftovers
+- Lists the apps you installed in **Applications** and **~/Applications**, in the **Applications** folder at the top of any drive you plug in, and in folders you add under Settings > Where Purge looks for apps (or from the hint under the app list), skipping system apps and Purge itself. Each tile shows what an uninstall would free: the app bundle plus its removable leftovers
 - Select one or more apps, then review a per-app sheet that lists every item with its path and size and a safety label
 - Matching is strict, so uninstalling one app can't sweep in files shared across a vendor's apps. Exact bundle-id and app-group matches arrive checked; looser name-only matches arrive unchecked for you to confirm
 - A running app is asked to quit first, and only gracefully. If it won't, it's left installed and the rest of the batch still goes through

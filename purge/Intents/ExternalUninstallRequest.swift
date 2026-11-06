@@ -19,8 +19,9 @@ nonisolated enum ExternalUninstallRequest {
         case noApp
         /// Finder sent several apps; the uninstaller takes one at a time from there.
         case severalApps(count: Int)
-        /// Outside the folders the uninstaller lists.
-        case outsideApplications(name: String)
+        /// Outside the folders the uninstaller lists. `folder` is the one the
+        /// app is in, which the alert offers to add (#99).
+        case outsideApplications(name: String, folder: String)
         /// Inside an app folder, but within another app or package, so the
         /// uninstaller does not list it on its own.
         case insideAnotherApp(name: String)
@@ -44,10 +45,11 @@ nonisolated enum ExternalUninstallRequest {
                     String(localized: "Choose one app"),
                     String(localized: "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller.")
                 )
-            case .outsideApplications(let name):
+            case .outsideApplications(let name, let folder):
+                let folderName = (folder as NSString).lastPathComponent
                 return (
                     String(localized: "\(name) isn't in a folder Purge lists apps from"),
-                    String(localized: "Purge's App Uninstaller lists apps in the Applications folders, on drives, and in folders you add in Settings > App folders. Add the folder \(name) is in there, or drag it to the Trash yourself.")
+                    String(localized: "Purge lists apps in Applications, on drives you plug in, and in folders you add. Add \u{201C}\(folderName)\u{201D} to uninstall \(name) here, or drag it to the Trash yourself.")
                 )
             case .insideAnotherApp(let name):
                 return (
@@ -95,7 +97,7 @@ nonisolated enum ExternalUninstallRequest {
         }
         let rootPaths = roots.map { $0.standardizedFileURL.path }
         guard rootPaths.contains(where: { PathContainment.isInside(path, $0) }) else {
-            return .outsideApplications(name: name)
+            return .outsideApplications(name: name, folder: bundleURL.deletingLastPathComponent().standardizedFileURL.path)
         }
         // The same reach the uninstaller's list uses (`AppBundleReach`).
         guard AppBundleReach.folderDepth(ofAppAtPath: path, roots: rootPaths) != nil else {

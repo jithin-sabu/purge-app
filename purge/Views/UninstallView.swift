@@ -125,6 +125,8 @@ struct UninstallView: View {
     /// density across tab changes and launches.
     @AppStorage("view.uninstaller.mode") private var viewMode = UninstallAppViewMode.grid
     @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
+    /// Why a folder picked from the hint under the list could not be added (#99).
+    @State private var appFolderMessage: String?
 
     /// The active view lives on the store so the tab header can swap its action
     /// button to match; this view reads and writes it through `store`.
@@ -189,6 +191,17 @@ struct UninstallView: View {
         }
         .onAppear(perform: applyUninstallerFocus)
         .onAppear { thumbSection = store.uninstallSection }
+        .alert(
+            AppFolderAdding.refusalTitle,
+            isPresented: Binding(
+                get: { appFolderMessage != nil },
+                set: { if !$0 { appFolderMessage = nil } }
+            )
+        ) {
+            Button("OK") { appFolderMessage = nil }
+        } message: {
+            Text(appFolderMessage ?? "")
+        }
         .onChange(of: store.uninstallerFocus) { _ in applyUninstallerFocus() }
         .onChange(of: appSearchQuery) { query in
             if let focusedSearch, query != focusedSearch.name { self.focusedSearch = nil }
@@ -607,7 +620,8 @@ struct UninstallView: View {
             emptyState(
                 symbol: "magnifyingglass",
                 title: String(localized: "Nothing matches"),
-                detail: String(localized: "No installed app matches \"\(appSearchQuery)\".")
+                detail: String(localized: "No installed app matches \"\(appSearchQuery)\"."),
+                showsMissingAppHint: true
             )
         } else {
             switch viewMode {
@@ -638,6 +652,7 @@ struct UninstallView: View {
                     }
                     .matchedGeometryEffect(id: app.id, in: listReorderNamespace)
                 }
+                missingAppHint
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, AppStyle.Spacing.xxxSmall)
@@ -681,6 +696,7 @@ struct UninstallView: View {
                         }
                     }
                 }
+                missingAppHint
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, AppStyle.Spacing.xxxSmall)
@@ -733,7 +749,31 @@ struct UninstallView: View {
 
     // MARK: Shared bits
 
-    private func emptyState(symbol: String, title: String, detail: String) -> some View {
+    /// Under the list, where someone looks when an app they expect is not there
+    /// (#99): where Purge looks, and a way to add the folder the app is in.
+    private var missingAppHint: some View {
+        VStack(spacing: AppStyle.Spacing.xxSmall) {
+            Text("Missing an app? Purge looks in Applications and on drives you plug in.")
+                .font(AppStyle.Typography.metadata)
+                .foregroundStyle(AppColors.textSecondary)
+                .multilineTextAlignment(.center)
+            Button("Add folder\u{2026}") {
+                AppFolderAdding.chooseFolder { folder in
+                    Task { appFolderMessage = await AppFolderAdding.add(folder, store: store) }
+                }
+            }
+            .buttonStyle(.purge(.quiet, size: .small))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, AppStyle.Spacing.medium)
+    }
+
+    private func emptyState(
+        symbol: String,
+        title: String,
+        detail: String,
+        showsMissingAppHint: Bool = false
+    ) -> some View {
         VStack(spacing: AppStyle.Spacing.small) {
             Image(systemName: symbol)
                 .font(.system(size: 38))
@@ -743,6 +783,9 @@ struct UninstallView: View {
             Text(LocalizedStringKey(detail))
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
+            if showsMissingAppHint {
+                missingAppHint
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, AppStyle.Spacing.large)

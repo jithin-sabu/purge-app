@@ -312,8 +312,11 @@ struct SettingsView: View {
 
             settingsSectionDivider
 
+            // Named for what it answers, so nobody has to open it to learn what
+            // it is for (#99).
             settingsLinkRow(
-                title: String(localized: "App folders"),
+                title: String(localized: "Where Purge looks for apps"),
+                caption: String(localized: "Applications, drives you plug in, and folders you add."),
                 value: appFoldersSummary
             ) {
                 showAppFoldersSheet = true
@@ -561,7 +564,7 @@ struct SettingsView: View {
     /// since a sheet's state can't be set from outside.
     func appFoldersSheet(listing: AppFolderListing) -> some View {
         settingsSheet(
-            title: String(localized: "App folders"),
+            title: String(localized: "Where Purge looks for apps"),
             caption: String(localized: "Purge lists apps from these folders. When you plug in a drive, the Applications folder at its top is added for as long as the drive stays connected."),
             onDone: { showAppFoldersSheet = false }
         ) {
@@ -580,7 +583,7 @@ struct SettingsView: View {
             }
         }
         .alert(
-            "Purge can\u{2019}t add that folder",
+            AppFolderAdding.refusalTitle,
             isPresented: Binding(
                 get: { appFolderMessage != nil },
                 set: { if !$0 { appFolderMessage = nil } }
@@ -944,29 +947,11 @@ struct SettingsView: View {
         appFolders = await Task.detached(priority: .userInitiated) { AppFolderListing.load() }.value
     }
 
-    /// One folder at a time, so a refusal names the folder it is about.
     private func chooseAppFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = false
-        panel.directoryURL = URL(fileURLWithPath: "/Volumes", isDirectory: true)
-        panel.prompt = String(localized: "Add")
-        panel.message = String(localized: "Choose a folder that holds apps. Purge lists every app inside it in the App Uninstaller.")
-        panel.begin { response in
-            guard response == .OK, let folder = panel.url else { return }
+        AppFolderAdding.chooseFolder { folder in
             Task {
-                let result = await Task.detached(priority: .userInitiated) { AppFolders.add(folder) }.value
-                if let refusal = result.refusal {
-                    appFolderMessage = AppFolderListing.message(for: refusal)
-                    return
-                }
-                if result.saveFailed {
-                    appFolderMessage = String(localized: "Purge couldn\u{2019}t save the folder list. Try again.")
-                }
+                appFolderMessage = await AppFolderAdding.add(folder, store: store)
                 await reloadAppFolders()
-                store.appFoldersChanged()
             }
         }
     }
@@ -975,7 +960,7 @@ struct SettingsView: View {
         Task {
             let saved = await Task.detached(priority: .userInitiated) { AppFolders.remove(path: row.path) }.value
             if !saved {
-                appFolderMessage = String(localized: "Purge couldn\u{2019}t save the folder list. Try again.")
+                appFolderMessage = AppFolderAdding.saveFailedMessage
             }
             await reloadAppFolders()
             store.appFoldersChanged()
@@ -1235,14 +1220,21 @@ struct SettingsView: View {
     /// A row that opens a sheet: title, a short summary, and a chevron.
     private func settingsLinkRow(
         title: String,
+        caption: String? = nil,
         value: String,
         valueIsFigure: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
-                Text(LocalizedStringKey(title))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                    Text(LocalizedStringKey(title))
+                    if let caption {
+                        Text(LocalizedStringKey(caption))
+                            .settingsCaption()
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(value)
                     .font(valueIsFigure ? scheduleStatusSecondaryFont.numbers : scheduleStatusSecondaryFont)
