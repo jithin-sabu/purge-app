@@ -2526,10 +2526,14 @@ final class PurgeStore: ObservableObject {
         // partial list.
         guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         installedApps = collected
+        // Remember the drive apps while their bundles are still readable, and
+        // before anything treats the scan as finished, so a drive ejected right
+        // after the scan can't leave an app's files looking unowned.
+        let bundles = collected.map(\.bundleURL)
+        await Task.detached(priority: .utility) { DriveAppMemory.record(bundles: bundles) }.value
+        guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         hasCompletedInstalledAppsScan = true
         refreshAppFolderPaths()
-        let bundles = collected.map(\.bundleURL)
-        Task.detached(priority: .utility) { DriveAppMemory.record(bundles: bundles) }
         // Every app on the Mac is listed now; saved apps not among them are gone.
         // The file waits for the totals, which the next lines measure.
         lastScanListsFinished([.apps], savable: false)

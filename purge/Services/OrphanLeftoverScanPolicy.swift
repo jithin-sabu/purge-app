@@ -80,7 +80,12 @@ enum OrphanLeftoverScanPolicy {
         /// so every caller has to say what evidence it is judging with.
         var evidence: InstalledCodeEvidence
 
-        var appCount: Int { diskBundleIDs.count }
+        /// How many apps were found on disk, when that differs from
+        /// `diskBundleIDs`: remembered drive apps (#99) count as owners there,
+        /// but not toward `looksComplete`.
+        var onDiskAppCount: Int?
+
+        var appCount: Int { onDiskAppCount ?? diskBundleIDs.count }
 
         /// Guards against acting on a broken view of the world: an unmounted
         /// volume, an unreadable `/Applications`, or a sandbox with no Launch
@@ -181,6 +186,9 @@ enum OrphanLeftoverScanPolicy {
         // what its code claims, read while the drive was in (#99).
         DriveAppMemory.record(bundles: appBundles)
         var evidence = InstalledCodeEvidence.gather(userAppBundles: appBundles)
+        // Counted before the remembered apps join, so a sparse view of the
+        // disk still reads as one.
+        let onDiskAppCount = ids.count
         for entry in DriveAppMemory.presentEntries() {
             if let id = entry.bundleID { ids.insert(id.lowercased()) }
             names.insert(entry.name.lowercased())
@@ -192,7 +200,8 @@ enum OrphanLeftoverScanPolicy {
             diskBundleIDs: ids,
             diskAppNames: names,
             rootsReadable: rootsReadable,
-            evidence: evidence
+            evidence: evidence,
+            onDiskAppCount: onDiskAppCount
         )
     }
 

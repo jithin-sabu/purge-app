@@ -12,15 +12,23 @@ import AppKit
 @MainActor
 enum ExternalUninstallHandler {
 
+    /// Counts requests, so only the newest one shows its result.
+    private static var latestRequest = 0
+
     /// The folder list is read off the main thread: it asks each drive about
     /// its file system, and a drive that is asleep takes a moment to answer.
+    /// A slow drive can make an earlier request finish after a later one, so
+    /// a request that is no longer the newest is dropped.
     static func handle(urls: [URL]) {
+        latestRequest += 1
+        let request = latestRequest
         Task {
             let (outcome, canAddFolder) = await Task.detached(priority: .userInitiated) {
                 let outcome = ExternalUninstallRequest.resolve(urls: urls)
                 guard case .outsideApplications(_, let folder) = outcome else { return (outcome, false) }
                 return (outcome, ExternalUninstallRequest.canOfferToAdd(folder: folder))
             }.value
+            guard request == latestRequest else { return }
             show(outcome, canAddFolder: canAddFolder, urls: urls)
         }
     }

@@ -157,6 +157,53 @@ struct DriveAppMemoryTests {
         #expect(reads == 2)
     }
 
+    @Test("An app replaced in place at the same version has its signatures read again")
+    func sameVersionReplacementRereadsClaims() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let drive = try fixture.app("Volumes/SSD/Applications/Editor.app", id: "com.vendor.editor")
+        let root = fixture.volumes.appendingPathComponent("SSD/Applications").standardizedFileURL.path
+        var reads = 0
+        let readClaims: (URL) -> InstalledCodeEvidence = { _ in
+            reads += 1
+            return InstalledCodeEvidence()
+        }
+
+        let first = DriveAppMemory.seenEntries([drive], roots: [root], now: Date(), readClaims: readClaims)
+        #expect(reads == 1)
+        // Same id and version, but the bundle was written again.
+        let info = drive.appendingPathComponent("Contents/Info.plist")
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: info.path)
+        _ = DriveAppMemory.seenEntries([drive], roots: [root], now: Date(), known: first, readClaims: readClaims)
+        #expect(reads == 2)
+    }
+
+    @Test("Two drives with an app at the same path are both remembered")
+    func sameMountPathKeepsBothDrives() {
+        func entry(_ id: String, volume: String) -> DriveAppMemory.Entry {
+            DriveAppMemory.Entry(
+                bundlePath: "/Volumes/SSD/Applications/Foo.app",
+                bundleID: id,
+                name: "Foo",
+                rootPath: "/Volumes/SSD/Applications",
+                lastSeen: Date(),
+                appGroups: ["group.\(id)"],
+                volumeID: volume
+            )
+        }
+        let driveA = entry("com.purgetest.foo-a", volume: "DRIVE-A")
+        let driveB = entry("com.purgetest.foo-b", volume: "DRIVE-B")
+
+        // Drive A is out and B is in: seeing B's app must not replace A's.
+        let merged = DriveAppMemory.merged([driveA], seen: [driveB], mayStillBeInstalled: { _ in true })
+        #expect(Set(merged.compactMap(\.bundleID)) == ["com.purgetest.foo-a", "com.purgetest.foo-b"])
+        #expect(merged.contains { $0.appGroups == ["group.com.purgetest.foo-a"] })
+
+        // Seeing B again updates only B's entry.
+        let again = DriveAppMemory.merged(merged, seen: [driveB], mayStillBeInstalled: { _ in true })
+        #expect(again.count == 2)
+    }
+
     @Test("Unlisted drive apps join the survivors, but not ones already listed or being removed")
     func unlistedDriveAppsJoinSurvivors() {
         func app(_ path: String) -> InstalledApp {
