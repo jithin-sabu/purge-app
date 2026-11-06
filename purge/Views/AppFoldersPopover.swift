@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "· from 3 folders" after the App Uninstaller's subtitle (#99). Shown only
+/// "from 3 folders" after the App Uninstaller's app count (#99). Shown only
 /// when an app comes from a drive or a folder the user added
 /// (`AppFolderSummary.isWorthShowing`), in the subtitle's own grey, and
 /// underlined only on hover, so it explains the extra apps to the people who
@@ -15,7 +15,7 @@ struct AppFoldersHeaderLink: View {
         Button {
             isShowingPopover = true
         } label: {
-            Text("· from \(summary.folders.count) folders")
+            Text("from \(summary.folders.count) folders")
                 .font(AppStyle.Typography.metadata.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .underline(isHovering)
@@ -41,17 +41,29 @@ struct AppFoldersPopover: View {
     @State private var message: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
-            Text("Purge lists apps from")
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(AppColors.textSecondary)
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xSmall) {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
+                Text("Purge lists apps from")
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                Spacer(minLength: AppStyle.Spacing.xSmall)
+                Button(action: onOpenSettings) {
+                    Label("Open Settings", systemImage: "gearshape")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.purge(.quiet, size: .small, width: .square))
+                .help("Open Settings")
+            }
 
             VStack(spacing: 0) {
-                ForEach(Array(summary.folders.enumerated()), id: \.element.id) { index, folder in
-                    if index > 0 {
-                        InsetCardDivider(horizontalInset: 0)
-                    }
+                ForEach(summary.folders) { folder in
                     row(folder)
+                    InsetCardDivider(horizontalInset: 0)
+                }
+                AddAppFolderRow {
+                    AppFolderAdding.chooseFolder { folder in
+                        Task { message = await AppFolderAdding.add(folder, store: store) }
+                    }
                 }
             }
 
@@ -61,27 +73,18 @@ struct AppFoldersPopover: View {
                     .foregroundStyle(AppColors.statusCheckText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            HStack(spacing: AppStyle.Spacing.small) {
-                Button {
-                    AppFolderAdding.chooseFolder { folder in
-                        Task { message = await AppFolderAdding.add(folder, store: store) }
-                    }
-                } label: {
-                    Label("Add folder\u{2026}", systemImage: "folder.badge.plus")
-                }
-                .buttonStyle(.purge(.secondary, size: .small))
-                .fixedSize()
-
-                Spacer(minLength: AppStyle.Spacing.small)
-
-                Button("Open Settings", action: onOpenSettings)
-                    .buttonStyle(.purge(.quiet, size: .small))
-                    .fixedSize()
-            }
         }
         .padding(AppStyle.Spacing.medium)
         .frame(width: 320)
+    }
+
+    private func countText(_ folder: AppFolderSummary.Folder) -> String {
+        if !folder.isAvailable { return String(localized: "Not connected") }
+        switch folder.appCount {
+        case 0: return String(localized: "No apps")
+        case 1: return String(localized: "1 app")
+        default: return String(localized: "\(folder.appCount) apps")
+        }
     }
 
     private func row(_ folder: AppFolderSummary.Folder) -> some View {
@@ -103,12 +106,43 @@ struct AppFoldersPopover: View {
                 }
             }
             Spacer(minLength: AppStyle.Spacing.small)
-            Text(folder.appCount == 1 ? String(localized: "1 app") : String(localized: "\(folder.appCount) apps"))
+            Text(countText(folder))
                 .font(AppStyle.Typography.metadata.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .monospacedDigit()
         }
         .padding(.vertical, AppStyle.Spacing.xSmall)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// "Add folder…" as the popover's last row, laid out like the folder rows
+/// above it, with a hover wash so it reads as clickable.
+private struct AddAppFolderRow: View {
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: AppStyle.Spacing.small) {
+                Image(systemName: "folder.badge.plus")
+                    .foregroundStyle(AppColors.textPrimary)
+                    .accessibilityHidden(true)
+                Text("Add folder\u{2026}")
+                    .font(AppStyle.Typography.body)
+                    .foregroundStyle(AppColors.textPrimary)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, AppStyle.Spacing.xSmall)
+            .padding(.horizontal, AppStyle.Spacing.xxSmall)
+            .background(
+                RoundedRectangle(cornerRadius: AppStyle.Radius.sm, style: .continuous)
+                    .fill(isHovering ? AppColors.fillSecondaryHover : Color.clear)
+            )
+            .padding(.horizontal, -AppStyle.Spacing.xxSmall)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }

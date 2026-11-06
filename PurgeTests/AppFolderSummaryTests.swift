@@ -59,5 +59,19 @@ struct AppFolderSummaryTests {
         #expect(summary.folders.last?.name == "Old Apps")
         #expect(summary.folders.last?.appCount == 0)
         #expect(summary.folders.last?.kind == .added)
+        #expect(summary.folders.last?.isAvailable == false)
+    }
+
+    @Test("An added folder that is there now is available, even with no apps")
+    func presentAddedFolderIsAvailable() {
+        let summary = AppFolderSummary.make(
+            appPaths: ["/Applications/VLC.app"],
+            roots: builtInRoots + ["/Volumes/SSD/Tools"],
+            builtIn: builtIn,
+            added: ["/Volumes/SSD/Tools"]
+        )
+        #expect(summary.folders.last?.isAvailable == true)
+        #expect(summary.folders.last?.appCount == 0)
+        #expect(summary.folders.allSatisfy { $0.isAvailable })
     }
 }

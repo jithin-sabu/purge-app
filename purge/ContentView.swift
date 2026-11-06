@@ -610,10 +610,15 @@ struct ContentView: View {
     }
 
     private func sectionPageHeader(now: Date) -> some View {
-        AppSectionPageHeader(
+        // With the folders link, the line reads "31 apps from 3 folders · 53.4 GB":
+        // the link follows the count and the part that changes comes last.
+        let folders = appFoldersHeaderLink
+        let parts = folders == nil ? nil : installedAppsSubtitleParts
+        return AppSectionPageHeader(
             title: store.selectedTab.displayName,
-            subtitle: selectedPageSubtitle(now: now),
-            subtitleAccessory: appFoldersHeaderLink
+            subtitle: parts?.lead ?? selectedPageSubtitle(now: now),
+            subtitleAccessory: parts == nil ? nil : folders,
+            subtitleTail: parts.map { String(localized: "· \($0.tail)") }
         ) {
             PageHeaderActionBar(
                 tab: store.selectedTab,
@@ -799,17 +804,8 @@ struct ContentView: View {
                 copy: .apps
             )
         }
-        guard !store.installedApps.isEmpty else { return nil }
-        return uninstallSubtitle(
-            count: store.installedApps.count,
-            counted: { String(localized: "\($0) apps") },
-            totalBytes: store.installedApps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) },
-            selectedCount: store.selectedAppIDs.count,
-            selectedBytes: store.selectedAppsRemovableBytes,
-            // App totals fill in on a background pass; say so rather than show a
-            // size that is still climbing.
-            measuring: !store.hasMeasuredAllRemovableTotals
-        )
+        guard let parts = installedAppsSubtitleParts else { return nil }
+        return String(localized: "\(parts.lead) · \(parts.tail)")
     }
 
     private func uninstallSubtitle(
@@ -820,14 +816,51 @@ struct ContentView: View {
         selectedBytes: Int64,
         measuring: Bool
     ) -> String {
-        let base = counted(count)
+        let parts = uninstallSubtitleParts(
+            count: count,
+            counted: counted,
+            totalBytes: totalBytes,
+            selectedCount: selectedCount,
+            selectedBytes: selectedBytes,
+            measuring: measuring
+        )
+        return String(localized: "\(parts.lead) · \(parts.tail)")
+    }
+
+    /// The count, and what follows it, kept apart so the App Uninstaller can
+    /// put "from 3 folders" between them (#99).
+    private func uninstallSubtitleParts(
+        count: Int,
+        counted: (Int) -> String,
+        totalBytes: Int64,
+        selectedCount: Int,
+        selectedBytes: Int64,
+        measuring: Bool
+    ) -> (lead: String, tail: String) {
+        let lead = counted(count)
         if selectedCount > 0 {
-            return String(localized: "\(base) · \(selectedCount) selected · \(formatBytes(selectedBytes))")
+            return (lead, String(localized: "\(selectedCount) selected · \(formatBytes(selectedBytes))"))
         }
         if measuring {
-            return String(localized: "\(base) · measuring space…")
+            return (lead, String(localized: "Measuring space\u{2026}"))
         }
-        return String(localized: "\(base) · \(formatBytes(totalBytes))")
+        return (lead, formatBytes(totalBytes))
+    }
+
+    /// The installed apps' subtitle in two parts, for when the folders link
+    /// sits between them.
+    private var installedAppsSubtitleParts: (lead: String, tail: String)? {
+        guard !store.installedApps.isEmpty else { return nil }
+        return uninstallSubtitleParts(
+            count: store.installedApps.count,
+            counted: { String(localized: "\($0) apps") },
+            totalBytes: store.installedApps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) },
+            selectedCount: store.selectedAppIDs.count,
+            selectedBytes: store.selectedAppsRemovableBytes,
+            // App totals fill in on a background pass; say so rather than show a
+            // size that is still climbing.
+            measuring: !store.hasMeasuredAllRemovableTotals
+        )
     }
 
     private var appCachesSafetyFilter: SafetyFilter {

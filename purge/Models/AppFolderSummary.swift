@@ -22,6 +22,9 @@ nonisolated struct AppFolderSummary: Equatable, Sendable {
         let name: String
         let kind: Kind
         let appCount: Int
+        /// False for an added folder that isn't there now, such as one on a
+        /// drive that is out.
+        var isAvailable = true
     }
 
     var folders: [Folder] = []
@@ -59,7 +62,13 @@ nonisolated struct AppFolderSummary: Equatable, Sendable {
             let kind: Kind = builtIn.contains(root) ? .builtIn : (added.contains(root) ? .added : .drive)
             let count = counts[root] ?? 0
             guard count > 0 || kind == .added else { continue }
-            folders.append(Folder(path: root, name: name(of: root, kind: kind, driveNames: driveNames), kind: kind, appCount: count))
+            folders.append(Folder(
+                path: root,
+                name: name(of: root, kind: kind, driveNames: driveNames),
+                kind: kind,
+                appCount: count,
+                isAvailable: roots.contains(root)
+            ))
         }
         return AppFolderSummary(folders: folders)
     }

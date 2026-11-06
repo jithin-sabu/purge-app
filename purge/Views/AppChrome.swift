@@ -129,8 +129,11 @@ struct AppSectionPageHeader<Trailing: View>: View {
     let title: String
     let subtitle: String?
     /// Sits after the subtitle on the same line, such as the App Uninstaller's
-    /// "· from 3 folders" (#99).
+    /// "from 3 folders" (#99).
     var subtitleAccessory: AnyView?
+    /// Text after the accessory, styled like the subtitle, so the accessory can
+    /// sit mid-line: "31 apps" [from 3 folders] "· 53.4 GB".
+    var subtitleTail: String?
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -138,12 +141,24 @@ struct AppSectionPageHeader<Trailing: View>: View {
         title: String,
         subtitle: String? = nil,
         subtitleAccessory: AnyView? = nil,
+        subtitleTail: String? = nil,
         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
     ) {
         self.title = title
         self.subtitle = subtitle
         self.subtitleAccessory = subtitleAccessory
+        self.subtitleTail = subtitleTail
         self.trailing = trailing
+    }
+
+    private func subtitleText(_ text: String) -> some View {
+        Text(text)
+            .font(AppStyle.Typography.metadata.numbers)
+            .foregroundStyle(AppColors.textSecondary)
+            .monospacedDigit()
+            .contentTransition(reduceMotion ? .identity : .numericText())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: text)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     var body: some View {
@@ -153,15 +168,12 @@ struct AppSectionPageHeader<Trailing: View>: View {
 
                 if let subtitle, !subtitle.isEmpty {
                     HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmall) {
-                        Text(subtitle)
-                            .font(AppStyle.Typography.metadata.numbers)
-                            .foregroundStyle(AppColors.textSecondary)
-                            .monospacedDigit()
-                            .contentTransition(reduceMotion ? .identity : .numericText())
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: subtitle)
-                            .fixedSize(horizontal: false, vertical: true)
+                        subtitleText(subtitle)
                         if let subtitleAccessory {
                             subtitleAccessory
+                        }
+                        if let subtitleTail, !subtitleTail.isEmpty {
+                            subtitleText(subtitleTail)
                         }
                     }
                 }

@@ -32,8 +32,8 @@
 "%@, %@ times over" = "%2$@ 份%1$@";
 "%@ used" = "已用 %@";
 "%@ was removed, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it." = "%@ 已被移除，但这些文件仍在 Mac 上。勾选的项目会移到废纸篓，清空前都可以恢复。";
-"%@ · %lld selected · %@" = "%@ · 已选 %lld 项 · %@";
-"%@ · measuring space…" = "%@ · 正在统计空间…";
+"%lld selected · %@" = "已选 %lld 项 · %@";
+"Measuring space…" = "正在统计空间…";
 "%@, %@" = "%@，%@";
 "%@, %@ reclaimed" = "%@，已释放 %@";
 "%@, %@ selected" = "%@，已选择 %@";
@@ -1417,7 +1417,8 @@
 "Purge can’t remove that folder" = "Purge 无法移除该文件夹";
 "No app matches “%@”" = "没有与“%@”匹配的应用";
 "If it’s on a drive or in another folder, add that folder and Purge lists it." = "如果它在外接磁盘或其他文件夹中，添加该文件夹后 Purge 就会列出它。";
-"· from %lld folders" = "· 来自 %lld 个文件夹";
+"from %lld folders" = "来自 %lld 个文件夹";
 "See which folders Purge lists apps from" = "查看 Purge 从哪些文件夹列出应用";
 "Purge lists apps from" = "Purge 从以下位置列出应用";
 "1 app" = "1 个应用";
+"No apps" = "没有应用";
