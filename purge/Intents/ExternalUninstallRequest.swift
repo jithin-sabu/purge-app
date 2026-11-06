@@ -30,6 +30,17 @@ nonisolated enum ExternalUninstallRequest {
         /// Purge itself.
         case purgeItself
 
+        /// The refusal for an app outside the folders whose own folder Purge
+        /// can't add either, such as the top of a drive or the home folder, so
+        /// the alert never offers something it would then refuse (#99).
+        var refusalWithoutAddingFolder: (title: String, detail: String)? {
+            guard case .outsideApplications(let name, _) = self else { return refusal }
+            return (
+                String(localized: "\(name) isn't in a folder Purge lists apps from"),
+                String(localized: "Purge lists apps in Applications, on drives you plug in, and in folders you add. Put \(name) in a folder, then add that folder, or drag it to the Trash yourself.")
+            )
+        }
+
         /// What to show when the request is turned down. Nil for `uninstall`.
         var refusal: (title: String, detail: String)? {
             switch self {
@@ -104,6 +115,16 @@ nonisolated enum ExternalUninstallRequest {
             return .insideAnotherApp(name: name)
         }
         return .uninstall(appID: path, name: name)
+    }
+
+    /// Whether the alert for an app outside the folders can offer to add the
+    /// folder it is in: only when `AppFolders` would take that folder.
+    static func canOfferToAdd(folder: String, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
+        AppFolders.refusal(
+            forPicked: URL(fileURLWithPath: folder, isDirectory: true),
+            home: home,
+            otherRoots: AppFolders.roots(home: home)
+        ) == nil
     }
 
     /// The same uncached read `ApplicationsFolderWatcher` uses.

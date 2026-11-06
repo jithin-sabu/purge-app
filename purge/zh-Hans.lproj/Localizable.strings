@@ -1413,3 +1413,4 @@
 "Purge lists apps in Applications, on drives you plug in, and in folders you add. Add “%@” to uninstall %@ here, or drag it to the Trash yourself." = "Purge 会列出“应用程序”文件夹、你插入的外接磁盘以及你添加的文件夹中的应用。添加“%@”即可在这里卸载 %@，或自行将它拖到废纸篓。";
 "Add Folder" = "添加文件夹";
 "Purge's App Uninstaller lists apps in Applications, on drives you plug in, and in folders you add in Settings, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具会列出“应用程序”文件夹、你插入的外接磁盘以及你在设置中添加的文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
+"Purge lists apps in Applications, on drives you plug in, and in folders you add. Put %@ in a folder, then add that folder, or drag it to the Trash yourself." = "Purge 会列出“应用程序”文件夹、你插入的外接磁盘以及你添加的文件夹中的应用。请把 %@ 放进一个文件夹，再添加该文件夹，或自行将它拖到废纸篓。";

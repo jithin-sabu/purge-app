@@ -100,6 +100,32 @@ struct ExternalUninstallRequestTests {
         #expect(refusal.detail.contains("Luminar Neo"))
     }
 
+    @Test("Add Folder is offered only for a folder Purge would take (#99)")
+    func addFolderOfferedOnlyWhenAllowed() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-offer-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let volumes = base.appendingPathComponent("Volumes", isDirectory: true)
+        let tools = volumes.appendingPathComponent("SSD/Tools", isDirectory: true)
+        try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+
+        try withTemporaryHandoffRoot {
+            AppFolders.$volumes.withValue(volumes) {
+                #expect(ExternalUninstallRequest.canOfferToAdd(folder: tools.path, home: home))
+                // The top of a drive, and the home folder, are never added.
+                #expect(!ExternalUninstallRequest.canOfferToAdd(folder: tools.deletingLastPathComponent().path, home: home))
+                #expect(!ExternalUninstallRequest.canOfferToAdd(folder: home.path, home: home))
+            }
+        }
+
+        let outcome = ExternalUninstallRequest.Outcome.outsideApplications(name: "Top Probe", folder: "/Volumes/SSD")
+        let refusal = try #require(outcome.refusalWithoutAddingFolder)
+        #expect(!refusal.detail.contains("\u{201C}SSD\u{201D}"))
+        #expect(refusal.detail.contains("Top Probe"))
+    }
+
     @Test("The name falls back to the bundle's file name without an Info.plist")
     func nameFallsBackToFileName() {
         let app = URL(fileURLWithPath: "/tmp/purge-tests/Desktop/Thing.app")

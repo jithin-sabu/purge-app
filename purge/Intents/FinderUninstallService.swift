@@ -18,6 +18,11 @@ enum ExternalUninstallHandler {
         case .uninstall(let appID, let name):
             Task { await IntentRouter.shared.showUninstaller(appID: appID, name: name) }
         case .outsideApplications(_, let folder):
+            guard ExternalUninstallRequest.canOfferToAdd(folder: folder) else {
+                guard let refusal = outcome.refusalWithoutAddingFolder else { return }
+                showRefusal(title: refusal.title, detail: refusal.detail)
+                return
+            }
             guard let refusal = outcome.refusal else { return }
             offerToAddFolder(folder, title: refusal.title, detail: refusal.detail, urls: urls)
         default:
