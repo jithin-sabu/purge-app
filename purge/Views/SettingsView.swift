@@ -554,6 +554,12 @@ struct SettingsView: View {
     /// Where the uninstaller lists apps from (#99): the two Applications folders,
     /// each drive's, and folders the user adds.
     var appFoldersSheet: some View {
+        appFoldersSheet(listing: appFolders)
+    }
+
+    /// The sheet for `listing`. A render of it in the test host passes its own,
+    /// since a sheet's state can't be set from outside.
+    func appFoldersSheet(listing: AppFolderListing) -> some View {
         settingsSheet(
             title: String(localized: "App folders"),
             caption: String(localized: "Purge lists apps from these folders. When you plug in a drive, the Applications folder at its top is added for as long as the drive stays connected."),
@@ -565,7 +571,7 @@ struct SettingsView: View {
             .buttonStyle(.purge(.secondary))
         } content: {
             InsetCard {
-                ForEach(Array(appFolders.rows.enumerated()), id: \.element.id) { index, row in
+                ForEach(Array(listing.rows.enumerated()), id: \.element.id) { index, row in
                     if index > 0 {
                         settingsSectionDivider
                     }
@@ -930,9 +936,8 @@ struct SettingsView: View {
     }
 
     private var appFoldersSummary: String {
-        let count = appFolders.rows.count
         // Before the first read, the two built-in folders are what there is.
-        return count <= 2 ? String(localized: "Applications") : String(localized: "\(count) folders")
+        String(localized: "\(max(appFolders.rows.count, 2)) folders")
     }
 
     private func reloadAppFolders() async {
