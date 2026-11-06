@@ -128,16 +128,21 @@ extension View {
 struct AppSectionPageHeader<Trailing: View>: View {
     let title: String
     let subtitle: String?
+    /// Sits after the subtitle on the same line, such as the App Uninstaller's
+    /// "· from 3 folders" (#99).
+    var subtitleAccessory: AnyView?
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         title: String,
         subtitle: String? = nil,
+        subtitleAccessory: AnyView? = nil,
         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.subtitleAccessory = subtitleAccessory
         self.trailing = trailing
     }
 
@@ -147,13 +152,18 @@ struct AppSectionPageHeader<Trailing: View>: View {
                 AnimatedPageTitle(title)
 
                 if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(AppStyle.Typography.metadata.numbers)
-                        .foregroundStyle(AppColors.textSecondary)
-                        .monospacedDigit()
-                        .contentTransition(reduceMotion ? .identity : .numericText())
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: subtitle)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xxSmall) {
+                        Text(subtitle)
+                            .font(AppStyle.Typography.metadata.numbers)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .monospacedDigit()
+                            .contentTransition(reduceMotion ? .identity : .numericText())
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: subtitle)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let subtitleAccessory {
+                            subtitleAccessory
+                        }
+                    }
                 }
             }
 

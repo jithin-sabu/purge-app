@@ -612,7 +612,8 @@ struct ContentView: View {
     private func sectionPageHeader(now: Date) -> some View {
         AppSectionPageHeader(
             title: store.selectedTab.displayName,
-            subtitle: selectedPageSubtitle(now: now)
+            subtitle: selectedPageSubtitle(now: now),
+            subtitleAccessory: appFoldersHeaderLink
         ) {
             PageHeaderActionBar(
                 tab: store.selectedTab,
@@ -620,6 +621,17 @@ struct ContentView: View {
                 largeFileSelection: store.largeFileSelection
             )
         }
+    }
+
+    /// Only on the apps list, and only when an app comes from a drive or an
+    /// added folder (#99). Everyone else sees the subtitle as it always was.
+    private var appFoldersHeaderLink: AnyView? {
+        guard store.selectedTab == .uninstaller,
+              store.uninstallSection == .installedApps,
+              !store.installedApps.isEmpty else { return nil }
+        let summary = store.appFolderSummary
+        guard summary.isWorthShowing else { return nil }
+        return AnyView(AppFoldersHeaderLink(summary: summary))
     }
 
     private func selectedPageSubtitle(now: Date) -> String? {

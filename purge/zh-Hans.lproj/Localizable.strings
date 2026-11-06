@@ -1408,7 +1408,6 @@
 "On %@" = "位于 %@";
 "Where Purge looks for apps" = "Purge 在哪里查找应用";
 "Applications, drives you plug in, and folders you add." = "“应用程序”文件夹、你插入的外接磁盘，以及你添加的文件夹。";
-"Missing an app? Purge looks in Applications and on drives you plug in." = "找不到某个应用？Purge 会在“应用程序”文件夹和你插入的外接磁盘上查找。";
 "Purge lists apps in Applications, on drives you plug in, and in folders you add. Add “%@” to uninstall %@ here, or drag it to the Trash yourself." = "Purge 会列出“应用程序”文件夹、你插入的外接磁盘以及你添加的文件夹中的应用。添加“%@”即可在这里卸载 %@，或自行将它拖到废纸篓。";
 "Add Folder" = "添加文件夹";
 "Purge's App Uninstaller lists apps in Applications, on drives you plug in, and in folders you add in Settings, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具会列出“应用程序”文件夹、你插入的外接磁盘以及你在设置中添加的文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
@@ -1416,3 +1415,9 @@
 "That folder holds a copy of a Mac or of a home folder, or is inside one. Choose a folder with apps you use." = "该文件夹包含或位于一台 Mac 或一个个人主文件夹的副本中。请选择存放你正在使用的应用的文件夹。";
 "That folder syncs with iCloud Drive, so moving an app from it to the Trash would remove it from your other devices too." = "该文件夹会与 iCloud 云盘同步，因此把其中的应用移到废纸篓也会将它从你的其他设备上移除。";
 "Purge can’t remove that folder" = "Purge 无法移除该文件夹";
+"No app matches “%@”" = "没有与“%@”匹配的应用";
+"If it’s on a drive or in another folder, add that folder and Purge lists it." = "如果它在外接磁盘或其他文件夹中，添加该文件夹后 Purge 就会列出它。";
+"· from %lld folders" = "· 来自 %lld 个文件夹";
+"See which folders Purge lists apps from" = "查看 Purge 从哪些文件夹列出应用";
+"Purge lists apps from" = "Purge 从以下位置列出应用";
+"1 app" = "1 个应用";

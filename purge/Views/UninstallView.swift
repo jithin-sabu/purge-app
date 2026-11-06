@@ -617,11 +617,13 @@ struct UninstallView: View {
             // Held behind the skeleton while the first scan runs; nothing to show.
             Color.clear
         } else if filteredApps.isEmpty {
+            // The moment someone looks for an app Purge does not list, so the
+            // one place outside Settings that offers to add a folder (#99).
             emptyState(
                 symbol: "magnifyingglass",
-                title: String(localized: "Nothing matches"),
-                detail: String(localized: "No installed app matches \"\(appSearchQuery)\"."),
-                showsMissingAppHint: true
+                title: String(localized: "No app matches \u{201C}\(appSearchQuery)\u{201D}"),
+                detail: String(localized: "If it\u{2019}s on a drive or in another folder, add that folder and Purge lists it."),
+                action: (String(localized: "Add folder\u{2026}"), addAppFolder)
             )
         } else {
             switch viewMode {
@@ -652,7 +654,6 @@ struct UninstallView: View {
                     }
                     .matchedGeometryEffect(id: app.id, in: listReorderNamespace)
                 }
-                missingAppHint
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, AppStyle.Spacing.xxxSmall)
@@ -696,7 +697,6 @@ struct UninstallView: View {
                         }
                     }
                 }
-                missingAppHint
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
             .padding(.top, AppStyle.Spacing.xxxSmall)
@@ -749,30 +749,17 @@ struct UninstallView: View {
 
     // MARK: Shared bits
 
-    /// Under the list, where someone looks when an app they expect is not there
-    /// (#99): where Purge looks, and a way to add the folder the app is in.
-    private var missingAppHint: some View {
-        VStack(spacing: AppStyle.Spacing.xxSmall) {
-            Text("Missing an app? Purge looks in Applications and on drives you plug in.")
-                .font(AppStyle.Typography.metadata)
-                .foregroundStyle(AppColors.textSecondary)
-                .multilineTextAlignment(.center)
-            Button("Add folder\u{2026}") {
-                AppFolderAdding.chooseFolder { folder in
-                    Task { appFolderMessage = await AppFolderAdding.add(folder, store: store) }
-                }
-            }
-            .buttonStyle(.purge(.quiet, size: .small))
+    private func addAppFolder() {
+        AppFolderAdding.chooseFolder { folder in
+            Task { appFolderMessage = await AppFolderAdding.add(folder, store: store) }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, AppStyle.Spacing.medium)
     }
 
     private func emptyState(
         symbol: String,
         title: String,
         detail: String,
-        showsMissingAppHint: Bool = false
+        action: (title: String, run: () -> Void)? = nil
     ) -> some View {
         VStack(spacing: AppStyle.Spacing.small) {
             Image(systemName: symbol)
@@ -783,8 +770,12 @@ struct UninstallView: View {
             Text(LocalizedStringKey(detail))
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
-            if showsMissingAppHint {
-                missingAppHint
+            if let action {
+                Button(action: action.run) {
+                    Label(action.title, systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.purge(.secondary))
+                .padding(.top, AppStyle.Spacing.xSmall)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

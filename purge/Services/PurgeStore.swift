@@ -330,6 +330,10 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var hasCompletedInstalledAppsScan = false
     /// The app folders the app list was last read with (#99).
     var lastAppFolderRoots: [String] = []
+    /// What the header needs to say where the listed apps come from (#99):
+    /// the folders read now, the ones the user added, and drive names. Read
+    /// off the main thread with each app scan, so no render asks the disk.
+    @Published var appFolderPaths = AppFolderPaths()
     /// Bundle-plus-safe-leftover total per app id, filled in the background after
     /// the list loads. Absent until measured; callers fall back to bundle size.
     @Published private(set) var removableBytesByAppID: [String: Int64] = [:] {
@@ -2523,6 +2527,7 @@ final class PurgeStore: ObservableObject {
         guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         installedApps = collected
         hasCompletedInstalledAppsScan = true
+        refreshAppFolderPaths()
         let bundles = collected.map(\.bundleURL)
         Task.detached(priority: .utility) { DriveAppMemory.record(bundles: bundles) }
         // Every app on the Mac is listed now; saved apps not among them are gone.

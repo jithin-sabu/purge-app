@@ -34,6 +34,26 @@ extension PurgeStore {
         }
     }
 
+    /// Reads the folder paths the header summary is built from.
+    func refreshAppFolderPaths() {
+        Task { [weak self] in
+            let paths = await Task.detached(priority: .utility) { AppFolderPaths.read() }.value
+            self?.appFolderPaths = paths
+        }
+    }
+
+    /// Where the listed apps come from, for the App Uninstaller's header. Paths
+    /// only, so it is cheap to build on every render.
+    var appFolderSummary: AppFolderSummary {
+        AppFolderSummary.make(
+            appPaths: installedApps.map(\.bundleURL.path),
+            roots: appFolderPaths.roots,
+            builtIn: appFolderPaths.builtIn,
+            added: appFolderPaths.added,
+            driveNames: appFolderPaths.driveNames
+        )
+    }
+
     /// Called after Settings adds or removes a folder. The watch agent reads the
     /// same list and starts again on it.
     func appFoldersChanged() {
