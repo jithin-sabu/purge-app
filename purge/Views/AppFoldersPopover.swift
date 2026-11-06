@@ -15,7 +15,9 @@ struct AppFoldersHeaderLink: View {
         Button {
             isShowingPopover = true
         } label: {
-            Text("from \(summary.folders.count) folders")
+            Text(summary.folders.count == 1
+                ? String(localized: "from 1 folder")
+                : String(localized: "from \(summary.folders.count) folders"))
                 .font(AppStyle.Typography.metadata.numbers)
                 .foregroundStyle(AppColors.textSecondary)
                 .underline(isHovering)

@@ -1418,6 +1418,7 @@
 "No app matches “%@”" = "没有与“%@”匹配的应用";
 "If it’s on a drive or in another folder, add that folder and Purge lists it." = "如果它在外接磁盘或其他文件夹中，添加该文件夹后 Purge 就会列出它。";
 "from %lld folders" = "来自 %lld 个文件夹";
+"from 1 folder" = "来自 1 个文件夹";
 "See which folders Purge lists apps from" = "查看 Purge 从哪些文件夹列出应用";
 "Purge lists apps from" = "Purge 从以下位置列出应用";
 "1 app" = "1 个应用";
