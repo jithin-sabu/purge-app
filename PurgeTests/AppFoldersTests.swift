@@ -226,7 +226,65 @@ struct AppFoldersTests {
         #expect(fixture.refusal("home/Apps", otherRoots: [picked]) == .holdsAnotherFolder)
     }
 
-    // MARK: - Saved list
+    @Test("A folder inside another Mac's volume or an old home folder is refused")
+    func foldersInsideWholeDiskCopiesAreRefused() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.folder("Volumes/Old Mac - Data/Users")
+        try fixture.folder("Volumes/Old Mac - Data/Applications")
+        try fixture.folder("Volumes/SSD/Old Home/Library")
+        try fixture.folder("Volumes/SSD/Old Home/Desktop")
+        try fixture.folder("Volumes/SSD/Old Mac/Users/bob/Apps")
+        // A drive's own top folder may hold a `Library` of the user's.
+        try fixture.folder("Volumes/Work/Library")
+        try fixture.folder("Volumes/Work/Apps")
+
+        #expect(fixture.refusal("Volumes/Old Mac - Data/Applications") == .holdsWholeDisk)
+        #expect(fixture.refusal("Volumes/SSD/Old Home/Desktop") == .holdsWholeDisk)
+        #expect(fixture.refusal("Volumes/SSD/Old Mac/Users/bob/Apps") == .holdsWholeDisk)
+        #expect(fixture.refusal("Volumes/Work/Apps") == nil)
+    }
+
+    @Test("The walk of an added folder skips build output, git checkouts and Mac copies")
+    func addedFolderWalkSkipsBuildsCheckoutsAndCopies() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let root = try fixture.folder("Volumes/SSD/Apps")
+        try fixture.folder("Volumes/SSD/Apps/Tool.app")
+        try fixture.folder("Volumes/SSD/Apps/Vendor/Suite.app")
+        try fixture.folder("Volumes/SSD/Apps/game/build/macos/Build/Products/Release/Game.app")
+        try fixture.folder("Volumes/SSD/Apps/editor/src-tauri/target/release/bundle/macos/Editor.app")
+        try fixture.folder("Volumes/SSD/Apps/repo/.git")
+        try fixture.folder("Volumes/SSD/Apps/repo/Repo.app")
+        try fixture.folder("Volumes/SSD/Apps/Old Macs/MacBook/System")
+        try fixture.folder("Volumes/SSD/Apps/Old Macs/MacBook/Applications/Safari.app")
+
+        let listed = try #require(AppFolders.appBundleURLs(in: root, home: fixture.home))
+            .map { $0.lastPathComponent }.sorted()
+        #expect(listed == ["Suite.app", "Tool.app"])
+
+        // The gate agrees with the list.
+        let roots = [root.standardizedFileURL.path]
+        for skipped in ["game/build/macos/Build/Products/Release/Game.app", "repo/Repo.app",
+                        "Old Macs/MacBook/Applications/Safari.app"] {
+            let path = root.appendingPathComponent(skipped).standardizedFileURL.path
+            #expect(AppFolders.folderDepth(ofAppAtPath: path, roots: roots, home: fixture.home) == nil, "\(skipped)")
+        }
+        let kept = root.appendingPathComponent("Vendor/Suite.app").standardizedFileURL.path
+        #expect(AppFolders.folderDepth(ofAppAtPath: kept, roots: roots, home: fixture.home) == 1)
+    }
+
+    @Test("The built-in Applications folders are walked as before")
+    func builtInFoldersKeepTheirWalk() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let applications = try fixture.folder("home/Applications/build/Tool.app")
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let path = applications.appendingPathComponent("build/Tool.app").standardizedFileURL.path
+        #expect(AppFolders.folderDepth(ofAppAtPath: path, roots: [applications.standardizedFileURL.path], home: fixture.home) == 1)
+    }
+
+    // MARK: - Saved list    // MARK: - Saved list
 
     @Test("Added folders are saved, listed, and removed")
     func addedFoldersRoundTrip() throws {

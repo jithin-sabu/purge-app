@@ -328,8 +328,8 @@ final class PurgeStore: ObservableObject {
     }
     @Published var isScanningInstalledApps = false
     @Published private(set) var hasCompletedInstalledAppsScan = false
-    /// The drive folders the app list was last read with (#99).
-    var lastDriveAppRoots: [String] = []
+    /// The app folders the app list was last read with (#99).
+    var lastAppFolderRoots: [String] = []
     /// Bundle-plus-safe-leftover total per app id, filled in the background after
     /// the list loads. Absent until measured; callers fall back to bundle size.
     @Published private(set) var removableBytesByAppID: [String: Int64] = [:] {

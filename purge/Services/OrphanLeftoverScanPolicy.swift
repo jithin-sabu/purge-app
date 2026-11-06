@@ -159,7 +159,7 @@ enum OrphanLeftoverScanPolicy {
 
         for root in AppUninstallScanPolicy.installedAppRoots() {
             guard fm.fileExists(atPath: root.path) else { continue }
-            guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
+            guard let bundles = AppFolders.appBundleURLs(in: root) else {
                 rootsReadable = false
                 continue
             }

@@ -745,7 +745,7 @@ nonisolated final class FileDeleter: Sendable {
                   url.pathExtension == "app",
                   AppUninstallScanPolicy.isRealAppBundle(url) else { return false }
             let appRoots = AppUninstallScanPolicy.installedAppRoots(home: home).map { $0.standardizedFileURL.path }
-            return AppBundleReach.folderDepth(ofAppAtPath: url.path, roots: appRoots) != nil
+            return AppFolders.folderDepth(ofAppAtPath: url.path, roots: appRoots, home: home) != nil
         }
 
         // The helper takes a bundle only from the two built-in Applications

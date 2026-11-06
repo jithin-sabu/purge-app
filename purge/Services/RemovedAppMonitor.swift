@@ -85,6 +85,8 @@ final class RemovedAppMonitor: ObservableObject {
     private var needsAnotherDrain = false
     /// Runs only while a review is queued or open, to withdraw it if the app returns.
     private var presenceWatcher: ApplicationsFolderWatcher?
+    /// True while the folder list for a new presence watcher is being read.
+    private var isStartingPresenceWatch = false
     private var cancellables = Set<AnyCancellable>()
 
     private var agentService: SMAppService {
@@ -621,19 +623,33 @@ final class RemovedAppMonitor: ObservableObject {
 
     /// Keeps a watcher running exactly while something is queued, being prepared,
     /// or on screen.
+    /// The folder list is read off the main thread: it asks each drive about its
+    /// file system, and a drive that is asleep takes a moment to answer (#99).
     private func updatePresenceWatch() {
-        let needed = isEnabled && (!queue.isEmpty || phase == .preparing || phase == .reviewing)
-        if needed, presenceWatcher == nil {
-            let watcher = ApplicationsFolderWatcher()
-            watcher.onChange = { [weak self] index in
-                self?.withdrawReturnedApps(installedBundleIDs: index.bundleIDs)
+        if isPresenceWatchNeeded, presenceWatcher == nil, !isStartingPresenceWatch {
+            isStartingPresenceWatch = true
+            Task { [weak self] in
+                let roots = await Task.detached(priority: .utility) {
+                    RemovedAppWatchPolicy.installedAppRoots()
+                }.value
+                guard let self else { return }
+                self.isStartingPresenceWatch = false
+                guard self.isPresenceWatchNeeded, self.presenceWatcher == nil else { return }
+                let watcher = ApplicationsFolderWatcher(roots: roots)
+                watcher.onChange = { [weak self] index in
+                    self?.withdrawReturnedApps(installedBundleIDs: index.bundleIDs)
+                }
+                watcher.start()
+                self.presenceWatcher = watcher
             }
-            watcher.start()
-            presenceWatcher = watcher
-        } else if !needed, let watcher = presenceWatcher {
+        } else if !isPresenceWatchNeeded, let watcher = presenceWatcher {
             watcher.stop()
             presenceWatcher = nil
         }
+    }
+
+    private var isPresenceWatchNeeded: Bool {
+        isEnabled && (!queue.isEmpty || phase == .preparing || phase == .reviewing)
     }
 
     /// Drops every queued or open review whose app is back: an update finished, or

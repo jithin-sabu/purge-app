@@ -14,21 +14,22 @@ extension PurgeStore {
             }
         }
         Task { [weak self] in
-            let roots = await Task.detached(priority: .utility) { AppFolders.driveRoots() }.value
-            self?.lastDriveAppRoots = roots.map(\.path)
+            let roots = await Task.detached(priority: .utility) { AppFolders.roots() }.value
+            self?.lastAppFolderRoots = roots.map(\.path)
         }
     }
 
     /// An installer disk image mounts and unmounts often and brings no folder of
-    /// its own, so the list is scanned again only when a drive's `Applications`
-    /// folder came or went.
+    /// its own, so the list is scanned again only when one of the folders came
+    /// or went: a drive's `Applications` folder, or a folder the user added on
+    /// a drive.
     private func driveMountsChanged() {
         Task { [weak self] in
-            let roots = await Task.detached(priority: .utility) { AppFolders.driveRoots() }.value
+            let roots = await Task.detached(priority: .utility) { AppFolders.roots() }.value
             guard let self else { return }
             let paths = roots.map(\.path)
-            guard paths != lastDriveAppRoots else { return }
-            lastDriveAppRoots = paths
+            guard paths != lastAppFolderRoots else { return }
+            lastAppFolderRoots = paths
             rescanAppsForNewFolders()
         }
     }
@@ -36,6 +37,10 @@ extension PurgeStore {
     /// Called after Settings adds or removes a folder. The watch agent reads the
     /// same list and starts again on it.
     func appFoldersChanged() {
+        Task { [weak self] in
+            let roots = await Task.detached(priority: .utility) { AppFolders.roots() }.value
+            self?.lastAppFolderRoots = roots.map(\.path)
+        }
         DistributedNotificationCenter.default().postNotificationName(
             RemovedAppHandoff.appFoldersChangedNotification,
             object: nil,

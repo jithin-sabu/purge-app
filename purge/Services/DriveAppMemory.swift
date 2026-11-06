@@ -30,6 +30,9 @@ nonisolated enum DriveAppMemory {
         var codeIDs: [String] = []
         var teamIDs: [String] = []
         var appGroups: [String] = []
+        /// The drive's volume UUID when it was seen, so a different drive
+        /// mounted under the same name does not make Purge forget the app.
+        var volumeID: String?
     }
 
     static var file: URL {
@@ -112,7 +115,8 @@ nonisolated enum DriveAppMemory {
                 name: bundle.deletingPathExtension().lastPathComponent,
                 rootPath: root,
                 lastSeen: now,
-                version: version
+                version: version,
+                volumeID: volumeID(of: URL(fileURLWithPath: root, isDirectory: true))
             )
             if let old = knownByPath[path], old.version == version, old.bundleID == entry.bundleID {
                 entry.codeIDs = old.codeIDs
@@ -135,9 +139,21 @@ nonisolated enum DriveAppMemory {
     }
 
     /// False only when the folder it was found in is there and the bundle is not.
-    static func mayStillBeInstalled(_ entry: Entry) -> Bool {
+    ///
+    /// A folder at the same path on another drive, one that happens to have the
+    /// same name, says nothing about this app: it still may be installed.
+    static func mayStillBeInstalled(
+        _ entry: Entry,
+        volumeID: (URL) -> String? = { DriveAppMemory.volumeID(of: $0) }
+    ) -> Bool {
         let fm = FileManager.default
-        return fm.fileExists(atPath: entry.bundlePath) || !fm.fileExists(atPath: entry.rootPath)
+        if fm.fileExists(atPath: entry.bundlePath) || !fm.fileExists(atPath: entry.rootPath) { return true }
+        guard let seenOn = entry.volumeID else { return false }
+        return volumeID(URL(fileURLWithPath: entry.rootPath, isDirectory: true)) != seenOn
+    }
+
+    static func volumeID(of url: URL) -> String? {
+        (try? url.resourceValues(forKeys: [.volumeUUIDStringKey]))?.volumeUUIDString
     }
 
     private static func save(_ entries: [Entry]) {

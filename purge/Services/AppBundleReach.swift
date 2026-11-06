@@ -39,8 +39,13 @@ nonisolated enum AppBundleReach {
     /// Nil when the path is not an `.app` or is outside every root, and nil when
     /// a folder on the way is a bundle or package, a symlink, or hidden: those
     /// are the folders the walk never enters, so the gate refuses exactly what
-    /// the picker never lists.
-    static func folderDepth(ofAppAtPath path: String, roots: [String]) -> Int? {
+    /// the picker never lists. `skipsFolder` is the same extra rule the walk
+    /// was given, if any (`AppFolders.walkSkips` for drives and added folders).
+    static func folderDepth(
+        ofAppAtPath path: String,
+        roots: [String],
+        skipsFolder: ((URL) -> Bool)? = nil
+    ) -> Int? {
         guard (path as NSString).pathExtension == "app" else { return nil }
         for root in roots {
             guard path.hasPrefix(root + "/") else { continue }
@@ -55,6 +60,7 @@ nonisolated enum AppBundleReach {
                 if values?.isPackage == true || values?.isSymbolicLink == true || values?.isHidden == true {
                     return nil
                 }
+                if let skipsFolder, skipsFolder(URL(fileURLWithPath: folderPath, isDirectory: true)) { return nil }
             }
             return folders.count
         }
@@ -67,8 +73,9 @@ nonisolated enum AppBundleReach {
     ///
     /// Returns nil when `root` cannot be listed, including when it is absent, so
     /// each caller decides what a missing or unreadable root means. A subfolder
-    /// that cannot be listed is skipped: it only hides the apps inside it.
-    static func appBundleURLs(in root: URL) -> [URL]? {
+    /// that cannot be listed is skipped: it only hides the apps inside it, and
+    /// so is one `skipsFolder` names.
+    static func appBundleURLs(in root: URL, skipsFolder: ((URL) -> Bool)? = nil) -> [URL]? {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [.isDirectoryKey, .isPackageKey, .isSymbolicLinkKey]
         guard let entries = try? fm.contentsOfDirectory(
@@ -91,6 +98,7 @@ nonisolated enum AppBundleReach {
                 guard values?.isDirectory == true,
                       values?.isPackage != true,
                       values?.isSymbolicLink != true else { continue }
+                if let skipsFolder, skipsFolder(entry) { continue }
                 let children = (try? fm.contentsOfDirectory(
                     at: entry,
                     includingPropertiesForKeys: keys,

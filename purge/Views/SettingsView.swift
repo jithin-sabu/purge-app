@@ -30,6 +30,8 @@ struct SettingsView: View {
     /// Read off the main thread when Settings appears and after each change.
     @State private var appFolders = AppFolderListing()
     @State private var appFolderMessage: String?
+    /// Adding and removing share the alert; each says which one failed.
+    @State private var appFolderAlertTitle = AppFolderAdding.refusalTitle
     @State private var showCleaningHistorySheet = false
     @State private var showCustomIntervalSheet = false
     @State private var selectedHistoryEntry: CleanupHistoryEntry?
@@ -583,7 +585,7 @@ struct SettingsView: View {
             }
         }
         .alert(
-            AppFolderAdding.refusalTitle,
+            appFolderAlertTitle,
             isPresented: Binding(
                 get: { appFolderMessage != nil },
                 set: { if !$0 { appFolderMessage = nil } }
@@ -950,6 +952,7 @@ struct SettingsView: View {
     private func chooseAppFolder() {
         AppFolderAdding.chooseFolder { folder in
             Task {
+                appFolderAlertTitle = AppFolderAdding.refusalTitle
                 appFolderMessage = await AppFolderAdding.add(folder, store: store)
                 await reloadAppFolders()
             }
@@ -960,6 +963,7 @@ struct SettingsView: View {
         Task {
             let saved = await Task.detached(priority: .userInitiated) { AppFolders.remove(path: row.path) }.value
             if !saved {
+                appFolderAlertTitle = String(localized: "Purge can\u{2019}t remove that folder")
                 appFolderMessage = AppFolderAdding.saveFailedMessage
             }
             await reloadAppFolders()

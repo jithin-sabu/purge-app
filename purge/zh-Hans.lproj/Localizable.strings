@@ -1402,7 +1402,6 @@
 "Purge doesn't look for apps in Library, in hidden folders, or inside other apps." = "Purge 不会在“资源库”、隐藏文件夹或其他应用内部查找应用。";
 "That folder is reached through an alias or link. Choose the folder it leads to." = "该文件夹是通过替身或链接访问的。请选择它指向的文件夹。";
 "Purge only lists apps on drives attached to this Mac that it can move files on, not network or read-only drives." = "Purge 只列出连接到这台 Mac 且可以移动文件的磁盘上的应用，不包括网络磁盘或只读磁盘。";
-"That folder holds a copy of a Mac or of a home folder. Choose the folder with the apps in it." = "该文件夹包含一台 Mac 或一个个人主文件夹的副本。请选择存放应用的那个文件夹。";
 "Purge already looks in that folder." = "Purge 已经会检查该文件夹。";
 "That folder holds one Purge already looks in. Remove that one first." = "该文件夹包含一个 Purge 已在检查的文件夹。请先移除那个文件夹。";
 "%@ · On %@" = "%@ · 位于 %@";
@@ -1414,3 +1413,6 @@
 "Add Folder" = "添加文件夹";
 "Purge's App Uninstaller lists apps in Applications, on drives you plug in, and in folders you add in Settings, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具会列出“应用程序”文件夹、你插入的外接磁盘以及你在设置中添加的文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
 "Purge lists apps in Applications, on drives you plug in, and in folders you add. Put %@ in a folder, then add that folder, or drag it to the Trash yourself." = "Purge 会列出“应用程序”文件夹、你插入的外接磁盘以及你添加的文件夹中的应用。请把 %@ 放进一个文件夹，再添加该文件夹，或自行将它拖到废纸篓。";
+"That folder holds a copy of a Mac or of a home folder, or is inside one. Choose a folder with apps you use." = "该文件夹包含或位于一台 Mac 或一个个人主文件夹的副本中。请选择存放你正在使用的应用的文件夹。";
+"That folder syncs with iCloud Drive, so moving an app from it to the Trash would remove it from your other devices too." = "该文件夹会与 iCloud 云盘同步，因此把其中的应用移到废纸篓也会将它从你的其他设备上移除。";
+"Purge can’t remove that folder" = "Purge 无法移除该文件夹";

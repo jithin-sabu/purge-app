@@ -111,7 +111,7 @@ nonisolated enum ExternalUninstallRequest {
             return .outsideApplications(name: name, folder: bundleURL.deletingLastPathComponent().standardizedFileURL.path)
         }
         // The same reach the uninstaller's list uses (`AppBundleReach`).
-        guard AppBundleReach.folderDepth(ofAppAtPath: path, roots: rootPaths) != nil else {
+        guard AppFolders.folderDepth(ofAppAtPath: path, roots: rootPaths) != nil else {
             return .insideAnotherApp(name: name)
         }
         return .uninstall(appID: path, name: name)

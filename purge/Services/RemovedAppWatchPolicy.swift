@@ -338,7 +338,7 @@ nonisolated enum RemovedAppWatchPolicy {
         guard normalized.hasSuffix(".app"), !normalized.contains("/../"), !normalized.contains("/./") else {
             return false
         }
-        guard AppBundleReach.folderDepth(ofAppAtPath: normalized, roots: roots) != nil else { return false }
+        guard AppFolders.folderDepth(ofAppAtPath: normalized, roots: roots) != nil else { return false }
 
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_")
         guard (1...255).contains(bundleID.count),

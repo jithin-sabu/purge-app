@@ -500,7 +500,7 @@ final class ApplicationsFolderWatcher {
     }
 
     /// Every `.app` the uninstaller's picker lists in each root
-    /// (`AppBundleReach.appBundleURLs(in:)`). An entry is reused from `previous`
+    /// (`AppFolders.appBundleURLs(in:)`). An entry is reused from `previous`
     /// only while its file number is unchanged and it has an identifier, so a
     /// bundle an updater swapped in place, or one first read mid-copy, is read
     /// again rather than described by what was there before. A root that exists but cannot be
@@ -576,7 +576,7 @@ final class ApplicationsFolderWatcher {
                     )
                 }
             }
-            guard let bundles = AppBundleReach.appBundleURLs(in: root) else {
+            guard let bundles = AppFolders.appBundleURLs(in: root) else {
                 keepPreviousEntries(under: rootPath)
                 continue
             }

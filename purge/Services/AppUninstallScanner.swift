@@ -144,7 +144,7 @@ nonisolated final class AppUninstallScanner {
         var result: [URL] = []
 
         for root in AppUninstallScanPolicy.installedAppRoots() {
-            for url in AppBundleReach.appBundleURLs(in: root) ?? [] {
+            for url in AppFolders.appBundleURLs(in: root) ?? [] {
                 let key = url.standardizedFileURL.path
                 guard !seen.contains(key) else { continue }
                 seen.insert(key)

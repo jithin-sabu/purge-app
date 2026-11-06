@@ -12,13 +12,25 @@ import AppKit
 @MainActor
 enum ExternalUninstallHandler {
 
+    /// The folder list is read off the main thread: it asks each drive about
+    /// its file system, and a drive that is asleep takes a moment to answer.
     static func handle(urls: [URL]) {
-        let outcome = ExternalUninstallRequest.resolve(urls: urls)
+        Task {
+            let (outcome, canAddFolder) = await Task.detached(priority: .userInitiated) {
+                let outcome = ExternalUninstallRequest.resolve(urls: urls)
+                guard case .outsideApplications(_, let folder) = outcome else { return (outcome, false) }
+                return (outcome, ExternalUninstallRequest.canOfferToAdd(folder: folder))
+            }.value
+            show(outcome, canAddFolder: canAddFolder, urls: urls)
+        }
+    }
+
+    private static func show(_ outcome: ExternalUninstallRequest.Outcome, canAddFolder: Bool, urls: [URL]) {
         switch outcome {
         case .uninstall(let appID, let name):
             Task { await IntentRouter.shared.showUninstaller(appID: appID, name: name) }
         case .outsideApplications(_, let folder):
-            guard ExternalUninstallRequest.canOfferToAdd(folder: folder) else {
+            guard canAddFolder else {
                 guard let refusal = outcome.refusalWithoutAddingFolder else { return }
                 showRefusal(title: refusal.title, detail: refusal.detail)
                 return

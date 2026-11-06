@@ -150,7 +150,7 @@ enum AppUninstallScanPolicy {
             let builtIn = AppFolders.builtInRoots(home: home).map { $0.standardizedFileURL.path }
             if AppBundleReach.folderDepth(ofAppAtPath: path, roots: builtIn) != nil { return true }
             let appRoots = installedAppRoots(home: home).map { $0.standardizedFileURL.path }
-            guard AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil else { return false }
+            guard AppFolders.folderDepth(ofAppAtPath: path, roots: appRoots, home: home) != nil else { return false }
             return AppFolders.isOnLocalDisk(std) && !AppFolders.isReadOnly(std)
         }
 

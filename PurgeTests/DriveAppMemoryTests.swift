@@ -85,6 +85,26 @@ struct DriveAppMemoryTests {
         }
     }
 
+    @Test("A different drive with the same name does not make Purge forget an app")
+    func sameNameDriveKeepsTheApp() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        // The folder is there and the bundle is not: on the drive it was seen
+        // on, that means it is gone; on another drive, it means nothing.
+        let root = try fixture.app("Volumes/SSD/Applications/Placeholder.app", id: "com.purgetest.placeholder")
+            .deletingLastPathComponent()
+        let entry = DriveAppMemory.Entry(
+            bundlePath: root.appendingPathComponent("Foo.app").path,
+            bundleID: "com.purgetest.foo",
+            name: "Foo",
+            rootPath: root.path,
+            lastSeen: Date(),
+            volumeID: "DRIVE-A"
+        )
+        #expect(DriveAppMemory.mayStillBeInstalled(entry, volumeID: { _ in "DRIVE-B" }))
+        #expect(!DriveAppMemory.mayStillBeInstalled(entry, volumeID: { _ in "DRIVE-A" }))
+    }
+
     @Test("The test host never writes the list")
     func testHostNeverWrites() throws {
         let fixture = try Fixture()

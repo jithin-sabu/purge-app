@@ -12,8 +12,12 @@ import Foundation
 /// two built-in folders.
 nonisolated enum AppFolders {
     /// Where drives are mounted. Tests bind it to a temporary folder with
-    /// `AppFolders.$volumes.withValue`, so they never read the real drives.
-    @TaskLocal static var volumes = URL(fileURLWithPath: "/Volumes", isDirectory: true)
+    /// `AppFolders.$volumes.withValue`, so they never read the real drives, and
+    /// the test host defaults to a folder that is not there.
+    @TaskLocal static var volumes = RemovedAppHandoff.runsInTestHost
+        ? FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-host-\(ProcessInfo.processInfo.processIdentifier)/no-volumes", isDirectory: true)
+        : URL(fileURLWithPath: "/Volumes", isDirectory: true)
 
     /// Every folder the uninstaller lists apps from right now: the built-in
     /// two, then each attached drive's, then each folder the user added that
@@ -30,6 +34,58 @@ nonisolated enum AppFolders {
             result.append(url)
         }
         return result
+    }
+
+    // MARK: Walking the folders
+
+    /// Every `.app` in `root`, as `AppBundleReach` walks it, plus `walkSkips`
+    /// for a drive's folder or an added one. The two built-in folders are
+    /// walked as before.
+    static func appBundleURLs(
+        in root: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [URL]? {
+        AppBundleReach.appBundleURLs(in: root, skipsFolder: skipRule(forRoot: root.standardizedFileURL.path, home: home))
+    }
+
+    /// `AppBundleReach.folderDepth` with the same rule as `appBundleURLs`, so
+    /// the gate refuses exactly what the list leaves out.
+    static func folderDepth(
+        ofAppAtPath path: String,
+        roots: [String],
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Int? {
+        guard let root = roots.first(where: { path.hasPrefix($0 + "/") }) else { return nil }
+        return AppBundleReach.folderDepth(
+            ofAppAtPath: path,
+            roots: [root],
+            skipsFolder: skipRule(forRoot: root, home: home)
+        )
+    }
+
+    /// Folders the walk of a drive or an added folder never enters:
+    /// - build output, where every build of an app someone is writing lands,
+    ///   so a clean would read as an uninstall and offer the app's data;
+    /// - a git checkout, for the same reason;
+    /// - a copy of a Mac, a home folder or a Time Machine backup, whose apps
+    ///   and helpers are not installed anywhere.
+    static func walkSkips(_ folder: URL) -> Bool {
+        if buildOutputNames.contains(folder.lastPathComponent) { return true }
+        if FileManager.default.fileExists(atPath: folder.appendingPathComponent(".git").path) { return true }
+        return holdsWholeDisk(folder, markers: pickedMarkers)
+    }
+
+    static let buildOutputNames: Set<String> = [
+        "build", "Build", "Products", "DerivedData", "target", "out", "dist",
+        "node_modules", "Pods", "Carthage"
+    ]
+
+    /// None for the two built-in folders, `walkSkips` for every other.
+    private static func skipRule(forRoot rootPath: String, home: URL) -> ((URL) -> Bool)? {
+        let builtIn = builtInRoots(home: home).contains { $0.standardizedFileURL.path == rootPath }
+        if builtIn { return nil }
+        let rule: (URL) -> Bool = { walkSkips($0) }
+        return rule
     }
 
     /// `/Applications` and `~/Applications`. `/System/Applications` is left
@@ -111,8 +167,11 @@ nonisolated enum AppFolders {
         case throughLink
         /// On a network share, a cloud drive, or a read-only volume.
         case notOnWritableLocalDisk
-        /// Holds a copy of a Mac, a home folder, or a Time Machine backup.
+        /// Holds a copy of a Mac, a home folder, or a Time Machine backup, or is
+        /// inside one.
         case holdsWholeDisk
+        /// Synced by iCloud Drive, where a move to the Trash leaves every device.
+        case syncs
         /// Already one of the folders, or inside one.
         case alreadyIncluded
         /// Holds one of the other folders.
@@ -166,7 +225,17 @@ nonisolated enum AppFolders {
             if values?.isPackage == true { return .insideLibraryOrBundle }
         }
         guard isLocalDisk(url), !isReadOnly(url) else { return .notOnWritableLocalDisk }
-        if holdsWholeDisk(url, markers: pickedMarkers) { return .holdsWholeDisk }
+        // The pick and every folder above it up to the drive or the home folder,
+        // so a folder inside another Mac's data volume or an old home folder is
+        // refused too. A drive's own top folder is judged by the drive rule: a
+        // `Library` there alone is not a home folder.
+        var ancestor = base
+        for (index, name) in below.enumerated() {
+            ancestor += "/" + name
+            let markers = onDrive && index == 0 ? driveMarkers : pickedMarkers
+            if holdsWholeDisk(URL(fileURLWithPath: ancestor), markers: markers) { return .holdsWholeDisk }
+        }
+        if (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?.isUbiquitousItem == true { return .syncs }
 
         for other in otherRoots {
             let otherPath = other.standardizedFileURL.path

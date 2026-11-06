@@ -69,7 +69,9 @@ nonisolated struct AppFolderListing: Equatable, Sendable {
         case .notOnWritableLocalDisk:
             String(localized: "Purge only lists apps on drives attached to this Mac that it can move files on, not network or read-only drives.")
         case .holdsWholeDisk:
-            String(localized: "That folder holds a copy of a Mac or of a home folder. Choose the folder with the apps in it.")
+            String(localized: "That folder holds a copy of a Mac or of a home folder, or is inside one. Choose a folder with apps you use.")
+        case .syncs:
+            String(localized: "That folder syncs with iCloud Drive, so moving an app from it to the Trash would remove it from your other devices too.")
         case .alreadyIncluded:
             String(localized: "Purge already looks in that folder.")
         case .holdsAnotherFolder:
