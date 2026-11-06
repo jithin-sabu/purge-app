@@ -54,6 +54,10 @@ nonisolated enum CleanFailureReason: String, Equatable, Error {
     case simulatorServiceNeedsRestart
     /// No `simctl` on this Mac could be run, so nothing can remove a simulator.
     case simulatorToolsMissing
+    /// An app on a drive or in a folder the user added that macOS would not let
+    /// Purge move. The root helper takes apps only from the two Applications
+    /// folders, so it can't move this one either (#99).
+    case moveInFinder
     case unknown
 
     var explanation: String {
@@ -78,6 +82,8 @@ nonisolated enum CleanFailureReason: String, Equatable, Error {
             String(localized: "Apple's simulator service is out of date. Restart your Mac, then clean again.")
         case .simulatorToolsMissing:
             String(localized: "Apple's simulator tools aren't working on this Mac, so Purge can't remove simulators. Reinstalling Xcode fixes this.")
+        case .moveInFinder:
+            String(localized: "macOS won't let Purge move this app from where it is. Drag it to the Trash in Finder, then retry to remove what it left behind.")
         case .unknown:
             String(localized: "This one couldn't be removed. Try again.")
         }
@@ -105,6 +111,8 @@ nonisolated enum CleanFailureReason: String, Equatable, Error {
             "arrow.clockwise.circle.fill"
         case .simulatorToolsMissing:
             "hammer.fill"
+        case .moveInFinder:
+            "externaldrive.fill"
         case .unknown:
             "exclamationmark.circle.fill"
         }
@@ -118,7 +126,8 @@ nonisolated enum CleanFailureReason: String, Equatable, Error {
     /// the Xcode license takes a minute; a restart or a reinstall does not fit.
     var showsRetry: Bool {
         switch self {
-        case .inUse, .unknown, .needsAdministrator, .needsAdministratorAccount, .xcodeLicenseNotAccepted:
+        case .inUse, .unknown, .needsAdministrator, .needsAdministratorAccount, .xcodeLicenseNotAccepted,
+             .moveInFinder:
             true
         case .needsFullDiskAccess, .systemProtected, .safetySkipped, .keptForOtherApp,
              .simulatorServiceNeedsRestart, .simulatorToolsMissing:
@@ -136,7 +145,8 @@ nonisolated enum CleanFailureReason: String, Equatable, Error {
         case .needsAdministratorAccount:
             String(localized: "Enter Password")
         case .needsFullDiskAccess, .inUse, .systemProtected, .safetySkipped, .keptForOtherApp,
-             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing, .unknown:
+             .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing,
+             .moveInFinder, .unknown:
             String(localized: "Retry")
         }
     }
@@ -290,7 +300,7 @@ struct CleanFailureItem: Identifiable, Equatable {
     var offersFinderRemoval: Bool {
         guard route == .lockedUninstall else { return false }
         switch reason {
-        case .needsAdministratorAccount, .inUse, .unknown:
+        case .needsAdministratorAccount, .inUse, .moveInFinder, .unknown:
             return true
         case .needsFullDiskAccess, .needsAdministrator, .systemProtected, .safetySkipped, .keptForOtherApp,
              .xcodeLicenseNotAccepted, .simulatorServiceNeedsRestart, .simulatorToolsMissing:

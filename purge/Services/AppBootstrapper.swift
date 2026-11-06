@@ -52,6 +52,7 @@ enum AppBootstrapper {
             })
         }
         RemovedAppMonitor.shared.attach(store: env.store)
+        env.store.startWatchingAppFolderDrives()
         CleaningQuitGuard.isCleaningActive = { [weak store = env.store] in
             store?.isAnyCleanInProgress ?? false
         }

@@ -29,8 +29,23 @@ nonisolated enum RemovedAppHandoff {
     /// watcher use the default. Tests bind it to a temporary folder with
     /// `RemovedAppHandoff.$root.withValue`; it is task-local, so suites running
     /// at the same time each see their own folder and none of them writes here.
-    @TaskLocal static var root: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Purge", isDirectory: true)
+    ///
+    /// The unit-test host gets a folder of its own, so a test that does not bind
+    /// one never reads or writes the user's records, folder list or remembered
+    /// drive apps (#99).
+    @TaskLocal static var root: URL = runsInTestHost
+        ? FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-test-host-\(ProcessInfo.processInfo.processIdentifier)/handoff", isDirectory: true)
+        : FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Purge", isDirectory: true)
+
+    /// The same check as `TestHost.isActive()`, which the watch agent does not
+    /// compile.
+    static let runsInTestHost: Bool = {
+        let environment = ProcessInfo.processInfo.environment
+        return ["XCTestConfigurationFilePath", "XCTestBundlePath", "XCTestSessionIdentifier"]
+            .contains { environment[$0] != nil }
+    }()
 
     static let launchURL = URL(string: "purge://removed-apps")!
     static let agentPlistName = "io.getpurge.watch.plist"
@@ -53,6 +68,10 @@ nonisolated enum RemovedAppHandoff {
     /// as allowed while nothing runs: it crashed, launchd gave up restarting it,
     /// or the user switched it off in System Settings. Only an answer proves it.
     static let agentPingNotification = Notification.Name("io.getpurge.watch.ping")
+    /// Posted by Purge when the user adds or removes an app folder (#99), so the
+    /// watcher starts again on the new list.
+    static let appFoldersChangedNotification = Notification.Name("io.getpurge.watch.appFoldersChanged")
+
     /// The watcher's answer, sent only while it is watching. The object is the
     /// path of the agent executable that answered.
     static let agentPongNotification = Notification.Name("io.getpurge.watch.pong")

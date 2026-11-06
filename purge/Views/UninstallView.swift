@@ -125,6 +125,8 @@ struct UninstallView: View {
     /// density across tab changes and launches.
     @AppStorage("view.uninstaller.mode") private var viewMode = UninstallAppViewMode.grid
     @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
+    /// Why a folder picked from the hint under the list could not be added (#99).
+    @State private var appFolderMessage: String?
 
     /// The active view lives on the store so the tab header can swap its action
     /// button to match; this view reads and writes it through `store`.
@@ -189,6 +191,17 @@ struct UninstallView: View {
         }
         .onAppear(perform: applyUninstallerFocus)
         .onAppear { thumbSection = store.uninstallSection }
+        .alert(
+            AppFolderAdding.refusalTitle,
+            isPresented: Binding(
+                get: { appFolderMessage != nil },
+                set: { if !$0 { appFolderMessage = nil } }
+            )
+        ) {
+            Button("OK") { appFolderMessage = nil }
+        } message: {
+            Text(appFolderMessage ?? "")
+        }
         .onChange(of: store.uninstallerFocus) { _ in applyUninstallerFocus() }
         .onChange(of: appSearchQuery) { query in
             if let focusedSearch, query != focusedSearch.name { self.focusedSearch = nil }
@@ -579,7 +592,7 @@ struct UninstallView: View {
                 emptyState(
                     symbol: "app.badge",
                     title: String(localized: "No apps found"),
-                    detail: String(localized: "Purge looks in Applications and your home Applications folder.")
+                    detail: String(localized: "Purge looks in Applications, your home Applications folder, the Applications folder on each drive, and folders you add in Settings.")
                 )
             } else {
                 ScanStatusPlaceholder(
@@ -604,10 +617,13 @@ struct UninstallView: View {
             // Held behind the skeleton while the first scan runs; nothing to show.
             Color.clear
         } else if filteredApps.isEmpty {
+            // The moment someone looks for an app Purge does not list, so the
+            // one place outside Settings that offers to add a folder (#99).
             emptyState(
                 symbol: "magnifyingglass",
-                title: String(localized: "Nothing matches"),
-                detail: String(localized: "No installed app matches \"\(appSearchQuery)\".")
+                title: String(localized: "No app matches \u{201C}\(appSearchQuery)\u{201D}"),
+                detail: String(localized: "If it\u{2019}s on a drive or in another folder, add that folder and Purge lists it."),
+                action: (String(localized: "Add folder\u{2026}"), addAppFolder)
             )
         } else {
             switch viewMode {
@@ -733,7 +749,18 @@ struct UninstallView: View {
 
     // MARK: Shared bits
 
-    private func emptyState(symbol: String, title: String, detail: String) -> some View {
+    private func addAppFolder() {
+        AppFolderAdding.chooseFolder { folder in
+            Task { appFolderMessage = await AppFolderAdding.add(folder, store: store) }
+        }
+    }
+
+    private func emptyState(
+        symbol: String,
+        title: String,
+        detail: String,
+        action: (title: String, run: () -> Void)? = nil
+    ) -> some View {
         VStack(spacing: AppStyle.Spacing.small) {
             Image(systemName: symbol)
                 .font(.system(size: 38))
@@ -743,6 +770,13 @@ struct UninstallView: View {
             Text(LocalizedStringKey(detail))
                 .foregroundStyle(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
+            if let action {
+                Button(action: action.run) {
+                    Label(action.title, systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.purge(.secondary))
+                .padding(.top, AppStyle.Spacing.xSmall)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, AppStyle.Spacing.large)
@@ -965,11 +999,12 @@ private struct AppListRow: View {
     @State private var isContextMenuActive = false
 
     /// The folder, plus who installed it when Homebrew did (#254), so the
-    /// review sheet's Homebrew choice is no surprise.
+    /// review sheet's Homebrew choice is no surprise, or the drive it is on (#99).
     private var locationLine: String {
         let folder = app.bundleURL.deletingLastPathComponent().path
-        guard app.homebrewCask != nil else { return folder }
-        return String(localized: "\(folder) · Installed by Homebrew")
+        if app.homebrewCask != nil { return String(localized: "\(folder) · Installed by Homebrew") }
+        if let drive = app.volumeName { return String(localized: "\(folder) · On \(drive)") }
+        return folder
     }
 
     var body: some View {
@@ -1108,6 +1143,7 @@ private struct AppTile: View {
 
     private var totalBytes: Int64 { size.bytes }
     private var isSizePending: Bool { size.isPending }
+    private var driveLabel: String? { app.volumeName.map { String(localized: "On \($0)") } }
 
     @State private var isHovering = false
     @State private var isContextMenuActive = false
@@ -1117,6 +1153,16 @@ private struct AppTile: View {
             Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
                 .resizable()
                 .frame(width: 56, height: 56)
+                // An app on a drive keeps the tile's height: the drive shows as a
+                // badge, and its name in the tooltip (#99).
+                .overlay(alignment: .bottomTrailing) {
+                    if app.volumeName != nil {
+                        Image(systemName: "externaldrive.fill")
+                            .font(AppStyle.Typography.metadata)
+                            .foregroundStyle(AppColors.textSecondary)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .frame(maxWidth: .infinity)
 
             VStack(spacing: AppStyle.Spacing.xxxSmall) {
@@ -1171,10 +1217,10 @@ private struct AppTile: View {
         .onTapGesture { if !isFromLastScan { onToggle() } }
         .onHover { isHovering = $0 && !isFromLastScan }
         // Full name on hover, since the tile truncates longer ones.
-        .help(isFromLastScan ? LastScanRowMarker.help : activityLabel.map { "\(app.name), \($0)" } ?? app.name)
+        .help(isFromLastScan ? LastScanRowMarker.help : [app.name, driveLabel, activityLabel].compactMap { $0 }.joined(separator: ", "))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(activityLabel.map { ", \($0)" } ?? "")"
+            "\(app.name), \(isSizePending ? String(localized: "calculating size") : formatBytes(totalBytes))\(driveLabel.map { ", \($0)" } ?? "")\(activityLabel.map { ", \($0)" } ?? "")"
         )
         .accessibilityValue(isFromLastScan ? LocalizedStringKey(LastScanRowMarker.help) : isSelected ? LocalizedStringKey("Selected") : LocalizedStringKey("Not selected"))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -1537,7 +1583,7 @@ struct RemovedAppLeftoverSheet: View {
                 Text("\(plan.app.name) left files behind")
                     .font(AppStyle.Typography.pageTitle)
                     .foregroundStyle(AppColors.textPrimary)
-                Text("\(plan.app.name) was removed from Applications, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it.")
+                Text("\(plan.app.name) was removed, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it.")
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

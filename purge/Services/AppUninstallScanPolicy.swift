@@ -9,16 +9,14 @@ enum AppUninstallScanPolicy {
 
     // MARK: App roots
 
-    /// Folders the picker enumerates. `/System/Applications` and
-    /// `/System/Library` are deliberately absent, so Apple's built-in apps are
-    /// never listed, never matched, and never deletable.
+    /// Folders the picker enumerates (`AppFolders`): the two Applications
+    /// folders, each attached drive's, and the ones the user added (#99).
+    /// `/System/Applications` and `/System/Library` are deliberately absent, so
+    /// Apple's built-in apps are never listed, never matched, and never deletable.
     nonisolated static func installedAppRoots(
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> [URL] {
-        [
-            URL(fileURLWithPath: "/Applications", isDirectory: true),
-            home.appendingPathComponent("Applications", isDirectory: true)
-        ]
+        AppFolders.roots(home: home)
     }
 
     /// True for a bundle that must never be offered for uninstall: anything under
@@ -141,11 +139,19 @@ enum AppUninstallScanPolicy {
         // folder stays out, so the gate never reaches bundle internals.
         // Never one that links into `/System`, like `/Applications/Safari.app`,
         // and never Purge itself, read by its bundle id as the list reads it (#176).
+        // A drive's folder or one the user added is read again here, so a drive
+        // swapped or a folder replaced since the scan answers as it is now (#99).
+        // A bundle there must also be on a disk attached to this Mac that can be
+        // written to: a folder inside a root can be where a network share or a
+        // disk image is mounted.
         if std.pathExtension == "app" {
             let bundleID = AppBundleReach.readInfoPlist(at: std)["CFBundleIdentifier"] as? String
             guard !isProtectedApp(bundleURL: std, bundleID: bundleID) else { return false }
+            let builtIn = AppFolders.builtInRoots(home: home).map { $0.standardizedFileURL.path }
+            if AppBundleReach.folderDepth(ofAppAtPath: path, roots: builtIn) != nil { return true }
             let appRoots = installedAppRoots(home: home).map { $0.standardizedFileURL.path }
-            return AppBundleReach.folderDepth(ofAppAtPath: path, roots: appRoots) != nil
+            guard AppFolders.folderDepth(ofAppAtPath: path, roots: appRoots, home: home) != nil else { return false }
+            return AppFolders.isOnLocalDisk(std) && !AppFolders.isReadOnly(std)
         }
 
         // A hidden home folder, only when the catalog names exactly this path and

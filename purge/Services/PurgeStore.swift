@@ -328,6 +328,12 @@ final class PurgeStore: ObservableObject {
     }
     @Published var isScanningInstalledApps = false
     @Published private(set) var hasCompletedInstalledAppsScan = false
+    /// The app folders the app list was last read with (#99).
+    var lastAppFolderRoots: [String] = []
+    /// What the header needs to say where the listed apps come from (#99):
+    /// the folders read now, the ones the user added, and drive names. Read
+    /// off the main thread with each app scan, so no render asks the disk.
+    @Published var appFolderPaths = AppFolderPaths()
     /// Bundle-plus-safe-leftover total per app id, filled in the background after
     /// the list loads. Absent until measured; callers fall back to bundle size.
     @Published private(set) var removableBytesByAppID: [String: Int64] = [:] {
@@ -1778,7 +1784,7 @@ final class PurgeStore: ObservableObject {
         let owner = pending.app
         let survivors = installedApps
         let appGroupClaims = await AppGroupClaims.gatherOffMain(for: survivors, leftovers: leftovers)
-        let claimants = await survivorsWithProtectedApps(survivors)
+        let claimants = await survivorsWithProtectedApps(survivors, removing: [bundleKey])
         let deletableLeftovers = leftovers.filter { leftover in
             if let otherApp = Self.appStillUsing(
                 leftover: leftover,
@@ -2520,7 +2526,14 @@ final class PurgeStore: ObservableObject {
         // partial list.
         guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         installedApps = collected
+        // Remember the drive apps while their bundles are still readable, and
+        // before anything treats the scan as finished, so a drive ejected right
+        // after the scan can't leave an app's files looking unowned.
+        let bundles = collected.map(\.bundleURL)
+        await Task.detached(priority: .utility) { DriveAppMemory.record(bundles: bundles) }.value
+        guard installedAppsScanGeneration == generation, !Task.isCancelled else { return }
         hasCompletedInstalledAppsScan = true
+        refreshAppFolderPaths()
         // Every app on the Mac is listed now; saved apps not among them are gone.
         // The file waits for the totals, which the next lines measure.
         lastScanListsFinished([.apps], savable: false)
@@ -3233,7 +3246,7 @@ final class PurgeStore: ObservableObject {
             for: survivors,
             leftovers: appPlans.flatMap(\.items)
         )
-        let claimants = await survivorsWithProtectedApps(survivors)
+        let claimants = await survivorsWithProtectedApps(survivors, removing: removingIDs)
         if Task.isCancelled { return }
         Self.markSharedWithSurvivors(in: &appPlans, survivors: claimants, appGroupClaims: appGroupClaims)
 
@@ -3311,14 +3324,32 @@ final class PurgeStore: ObservableObject {
     }
 
     /// `survivors` plus the apps the uninstaller never lists, Apple's among them
-    /// (#176), so they hold back leftovers that are theirs too. They claim by
-    /// bundle id and name only: their app groups are not read, which would mean
-    /// reading the signatures of some 60 system bundles on every review.
-    private func survivorsWithProtectedApps(_ survivors: [InstalledApp]) async -> [InstalledApp] {
-        let protected = await Task.detached(priority: .userInitiated) {
-            AppUninstallScanner.protectedApps()
+    /// (#176), and apps on drives that are unplugged (#99), so they hold back
+    /// leftovers that are theirs too. They claim by bundle id and name only:
+    /// their app groups are not read, which would mean reading the signatures
+    /// of some 60 system bundles on every review. `removing` holds the bundle
+    /// paths of the apps going now.
+    private func survivorsWithProtectedApps(
+        _ survivors: [InstalledApp],
+        removing: Set<String>
+    ) async -> [InstalledApp] {
+        let (protected, remembered) = await Task.detached(priority: .userInitiated) {
+            (AppUninstallScanner.protectedApps(), DriveAppMemory.apps())
         }.value
         return survivors + protected
+            + Self.unlistedDriveApps(besides: survivors, removing: removing, remembered: remembered)
+    }
+
+    /// Remembered apps on drives the list doesn't hold now, most often because
+    /// the drive is unplugged (#99). They claim their leftovers like any app
+    /// the user keeps. An app being removed never counts.
+    nonisolated static func unlistedDriveApps(
+        besides listed: [InstalledApp],
+        removing: Set<String>,
+        remembered: [InstalledApp] = DriveAppMemory.apps()
+    ) -> [InstalledApp] {
+        let listedIDs = Set(listed.map(\.id))
+        return remembered.filter { !listedIDs.contains($0.id) && !removing.contains($0.id) }
     }
 
     /// The other still-installed app, if any, that a leftover also belongs to.
@@ -3640,7 +3671,7 @@ final class PurgeStore: ObservableObject {
                 for: remainingApps,
                 leftovers: leftoverBatch.flatMap { $0.1 }
             )
-            let claimants = await survivorsWithProtectedApps(remainingApps)
+            let claimants = await survivorsWithProtectedApps(remainingApps, removing: movedBundlePaths)
             var urls: [URL] = []
             var names: [String: String] = [:]
             var sizes: [String: Int64] = [:]

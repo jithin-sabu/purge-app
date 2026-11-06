@@ -100,6 +100,8 @@ it checks every request five ways:
   direct child of a folder the uninstaller scans for leftovers, such as
   `~/Library/Application Support` or `/Library/LaunchDaemons`. The full list is in
   [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift).
+  The uninstaller also lists apps on drives and in folders the user adds, but
+  the app never sends those to the helper, and the helper would refuse them.
   It also accepts a direct child of `macOS Install Data`, never `Locked Files`,
   and only while that folder and everything in it are older than the moment the
   running macOS was installed, from `/Library/Receipts/InstallHistory.plist`.

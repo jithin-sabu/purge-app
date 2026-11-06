@@ -19,8 +19,9 @@ nonisolated enum ExternalUninstallRequest {
         case noApp
         /// Finder sent several apps; the uninstaller takes one at a time from there.
         case severalApps(count: Int)
-        /// Outside the folders the uninstaller lists.
-        case outsideApplications(name: String)
+        /// Outside the folders the uninstaller lists. `folder` is the one the
+        /// app is in, which the alert offers to add (#99).
+        case outsideApplications(name: String, folder: String)
         /// Inside an app folder, but within another app or package, so the
         /// uninstaller does not list it on its own.
         case insideAnotherApp(name: String)
@@ -28,6 +29,17 @@ nonisolated enum ExternalUninstallRequest {
         case appleApp(name: String)
         /// Purge itself.
         case purgeItself
+
+        /// The refusal for an app outside the folders whose own folder Purge
+        /// can't add either, such as the top of a drive or the home folder, so
+        /// the alert never offers something it would then refuse (#99).
+        var refusalWithoutAddingFolder: (title: String, detail: String)? {
+            guard case .outsideApplications(let name, _) = self else { return refusal }
+            return (
+                String(localized: "\(name) isn't in a folder Purge lists apps from"),
+                String(localized: "Purge lists apps in Applications, on drives you plug in, and in folders you add. Put \(name) in a folder, then add that folder, or drag it to the Trash yourself.")
+            )
+        }
 
         /// What to show when the request is turned down. Nil for `uninstall`.
         var refusal: (title: String, detail: String)? {
@@ -44,10 +56,11 @@ nonisolated enum ExternalUninstallRequest {
                     String(localized: "Choose one app"),
                     String(localized: "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller.")
                 )
-            case .outsideApplications(let name):
+            case .outsideApplications(let name, let folder):
+                let folderName = (folder as NSString).lastPathComponent
                 return (
-                    String(localized: "\(name) is outside the Applications folder"),
-                    String(localized: "Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move \(name) there first, or drag it to the Trash yourself.")
+                    String(localized: "\(name) isn't in a folder Purge lists apps from"),
+                    String(localized: "Purge lists apps in Applications, on drives you plug in, and in folders you add. Add \u{201C}\(folderName)\u{201D} to uninstall \(name) here, or drag it to the Trash yourself.")
                 )
             case .insideAnotherApp(let name):
                 return (
@@ -95,13 +108,23 @@ nonisolated enum ExternalUninstallRequest {
         }
         let rootPaths = roots.map { $0.standardizedFileURL.path }
         guard rootPaths.contains(where: { PathContainment.isInside(path, $0) }) else {
-            return .outsideApplications(name: name)
+            return .outsideApplications(name: name, folder: bundleURL.deletingLastPathComponent().standardizedFileURL.path)
         }
         // The same reach the uninstaller's list uses (`AppBundleReach`).
-        guard AppBundleReach.folderDepth(ofAppAtPath: path, roots: rootPaths) != nil else {
+        guard AppFolders.folderDepth(ofAppAtPath: path, roots: rootPaths) != nil else {
             return .insideAnotherApp(name: name)
         }
         return .uninstall(appID: path, name: name)
+    }
+
+    /// Whether the alert for an app outside the folders can offer to add the
+    /// folder it is in: only when `AppFolders` would take that folder.
+    static func canOfferToAdd(folder: String, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
+        AppFolders.refusal(
+            forPicked: URL(fileURLWithPath: folder, isDirectory: true),
+            home: home,
+            otherRoots: AppFolders.roots(home: home)
+        ) == nil
     }
 
     /// The same uncached read `ApplicationsFolderWatcher` uses.

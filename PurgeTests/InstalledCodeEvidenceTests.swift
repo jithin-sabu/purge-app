@@ -173,6 +173,58 @@ struct InstalledCodeEvidenceTests {
         #expect(!claims.app(app, claims: "TEAM123456.com.vendor.other"))
     }
 
+    /// An app on a drive that is unplugged has no signature to read. The groups
+    /// it listed while the drive was in still claim their containers (#99).
+    @Test
+    func unpluggedDriveAppKeepsItsAppGroups() {
+        let entry = DriveAppMemory.Entry(
+            bundlePath: "/Volumes/purge-tests-\(UUID().uuidString)/Applications/Editor.app",
+            bundleID: "com.vendor.editor",
+            name: "Editor",
+            rootPath: "/Volumes/purge-tests-gone/Applications",
+            lastSeen: Date(),
+            appGroups: ["TEAM123456.com.vendor.Shared"]
+        )
+        let unplugged = installedApp(at: URL(fileURLWithPath: entry.bundlePath))
+
+        let claims = AppGroupClaims.gather(
+            for: [],
+            leftovers: [groupContainer("TEAM123456.com.vendor.shared")],
+            readSignature: { _ in nil },
+            remembered: [entry]
+        )
+        #expect(claims.app(unplugged, claims: "TEAM123456.com.vendor.shared"))
+    }
+
+    /// A remembered app whose bundle is on disk but no longer listed, because
+    /// its added folder was removed from the list, still claims the groups it
+    /// listed. Uninstalling a sibling app then keeps the shared container (#99).
+    @Test
+    func presentButUnlistedRememberedAppKeepsItsAppGroups() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = try makeFakeApp(in: root)
+        let entry = DriveAppMemory.Entry(
+            bundlePath: bundle.standardizedFileURL.path,
+            bundleID: "com.vendor.keeper",
+            name: "Keeper",
+            rootPath: root.path,
+            lastSeen: Date(),
+            appGroups: ["TEAM123456.group.foo"]
+        )
+        let kept = installedApp(at: bundle.standardizedFileURL)
+
+        // The app being kept is not in `apps`: only the listed survivors are.
+        let claims = AppGroupClaims.gather(
+            for: [],
+            leftovers: [groupContainer("TEAM123456.group.foo")],
+            readSignature: { _ in nil },
+            remembered: [entry]
+        )
+        #expect(FileManager.default.fileExists(atPath: bundle.path))
+        #expect(claims.app(kept, claims: "TEAM123456.group.foo"))
+    }
+
     /// Without a group container among the leftovers there is nothing to
     /// claim, so no signature is read.
     @Test

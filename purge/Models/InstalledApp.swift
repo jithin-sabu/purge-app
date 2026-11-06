@@ -30,6 +30,9 @@ nonisolated struct InstalledApp: Identifiable, Hashable {
     /// Caskroom link that points at the bundle. The review sheet then offers to
     /// remove the app through Homebrew, which deletes it permanently.
     var homebrewCask: HomebrewCask? = nil
+    /// The drive's name, such as "SSD", when the app is on a drive and not on the
+    /// startup disk (#99). Read once by the scan, so no view asks the disk.
+    var volumeName: String? = nil
 
     /// The stem used for name-based leftover matching, e.g. "Rectangle". Kept
     /// separate from `name` so a future display tweak cannot loosen matching.

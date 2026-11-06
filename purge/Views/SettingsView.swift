@@ -26,6 +26,12 @@ struct SettingsView: View {
     @State private var scheduledCleanNowMessage: String?
     @State private var showClearHistoryConfirmation = false
     @State private var showExcludedFoldersSheet = false
+    @State private var showAppFoldersSheet = false
+    /// Read off the main thread when Settings appears and after each change.
+    @State private var appFolders = AppFolderListing()
+    @State private var appFolderMessage: String?
+    /// Adding and removing share the alert; each says which one failed.
+    @State private var appFolderAlertTitle = AppFolderAdding.refusalTitle
     @State private var showCleaningHistorySheet = false
     @State private var showCustomIntervalSheet = false
     @State private var selectedHistoryEntry: CleanupHistoryEntry?
@@ -76,6 +82,10 @@ struct SettingsView: View {
         .sheet(isPresented: $showExcludedFoldersSheet) {
             excludedFoldersSheet
         }
+        .sheet(isPresented: $showAppFoldersSheet) {
+            appFoldersSheet
+        }
+        .task { await reloadAppFolders() }
         .sheet(isPresented: $showCleaningHistorySheet) {
             cleaningHistorySheet
         }
@@ -301,6 +311,18 @@ struct SettingsView: View {
             // The same switch lives in System Settings, so read it again each time
             // this page comes into view.
             .onAppear { finderService.refresh() }
+
+            settingsSectionDivider
+
+            // Named for what it answers, so nobody has to open it to learn what
+            // it is for (#99).
+            settingsLinkRow(
+                title: String(localized: "Where Purge looks for apps"),
+                caption: String(localized: "Applications, drives you plug in, and folders you add."),
+                value: appFoldersSummary
+            ) {
+                showAppFoldersSheet = true
+            }
 
             settingsSectionDivider
 
@@ -534,6 +556,49 @@ struct SettingsView: View {
         }
     }
 
+    /// Where the uninstaller lists apps from (#99): the two Applications folders,
+    /// each drive's, and folders the user adds.
+    var appFoldersSheet: some View {
+        appFoldersSheet(listing: appFolders)
+    }
+
+    /// The sheet for `listing`. A render of it in the test host passes its own,
+    /// since a sheet's state can't be set from outside.
+    func appFoldersSheet(listing: AppFolderListing) -> some View {
+        settingsSheet(
+            title: String(localized: "Where Purge looks for apps"),
+            caption: String(localized: "Purge lists apps from these folders. When you plug in a drive, the Applications folder at its top is added for as long as the drive stays connected."),
+            onDone: { showAppFoldersSheet = false }
+        ) {
+            Button(action: chooseAppFolder) {
+                Label("Add folder\u{2026}", systemImage: "folder.badge.plus")
+            }
+            .buttonStyle(.purge(.secondary))
+        } content: {
+            InsetCard {
+                ForEach(Array(listing.rows.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 {
+                        settingsSectionDivider
+                    }
+                    appFolderRow(row)
+                }
+            }
+        }
+        .alert(
+            appFolderAlertTitle,
+            isPresented: Binding(
+                get: { appFolderMessage != nil },
+                set: { if !$0 { appFolderMessage = nil } }
+            )
+        ) {
+            Button("OK") { appFolderMessage = nil }
+        } message: {
+            Text(appFolderMessage ?? "")
+        }
+        // A drive may have come or gone since Settings opened.
+        .task { await reloadAppFolders() }
+    }
+
     /// Recent cleanup activity, so scheduled cleans are visible in the app instead
     /// of only in a passing notification.
     var cleaningHistorySheet: some View {
@@ -730,7 +795,7 @@ struct SettingsView: View {
 
     private var deletedAppsCaption: String {
         String(localized: """
-        When an app leaves Applications, like dragging it to the Trash in Finder, \
+        When an app leaves one of its folders, like dragging it to the Trash in Finder, \
         Purge opens with the files it left behind, even if Purge was quit. Nothing \
         moves until you confirm. A small background watcher stays on while this is \
         enabled; you can turn it off here at any time.
@@ -823,6 +888,86 @@ struct SettingsView: View {
         .padding(AppStyle.Spacing.medium)
         .task(id: entry.path) {
             await loadExcludedSizeIfNeeded(forPath: entry.path)
+        }
+    }
+
+    private func appFolderRow(_ row: AppFolderListing.Row) -> some View {
+        HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
+            VStack(alignment: .leading, spacing: AppStyle.Spacing.xxSmall) {
+                Text(row.name)
+                    .font(scheduleStatusPrimaryFont)
+                    .foregroundStyle(AppColors.textPrimary)
+                    .lineLimit(1)
+
+                Text((row.path as NSString).abbreviatingWithTildeInPath)
+                    .font(AppStyle.Typography.micro.weight(.regular).monospaced())
+                    .foregroundStyle(AppColors.textSecondary)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: AppStyle.Spacing.small)
+
+            Text(appFolderStatus(row))
+                .font(scheduleStatusSecondaryFont)
+                .foregroundStyle(row.isAvailable ? AppColors.textSecondary : AppColors.statusCheckText)
+                .lineLimit(1)
+
+            if row.kind == .added {
+                Button {
+                    removeAppFolder(row)
+                } label: {
+                    Label("Remove \(row.name)", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                        .imageScale(.small)
+                }
+                .buttonStyle(.purge(.secondary, size: .small, width: .square))
+                .help("Stop listing apps from \(row.name).")
+            }
+        }
+        .padding(AppStyle.Spacing.medium)
+    }
+
+    private func appFolderStatus(_ row: AppFolderListing.Row) -> String {
+        switch row.kind {
+        case .builtIn:
+            String(localized: "Built in")
+        case .drive:
+            String(localized: "Drive")
+        case .added:
+            row.isAvailable ? String(localized: "Added") : String(localized: "Not connected")
+        }
+    }
+
+    private var appFoldersSummary: String {
+        // Before the first read, the two built-in folders are what there is.
+        String(localized: "\(max(appFolders.rows.count, 2)) folders")
+    }
+
+    private func reloadAppFolders() async {
+        appFolders = await Task.detached(priority: .userInitiated) { AppFolderListing.load() }.value
+    }
+
+    private func chooseAppFolder() {
+        AppFolderAdding.chooseFolder { folder in
+            Task {
+                appFolderAlertTitle = AppFolderAdding.refusalTitle
+                appFolderMessage = await AppFolderAdding.add(folder, store: store)
+                await reloadAppFolders()
+            }
+        }
+    }
+
+    private func removeAppFolder(_ row: AppFolderListing.Row) {
+        Task {
+            let saved = await Task.detached(priority: .userInitiated) { AppFolders.remove(path: row.path) }.value
+            if !saved {
+                appFolderAlertTitle = String(localized: "Purge can\u{2019}t remove that folder")
+                appFolderMessage = AppFolderAdding.saveFailedMessage
+            }
+            await reloadAppFolders()
+            store.appFoldersChanged()
         }
     }
 
@@ -1079,14 +1224,21 @@ struct SettingsView: View {
     /// A row that opens a sheet: title, a short summary, and a chevron.
     private func settingsLinkRow(
         title: String,
+        caption: String? = nil,
         value: String,
         valueIsFigure: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: AppStyle.Spacing.small) {
-                Text(LocalizedStringKey(title))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+                    Text(LocalizedStringKey(title))
+                    if let caption {
+                        Text(LocalizedStringKey(caption))
+                            .settingsCaption()
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(value)
                     .font(valueIsFigure ? scheduleStatusSecondaryFont.numbers : scheduleStatusSecondaryFont)

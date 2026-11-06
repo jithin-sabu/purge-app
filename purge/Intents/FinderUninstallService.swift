@@ -12,14 +12,64 @@ import AppKit
 @MainActor
 enum ExternalUninstallHandler {
 
+    /// Counts requests, so only the newest one shows its result.
+    private static var latestRequest = 0
+
+    /// The folder list is read off the main thread: it asks each drive about
+    /// its file system, and a drive that is asleep takes a moment to answer.
+    /// A slow drive can make an earlier request finish after a later one, so
+    /// a request that is no longer the newest is dropped.
     static func handle(urls: [URL]) {
-        let outcome = ExternalUninstallRequest.resolve(urls: urls)
+        latestRequest += 1
+        let request = latestRequest
+        Task {
+            let (outcome, canAddFolder) = await Task.detached(priority: .userInitiated) {
+                let outcome = ExternalUninstallRequest.resolve(urls: urls)
+                guard case .outsideApplications(_, let folder) = outcome else { return (outcome, false) }
+                return (outcome, ExternalUninstallRequest.canOfferToAdd(folder: folder))
+            }.value
+            guard request == latestRequest else { return }
+            show(outcome, canAddFolder: canAddFolder, urls: urls)
+        }
+    }
+
+    private static func show(_ outcome: ExternalUninstallRequest.Outcome, canAddFolder: Bool, urls: [URL]) {
         switch outcome {
         case .uninstall(let appID, let name):
             Task { await IntentRouter.shared.showUninstaller(appID: appID, name: name) }
+        case .outsideApplications(_, let folder):
+            guard canAddFolder else {
+                guard let refusal = outcome.refusalWithoutAddingFolder else { return }
+                showRefusal(title: refusal.title, detail: refusal.detail)
+                return
+            }
+            guard let refusal = outcome.refusal else { return }
+            offerToAddFolder(folder, title: refusal.title, detail: refusal.detail, urls: urls)
         default:
             guard let refusal = outcome.refusal else { return }
             showRefusal(title: refusal.title, detail: refusal.detail)
+        }
+    }
+
+    /// An app outside the folders Purge lists: rather than a dead end, the alert
+    /// offers to add the folder it is in, and then goes on to the app (#99). A
+    /// folder the rules refuse, like a whole drive, says why instead.
+    static func offerToAddFolder(_ folder: String, title: String, detail: String, urls: [URL]) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: String(localized: "Add Folder"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task {
+            let folderURL = URL(fileURLWithPath: folder, isDirectory: true)
+            if let message = await AppFolderAdding.add(folderURL, store: AppEnvironment.store) {
+                showRefusal(title: AppFolderAdding.refusalTitle, detail: message)
+                return
+            }
+            handle(urls: urls)
         }
     }
 

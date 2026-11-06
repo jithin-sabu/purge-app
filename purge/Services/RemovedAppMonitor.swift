@@ -85,6 +85,8 @@ final class RemovedAppMonitor: ObservableObject {
     private var needsAnotherDrain = false
     /// Runs only while a review is queued or open, to withdraw it if the app returns.
     private var presenceWatcher: ApplicationsFolderWatcher?
+    /// True while the folder list for a new presence watcher is being read.
+    private var isStartingPresenceWatch = false
     private var cancellables = Set<AnyCancellable>()
 
     private var agentService: SMAppService {
@@ -621,19 +623,33 @@ final class RemovedAppMonitor: ObservableObject {
 
     /// Keeps a watcher running exactly while something is queued, being prepared,
     /// or on screen.
+    /// The folder list is read off the main thread: it asks each drive about its
+    /// file system, and a drive that is asleep takes a moment to answer (#99).
     private func updatePresenceWatch() {
-        let needed = isEnabled && (!queue.isEmpty || phase == .preparing || phase == .reviewing)
-        if needed, presenceWatcher == nil {
-            let watcher = ApplicationsFolderWatcher()
-            watcher.onChange = { [weak self] index in
-                self?.withdrawReturnedApps(installedBundleIDs: index.bundleIDs)
+        if isPresenceWatchNeeded, presenceWatcher == nil, !isStartingPresenceWatch {
+            isStartingPresenceWatch = true
+            Task { [weak self] in
+                let roots = await Task.detached(priority: .utility) {
+                    RemovedAppWatchPolicy.installedAppRoots()
+                }.value
+                guard let self else { return }
+                self.isStartingPresenceWatch = false
+                guard self.isPresenceWatchNeeded, self.presenceWatcher == nil else { return }
+                let watcher = ApplicationsFolderWatcher(roots: roots)
+                watcher.onChange = { [weak self] index in
+                    self?.withdrawReturnedApps(installedBundleIDs: index.bundleIDs)
+                }
+                watcher.start()
+                self.presenceWatcher = watcher
             }
-            watcher.start()
-            presenceWatcher = watcher
-        } else if !needed, let watcher = presenceWatcher {
+        } else if !isPresenceWatchNeeded, let watcher = presenceWatcher {
             watcher.stop()
             presenceWatcher = nil
         }
+    }
+
+    private var isPresenceWatchNeeded: Bool {
+        isEnabled && (!queue.isEmpty || phase == .preparing || phase == .reviewing)
     }
 
     /// Drops every queued or open review whose app is back: an update finished, or
@@ -900,9 +916,12 @@ nonisolated enum RemovedAppPresence {
         let index = currentIndex()
         let trash = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".Trash", isDirectory: true)
+        let remembered = DriveAppMemory.apps(excluding: app.id)
         return ReviewContext(
             stillRemoved: isStillRemoved(app, installedBundleIDs: index.bundleIDs),
-            survivors: Array(index.apps.values),
+            survivors: PurgeStore.unlistedDriveApps(
+                besides: Array(index.apps.values), removing: [app.id], remembered: remembered
+            ) + Array(index.apps.values),
             trashedBundleURL: RemovedAppWatchPolicy.trashedCopy(fileNumber: fileNumber, in: trash)
         )
     }
@@ -920,7 +939,12 @@ nonisolated enum RemovedAppPresence {
     @concurrent static func revalidate(_ plan: RemovedAppLeftoverPlan) async -> RemovedAppLeftoverPlan? {
         let index = currentIndex()
         guard isStillRemoved(plan.app, installedBundleIDs: index.bundleIDs) else { return nil }
-        let survivors = Array(index.apps.values)
+        // Apps on drives that are unplugged keep what they share too (#99).
+        let survivors = Array(index.apps.values) + PurgeStore.unlistedDriveApps(
+            besides: Array(index.apps.values),
+            removing: [plan.app.id],
+            remembered: DriveAppMemory.apps(excluding: plan.app.id)
+        )
         let appGroupClaims = AppGroupClaims.gather(for: survivors, leftovers: plan.items)
         var checked = plan
         checked.items = plan.items.filter { item in

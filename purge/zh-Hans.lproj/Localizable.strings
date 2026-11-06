@@ -31,9 +31,9 @@
 "%@ safe to clean" = "%@ 可安全清理";
 "%@, %@ times over" = "%2$@ 份%1$@";
 "%@ used" = "已用 %@";
-"%@ was removed from Applications, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it." = "%@ 已从“应用程序”中移除，但这些文件仍在 Mac 上。勾选的项目会移到废纸篓，清空前都可以恢复。";
-"%@ · %lld selected · %@" = "%@ · 已选 %lld 项 · %@";
-"%@ · measuring space…" = "%@ · 正在统计空间…";
+"%@ was removed, but these files are still on your Mac. Anything you keep ticked moves to the Trash, so you can put it back until you empty it." = "%@ 已被移除，但这些文件仍在 Mac 上。勾选的项目会移到废纸篓，清空前都可以恢复。";
+"%lld selected · %@" = "已选 %lld 项 · %@";
+"Measuring space…" = "正在统计空间…";
 "%@, %@" = "%@，%@";
 "%@, %@ reclaimed" = "%@，已释放 %@";
 "%@, %@ selected" = "%@，已选择 %@";
@@ -456,7 +456,7 @@
 "Purge keeps running after you close the window, so you can scan and clean from the menu bar." = "关闭窗口后 Purge 仍会运行，可从菜单栏扫描和清理。";
 "Purge keeps the newest snapshot and the one from your last backup, which Time Machine may still need. To delete those too, choose View > Show APFS Snapshots in Disk Utility." = "Purge 会保留最新的快照和上次备份留下的那张，时间机器可能仍需要它们。若要连这些也删除，请在磁盘工具中选择“显示 > 显示 APFS 快照”。";
 "Purge left this one alone to stay on the safe side." = "出于安全考虑，Purge 保留了此内容。";
-"Purge looks in Applications and your home Applications folder." = "Purge 会检查系统和个人主文件夹中的“应用程序”文件夹。";
+"Purge looks in Applications, your home Applications folder, the Applications folder on each drive, and folders you add in Settings." = "Purge 会检查系统和个人主文件夹中的“应用程序”文件夹、每个外接磁盘上的“应用程序”文件夹，以及你在设置中添加的文件夹。";
 "Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted permanently, so you can put anything back if you change your mind." = "Purge 会将各应用及仍被勾选的项目移到废纸篓，不会永久删除。改变主意时可将它们恢复。";
 "Purge moves these to Trash. You can put anything back if you change your mind." = "Purge 会将这些项目移到废纸篓。改变主意时可以恢复。";
 "Purge needs Full Disk Access to remove this." = "Purge 需要完全磁盘访问权限才能移除此内容。";
@@ -701,7 +701,7 @@
 "Welcome to" = "欢迎使用";
 "Welcome to Purge" = "欢迎使用 Purge";
 "What are Time Machine snapshots?" = "什么是时间机器快照？";
-"When an app leaves Applications, like dragging it to the Trash in Finder, Purge opens with the files it left behind, even if Purge was quit. Nothing moves until you confirm. A small background watcher stays on while this is enabled; you can turn it off here at any time." = "应用从“应用程序”中移除时（例如在访达中拖到废纸篓），Purge 会打开并显示残留文件，即使之前已退出。确认前不会移动任何内容。启用此功能后，一个小型后台程序会持续监测；你可随时在此关闭。";
+"When an app leaves one of its folders, like dragging it to the Trash in Finder, Purge opens with the files it left behind, even if Purge was quit. Nothing moves until you confirm. A small background watcher stays on while this is enabled; you can turn it off here at any time." = "应用从其所在文件夹中移除时（例如在访达中拖到废纸篓），Purge 会打开并显示残留文件，即使之前已退出。确认前不会移动任何内容。启用此功能后，一个小型后台程序会持续监测；你可随时在此关闭。";
 "Xcode can no longer run this device. %@" = "Xcode 已无法运行此设备。%@";
 "Yesterday" = "昨天";
 "You have unsaved code changes nearby" = "附近的代码有未保存的更改";
@@ -832,13 +832,12 @@
 "%@ %@ Runtime" = "%@ %@ 运行时";
 "Only runs %@ simulators. %@" = "只能运行 %1$@ 模拟器。%2$@";
 "The only %@ runtime here that runs most devices. %@" = "这是此 Mac 上唯一能运行大多数设备的 %1$@ 运行时。%2$@";
-"%@ is outside the Applications folder" = "%@ 不在“应用程序”文件夹中";
+"%@ isn't in a folder Purge lists apps from" = "%@ 不在 Purge 列出应用的文件夹中";
 "%@ is part of macOS" = "%@ 是 macOS 的一部分";
 "%@ is part of another app" = "%@ 是另一个应用的一部分";
 "%@ is no longer there" = "%@ 已不在原处";
 "Purge could not find %@ where it was. It may have been moved or already removed." = "Purge 在原来的位置找不到 %@。它可能已被移动或移除。";
 "Purge could not find %@ in its app list" = "Purge 的应用列表中找不到 %@";
-"Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具只列出 /Applications 和个人主文件夹中“应用程序”文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
 "%@ is inside another app or package, so Purge does not list it on its own. To remove it, uninstall the app it belongs to." = "%@ 位于另一个应用或软件包内，因此 Purge 不会单独列出它。要移除它，请卸载它所属的应用。";
 "%lld simulators use it. %@" = "有 %lld 个模拟器在使用它。%@";
 ", syncs with iCloud" = "，与 iCloud 同步";
@@ -865,7 +864,6 @@
 "Purge never removes Apple's built-in apps." = "Purge 从不移除 Apple 内置应用。";
 "Purge uninstalls apps. Select an app in Finder and try again." = "Purge 只能卸载应用。请在访达中选择一个应用后重试。";
 "Purge uninstalls one app at a time from Finder. To remove several at once, tick them in Purge's App Uninstaller." = "从访达一次只能卸载一个应用。如需一次移除多个应用，请在 Purge 的卸载工具中勾选。";
-"Purge's App Uninstaller lists apps in /Applications and in the Applications folder of your home folder. Move %@ there first, or drag it to the Trash yourself." = "Purge 的卸载工具只列出 /Applications 和个人主文件夹中“应用程序”文件夹里的应用。请先将 %@ 移到那里，或自行将它拖到废纸篓。";
 "Purge's secure removal helper isn't responding. Move the app to the Trash in Finder instead." = "Purge 的安全移除助手没有响应。请改用访达将应用移到废纸篓。";
 "Purge's secure removal helper isn't responding. Try again later." = "Purge 的安全移除助手没有响应。请稍后再试。";
 "Restart to Update to Purge %@" = "重新启动以更新到 Purge %@";
@@ -1383,3 +1381,45 @@
 "%@ %lld Check First items (%@)" = "%@ %lld 项需先检查的内容（%@）";
 "Moved %lld items to Trash, about %@. Empty the trash to reclaim the space." = "已将 %lld 项内容移到废纸篓，约 %@。清空废纸篓后才能释放空间。";
 "%lld other identical copies found" = "发现另外 %lld 份相同的副本";
+
+/* An app on a drive or in an added folder that macOS would not let Purge move (#99) */
+"macOS won't let Purge move this app from where it is. Drag it to the Trash in Finder, then retry to remove what it left behind." = "macOS 不允许 Purge 从当前位置移动这个应用。请在“访达”中把它拖到废纸篓，然后重试以移除它留下的文件。";
+
+/* App folders in Settings > Uninstalling (#99) */
+"Purge lists apps from these folders. When you plug in a drive, the Applications folder at its top is added for as long as the drive stays connected." = "Purge 会列出这些文件夹中的应用。插入外接磁盘后，其顶层的“应用程序”文件夹会在磁盘保持连接期间一并加入。";
+"Purge can’t add that folder" = "Purge 无法添加该文件夹";
+"Built in" = "内置";
+"Drive" = "外接磁盘";
+"Added" = "已添加";
+"Not connected" = "未连接";
+"Stop listing apps from %@." = "不再列出 %@ 中的应用。";
+"Add" = "添加";
+"Choose a folder that holds apps. Purge lists every app inside it in the App Uninstaller." = "选择一个存放应用的文件夹。Purge 会在应用卸载工具中列出其中的每个应用。";
+"Purge couldn’t save the folder list. Try again." = "Purge 无法保存文件夹列表。请重试。";
+"That folder can't be found." = "找不到该文件夹。";
+"Choose a folder in your home folder or on a drive." = "请选择个人主文件夹中或外接磁盘上的文件夹。";
+"Choose the folder that holds your apps, not your home folder or a whole drive." = "请选择存放应用的文件夹，而不是个人主文件夹或整个磁盘。";
+"Purge doesn't look for apps in Library, in hidden folders, or inside other apps." = "Purge 不会在“资源库”、隐藏文件夹或其他应用内部查找应用。";
+"That folder is reached through an alias or link. Choose the folder it leads to." = "该文件夹是通过替身或链接访问的。请选择它指向的文件夹。";
+"Purge only lists apps on drives attached to this Mac that it can move files on, not network or read-only drives." = "Purge 只列出连接到这台 Mac 且可以移动文件的磁盘上的应用，不包括网络磁盘或只读磁盘。";
+"Purge already looks in that folder." = "Purge 已经会检查该文件夹。";
+"That folder holds one Purge already looks in. Remove that one first." = "该文件夹包含一个 Purge 已在检查的文件夹。请先移除那个文件夹。";
+"%@ · On %@" = "%@ · 位于 %@";
+"On %@" = "位于 %@";
+"Where Purge looks for apps" = "Purge 在哪里查找应用";
+"Applications, drives you plug in, and folders you add." = "“应用程序”文件夹、你插入的外接磁盘，以及你添加的文件夹。";
+"Purge lists apps in Applications, on drives you plug in, and in folders you add. Add “%@” to uninstall %@ here, or drag it to the Trash yourself." = "Purge 会列出“应用程序”文件夹、你插入的外接磁盘以及你添加的文件夹中的应用。添加“%@”即可在这里卸载 %@，或自行将它拖到废纸篓。";
+"Add Folder" = "添加文件夹";
+"Purge's App Uninstaller lists apps in Applications, on drives you plug in, and in folders you add in Settings, and never Apple's built-in apps. Check where %@ is installed and try again." = "Purge 的卸载工具会列出“应用程序”文件夹、你插入的外接磁盘以及你在设置中添加的文件夹里的应用，但从不列出 Apple 的内置应用。请检查 %@ 的安装位置后重试。";
+"Purge lists apps in Applications, on drives you plug in, and in folders you add. Put %@ in a folder, then add that folder, or drag it to the Trash yourself." = "Purge 会列出“应用程序”文件夹、你插入的外接磁盘以及你添加的文件夹中的应用。请把 %@ 放进一个文件夹，再添加该文件夹，或自行将它拖到废纸篓。";
+"That folder holds a copy of a Mac or of a home folder, or is inside one. Choose a folder with apps you use." = "该文件夹包含或位于一台 Mac 或一个个人主文件夹的副本中。请选择存放你正在使用的应用的文件夹。";
+"That folder syncs with iCloud Drive, so moving an app from it to the Trash would remove it from your other devices too." = "该文件夹会与 iCloud 云盘同步，因此把其中的应用移到废纸篓也会将它从你的其他设备上移除。";
+"Purge can’t remove that folder" = "Purge 无法移除该文件夹";
+"No app matches “%@”" = "没有与“%@”匹配的应用";
+"If it’s on a drive or in another folder, add that folder and Purge lists it." = "如果它在外接磁盘或其他文件夹中，添加该文件夹后 Purge 就会列出它。";
+"from %lld folders" = "来自 %lld 个文件夹";
+"from 1 folder" = "来自 1 个文件夹";
+"See which folders Purge lists apps from" = "查看 Purge 从哪些文件夹列出应用";
+"Purge lists apps from" = "Purge 从以下位置列出应用";
+"1 app" = "1 个应用";
+"No apps" = "没有应用";

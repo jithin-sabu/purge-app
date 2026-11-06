@@ -68,11 +68,18 @@ nonisolated final class AppUninstallScanner {
                     bundleSizeBytes: size,
                     isRunning: isRunning,
                     lastOpened: InstalledAppBundleSizing.spotlightLastOpened(at: app.bundleURL),
-                    homebrewCask: casks[app.bundleURL.standardizedFileURL.path]
+                    homebrewCask: casks[app.bundleURL.standardizedFileURL.path],
+                    volumeName: driveName(of: app.bundleURL)
                 )
             )
         }
         continuation.finish()
+    }
+
+    /// The name of the drive `bundleURL` is on, or nil on the home folder's volume.
+    static func driveName(of bundleURL: URL) -> String? {
+        guard !AppFolders.isOnHomeVolume(bundleURL) else { return nil }
+        return (try? bundleURL.resourceValues(forKeys: [.volumeLocalizedNameKey]))?.volumeLocalizedName
     }
 
     /// An app the uninstaller can act on, found but not yet measured.
@@ -137,7 +144,7 @@ nonisolated final class AppUninstallScanner {
         var result: [URL] = []
 
         for root in AppUninstallScanPolicy.installedAppRoots() {
-            for url in AppBundleReach.appBundleURLs(in: root) ?? [] {
+            for url in AppFolders.appBundleURLs(in: root) ?? [] {
                 let key = url.standardizedFileURL.path
                 guard !seen.contains(key) else { continue }
                 seen.insert(key)

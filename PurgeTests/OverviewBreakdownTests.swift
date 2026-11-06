@@ -127,6 +127,20 @@ struct OverviewBreakdownTests {
         #expect(breakdown.everythingElseBytes == 188 * gb)
     }
 
+    /// An app on a drive (#99) counts the leftovers it keeps in `~/Library` on
+    /// this disk, and not its bundle, which is on the drive.
+    @Test func appsOnAnotherDriveCountOnlyTheirLeftovers() {
+        let items = PurgeStore.onThisDisk([
+            item("/Volumes/SSD/Applications/Luminar Neo.app", 4 * gb),
+            item("/Users/me/Library/Caches/com.skylum.luminarneo", 2 * gb),
+            item("/Applications/Tool.app", 1 * gb),
+        ])
+        #expect(items.map(\.path) == [
+            "/Users/me/Library/Caches/com.skylum.luminarneo",
+            "/Applications/Tool.app",
+        ])
+    }
+
     @Test func everythingElseNeverGoesNegative() {
         // Hard links counted by two scans can add up to more than the used space.
         let breakdown = OverviewBreakdown(
