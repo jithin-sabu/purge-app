@@ -397,6 +397,13 @@ struct UninstallView: View {
         return AppRowSize(bytes: bytes, isPending: bytes == 0 && !store.hasMeasuredAllRemovableTotals, isFromLastScan: false)
     }
 
+    /// Whether the search is someone looking for Purge itself: two letters or
+    /// more of its name. Purge never lists itself (#330).
+    nonisolated static func searchesForPurge(_ query: String) -> Bool {
+        let typed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return typed.count >= 2 && "purge".hasPrefix(typed)
+    }
+
     /// The apps the search shows: the focused installation alone while the box
     /// still holds the text Uninstall an App filled in, otherwise every app whose
     /// name or bundle id contains the query.
@@ -616,6 +623,16 @@ struct UninstallView: View {
         if store.installedApps.isEmpty && lastScanApps.isEmpty {
             // Held behind the skeleton while the first scan runs; nothing to show.
             Color.clear
+        } else if filteredApps.isEmpty, Self.searchesForPurge(appSearchQuery) {
+            // Purge never lists itself, so someone looking for it here gets the
+            // way out instead (#330).
+            emptyState(
+                symbol: "trash",
+                title: String(localized: "Purge isn\u{2019}t listed here"),
+                detail: nil,
+                action: (String(localized: "Uninstall Purge\u{2026}"), { store.presentSelfUninstall() }),
+                actionSymbol: nil
+            )
         } else if filteredApps.isEmpty {
             // The moment someone looks for an app Purge does not list, so the
             // one place outside Settings that offers to add a folder (#99).
@@ -758,8 +775,9 @@ struct UninstallView: View {
     private func emptyState(
         symbol: String,
         title: String,
-        detail: String,
-        action: (title: String, run: () -> Void)? = nil
+        detail: String?,
+        action: (title: String, run: () -> Void)? = nil,
+        actionSymbol: String? = "folder.badge.plus"
     ) -> some View {
         VStack(spacing: AppStyle.Spacing.small) {
             Image(systemName: symbol)
@@ -767,12 +785,18 @@ struct UninstallView: View {
                 .foregroundStyle(AppColors.textSecondary)
             Text(LocalizedStringKey(title))
                 .font(AppStyle.Typography.sectionTitle.weight(.regular))
-            Text(LocalizedStringKey(detail))
-                .foregroundStyle(AppColors.textSecondary)
-                .multilineTextAlignment(.center)
+            if let detail {
+                Text(LocalizedStringKey(detail))
+                    .foregroundStyle(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
             if let action {
                 Button(action: action.run) {
-                    Label(action.title, systemImage: "folder.badge.plus")
+                    if let actionSymbol {
+                        Label(action.title, systemImage: actionSymbol)
+                    } else {
+                        Text(action.title)
+                    }
                 }
                 .buttonStyle(.purge(.secondary))
                 .padding(.top, AppStyle.Spacing.xSmall)

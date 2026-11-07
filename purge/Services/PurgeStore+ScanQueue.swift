@@ -140,7 +140,7 @@ extension PurgeStore {
     }
 
     private func startScanQueueIfIdle() {
-        guard scanQueueTask == nil, !isScanQueueHeld, !scanQueue.pending.isEmpty else { return }
+        guard scanQueueTask == nil, !isScanQueueHeld, !isUninstallingPurge, !scanQueue.pending.isEmpty else { return }
         scanQueueRunID += 1
         let runID = scanQueueRunID
         scanQueueTask = Task { @MainActor [weak self] in

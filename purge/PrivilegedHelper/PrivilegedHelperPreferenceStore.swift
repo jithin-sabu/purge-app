@@ -89,6 +89,13 @@ final class PrivilegedHelperPreferenceStore: ObservableObject {
         }
     }
 
+    /// Turns the helper off and waits until the unregister has run, so Uninstall
+    /// Purge (#330) reads the result rather than a queued request.
+    func turnOffForUninstall() async {
+        setEnabled(false)
+        await applyTask?.value
+    }
+
     private func monitorPendingApproval() {
         approvalMonitorTask?.cancel()
         approvalMonitorTask = Task { @MainActor [weak self] in

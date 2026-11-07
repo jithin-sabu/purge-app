@@ -33,6 +33,8 @@ struct SettingsView: View {
     /// Adding and removing share the alert; each says which one failed.
     @State private var appFolderAlertTitle = AppFolderAdding.refusalTitle
     @State private var showCleaningHistorySheet = false
+    /// Uninstall… turns red under the pointer.
+    @State private var isHoveringUninstall = false
     @State private var showCustomIntervalSheet = false
     @State private var selectedHistoryEntry: CleanupHistoryEntry?
     /// Session cache of on-disk sizes for excluded paths, keyed by path. No entry
@@ -48,7 +50,7 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                // Four groups, one line per setting. The longer explanations sit
+                // Five groups, one line per setting. The longer explanations sit
                 // behind an info button beside each title, and the two lists
                 // (exclusions, history) open in a sheet.
                 VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
@@ -56,6 +58,7 @@ struct SettingsView: View {
                     cleaningGroup
                     uninstallingGroup
                     updatesAndHistoryGroup
+                    uninstallGroup
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -388,6 +391,28 @@ struct SettingsView: View {
             )
         case .failed:
             return SettingsRowStatus(text: helperStatusMessage, tint: AppColors.statusCheckText)
+        }
+    }
+
+    // MARK: - Uninstall
+
+    /// Uninstall Purge (#330), last, under everything it would turn off. A plain
+    /// card and a secondary button like the rest of Settings; the red button is
+    /// in the sheet it opens, which asks before anything happens.
+    private var uninstallGroup: some View {
+        settingsGroup("Uninstall") {
+            settingsControlRow(
+                title: String(localized: "Uninstall Purge"),
+                caption: String(localized: "Turns off background items and moves Purge to the Trash.")
+            ) {
+                Button {
+                    store.presentSelfUninstall()
+                } label: {
+                    Label(String(localized: "Uninstall…"), systemImage: "trash")
+                }
+                .buttonStyle(.purge(isHoveringUninstall ? .destructive : .secondary))
+                .onHover { isHoveringUninstall = $0 }
+            }
         }
     }
 
