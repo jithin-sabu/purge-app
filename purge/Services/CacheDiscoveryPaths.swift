@@ -43,6 +43,15 @@ enum CacheDiscoveryPaths {
         "Service Worker/ScriptCache"
     ]
 
+    /// The Service Worker caches offered in an app folder itself and in a nested
+    /// storage folder. `CacheStorage` is left out there: the nested rule reaches
+    /// the main browsers' own profiles (`Google/Chrome/Default`), where installed
+    /// web apps keep their offline content in it. These paths are Safe, so Clean
+    /// Safe Items and scheduled cleans would take it without asking (#323).
+    nonisolated static let nestedChromiumServiceWorkerCachePaths: [String] = [
+        "Service Worker/ScriptCache"
+    ]
+
     /// Application Support roots that are not app caches (handled elsewhere or sensitive).
     nonisolated static let excludedApplicationSupportRoots: Set<String> = [
         "MobileSync",
@@ -116,9 +125,10 @@ enum CacheDiscoveryPaths {
     /// Whether `parts` is a cache in a Chromium storage folder at most
     /// `nestedChromiumStorageMaxDepth` folders below `appRoot`, or one of the app
     /// folder's own Service Worker caches. A storage folder holds Chromium's
-    /// `Local State` or `Network Persistent State`. Only the cache names and the
-    /// Service Worker caches directly in it count, and every folder on the way
-    /// down must be a real folder, not a link.
+    /// `Local State` or `Network Persistent State`. Only the cache names and
+    /// `nestedChromiumServiceWorkerCachePaths` directly in it count. Every folder
+    /// on the way down, `Service Worker` included, must be a real folder, not a
+    /// link, and hidden folders are skipped, as discovery skips them.
     nonisolated static func isNestedChromiumStorageCachePath(_ parts: [String], appRoot: URL) -> Bool {
         for depth in 0...nestedChromiumStorageMaxDepth {
             let rest = Array(parts.dropFirst(depth))
@@ -128,7 +138,7 @@ enum CacheDiscoveryPaths {
             var throughRealFolders = true
             for part in parts.prefix(depth) {
                 storage = storage.appendingPathComponent(part, isDirectory: true)
-                if !isRealDirectory(storage) {
+                if part.hasPrefix(".") || !isRealDirectory(storage) {
                     throughRealFolders = false
                     break
                 }
@@ -139,11 +149,24 @@ enum CacheDiscoveryPaths {
                                      names: applicationSupportDirectCacheNames) {
                 return true
             }
-            if rest.count == 2, chromiumProfileRelativePaths.contains(rest.joined(separator: "/")) {
+            if rest.count == 2,
+               nestedChromiumServiceWorkerCachePaths.contains(rest.joined(separator: "/")),
+               isRealDirectory(storage.appendingPathComponent(rest[0], isDirectory: true)) {
                 return true
             }
         }
         return false
+    }
+
+    /// `nestedChromiumServiceWorkerCachePaths` in `storage`, when its
+    /// `Service Worker` folder is a real folder and not a link.
+    private nonisolated static func nestedServiceWorkerCacheURLs(in storage: URL) -> [URL] {
+        guard isRealDirectory(storage.appendingPathComponent("Service Worker", isDirectory: true)) else {
+            return []
+        }
+        return nestedChromiumServiceWorkerCachePaths.map {
+            storage.appendingPathComponent($0, isDirectory: true)
+        }
     }
 
     /// A folder that is not a link. `isDirectoryKey` is false for a link to a folder.
@@ -186,7 +209,12 @@ enum CacheDiscoveryPaths {
         case 2:
             return isChromiumCacheFolder(url, names: chromiumProfileCacheNames)
         default:
+            // The profile and its `Service Worker` folder must be real folders, so
+            // a link there is never followed to the `CacheStorage` it points at.
+            let profile = userData.appendingPathComponent(parts[0], isDirectory: true)
             return chromiumProfileRelativePaths.contains("\(parts[1])/\(parts[2])")
+                && isRealDirectory(profile)
+                && isRealDirectory(profile.appendingPathComponent(parts[1], isDirectory: true))
         }
     }
 
@@ -249,8 +277,8 @@ enum CacheDiscoveryPaths {
         // further down: a browser's data folder and its profiles, a versioned
         // Figma profile, an Electron session partition (#323).
         if isChromiumDataFolder(appRoot, access: access) {
-            for relative in chromiumProfileRelativePaths {
-                appendIfExists(appRoot.appendingPathComponent(relative, isDirectory: true))
+            for url in nestedServiceWorkerCacheURLs(in: appRoot) {
+                appendIfExists(url)
             }
         }
         for storage in nestedChromiumStorageFolders(in: appRoot, access: access) {
@@ -258,8 +286,8 @@ enum CacheDiscoveryPaths {
                 appendIfExists(storage.appendingPathComponent(name, isDirectory: true),
                                cacheNames: applicationSupportDirectCacheNames)
             }
-            for relative in chromiumProfileRelativePaths {
-                appendIfExists(storage.appendingPathComponent(relative, isDirectory: true))
+            for url in nestedServiceWorkerCacheURLs(in: storage) {
+                appendIfExists(url)
             }
         }
 
@@ -316,6 +344,10 @@ enum CacheDiscoveryPaths {
             }
             for name in chromiumProfileCacheNames {
                 appendIfExists(profileDir.appendingPathComponent(name, isDirectory: true), chromiumProfileCacheNames)
+            }
+            // Never through a linked `Service Worker` folder, as the gate refuses it.
+            guard isRealDirectory(profileDir.appendingPathComponent("Service Worker", isDirectory: true)) else {
+                continue
             }
             for relative in chromiumProfileRelativePaths {
                 appendIfExists(profileDir.appendingPathComponent(relative, isDirectory: true), nil)

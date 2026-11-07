@@ -910,8 +910,8 @@ nonisolated final class DevScanner {
         return entries.filter { !$0.paths.isEmpty }
     }
 
-    /// Old Claude Code and Cursor Agent versions, keeping the one each command runs
-    /// and the newest. The policy re-checks this before anything is deleted.
+    /// Old Claude Code, Cursor Agent and Grok versions, keeping the one each command
+    /// runs and the newest. The policy re-checks this before anything is deleted.
     nonisolated static func oldCLIVersionDefinitions(home: URL) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
         return DeletionSafetyPolicy.cliVersionStores.compactMap { store in
@@ -920,11 +920,12 @@ nonisolated final class DevScanner {
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited),
                   let kept = DeletionSafetyPolicy.keptCLIVersions(
                     versionsRoot: root,
-                    command: "\(homePath)/\(store.command)"
+                    command: "\(homePath)/\(store.command)",
+                    entry: store.entry
                   ),
                   let names = try? FileManager.default.contentsOfDirectory(atPath: root) else { return nil }
             let old = names
-                .filter { !$0.hasPrefix(".") && !kept.contains($0) }
+                .filter { !$0.hasPrefix(".") && !kept.contains($0) && store.entry.accepts(name: $0, in: root) }
                 .sorted { $0.compare($1, options: .numeric) == .orderedAscending }
                 .map { URL(fileURLWithPath: "\(root)/\($0)") }
             return old.isEmpty ? nil : (label, old)

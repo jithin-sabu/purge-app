@@ -808,46 +808,116 @@ enum DeletionSafetyPolicy {
     nonisolated static let cursorAgentWorkerCLI =
         "Library/Application Support/Cursor/User/globalStorage/anysphere.cursor-agent-worker/agent-cli"
 
+    /// Which entries in a CLI's versions folder are versions.
+    nonisolated enum CLIVersionEntry: Equatable, Sendable {
+        /// The folder holds only versions, so every entry is one (Claude Code,
+        /// Cursor Agent).
+        case anyName
+        /// A generic downloads folder. Only a plain file named
+        /// `grok-<version>` or `grok-<version>-macos-<arch>` is a version, never
+        /// a link, a folder, a partial download or a manifest.
+        case grokBinary
+
+        /// Whether `name` is a version by its name alone.
+        func matches(name: String) -> Bool {
+            switch self {
+            case .anyName:
+                return !name.isEmpty
+            case .grokBinary:
+                return Self.isGrokBinaryName(name)
+            }
+        }
+
+        /// Whether the entry `name` in `versionsRoot` is a version, by its name
+        /// and by what is on disk.
+        func accepts(name: String, in versionsRoot: String) -> Bool {
+            guard matches(name: name) else { return false }
+            switch self {
+            case .anyName:
+                return true
+            case .grokBinary:
+                let url = URL(fileURLWithPath: versionsRoot, isDirectory: true).appendingPathComponent(name)
+                guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else {
+                    return false
+                }
+                return values.isRegularFile == true && values.isSymbolicLink != true
+            }
+        }
+
+        /// `grok-1.0.13` or `grok-1.0.13-macos-aarch64`: digits and dots, starting
+        /// and ending with a digit, then an optional `-macos-<arch>`.
+        static func isGrokBinaryName(_ name: String) -> Bool {
+            guard name.hasPrefix("grok-") else { return false }
+            var rest = Substring(name.dropFirst("grok-".count))
+            if let range = rest.range(of: "-macos-") {
+                let arch = rest[range.upperBound...]
+                guard !arch.isEmpty, arch.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }) else {
+                    return false
+                }
+                rest = rest[..<range.lowerBound]
+            }
+            guard let first = rest.first, let last = rest.last,
+                  first.isASCII, first.isNumber, last.isASCII, last.isNumber,
+                  rest.contains("."), !rest.contains("..") else { return false }
+            return rest.allSatisfy { ($0.isASCII && $0.isNumber) || $0 == "." }
+        }
+    }
+
     /// AI coding CLIs that install each version side by side: the folder of versions,
-    /// the command whose symlink points at the version in use, and the Dev Tools row.
-    nonisolated static let cliVersionStores: [(versions: String, command: String, label: String)] = [
-        (".local/share/claude/versions", ".local/bin/claude", "Old Claude Code Versions"),
-        (".local/share/cursor-agent/versions", ".local/bin/cursor-agent", "Old Cursor Agent Versions"),
+    /// the command whose symlink points at the version in use, the Dev Tools row,
+    /// and which entries in the folder are versions.
+    nonisolated static let cliVersionStores: [
+        (versions: String, command: String, label: String, entry: CLIVersionEntry)
+    ] = [
+        (".local/share/claude/versions", ".local/bin/claude", "Old Claude Code Versions", .anyName),
+        (".local/share/cursor-agent/versions", ".local/bin/cursor-agent", "Old Cursor Agent Versions", .anyName),
         ("\(cursorAgentWorkerCLI)/.local/share/cursor-agent/versions",
-         "\(cursorAgentWorkerCLI)/.local/bin/cursor-agent", "Old Cursor Agent Versions"),
+         "\(cursorAgentWorkerCLI)/.local/bin/cursor-agent", "Old Cursor Agent Versions", .anyName),
         // Grok keeps every binary it downloaded and points its command at one.
-        (".grok/downloads", ".grok/bin/grok", "Old Grok Versions")
+        // The folder is a generic downloads folder, so only its binaries count.
+        (".grok/downloads", ".grok/bin/grok", "Old Grok Versions", .grokBinary)
     ]
 
-    /// The version folder or file `path` belongs to, with its store.
+    /// The version folder or file `path` belongs to, with its store. Nil for an
+    /// entry the store doesn't count as a version, and for anything inside an
+    /// entry of a store whose versions are single files.
     nonisolated static func cliVersion(
         containing path: String,
         home: String
-    ) -> (versionsRoot: String, command: String, version: String)? {
+    ) -> (versionsRoot: String, command: String, version: String, entry: CLIVersionEntry)? {
         for store in cliVersionStores {
             let root = "\(home)/\(store.versions)"
             guard PathContainment.isInside(path, root) else { continue }
-            guard let version = path.dropFirst(root.count + 1).split(separator: "/").first.map(String.init),
-                  !version.isEmpty else { return nil }
-            return (root, "\(home)/\(store.command)", version)
+            let parts = path.dropFirst(root.count + 1).split(separator: "/")
+            guard let version = parts.first.map(String.init),
+                  store.entry.matches(name: version) else { return nil }
+            if store.entry == .grokBinary, parts.count != 1 { return nil }
+            return (root, "\(home)/\(store.command)", version, store.entry)
         }
         return nil
     }
 
     /// The versions to keep: the one the command runs, and the newest, in case an
-    /// update has installed it and not yet switched the link. Nil when the command
-    /// cannot be read, and then nothing is offered.
-    nonisolated static func keptCLIVersions(versionsRoot: String, command: String) -> Set<String>? {
+    /// update has installed it and not yet switched the link. Only entries that
+    /// `entry` accepts count toward the newest, so a manifest or partial download
+    /// never stands in for it. Nil when the command cannot be read or points at
+    /// something that is not a version, and then nothing is offered.
+    nonisolated static func keptCLIVersions(
+        versionsRoot: String,
+        command: String,
+        entry: CLIVersionEntry = .anyName
+    ) -> Set<String>? {
         guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: command) else { return nil }
         let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: command).deletingLastPathComponent())
             .standardizedFileURL.path
         guard PathContainment.isInside(resolved, versionsRoot),
-              let inUse = resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init) else {
+              let inUse = resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init),
+              entry.matches(name: inUse) else {
             return nil
         }
         var kept: Set<String> = [inUse]
         let all = ((try? FileManager.default.contentsOfDirectory(atPath: versionsRoot)) ?? [])
-            .filter { !$0.hasPrefix(".") }
+            .filter { !$0.hasPrefix(".") && entry.accepts(name: $0, in: versionsRoot) }
         if let newest = all.max(by: { $0.compare($1, options: .numeric) == .orderedAscending }) {
             kept.insert(newest)
         }
@@ -861,7 +931,13 @@ enum DeletionSafetyPolicy {
     nonisolated static func oldCLIVersionRefusesDeletion(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path
         guard let match = cliVersion(containing: path, home: cachedHomePath) else { return false }
-        guard let kept = keptCLIVersions(versionsRoot: match.versionsRoot, command: match.command) else {
+        // A link, folder or other entry by a version's name stays.
+        guard match.entry.accepts(name: match.version, in: match.versionsRoot) else { return true }
+        guard let kept = keptCLIVersions(
+            versionsRoot: match.versionsRoot,
+            command: match.command,
+            entry: match.entry
+        ) else {
             return true
         }
         return kept.contains(match.version)
@@ -924,10 +1000,11 @@ enum DeletionSafetyPolicy {
         return nil
     }
 
-    /// Only a plain file is ever taken. A daemon's log stays while a process with
-    /// its pid runs, even when the pid now belongs to something else. A temp file
-    /// stays until it is a week old: a download in progress, or a worker that has
-    /// just read its class path, is minutes old.
+    /// Only a plain file is ever taken, in folders that are real folders and not
+    /// links. A daemon's log stays while a process with its pid runs, even when
+    /// the pid now belongs to something else. A temp file stays until it is a week
+    /// old: a download in progress, or a worker that has just read its class path,
+    /// is minutes old.
     nonisolated static func gradleLeftoverRefusesDeletion(
         _ url: URL,
         home: String = cachedHomePath,
@@ -936,6 +1013,14 @@ enum DeletionSafetyPolicy {
     ) -> Bool {
         let standardized = url.standardizedFileURL
         guard let leftover = gradleLeftover(at: standardized.path, home: home) else { return false }
+        // `~/.gradle/daemon` and the version folder, or `~/.gradle/.tmp`. A link
+        // there would take the file from wherever the link points.
+        let parent = standardized.deletingLastPathComponent()
+        let folders = leftover == .temporaryFile ? [parent] : [parent.deletingLastPathComponent(), parent]
+        for folder in folders {
+            guard let folderValues = try? folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                  folderValues.isDirectory == true, folderValues.isSymbolicLink != true else { return true }
+        }
         guard let values = try? standardized.resourceValues(
             forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey]
         ), values.isRegularFile == true, values.isSymbolicLink != true else { return true }

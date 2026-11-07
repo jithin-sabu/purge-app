@@ -78,7 +78,7 @@ struct NestedChromiumCacheTests {
         let expected = [
             "DesktopProfile/v42/Code Cache",
             "DesktopProfile/v43/Cache", "DesktopProfile/v43/Code Cache", "DesktopProfile/v43/DawnWebGPUCache",
-            "DesktopProfile/v43/GPUCache", "DesktopProfile/v43/Service Worker/CacheStorage",
+            "DesktopProfile/v43/GPUCache",
         ]
         #expect(listed(figma) == expected)
         #expect(try everythingAllowed(figma) == expected)
@@ -103,12 +103,50 @@ struct NestedChromiumCacheTests {
         ])
 
         let expected = [
-            "Chrome Beta/Default/GPUCache", "Chrome Beta/Default/Service Worker/CacheStorage",
+            "Chrome Beta/Default/GPUCache",
             "Chrome Beta/Default/Service Worker/ScriptCache", "Chrome Beta/GrShaderCache",
             "Chrome Beta/GraphiteDawnCache", "Chrome Beta/component_crx_cache",
         ]
         #expect(listed(google) == expected)
         #expect(try everythingAllowed(google) == expected)
+    }
+
+    /// The main browsers' own profiles keep installed web apps' offline content
+    /// in `Service Worker/CacheStorage`. It is never offered there, so Clean Safe
+    /// Items and scheduled cleans can't take it. What is offered next to it is Safe.
+    @Test(arguments: [
+        ("Google", "Chrome"), ("Google", "Chrome Beta"),
+        ("BraveSoftware", "Brave-Browser"), ("Microsoft Edge", ""),
+    ])
+    func browserProfileCacheStorageIsNeverOffered(app: String, browser: String) throws {
+        let base = try MissedPaths.makeFolder()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let home = base.standardizedFileURL.path
+        let support = base.appendingPathComponent("Library/Application Support", isDirectory: true)
+        let appRoot = support.appendingPathComponent(app, isDirectory: true)
+        let data = browser.isEmpty ? "" : "\(browser)/"
+        try MissedPaths.lay(appRoot, folders: [
+            "\(data)Default/Service Worker/CacheStorage/abc", "\(data)Default/Service Worker/ScriptCache",
+            "\(data)Default/Code Cache/js", "\(data)Profile 1/Service Worker/CacheStorage",
+        ], files: [
+            "\(data)Local State", "\(data)Default/Network Persistent State",
+            "\(data)Profile 1/Network Persistent State",
+        ])
+
+        let listedPaths = listed(appRoot)
+        #expect(!listedPaths.contains { $0.contains("CacheStorage") }, "\(listedPaths)")
+        for relative in ["Default/Service Worker/CacheStorage", "Default/Service Worker/CacheStorage/abc",
+                         "Profile 1/Service Worker/CacheStorage"] {
+            #expect(!allowed(appRoot, data + relative), "\(relative)")
+            let path = appRoot.appendingPathComponent(data + relative).standardizedFileURL.path
+            #expect(!DeletionSafetyPolicy.isWhitelistedApplicationSupportCachePath(path, home: home), "\(relative)")
+        }
+
+        for relative in ["Default/Service Worker/ScriptCache", "Default/Code Cache"] {
+            #expect(listedPaths.contains(data + relative), "\(relative)")
+            let url = appRoot.appendingPathComponent(data + relative, isDirectory: true)
+            #expect(SafetyTierList.evaluate(folderName: app, path: url) == .safe, "\(relative)")
+        }
     }
 
     /// An Electron session partition holds its own caches next to its storage.
@@ -171,6 +209,46 @@ struct NestedChromiumCacheTests {
         #expect(listed(app).isEmpty)
         #expect(!allowed(app, "profile/Code Cache"))
         #expect(!allowed(app, "profile/GPUCache"))
+    }
+
+    /// A `Service Worker` folder that is a link is not followed, in the app folder,
+    /// in a nested storage folder, or in a `User Data` profile.
+    @Test
+    func linkedServiceWorkerFolderIsNotFollowed() throws {
+        let base = try MissedPaths.makeFolder()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let elsewhere = base.appendingPathComponent("Documents/sw", isDirectory: true)
+        try MissedPaths.lay(elsewhere, folders: ["ScriptCache", "CacheStorage"])
+        let app = base.appendingPathComponent("Support/LinkApp", isDirectory: true)
+        try MissedPaths.lay(app, folders: ["nested", "User Data/Default"], files: [
+            "Local State", "nested/Local State", "User Data/Local State",
+        ])
+        for folder in ["", "nested/", "User Data/Default/"] {
+            try FileManager.default.createSymbolicLink(
+                at: app.appendingPathComponent("\(folder)Service Worker"),
+                withDestinationURL: elsewhere
+            )
+        }
+
+        #expect(listed(app).isEmpty, "\(listed(app))")
+        for relative in ["Service Worker/ScriptCache", "nested/Service Worker/ScriptCache",
+                         "User Data/Default/Service Worker/ScriptCache",
+                         "User Data/Default/Service Worker/CacheStorage"] {
+            #expect(!allowed(app, relative), "\(relative)")
+        }
+    }
+
+    /// Discovery skips hidden folders, so the gate does too.
+    @Test
+    func hiddenStorageFolderIsNotLookedAt() throws {
+        let support = try MissedPaths.makeFolder()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let app = support.appendingPathComponent("HiddenApp", isDirectory: true)
+        try MissedPaths.lay(app, folders: [".hidden/Code Cache", "a/.b/GPUCache"], files: [
+            ".hidden/Local State", "a/.b/Local State",
+        ])
+        #expect(listed(app).isEmpty)
+        #expect(try everythingAllowed(app).isEmpty)
     }
 
     /// A nested cache gets its tier from the shape, so an app with no entry
@@ -271,6 +349,42 @@ struct GradleLeftoverTests {
                 logs.appendingPathComponent(name), home: base.standardizedFileURL.path, isRunning: { _ in false }
             ), "\(name)")
         }
+    }
+
+    /// A linked version folder, `daemon` folder or `.tmp` is not followed, even
+    /// to a file with a leftover's name.
+    @Test
+    func aLinkedParentFolderIsNotFollowed() throws {
+        let base = try MissedPaths.makeFolder()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let elsewhere = base.appendingPathComponent("elsewhere", isDirectory: true)
+        try MissedPaths.lay(elsewhere, folders: ["daemon/8.13"], files: [
+            "logs/daemon-7.out.log", "daemon/8.13/daemon-8.out.log", "tmp/gradle_download9bin",
+        ])
+        let old = Date().addingTimeInterval(-30 * 24 * 60 * 60)
+        try FileManager.default.setAttributes(
+            [.modificationDate: old], ofItemAtPath: elsewhere.appendingPathComponent("tmp/gradle_download9bin").path
+        )
+        let fm = FileManager.default
+        try MissedPaths.lay(home, folders: [".gradle/daemon"])
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".gradle/daemon/8.13"),
+                                  withDestinationURL: elsewhere.appendingPathComponent("logs"))
+        try fm.createSymbolicLink(at: home.appendingPathComponent(".gradle/.tmp"),
+                                  withDestinationURL: elsewhere.appendingPathComponent("tmp"))
+        let linkedDaemonHome = base.appendingPathComponent("home2", isDirectory: true)
+        try MissedPaths.lay(linkedDaemonHome, folders: [".gradle"])
+        try fm.createSymbolicLink(at: linkedDaemonHome.appendingPathComponent(".gradle/daemon"),
+                                  withDestinationURL: elsewhere.appendingPathComponent("daemon"))
+
+        func refuses(_ relative: String, in home: URL) -> Bool {
+            DeletionSafetyPolicy.gradleLeftoverRefusesDeletion(
+                home.appendingPathComponent(relative), home: home.standardizedFileURL.path, isRunning: { _ in false }
+            )
+        }
+        #expect(refuses(".gradle/daemon/8.13/daemon-7.out.log", in: home))
+        #expect(refuses(".gradle/.tmp/gradle_download9bin", in: home))
+        #expect(refuses(".gradle/daemon/8.13/daemon-8.out.log", in: linkedDaemonHome))
     }
 
     @Test
@@ -445,13 +559,69 @@ struct MissedCacheAllowlistTests {
         #expect(kept == ["grok-1.0.13-macos-aarch64", "grok-1.0.14-macos-aarch64"])
     }
 
+    /// `~/.grok/downloads` is a generic downloads folder. A manifest, a partial
+    /// download, or a folder or link by a version's name is never a version: it
+    /// is not offered, and it can't stand in for the newest, which stays.
+    @Test
+    func grokOffersOnlyItsBinaries() throws {
+        let base = try MissedPaths.makeFolder()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let downloads = base.appendingPathComponent(".grok/downloads", isDirectory: true)
+        try MissedPaths.lay(base, folders: [".grok/bin", ".grok/downloads/grok-1.0.99-macos-aarch64"], files: [
+            ".grok/downloads/grok-1.0.5-macos-aarch64", ".grok/downloads/grok-1.0.13-macos-aarch64",
+            ".grok/downloads/grok-1.0.14-macos-aarch64", ".grok/downloads/manifest.json",
+            ".grok/downloads/grok-1.0.15-macos-aarch64.part", ".grok/downloads/grok-latest",
+            "Documents/notes.txt",
+        ])
+        try FileManager.default.createSymbolicLink(
+            at: downloads.appendingPathComponent("grok-1.0.98-macos-aarch64"),
+            withDestinationURL: base.appendingPathComponent("Documents/notes.txt")
+        )
+        let command = base.appendingPathComponent(".grok/bin/grok")
+        try FileManager.default.createSymbolicLink(
+            atPath: command.path,
+            withDestinationPath: "../downloads/grok-1.0.13-macos-aarch64"
+        )
+
+        let kept = DeletionSafetyPolicy.keptCLIVersions(
+            versionsRoot: downloads.path, command: command.path, entry: .grokBinary
+        )
+        #expect(kept == ["grok-1.0.13-macos-aarch64", "grok-1.0.14-macos-aarch64"])
+
+        let rows = DevScanner.oldCLIVersionDefinitions(home: base)
+        let grok = rows.first { $0.label == "Old Grok Versions" }
+        #expect(grok?.paths.map(\.lastPathComponent) == ["grok-1.0.5-macos-aarch64"])
+
+        for name in ["manifest.json", "grok-1.0.15-macos-aarch64.part", "grok-latest"] {
+            #expect(MissedPaths.evaluate(".grok/downloads/\(name)") != .allow, "\(name)")
+        }
+        // A file inside an entry is never a version, even under a version's name.
+        #expect(MissedPaths.evaluate(".grok/downloads/grok-1.0.99-macos-aarch64/grok") != .allow)
+    }
+
+    @Test(arguments: ["grok-1.0.13", "grok-1.0.13-macos-aarch64", "grok-0.1-macos-x86_64", "grok-2.10.3-macos-arm64"])
+    func grokBinaryNamesMatch(name: String) {
+        #expect(DeletionSafetyPolicy.CLIVersionEntry.isGrokBinaryName(name), "\(name)")
+    }
+
+    @Test(arguments: [
+        "grok", "grok-", "grok-1", "grok-1.0.13.part", "grok-1.0.13-macos-aarch64.part", "grok-1.0.13-macos-",
+        "grok-1..13", "grok-.1.0", "grok-1.0.", "grok-latest", "manifest.json", "grok-1.0.13-linux-x86_64",
+        "grok-1.0.13-macos-aarch64/../x", "Grok-1.0.13",
+    ])
+    func otherGrokNamesDoNotMatch(name: String) {
+        #expect(!DeletionSafetyPolicy.CLIVersionEntry.isGrokBinaryName(name), "\(name)")
+    }
+
     @Test
     func newCLIStoresAreListed() {
         let stores = DeletionSafetyPolicy.cliVersionStores
         let worker = DeletionSafetyPolicy.cursorAgentWorkerCLI
         #expect(stores.contains { $0.versions == "\(worker)/.local/share/cursor-agent/versions"
             && $0.command == "\(worker)/.local/bin/cursor-agent" && $0.label == "Old Cursor Agent Versions" })
-        #expect(stores.contains { $0.versions == ".grok/downloads" && $0.command == ".grok/bin/grok" })
+        #expect(stores.contains { $0.versions == ".grok/downloads" && $0.command == ".grok/bin/grok"
+            && $0.entry == .grokBinary })
+        #expect(stores.filter { $0.entry == .anyName }.count == 3)
         // Inside a store only; the stores' own folders and their neighbours stay out.
         #expect(MissedPaths.evaluate("\(worker)/.local/share/cursor-agent/versions/2026.09.10-fd3934a") == .allow)
         #expect(MissedPaths.evaluate(".grok/downloads/grok-1.0.5-macos-aarch64") == .allow)
