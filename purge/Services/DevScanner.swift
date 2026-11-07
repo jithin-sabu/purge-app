@@ -598,10 +598,12 @@ nonisolated final class DevScanner {
     nonisolated static func gradleLeftoverPaths(home: URL) -> [URL] {
         let gradle = home.appendingPathComponent(".gradle", isDirectory: true)
         // Listing follows a link, so a `~/.gradle` linked into Documents is skipped.
-        guard ProtectedLocations.isReadable(gradle, access: .limited) else { return [] }
+        guard ProtectedLocations.isReadable(gradle, access: .limited, home: home) else { return [] }
         let daemonFolder = gradle.appendingPathComponent("daemon", isDirectory: true)
+        // The same for `daemon` itself, which is listed below.
+        let readable = ProtectedLocations.isReadable(daemonFolder, access: .limited, home: home)
         // Built from the names, so each path keeps the spelling of `home`.
-        let versions = ((try? FileManager.default.contentsOfDirectory(atPath: daemonFolder.path)) ?? [])
+        let versions = ((readable ? try? FileManager.default.contentsOfDirectory(atPath: daemonFolder.path) : nil) ?? [])
             .filter { !$0.hasPrefix(".") }
             .sorted()
             .map { daemonFolder.appendingPathComponent($0, isDirectory: true) }

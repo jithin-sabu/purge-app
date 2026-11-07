@@ -407,6 +407,23 @@ struct GradleLeftoverTests {
         #expect(names.sorted() == [".gradle/.tmp", ".gradle/daemon/8.13", ".gradle/daemon/8.9"])
     }
 
+    /// A `daemon` folder linked into Documents is not listed, so a scan without
+    /// Full Disk Access never sets off the prompt it is meant to avoid.
+    @Test
+    func aDaemonFolderLinkedIntoDocumentsIsNotListed() throws {
+        let home = try MissedPaths.makeFolder()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try MissedPaths.lay(home, folders: [".gradle/.tmp", "Documents/gradle-daemon/8.13"])
+        try FileManager.default.createSymbolicLink(
+            at: home.appendingPathComponent(".gradle/daemon"),
+            withDestinationURL: home.appendingPathComponent("Documents/gradle-daemon")
+        )
+        let names = DevScanner.gradleLeftoverPaths(home: home).map {
+            String($0.path.dropFirst(home.path.count + 1))
+        }
+        #expect(names == [".gradle/.tmp"])
+    }
+
     /// Through the whole chain on this Mac's home path: the folders are allowed,
     /// Gradle's own state is not.
     @Test
