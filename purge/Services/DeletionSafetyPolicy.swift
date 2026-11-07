@@ -485,8 +485,11 @@ enum DeletionSafetyPolicy {
         // Which tool version, emulator image or Figma profile is in use can
         // change at any time, and an unfinished install becomes old.
         if OldToolVersionScanPolicy.refusesDeletion(url) { return false }
-        // Which Playwright builds a project uses changes with every install.
-        if PlaywrightBuildScanPolicy.refusesDeletion(url) { return false }
+        // Which Playwright builds a project uses changes with every install. The
+        // Dev Tools filter asks on the main thread for each build on every scan
+        // flush, so it may reuse a read from the last few seconds. `FileDeleter`
+        // asks off the main thread, so a move always reads the links again.
+        if PlaywrightBuildScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
         if gradleLeftoverRefusesDeletion(url) { return false }

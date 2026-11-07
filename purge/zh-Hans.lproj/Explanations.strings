@@ -262,7 +262,7 @@
 
 /* playwright-unused-builds */
 "Unused Playwright Browsers" = "未使用的 Playwright 浏览器";
-"Browser builds Playwright downloaded that no installed Playwright uses. If a project needs one again, npx playwright install downloads it." = "Playwright 下载的、已安装的 Playwright 都不再使用的浏览器版本。如果项目再次需要，运行 npx playwright install 会重新下载。";
+"Browser builds no Playwright install still lists. A project that never ran npx playwright install may use one. That command downloads it again." = "已没有任何 Playwright 安装仍列出的浏览器版本。从未运行过 npx playwright install 的项目可能仍在使用，运行该命令会重新下载。";
 
 /* node-modules */
 "Node.js Packages" = "Node.js 软件包";

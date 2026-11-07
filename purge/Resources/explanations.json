@@ -849,7 +849,7 @@
     "key": "playwright-unused-builds",
     "display_name": "Unused Playwright Browsers",
     "tag": "medium",
-    "explanation": "Browser builds Playwright downloaded that no installed Playwright uses. If a project needs one again, npx playwright install downloads it.",
+    "explanation": "Browser builds no Playwright install still lists. A project that never ran npx playwright install may use one. That command downloads it again.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "packages"

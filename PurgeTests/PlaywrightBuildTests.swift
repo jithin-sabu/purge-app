@@ -78,7 +78,7 @@ private enum Playwright {
     static func layBuilds(_ home: URL, root: String = root) throws {
         try folders(home, [
             "chromium-1200", "chromium-1254", "chromium_headless_shell-1200", "chromium_headless_shell-1254",
-            "firefox-1572", "webkit-2388", "webkit_mac14_arm64_special-2251", "ffmpeg-1011", "ffmpeg-1013",
+            "firefox-1572", "webkit-2388", "webkit-2251", "webkit_mac14_arm64_special-2251", "ffmpeg-1011", "ffmpeg-1013",
             "chromium-1254/chrome-mac-arm64", "__dirlock-not", "b", "mcp-chrome-4a3f9e"
         ].map { "\(root)/\($0)" })
     }
@@ -116,9 +116,10 @@ struct PlaywrightBuildTests {
         for build in ["chromium-1200", "chromium_headless_shell-1200", "ffmpeg-1011"] {
             #expect(Playwright.offered(home, "\(Playwright.root)/\(build)"), "\(build)")
         }
+        // `webkit-2251` is named only through 1.65's revision override for mac14.
         for kept in [
             "chromium-1254", "chromium_headless_shell-1254", "firefox-1572", "webkit-2388",
-            "webkit_mac14_arm64_special-2251", "ffmpeg-1013",
+            "webkit-2251", "ffmpeg-1013",
         ] {
             #expect(!Playwright.offered(home, "\(Playwright.root)/\(kept)"), "\(kept)")
         }
@@ -345,15 +346,85 @@ struct PlaywrightBuildTests {
         #expect(evaluate(".cache/ms-playwright/chromium-1194") == .allow)
     }
 
+    /// A made-up home, so no real folder is listed.
     @Test
     func rowIsCheckFirstAndAppCachesStaysOffTheFolders() {
         let info = DevScanner.automaticSafetyInfo(forDevToolLabel: Policy.label, primaryPath: nil)
         #expect(info.level == .medium)
         #expect(info.headline == "Unused Playwright Browsers")
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let claimed = DevScanner.claimedGlobalCachePaths()
+        let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+        let claimed = DevScanner.claimedRoots(home: home).map(\.path)
         for root in Policy.roots {
-            #expect(claimed.contains(home.appendingPathComponent(root).standardizedFileURL.path), "\(root)")
+            #expect(claimed.contains("/Users/someone/\(root)"), "\(root)")
         }
+    }
+
+    /// `evaluate` allows all of `~/Library/Caches/ms-playwright` through the Caches
+    /// prefix, so `isOfferedForCleanup` alone refuses the rest of the folder. These
+    /// are refused by their shape before anything is read.
+    @Test
+    func isOfferedForCleanupRefusesEverythingButBuilds() {
+        let home = DeletionSafetyPolicy.cachedHomePath
+        for root in Policy.roots {
+            for relative in ["", "/.links", "/.links/0a1b2c3d", "/__dirlock", "/b", "/mcp-chrome-4a3f9e",
+                             "/chromium-1194/chrome-mac-arm64", "/webkit_mac14_arm64_special-2251"] {
+                let url = URL(fileURLWithPath: "\(home)/\(root)\(relative)")
+                #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url), "\(root)\(relative)")
+            }
+        }
+    }
+
+    /// A link that leads to another volume keeps every build, with or without
+    /// access, and nothing on that volume is looked at.
+    @Test(arguments: [
+        "/Volumes/purge-test-328/app/node_modules/playwright-core",
+        "/Network/Servers/purge-test-328/app/node_modules/playwright-core",
+        "/net/purge-test-328/app/node_modules/playwright-core",
+        "through a link",
+    ])
+    func otherVolumeKeepsEveryBuild(_ target: String) throws {
+        let home = try Playwright.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Playwright.layBuilds(home)
+        try Playwright.install(home, package: "app/node_modules/playwright-core", browsersJSON: Playwright.browsersJSON165)
+        var linkTarget = target
+        if target == "through a link" {
+            // `~/Work` points at a drive. The link is read, the drive is not.
+            try FileManager.default.createSymbolicLink(
+                atPath: home.appendingPathComponent("Work").path,
+                withDestinationPath: "/Volumes/purge-test-328"
+            )
+            linkTarget = home.appendingPathComponent("Work/app/node_modules/playwright-core").path
+        }
+        try Playwright.write(linkTarget, home, "\(Playwright.root)/.links/drive")
+        for access in [ScanAccess.limited, .full] {
+            #expect(Playwright.rows(home, access: access).isEmpty, "\(target) \(access)")
+            #expect(!Playwright.offered(home, "\(Playwright.root)/chromium-1200", access: access), "\(target) \(access)")
+        }
+    }
+
+    /// The on-screen filter may answer from a read under `recentReadLifetime`
+    /// seconds old. Every other caller reads the links again.
+    @Test
+    func onlyTheOnScreenFilterReusesARecentRead() throws {
+        let home = try Playwright.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Playwright.layBuilds(home)
+        try Playwright.install(home, package: "new/node_modules/playwright-core", browsersJSON: Playwright.browsersJSON165)
+        let build = home.appendingPathComponent("\(Playwright.root)/chromium-1200")
+        let now = Date()
+        func refused(after seconds: TimeInterval, reuse: Bool) -> Bool {
+            Policy.refusesDeletion(build, home: home.path, now: now.addingTimeInterval(seconds), access: .full, reuseRecentRead: reuse)
+        }
+        #expect(!refused(after: 0, reuse: true))
+        // A copy pinned to the old build installs.
+        try Playwright.install(
+            home,
+            package: "old/node_modules/playwright-core",
+            browsersJSON: Playwright.browsersJSON([("chromium", "1200")])
+        )
+        #expect(refused(after: 1, reuse: false))
+        #expect(!refused(after: 1, reuse: true))
+        #expect(refused(after: Policy.recentReadLifetime + 1, reuse: true))
     }
 }

@@ -1,7 +1,8 @@
 import Darwin
 import Foundation
 
-/// Playwright browser builds no installed Playwright uses (#328).
+/// Playwright browser builds that no Playwright which installed browsers still
+/// names (#328).
 ///
 /// Playwright keeps every browser it downloads in `ms-playwright`, one folder
 /// per build (`chromium-1194`, `chromium_headless_shell-1194`, `ffmpeg-1011`).
@@ -9,9 +10,9 @@ import Foundation
 /// `ms-playwright/.links`, named for the SHA-1 of its folder and holding that
 /// folder's path. The copy's `browsers.json` names the builds it runs. On every
 /// install Playwright deletes the build folders no link names
-/// (`_validateInstallationCache` in playwright-core, checked in 1.65.0). Purge
-/// applies the same rule without running Playwright, and keeps more than
-/// Playwright does:
+/// (`_validateInstallationCache` in playwright-core, checked in 1.65.0), unless
+/// `PLAYWRIGHT_SKIP_BROWSER_GC` is set. Purge applies the same rule without
+/// running Playwright, and keeps more than Playwright does:
 ///
 /// - Every build stays while anything is unclear: `.links` is missing, empty or
 ///   can't be listed, a link file can't be read, it names a folder that isn't
@@ -20,6 +21,10 @@ import Foundation
 ///   deletes the builds only it named. Purge can't tell those builds apart.
 /// - A `browsers.json` in Desktop, Documents or another protected folder is read
 ///   only with Full Disk Access. Without it every build stays.
+/// - A link that leads to `/Volumes`, `/Network` or `/net`, directly or through a
+///   symlink, keeps every build and is never followed there. Reaching a removable
+///   or network volume can ask for permission, and a share that stopped
+///   answering would block.
 /// - Every build stays while `__dirlock` is under an hour old. Playwright holds it
 ///   while it writes a link and downloads.
 /// - Only folders named `<browser>-<revision>`, for a browser Playwright has ever
@@ -30,11 +35,19 @@ import Foundation
 /// write links too. Java unpacks its driver into a temporary folder for each
 /// run, so its link soon names a folder that is gone, and every build stays.
 ///
+/// What the links can't show: launching a browser writes no link. A copy that
+/// never ran `playwright install`, such as a second checkout that found the
+/// builds already there, can run a build no link names, and so can a Mac that
+/// keeps old builds on purpose with `PLAYWRIGHT_SKIP_BROWSER_GC`. The row's
+/// text says so, and it is Check First.
+///
 /// `PLAYWRIGHT_BROWSERS_PATH` is ignored. Only the default folders are looked at.
 ///
 /// The row is Check First. `isWhitelistedPath` proves only the shape, for
 /// `evaluate`. `refusesDeletion` reads the links again, from
-/// `isOfferedForCleanup`, which `FileDeleter` asks before every move.
+/// `isOfferedForCleanup`, which `FileDeleter` asks before every move. Only the
+/// on-screen filter, which runs on the main thread, may reuse a read from the
+/// last few seconds (`recentReadLifetime`).
 nonisolated enum PlaywrightBuildScanPolicy {
 
     static let label = "Unused Playwright Browsers"
@@ -68,6 +81,11 @@ nonisolated enum PlaywrightBuildScanPolicy {
     static let lockLifetime: TimeInterval = 60 * 60
     /// Finder may leave this in `.links`. It never names a Playwright copy.
     static let finderMetadataName = ".DS_Store"
+    /// Where other volumes are mounted. A link that leads here is never followed.
+    static let otherVolumeRoots = ["/Volumes", "/Network", "/net"]
+    /// How long `refusesDeletion(reuseRecentRead: true)` may answer from an
+    /// earlier read of a folder's links.
+    static let recentReadLifetime: TimeInterval = 10
 
     // MARK: Shape
 
@@ -112,24 +130,61 @@ nonisolated enum PlaywrightBuildScanPolicy {
     /// names now: the folder itself, `.links`, `__dirlock`, anything inside a
     /// build, and a build in use or whose use can't be read. False for paths
     /// outside the folders, which other rules judge.
+    ///
+    /// `reuseRecentRead` lets the answer come from a read of the links in the last
+    /// `recentReadLifetime` seconds. Only the on-screen filter passes it. A move
+    /// always reads the links again.
     static func refusesDeletion(
         _ url: URL,
         home: String = DeletionSafetyPolicy.cachedHomePath,
         now: Date = Date(),
-        access: ScanAccess? = nil
+        access: ScanAccess? = nil,
+        reuseRecentRead: Bool = false
     ) -> Bool {
         let path = url.standardizedFileURL.path
         guard let root = containingRoot(of: path, home: home) else { return false }
         guard buildRoot(of: path, home: home) == root else { return true }
-        return !isOffered(path, root: root, home: home, now: now, access: access)
+        return !isOffered(path, root: root, home: home, now: now, access: access, reuseRecentRead: reuseRecentRead)
     }
 
-    static func isOffered(_ path: String, root: String, home: String, now: Date, access: ScanAccess?) -> Bool {
+    static func isOffered(
+        _ path: String,
+        root: String,
+        home: String,
+        now: Date,
+        access: ScanAccess?,
+        reuseRecentRead: Bool = false
+    ) -> Bool {
         let url = URL(fileURLWithPath: path)
         guard !PathContainment.containsSymlinkComponent(url, home: home),
-              OldToolVersionScanPolicy.isRealFolder(path),
-              let used = usedBuildFolders(root: root, home: home, now: now, access: access) else { return false }
+              OldToolVersionScanPolicy.isRealFolder(path) else { return false }
+        let used = reuseRecentRead
+            ? recentlyUsedBuildFolders(root: root, home: home, now: now, access: access)
+            : usedBuildFolders(root: root, home: home, now: now, access: access)
+        guard let used else { return false }
         return !used.contains(url.lastPathComponent.lowercased())
+    }
+
+    private static let recentReadsLock = NSLock()
+    private nonisolated(unsafe) static var recentReads: [String: (at: Date, used: Set<String>?)] = [:]
+
+    /// `usedBuildFolders`, answered from the last read of `root` while it is under
+    /// `recentReadLifetime` seconds old. The on-screen filter runs on the main
+    /// thread for every scan flush and for each build, so it reads the links once
+    /// in that time instead of each time.
+    static func recentlyUsedBuildFolders(root: String, home: String, now: Date, access: ScanAccess?) -> Set<String>? {
+        recentReadsLock.lock()
+        let recent = recentReads[root]
+        recentReadsLock.unlock()
+        if let recent {
+            let age = now.timeIntervalSince(recent.at)
+            if age >= 0, age < recentReadLifetime { return recent.used }
+        }
+        let used = usedBuildFolders(root: root, home: home, now: now, access: access)
+        recentReadsLock.lock()
+        recentReads[root] = (now, used)
+        recentReadsLock.unlock()
+        return used
     }
 
     // MARK: Disk reads
@@ -156,21 +211,29 @@ nonisolated enum PlaywrightBuildScanPolicy {
         // Full Disk Access is checked once, and only when a link leads into a
         // protected folder.
         var resolvedAccess = access
-        func mayRead(_ file: String) -> Bool {
-            let homeURL = URL(fileURLWithPath: home, isDirectory: true)
-            if ProtectedLocations.isReadable(URL(fileURLWithPath: file), access: .limited, home: homeURL) {
-                return true
-            }
+        let homeURL = URL(fileURLWithPath: home, isDirectory: true)
+        /// The path to read `file` at, or nil when it must not be read. Found with
+        /// `readlink` alone, which never touches another volume or a protected
+        /// folder.
+        func readablePath(_ file: String) -> String? {
+            let walk = ProtectedLocations.readablePath(
+                of: URL(fileURLWithPath: file),
+                home: homeURL,
+                alsoStoppingAt: otherVolumeRoots
+            )
+            if walk.stoppedAtOther { return nil }
+            if let path = walk.path { return path }
+            // A protected folder on the way, or a chain of links too long to follow.
             if resolvedAccess == nil { resolvedAccess = ScanAccess.current() }
-            return resolvedAccess == .full
+            return resolvedAccess == .full ? file : nil
         }
 
         var used: Set<String> = []
         for name in linkNames {
-            guard let target = linkTarget(at: "\(links)/\(name)") else { return nil }
-            let file = URL(fileURLWithPath: target, isDirectory: true)
-                .appendingPathComponent("browsers.json").standardizedFileURL.path
-            guard mayRead(file), let data = readSmallFile(file),
+            // Joined as text: standardizing the path would look at the disk first.
+            guard let target = linkTarget(at: "\(links)/\(name)"),
+                  let file = readablePath((target as NSString).appendingPathComponent("browsers.json")),
+                  let data = readSmallFile(file),
                   let folders = buildFolders(inBrowsersJSON: data) else { return nil }
             used.formUnion(folders)
         }

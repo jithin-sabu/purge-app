@@ -588,12 +588,15 @@ nonisolated final class DevScanner {
     /// once the dev scan claims them.
     nonisolated static func claimedGlobalCachePaths() -> Set<String> {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        // The JetBrains and Playwright rows list entries inside their folders rather
-        // than the folder itself, so each folder is claimed by name here to keep App
-        // Caches off it.
-        let claimedRoots = [home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)]
+        return Set((globalCacheDefinitions().flatMap(\.paths) + claimedRoots(home: home)).map { $0.standardizedFileURL.path })
+    }
+
+    /// Folders claimed by name although no row lists them whole. The JetBrains and
+    /// Playwright rows list entries inside their folders, so each folder is
+    /// claimed here to keep App Caches off it. Reads nothing.
+    nonisolated static func claimedRoots(home: URL) -> [URL] {
+        [home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)]
             + PlaywrightBuildScanPolicy.roots.map { home.appendingPathComponent($0, isDirectory: true) }
-        return Set((globalCacheDefinitions().flatMap(\.paths) + claimedRoots).map { $0.standardizedFileURL.path })
     }
 
     /// `~/.gem/specs` plus each `~/.gem/ruby/<version>/cache`. Installed gems in
