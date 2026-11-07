@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-11-04: A Cursor agent folder in use could be listed as a leftover
 
-**Found internally** in a code audit ([#183](https://github.com/jithin-sabu/purge-app/issues/183)), no report. **Fixed:** in the pull request for [#183](https://github.com/jithin-sabu/purge-app/issues/183). **Affected:** v1.5.3 to v1.13.2.
+**Found internally** in a code audit ([#183](https://github.com/jithin-sabu/purge-app/issues/183)), no report. **Fixed:** [#315](https://github.com/jithin-sabu/purge-app/pull/315), shipped in v1.13.3 (2026-11-04). **Affected:** v1.5.3 to v1.13.2.
 
 ### What happened
 
@@ -48,7 +48,7 @@ gone, and lists nothing when the process read fails.
 
 ## 2026-11-03: Project folders could be judged by the wrong path
 
-**Found internally** in review of [#313](https://github.com/jithin-sabu/purge-app/pull/313) ([#190](https://github.com/jithin-sabu/purge-app/issues/190)), no report. **Fixed:** [#313](https://github.com/jithin-sabu/purge-app/pull/313). **Affected:** `~/.gradle` from v1.1.0, linked folders from v1.4.0, to v1.13.2.
+**Found internally** in review of [#313](https://github.com/jithin-sabu/purge-app/pull/313) ([#190](https://github.com/jithin-sabu/purge-app/issues/190)), no report. **Fixed:** [#313](https://github.com/jithin-sabu/purge-app/pull/313), shipped in v1.13.3 (2026-11-04). **Affected:** `~/.gradle` from v1.1.0, linked folders from v1.4.0, to v1.13.2.
 
 ### What happened
 
