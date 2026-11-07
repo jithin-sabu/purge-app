@@ -309,6 +309,8 @@ extension PurgeStore {
     // MARK: Writing
 
     private func scheduleLastScanWrite() {
+        // Uninstall Purge may have moved the folder this writes to (#330).
+        guard !isUninstallingPurge else { return }
         guard lastScanWriteTask == nil, !lastScanDirty.isDisjoint(with: lastScanSavable) else { return }
         lastScanWriteTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
@@ -322,11 +324,23 @@ extension PurgeStore {
     /// and queued in one step on the main thread, so the file sees saves and
     /// forgets in the order they happened.
     private func writeLastScanNow() {
+        // Left dirty, so a Cancel back to normal running still writes it later.
+        guard !isUninstallingPurge else { return }
         let sections = lastScanDirty.intersection(lastScanSavable)
         lastScanDirty.subtract(sections)
         guard !sections.isEmpty, let lastScanStore else { return }
         lastScanStore.save(sections, from: makeLastScanSnapshot(sections))
         lastScanWriteCount &+= 1
+    }
+
+    /// Uninstall Purge is starting: drops the half-second wait and lets any write
+    /// already handed to the file finish, so nothing lands in Application Support
+    /// after its data moved to the Trash (#330). New writes wait while
+    /// `isUninstallingPurge` is set.
+    func holdLastScanWrites() {
+        lastScanWriteTask?.cancel()
+        lastScanWriteTask = nil
+        lastScanStore?.flush()
     }
 
     /// Purge is quitting: write what the half-second wait still holds and wait for
