@@ -177,6 +177,7 @@ enum CacheDiscoveryPaths {
     /// Chromium storage folders one and two levels below `appRoot`, in the shape
     /// `isNestedChromiumStorageCachePath` accepts. Links are never followed.
     nonisolated static func nestedChromiumStorageFolders(in appRoot: URL, access: ScanAccess = .full) -> [URL] {
+        /// Readable, non-hidden folders directly in `folder`, links left out.
         func subfolders(of folder: URL) -> [URL] {
             guard let children = try? FileManager.default.contentsOfDirectory(
                 at: folder,

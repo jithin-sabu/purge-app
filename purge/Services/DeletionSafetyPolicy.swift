@@ -1015,12 +1015,14 @@ enum DeletionSafetyPolicy {
         let gradle = URL(fileURLWithPath: "\(home)/.gradle", isDirectory: true)
         let daemonRoot = gradle.appendingPathComponent("daemon", isDirectory: true)
 
+        /// A folder, not a link to one and not a file.
         func isRealFolder(_ folder: URL) -> Bool {
             guard let values = try? folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else {
                 return false
             }
             return values.isDirectory == true && values.isSymbolicLink != true
         }
+        /// True when a logged daemon may still run, or the folder can't be listed.
         func hasRunningDaemon(_ versionFolder: URL) -> Bool {
             guard let pids = gradleDaemonPids(in: versionFolder) else { return true }
             return pids.contains(where: isRunning)
@@ -1083,6 +1085,8 @@ enum DeletionSafetyPolicy {
         return bothVarSpellings(of: path)
     }()
 
+    /// Whether `path` is the clang module cache, or inside it, under either
+    /// spelling of `/var`. Nothing else in the per-user cache folder is.
     nonisolated static func isWhitelistedClangModuleCachePath(
         _ path: String,
         cachePaths: [String] = clangModuleCachePaths
@@ -1102,6 +1106,8 @@ enum DeletionSafetyPolicy {
         return path
     }
 
+    /// `path` as both `/var/...` and `/private/var/...` when it is under either;
+    /// any other path as it is.
     nonisolated static func bothVarSpellings(of path: String) -> [String] {
         if path.hasPrefix("/private/var/") { return [path, String(path.dropFirst("/private".count))] }
         if path.hasPrefix("/var/") { return [path, "/private" + path] }

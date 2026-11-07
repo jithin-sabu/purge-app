@@ -38,6 +38,7 @@ private enum MissedPaths {
 
 @Suite("Missed caches (#323): nested Chromium folders")
 struct NestedChromiumCacheTests {
+    /// What discovery lists in `appRoot`, relative to it and sorted.
     private func listed(_ appRoot: URL) -> [String] {
         let prefix = appRoot.standardizedFileURL.path + "/"
         return CacheDiscoveryPaths.applicationSupportCacheURLs(in: appRoot, access: .full)
@@ -45,6 +46,7 @@ struct NestedChromiumCacheTests {
             .sorted()
     }
 
+    /// Whether the shape check, which the gate and the tier share, accepts `relative`.
     private func allowed(_ appRoot: URL, _ relative: String) -> Bool {
         let parts = relative.split(separator: "/").map(String.init)
         return CacheDiscoveryPaths.isApplicationSupportCachePath(parts, appRoot: appRoot)
@@ -419,6 +421,24 @@ struct GradleLeftoverTests {
 
     /// A pid now used by something other than `java` is not a daemon. This test
     /// host is `Purge`; a pid that can't be read still counts as one.
+    /// `FileDeleter` asks `isOfferedForCleanup` before every move, and that is
+    /// where the delete-time checks run. A version folder that isn't there and
+    /// a Grok entry that isn't a binary pass `evaluate` or fail it by shape, but
+    /// are never offered. Nothing here exists on disk.
+    @Test
+    func deleteTimeChecksRunThroughTheOfferGate() {
+        let missingVersion = "9.9.9-purge-test-\(UUID().uuidString)"
+        let folder = URL(fileURLWithPath: "\(MissedPaths.home)/.gradle/daemon/\(missingVersion)", isDirectory: true)
+        #expect(DeletionSafetyPolicy.evaluate(folder) == .allow)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(folder))
+
+        let missingBinary = URL(fileURLWithPath: "\(MissedPaths.home)/.grok/downloads/grok-9.9.9-macos-purgetest")
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(missingBinary))
+        let manifest = URL(fileURLWithPath: "\(MissedPaths.home)/.grok/downloads/manifest.json")
+        #expect(DeletionSafetyPolicy.evaluate(manifest) != .allow)
+        #expect(!DeletionSafetyPolicy.isOfferedForCleanup(manifest))
+    }
+
     @Test
     func aReusedPidIsNotADaemon() {
         #expect(!DeletionSafetyPolicy.isGradleDaemonRunning(getpid()))
