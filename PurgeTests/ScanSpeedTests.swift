@@ -253,6 +253,105 @@ struct ScanSpeedTests {
     }
 }
 
+/// A full scan starts project discovery with its App Caches half, so
+/// discovery's git check can still be running when a half of the scan starts.
+/// Neither half may reset the git session then, or the check's answers are
+/// thrown away and its rows stay unknown for the rest of the session.
+@MainActor
+@Suite("Project discovery beside a full scan")
+struct DiscoveryBesideFullScanTests {
+    @Test
+    func discoveryGitCheckSurvivesTheDevToolsHalf() async throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("purge-discovery-git-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let projectRoot = base.appendingPathComponent("app", isDirectory: true)
+        // A name off the cache allowlist, so the checker asks `git` rather than
+        // calling the folder clean by its name.
+        let artifactPath = projectRoot.appendingPathComponent("purge-test-output", isDirectory: true)
+        try FileManager.default.createDirectory(at: artifactPath, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: projectRoot.appendingPathComponent(".git"), withIntermediateDirectories: true)
+
+        let gate = HeldGitStatus()
+        let checker = GitStatusChecker { _ in await gate.answer() }
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.gitStatusChecker = checker
+        fake.holdsGeneral = true
+        let group = ProjectGroup(
+            displayName: "app",
+            rootPath: projectRoot,
+            inferredTypes: [.node],
+            artifacts: [ProjectCacheArtifact(
+                kind: .nodeModules,
+                path: artifactPath,
+                projectRoot: projectRoot,
+                sizeBytes: 1_000_000,
+                lastModified: .distantPast,
+                isSelected: false,
+                safetyInfo: SafetyInfo(level: .safe, headline: "output", explanation: "", recoverySteps: "", reinstallCommand: nil),
+                reinstallSafety: .notApplicable,
+                gitStatus: .unknown,
+                checkFirstReason: nil
+            )]
+        )
+        fake.holdsProjects = true
+        let store = fake.makeStore(gitChecker: checker)
+
+        let scan = Task { await store.scanAll() }
+        // Discovery finds the project and starts its git check while App Caches
+        // is still held open.
+        #expect(await eventually { fake.projectScanCount == 1 })
+        store.projectGroups = [group]
+        fake.finishHeldProjects()
+        #expect(await eventually { gate.isWaiting })
+        // The Dev Tools half starts while the check still waits for `git`.
+        fake.finishHeldGeneral()
+        #expect(await eventually { fake.developerAccesses.count == 1 })
+        gate.release()
+        await scan.value
+
+        #expect(await eventually { !store.isScanningProjects })
+        #expect(store.projectGroups.flatMap(\.artifacts).map(\.gitStatus) == [.clean])
+    }
+}
+
+/// A `git status` that waits until the test lets it answer clean.
+private final class HeldGitStatus: @unchecked Sendable {
+    private let lock = NSLock()
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var released = false
+
+    var isWaiting: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !waiting.isEmpty
+    }
+
+    func answer() async -> GitWorktreeStatus {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if released {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                waiting.append(continuation)
+                lock.unlock()
+            }
+        }
+        return .clean
+    }
+
+    func release() {
+        lock.lock()
+        released = true
+        let held = waiting
+        waiting = []
+        lock.unlock()
+        held.forEach { $0.resume() }
+    }
+}
+
 /// Chunk sizes as `directorySizes` reports them, from its sizing threads.
 private final class Collected: @unchecked Sendable {
     private let lock = NSLock()

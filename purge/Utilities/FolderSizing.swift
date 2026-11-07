@@ -51,12 +51,19 @@ nonisolated enum FolderSizing {
     /// How a call's folders are shared out between `du` processes.
     nonisolated enum Split: Sendable {
         /// Up to `duChunkSize` folders per `du`. One `du` counts a hard-linked
-        /// file once across all its folders, which the Trash total and the
-        /// deletion report rely on.
+        /// file once across all its folders, under the first folder that holds
+        /// it. The Trash total keeps this.
         case fewest
-        /// A few folders per `du`, so up to `maxConcurrentDuChunks` walk side by
-        /// side. A scan of fewer than `duChunkSize` folders used to walk them all
-        /// in one `du`, one after another, on one core.
+        /// A few folders per `du`, one each for a list of `duChunkSize` or fewer,
+        /// so up to `maxConcurrentDuChunks` walk side by side. A scan of fewer than
+        /// `duChunkSize` folders used to walk them all in one `du`, one after
+        /// another, on one core.
+        ///
+        /// Each folder's size is then its own: a file hard-linked into two folders
+        /// sized by different `du` runs counts in both. Scan sizes are what a
+        /// clean reports as freed and what Cleanup History records, so cleaning
+        /// two such folders together counts the shared bytes twice. No safety
+        /// level or gate reads these sizes.
         case spread
     }
 

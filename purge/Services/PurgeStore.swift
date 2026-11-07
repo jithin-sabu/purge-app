@@ -4021,19 +4021,26 @@ final class PurgeStore: ObservableObject {
             ScanPhaseTiming.finish("runFullScan total", since: fullStart)
         }
 
+        // One git session for the whole scan, started before discovery. Its git
+        // check can still be running when either half below starts, and a fresh
+        // session then would drop its answers and leave its rows unknown.
+        await gitChecker.clearSessionCache()
+        await gitChecker.setAccess(access)
+        guard !Task.isCancelled, scanGeneration == generation else { return }
+
         // Project discovery walks the home folders and needs nothing from the
         // two scans below, so it starts with them rather than after them, and
         // carries Dev Tools on if it is still going when they end.
         startProjectDiscovery(generation: generation, access: access)
         let discovery = projectDiscoveryTask
 
-        await runGeneralScan(generation: generation, access: access)
+        await runGeneralScan(generation: generation, access: access, inFullScan: true)
         guard !Task.isCancelled, scanGeneration == generation else {
             stopProjectDiscovery(discovery)
             return
         }
         cacheScanStage = .devTools
-        await runDeveloperScan(generation: generation, access: access, startsProjectDiscovery: false)
+        await runDeveloperScan(generation: generation, access: access, inFullScan: true)
         guard !Task.isCancelled, scanGeneration == generation else {
             stopProjectDiscovery(discovery)
             return
@@ -4055,15 +4062,19 @@ final class PurgeStore: ObservableObject {
         isScanningProjects = false
     }
 
-    private func runGeneralScan(generation: Int, access: ScanAccess) async {
+    /// `inFullScan` is true when `runFullScan` runs this half. That scan has
+    /// started the git session for both halves and its project discovery.
+    private func runGeneralScan(generation: Int, access: ScanAccess, inFullScan: Bool = false) async {
         let generalStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         isScanningGeneral = true
         generalResultsAccess = access
         readableWithoutFullDiskAccess.removeAll()
-        await gitChecker.clearSessionCache()
-        await gitChecker.setAccess(access)
+        if !inFullScan {
+            await gitChecker.clearSessionCache()
+            await gitChecker.setAccess(access)
+        }
         defer {
             if scanGeneration == generation {
                 isScanningGeneral = false
@@ -4113,9 +4124,9 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// `startsProjectDiscovery` is false for a full scan, which started
-    /// discovery itself.
-    private func runDeveloperScan(generation: Int, access: ScanAccess, startsProjectDiscovery: Bool = true) async {
+    /// `inFullScan` is true when `runFullScan` runs this half. That scan has
+    /// started the git session for both halves and its project discovery.
+    private func runDeveloperScan(generation: Int, access: ScanAccess, inFullScan: Bool = false) async {
         let developerStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
@@ -4123,8 +4134,10 @@ final class PurgeStore: ObservableObject {
         isScanningDeveloper = true
         developerResultsAccess = access
         readableWithoutFullDiskAccess.removeAll()
-        await gitChecker.clearSessionCache()
-        await gitChecker.setAccess(access)
+        if !inFullScan {
+            await gitChecker.clearSessionCache()
+            await gitChecker.setAccess(access)
+        }
         defer {
             if scanGeneration == generation {
                 isScanningDeveloper = false
@@ -4202,7 +4215,7 @@ final class PurgeStore: ObservableObject {
         if scanGeneration == generation, !Task.isCancelled {
             lastScanListsFinished([.devTools, .simulators, .runtimes])
         }
-        if startsProjectDiscovery {
+        if !inFullScan {
             startProjectDiscovery(generation: generation, access: access)
         }
     }
