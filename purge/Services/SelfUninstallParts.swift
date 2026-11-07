@@ -50,8 +50,14 @@ struct FinderServicePart: SelfUninstallPartControl {
         return preference.isEnabled
     }
 
+    /// A Settings toggle may still be writing and flushing (up to about five
+    /// seconds), and `setEnabled` ignores a call made meanwhile.
     func turnOff() async {
-        await FinderServicePreference.shared.setEnabled(false)
+        let preference = FinderServicePreference.shared
+        for _ in 0..<40 where preference.isApplying {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        await preference.setEnabled(false)
     }
 }
 
@@ -144,6 +150,14 @@ struct LiveSelfUninstallFileMover: SelfUninstallFileMover {
         return result
     }
 
+    func appRefusal() async -> SelfUninstallPolicy.Refusal? {
+        let url = bundleURL
+        let identifier = bundleIdentifier
+        return await Task.detached(priority: .userInitiated) {
+            SelfUninstallPolicy.evaluateApp(SelfUninstallPolicy.readFacts(of: url), runningBundleIdentifier: identifier)
+        }.value
+    }
+
     func moveApp() async -> SelfUninstallAppMove {
         let url = bundleURL
         let identifier = bundleIdentifier
@@ -167,6 +181,7 @@ struct LiveSelfUninstallFileMover: SelfUninstallFileMover {
 @MainActor
 private struct InertSelfUninstallFileMover: SelfUninstallFileMover {
     func moveData() async -> SelfUninstallDataMove { .failed }
+    func appRefusal() async -> SelfUninstallPolicy.Refusal? { .notThisApp }
     func moveApp() async -> SelfUninstallAppMove { .refused(.notThisApp) }
 }
 
@@ -219,7 +234,14 @@ extension SelfUninstaller {
     static func live(store: PurgeStore) -> SelfUninstaller {
         let setRunning: (Bool) -> Void = { [weak store] running in
             store?.isUninstallingPurge = running
-            if running { store?.stopScans() }
+            if running {
+                store?.stopScans()
+                store?.holdLastScanWrites()
+            } else {
+                // Back to normal running: steps asked for meanwhile, and any
+                // launch step with no results yet, start now.
+                store?.startLaunchScans()
+            }
         }
         guard !TestHost.isActive() else {
             return SelfUninstaller(parts: [], mover: InertSelfUninstallFileMover(), setRunning: setRunning)

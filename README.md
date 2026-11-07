@@ -269,7 +269,7 @@ Choose **Uninstall Purge…** in the Purge menu, or **Settings → Uninstall →
 
 Your settings and cleaning history stay on your Mac, so a reinstall picks up where you left off. Tick **Also move settings and history to the Trash** to move them too. Nothing is deleted permanently; you empty the Trash when you're ready.
 
-macOS doesn't let an app remove its own Full Disk Access. When Purge quits, it opens that list in System Settings: select Purge and click the minus button.
+macOS doesn't let an app remove its own Full Disk Access. If Purge had it, the last screen offers **Quit and Open Full Disk Access**. In System Settings, select Purge and click the minus button.
 
 Already dragged Purge to the Trash? Download it again, open it, and choose **Uninstall Purge…**, so nothing it ran keeps running. To check nothing is left, Purge should be gone from **System Settings → General → Login Items & Extensions**, and this should print nothing:
 

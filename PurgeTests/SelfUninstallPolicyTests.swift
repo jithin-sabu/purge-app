@@ -169,6 +169,24 @@ struct SelfUninstallPolicyTests {
         #expect(!SelfUninstallPolicy.isOwnDataFolder(sneaky, home: Self.home, bundleIdentifier: "x/../../Preferences"))
     }
 
+    @Test func onlyReverseDNSBundleIdentifiersAreAccepted() {
+        for good in ["io.getpurge.app", "io.getpurge.app.e2e190", "com.example-1.a"] {
+            #expect(SelfUninstallPolicy.isValidBundleIdentifier(good), "\(good)")
+        }
+        for bad in ["", ".", "..", "io", "io..app", ".io.app", "io.app.", "io/app.x", "io.app/..", "io.ap p", "io.äpp"] {
+            #expect(!SelfUninstallPolicy.isValidBundleIdentifier(bad), "\(bad)")
+        }
+    }
+
+    /// `Caches/.` is the Caches folder itself and `Caches/..` is Library.
+    @Test func dotIdentifiersNeverNameAFolder() {
+        for id in [".", ".."] {
+            #expect(SelfUninstallPolicy.dataFolders(home: Self.home, bundleIdentifier: id).isEmpty)
+            #expect(!SelfUninstallPolicy.isOwnDataFolder(URL(fileURLWithPath: "/Users/me/Library/Caches"), home: Self.home, bundleIdentifier: id))
+            #expect(!SelfUninstallPolicy.isOwnDataFolder(URL(fileURLWithPath: "/Users/me/Library"), home: Self.home, bundleIdentifier: id))
+        }
+    }
+
     @Test func aDevBuildLeavesTheSharedApplicationSupportFolderAlone() {
         let dev = "io.getpurge.app.shots"
         let folders = SelfUninstallPolicy.dataFolders(home: Self.home, bundleIdentifier: dev).map(\.path)

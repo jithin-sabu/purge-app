@@ -27,6 +27,9 @@ protocol SelfUninstallPartControl {
 protocol SelfUninstallFileMover {
     /// Moves the data folders and a copy of the preferences. True when nothing failed.
     func moveData() async -> SelfUninstallDataMove
+    /// Why the app would not move, read from disk without moving it. Checked
+    /// before the data, so a copy that can't move itself keeps its data too.
+    func appRefusal() async -> SelfUninstallPolicy.Refusal?
     func moveApp() async -> SelfUninstallAppMove
 }
 
@@ -234,6 +237,13 @@ final class SelfUninstaller: ObservableObject, Identifiable {
         hasStartedMoving = true
         isStopping = false
         if let index = steps.firstIndex(where: { $0.kind == .data && $0.state == .pending }) {
+            // The app first: data must not go when the app then stays put.
+            if let refusal = await mover.appRefusal(), refusal != .alreadyInTrash {
+                steps[index].state = .skipped
+                if let app = steps.firstIndex(where: { $0.kind == .app }) { steps[app].state = .failed }
+                phase = .couldNotMove(Self.problem(for: refusal))
+                return
+            }
             steps[index].state = .working
             // Read again: a copy can appear while the sheet is open.
             let others = await findOtherCopies()

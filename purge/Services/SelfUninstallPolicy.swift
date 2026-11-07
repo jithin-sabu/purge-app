@@ -77,6 +77,7 @@ nonisolated enum SelfUninstallPolicy {
     /// is listed only for the released bundle ID: a dev build with an ID of its
     /// own shares that folder with the installed app and must not take it.
     static func dataFolders(home: URL, bundleIdentifier: String) -> [URL] {
+        guard isValidBundleIdentifier(bundleIdentifier) else { return [] }
         let library = home.appendingPathComponent("Library", isDirectory: true)
         var folders: [URL] = []
         if bundleIdentifier == releasedBundleIdentifier {
@@ -87,13 +88,30 @@ nonisolated enum SelfUninstallPolicy {
         return folders
     }
 
-    /// True only for one of `dataFolders`, compared by exact standardized path.
-    /// A folder inside one, beside one, or a parent of one is refused.
+    /// Reverse-DNS only: two or more dot-separated parts of letters, digits and
+    /// hyphens. Rules out an empty ID, a slash, and `.` or `..`, any of which
+    /// would point a folder name somewhere else.
+    static func isValidBundleIdentifier(_ identifier: String) -> Bool {
+        let parts = identifier.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count >= 2 else { return false }
+        return parts.allSatisfy { part in
+            !part.isEmpty && part.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+        }
+    }
+
+    /// True only for one of `dataFolders`, compared by exact standardized path,
+    /// and only when it sits directly in its Library folder under the bundle's
+    /// own name. A folder inside one, beside one, or a parent of one is refused.
     static func isOwnDataFolder(_ url: URL, home: URL, bundleIdentifier: String) -> Bool {
-        guard !bundleIdentifier.isEmpty, !bundleIdentifier.contains("/") else { return false }
-        let path = url.standardizedFileURL.path
+        guard isValidBundleIdentifier(bundleIdentifier) else { return false }
+        let standardized = url.standardizedFileURL
+        let library = home.appendingPathComponent("Library", isDirectory: true).standardizedFileURL.path
+        let parent = standardized.deletingLastPathComponent().path
+        let parents = ["Application Support", "Caches", "HTTPStorages"].map { "\(library)/\($0)" }
+        let names = [bundleIdentifier, releasedBundleIdentifier]
+        guard parents.contains(parent), names.contains(standardized.lastPathComponent) else { return false }
         return dataFolders(home: home, bundleIdentifier: bundleIdentifier)
-            .contains { $0.standardizedFileURL.path == path }
+            .contains { $0.standardizedFileURL.path == standardized.path }
     }
 
     /// The preferences file a copy of goes to the Trash. The domain itself is

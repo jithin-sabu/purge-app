@@ -46,6 +46,7 @@ struct SelfUninstallerTests {
     final class FakeMover: SelfUninstallFileMover {
         var dataResults: [SelfUninstallDataMove] = [.moved]
         var appResult: SelfUninstallAppMove = .moved
+        var refusal: SelfUninstallPolicy.Refusal?
         private(set) var dataMoves = 0
         private(set) var appMoves = 0
 
@@ -53,6 +54,8 @@ struct SelfUninstallerTests {
             dataMoves += 1
             return dataResults.count > 1 ? dataResults.removeFirst() : (dataResults.first ?? .moved)
         }
+
+        func appRefusal() async -> SelfUninstallPolicy.Refusal? { refusal }
 
         func moveApp() async -> SelfUninstallAppMove {
             appMoves += 1
@@ -309,6 +312,33 @@ struct SelfUninstallerTests {
     }
 
     // MARK: The app can't move
+
+    /// A copy that can't move itself keeps its data: the app is checked first.
+    @Test func aCopyThatCannotMoveKeepsItsData() async {
+        let mover = FakeMover()
+        mover.refusal = .translocated
+        let model = make([FakePart(.loginItem)], mover: mover)
+        await model.load()
+        model.movesData = true
+        await model.start()
+        #expect(model.phase == .couldNotMove(.translocated))
+        #expect(mover.dataMoves == 0)
+        #expect(mover.appMoves == 0)
+        #expect(!model.movedData)
+        #expect(model.steps.first { $0.kind == .data }?.state == .skipped)
+    }
+
+    @Test func anAppAlreadyInTheTrashStillLetsTheDataMove() async {
+        let mover = FakeMover()
+        mover.refusal = .alreadyInTrash
+        mover.appResult = .refused(.alreadyInTrash)
+        let model = make([], mover: mover)
+        await model.load()
+        model.movesData = true
+        await model.start()
+        #expect(model.phase == .done)
+        #expect(mover.dataMoves == 1)
+    }
 
     @Test func eachRefusalMapsToTheReasonTheSheetShows() async {
         let cases: [(SelfUninstallAppMove, SelfUninstallMoveProblem)] = [
