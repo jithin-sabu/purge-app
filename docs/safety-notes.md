@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-11-07: Browsers' Service Worker caches were Safe to Clean
 
-**Found internally** in a deletion-safety review of [#325](https://github.com/jithin-sabu/purge-app/pull/325) before 1.14.0, no report. **Fixed:** [#PR_NUMBER](https://github.com/jithin-sabu/purge-app/pull/PR_NUMBER), not yet released. **Affected:** browsers that keep a `User Data` folder, such as Dia and Arc, v1.1.2 to v1.13.4. Chrome, Brave and Edge only on `main` after #325, never in a release.
+**Found internally** in a deletion-safety review of [#325](https://github.com/jithin-sabu/purge-app/pull/325) before 1.14.0, no report. **Fixed:** [#335](https://github.com/jithin-sabu/purge-app/pull/335), not yet released. **Affected:** browsers that keep a `User Data` folder, such as Dia and Arc, v1.1.2 to v1.13.4. Chrome, Brave and Edge only on `main` after #325, never in a release.
 
 ### What happened
 
