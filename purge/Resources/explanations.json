@@ -3382,7 +3382,7 @@
     "key": "android-ndk-version",
     "display_name": "Android NDK",
     "tag": "medium",
-    "explanation": "An Android NDK version other than the newest one you have. A project that names this version in ndkVersion downloads it again on its next build.",
+    "explanation": "An Android NDK version other than the newest one you have. An Android build that uses it downloads it again, which takes a while. A build set up outside Android Studio and Gradle may fail until you install it again.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "devices"

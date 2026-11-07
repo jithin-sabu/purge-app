@@ -1106,7 +1106,7 @@
 
 /* android-ndk-version */
 "Android NDK" = "Android NDK";
-"An Android NDK version other than the newest one you have. A project that names this version in ndkVersion downloads it again on its next build." = "除你已有的最新版本以外的 Android NDK 版本。在 ndkVersion 中指定此版本的项目会在下次构建时重新下载。";
+"An Android NDK version other than the newest one you have. An Android build that uses it downloads it again, which takes a while. A build set up outside Android Studio and Gradle may fail until you install it again." = "除你已有的最新版本以外的 Android NDK 版本。使用它的 Android 构建会重新下载，需要一些时间。不通过 Android Studio 和 Gradle 设置的构建可能会失败，直到你重新安装它。";
 
 /* android-system-images */
 "Unused Android System Images" = "未使用的 Android 系统映像";

@@ -168,13 +168,25 @@ nonisolated enum OldToolVersionScanPolicy {
 
     // MARK: Delete-time gate
 
-    /// The disk facts the system-image gate reads. Tests pass their own.
+    /// The facts the Android gates read besides the SDK itself. Tests pass their own.
     nonisolated struct AndroidContext: Sendable {
         var avdHomes: [String]
+        /// Folders `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT` or `ANDROID_NDK` name,
+        /// when Purge was started with them.
+        var ndkEnvironmentPaths: [String] = []
         var emulatorIsRunning: @Sendable () -> Bool
 
-        static func current(home: String) -> AndroidContext {
-            AndroidContext(avdHomes: defaultAVDHomes(home: home), emulatorIsRunning: { isEmulatorRunning() })
+        static func current(
+            home: String,
+            environment: [String: String] = ProcessInfo.processInfo.environment
+        ) -> AndroidContext {
+            AndroidContext(
+                avdHomes: defaultAVDHomes(home: home, environment: environment),
+                ndkEnvironmentPaths: ["ANDROID_NDK_HOME", "ANDROID_NDK_ROOT", "ANDROID_NDK"]
+                    .compactMap { environment[$0] }
+                    .filter { $0.hasPrefix("/") },
+                emulatorIsRunning: { isEmulatorRunning() }
+            )
         }
     }
 
@@ -211,14 +223,23 @@ nonisolated enum OldToolVersionScanPolicy {
                 && isUnchanged(path, before: now.addingTimeInterval(-minimumLeftoverAge))
         case .androidNDK:
             let root = url.deletingLastPathComponent().path
-            guard isCompleteNDK(path), let newest = newestCompleteNDK(in: root) else { return false }
-            return isLower(url.lastPathComponent, than: newest)
+            let version = url.lastPathComponent
+            guard isCompleteNDK(path), let newest = newestCompleteNDK(in: root),
+                  let pinned = pinnedNDKVersions(
+                    sdkRoot: "\(home)/\(androidSDK)",
+                    environmentPaths: android.ndkEnvironmentPaths
+                  ) else { return false }
+            return isLower(version, than: newest) && !pinned.contains(version)
         case .androidSystemImage:
-            guard isRealFolder(path), !android.emulatorIsRunning(),
-                  let used = avdImageFolders(avdHomes: android.avdHomes, sdkRoot: "\(home)/\(androidSDK)") else {
-                return false
+            guard isRealFolder(path),
+                  let used = avdImageFolders(avdHomes: android.avdHomes, sdkRoot: "\(home)/\(androidSDK)", home: home)
+            else { return false }
+            let spellings = comparableSpellings(of: path)
+            let named = used.contains { image in
+                spellings.contains { PathContainment.isSameOrInside(image, $0) || PathContainment.isSameOrInside($0, image) }
             }
-            return !used.contains(where: { PathContainment.isSameOrInside($0, path) || PathContainment.isSameOrInside(path, $0) })
+            // Last, since it lists every process: only for an image no AVD names.
+            return !named && !android.emulatorIsRunning()
         case .figmaProfile:
             guard isRealFolder(path), let number = figmaProfileNumber(url.lastPathComponent),
                   let current = currentFigmaProfile(in: url.deletingLastPathComponent().path) else { return false }
@@ -272,16 +293,87 @@ nonisolated enum OldToolVersionScanPolicy {
             .max { isLower($0, than: $1) }
     }
 
-    /// The number of the highest `vNN` folder, when Figma has finished moving
-    /// into it. Nil when the highest has no marker yet, which is a migration
-    /// under way or a profile Figma hasn't opened, or when nothing can be read.
+    /// The lowest profile Figma may still use: the highest `vNN` once Figma has
+    /// moved into it, or the one Figma wrote to last when that is lower, as after
+    /// a downgrade to a Figma that opens an older profile again. Only folders
+    /// below it are offered. Nil when the highest has no marker yet, which is a
+    /// migration under way or a profile Figma hasn't opened, or when a profile
+    /// can't be read.
     static func currentFigmaProfile(in profilesRoot: String) -> Int? {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: profilesRoot) else { return nil }
         let numbered = names.compactMap { name in figmaProfileNumber(name).map { (name, $0) } }
         guard let highest = numbered.max(by: { $0.1 < $1.1 }) else { return nil }
         let folder = "\(profilesRoot)/\(highest.0)"
         guard isRealFolder(folder), isRegularFile("\(folder)/\(figmaMigratedMarker)") else { return nil }
-        return highest.1
+        var lastUsed: (number: Int, written: Date)?
+        for (name, number) in numbered {
+            guard let written = lastWrite(in: "\(profilesRoot)/\(name)") else { return nil }
+            if lastUsed == nil || written > lastUsed!.written
+                || (written == lastUsed!.written && number > lastUsed!.number) {
+                lastUsed = (number, written)
+            }
+        }
+        return min(highest.1, lastUsed?.number ?? highest.1)
+    }
+
+    /// When anything directly in `folder` last changed. Chromium writes `Local
+    /// State`, `Preferences` and its journals each time the profile is open.
+    /// The folder's own date is left out: Figma's migration deletes cache
+    /// folders from old profiles, which changes it. Nil when it can't be read.
+    static func lastWrite(in folder: String) -> Date? {
+        guard isRealFolder(folder),
+              let names = try? FileManager.default.contentsOfDirectory(atPath: folder) else { return nil }
+        var newest = Date.distantPast
+        for name in names {
+            var info = stat()
+            guard lstat("\(folder)/\(name)", &info) == 0 else { return nil }
+            newest = max(newest, Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec)))
+        }
+        return newest
+    }
+
+    /// NDK versions something outside Gradle's own download points at:
+    /// `sdk/ndk-bundle` linking to one, or an Android NDK variable naming one. A
+    /// build set up that way fails instead of downloading the NDK again. Nil when
+    /// `ndk-bundle` is a link that can't be read.
+    static func pinnedNDKVersions(sdkRoot: String, environmentPaths: [String]) -> Set<String>? {
+        let ndkRoot = "\(sdkRoot)/ndk"
+        var targets = environmentPaths.map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+        let bundle = "\(sdkRoot)/ndk-bundle"
+        var info = stat()
+        if lstat(bundle, &info) == 0, (info.st_mode & S_IFMT) == S_IFLNK {
+            guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: bundle) else { return nil }
+            targets.append(URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: sdkRoot, isDirectory: true))
+                .standardizedFileURL.path)
+        }
+        var pinned: Set<String> = []
+        for target in targets {
+            for spelling in comparableSpellings(of: target) {
+                let root = ndkRoot.lowercased()
+                guard PathContainment.isInside(spelling, root),
+                      let version = spelling.dropFirst(root.count + 1).split(separator: "/").first else { continue }
+                pinned.insert(String(version))
+            }
+        }
+        return pinned
+    }
+
+    /// `path` as written and with its links resolved, both in lowercase, since
+    /// the Mac's disk ignores case. An in-use check matches either spelling.
+    static func comparableSpellings(of path: String) -> Set<String> {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        return [url.path.lowercased(), url.resolvingSymlinksInPath().path.lowercased()]
+    }
+
+    /// Whether a path that an AVD setting names is missing. `false` when it is
+    /// there. `true` when it is missing from the home folder, on the Mac's own
+    /// disk, so it is gone. Nil when it is missing anywhere else, such as a drive
+    /// under `/Volumes` that may only be unplugged, or can't be checked.
+    static func isGone(_ path: String, home: String) -> Bool? {
+        var info = stat()
+        if lstat(path, &info) == 0 { return false }
+        guard errno == ENOENT else { return nil }
+        return PathContainment.isInside(path, home) ? true : nil
     }
 
     /// Where the emulator looks for AVDs: `~/.android/avd`, and the folders the
@@ -301,32 +393,34 @@ nonisolated enum OldToolVersionScanPolicy {
         add("ANDROID_EMULATOR_HOME", "/avd")
         add("ANDROID_USER_HOME", "/avd")
         add("ANDROID_SDK_HOME", "/.android/avd")
+        // The older name for the folder that holds `.android`.
+        add("ANDROID_PREFS_ROOT", "/.android/avd")
         var seen = Set<String>()
         return homes.filter { seen.insert($0).inserted }
     }
 
-    /// The system-image folders the AVDs name in `image.sysdir.N`, standardized.
-    /// An AVD is every `*.avd` folder in an AVD home and the folder each `*.ini`
-    /// there names in `path=` (or `path.rel=`). Nil, which keeps every image, when
-    /// an AVD home exists and can't be listed, or an AVD's `config.ini` can't be
-    /// read or names no image. A missing AVD home holds no AVDs.
-    static func avdImageFolders(avdHomes: [String], sdkRoot: String) -> Set<String>? {
-        let fileManager = FileManager.default
+    /// The system-image folders the AVDs name in `image.sysdir.N`, in
+    /// `comparableSpellings`. An AVD is every `*.avd` folder in an AVD home or one
+    /// folder down (Gradle managed devices keep theirs in `gradle-managed`), and
+    /// the folder each `*.ini` there names in `path=` (or `path.rel=`).
+    ///
+    /// Nil, which keeps every image, when an AVD home or an AVD is missing
+    /// somewhere it may only be unplugged (`isGone`), when a folder can't be
+    /// listed, when a folder sits deeper than Purge reads, or when an AVD's
+    /// `config.ini` can't be read or names no image. An AVD home or AVD missing
+    /// from the home folder holds nothing.
+    static func avdImageFolders(avdHomes: [String], sdkRoot: String, home: String) -> Set<String>? {
         var avds: Set<String> = []
-        for avdHome in avdHomes {
-            var info = stat()
-            if lstat(avdHome, &info) != 0 {
-                guard errno == ENOENT else { return nil }
-                continue
-            }
-            guard let names = try? fileManager.contentsOfDirectory(atPath: avdHome) else { return nil }
+
+        /// Reads one folder of an AVD home. False when the answer can't be known.
+        func collect(_ folder: String, avdHome: String, depth: Int) -> Bool {
+            guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder) else { return false }
             for name in names {
+                let entry = "\(folder)/\(name)"
                 if name.hasSuffix(".avd") {
-                    avds.insert("\(avdHome)/\(name)")
+                    avds.insert(entry)
                 } else if name.hasSuffix(".ini") {
-                    guard let text = try? String(contentsOfFile: "\(avdHome)/\(name)", encoding: .utf8) else {
-                        return nil
-                    }
+                    guard let text = try? String(contentsOfFile: entry, encoding: .utf8) else { return false }
                     let values = iniValues(text)
                     if let path = values["path"], path.hasPrefix("/") {
                         avds.insert(URL(fileURLWithPath: path).standardizedFileURL.path)
@@ -335,19 +429,35 @@ nonisolated enum OldToolVersionScanPolicy {
                         let base = URL(fileURLWithPath: avdHome).deletingLastPathComponent()
                         avds.insert(base.appendingPathComponent(relative).standardizedFileURL.path)
                     } else {
-                        return nil
+                        return false
                     }
+                } else {
+                    var info = stat()
+                    guard stat(entry, &info) == 0 else {
+                        // A link that leads nowhere holds no AVD. Anything else unreadable might.
+                        var linkInfo = stat()
+                        if lstat(entry, &linkInfo) == 0, (linkInfo.st_mode & S_IFMT) == S_IFLNK { continue }
+                        return false
+                    }
+                    guard (info.st_mode & S_IFMT) == S_IFDIR else { continue }
+                    // One level down is read. A folder deeper than that is a layout Purge doesn't know.
+                    guard depth == 0, collect(entry, avdHome: avdHome, depth: 1) else { return false }
                 }
             }
+            return true
+        }
+
+        for avdHome in avdHomes {
+            guard let gone = isGone(avdHome, home: home) else { return nil }
+            if gone { continue }
+            guard collect(avdHome, avdHome: avdHome, depth: 0) else { return nil }
         }
         var images: Set<String> = []
         for avd in avds {
-            var info = stat()
-            // An `.ini` can outlive its AVD. With no folder there is nothing to start.
-            if lstat(avd, &info) != 0 {
-                guard errno == ENOENT else { return nil }
-                continue
-            }
+            // An `.ini` can outlive its AVD. With no folder there is nothing to start,
+            // unless the folder is on a drive that is only unplugged.
+            guard let gone = isGone(avd, home: home) else { return nil }
+            if gone { continue }
             guard let text = try? String(contentsOfFile: "\(avd)/config.ini", encoding: .utf8) else { return nil }
             let folders = iniValues(text)
                 .filter { $0.key.hasPrefix("image.sysdir.") && !$0.value.isEmpty }
@@ -355,7 +465,7 @@ nonisolated enum OldToolVersionScanPolicy {
             guard !folders.isEmpty else { return nil }
             for folder in folders {
                 let absolute = folder.hasPrefix("/") ? folder : "\(sdkRoot)/\(folder)"
-                images.insert(URL(fileURLWithPath: absolute).standardizedFileURL.path)
+                images.formUnion(comparableSpellings(of: absolute))
             }
         }
         return images

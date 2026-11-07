@@ -42,8 +42,14 @@ private enum OldVersions {
     }
 
     /// No AVD home and no emulator, unless a test says otherwise.
-    static func android(avdHomes: [String] = [], emulator: Bool = false) -> Policy.AndroidContext {
-        Policy.AndroidContext(avdHomes: avdHomes, emulatorIsRunning: { emulator })
+    static func android(avdHomes: [String] = [], ndkPaths: [String] = [], emulator: Bool = false) -> Policy.AndroidContext {
+        Policy.AndroidContext(avdHomes: avdHomes, ndkEnvironmentPaths: ndkPaths, emulatorIsRunning: { emulator })
+    }
+
+    static func write(_ text: String, _ home: URL, _ relative: String) throws {
+        let url = home.appendingPathComponent(relative)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     /// Whether the delete-time gate lets `relative` go.
@@ -355,6 +361,25 @@ struct OldToolVersionAndroidTests {
         #expect(!OldVersions.offered(home, "Library/Android/sdk/ndk/27.0.12077973"))
     }
 
+    /// A build outside Gradle, or an old one, reaches the NDK through
+    /// `sdk/ndk-bundle` or an Android NDK variable. It fails instead of
+    /// downloading the version again, so that version stays.
+    @Test
+    func ndkVersionsSomethingPointsAtAreKept() throws {
+        let home = try OldVersions.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try ndk(home, complete: ["25.1.8937393", "26.1.10909125", "27.0.12077973"], partial: [])
+        let root = "Library/Android/sdk/ndk"
+        try OldVersions.link(home, "Library/Android/sdk/ndk-bundle", to: "ndk/25.1.8937393")
+        let context = OldVersions.android(ndkPaths: [home.appendingPathComponent("\(root)/26.1.10909125/").path])
+        #expect(!OldVersions.offered(home, "\(root)/25.1.8937393", android: context))
+        #expect(!OldVersions.offered(home, "\(root)/26.1.10909125", android: context))
+        // Without the variable, only the link holds 25.1 back.
+        #expect(!OldVersions.offered(home, "\(root)/25.1.8937393"))
+        #expect(OldVersions.offered(home, "\(root)/26.1.10909125"))
+        #expect(OldVersions.rows(home, android: context).keys.filter { $0.hasPrefix("Android NDK") }.isEmpty)
+    }
+
     @Test
     func ndkInALinkedSDKIsNotOffered() throws {
         let home = try OldVersions.makeHome()
@@ -458,12 +483,71 @@ struct OldToolVersionAndroidTests {
             "ANDROID_EMULATOR_HOME": "/Users/someone/.android",
             "ANDROID_USER_HOME": "relative/path",
             "ANDROID_SDK_HOME": "/Users/someone/sdkhome",
+            "ANDROID_PREFS_ROOT": "/Users/someone/prefs",
         ])
         #expect(homes == [
             "/Users/someone/.android/avd",
             "/Volumes/Fast/avd",
             "/Users/someone/sdkhome/.android/avd",
+            "/Users/someone/prefs/.android/avd",
         ])
+    }
+
+    /// An AVD on a drive that isn't plugged in can't be read, so its image may
+    /// be in use. Only an AVD missing from the home folder is gone.
+    @Test
+    func anAVDOnAnUnpluggedDriveKeepsEveryImage() throws {
+        let home = try imagesHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try OldVersions.write("path=/Volumes/PurgeTest324Unplugged/avd/Pixel.avd\n", home, ".android/avd/Pixel.ini")
+        let context = OldVersions.android(avdHomes: [home.appendingPathComponent(".android/avd").path])
+        #expect(!OldVersions.offered(home, playStore, android: context))
+        #expect(OldVersions.rows(home, android: context)[OldToolVersionScanPolicy.systemImagesLabel] == nil)
+
+        // The same for an AVD home a variable names on a drive that isn't there.
+        let unpluggedHome = OldVersions.android(avdHomes: ["/Volumes/PurgeTest324Unplugged/avd"])
+        #expect(!OldVersions.offered(home, playStore, android: unpluggedHome))
+    }
+
+    /// Gradle managed devices keep their AVDs one folder down, in `gradle-managed`.
+    @Test
+    func anAVDOneFolderDownKeepsItsImage() throws {
+        let home = try imagesHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try OldVersions.write(
+            "image.sysdir.1=system-images/android-36/google_apis/arm64-v8a/\n",
+            home, ".android/avd/gradle-managed/dev36_aosp.avd/config.ini"
+        )
+        try OldVersions.write(
+            "path=\(home.appendingPathComponent(".android/avd/gradle-managed/dev36_aosp.avd").path)\n",
+            home, ".android/avd/gradle-managed/dev36_aosp.ini"
+        )
+        let context = OldVersions.android(avdHomes: [home.appendingPathComponent(".android/avd").path])
+        #expect(!OldVersions.offered(home, apis, android: context))
+        #expect(OldVersions.offered(home, playStore, android: context))
+
+        // Deeper than that is a layout Purge doesn't read, so every image stays.
+        try OldVersions.lay(home, folders: [".android/avd/gradle-managed/more/inside"])
+        #expect(!OldVersions.offered(home, playStore, android: context))
+    }
+
+    /// An `image.sysdir` written through a link, or in other letter case, names
+    /// the same folder on the Mac's disk.
+    @Test
+    func anImageNamedThroughALinkOrOtherCaseIsKept() throws {
+        let home = try imagesHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try OldVersions.link(home, "sdk", to: home.appendingPathComponent("Library/Android/sdk").path)
+        let linked = home.appendingPathComponent("sdk/system-images/android-36/google_apis/arm64-v8a").path
+        try OldVersions.write("image.sysdir.1=\(linked)/\n", home, ".android/avd/Linked.avd/config.ini")
+        try OldVersions.write(
+            "image.sysdir.1=SYSTEM-IMAGES/Android-37.0/Google_APIs_PlayStore_ps16k/ARM64-v8a/\n",
+            home, ".android/avd/Cased.avd/config.ini"
+        )
+        let context = OldVersions.android(avdHomes: [home.appendingPathComponent(".android/avd").path])
+        #expect(!OldVersions.offered(home, apis, android: context))
+        #expect(!OldVersions.offered(home, beta, android: context))
+        #expect(OldVersions.offered(home, playStore, android: context))
     }
 }
 
@@ -473,6 +557,8 @@ struct OldToolVersionAndroidTests {
 struct OldToolVersionFigmaTests {
     private let profiles = "Library/Application Support/Figma/DesktopProfile"
 
+    /// Each profile last written in number order, the highest most recently,
+    /// as when Figma moves forward one version at a time.
     private func figmaHome(markerOn: [Int], folders: [Int]) throws -> URL {
         let home = try OldVersions.makeHome()
         try OldVersions.lay(
@@ -480,7 +566,27 @@ struct OldToolVersionFigmaTests {
             folders: folders.map { "\(profiles)/v\($0)/IndexedDB" },
             files: markerOn.map { "\(profiles)/v\($0)/FigmaProfileMigrated" }
         )
+        for number in folders {
+            let days = TimeInterval(100 - number)
+            try OldVersions.age(home, "\(profiles)/v\(number)/IndexedDB", by: days * OldVersions.day)
+            if markerOn.contains(number) {
+                try OldVersions.age(home, "\(profiles)/v\(number)/FigmaProfileMigrated", by: days * OldVersions.day)
+            }
+        }
         return home
+    }
+
+    /// After a downgrade, Figma opens an older profile again while the newer one
+    /// still has its marker. The profile it wrote to last stays.
+    @Test
+    func theProfileFigmaWroteToLastIsKept() throws {
+        let home = try figmaHome(markerOn: [41, 42, 43], folders: [40, 41, 42, 43])
+        defer { try? FileManager.default.removeItem(at: home) }
+        try OldVersions.lay(home, files: ["\(profiles)/v42/Cookies"])
+        #expect(OldVersions.offered(home, "\(profiles)/v40"))
+        #expect(OldVersions.offered(home, "\(profiles)/v41"))
+        #expect(!OldVersions.offered(home, "\(profiles)/v42"))
+        #expect(!OldVersions.offered(home, "\(profiles)/v43"))
     }
 
     @Test
