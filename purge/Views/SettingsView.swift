@@ -48,7 +48,7 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                // Four groups, one line per setting. The longer explanations sit
+                // Five groups, one line per setting. The longer explanations sit
                 // behind an info button beside each title, and the two lists
                 // (exclusions, history) open in a sheet.
                 VStack(alignment: .leading, spacing: AppStyle.Spacing.medium) {
@@ -56,6 +56,7 @@ struct SettingsView: View {
                     cleaningGroup
                     uninstallingGroup
                     updatesAndHistoryGroup
+                    uninstallGroup
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -388,6 +389,20 @@ struct SettingsView: View {
             )
         case .failed:
             return SettingsRowStatus(text: helperStatusMessage, tint: AppColors.statusCheckText)
+        }
+    }
+
+    // MARK: - Uninstall
+
+    /// Uninstall Purge (#330), last, under everything it would turn off.
+    private var uninstallGroup: some View {
+        settingsGroup("Purge") {
+            settingsControlRow(title: String(localized: "Uninstall Purge")) {
+                Button(String(localized: "Uninstall…")) {
+                    store.presentSelfUninstall()
+                }
+                .buttonStyle(.purge(.secondary))
+            }
         }
     }
 

@@ -142,6 +142,9 @@ struct ContentView: View {
                 onConfirm: { edited in Task { await store.confirmRemovedAppLeftovers(edited) } }
             )
         }
+        .sheet(isPresented: $store.isSelfUninstallPresented) {
+            SelfUninstallSheet(store: store)
+        }
         .disabled(store.isManualCleaningInProgress)
         .overlay {
             if isLifecycleActive, let session = store.interactiveSafeCleanupSession {
