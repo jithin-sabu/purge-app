@@ -1096,6 +1096,26 @@
 "Old AI Coding Tool Versions" = "旧版 AI 编程工具";
 "Earlier versions of Claude Code, Cursor Agent or Grok that stayed behind after updates. The version you run and the newest one are kept. Safe to delete." = "Claude Code、Cursor Agent 或 Grok 更新后遗留的旧版本。正在运行的版本与最新版本会保留。可以安全删除。";
 
+/* cursor-agent-install-leftovers */
+"Cursor Agent Install Leftovers" = "Cursor Agent 安装残留";
+"Unfinished installs and a leftover download from updates to the agent CLI that Cursor keeps. Only items untouched for a day are listed, so an update in progress stays. The installed versions stay." = "Cursor 自带的 agent CLI 更新时留下的未完成安装和下载残留。只列出一天内未改动的项目，因此正在进行的更新会保留。已安装的版本会保留。";
+
+/* claude-code-downloads */
+"Old Claude Code Downloads" = "旧版 Claude Code 下载";
+"Claude Code installers older than the version you run. Claude Code runs from its versions folder and doesn't open these again." = "比你正在运行的版本更旧的 Claude Code 安装文件。Claude Code 从其版本文件夹运行，不会再打开这些文件。";
+
+/* android-ndk-version */
+"Android NDK" = "Android NDK";
+"An Android NDK version other than the newest one you have. An Android build that uses it downloads it again, which takes a while. A build set up outside Android Studio and Gradle may fail until you install it again." = "除你已有的最新版本以外的 Android NDK 版本。使用它的 Android 构建会重新下载，需要一些时间。不通过 Android Studio 和 Gradle 设置的构建可能会失败，直到你重新安装它。";
+
+/* android-system-images */
+"Unused Android System Images" = "未使用的 Android 系统映像";
+"Emulator system images that no emulator in ~/.android/avd uses. Android Studio downloads an image again when you create an emulator with it. If you keep emulators in another folder, check them first." = "~/.android/avd 中没有任何模拟器使用的模拟器系统映像。用某个映像创建模拟器时，Android Studio 会重新下载它。如果你把模拟器放在其他文件夹，请先检查。";
+
+/* old-figma-profiles */
+"Old Figma Profiles" = "旧版 Figma 配置文件";
+"Earlier Figma profiles. Figma copied each one into the profile it uses now and doesn't read them again. They still hold old cookies and site data." = "较早的 Figma 配置文件。Figma 已将每个配置文件复制到当前使用的配置文件中，不会再读取它们。它们仍保存着旧的 Cookie 和网站数据。";
+
 /* pre-commit-cache */
 "pre-commit Environments" = "pre-commit 环境";
 "Tool environments that pre-commit sets up to run your git hooks. Safe to delete; they are set up again on your next commit, which makes that commit slow." = "pre-commit 为运行 Git 钩子而设置的工具环境。可以安全删除，下次提交时会重新设置，导致该次提交较慢。";

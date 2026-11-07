@@ -481,6 +481,9 @@ enum DeletionSafetyPolicy {
         if spotifyOfflineMusicRefusesDeletion(url) { return false }
         // Which CLI version is in use changes on every auto-update.
         if oldCLIVersionRefusesDeletion(url) { return false }
+        // Which tool version, emulator image or Figma profile is in use can
+        // change at any time, and an unfinished install becomes old.
+        if OldToolVersionScanPolicy.refusesDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
         if gradleLeftoverRefusesDeletion(url) { return false }
@@ -889,7 +892,10 @@ enum DeletionSafetyPolicy {
             let root = "\(home)/\(store.versions)"
             guard PathContainment.isInside(path, root) else { continue }
             let parts = path.dropFirst(root.count + 1).split(separator: "/")
+            // A hidden entry is never a version. Cursor's `.tmp-*` unfinished
+            // installs sit here, and `OldToolVersionScanPolicy` gates them by age.
             guard let version = parts.first.map(String.init),
+                  !version.hasPrefix("."),
                   store.entry.matches(name: version) else { return nil }
             if store.entry == .grokBinary, parts.count != 1 { return nil }
             return (root, "\(home)/\(store.command)", version, store.entry)
@@ -907,11 +913,7 @@ enum DeletionSafetyPolicy {
         command: String,
         entry: CLIVersionEntry = .anyName
     ) -> Set<String>? {
-        guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: command) else { return nil }
-        let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: command).deletingLastPathComponent())
-            .standardizedFileURL.path
-        guard PathContainment.isInside(resolved, versionsRoot),
-              let inUse = resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init),
+        guard let inUse = cliVersionInUse(versionsRoot: versionsRoot, command: command),
               entry.matches(name: inUse) else {
             return nil
         }
@@ -922,6 +924,16 @@ enum DeletionSafetyPolicy {
             kept.insert(newest)
         }
         return kept
+    }
+
+    /// The entry in `versionsRoot` the `command` symlink points at, or into. Nil
+    /// when the command is not a link or points anywhere else.
+    nonisolated static func cliVersionInUse(versionsRoot: String, command: String) -> String? {
+        guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: command) else { return nil }
+        let resolved = URL(fileURLWithPath: target, relativeTo: URL(fileURLWithPath: command).deletingLastPathComponent())
+            .standardizedFileURL.path
+        guard PathContainment.isInside(resolved, versionsRoot) else { return nil }
+        return resolved.dropFirst(versionsRoot.count + 1).split(separator: "/").first.map(String.init)
     }
 
     nonisolated static func isWhitelistedOldCLIVersionPath(_ path: String, home: String) -> Bool {
@@ -1468,6 +1480,11 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedOldCLIVersionPath(path, home: home) {
+            return .allow
+        }
+        // Shape only. Whether the version is still in use is checked by
+        // `OldToolVersionScanPolicy.refusesDeletion` before every move.
+        if OldToolVersionScanPolicy.isWhitelistedPath(path, home: home) {
             return .allow
         }
         if gradleLeftover(at: path, home: home) != nil {

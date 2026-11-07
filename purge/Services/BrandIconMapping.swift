@@ -122,6 +122,10 @@ enum BrandIconMapping {
         "corepack-cache": "nodedotjs",
         "orphaned-editor-workspace-storage": "cursor",
         "cursor-agent-leftover": "cursor",
+        "cursor-agent-install-leftovers": "cursor",
+        "claude-code-downloads": "anthropic",
+        "android-system-images": "androidstudio",
+        "old-figma-profiles": "figma",
         "orphaned-git-worktree": "git",
         "zsh": "iterm2",
     ]
@@ -240,6 +244,10 @@ enum BrandIconMapping {
         }
         if let slug = devToolDefinitionKeyToSlug[lower] ?? devToolDefinitionKeyToSlug[key] {
             return slug
+        }
+        // Each NDK row's key is its label, `Android NDK <version>` (#324).
+        if OldToolVersionScanPolicy.ndkVersion(inLabel: key) != nil {
+            return "androidstudio"
         }
         return nil
     }
