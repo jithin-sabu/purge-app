@@ -105,8 +105,7 @@ struct NestedChromiumCacheTests {
         ])
 
         let expected = [
-            "Chrome Beta/Default/GPUCache",
-            "Chrome Beta/Default/Service Worker/ScriptCache", "Chrome Beta/GrShaderCache",
+            "Chrome Beta/Default/GPUCache", "Chrome Beta/GrShaderCache",
             "Chrome Beta/GraphiteDawnCache", "Chrome Beta/component_crx_cache",
         ]
         #expect(listed(google) == expected)
@@ -114,13 +113,16 @@ struct NestedChromiumCacheTests {
     }
 
     /// The main browsers' own profiles keep installed web apps' offline content
-    /// in `Service Worker/CacheStorage`. It is never offered there, so Clean Safe
-    /// Items and scheduled cleans can't take it. What is offered next to it is Safe.
+    /// in `Service Worker/CacheStorage`, and each site's worker scripts in
+    /// `Service Worker/ScriptCache`. Chromium deletes a site's registration and
+    /// its web push subscription when the script is gone. Neither is offered,
+    /// so Clean Safe Items and scheduled cleans can't take them. What is offered
+    /// next to them is Safe.
     @Test(arguments: [
         ("Google", "Chrome"), ("Google", "Chrome Beta"),
         ("BraveSoftware", "Brave-Browser"), ("Microsoft Edge", ""),
     ])
-    func browserProfileCacheStorageIsNeverOffered(app: String, browser: String) throws {
+    func browserProfileServiceWorkerCachesAreNeverOffered(app: String, browser: String) throws {
         let base = try MissedPaths.makeFolder()
         defer { try? FileManager.default.removeItem(at: base) }
         let home = base.standardizedFileURL.path
@@ -136,19 +138,19 @@ struct NestedChromiumCacheTests {
         ])
 
         let listedPaths = listed(appRoot)
-        #expect(!listedPaths.contains { $0.contains("CacheStorage") }, "\(listedPaths)")
+        #expect(!listedPaths.contains { $0.contains("Service Worker") }, "\(listedPaths)")
         for relative in ["Default/Service Worker/CacheStorage", "Default/Service Worker/CacheStorage/abc",
-                         "Profile 1/Service Worker/CacheStorage"] {
+                         "Default/Service Worker/ScriptCache", "Profile 1/Service Worker/CacheStorage"] {
             #expect(!allowed(appRoot, data + relative), "\(relative)")
-            let path = appRoot.appendingPathComponent(data + relative).standardizedFileURL.path
+            let url = appRoot.appendingPathComponent(data + relative, isDirectory: true)
+            let path = url.standardizedFileURL.path
             #expect(!DeletionSafetyPolicy.isWhitelistedApplicationSupportCachePath(path, home: home), "\(relative)")
+            #expect(SafetyTierList.evaluate(folderName: app, path: url) != .safe, "\(relative)")
         }
 
-        for relative in ["Default/Service Worker/ScriptCache", "Default/Code Cache"] {
-            #expect(listedPaths.contains(data + relative), "\(relative)")
-            let url = appRoot.appendingPathComponent(data + relative, isDirectory: true)
-            #expect(SafetyTierList.evaluate(folderName: app, path: url) == .safe, "\(relative)")
-        }
+        #expect(listedPaths.contains(data + "Default/Code Cache"))
+        let codeCache = appRoot.appendingPathComponent(data + "Default/Code Cache", isDirectory: true)
+        #expect(SafetyTierList.evaluate(folderName: app, path: codeCache) == .safe)
     }
 
     /// An Electron session partition holds its own caches next to its storage.
@@ -168,17 +170,17 @@ struct NestedChromiumCacheTests {
         #expect(try everythingAllowed(cursor) == expected)
     }
 
-    /// The app folder's own Service Worker caches, which the old rule left out.
+    /// The app folder's own Service Worker caches are not offered either.
     @Test
-    func appFolderServiceWorkerCachesAreListed() throws {
+    func appFolderServiceWorkerCachesAreNotListed() throws {
         let support = try MissedPaths.makeFolder()
         defer { try? FileManager.default.removeItem(at: support) }
         let app = support.appendingPathComponent("Code", isDirectory: true)
         try MissedPaths.lay(app, folders: [
             "Service Worker/ScriptCache", "Service Worker/Database", "User/History",
         ], files: ["Network Persistent State"])
-        #expect(listed(app) == ["Service Worker/ScriptCache"])
-        #expect(try everythingAllowed(app) == ["Service Worker/ScriptCache"])
+        #expect(listed(app).isEmpty)
+        #expect(try everythingAllowed(app).isEmpty)
     }
 
     /// Three levels down is not looked at, and neither is a folder without a marker.

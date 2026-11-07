@@ -149,7 +149,7 @@
 "Checking the places that were locked." = "正在检查之前无法访问的位置。";
 "Checking..." = "正在检查…";
 "Choose a light or dark look, or match your system setting." = "选择浅色、深色外观，或跟随系统设置。";
-"Chromium profile caches and service worker stores, per browser profile" = "各浏览器配置的 Chromium 缓存和 Service Worker 存储";
+"Chromium profile caches, per browser profile" = "各浏览器配置的 Chromium 缓存";
 "Clean" = "清理";
 "Clean Safe Files" = "清理安全文件";
 "Clean Safe Items" = "清理安全项目";

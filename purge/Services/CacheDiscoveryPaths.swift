@@ -37,20 +37,12 @@ enum CacheDiscoveryPaths {
         "GraphiteDawnCache"
     ]
 
-    /// Relative paths under a Chromium profile directory.
-    nonisolated static let chromiumProfileRelativePaths: [String] = [
-        "Service Worker/CacheStorage",
-        "Service Worker/ScriptCache"
-    ]
-
-    /// The Service Worker caches offered in an app folder itself and in a nested
-    /// storage folder. `CacheStorage` is left out there: the nested rule reaches
-    /// the main browsers' own profiles (`Google/Chrome/Default`), where installed
-    /// web apps keep their offline content in it. These paths are Safe, so Clean
-    /// Safe Items and scheduled cleans would take it without asking (#323).
-    nonisolated static let nestedChromiumServiceWorkerCachePaths: [String] = [
-        "Service Worker/ScriptCache"
-    ]
+    // Nothing in a `Service Worker` folder is offered, in any of these shapes.
+    // `ScriptCache` holds each site's worker scripts, and Chromium deletes a
+    // registration whose script it can't read, with the site's web push
+    // subscription. `CacheStorage` holds installed web apps' offline content.
+    // Browsers keep their profiles in these shapes too (`Google/Chrome Beta/Default`,
+    // `Dia/User Data/Default`), and the user must visit each site again.
 
     /// Application Support roots that are not app caches (handled elsewhere or sensitive).
     nonisolated static let excludedApplicationSupportRoots: Set<String> = [
@@ -94,7 +86,8 @@ enum CacheDiscoveryPaths {
     /// Whether `parts`, a path inside the Application Support folder `appRoot`,
     /// is a cache Purge offers there: a cache directly in an Electron app's
     /// folder, a cache in its Chromium `User Data` folder, a cache in a Chromium
-    /// storage folder one or two levels down, or `Crashpad/completed`.
+    /// storage folder one or two levels down, or `Crashpad/completed`. Never a
+    /// `Service Worker` cache.
     /// The name is never enough by itself. The folder it sits in must be a
     /// Chromium data folder, and `Cache` needs Chromium's layout inside.
     /// `applicationSupportCacheURLs` lists exactly these paths, and
@@ -123,50 +116,22 @@ enum CacheDiscoveryPaths {
     nonisolated static let nestedChromiumStorageMaxDepth = 2
 
     /// Whether `parts` is a cache in a Chromium storage folder at most
-    /// `nestedChromiumStorageMaxDepth` folders below `appRoot`, or one of the app
-    /// folder's own Service Worker caches. A storage folder holds Chromium's
-    /// `Local State` or `Network Persistent State`. Only the cache names and
-    /// `nestedChromiumServiceWorkerCachePaths` directly in it count. Every folder
-    /// on the way down, `Service Worker` included, must be a real folder, not a
-    /// link, and hidden folders are skipped, as discovery skips them.
+    /// `nestedChromiumStorageMaxDepth` folders below `appRoot`. A storage folder
+    /// holds Chromium's `Local State` or `Network Persistent State`, and only the
+    /// cache names directly in it count. Every folder on the way down must be a
+    /// real folder, not a link, and hidden folders are skipped, as discovery
+    /// skips them.
     nonisolated static func isNestedChromiumStorageCachePath(_ parts: [String], appRoot: URL) -> Bool {
-        for depth in 0...nestedChromiumStorageMaxDepth {
-            let rest = Array(parts.dropFirst(depth))
-            // The app folder's own direct caches are the single-part shape above.
-            guard !rest.isEmpty, depth > 0 || rest.count == 2 else { continue }
-            var storage = appRoot
-            var throughRealFolders = true
-            for part in parts.prefix(depth) {
-                storage = storage.appendingPathComponent(part, isDirectory: true)
-                if part.hasPrefix(".") || !isRealDirectory(storage) {
-                    throughRealFolders = false
-                    break
-                }
-            }
-            guard throughRealFolders, isChromiumDataFolder(storage) else { continue }
-            if rest.count == 1,
-               isChromiumCacheFolder(storage.appendingPathComponent(rest[0], isDirectory: true),
-                                     names: applicationSupportDirectCacheNames) {
-                return true
-            }
-            if rest.count == 2,
-               nestedChromiumServiceWorkerCachePaths.contains(rest.joined(separator: "/")),
-               isRealDirectory(storage.appendingPathComponent(rest[0], isDirectory: true)) {
-                return true
-            }
+        let depth = parts.count - 1
+        guard (1...nestedChromiumStorageMaxDepth).contains(depth) else { return false }
+        var storage = appRoot
+        for part in parts.prefix(depth) {
+            storage = storage.appendingPathComponent(part, isDirectory: true)
+            guard !part.hasPrefix("."), isRealDirectory(storage) else { return false }
         }
-        return false
-    }
-
-    /// `nestedChromiumServiceWorkerCachePaths` in `storage`, when its
-    /// `Service Worker` folder is a real folder and not a link.
-    private nonisolated static func nestedServiceWorkerCacheURLs(in storage: URL) -> [URL] {
-        guard isRealDirectory(storage.appendingPathComponent("Service Worker", isDirectory: true)) else {
-            return []
-        }
-        return nestedChromiumServiceWorkerCachePaths.map {
-            storage.appendingPathComponent($0, isDirectory: true)
-        }
+        return isChromiumDataFolder(storage)
+            && isChromiumCacheFolder(storage.appendingPathComponent(parts[depth], isDirectory: true),
+                                     names: applicationSupportDirectCacheNames)
     }
 
     /// A folder that is not a link. `isDirectoryKey` is false for a link to a folder.
@@ -199,23 +164,16 @@ enum CacheDiscoveryPaths {
     }
 
     /// Whether `parts`, a path inside a Chromium `User Data` folder, is a cache
-    /// at its root, a cache in one of its profiles, or a profile's Service Worker
-    /// cache. Never the folder itself, a profile, or anything else in it.
+    /// at its root or a cache in one of its profiles. Never the folder itself, a
+    /// profile, its `Service Worker` folder, or anything else in it.
     nonisolated static func isChromiumUserDataCachePath(_ parts: [String], userData: URL) -> Bool {
-        guard !parts.isEmpty, parts.count <= 3, isChromiumDataFolder(userData) else { return false }
+        guard !parts.isEmpty, parts.count <= 2, isChromiumDataFolder(userData) else { return false }
         let url = parts.reduce(userData) { $0.appendingPathComponent($1, isDirectory: true) }
         switch parts.count {
         case 1:
             return isChromiumCacheFolder(url, names: applicationSupportDirectCacheNames)
-        case 2:
-            return isChromiumCacheFolder(url, names: chromiumProfileCacheNames)
         default:
-            // The profile and its `Service Worker` folder must be real folders, so
-            // a link there is never followed to the `CacheStorage` it points at.
-            let profile = userData.appendingPathComponent(parts[0], isDirectory: true)
-            return chromiumProfileRelativePaths.contains("\(parts[1])/\(parts[2])")
-                && isRealDirectory(profile)
-                && isRealDirectory(profile.appendingPathComponent(parts[1], isDirectory: true))
+            return isChromiumCacheFolder(url, names: chromiumProfileCacheNames)
         }
     }
 
@@ -274,21 +232,12 @@ enum CacheDiscoveryPaths {
             appendIfExists(url)
         }
 
-        // The app folder's own Service Worker caches, then every storage folder
-        // further down: a browser's data folder and its profiles, a versioned
-        // Figma profile, an Electron session partition (#323).
-        if isChromiumDataFolder(appRoot, access: access) {
-            for url in nestedServiceWorkerCacheURLs(in: appRoot) {
-                appendIfExists(url)
-            }
-        }
+        // Every storage folder further down: a browser's data folder and its
+        // profiles, a versioned Figma profile, an Electron session partition (#323).
         for storage in nestedChromiumStorageFolders(in: appRoot, access: access) {
             for name in applicationSupportDirectCacheNames.sorted() {
                 appendIfExists(storage.appendingPathComponent(name, isDirectory: true),
                                cacheNames: applicationSupportDirectCacheNames)
-            }
-            for url in nestedServiceWorkerCacheURLs(in: storage) {
-                appendIfExists(url)
             }
         }
 
@@ -345,13 +294,6 @@ enum CacheDiscoveryPaths {
             }
             for name in chromiumProfileCacheNames {
                 appendIfExists(profileDir.appendingPathComponent(name, isDirectory: true), chromiumProfileCacheNames)
-            }
-            // Never through a linked `Service Worker` folder, as the gate refuses it.
-            guard isRealDirectory(profileDir.appendingPathComponent("Service Worker", isDirectory: true)) else {
-                continue
-            }
-            for relative in chromiumProfileRelativePaths {
-                appendIfExists(profileDir.appendingPathComponent(relative, isDirectory: true), nil)
             }
         }
     }

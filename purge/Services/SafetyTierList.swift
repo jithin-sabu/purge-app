@@ -29,8 +29,6 @@ enum SafetyTierList {
         "Code Cache",
         "DawnWebGPUCache",
         "component_crx_cache",
-        "CacheStorage",
-        "ScriptCache",
         "DocumentationCache",
         "LinkThumbnail",
         "ChatMedia",
@@ -117,9 +115,12 @@ enum SafetyTierList {
 
         if let path {
             let pathLower = path.standardizedFileURL.path.lowercased()
-            if pathLower.contains("/service worker/cachestorage")
-                || pathLower.contains("/service worker/scriptcache")
-                || pathLower.contains("/gpucache")
+            // Never a `Service Worker` cache: its loss removes sites' workers and
+            // their web push subscriptions (`CacheDiscoveryPaths`).
+            if pathLower.contains("/service worker/") {
+                return nil
+            }
+            if pathLower.contains("/gpucache")
                 || pathLower.contains("/shadercache")
                 || pathLower.contains("/code cache")
                 || pathLower.contains("/cacheddata")
