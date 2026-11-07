@@ -3364,7 +3364,7 @@
     "key": "cursor-agent-install-leftovers",
     "display_name": "Cursor Agent Install Leftovers",
     "tag": "medium",
-    "explanation": "Unfinished installs and a leftover download from updates to the agent CLI that Cursor keeps. Only items untouched for a day are listed, so an update in progress stays. The installed versions stay.",
+    "explanation": "Unfinished installs and a download left by Cursor's agent CLI updates. Only items untouched for a day are listed. The installed versions stay.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "ai"
@@ -3382,7 +3382,7 @@
     "key": "android-ndk-version",
     "display_name": "Android NDK",
     "tag": "medium",
-    "explanation": "An Android NDK version other than the newest one you have. An Android build that uses it downloads it again, which takes a while. A build set up outside Android Studio and Gradle may fail until you install it again.",
+    "explanation": "An older Android NDK. Gradle downloads it again when a project needs it. A build without Gradle may fail until you reinstall it. The newest one stays.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "devices"
@@ -3391,7 +3391,7 @@
     "key": "android-system-images",
     "display_name": "Unused Android System Images",
     "tag": "medium",
-    "explanation": "Emulator system images that no emulator in ~/.android/avd uses. Android Studio downloads an image again when you create an emulator with it. If you keep emulators in another folder, check them first.",
+    "explanation": "Emulator images no emulator in ~/.android/avd uses. Android Studio downloads one again when you need it. If you keep emulators elsewhere, check them first.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "devices"
