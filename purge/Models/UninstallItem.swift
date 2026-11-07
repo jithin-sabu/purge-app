@@ -345,6 +345,9 @@ nonisolated struct UninstallAppPlan: Identifiable, Hashable {
 nonisolated struct UninstallPlan: Identifiable, Hashable {
     let id: String
     var apps: [UninstallAppPlan]
+    /// Groups with their own uninstaller that this removal takes only part of
+    /// (#155), so the sheet can point to that uninstaller.
+    var partialSuites: [PartialSuite] = []
 
     var totalSelectedItems: Int { uniqueSelectedItems.count }
     var totalSelectedBytes: Int64 { uniqueSelectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }

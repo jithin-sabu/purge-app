@@ -324,6 +324,7 @@ final class PurgeStore: ObservableObject {
         didSet {
             categoryInputsDidChange()
             lastScanListDidChange(.apps)
+            appSuiteInputsDidChange()
         }
     }
     @Published var isScanningInstalledApps = false
@@ -333,7 +334,26 @@ final class PurgeStore: ObservableObject {
     /// What the header needs to say where the listed apps come from (#99):
     /// the folders read now, the ones the user added, and drive names. Read
     /// off the main thread with each app scan, so no render asks the disk.
-    @Published var appFolderPaths = AppFolderPaths()
+    @Published var appFolderPaths = AppFolderPaths() {
+        didSet { if appFolderPaths != oldValue { appSuiteInputsDidChange() } }
+    }
+    /// Apps from one vendor that share a folder, shown as one entry in the list
+    /// (#155). Display only: every member stays in `installedApps`. Rebuilt off
+    /// the main thread when the list or its folders change.
+    @Published var appSuiteGroups: [AppSuiteGroup] = []
+    /// Signing team per nested bundle path, "" when unsigned or unreadable, so a
+    /// rebuild reads each signature once.
+    var appTeamIDByPath: [String: String] = [:]
+    /// Reads a bundle's signing team. Replaced in tests with fixed teams.
+    var appTeamIDReader: @Sendable (URL) -> String? = { CodeSignature.read(at: $0)?.teamID }
+    /// What the groups were last built from.
+    var appSuiteInputs = AppSuiteInputs()
+    /// The rebuild in flight, cancelled when a newer one starts.
+    var appSuiteGroupingTask: Task<Void, Never>?
+    /// Opens an app, such as a suite's own uninstaller. Replaced in tests.
+    var appLauncher: (URL) -> Void = { url in
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
     /// Bundle-plus-safe-leftover total per app id, filled in the background after
     /// the list loads. Absent until measured; callers fall back to bundle size.
     @Published private(set) var removableBytesByAppID: [String: Int64] = [:] {
@@ -508,7 +528,9 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var scanRecords: [OverviewCategory: ScanRecord] = [:]
     /// Rows from the last scan's saved file (#283), for display only. See
     /// `PurgeStore+LastScan.swift`: nothing that cleans or counts reads them.
-    @Published var lastScanRows = LastScanRows()
+    @Published var lastScanRows = LastScanRows() {
+        didSet { if lastScanRows.installedApps != oldValue.installedApps { appSuiteInputsDidChange() } }
+    }
     /// Nil under the test host unless a test passes its own.
     let lastScanStore: LastScanStore?
     /// Lists whose scan ran to its end this session, so they may replace the file.
@@ -3281,6 +3303,17 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Ticks or clears every app of a group at once (#155). Like the single
+    /// toggle, it ticks only listed apps, never a saved one from the last scan.
+    func setAppsSelected(_ ids: [String], _ isSelected: Bool) {
+        if isSelected {
+            let listed = Set(installedApps.map(\.id))
+            selectedAppIDs.formUnion(ids.filter(listed.contains))
+        } else {
+            selectedAppIDs.subtract(ids)
+        }
+    }
+
     var selectedApps: [InstalledApp] {
         installedApps.filter { selectedAppIDs.contains($0.id) }
     }
@@ -3326,7 +3359,15 @@ final class PurgeStore: ObservableObject {
         Self.markSharedWithSurvivors(in: &appPlans, survivors: claimants, appGroupClaims: appGroupClaims)
 
         let id = appPlans.map(\.app.id).sorted().joined(separator: "|")
-        uninstallPlan = UninstallPlan(id: id, apps: appPlans)
+        uninstallPlan = UninstallPlan(
+            id: id,
+            apps: appPlans,
+            partialSuites: AppSuiteGrouping.partialSuites(
+                pickedIDs: removingIDs,
+                groups: appSuiteGroups,
+                apps: installedApps
+            )
+        )
     }
 
     /// Unticks and labels any leftover that an app the user is keeping also claims,
