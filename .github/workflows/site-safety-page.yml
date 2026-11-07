@@ -2,12 +2,20 @@ name: Site safety page
 
 # purgemac.com/safety is generated from these files. Build it from this
 # branch so a change the site can't read is caught on the pull request,
-# not on release day.
+# not on release day. The site also fails the build when evaluate allows
+# something it does not describe. The files beyond DeletionSafetyPolicy.swift
+# are the ones lib/safety.ts pins its shape rules to.
 
 on:
   pull_request:
     paths:
       - purge/Services/DeletionSafetyPolicy.swift
+      - purge/Services/OldToolVersionScanPolicy.swift
+      - purge/Services/CacheDiscoveryPaths.swift
+      - purge/Services/EditorWorkspaceStoragePolicy.swift
+      - purge/Services/CursorAgentLeftoverScanPolicy.swift
+      - purge/Services/AgentWorktreeScanPolicy.swift
+      - purge/PrivilegedHelper/MacOSInstallLeftovers.swift
       - purge/Resources/explanations.json
       - purge/Models/ProjectArtifactCatalog.swift
       - .github/workflows/site-safety-page.yml
@@ -15,6 +23,12 @@ on:
     branches: [main]
     paths:
       - purge/Services/DeletionSafetyPolicy.swift
+      - purge/Services/OldToolVersionScanPolicy.swift
+      - purge/Services/CacheDiscoveryPaths.swift
+      - purge/Services/EditorWorkspaceStoragePolicy.swift
+      - purge/Services/CursorAgentLeftoverScanPolicy.swift
+      - purge/Services/AgentWorktreeScanPolicy.swift
+      - purge/PrivilegedHelper/MacOSInstallLeftovers.swift
       - purge/Resources/explanations.json
       - purge/Models/ProjectArtifactCatalog.swift
       - .github/workflows/site-safety-page.yml
