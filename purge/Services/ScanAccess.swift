@@ -116,6 +116,27 @@ nonisolated enum ProtectedLocations {
         return resolvingLinks(in: url.path, fileManager: fileManager) { isPath($0, inAnyOf: roots) }
     }
 
+    /// `readablePath`, also stopping before a path in `otherRoots`, such as other
+    /// volumes, before any link there is read. `stoppedAtOther` says whether one
+    /// of those, not a protected root, stopped it.
+    static func readablePath(
+        of url: URL,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default,
+        alsoStoppingAt otherRoots: [String]
+    ) -> (path: String?, stoppedAtOther: Bool) {
+        let roots = resolvedRootPaths(home: home, fileManager: fileManager)
+        var stoppedAtOther = false
+        let path = resolvingLinks(in: url.path, fileManager: fileManager) { partial in
+            if isPath(partial, inAnyOf: otherRoots) {
+                stoppedAtOther = true
+                return true
+            }
+            return isPath(partial, inAnyOf: roots)
+        }
+        return (path, stoppedAtOther)
+    }
+
     /// `rootPaths` plus the same roots under home's resolved path. Resolved paths
     /// are compared against these: a home under `/var` is really under
     /// `/private/var`. Home itself is never protected, so resolving it is safe.

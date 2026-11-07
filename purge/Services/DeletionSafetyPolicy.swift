@@ -369,7 +369,8 @@ enum DeletionSafetyPolicy {
             // cache), so it must never be scanned, sized, or deleted.
             // NOTE: `~/Library/Application Support/Zed/db` is deliberately NOT listed.
             // It is Zed's workspace state database, not a cache.
-            "\(home)/.cache/ms-playwright",
+            // `~/.cache/ms-playwright` is not listed: a project still runs some of
+            // its builds. `PlaywrightBuildScanPolicy` allows one build at a time.
             "\(home)/Library/Developer/CoreSimulator/Devices",
             // Adobe stores its heavy caches under Application Support rather than
             // ~/Library/Caches, so the broad Caches sweep never reaches them. These
@@ -484,6 +485,11 @@ enum DeletionSafetyPolicy {
         // Which tool version, emulator image or Figma profile is in use can
         // change at any time, and an unfinished install becomes old.
         if OldToolVersionScanPolicy.refusesDeletion(url) { return false }
+        // Which Playwright builds a project uses changes with every install. The
+        // Dev Tools filter asks on the main thread for each build on every scan
+        // flush, so it may reuse a read from the last few seconds. `FileDeleter`
+        // asks off the main thread, so a move always reads the links again.
+        if PlaywrightBuildScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
         if gradleLeftoverRefusesDeletion(url) { return false }
@@ -1485,6 +1491,11 @@ enum DeletionSafetyPolicy {
         // Shape only. Whether the version is still in use is checked by
         // `OldToolVersionScanPolicy.refusesDeletion` before every move.
         if OldToolVersionScanPolicy.isWhitelistedPath(path, home: home) {
+            return .allow
+        }
+        // Shape only. Whether a link still names the build is checked by
+        // `PlaywrightBuildScanPolicy.refusesDeletion` before every move.
+        if PlaywrightBuildScanPolicy.isWhitelistedPath(path, home: home) {
             return .allow
         }
         if gradleLeftover(at: path, home: home) != nil {
