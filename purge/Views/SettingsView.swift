@@ -394,14 +394,21 @@ struct SettingsView: View {
 
     // MARK: - Uninstall
 
-    /// Uninstall Purge (#330), last, under everything it would turn off.
+    /// Uninstall Purge (#330), last, under everything it would turn off. A plain
+    /// card like the others; only the button is red, since it starts a move to
+    /// the Trash. The sheet it opens asks before anything happens.
     private var uninstallGroup: some View {
-        settingsGroup("Purge") {
-            settingsControlRow(title: String(localized: "Uninstall Purge")) {
-                Button(String(localized: "Uninstall…")) {
+        settingsGroup("Uninstall") {
+            settingsControlRow(
+                title: String(localized: "Uninstall Purge"),
+                caption: String(localized: "Turns off background items and moves Purge to the Trash.")
+            ) {
+                Button {
                     store.presentSelfUninstall()
+                } label: {
+                    Label(String(localized: "Uninstall…"), systemImage: "trash")
                 }
-                .buttonStyle(.purge(.secondary))
+                .buttonStyle(.purge(.destructive))
             }
         }
     }

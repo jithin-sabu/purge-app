@@ -1469,3 +1469,4 @@
 "Still on" = "仍处于开启状态";
 "Not done" = "未完成";
 "Purge isn’t listed here" = "Purge 不会列在这里";
+"Turns off background items and moves Purge to the Trash." = "关闭后台项目，并将 Purge 移到废纸篓。";

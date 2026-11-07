@@ -265,7 +265,7 @@ You can also browse past versions on the [releases page](https://github.com/jith
 
 ## Uninstalling
 
-Choose **Uninstall Purge…** in the Purge menu, or **Settings → Purge → Uninstall…**. Purge lists what it runs in the background on your Mac (the deleted-app watcher, the admin helper, the Finder right-click item, the cleanup reminder and launch at login), turns each one off and checks it really stopped, then moves itself to the Trash and quits.
+Choose **Uninstall Purge…** in the Purge menu, or **Settings → Uninstall → Uninstall…**. Purge lists what it runs in the background on your Mac (the deleted-app watcher, the admin helper, the Finder right-click item, the cleanup reminder and launch at login), turns each one off and checks it really stopped, then moves itself to the Trash and quits.
 
 Your settings and cleaning history stay on your Mac, so a reinstall picks up where you left off. Tick **Also move settings and history to the Trash** to move them too. Nothing is deleted permanently; you empty the Trash when you're ready.
 
