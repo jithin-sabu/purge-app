@@ -4,44 +4,52 @@ import SwiftUI
 // The members stay ordinary app tiles and rows; these are the group's own
 // tile, list header, and notes.
 
-/// Up to four member icons in a 2x2 square, so a group never reads as one app.
-struct AppGroupMosaic: View {
+/// A group's icon (#155): its lead app in front with up to two more fanned
+/// behind, like a hand of cards. Hovering spreads the fan a little.
+struct AppGroupFan: View {
     let apps: [InstalledApp]
-    /// The square's side.
-    let side: CGFloat
+    let groupName: String
+    /// The front icon's side; the fan is about twice as wide.
+    let iconSide: CGFloat
+    var isSpread = false
+    /// A tighter fan for the list's 36pt icon column.
+    var isCompact = false
 
-    /// Tighter in the list's small square, so its icons stay legible.
-    private var gap: CGFloat { side < 48 ? AppStyle.Spacing.xxxSmall : AppStyle.Spacing.xxSmall }
-    private var iconSide: CGFloat { (side - gap * 3) / 2 }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The lead app first: the one named like the folder, else the largest.
+    /// The vendor's uninstaller goes last, so it is never the face of a group.
+    static func ordered(_ apps: [InstalledApp], groupName: String) -> [InstalledApp] {
+        let isUninstaller: (InstalledApp) -> Bool = { AppSuiteGrouping.uninstaller(in: [$0]) != nil }
+        let rest = apps.filter { !isUninstaller($0) }.sorted { $0.bundleSizeBytes > $1.bundleSizeBytes }
+        let lead = rest.first { $0.name.localizedCaseInsensitiveCompare(groupName) == .orderedSame }
+            ?? rest.first { $0.name.localizedCaseInsensitiveContains(groupName) }
+            ?? rest.first
+        let others = rest.filter { $0.id != lead?.id } + apps.filter(isUninstaller)
+        return (lead.map { [$0] } ?? []) + others
+    }
 
     var body: some View {
-        let shown = Array(apps.prefix(4))
-        VStack(spacing: gap) {
-            ForEach(0..<2, id: \.self) { row in
-                HStack(spacing: gap) {
-                    ForEach(0..<2, id: \.self) { column in
-                        let index = row * 2 + column
-                        if index < shown.count {
-                            Image(nsImage: BrandIconService.shared.installedAppIcon(at: shown[index].bundleURL))
-                                .resizable()
-                                .frame(width: iconSide, height: iconSide)
-                        } else {
-                            Color.clear.frame(width: iconSide, height: iconSide)
-                        }
-                    }
-                }
+        let shown = Array(Self.ordered(apps, groupName: groupName).prefix(3))
+        // Back-to-front slot for each shown icon: the lead sits in the middle.
+        let slots: [Int] = shown.count == 2 ? [1, 0] : [1, 0, 2]
+        let center = CGFloat(shown.count - 1) / 2
+        let angle: Double = (shown.count == 2 ? 12 : 16) * (isSpread ? 1.3 : 1) * (isCompact ? 0.75 : 1)
+        let step = iconSide * (isSpread ? 0.4 : 0.28) * (isCompact ? 0.75 : 1)
+        ZStack {
+            ForEach(Array(shown.enumerated().reversed()), id: \.element.id) { index, app in
+                let slot = CGFloat(slots[index])
+                Image(nsImage: BrandIconService.shared.installedAppIcon(at: app.bundleURL))
+                    .resizable()
+                    .frame(width: iconSide, height: iconSide)
+                    .shadow(color: .black.opacity(0.35), radius: 3, y: 1.5)
+                    .rotationEffect(.degrees(angle * Double(slot - center) / max(center, 1)), anchor: .bottom)
+                    .offset(x: (slot - center) * step)
+                    .zIndex(index == 0 ? 1 : 0)
             }
         }
-        .padding(gap)
-        .frame(width: side, height: side)
-        .background(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
-                .fill(AppColors.surfaceBase)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppStyle.Radius.md, style: .continuous)
-                .strokeBorder(AppColors.borderSubtle, lineWidth: 1)
-        )
+        .frame(width: iconSide * 2, height: iconSide)
+        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.72), value: isSpread)
         .accessibilityHidden(true)
     }
 }
@@ -86,7 +94,8 @@ struct AppGroupTile: View {
 
     var body: some View {
         VStack(spacing: AppStyle.Spacing.xSmall) {
-            AppGroupMosaic(apps: apps, side: 56)
+            AppGroupFan(apps: apps, groupName: group.name, iconSide: 46, isSpread: isHovering)
+                .frame(height: 56)
                 .frame(maxWidth: .infinity)
 
             VStack(spacing: AppStyle.Spacing.xxxSmall) {
@@ -217,7 +226,8 @@ struct AppGroupListRow: View {
                 LastScanRowMarker()
             }
 
-            AppGroupMosaic(apps: apps, side: 36)
+            AppGroupFan(apps: apps, groupName: group.name, iconSide: 26, isSpread: isHovering, isCompact: true)
+                .frame(width: 36, height: 36)
 
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
                 HStack(spacing: AppStyle.Spacing.xxSmallPlus) {

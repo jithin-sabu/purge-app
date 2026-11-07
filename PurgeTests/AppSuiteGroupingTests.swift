@@ -216,6 +216,24 @@ struct AppSuiteGroupingTests {
         #expect(Set(shown) == Set(apps.map(\.id)))
     }
 
+    // MARK: Fan order
+
+    @Test
+    func fanLeadsWithTheAppNamedLikeTheFolderAndPutsTheUninstallerLast() {
+        var apps = resolve
+        apps[1].bundleSizeBytes = 9_000 // the largest, but not named like the folder
+        let order = AppGroupFan.ordered(apps, groupName: "DaVinci Resolve").map(\.name)
+        #expect(order.first == "DaVinci Resolve")
+        #expect(order.last == "Uninstall Resolve")
+    }
+
+    @Test
+    func fanLeadsWithTheLargestAppWhenNoneIsNamedLikeTheFolder() {
+        var apps = raw
+        apps[1].bundleSizeBytes = 500
+        #expect(AppGroupFan.ordered(apps, groupName: "Blackmagic RAW").first?.name == "Blackmagic RAW Speed Test")
+    }
+
     // MARK: Search
 
     @Test
