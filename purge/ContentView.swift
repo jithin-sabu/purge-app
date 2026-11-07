@@ -142,8 +142,8 @@ struct ContentView: View {
                 onConfirm: { edited in Task { await store.confirmRemovedAppLeftovers(edited) } }
             )
         }
-        .sheet(isPresented: $store.isSelfUninstallPresented) {
-            SelfUninstallSheet(store: store)
+        .sheet(item: $store.selfUninstall) { model in
+            SelfUninstallSheet(store: store, model: model, hadFullDiskAccess: store.hasFullDiskAccess)
         }
         .disabled(store.isManualCleaningInProgress)
         .overlay {

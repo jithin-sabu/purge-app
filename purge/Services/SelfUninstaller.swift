@@ -49,7 +49,7 @@ enum SelfUninstallMoveProblem: Equatable {
 /// data (when asked) and the app. A part still on stops the run before anything
 /// moves, unless the user picks Uninstall Anyway.
 @MainActor
-final class SelfUninstaller: ObservableObject {
+final class SelfUninstaller: ObservableObject, Identifiable {
     enum Phase: Equatable {
         /// Reading which parts are on.
         case reading

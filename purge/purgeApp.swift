@@ -279,7 +279,7 @@ private struct UninstallPurgeMenuItem: View {
             IntentRouter.revealWindow()
             store.presentSelfUninstall()
         }
-        .disabled(!hasCompletedOnboarding || store.isAnotherSheetOpen || store.isSelfUninstallPresented)
+        .disabled(!hasCompletedOnboarding || store.isAnotherSheetOpen || store.isSelfUninstallPresented || store.isPreparingSelfUninstall)
     }
 }
 

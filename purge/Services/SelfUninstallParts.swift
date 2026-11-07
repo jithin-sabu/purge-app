@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import ServiceManagement
 import UserNotifications
@@ -135,7 +136,7 @@ struct LiveSelfUninstallFileMover: SelfUninstallFileMover {
             }
             return ok
         }.value
-        if moved { SelfUninstallState.clearsDefaultsOnQuit = true }
+        if moved { SelfUninstallState.defaultsDomainToClear = identifier }
         return moved
     }
 
@@ -168,16 +169,44 @@ private struct InertSelfUninstallFileMover: SelfUninstallFileMover {
 /// What the quit after Uninstall Purge still has to do.
 @MainActor
 enum SelfUninstallState {
-    /// Set once the data folders went to the Trash. The defaults domain is
-    /// cleared at quit rather than then: clearing it while Purge runs would put
-    /// the window back into onboarding under the sheet.
-    static var clearsDefaultsOnQuit = false
+    /// Set once the data folders went to the Trash, to the bundle ID read before
+    /// the app moved. The domain is cleared at quit rather than then: clearing it
+    /// while Purge runs would put the window back into onboarding under the sheet.
+    static var defaultsDomainToClear: String?
 
-    /// Called from `applicationWillTerminate`.
+    static var clearsDefaultsOnQuit: Bool { defaultsDomainToClear != nil }
+
+    /// Called from `applicationWillTerminate`. The menu bar icon writes its
+    /// state while AppKit tears it down, after this runs, so the domain is
+    /// cleared once more at process exit.
     static func finishQuit() {
-        guard clearsDefaultsOnQuit, let identifier = Bundle.main.bundleIdentifier else { return }
+        guard let identifier = defaultsDomainToClear else { return }
+        clearDefaults(identifier)
+        domainToClearAtExit = identifier
+        atexit {
+            guard let identifier = SelfUninstallState.domainToClearAtExit else { return }
+            SelfUninstallState.clearDefaults(identifier)
+        }
+    }
+
+    nonisolated(unsafe) private static var domainToClearAtExit: String?
+
+    nonisolated private static func clearDefaults(_ identifier: String) {
         UserDefaults.standard.removePersistentDomain(forName: identifier)
-        UserDefaults.standard.synchronize()
+        CFPreferencesAppSynchronize(identifier as CFString)
+    }
+
+    /// AppKit won't quit while a sheet is open: it logs "App termination blocked
+    /// by modal sheet" and aborts. So the sheet closes first, and the quit
+    /// follows once no window still has one attached (at most two seconds).
+    static func quitClosingSheet(_ close: () -> Void) {
+        close()
+        Task { @MainActor in
+            for _ in 0..<40 where NSApp.windows.contains(where: { $0.attachedSheet != nil }) {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            NSApp.terminate(nil)
+        }
     }
 }
 

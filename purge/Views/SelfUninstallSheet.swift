@@ -13,12 +13,8 @@ struct SelfUninstallSheet: View {
     /// Read once: whether the done screen should point to Full Disk Access.
     private let hadFullDiskAccess: Bool
 
-    init(store: PurgeStore) {
-        self.init(store: store, model: SelfUninstaller.live(store: store), hadFullDiskAccess: store.hasFullDiskAccess)
-    }
-
-    /// For tests and screenshots: a model driven by fake parts. A model that has
-    /// already loaded is not read again.
+    /// `model` has usually loaded already (`PurgeStore.openSelfUninstall`), so
+    /// the sheet opens at its final size; one that has not is read here.
     init(store: PurgeStore, model: SelfUninstaller, hadFullDiskAccess: Bool) {
         self.store = store
         _model = StateObject(wrappedValue: model)
@@ -234,7 +230,7 @@ struct SelfUninstallSheet: View {
     private var cancelButton: some View {
         Button(String(localized: "Cancel")) {
             model.dismissed()
-            store.isSelfUninstallPresented = false
+            store.selfUninstall = nil
         }
         .buttonStyle(.purge(.secondary))
         .keyboardShortcut(.cancelAction)
@@ -275,7 +271,7 @@ struct SelfUninstallSheet: View {
                 : running
             NSWorkspace.shared.activateFileViewerSelecting([original])
         }
-        NSApp.terminate(nil)
+        SelfUninstallState.quitClosingSheet { store.selfUninstall = nil }
     }
 
     // MARK: Words and symbols

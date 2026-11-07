@@ -318,23 +318,47 @@ struct SelfUninstallStoreGateTests {
         #expect(store.mayStartSafeClean(trigger: .scheduled))
     }
 
-    @Test func theOpenSheetHoldsUnpromptedReviews() {
+    @Test func theOpenSheetHoldsUnpromptedReviews() async {
         let scans = FakeScans()
         defer { scans.cleanUp() }
         let store = scans.makeStore()
         #expect(!store.isShowingReviewOrCleaning)
-        store.presentSelfUninstall()
+        await store.openSelfUninstall()
         #expect(store.isSelfUninstallPresented)
         #expect(store.isShowingReviewOrCleaning)
     }
 
-    @Test func theSheetNeverOpensOverAnother() {
+    @Test func theSheetNeverOpensOverAnother() async {
         let scans = FakeScans()
         defer { scans.cleanUp() }
         let store = scans.makeStore()
         store.showDeletionSheet = true
-        store.presentSelfUninstall()
+        await store.openSelfUninstall()
         #expect(!store.isSelfUninstallPresented)
+    }
+
+    /// The sheet opens with its list already read, so it never grows on screen.
+    @Test func theSheetOpensOnlyOnceThePartsAreRead() async {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        let model = SelfUninstaller(parts: [SelfUninstallerTests.FakePart(.loginItem)], mover: SelfUninstallerTests.FakeMover())
+        await store.openSelfUninstall(model: model)
+        let shown = try? #require(store.selfUninstall)
+        #expect(shown === model)
+        #expect(model.phase == .confirm)
+        #expect(model.partsOn == [.loginItem])
+        #expect(!store.isPreparingSelfUninstall)
+    }
+
+    @Test func aSecondOpenWhileOneIsShownDoesNothing() async {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let store = scans.makeStore()
+        let first = SelfUninstaller(parts: [], mover: SelfUninstallerTests.FakeMover())
+        await store.openSelfUninstall(model: first)
+        await store.openSelfUninstall(model: SelfUninstaller(parts: [], mover: SelfUninstallerTests.FakeMover()))
+        #expect(store.selfUninstall === first)
     }
 
     @Test func theTestHostGetsNoLiveParts() async {

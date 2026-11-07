@@ -455,8 +455,12 @@ final class PurgeStore: ObservableObject {
     /// Access. Set by the sidebar notice, the locked tabs, and a deleted-app review
     /// that needs access to find leftovers.
     @Published var isLookDeeperPresented = false
-    /// The Uninstall Purge sheet (#330).
-    @Published var isSelfUninstallPresented = false
+    /// The Uninstall Purge sheet (#330), shown once its parts have been read so
+    /// it opens at its final size.
+    @Published var selfUninstall: SelfUninstaller?
+    /// True while the parts are read, before the sheet opens.
+    @Published private(set) var isPreparingSelfUninstall = false
+    var isSelfUninstallPresented: Bool { selfUninstall != nil }
     /// True while Uninstall Purge turns parts off and moves files. Scans, cleans,
     /// scheduled cleans and removed-app reviews wait.
     @Published var isUninstallingPurge = false
@@ -924,6 +928,7 @@ final class PurgeStore: ObservableObject {
     var isShowingReviewOrCleaning: Bool {
         isReviewingOrCleaning
             || isSelfUninstallPresented
+            || isPreparingSelfUninstall
             || manualDeletionSession != nil
             || interactiveSafeCleanupSession != nil
             || onboardingCelebrationMovedToTrashBytes != nil
@@ -970,8 +975,20 @@ final class PurgeStore: ObservableObject {
 
     /// Opens the Uninstall Purge sheet, unless another sheet is up.
     func presentSelfUninstall() {
-        guard !isAnotherSheetOpen else { return }
-        isSelfUninstallPresented = true
+        Task { await openSelfUninstall() }
+    }
+
+    /// Reads which parts are on, then opens the sheet. Reading first keeps the
+    /// sheet from opening small and growing once the list arrives.
+    func openSelfUninstall(model: SelfUninstaller? = nil) async {
+        guard !isAnotherSheetOpen, !isSelfUninstallPresented, !isPreparingSelfUninstall else { return }
+        isPreparingSelfUninstall = true
+        let model = model ?? SelfUninstaller.live(store: self)
+        await model.load()
+        isPreparingSelfUninstall = false
+        // Another sheet may have opened while the parts were read.
+        guard !isAnotherSheetOpen, !isSelfUninstallPresented else { return }
+        selfUninstall = model
     }
 
     /// Whether a safe clean may claim `isDeleting` now. A scheduled clean also
