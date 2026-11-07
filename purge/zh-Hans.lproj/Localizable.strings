@@ -1424,3 +1424,16 @@
 "Purge lists apps from" = "Purge 从以下位置列出应用";
 "1 app" = "1 个应用";
 "No apps" = "没有应用";
+
+/* App Uninstaller: a vendor's apps grouped by folder (#155) */
+"%lld apps · %lld selected" = "%lld 个应用 · 已选 %lld 个";
+"%@, %lld apps" = "%@，%lld 个应用";
+"Select every app in %@" = "选择 %@ 中的所有应用";
+"Clear every app in %@" = "取消选择 %@ 中的所有应用";
+"Select every app in the group" = "选择该组中的所有应用";
+"Clear every app in the group" = "取消选择该组中的所有应用";
+"Expand group" = "展开分组";
+"Collapse group" = "折叠分组";
+"Close" = "关闭";
+"%@ comes with its own uninstaller." = "%@ 自带卸载程序。";
+"You picked %lld of %lld apps in %@. Removing only some of them can stop its own uninstaller from removing the rest." = "你选择了 %3$@ 中 %2$lld 个应用里的 %1$lld 个。只移除其中一部分，可能导致它自带的卸载程序无法移除其余部分。";

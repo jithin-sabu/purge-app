@@ -216,6 +216,19 @@ struct AppSuiteGroupingTests {
         #expect(Set(shown) == Set(apps.map(\.id)))
     }
 
+    // MARK: Search
+
+    @Test
+    func searchingTheFolderNameListsEveryAppInTheGroup() {
+        let apps = resolve + raw + [app("/Applications/Xcode.app")]
+        let groups = AppSuiteGrouping.groups(apps: apps, roots: roots, teamID: teams(sameTeam(resolve + raw)))
+        let found = UninstallView.matchingApps(apps, query: "davinci", focus: nil, groups: groups)
+        #expect(Set(found.map(\.id)) == Set(resolve.map(\.id)))
+        // Without groups, only names and bundle ids match, as before.
+        let plain = UninstallView.matchingApps(apps, query: "davinci", focus: nil)
+        #expect(Set(plain.map(\.id)) == Set([resolve[0].id, resolve[2].id, resolve[3].id]))
+    }
+
     // MARK: Partial suites
 
     @Test

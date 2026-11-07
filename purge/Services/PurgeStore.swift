@@ -346,6 +346,10 @@ final class PurgeStore: ObservableObject {
     var appTeamIDByPath: [String: String] = [:]
     /// Reads a bundle's signing team. Replaced in tests with fixed teams.
     var appTeamIDReader: @Sendable (URL) -> String? = { CodeSignature.read(at: $0)?.teamID }
+    /// The group whose tray is open in the uninstaller's grid, one at a time.
+    @Published var openGridAppGroupID: String?
+    /// The groups opened in the uninstaller's list.
+    @Published var expandedListAppGroupIDs: Set<String> = []
     /// What the groups were last built from.
     var appSuiteInputs = AppSuiteInputs()
     /// The rebuild in flight, cancelled when a newer one starts.

@@ -118,7 +118,8 @@ struct ContentView: View {
             UninstallReviewSheet(
                 plan: plan,
                 onCancel: { store.dismissUninstallPlan() },
-                onConfirm: { edited in Task { await store.confirmUninstallPlan(edited) } }
+                onConfirm: { edited in Task { await store.confirmUninstallPlan(edited) } },
+                onOpenUninstaller: { store.openSuiteUninstaller(at: $0) }
             )
         }
         .sheet(item: $store.orphanCleanupPlan) { plan in
