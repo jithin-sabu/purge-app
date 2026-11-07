@@ -151,6 +151,21 @@ struct SelfUninstallerTests {
         #expect(model.phase == .done)
     }
 
+    // MARK: Another copy on this Mac
+
+    @Test func anotherCopyKeepsTheDataWhateverTheBox() async {
+        let mover = FakeMover()
+        let other = URL(fileURLWithPath: "/Applications/Purge.app")
+        let model = SelfUninstaller(parts: [FakePart(.loginItem)], mover: mover, otherCopies: { [other] })
+        await model.load()
+        #expect(!model.mayMoveData)
+        model.movesData = true
+        await model.start()
+        #expect(model.phase == .done)
+        #expect(mover.dataMoves == 0)
+        #expect(!model.steps.contains { $0.kind == .data })
+    }
+
     // MARK: A part stays on
 
     @Test func aPartStillOnStopsTheRunBeforeAnythingMoves() async {

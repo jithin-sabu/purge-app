@@ -185,6 +185,22 @@ struct SelfUninstallPolicyTests {
             == "/Users/me/Library/Preferences/io.getpurge.app.plist")
     }
 
+    // MARK: Other copies
+
+    @Test func otherCopiesLeaveOutThisOneTheTrashAndMissingOnes() {
+        let running = URL(fileURLWithPath: "/Users/me/Library/Developer/Xcode/DerivedData/purge-x/Build/Products/Debug/Purge.app")
+        let known = [
+            running,
+            URL(fileURLWithPath: "/Applications/Purge.app"),
+            URL(fileURLWithPath: "/Applications/Purge.app/"),
+            URL(fileURLWithPath: "/Users/me/.Trash/Purge.app"),
+            URL(fileURLWithPath: "/Users/me/Downloads/Purge.app")
+        ]
+        let found = SelfUninstallPolicy.otherCopies(among: known, running: running) { $0.path != "/Users/me/Downloads/Purge.app" }
+        #expect(found.map(\.path) == ["/Applications/Purge.app"])
+        #expect(SelfUninstallPolicy.otherCopies(among: [running], running: running) { _ in true }.isEmpty)
+    }
+
     // MARK: Uninstaller search
 
     @Test func searchingForPurgeInTheUninstallerIsRecognised() {

@@ -35,8 +35,9 @@ struct SelfUninstallSheet: View {
             guard model.phase == .reading else { return }
             await model.load()
         }
-        .animation(.easeInOut(duration: 0.2), value: model.phase)
-        .animation(.easeInOut(duration: 0.2), value: model.steps)
+        // No animation on the whole sheet: the sheet resizes between states,
+        // and animating its content as well made the rows jump. Each row
+        // animates only its own status.
     }
 
     @ViewBuilder
@@ -119,12 +120,21 @@ struct SelfUninstallSheet: View {
                 }
             }
         }
-        Toggle(isOn: $model.movesData) {
-            Text("Also move settings and history to the Trash")
-                .font(AppStyle.Typography.body)
-                .foregroundStyle(AppColors.textPrimary)
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
+            Toggle(isOn: $model.movesData) {
+                Text("Also move settings and history to the Trash")
+                    .font(AppStyle.Typography.body)
+                    .foregroundStyle(AppColors.textPrimary)
+            }
+            .toggleStyle(.checkbox)
+            .disabled(!model.mayMoveData)
+            if !model.mayMoveData {
+                Text("Another copy of Purge is on this Mac, so they stay.")
+                    .font(AppStyle.Typography.callout)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .padding(.leading, AppStyle.Spacing.large)
+            }
         }
-        .toggleStyle(.checkbox)
         buttons {
             if store.isReviewingOrCleaning {
                 HStack(spacing: AppStyle.Spacing.xxSmallPlus) {
@@ -202,15 +212,13 @@ struct SelfUninstallSheet: View {
     private var stepList: some View {
         SelfUninstallFactList {
             ForEach(model.steps) { step in
+                // A divider of its own before the move, laid out like a row.
+                if step.kind == .app {
+                    Rectangle()
+                        .fill(AppColors.borderStrong)
+                        .frame(height: 1)
+                }
                 stepRow(step)
-                    .overlay(alignment: .top) {
-                        if step.kind == .app {
-                            Rectangle()
-                                .fill(AppColors.borderStrong)
-                                .frame(height: 1)
-                                .offset(y: -AppStyle.Spacing.xxSmallPlus)
-                        }
-                    }
             }
         }
     }
@@ -292,7 +300,7 @@ struct SelfUninstallSheet: View {
         switch kind {
         case .part(.deletedAppsWatcher): return "eye"
         case .part(.adminHelper): return "key"
-        case .part(.finderService): return "contextualmenu.and.cursorarrow"
+        case .part(.finderService): return "filemenu.and.selection"
         case .part(.cleanupReminder): return "bell"
         case .part(.loginItem): return "power"
         case .data: return "folder"
@@ -447,6 +455,7 @@ private struct SelfUninstallFactRow: View {
             }
             statusView
                 .frame(width: 16, height: 16)
+                .animation(.easeInOut(duration: 0.15), value: state)
         }
         .accessibilityElement(children: .combine)
         .accessibilityValue(accessibilityStatus)
@@ -463,7 +472,7 @@ private struct SelfUninstallFactRow: View {
     private var statusView: some View {
         switch state {
         case .working:
-            ProgressView().controlSize(.small).scaleEffect(0.7)
+            ProgressView().controlSize(.mini)
         case .done:
             Image(systemName: "checkmark")
                 .font(.system(size: 11, weight: .bold))

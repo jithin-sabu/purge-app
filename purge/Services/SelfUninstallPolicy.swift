@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Security
 
@@ -100,6 +101,24 @@ nonisolated enum SelfUninstallPolicy {
     /// back about ten seconds later.
     static func preferencesFile(home: URL, bundleIdentifier: String) -> URL {
         home.appendingPathComponent("Library/Preferences/\(bundleIdentifier).plist")
+    }
+
+    /// Other copies of this app that Launch Services knows, still on disk and
+    /// not in a Trash. They share Purge's settings and history.
+    static func otherCopies(of running: URL, bundleIdentifier: String) -> [URL] {
+        guard !bundleIdentifier.isEmpty else { return [] }
+        let known = NSWorkspace.shared.urlsForApplications(withBundleIdentifier: bundleIdentifier)
+        return otherCopies(among: known, running: running, exists: { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    static func otherCopies(among known: [URL], running: URL, exists: (URL) -> Bool) -> [URL] {
+        let runningPath = running.resolvingSymlinksInPath().standardizedFileURL.path
+        var seen = Set<String>()
+        return known.filter { url in
+            let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+            guard path != runningPath, !isInTrash(path: path), seen.insert(path).inserted else { return false }
+            return exists(url)
+        }
     }
 
     // MARK: Reading from disk

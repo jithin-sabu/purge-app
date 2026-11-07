@@ -93,21 +93,29 @@ final class SelfUninstaller: ObservableObject, Identifiable {
     @Published private(set) var hasStartedMoving = false
     /// True when the data step ran and finished.
     @Published private(set) var movedData = false
+    /// Other copies of Purge on this Mac. They share the settings and history,
+    /// so the box is off while any exists: an Xcode build once took the data of
+    /// the installed copy this way.
+    @Published private(set) var otherCopies: [URL] = []
+    var mayMoveData: Bool { otherCopies.isEmpty }
 
     private let parts: [SelfUninstallPart: SelfUninstallPartControl]
     private let mover: SelfUninstallFileMover
     /// Holds scans, cleans and reviews while the run is going (`PurgeStore`).
     private let setRunning: (Bool) -> Void
+    private let findOtherCopies: () async -> [URL]
     private var stopRequested = false
 
     init(
         parts: [SelfUninstallPartControl],
         mover: SelfUninstallFileMover,
-        setRunning: @escaping (Bool) -> Void = { _ in }
+        setRunning: @escaping (Bool) -> Void = { _ in },
+        otherCopies: @escaping () async -> [URL] = { [] }
     ) {
         self.parts = Dictionary(parts.map { ($0.part, $0) }, uniquingKeysWith: { first, _ in first })
         self.mover = mover
         self.setRunning = setRunning
+        self.findOtherCopies = otherCopies
     }
 
     /// Reads which parts are on, in the order the sheet lists them.
@@ -119,13 +127,15 @@ final class SelfUninstaller: ObservableObject, Identifiable {
             if await control.isOn(thorough: false) { on.append(part) }
         }
         partsOn = on
+        otherCopies = await findOtherCopies()
+        if !mayMoveData { movesData = false }
         phase = .confirm
     }
 
     func start() async {
         guard phase == .confirm else { return }
         var planned = partsOn.map { Step(kind: .part($0), state: .pending) }
-        if movesData { planned.append(Step(kind: .data, state: .pending)) }
+        if movesData, mayMoveData { planned.append(Step(kind: .data, state: .pending)) }
         planned.append(Step(kind: .app, state: .pending))
         steps = planned
         stopRequested = false

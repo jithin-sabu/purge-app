@@ -229,7 +229,8 @@ extension SelfUninstaller {
                 LoginItemPart()
             ],
             mover: LiveSelfUninstallFileMover(),
-            setRunning: setRunning
+            setRunning: setRunning,
+            otherCopies: { SelfUninstallPolicy.otherCopies(of: Bundle.main.bundleURL, bundleIdentifier: Bundle.main.bundleIdentifier ?? "") }
         )
     }
 }
