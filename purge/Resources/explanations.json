@@ -3361,6 +3361,51 @@
     "kind": "ai"
   },
   {
+    "key": "cursor-agent-install-leftovers",
+    "display_name": "Cursor Agent Install Leftovers",
+    "tag": "medium",
+    "explanation": "Unfinished installs and a leftover download from updates to the agent CLI that Cursor keeps. Only items untouched for a day are listed, so an update in progress stays. The installed versions stay.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "ai"
+  },
+  {
+    "key": "claude-code-downloads",
+    "display_name": "Old Claude Code Downloads",
+    "tag": "medium",
+    "explanation": "Claude Code installers older than the version you run. Claude Code runs from its versions folder and doesn't open these again.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "ai"
+  },
+  {
+    "key": "android-ndk-version",
+    "display_name": "Android NDK",
+    "tag": "medium",
+    "explanation": "An Android NDK version other than the newest one you have. A project that names this version in ndkVersion downloads it again on its next build.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "devices"
+  },
+  {
+    "key": "android-system-images",
+    "display_name": "Unused Android System Images",
+    "tag": "medium",
+    "explanation": "Emulator system images that no emulator in ~/.android/avd uses. Android Studio downloads an image again when you create an emulator with it. If you keep emulators in another folder, check them first.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "devices"
+  },
+  {
+    "key": "old-figma-profiles",
+    "display_name": "Old Figma Profiles",
+    "tag": "medium",
+    "explanation": "Earlier Figma profiles. Figma copied each one into the profile it uses now and doesn't read them again. They still hold old cookies and site data.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "design"
+  },
+  {
     "key": "pre-commit-cache",
     "display_name": "pre-commit Environments",
     "tag": "safe",

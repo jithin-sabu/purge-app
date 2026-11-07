@@ -65,6 +65,10 @@ nonisolated final class DevScanner {
         "Old Claude Code Versions": "old-cli-versions",
         "Old Cursor Agent Versions": "old-cli-versions",
         "Old Grok Versions": "old-cli-versions",
+        "Cursor Agent Install Leftovers": "cursor-agent-install-leftovers",
+        "Old Claude Code Downloads": "claude-code-downloads",
+        "Unused Android System Images": "android-system-images",
+        "Old Figma Profiles": "old-figma-profiles",
         "Dart Pub Cache": "pub-cache",
         "pre-commit Environments": "pre-commit-cache",
         "Prisma Engines": "prisma-nodejs",
@@ -93,6 +97,22 @@ nonisolated final class DevScanner {
 
     /// Shared automatic safety resolution for global dev tool rows (scan + reset).
     nonisolated static func automaticSafetyInfo(forDevToolLabel toolLabel: String, primaryPath: URL?) -> SafetyInfo {
+        // One row per NDK version. Each label is its own definition key, so the
+        // rows stay apart, and the headline names the version (#324).
+        if let version = OldToolVersionScanPolicy.ndkVersion(inLabel: toolLabel) {
+            let base = SafetyInfo.fromExplanationDatabase(
+                key: OldToolVersionScanPolicy.ndkExplanationKey,
+                friendlyFallback: toolLabel,
+                path: primaryPath
+            )
+            return SafetyInfo(
+                level: base.level,
+                headline: String(localized: "Android NDK \(version)"),
+                explanation: base.explanation,
+                recoverySteps: base.recoverySteps,
+                reinstallCommand: base.reinstallCommand
+            )
+        }
         let key = toolExplanationKeys[toolLabel] ?? toolLabel
         if toolLabel == "Xcode Archives", let path = primaryPath {
             let base = SafetyInfo.fromExplanationDatabase(
@@ -843,6 +863,7 @@ nonisolated final class DevScanner {
         var staticDefinitions = Self.globalCacheDefinitions()
             + discoverOrphanedEditorWorkspaceDefinitions(home: home, access: access)
             + Self.oldCLIVersionDefinitions(home: home)
+            + OldToolVersionScanPolicy.definitions(home: home)
         // Agent worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop, and Claude Code's live
         // inside those projects. A limited scan cannot look there without a prompt,
