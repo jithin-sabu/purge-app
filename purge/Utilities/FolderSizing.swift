@@ -224,7 +224,15 @@ nonisolated enum FolderSizing {
     /// `skipsPackages` leaves out nested packages. A virtual machine must pass
     /// false: its disk folders (Parallels' `.hdd`) can register as packages,
     /// and skipping them would leave out most of the bytes.
-    nonisolated static func walkedSize(at url: URL, skipsPackages: Bool) -> (bytes: Int64, lastUsed: Date) {
+    ///
+    /// `isCancelled` is asked between files. Work running outside a task, such as
+    /// on `ConcurrentMap`'s threads, passes its own, since `Task.isCancelled` is
+    /// always false there.
+    nonisolated static func walkedSize(
+        at url: URL,
+        skipsPackages: Bool,
+        isCancelled: () -> Bool = { Task.isCancelled }
+    ) -> (bytes: Int64, lastUsed: Date) {
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .totalFileAllocatedSizeKey, .fileSizeKey,
             .contentAccessDateKey, .contentModificationDateKey
@@ -238,7 +246,7 @@ nonisolated enum FolderSizing {
         var bytes: Int64 = 0
         var lastUsed = Date.distantPast
         while let next = enumerator.nextObject() {
-            if Task.isCancelled { break }
+            if isCancelled() { break }
             guard let fileURL = next as? URL,
                   let values = try? fileURL.resourceValues(forKeys: keys),
                   values.isRegularFile == true

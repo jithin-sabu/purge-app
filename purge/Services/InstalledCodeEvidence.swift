@@ -296,10 +296,13 @@ nonisolated struct InstalledCodeEvidence {
         var walks = bundles.map { NestedWalk(queue: [$0], budget: nestedWalkEntryBudget) }
 
         while true {
-            var folders: [(walk: Int, folder: URL)] = []
+            // Each folder carries its walk's budget at the start of the round.
+            // A folder's entries past it can never be counted this round, so
+            // they are not judged.
+            var folders: [(walk: Int, folder: URL, budget: Int)] = []
             for (number, walk) in walks.enumerated() where walk.index < walk.queue.count && walk.budget > 0 {
                 let end = min(walk.index + nestedWalkListingBatch, walk.queue.count)
-                folders += walk.queue[walk.index..<end].map { (number, $0) }
+                folders += walk.queue[walk.index..<end].map { (number, $0, walk.budget) }
             }
             guard !folders.isEmpty else { break }
             let listings = ConcurrentMap.values(folders) { item -> [NestedWalkEntry]? in
@@ -308,7 +311,7 @@ nonisolated struct InstalledCodeEvidence {
                     includingPropertiesForKeys: keys,
                     options: [.skipsHiddenFiles]
                 ) else { return nil }
-                return entries.map { entry in
+                return entries.prefix(item.budget).map { entry in
                     let values = try? entry.resourceValues(forKeys: keySet)
                     guard values?.isDirectory == true, values?.isSymbolicLink != true else {
                         return NestedWalkEntry(url: entry, descends: false, isOwnerCode: false)

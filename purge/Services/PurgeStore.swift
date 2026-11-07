@@ -2594,8 +2594,8 @@ final class PurgeStore: ObservableObject {
             while let leftovers = progress.leftovers[progress.nextToCount] {
                 let app = apps[progress.nextToCount]
                 let bundleKey = app.bundleURL.standardizedFileURL.path
-                // A bundle `du` could not read counts as 0, as a failed `du`
-                // in the leftover scan made it count before.
+                // A bundle `du` could not read even on the retry counts as 0, as
+                // it did when the leftover scan's second `du` failed too.
                 guard let bundleBytes = progress.bundleBytes[bundleKey] ?? (progress.bundlesDone ? 0 : nil) else { return }
                 progress.leftovers[progress.nextToCount] = nil
                 progress.nextToCount += 1
@@ -2646,6 +2646,25 @@ final class PurgeStore: ObservableObject {
                         countReadyApps()
                     }
                     guard !Task.isCancelled else { return }
+                    // A bundle `du` could not size gets one more try, as it did
+                    // when each app's leftover scan sized its bundle again.
+                    let missing = apps.map(\.bundleURL).filter {
+                        progress.bundleBytes[$0.standardizedFileURL.path] == nil
+                    }
+                    if !missing.isEmpty {
+                        let retried = await Task.detached(priority: .userInitiated) {
+                            FolderSizing.directorySizes(at: missing, split: .spread)
+                        }.value
+                        guard let self, self.installedAppsScanGeneration == generation, !Task.isCancelled else { return }
+                        progress.bundleBytes.merge(retried) { _, new in new }
+                        var updated = self.installedApps
+                        for i in updated.indices {
+                            if let size = retried[updated[i].bundleURL.standardizedFileURL.path] {
+                                updated[i].bundleSizeBytes = size
+                            }
+                        }
+                        self.installedApps = updated
+                    }
                     progress.bundlesDone = true
                     countReadyApps()
                 }

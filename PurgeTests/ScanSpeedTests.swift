@@ -135,6 +135,32 @@ struct ScanSpeedTests {
         }
     }
 
+    /// A walk that runs out of budget part way stops at the same entry, and
+    /// finds the same code, as the walk that read one folder at a time.
+    @Test
+    func jointNestedWalkRunsOutOfBudgetWhereTheOldWalkDid() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? fm.removeItem(at: root) }
+        let app = root.appendingPathComponent("Big.app", isDirectory: true)
+        let contents = app.appendingPathComponent("Contents", isDirectory: true)
+        let pile = contents.appendingPathComponent("Pile", isDirectory: true)
+        try fm.createDirectory(at: pile, withIntermediateDirectories: true)
+        for index in 0..<(InstalledCodeEvidence.nestedWalkEntryBudget + 100) {
+            fm.createFile(atPath: pile.appendingPathComponent("f\(index)").path, contents: nil)
+        }
+        for folder in ["PlugIns/Early.appex", "Pile2/Deep/Late.xpc", "XPCServices/Fetch.xpc"] {
+            try fm.createDirectory(at: contents.appendingPathComponent(folder), withIntermediateDirectories: true)
+        }
+        let small = root.appendingPathComponent("Small.app/Contents/PlugIns/Share.appex", isDirectory: true)
+        try fm.createDirectory(at: small, withIntermediateDirectories: true)
+        let smallApp = root.appendingPathComponent("Small.app", isDirectory: true)
+
+        let joint = InstalledCodeEvidence.nestedCodeBundleURLs(inEach: [app, smallApp])
+        #expect(joint[0] == Self.walkOneFolderAtATime(app))
+        #expect(joint[1] == Self.walkOneFolderAtATime(smallApp))
+        #expect(joint[1].map(\.lastPathComponent) == ["Share.appex"])
+    }
+
     /// The walk as it was before it read folders side by side.
     private static func walkOneFolderAtATime(_ bundle: URL) -> [URL] {
         let fm = FileManager.default

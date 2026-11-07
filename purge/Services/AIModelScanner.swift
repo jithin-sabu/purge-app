@@ -444,8 +444,9 @@ nonisolated final class AIModelScanner {
                     return .skip
                 }
                 guard AIModelScanPolicy.isWeightBundle(named: name) else { return .descend }
-                let measured = FolderSizing.walkedSize(at: url, skipsPackages: false)
-                guard measured.bytes >= sizeFloor else { return .skip }
+                let measured = FolderSizing.walkedSize(at: url, skipsPackages: false, isCancelled: isCancelled)
+                // A walk stopped part way has no real size to list.
+                guard !isCancelled(), measured.bytes >= sizeFloor else { return .skip }
                 return .row(looseWeightRow(url, bytes: measured.bytes, lastUsed: measured.lastUsed))
             }
             guard values.isRegularFile == true,
