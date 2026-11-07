@@ -84,7 +84,8 @@ enum CacheDiscoveryPaths {
 
     /// Whether `parts`, a path inside the Application Support folder `appRoot`,
     /// is a cache Purge offers there: a cache directly in an Electron app's
-    /// folder, a cache in its Chromium `User Data` folder, or `Crashpad/completed`.
+    /// folder, a cache in its Chromium `User Data` folder, a cache in a Chromium
+    /// storage folder one or two levels down, or `Crashpad/completed`.
     /// The name is never enough by itself. The folder it sits in must be a
     /// Chromium data folder, and `Cache` needs Chromium's layout inside.
     /// `applicationSupportCacheURLs` lists exactly these paths, and
@@ -96,11 +97,81 @@ enum CacheDiscoveryPaths {
                 && isChromiumCacheFolder(appRoot.appendingPathComponent(parts[0], isDirectory: true),
                                          names: applicationSupportDirectCacheNames)
         }
-        guard parts.first == "User Data" else { return false }
-        return isChromiumUserDataCachePath(
-            Array(parts.dropFirst()),
-            userData: appRoot.appendingPathComponent("User Data", isDirectory: true)
-        )
+        if parts.first == "User Data",
+           isChromiumUserDataCachePath(
+               Array(parts.dropFirst()),
+               userData: appRoot.appendingPathComponent("User Data", isDirectory: true)
+           ) {
+            return true
+        }
+        return isNestedChromiumStorageCachePath(parts, appRoot: appRoot)
+    }
+
+    /// How far below an app's Application Support folder a Chromium storage folder
+    /// is looked for. Chrome keeps its data in `Google/Chrome Beta` and its profiles
+    /// in `Google/Chrome Beta/Default`, Figma in `Figma/DesktopProfile/v43`, and
+    /// Electron apps keep one per session in `Partitions/<name>` (#323).
+    nonisolated static let nestedChromiumStorageMaxDepth = 2
+
+    /// Whether `parts` is a cache in a Chromium storage folder at most
+    /// `nestedChromiumStorageMaxDepth` folders below `appRoot`, or one of the app
+    /// folder's own Service Worker caches. A storage folder holds Chromium's
+    /// `Local State` or `Network Persistent State`. Only the cache names and the
+    /// Service Worker caches directly in it count, and every folder on the way
+    /// down must be a real folder, not a link.
+    nonisolated static func isNestedChromiumStorageCachePath(_ parts: [String], appRoot: URL) -> Bool {
+        for depth in 0...nestedChromiumStorageMaxDepth {
+            let rest = Array(parts.dropFirst(depth))
+            // The app folder's own direct caches are the single-part shape above.
+            guard !rest.isEmpty, depth > 0 || rest.count == 2 else { continue }
+            var storage = appRoot
+            var throughRealFolders = true
+            for part in parts.prefix(depth) {
+                storage = storage.appendingPathComponent(part, isDirectory: true)
+                if !isRealDirectory(storage) {
+                    throughRealFolders = false
+                    break
+                }
+            }
+            guard throughRealFolders, isChromiumDataFolder(storage) else { continue }
+            if rest.count == 1,
+               isChromiumCacheFolder(storage.appendingPathComponent(rest[0], isDirectory: true),
+                                     names: applicationSupportDirectCacheNames) {
+                return true
+            }
+            if rest.count == 2, chromiumProfileRelativePaths.contains(rest.joined(separator: "/")) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// A folder that is not a link. `isDirectoryKey` is false for a link to a folder.
+    private nonisolated static func isRealDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+
+    /// Chromium storage folders one and two levels below `appRoot`, in the shape
+    /// `isNestedChromiumStorageCachePath` accepts. Links are never followed.
+    nonisolated static func nestedChromiumStorageFolders(in appRoot: URL, access: ScanAccess = .full) -> [URL] {
+        func subfolders(of folder: URL) -> [URL] {
+            guard let children = try? FileManager.default.contentsOfDirectory(
+                at: folder,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { return [] }
+            return children.filter {
+                ProtectedLocations.isReadable($0, access: access) && isRealDirectory($0)
+            }
+        }
+
+        var results: [URL] = []
+        var level = [appRoot]
+        for _ in 1...nestedChromiumStorageMaxDepth {
+            level = level.flatMap(subfolders(of:))
+            results += level.filter { isChromiumDataFolder($0, access: access) }
+        }
+        return results
     }
 
     /// Whether `parts`, a path inside a Chromium `User Data` folder, is a cache
@@ -172,6 +243,24 @@ enum CacheDiscoveryPaths {
         let userData = appRoot.appendingPathComponent("User Data", isDirectory: true)
         for url in chromiumUserDataCacheURLs(userData: userData, access: access) {
             appendIfExists(url)
+        }
+
+        // The app folder's own Service Worker caches, then every storage folder
+        // further down: a browser's data folder and its profiles, a versioned
+        // Figma profile, an Electron session partition (#323).
+        if isChromiumDataFolder(appRoot, access: access) {
+            for relative in chromiumProfileRelativePaths {
+                appendIfExists(appRoot.appendingPathComponent(relative, isDirectory: true))
+            }
+        }
+        for storage in nestedChromiumStorageFolders(in: appRoot, access: access) {
+            for name in applicationSupportDirectCacheNames.sorted() {
+                appendIfExists(storage.appendingPathComponent(name, isDirectory: true),
+                               cacheNames: applicationSupportDirectCacheNames)
+            }
+            for relative in chromiumProfileRelativePaths {
+                appendIfExists(storage.appendingPathComponent(relative, isDirectory: true))
+            }
         }
 
         return results

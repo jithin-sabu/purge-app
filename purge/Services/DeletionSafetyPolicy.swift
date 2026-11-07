@@ -251,7 +251,12 @@ enum DeletionSafetyPolicy {
             // signing or repository keys) and `init.d`. Its caches are offered as
             // subfolders. A stray `~/settings.gradle` made home a project whose
             // `.gradle` the project rule offered whole (#190).
-            "\(home)/.gradle"
+            "\(home)/.gradle",
+            // The shared cache folder of many command-line tools, which also holds
+            // installed runtimes (`codex-runtimes`) and AI models (`huggingface`).
+            // `.cache` is an allowed folder name, so without this the folder-name
+            // rule allowed all of it. Its caches are offered as subfolders (#323).
+            "\(home)/.cache"
         ]
     }
 
@@ -425,6 +430,14 @@ enum DeletionSafetyPolicy {
             // their scratch space here. The rest of `~/.hermes` is config, API keys,
             // sessions and memories, and is not listed.
             "\(home)/.hermes/cache",
+            // Download caches found by the #323 survey. nvm's Node downloads, which
+            // `nvm cache clear` empties too; installed versions are in `~/.nvm/versions`.
+            "\(home)/.nvm/.cache",
+            // Templates giget fetched for `nuxi init` and `create-*` tools.
+            "\(home)/.cache/giget",
+            // The emulator files firebase-tools downloads, and downloads again
+            // the next time the emulators start.
+            "\(home)/.cache/firebase/emulators",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
             "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",
@@ -469,6 +482,8 @@ enum DeletionSafetyPolicy {
         // Which CLI version is in use changes on every auto-update.
         if oldCLIVersionRefusesDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
+        // A daemon's log stays while it runs, and a temp file until it is old.
+        if gradleLeftoverRefusesDeletion(url) { return false }
 
         offeredForCleanupLock.lock()
         let cached = offeredForCleanupCache[key]
@@ -788,11 +803,20 @@ enum DeletionSafetyPolicy {
         return spotifyOfflineIndexShowsDownloads(home: home)
     }
 
+    /// Where the Cursor app installs its own copy of the agent CLI, with the same
+    /// `.local` layout as the one in the home folder (#323).
+    nonisolated static let cursorAgentWorkerCLI =
+        "Library/Application Support/Cursor/User/globalStorage/anysphere.cursor-agent-worker/agent-cli"
+
     /// AI coding CLIs that install each version side by side: the folder of versions,
-    /// and the command whose symlink points at the version in use.
-    nonisolated static let cliVersionStores: [(versions: String, command: String)] = [
-        (".local/share/claude/versions", ".local/bin/claude"),
-        (".local/share/cursor-agent/versions", ".local/bin/cursor-agent")
+    /// the command whose symlink points at the version in use, and the Dev Tools row.
+    nonisolated static let cliVersionStores: [(versions: String, command: String, label: String)] = [
+        (".local/share/claude/versions", ".local/bin/claude", "Old Claude Code Versions"),
+        (".local/share/cursor-agent/versions", ".local/bin/cursor-agent", "Old Cursor Agent Versions"),
+        ("\(cursorAgentWorkerCLI)/.local/share/cursor-agent/versions",
+         "\(cursorAgentWorkerCLI)/.local/bin/cursor-agent", "Old Cursor Agent Versions"),
+        // Grok keeps every binary it downloaded and points its command at one.
+        (".grok/downloads", ".grok/bin/grok", "Old Grok Versions")
     ]
 
     /// The version folder or file `path` belongs to, with its store.
@@ -857,6 +881,114 @@ enum DeletionSafetyPolicy {
         #else
         return false
         #endif
+    }
+
+    /// What Gradle leaves behind that it never reads again (#323).
+    nonisolated enum GradleLeftover: Equatable, Sendable {
+        /// `~/.gradle/daemon/<version>/daemon-<pid>.out.log`, one daemon's log.
+        case daemonLog(pid: Int32)
+        /// `~/.gradle/.tmp/gradle_download<n>bin` or `gradle-worker-classpath<n>txt`.
+        case temporaryFile
+    }
+
+    /// A temp file younger than this could belong to a build that is still running.
+    nonisolated static let gradleTemporaryFileMinimumAge: TimeInterval = 7 * 24 * 60 * 60
+
+    /// The leftover `path` is, by its name and place alone. `registry.bin`, the
+    /// JDKs and everything else in `~/.gradle` are never one.
+    nonisolated static func gradleLeftover(at path: String, home: String) -> GradleLeftover? {
+        func isDigits(_ text: Substring) -> Bool {
+            !text.isEmpty && text.allSatisfy { ("0"..."9").contains($0) }
+        }
+
+        let daemonRoot = "\(home)/.gradle/daemon/"
+        if path.hasPrefix(daemonRoot) {
+            let parts = path.dropFirst(daemonRoot.count).split(separator: "/", omittingEmptySubsequences: false)
+            guard parts.count == 2, !parts[0].isEmpty, !parts[0].hasPrefix(".") else { return nil }
+            let name = parts[1]
+            guard name.hasPrefix("daemon-"), name.hasSuffix(".out.log"),
+                  case let digits = name.dropFirst("daemon-".count).dropLast(".out.log".count),
+                  isDigits(digits), let pid = Int32(digits), pid > 0 else { return nil }
+            return .daemonLog(pid: pid)
+        }
+
+        let tempRoot = "\(home)/.gradle/.tmp/"
+        guard path.hasPrefix(tempRoot) else { return nil }
+        let name = path.dropFirst(tempRoot.count)
+        guard !name.contains("/") else { return nil }
+        for (prefix, suffix) in [("gradle_download", "bin"), ("gradle-worker-classpath", "txt")]
+        where name.hasPrefix(prefix) && name.hasSuffix(suffix) && name.count > prefix.count + suffix.count {
+            // Java's random temp names run to 20 digits, so they are not parsed as a number.
+            if isDigits(name.dropFirst(prefix.count).dropLast(suffix.count)) { return .temporaryFile }
+        }
+        return nil
+    }
+
+    /// Only a plain file is ever taken. A daemon's log stays while a process with
+    /// its pid runs, even when the pid now belongs to something else. A temp file
+    /// stays until it is a week old: a download in progress, or a worker that has
+    /// just read its class path, is minutes old.
+    nonisolated static func gradleLeftoverRefusesDeletion(
+        _ url: URL,
+        home: String = cachedHomePath,
+        now: Date = Date(),
+        isRunning: (Int32) -> Bool = isProcessRunning
+    ) -> Bool {
+        let standardized = url.standardizedFileURL
+        guard let leftover = gradleLeftover(at: standardized.path, home: home) else { return false }
+        guard let values = try? standardized.resourceValues(
+            forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey]
+        ), values.isRegularFile == true, values.isSymbolicLink != true else { return true }
+        switch leftover {
+        case .daemonLog(let pid):
+            return isRunning(pid)
+        case .temporaryFile:
+            guard let modified = values.contentModificationDate else { return true }
+            return now.timeIntervalSince(modified) < gradleTemporaryFileMinimumAge
+        }
+    }
+
+    /// True when a process with `pid` exists, ours or not.
+    nonisolated static func isProcessRunning(_ pid: Int32) -> Bool {
+        guard pid > 0 else { return true }
+        return kill(pid, 0) == 0 || errno == EPERM
+    }
+
+    /// clang's module cache in the per-user cache folder, which command-line
+    /// `clang`, `swiftc` and Swift scripts use when no other is named; Xcode builds
+    /// use the one in DerivedData. Compiled module files only, rebuilt on the next
+    /// compile (#323). Both spellings of `/var` are listed, since a walk reports
+    /// `/private/var` and a standardized path `/var`.
+    nonisolated static let clangModuleCachePaths: [String] = {
+        guard let base = darwinUserCacheDirectory() else { return [] }
+        let path = URL(fileURLWithPath: base, isDirectory: true)
+            .appendingPathComponent("clang/ModuleCache", isDirectory: true).path
+        return bothVarSpellings(of: path)
+    }()
+
+    nonisolated static func isWhitelistedClangModuleCachePath(
+        _ path: String,
+        cachePaths: [String] = clangModuleCachePaths
+    ) -> Bool {
+        cachePaths.contains { PathContainment.isSameOrInside(path, $0) }
+    }
+
+    /// `getconf DARWIN_USER_CACHE_DIR`: `/var/folders/<xx>/<id>/C/`.
+    nonisolated static func darwinUserCacheDirectory() -> String? {
+        let length = confstr(_CS_DARWIN_USER_CACHE_DIR, nil, 0)
+        guard length > 0 else { return nil }
+        var buffer = [CChar](repeating: 0, count: length)
+        guard confstr(_CS_DARWIN_USER_CACHE_DIR, &buffer, length) > 0 else { return nil }
+        let path = buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        // Never a cache folder that is not the per-user one under /var/folders.
+        guard path.hasPrefix("/var/folders/") || path.hasPrefix("/private/var/folders/") else { return nil }
+        return path
+    }
+
+    nonisolated static func bothVarSpellings(of path: String) -> [String] {
+        if path.hasPrefix("/private/var/") { return [path, String(path.dropFirst("/private".count))] }
+        if path.hasPrefix("/var/") { return [path, "/private" + path] }
+        return [path]
     }
 
     /// Unfinished downloads sitting directly in ~/Downloads: Chrome's
@@ -1213,6 +1345,14 @@ enum DeletionSafetyPolicy {
             return .allow
         }
         if isWhitelistedOldCLIVersionPath(path, home: home) {
+            return .allow
+        }
+        if gradleLeftover(at: path, home: home) != nil {
+            return .allow
+        }
+        // Above the never-delete guards on purpose: it is in `/var/folders`, which
+        // `/var` refuses.
+        if isWhitelistedClangModuleCachePath(path) {
             return .allow
         }
         if isWhitelistedUnfinishedDownloadPath(path, home: home) {

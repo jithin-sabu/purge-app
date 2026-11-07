@@ -3355,7 +3355,7 @@
     "key": "old-cli-versions",
     "display_name": "Old AI Coding Tool Versions",
     "tag": "safe",
-    "explanation": "Earlier versions of Claude Code or Cursor Agent that stayed behind after updates. The version you run and the newest one are kept. Safe to delete.",
+    "explanation": "Earlier versions of Claude Code, Cursor Agent or Grok that stayed behind after updates. The version you run and the newest one are kept. Safe to delete.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "ai"
@@ -3467,5 +3467,96 @@
     "bundle_ids": [],
     "aliases": [],
     "kind": "browser"
+  },
+  {
+    "key": "nvm-download-cache",
+    "display_name": "nvm Download Cache",
+    "tag": "safe",
+    "explanation": "Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "giget-cache",
+    "display_name": "giget Template Cache",
+    "tag": "safe",
+    "explanation": "Project templates giget downloaded for tools like nuxi init. Safe to delete; they download again the next time you create a project.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "firebase-emulators",
+    "display_name": "Firebase Emulators",
+    "tag": "safe",
+    "explanation": "Emulator files the Firebase CLI downloaded. Safe to delete; the Firebase CLI downloads them again the next time you start the emulators.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
+    "key": "gradle-leftovers",
+    "display_name": "Gradle Logs and Temp Files",
+    "tag": "safe",
+    "explanation": "Logs from Gradle daemons that have stopped, and temporary files Gradle left behind more than a week ago. Gradle never reads them again. Safe to delete.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "logs"
+  },
+  {
+    "key": "clang-module-cache",
+    "display_name": "Clang Module Cache",
+    "tag": "safe",
+    "explanation": "Compiled module files clang and the Swift compiler keep for command-line builds and scripts. Xcode's own builds use another folder. Safe to delete; the next compile builds them again.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "build"
+  },
+  {
+    "key": "codexbar-cache",
+    "display_name": "CodexBar Cache",
+    "tag": "safe",
+    "explanation": "Web downloads and update files the CodexBar menu bar app keeps. Safe to delete; CodexBar downloads them again when needed.",
+    "bundle_ids": [
+      "com.steipete.codexbar"
+    ],
+    "aliases": [
+      "com.steipete.codexbar"
+    ],
+    "kind": "utilities"
+  },
+  {
+    "key": "codexbar-usage-history",
+    "display_name": "CodexBar Usage History",
+    "tag": "medium",
+    "explanation": "Cost and usage totals CodexBar worked out from your Claude and Codex session logs. CodexBar works them out again, but days whose logs are gone stay missing.",
+    "bundle_ids": [],
+    "aliases": [
+      "CodexBar"
+    ],
+    "kind": "utilities"
+  },
+  {
+    "key": "intelligenceflowd-cache",
+    "display_name": "Apple Intelligence Service Cache",
+    "tag": "safe",
+    "explanation": "Web downloads and compiled model files a background Apple Intelligence service keeps. The Apple Intelligence models are not touched. Safe to delete; macOS builds these again when the service next needs them.",
+    "bundle_ids": [],
+    "aliases": [
+      "com.apple.intelligenceflow.intelligenceflowd"
+    ],
+    "kind": "system"
+  },
+  {
+    "key": "swift-frontend-cache",
+    "display_name": "Swift Compiler Cache",
+    "tag": "safe",
+    "explanation": "Compiled model files the Swift compiler keeps. Safe to delete; they are built again when the compiler next needs them.",
+    "bundle_ids": [],
+    "aliases": [
+      "swift-frontend"
+    ],
+    "kind": "build"
   }
 ]
