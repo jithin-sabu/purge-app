@@ -395,8 +395,8 @@ struct SettingsView: View {
     // MARK: - Uninstall
 
     /// Uninstall Purge (#330), last, under everything it would turn off. A plain
-    /// card like the others; only the button is red, since it starts a move to
-    /// the Trash. The sheet it opens asks before anything happens.
+    /// card and a secondary button like the rest of Settings; the red button is
+    /// in the sheet it opens, which asks before anything happens.
     private var uninstallGroup: some View {
         settingsGroup("Uninstall") {
             settingsControlRow(
@@ -408,7 +408,7 @@ struct SettingsView: View {
                 } label: {
                     Label(String(localized: "Uninstall…"), systemImage: "trash")
                 }
-                .buttonStyle(.purge(.destructive))
+                .buttonStyle(.purge(.secondary))
             }
         }
     }

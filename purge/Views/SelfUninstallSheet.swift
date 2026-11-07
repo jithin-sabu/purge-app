@@ -212,12 +212,6 @@ struct SelfUninstallSheet: View {
     private var stepList: some View {
         SelfUninstallFactList {
             ForEach(model.steps) { step in
-                // A divider of its own before the move, laid out like a row.
-                if step.kind == .app {
-                    Rectangle()
-                        .fill(AppColors.borderStrong)
-                        .frame(height: 1)
-                }
                 stepRow(step)
             }
         }
