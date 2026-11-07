@@ -5,7 +5,13 @@ nonisolated enum FolderSizing {
     nonisolated static let duChunkSize = 64
     /// Process-wide cap on concurrent `du` processes. `CacheScanner.runSizeJobs`
     /// fans out this many Swift tasks, each calling ``directorySizesForChunk``.
-    nonisolated static let maxConcurrentDuChunks = 10
+    ///
+    /// Four, not more. Scans now hand every `du` a few folders, so the cap is
+    /// what is really in use. Measured on a 10-core M4: four ran every scan as
+    /// fast as ten, and the Everything else walk took 23 s against 41 s with
+    /// ten, which evicted each other's folder data from memory. Fewer `du`
+    /// processes also keep the rest of the Mac responsive while a scan runs.
+    nonisolated static let maxConcurrentDuChunks = 4
 
     /// Process-wide, deliberately **not** per call.
     ///
@@ -42,6 +48,41 @@ nonisolated enum FolderSizing {
         return acquired
     }
 
+    /// How a call's folders are shared out between `du` processes.
+    nonisolated enum Split: Sendable {
+        /// Up to `duChunkSize` folders per `du`. One `du` counts a hard-linked
+        /// file once across all its folders, which the Trash total and the
+        /// deletion report rely on.
+        case fewest
+        /// A few folders per `du`, so up to `maxConcurrentDuChunks` walk side by
+        /// side. A scan of fewer than `duChunkSize` folders used to walk them all
+        /// in one `du`, one after another, on one core.
+        case spread
+    }
+
+    /// With `.spread`, each process slot gets about this many chunks, so one
+    /// big folder holds up only its own short chunk, not a long one.
+    private nonisolated static let spreadChunksPerSlot = 3
+
+    /// `items` in order, cut into the chunks `split` gives each `du` process.
+    nonisolated static func chunks<T>(of items: [T], split: Split) -> [[T]] {
+        guard !items.isEmpty else { return [] }
+        let size: Int
+        switch split {
+        case .fewest:
+            size = duChunkSize
+        case .spread:
+            // Up to `duChunkSize` folders, one `du` each: the next free slot takes
+            // the next folder, so one big folder holds up nothing else.
+            guard items.count > duChunkSize else { return items.map { [$0] } }
+            let target = maxConcurrentDuChunks * spreadChunksPerSlot
+            size = max(1, min(duChunkSize, (items.count + target - 1) / target))
+        }
+        return stride(from: 0, to: items.count, by: size).map {
+            Array(items[$0..<min($0 + size, items.count)])
+        }
+    }
+
     nonisolated static func directorySizesForChunk(_ chunk: [URL]) -> [String: Int64] {
         guard !chunk.isEmpty else { return [:] }
         guard acquireDuPermit() else { return [:] }
@@ -58,13 +99,15 @@ nonisolated enum FolderSizing {
     /// Raw `du` for a chunk. Callers that already hold ``duChunkLimiter`` must use this
     /// rather than ``directorySizesForChunk``, which would try to take a second permit
     /// and deadlock once the cap is full.
-    private nonisolated static func runDuChunk(_ chunk: [URL]) -> [String: Int64] {
+    /// `staysOnVolume` passes `-x`, so `du` does not walk into another file
+    /// system mounted inside a folder.
+    private nonisolated static func runDuChunk(_ chunk: [URL], staysOnVolume: Bool = false) -> [String: Int64] {
         // `du` writes one "Permission denied" line per unreadable directory, so stderr can run
         // to megabytes on a broad scan. ProcessRunner drains it concurrently; leaving it
         // undrained would block `du` on a full pipe and hang the read below.
         guard let output = ProcessRunner.run(
             executablePath: "/usr/bin/du",
-            arguments: ["-sk"] + chunk.map { $0.standardizedFileURL.path },
+            arguments: (staysOnVolume ? ["-skx"] : ["-sk"]) + chunk.map { $0.standardizedFileURL.path },
             timeout: duChunkTimeout
         ) else {
             // Omit paths in this chunk; callers default to 0.
@@ -87,18 +130,27 @@ nonisolated enum FolderSizing {
     }
 
     /// `onChunkDone` is told how many of the chunks have come back, out of how
-    /// many, after each one; it is called on a sizing thread.
+    /// many, after each one, and `onChunkSizes` gets each chunk's sizes as it
+    /// lands; both are called on a sizing thread. Scans pass `.spread`; see `Split`.
+    /// `staysOnVolume` leaves out file systems mounted inside the folders, such
+    /// as the FSKit view of a paired iPhone in `~/Library/Developer/CoreDevice`.
     nonisolated static func directorySizes(
         at urls: [URL],
+        split: Split = .fewest,
+        staysOnVolume: Bool = false,
+        onChunkSizes: (@Sendable ([String: Int64]) -> Void)? = nil,
         onChunkDone: (@Sendable (_ done: Int, _ total: Int) -> Void)? = nil
     ) -> [String: Int64] {
         guard !urls.isEmpty else { return [:] }
 
-        var chunks: [[URL]] = []
-        var index = 0
-        while index < urls.count {
-            chunks.append(Array(urls[index..<min(index + duChunkSize, urls.count)]))
-            index += duChunkSize
+        let chunks = Self.chunks(of: urls, split: split)
+        // A scan's `du` runs at the priority of the scan that asked, so a scan
+        // someone is waiting on isn't held back by a busy Mac. Everything else
+        // (the Trash total, a deletion's report) stays in the background.
+        let qos: DispatchQoS
+        switch split {
+        case .spread: qos = .unspecified
+        case .fewest: qos = .utility
         }
 
         var result: [String: Int64] = [:]
@@ -124,12 +176,12 @@ nonisolated enum FolderSizing {
             // that pool is full. Once every pool thread was waiting here, no `du` ever started:
             // three parallel tests on a 3-core CI runner were enough. A serial queue made here
             // runs on an overcommit thread, which the system always grants.
-            DispatchQueue(label: "purge.folder-sizing.du", qos: .utility).async {
+            DispatchQueue(label: "purge.folder-sizing.du", qos: qos).async {
                 defer {
                     duChunkLimiter.signal()
                     group.leave()
                 }
-                let partial = runDuChunk(chunk)
+                let partial = runDuChunk(chunk, staysOnVolume: staysOnVolume)
                 lock.lock()
                 for (path, size) in partial {
                     result[path] = size
@@ -137,6 +189,7 @@ nonisolated enum FolderSizing {
                 completedChunks += 1
                 let done = completedChunks
                 lock.unlock()
+                onChunkSizes?(partial)
                 onChunkDone?(done, chunks.count)
             }
         }
@@ -153,8 +206,8 @@ nonisolated enum FolderSizing {
     /// never ran. That is a different fact from `0`, which `du` prints only for a directory
     /// it read and found empty, and callers that must tell "empty" from "could not look"
     /// (the trash total, where 0 is a claim about the user's files) need the distinction.
-    nonisolated static func directoryByteSizeIfMeasurable(at url: URL) -> Int64? {
-        directorySizes(at: [url])[url.standardizedFileURL.path]
+    nonisolated static func directoryByteSizeIfMeasurable(at url: URL, staysOnVolume: Bool = false) -> Int64? {
+        directorySizes(at: [url], staysOnVolume: staysOnVolume)[url.standardizedFileURL.path]
     }
 
     /// Allocated bytes under `url`, and the latest access or change inside it,

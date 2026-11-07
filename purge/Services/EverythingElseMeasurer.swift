@@ -36,11 +36,16 @@ nonisolated final class EverythingElseMeasurer {
                     homeFolderNames: homeNames,
                     usersFolder: usersFolder
                 )
-                Self.run(roots: roots, access: access, home: home, readsSystemVolume: readsSystemVolume, continuation: continuation)
+                await Self.run(roots: roots, access: access, home: home, readsSystemVolume: readsSystemVolume, continuation: continuation)
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
+
+    /// How many roots are measured at once. Most roots wait on one big folder
+    /// while the other `du` slots sit idle; a few side by side fill them. Every
+    /// `du` still counts against `FolderSizing`'s process-wide cap.
+    static let rootsMeasuredAtOnce = 3
 
     private static func run(
         roots: [EverythingElseMeasureRoot],
@@ -48,7 +53,7 @@ nonisolated final class EverythingElseMeasurer {
         home: URL,
         readsSystemVolume: Bool,
         continuation: AsyncStream<EverythingElseMeasureEvent>.Continuation
-    ) {
+    ) async {
         defer { continuation.finish() }
         continuation.yield(.planned(roots))
 
@@ -68,38 +73,77 @@ nonisolated final class EverythingElseMeasurer {
             continuation.yield(.macOS(bytes))
         }
 
-        for root in roots {
-            if Task.isCancelled { return }
-            if root.isLockedWithoutAccess {
-                continuation.yield(.skipped(root, locked: true))
-                continue
-            }
-            guard isDirectory(root.url) else {
-                continuation.yield(.skipped(root, locked: false))
-                continue
-            }
-            switch root.kind {
-            case .whole:
-                guard let bytes = FolderSizing.directoryByteSizeIfMeasurable(at: root.url) else {
-                    continuation.yield(.skipped(root, locked: false))
-                    continue
-                }
-                continuation.yield(.measured(EverythingElseMeasuredRoot(root: root, totalBytes: bytes)))
-            case .children, .hiddenChildren, .childrenExcept:
-                let measured = measureChildren(of: root, access: access, home: home) { fraction in
-                    continuation.yield(.progress(root, fraction))
-                }
-                guard let measured else {
-                    continuation.yield(.skipped(root, locked: false))
-                    continue
-                }
-                if Task.isCancelled { return }
-                continuation.yield(.measured(measured))
-                let games = steamGames(inCommonFolder: root.url)
-                if !games.isEmpty {
-                    continuation.yield(.steamGames(games))
+        // A few roots are measured side by side, but each root's figures are
+        // reported in plan order, as the page expects. Progress inside a root
+        // is reported as it comes.
+        await withTaskGroup(of: (Int, [EverythingElseMeasureEvent]).self) { group in
+            var nextToStart = 0
+            var nextToReport = 0
+            var finished: [Int: [EverythingElseMeasureEvent]] = [:]
+
+            func startNext() {
+                guard nextToStart < roots.count else { return }
+                let index = nextToStart
+                nextToStart += 1
+                let root = roots[index]
+                group.addTask {
+                    (index, measure(root, access: access, home: home, continuation: continuation))
                 }
             }
+
+            for _ in 0..<min(rootsMeasuredAtOnce, roots.count) {
+                startNext()
+            }
+            while let (index, events) = await group.next() {
+                if Task.isCancelled {
+                    group.cancelAll()
+                    return
+                }
+                finished[index] = events
+                while let ready = finished.removeValue(forKey: nextToReport) {
+                    ready.forEach { continuation.yield($0) }
+                    nextToReport += 1
+                }
+                startNext()
+            }
+        }
+    }
+
+    /// What measuring one root reports, its progress aside, which goes straight
+    /// to `continuation`. Empty when the walk was stopped part way.
+    private static func measure(
+        _ root: EverythingElseMeasureRoot,
+        access: ScanAccess,
+        home: URL,
+        continuation: AsyncStream<EverythingElseMeasureEvent>.Continuation
+    ) -> [EverythingElseMeasureEvent] {
+        if Task.isCancelled { return [] }
+        if root.isLockedWithoutAccess {
+            return [.skipped(root, locked: true)]
+        }
+        guard isDirectory(root.url) else {
+            return [.skipped(root, locked: false)]
+        }
+        switch root.kind {
+        case .whole:
+            guard let bytes = FolderSizing.directoryByteSizeIfMeasurable(at: root.url, staysOnVolume: true) else {
+                return [.skipped(root, locked: false)]
+            }
+            return [.measured(EverythingElseMeasuredRoot(root: root, totalBytes: bytes))]
+        case .children, .hiddenChildren, .childrenExcept:
+            let measured = measureChildren(of: root, access: access, home: home) { fraction in
+                continuation.yield(.progress(root, fraction))
+            }
+            guard let measured else {
+                return [.skipped(root, locked: false)]
+            }
+            if Task.isCancelled { return [] }
+            var events: [EverythingElseMeasureEvent] = [.measured(measured)]
+            let games = steamGames(inCommonFolder: root.url)
+            if !games.isEmpty {
+                events.append(.steamGames(games))
+            }
+            return events
         }
     }
 
@@ -161,7 +205,10 @@ nonisolated final class EverythingElseMeasurer {
         }
         if Task.isCancelled { return nil }
 
-        let sizes = FolderSizing.directorySizes(at: folders) { done, total in
+        // Only this disk: a file system mounted inside a folder, such as the
+        // FSKit view of a paired iPhone under `~/Library/Developer/CoreDevice`,
+        // holds nothing on it, and walking that one took most of the measure.
+        let sizes = FolderSizing.directorySizes(at: folders, split: .spread, staysOnVolume: true) { done, total in
             progress(Double(done) / Double(max(1, total)))
         }
         var items: [OverviewSizedItem] = []

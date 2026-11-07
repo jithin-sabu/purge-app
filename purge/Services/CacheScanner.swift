@@ -577,17 +577,13 @@ nonisolated final class CacheScanner {
         let jobs = jobs.filter { ProtectedLocations.isReadable($0.path, access: access) }
         guard !jobs.isEmpty else { return }
 
-        let chunkSize = FolderSizing.duChunkSize
         // Matches the process-wide `du` cap. Each task takes one limiter permit
         // inside `directorySizesForChunk`, so this is the fan-out, not a second
         // multiplier on top of `directorySizes` callers.
         let maxConcurrent = FolderSizing.maxConcurrentDuChunks
-        var chunks: [[SizeJob]] = []
-        var index = 0
-        while index < jobs.count {
-            chunks.append(Array(jobs[index..<min(index + chunkSize, jobs.count)]))
-            index += chunkSize
-        }
+        // Short chunks, so every permit is in use and one big cache folder holds
+        // up only the few beside it.
+        let chunks = FolderSizing.chunks(of: jobs, split: .spread)
 
         await withTaskGroup(of: ([SizeJob], [String: Int64])?.self) { group in
             var iterator = chunks.makeIterator()

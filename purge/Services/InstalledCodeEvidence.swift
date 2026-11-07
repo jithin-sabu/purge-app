@@ -79,11 +79,64 @@ nonisolated struct InstalledCodeEvidence {
         runningApps: [RunningApp]? = nil,
         launchdJobRoots: [URL] = launchdJobRoots()
     ) -> InstalledCodeEvidence {
+        let systemApps = systemAppRoots.flatMap { AppBundleReach.appBundleURLs(in: $0) ?? [] }
+        let running = runningApps ?? currentRunningApps()
+        let jobs = launchdJobs(roots: launchdJobRoots)
+
+        // Every bundle and program the merge below can look at, read side by
+        // side first. The reads are independent, and one app at a time spent
+        // most of the Leftovers scan waiting on them. The merge then runs in
+        // the same order as before, so `visited` and the read counts come out
+        // the same.
+        var walked: [URL] = userAppBundles
+        var unwalked: [URL] = systemApps
+        var programs: [URL] = []
+        for app in running {
+            guard let url = app.bundleURL, !url.path.hasPrefix("/System/") else { continue }
+            walked.append(url)
+        }
+        for job in jobs {
+            guard let program = job.program else { continue }
+            if let bundle = outermostCodeBundle(containing: program) {
+                walked.append(bundle)
+            } else {
+                programs.append(program)
+            }
+        }
+        walked = uniqued(walked)
+        let walkedPaths = Set(walked.map(\.standardizedFileURL.path))
+        unwalked = uniqued(unwalked).filter { !walkedPaths.contains($0.standardizedFileURL.path) }
+        programs = uniqued(programs)
+
+        // The nested code of every walked bundle, all walks side by side, then
+        // every signature at once. Running the two in one pass nested one
+        // parallel loop in another, which GCD runs one item at a time, so
+        // Xcode's walk alone set the pace.
+        let nested = nestedCodeBundleURLs(inEach: walked)
+        var nestedByBundle: [String: [URL]] = [:]
+        for (bundle, inside) in zip(walked, nested) {
+            nestedByBundle[bundle.standardizedFileURL.path] = inside
+        }
+        let codeURLs = uniqued(walked + nested.flatMap { $0 } + unwalked)
+        let codeReads = ConcurrentMap.values(codeURLs) { url in
+            CodeRead(bundleID: bundleIdentifier(of: url), signature: CodeSignature.read(at: url))
+        }
+        let programReads = ConcurrentMap.values(programs) { CodeSignature.read(at: $0) }
+        let codeByPath = Dictionary(
+            zip(codeURLs.map(\.standardizedFileURL.path), codeReads),
+            uniquingKeysWith: { first, _ in first }
+        )
+        let programByPath: [String: CodeSignature?] = Dictionary(
+            zip(programs.map(\.standardizedFileURL.path), programReads),
+            uniquingKeysWith: { first, _ in first }
+        )
+        let reads = Prefetched(nestedByBundle: nestedByBundle, codeByPath: codeByPath, programByPath: programByPath)
+
         var evidence = InstalledCodeEvidence()
         var visited = Set<String>()
 
         for app in userAppBundles {
-            let readable = evidence.addBundle(app, includingNestedCode: true, visited: &visited)
+            let readable = evidence.addBundle(app, includingNestedCode: true, visited: &visited, reads: reads)
             if readable {
                 evidence.userAppSignaturesRead += 1
             } else {
@@ -95,38 +148,75 @@ nonisolated struct InstalledCodeEvidence {
         // the completeness check), but their groups are real claims: Podcasts
         // owns `243LU875E5.groups.com.apple.podcasts`, a name that does not start
         // with `com.apple.`.
-        for root in systemAppRoots {
-            for app in AppBundleReach.appBundleURLs(in: root) ?? [] {
-                evidence.addBundle(app, includingNestedCode: false, visited: &visited)
-            }
+        for app in systemApps {
+            evidence.addBundle(app, includingNestedCode: false, visited: &visited, reads: reads)
         }
 
         // An app can run from anywhere: a disk image, Downloads, another volume.
-        for running in runningApps ?? currentRunningApps() {
+        for running in running {
             if let id = running.bundleID, !id.isEmpty {
                 evidence.bundleIDs.insert(id.lowercased())
             }
             guard let url = running.bundleURL, !url.path.hasPrefix("/System/") else { continue }
-            evidence.addBundle(url, includingNestedCode: true, visited: &visited)
+            evidence.addBundle(url, includingNestedCode: true, visited: &visited, reads: reads)
         }
 
         // Updaters, agents, and privileged helpers often live outside the app
         // roots (Microsoft AutoUpdate in `/Library/Application Support`, helper
         // tools in `/Library/PrivilegedHelperTools`) and are only reachable
         // through the launchd job that starts them.
-        for job in launchdJobs(roots: launchdJobRoots) {
+        for job in jobs {
             for id in job.bundleIDs where !id.isEmpty {
                 evidence.bundleIDs.insert(id.lowercased())
             }
             guard let program = job.program else { continue }
             if let bundle = outermostCodeBundle(containing: program) {
-                evidence.addBundle(bundle, includingNestedCode: true, visited: &visited)
+                evidence.addBundle(bundle, includingNestedCode: true, visited: &visited, reads: reads)
             } else if visited.insert(program.standardizedFileURL.path).inserted,
-                      let signature = CodeSignature.read(at: program) {
+                      let signature = reads.program(at: program) {
                 evidence.add(signature)
             }
         }
         return evidence
+    }
+
+    /// One bundle's id and signature, read ahead of the merge in `gather`.
+    private struct CodeRead {
+        let bundleID: String?
+        let signature: CodeSignature?
+    }
+
+    /// What `gather` read ahead, by standardized path. A path it did not read
+    /// ahead is read when asked, so the merge never depends on the list above
+    /// being complete.
+    private struct Prefetched {
+        let nestedByBundle: [String: [URL]]
+        let codeByPath: [String: CodeRead]
+        let programByPath: [String: CodeSignature?]
+
+        func nested(in bundle: URL) -> [URL] {
+            nestedByBundle[bundle.standardizedFileURL.path]
+                ?? InstalledCodeEvidence.nestedCodeBundleURLs(in: bundle)
+        }
+
+        func code(at bundle: URL) -> CodeRead {
+            codeByPath[bundle.standardizedFileURL.path]
+                ?? CodeRead(
+                    bundleID: InstalledCodeEvidence.bundleIdentifier(of: bundle),
+                    signature: CodeSignature.read(at: bundle)
+                )
+        }
+
+        func program(at url: URL) -> CodeSignature? {
+            if let read = programByPath[url.standardizedFileURL.path] { return read }
+            return CodeSignature.read(at: url)
+        }
+    }
+
+    /// `urls` in order, each standardized path once.
+    private static func uniqued(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls.filter { seen.insert($0.standardizedFileURL.path).inserted }
     }
 
     /// Adds one bundle's claims and, when asked, those of the code nested inside
@@ -137,25 +227,26 @@ nonisolated struct InstalledCodeEvidence {
     private mutating func addBundle(
         _ bundle: URL,
         includingNestedCode: Bool,
-        visited: inout Set<String>
+        visited: inout Set<String>,
+        reads: Prefetched
     ) -> Bool {
         guard visited.insert(bundle.standardizedFileURL.path).inserted else { return true }
-        var readable = addCode(at: bundle)
+        var readable = addCode(reads.code(at: bundle))
         guard includingNestedCode else { return readable }
-        for nested in Self.nestedCodeBundleURLs(in: bundle)
+        for nested in reads.nested(in: bundle)
         where visited.insert(nested.standardizedFileURL.path).inserted {
-            let nestedReadable = addCode(at: nested)
+            let nestedReadable = addCode(reads.code(at: nested))
             readable = readable && nestedReadable
         }
         return readable
     }
 
     @discardableResult
-    private mutating func addCode(at bundle: URL) -> Bool {
-        if let id = Self.bundleIdentifier(of: bundle) {
+    private mutating func addCode(_ read: CodeRead) -> Bool {
+        if let id = read.bundleID {
             bundleIDs.insert(id.lowercased())
         }
-        guard let signature = CodeSignature.read(at: bundle) else { return false }
+        guard let signature = read.signature else { return false }
         add(signature)
         return true
     }
@@ -190,37 +281,91 @@ nonisolated struct InstalledCodeEvidence {
     /// Every helper app, extension, XPC service, and system extension inside
     /// `bundle`, at any depth. Never follows a symlink.
     static func nestedCodeBundleURLs(in bundle: URL) -> [URL] {
+        nestedCodeBundleURLs(inEach: [bundle])[0]
+    }
+
+    /// `nestedCodeBundleURLs(in:)` for each bundle, in order. The bundles are
+    /// walked together: each round lists the next few queued folders of every
+    /// unfinished bundle side by side, then counts each bundle's entries in its
+    /// own queue order, so every bundle's budget runs out at the same entry as
+    /// a walk that read one folder at a time.
+    static func nestedCodeBundleURLs(inEach bundles: [URL]) -> [[URL]] {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey]
-        var result: [URL] = []
-        var queue: [URL] = [bundle]
-        var budget = nestedWalkEntryBudget
-        var index = 0
+        let keySet = Set(keys)
+        var walks = bundles.map { NestedWalk(queue: [$0], budget: nestedWalkEntryBudget) }
 
-        while index < queue.count, budget > 0 {
-            let folder = queue[index]
+        while true {
+            var folders: [(walk: Int, folder: URL)] = []
+            for (number, walk) in walks.enumerated() where walk.index < walk.queue.count && walk.budget > 0 {
+                let end = min(walk.index + nestedWalkListingBatch, walk.queue.count)
+                folders += walk.queue[walk.index..<end].map { (number, $0) }
+            }
+            guard !folders.isEmpty else { break }
+            let listings = ConcurrentMap.values(folders) { item -> [NestedWalkEntry]? in
+                guard let entries = try? fm.contentsOfDirectory(
+                    at: item.folder,
+                    includingPropertiesForKeys: keys,
+                    options: [.skipsHiddenFiles]
+                ) else { return nil }
+                return entries.map { entry in
+                    let values = try? entry.resourceValues(forKeys: keySet)
+                    guard values?.isDirectory == true, values?.isSymbolicLink != true else {
+                        return NestedWalkEntry(url: entry, descends: false, isOwnerCode: false)
+                    }
+                    let name = entry.lastPathComponent
+                    let ext = entry.pathExtension.lowercased()
+                    guard !skippedFolderNames.contains(name), !skippedFolderExtensions.contains(ext) else {
+                        return NestedWalkEntry(url: entry, descends: false, isOwnerCode: false)
+                    }
+                    return NestedWalkEntry(url: entry, descends: true, isOwnerCode: ownerCodeExtensions.contains(ext))
+                }
+            }
+            for (item, listing) in zip(folders, listings) {
+                walks[item.walk].take(listing)
+            }
+        }
+        return walks.map(\.result)
+    }
+
+    /// One bundle's breadth-first walk in `nestedCodeBundleURLs(inEach:)`.
+    private struct NestedWalk {
+        var queue: [URL]
+        var budget: Int
+        var index = 0
+        var result: [URL] = []
+
+        /// Counts the listing of `queue[index]`, the next folder in order.
+        /// A walk whose budget ran out ignores the rest of its round.
+        mutating func take(_ listing: [NestedWalkEntry]?) {
+            guard budget > 0 else { return }
             index += 1
-            guard let entries = try? fm.contentsOfDirectory(
-                at: folder,
-                includingPropertiesForKeys: keys,
-                options: [.skipsHiddenFiles]
-            ) else { continue }
+            guard let entries = listing else { return }
             for entry in entries {
                 budget -= 1
                 if budget <= 0 { break }
-                let values = try? entry.resourceValues(forKeys: Set(keys))
-                guard values?.isDirectory == true, values?.isSymbolicLink != true else { continue }
-                let name = entry.lastPathComponent
-                let ext = entry.pathExtension.lowercased()
-                guard !skippedFolderNames.contains(name), !skippedFolderExtensions.contains(ext) else { continue }
-                if ownerCodeExtensions.contains(ext) {
-                    result.append(entry)
+                guard entry.descends else { continue }
+                if entry.isOwnerCode {
+                    result.append(entry.url)
                 }
-                queue.append(entry)
+                queue.append(entry.url)
             }
         }
-        return result
     }
+
+    /// One folder entry as the nested-code walk judged it.
+    private struct NestedWalkEntry {
+        let url: URL
+        /// A real folder (not a link) the walk goes into.
+        let descends: Bool
+        /// A helper app, extension, XPC service or system extension.
+        let isOwnerCode: Bool
+    }
+
+    /// How many queued folders of each bundle one round of the nested-code walk
+    /// lists. Small, so a walk that runs out of budget part way lists few
+    /// folders it never uses.
+    static let nestedWalkListingBatch = 128
 
     /// The bundle id from a bundle's `Info.plist`, in the macOS layout
     /// (`Contents/Info.plist`) or the iOS one (`Info.plist` at the root, as in
