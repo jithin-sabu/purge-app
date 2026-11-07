@@ -3363,15 +3363,8 @@ final class PurgeStore: ObservableObject {
         Self.markSharedWithSurvivors(in: &appPlans, survivors: claimants, appGroupClaims: appGroupClaims)
 
         let id = appPlans.map(\.app.id).sorted().joined(separator: "|")
-        uninstallPlan = UninstallPlan(
-            id: id,
-            apps: appPlans,
-            partialSuites: AppSuiteGrouping.partialSuites(
-                pickedIDs: removingIDs,
-                groups: appSuiteGroups,
-                apps: installedApps
-            )
-        )
+        let suites = suiteContext(for: removingIDs)
+        uninstallPlan = UninstallPlan(id: id, apps: appPlans, suiteGroups: suites.groups, suiteApps: suites.apps)
     }
 
     /// Unticks and labels any leftover that an app the user is keeping also claims,

@@ -344,6 +344,11 @@ struct PartialSuiteWarning: View {
     }
 
     static func text(for suite: PartialSuite) -> String {
-        String(localized: "You picked \(suite.pickedCount) of \(suite.totalCount) apps in \(suite.groupName). Removing only some of them can stop its own uninstaller from removing the rest.")
+        switch suite.kind {
+        case .uninstallerRemoved:
+            return String(localized: "\(suite.uninstallerName) is the uninstaller that came with \(suite.groupName). Open it first, so it can remove the parts it installed outside this folder.")
+        case .someParts:
+            return String(localized: "You picked \(suite.pickedCount) of \(suite.totalCount) apps in \(suite.groupName). Removing only some of them can stop its own uninstaller from removing the rest.")
+        }
     }
 }

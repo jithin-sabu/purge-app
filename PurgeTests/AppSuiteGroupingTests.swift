@@ -249,25 +249,74 @@ struct AppSuiteGroupingTests {
 
     // MARK: Partial suites
 
-    @Test
-    func partialSuiteOnlyForSomeMembersOfAGroupWithAnUninstaller() {
+    private var suiteSetup: (apps: [InstalledApp], groups: [AppSuiteGroup]) {
         let apps = resolve + raw
-        let groups = AppSuiteGrouping.groups(apps: apps, roots: roots, teamID: teams(sameTeam(apps)))
+        return (apps, AppSuiteGrouping.groups(apps: apps, roots: roots, teamID: teams(sameTeam(apps))))
+    }
 
-        let one = AppSuiteGrouping.partialSuites(pickedIDs: [resolve[0].id], groups: groups, apps: apps)
+    @Test
+    func somePartsWarnAndCountOnlyTheAppsBesideTheUninstaller() {
+        let (apps, groups) = suiteSetup
+        let one = AppSuiteGrouping.partialSuites(removingIDs: [resolve[0].id], groups: groups, apps: apps)
         #expect(one == [PartialSuite(
+            kind: .someParts,
             groupName: "DaVinci Resolve",
             uninstallerName: "Uninstall Resolve",
             uninstallerURL: resolve[3].bundleURL,
             pickedCount: 1,
-            totalCount: 4
+            totalCount: 3
         )])
-
-        let all = Set(resolve.map(\.id))
-        #expect(AppSuiteGrouping.partialSuites(pickedIDs: all, groups: groups, apps: apps).isEmpty)
-        #expect(AppSuiteGrouping.partialSuites(pickedIDs: [], groups: groups, apps: apps).isEmpty)
+        // Every app but the uninstaller: the uninstaller can still run, so no note.
+        let parts = Set(resolve.prefix(3).map(\.id))
+        #expect(AppSuiteGrouping.partialSuites(removingIDs: parts, groups: groups, apps: apps).isEmpty)
+        #expect(AppSuiteGrouping.partialSuites(removingIDs: [], groups: groups, apps: apps).isEmpty)
         // Blackmagic RAW has no uninstaller, so a partial pick there gets no note.
-        #expect(AppSuiteGrouping.partialSuites(pickedIDs: [raw[0].id], groups: groups, apps: apps).isEmpty)
+        #expect(AppSuiteGrouping.partialSuites(removingIDs: [raw[0].id], groups: groups, apps: apps).isEmpty)
+    }
+
+    /// Review of #337: removing the uninstaller is the case that leaves the
+    /// vendor's other files behind, alone or with every other app.
+    @Test
+    func removingTheUninstallerAlwaysWarns() {
+        let (apps, groups) = suiteSetup
+        let alone = AppSuiteGrouping.partialSuites(removingIDs: [resolve[3].id], groups: groups, apps: apps)
+        #expect(alone.map(\.kind) == [.uninstallerRemoved])
+        #expect(alone.first?.pickedCount == 0)
+
+        let all = AppSuiteGrouping.partialSuites(removingIDs: Set(resolve.map(\.id)), groups: groups, apps: apps)
+        #expect(all.map(\.kind) == [.uninstallerRemoved])
+        #expect(all.first?.pickedCount == 3)
+    }
+
+    private func appPlan(_ app: InstalledApp, bundleTicked: Bool = true) -> UninstallAppPlan {
+        UninstallAppPlan(app: app, items: [UninstallItem(
+            path: app.bundleURL, sizeBytes: 1, category: .bundle,
+            safetyInfo: SafetyInfo(level: .medium, headline: app.name, explanation: "", recoverySteps: "", reinstallCommand: nil),
+            matchReason: .appBundle, isSelected: bundleTicked
+        )])
+    }
+
+    /// Review of #337: the sheet lets the user untick a bundle, which keeps
+    /// that app, so the warning follows the ticks rather than the first pick.
+    @Test
+    func planWarningFollowsTheTickedBundles() {
+        let (apps, groups) = suiteSetup
+        var plan = UninstallPlan(
+            id: "p",
+            apps: resolve.prefix(3).map { appPlan($0) },
+            suiteGroups: groups,
+            suiteApps: apps
+        )
+        #expect(plan.partialSuites.isEmpty)
+
+        plan.apps[1].items[0].isSelected = false
+        #expect(plan.partialSuites.map(\.kind) == [.someParts])
+        #expect(plan.partialSuites.first?.pickedCount == 2)
+
+        var one = UninstallPlan(id: "q", apps: [appPlan(resolve[0])], suiteGroups: groups, suiteApps: apps)
+        #expect(one.partialSuites.count == 1)
+        one.apps[0].items[0].isSelected = false
+        #expect(one.partialSuites.isEmpty)
     }
 }
 

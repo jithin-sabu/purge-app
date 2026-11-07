@@ -118,42 +118,38 @@ struct AppSuiteStoreTests {
         #expect(store.selectedAppIDs == [fixture.loner.id])
     }
 
+    /// The plan gets the groups its apps belong to and their members. Checked
+    /// on the store's helper, not through a plan build, which scans the real
+    /// home folder for leftovers.
     @Test
-    func planNotesASuiteTakenInPartAndOpensItsUninstaller() async throws {
+    func suiteContextHoldsOnlyTheGroupsOfThePickedApps() async throws {
+        let scans = FakeScans()
+        let fixture = try makeFixture()
+        defer { scans.cleanUp(); try? fm.removeItem(at: fixture.root) }
+        let store = makeStore(scans, fixture)
+        #expect(await eventually { store.appSuiteGroups.count == 1 })
+
+        let picked = store.suiteContext(for: [fixture.apps[0].id])
+        #expect(picked.groups.map(\.id) == store.appSuiteGroups.map(\.id))
+        #expect(Set(picked.apps.map(\.id)) == Set(fixture.suiteIDs))
+
+        let lone = store.suiteContext(for: [fixture.loner.id])
+        #expect(lone.groups.isEmpty)
+        #expect(lone.apps.isEmpty)
+    }
+
+    @Test
+    func openingTheUninstallerClosesThePlanAndLaunchesIt() throws {
         let scans = FakeScans()
         let fixture = try makeFixture()
         defer { scans.cleanUp(); try? fm.removeItem(at: fixture.root) }
         let store = makeStore(scans, fixture)
         var launched: [URL] = []
         store.appLauncher = { launched.append($0) }
-        #expect(await eventually { store.appSuiteGroups.count == 1 })
+        store.uninstallPlan = UninstallPlan(id: "p", apps: [UninstallAppPlan(app: fixture.apps[0], items: [])])
 
-        store.toggleAppSelected(id: fixture.apps[0].id)
-        await store.requestUninstallSelectedApps()
-        let plan = try #require(store.uninstallPlan)
-        let suite = try #require(plan.partialSuites.first)
-        #expect(plan.partialSuites.count == 1)
-        #expect(suite.pickedCount == 1)
-        #expect(suite.totalCount == 3)
-        #expect(suite.uninstallerURL == fixture.uninstaller.bundleURL)
-
-        store.openSuiteUninstaller(at: suite.uninstallerURL)
+        store.openSuiteUninstaller(at: fixture.uninstaller.bundleURL)
         #expect(store.uninstallPlan == nil)
         #expect(launched == [fixture.uninstaller.bundleURL])
-    }
-
-    @Test
-    func planForAWholeSuiteHasNoNote() async throws {
-        let scans = FakeScans()
-        let fixture = try makeFixture()
-        defer { scans.cleanUp(); try? fm.removeItem(at: fixture.root) }
-        let store = makeStore(scans, fixture)
-        #expect(await eventually { store.appSuiteGroups.count == 1 })
-
-        store.setAppsSelected(fixture.suiteIDs, true)
-        await store.requestUninstallSelectedApps()
-        let plan = try #require(store.uninstallPlan)
-        #expect(plan.apps.count == 3)
-        #expect(plan.partialSuites.isEmpty)
     }
 }

@@ -1437,3 +1437,4 @@
 "Close" = "关闭";
 "%@ comes with its own uninstaller." = "%@ 自带卸载程序。";
 "You picked %lld of %lld apps in %@. Removing only some of them can stop its own uninstaller from removing the rest." = "你选择了 %3$@ 中 %2$lld 个应用里的 %1$lld 个。只移除其中一部分，可能导致它自带的卸载程序无法移除其余部分。";
+"%@ is the uninstaller that came with %@. Open it first, so it can remove the parts it installed outside this folder." = "%1$@ 是 %2$@ 自带的卸载程序。请先打开它，让它移除安装在此文件夹之外的部分。";

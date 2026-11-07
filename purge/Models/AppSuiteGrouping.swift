@@ -148,35 +148,56 @@ nonisolated enum AppSuiteGrouping {
     }
 }
 
-/// A group with its own uninstaller that a removal takes only part of (#155).
-/// The review sheet warns, since removing some parts by hand can stop the
-/// vendor's uninstaller from removing the rest.
+/// A removal the review sheet warns about (#155): it takes the vendor's own
+/// uninstaller, or only some of a group's other apps while that uninstaller
+/// stays. Removing parts by hand can stop the uninstaller from removing the
+/// rest, and only it removes what the vendor installed outside the folder.
 nonisolated struct PartialSuite: Hashable, Sendable {
+    enum Kind: Hashable, Sendable {
+        /// The removal takes the uninstaller itself.
+        case uninstallerRemoved
+        /// The removal takes some, not all, of the other apps.
+        case someParts
+    }
+
+    let kind: Kind
     let groupName: String
     let uninstallerName: String
     let uninstallerURL: URL
+    /// Apps other than the uninstaller that the removal takes.
     let pickedCount: Int
+    /// Apps in the group other than the uninstaller.
     let totalCount: Int
 }
 
 extension AppSuiteGrouping {
-    /// The groups with an uninstaller where some, but not all, members are picked.
+    /// The groups with an uninstaller that a removal of `removingIDs` should
+    /// warn about. The uninstaller never counts as one of the parts.
     static func partialSuites(
-        pickedIDs: Set<String>,
+        removingIDs: Set<String>,
         groups: [AppSuiteGroup],
         apps: [InstalledApp]
     ) -> [PartialSuite] {
         let byID = Dictionary(apps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return groups.compactMap { group in
             guard let uninstallerID = group.uninstallerID, let uninstaller = byID[uninstallerID] else { return nil }
-            let picked = group.appIDs.filter(pickedIDs.contains).count
-            guard picked > 0, picked < group.appIDs.count else { return nil }
+            let parts = group.appIDs.filter { $0 != uninstallerID }
+            let picked = parts.filter(removingIDs.contains).count
+            let kind: PartialSuite.Kind
+            if removingIDs.contains(uninstallerID) {
+                kind = .uninstallerRemoved
+            } else if picked > 0, picked < parts.count {
+                kind = .someParts
+            } else {
+                return nil
+            }
             return PartialSuite(
+                kind: kind,
                 groupName: group.name,
                 uninstallerName: uninstaller.name,
                 uninstallerURL: uninstaller.bundleURL,
                 pickedCount: picked,
-                totalCount: group.appIDs.count
+                totalCount: parts.count
             )
         }
     }

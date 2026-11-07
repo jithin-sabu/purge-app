@@ -345,9 +345,18 @@ nonisolated struct UninstallAppPlan: Identifiable, Hashable {
 nonisolated struct UninstallPlan: Identifiable, Hashable {
     let id: String
     var apps: [UninstallAppPlan]
-    /// Groups with their own uninstaller that this removal takes only part of
-    /// (#155), so the sheet can point to that uninstaller.
-    var partialSuites: [PartialSuite] = []
+    /// The vendor groups the plan's apps belong to (#155), and every app in
+    /// them, so the sheet can warn as the user ticks and unticks bundles.
+    var suiteGroups: [AppSuiteGroup] = []
+    var suiteApps: [InstalledApp] = []
+
+    /// What the sheet warns about, from the bundles ticked right now: an
+    /// unticked bundle stays on disk, so its app is not being removed.
+    var partialSuites: [PartialSuite] {
+        guard !suiteGroups.isEmpty else { return [] }
+        let removing = Set(apps.filter { $0.bundleItem?.isSelected == true }.map(\.app.id))
+        return AppSuiteGrouping.partialSuites(removingIDs: removing, groups: suiteGroups, apps: suiteApps)
+    }
 
     var totalSelectedItems: Int { uniqueSelectedItems.count }
     var totalSelectedBytes: Int64 { uniqueSelectedItems.reduce(Int64(0)) { $0 + $1.sizeBytes } }

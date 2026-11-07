@@ -48,6 +48,14 @@ extension PurgeStore {
         AppSuiteGrouping.entries(apps: apps, groups: appSuiteGroups)
     }
 
+    /// The groups that hold any of `appIDs`, and every listed app in them, for
+    /// the review sheet's warning.
+    func suiteContext(for appIDs: Set<String>) -> (groups: [AppSuiteGroup], apps: [InstalledApp]) {
+        let groups = appSuiteGroups.filter { !appIDs.isDisjoint(with: $0.appIDs) }
+        let members = Set(groups.flatMap(\.appIDs))
+        return (groups, installedApps.filter { members.contains($0.id) })
+    }
+
     /// Opens a suite's own uninstaller, closing the review sheet first when it
     /// was opened from there.
     func openSuiteUninstaller(at url: URL) {
