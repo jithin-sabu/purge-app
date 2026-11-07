@@ -12,15 +12,18 @@ extension PurgeStore {
         guard inputs != appSuiteInputs else { return }
         appSuiteInputs = inputs
 
-        appSuiteGroupingTask?.cancel()
+        // Rebuilds run one at a time: the new one waits for the one it replaces,
+        // which stops at its next signature read and keeps what it read in the
+        // cache, so no signature is read twice or by two builds at once.
+        let previous = appSuiteGroupingTask
+        previous?.cancel()
         let roots = inputs.roots
-        let known = appTeamIDByPath
-        let reader = appTeamIDReader
         appSuiteGroupingTask = Task { [weak self] in
+            await previous?.value
             // A scan lists apps a few at a time; wait for a pause so one build
             // covers the burst instead of one per app.
             try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, let known = self?.appTeamIDByPath, let reader = self?.appTeamIDReader else { return }
             let (groups, teams) = await Self.buildSuiteGroups(apps: apps, roots: roots, known: known, reader: reader)
             guard let self else { return }
             // Teams read before a newer build took over still go in the cache.

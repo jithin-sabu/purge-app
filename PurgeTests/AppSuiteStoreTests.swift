@@ -44,6 +44,31 @@ struct AppSuiteStoreTests {
         return Fixture(root: root, apps: apps)
     }
 
+    /// A signature reader that holds its first read until the test lets it go,
+    /// and records how many reads ran at once.
+    private final class HeldReader: @unchecked Sendable {
+        private let lock = NSLock()
+        private let release = DispatchSemaphore(value: 0)
+        private var paths: [String] = []
+        private var active = 0
+        private(set) var maxActive = 0
+
+        func read(_ url: URL) -> String? {
+            lock.lock()
+            paths.append(url.path)
+            active += 1
+            maxActive = max(maxActive, active)
+            let isFirst = paths.count == 1
+            lock.unlock()
+            if isFirst { release.wait() }
+            lock.lock(); active -= 1; lock.unlock()
+            return "ABCDE12345"
+        }
+
+        func letGo() { release.signal() }
+        var readPaths: [String] { lock.lock(); defer { lock.unlock() }; return paths }
+    }
+
     private final class Calls: @unchecked Sendable {
         private let lock = NSLock()
         private var paths: [String] = []
@@ -124,6 +149,31 @@ struct AppSuiteStoreTests {
         #expect(await eventually { store.appSuiteGroups.count == 1 })
         #expect(calls.count == 3)
         #expect(readOnMain.count == 0)
+    }
+
+    /// Review of #337: the list changes while a build is stuck on a signature
+    /// read. The next build waits for it, so reads never overlap, no path is
+    /// read twice, and the groups for the final list still land.
+    @Test
+    func aChangeDuringABuildWaitsForItAndStillPublishes() async throws {
+        let scans = FakeScans()
+        let fixture = try makeFixture()
+        defer { scans.cleanUp(); try? fm.removeItem(at: fixture.root) }
+        let reader = HeldReader()
+        let store = scans.makeStore()
+        store.appTeamIDReader = { reader.read($0) }
+        store.appFolderPaths = AppFolderPaths(roots: [fixture.applications.path])
+        store.installedApps = [fixture.apps[0], fixture.apps[1]]
+
+        #expect(await eventually { reader.readPaths.count == 1 })
+        store.installedApps = fixture.apps
+        try await Task.sleep(for: .milliseconds(400))
+        reader.letGo()
+
+        #expect(await eventually { store.appSuiteGroups.count == 1 })
+        #expect(store.appSuiteGroups.first?.appIDs.count == 3)
+        #expect(reader.maxActive == 1)
+        #expect(reader.readPaths.count == Set(reader.readPaths).count)
     }
 
     @Test
