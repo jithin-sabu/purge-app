@@ -260,6 +260,10 @@
 "Playwright Browsers" = "Playwright 浏览器";
 "Browsers Playwright downloaded for automated website testing. Your tests fail until you run npx playwright install, which downloads them again." = "Playwright 为自动化网站测试下载的浏览器。删除后测试会失败，直到你运行 npx playwright install 重新下载。";
 
+/* playwright-unused-builds */
+"Unused Playwright Browsers" = "未使用的 Playwright 浏览器";
+"Browser builds Playwright downloaded that no installed Playwright uses. If a project needs one again, npx playwright install downloads it." = "Playwright 下载的、已安装的 Playwright 都不再使用的浏览器版本。如果项目再次需要，运行 npx playwright install 会重新下载。";
+
 /* node-modules */
 "Node.js Packages" = "Node.js 软件包";
 "Code libraries installed for developer projects. Safe to remove for stale projects — run npm install to restore them anytime." = "开发项目安装的代码库。旧项目的代码库可以安全移除，随时运行 npm install 即可恢复。";

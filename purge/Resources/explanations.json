@@ -846,6 +846,15 @@
     "kind": "packages"
   },
   {
+    "key": "playwright-unused-builds",
+    "display_name": "Unused Playwright Browsers",
+    "tag": "medium",
+    "explanation": "Browser builds Playwright downloaded that no installed Playwright uses. If a project needs one again, npx playwright install downloads it.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
     "key": "node-modules",
     "display_name": "Node.js Packages",
     "tag": "safe",

@@ -105,6 +105,7 @@ enum BrandIconMapping {
         "zed": "zedindustries",
         "electron": "electron",
         "ms-playwright": "playwright",
+        "playwright-unused-builds": "playwright",
         "DerivedData": "xcode",
         "archives": "xcode",
         "xcode": "xcode",

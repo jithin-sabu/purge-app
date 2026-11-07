@@ -94,7 +94,7 @@ struct AllowlistNoLongerSafeTests {
 
     @Test(arguments: [
         "Maven Cache", "Gradle Cache", "NuGet Packages", "Cabal Packages",
-        "SBT Cache", "Playwright Browsers",
+        "SBT Cache", "Unused Playwright Browsers",
     ])
     func bigDownloadStoresAreCheckFirst(label: String) {
         let info = DevScanner.automaticSafetyInfo(forDevToolLabel: label, primaryPath: nil)

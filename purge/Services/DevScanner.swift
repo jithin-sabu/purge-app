@@ -52,7 +52,7 @@ nonisolated final class DevScanner {
         "Vagrant Cache": "vagrant",
         "Zsh Cache": "zsh",
         "Electron App Caches": "electron",
-        "Playwright Browsers": "ms-playwright",
+        PlaywrightBuildScanPolicy.label: PlaywrightBuildScanPolicy.explanationKey,
         "npm npx Cache": "npm-npx-cache",
         "npm Logs": "npm-logs",
         "Xcode Documentation Cache": "xcode-docs-cache",
@@ -588,9 +588,11 @@ nonisolated final class DevScanner {
     /// once the dev scan claims them.
     nonisolated static func claimedGlobalCachePaths() -> Set<String> {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        // The JetBrains row lists each IDE folder's children rather than the folder
-        // itself, so the folder is claimed by name here to keep App Caches off it.
+        // The JetBrains and Playwright rows list entries inside their folders rather
+        // than the folder itself, so each folder is claimed by name here to keep App
+        // Caches off it.
         let claimedRoots = [home.appendingPathComponent("Library/Caches/JetBrains", isDirectory: true)]
+            + PlaywrightBuildScanPolicy.roots.map { home.appendingPathComponent($0, isDirectory: true) }
         return Set((globalCacheDefinitions().flatMap(\.paths) + claimedRoots).map { $0.standardizedFileURL.path })
     }
 
@@ -835,12 +837,9 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent("Library/Application Support/discord/Code Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Notion/Cache", isDirectory: true),
                 home.appendingPathComponent("Library/Application Support/Figma/Cache", isDirectory: true)
-            ]),
-
-            ("Playwright Browsers", [
-                home.appendingPathComponent("Library/Caches/ms-playwright", isDirectory: true),
-                home.appendingPathComponent(".cache/ms-playwright", isDirectory: true)
             ])
+            // Playwright's browser folders are not a row as a whole: a project still
+            // runs some of the builds. `PlaywrightBuildScanPolicy` offers the rest (#328).
         ] + chromiumUserDataCacheDefinitions(home: home)
     }
 
@@ -864,6 +863,7 @@ nonisolated final class DevScanner {
             + discoverOrphanedEditorWorkspaceDefinitions(home: home, access: access)
             + Self.oldCLIVersionDefinitions(home: home)
             + OldToolVersionScanPolicy.definitions(home: home)
+            + PlaywrightBuildScanPolicy.definitions(home: home, access: access)
         // Agent worktrees are judged by reading the git dir their `.git` file points
         // at, which is usually a repo in Documents or Desktop, and Claude Code's live
         // inside those projects. A limited scan cannot look there without a prompt,
