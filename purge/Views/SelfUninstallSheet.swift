@@ -69,14 +69,16 @@ struct SelfUninstallSheet: View {
             SelfUninstallHero(icon: .failed, title: failureTitle, subtitle: String(localized: "Purge wasn’t moved."))
             stepList
             buttons {
-                if model.failedSteps.allSatisfy({ $0.kind != .data }) {
+                if model.dataIsSplit || model.failedSteps.allSatisfy({ $0.kind != .data }) {
                     Button(String(localized: "Uninstall Anyway")) {
                         Task { await model.uninstallAnyway() }
                     }
                     .buttonStyle(.purge(.quiet))
                 }
                 Spacer()
-                cancelButton
+                // With data split between here and the Trash, going back to a
+                // running Purge would start a new, empty data folder.
+                if model.mayCancel { cancelButton }
                 Button(String(localized: "Try Again")) {
                     Task { await model.retry() }
                 }
@@ -222,7 +224,11 @@ struct SelfUninstallSheet: View {
             symbol: Self.symbol(for: step.kind),
             title: Self.title(for: step.kind),
             state: step.state,
-            detail: step.state == .failed ? Self.failureDetail(for: step.kind) : nil,
+            detail: step.state == .failed
+                ? (step.kind == .data && model.dataIsSplit
+                    ? String(localized: "Some are in the Trash")
+                    : Self.failureDetail(for: step.kind))
+                : nil,
             fix: step.state == .failed && Self.isListedInLoginItems(step.kind)
                 ? (String(localized: "Open Login Items"), { SMAppServiceSettings.openLoginItems() })
                 : nil
@@ -308,7 +314,7 @@ struct SelfUninstallSheet: View {
             return String(localized: "Still in Login Items")
         case .part(.finderService): return String(localized: "Still in Finder’s menu")
         case .part(.cleanupReminder): return String(localized: "Still scheduled")
-        case .data: return String(localized: "Not all moved")
+        case .data: return String(localized: "Nothing moved")
         case .app: return String(localized: "Not moved")
         }
     }

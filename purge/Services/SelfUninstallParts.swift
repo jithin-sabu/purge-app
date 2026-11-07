@@ -101,43 +101,47 @@ struct LiveSelfUninstallFileMover: SelfUninstallFileMover {
     var bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
     var home = FileManager.default.homeDirectoryForCurrentUser
 
-    func moveData() async -> Bool {
+    func moveData() async -> SelfUninstallDataMove {
+        // Checked again here, right before the move, as well as by the run.
+        guard SelfUninstallPolicy.otherCopies(of: bundleURL, bundleIdentifier: bundleIdentifier).isEmpty else {
+            return .keptForOtherCopy
+        }
         let home = home
         let identifier = bundleIdentifier
-        let moved = await Task.detached(priority: .userInitiated) { () -> Bool in
+        let result = await Task.detached(priority: .userInitiated) { () -> SelfUninstallDataMove in
             let files = FileManager.default
-            var ok = true
-            // A copy, so it can be put back. The domain is cleared at quit.
+            let folders = SelfUninstallPolicy.dataFolders(home: home, bundleIdentifier: identifier)
+                .filter { files.fileExists(atPath: $0.path) }
+            // Every folder is checked before any moves.
+            guard folders.allSatisfy({
+                SelfUninstallPolicy.isOwnDataFolder($0, home: home, bundleIdentifier: identifier)
+                    && files.isDeletableFile(atPath: $0.path)
+            }) else { return .failed }
+            var items = folders.map { SelfUninstallPolicy.DataItem.folder($0) }
+            // A copy of the preferences, last, so it can be put back. The domain
+            // itself is cleared at quit.
             let preferences = SelfUninstallPolicy.preferencesFile(home: home, bundleIdentifier: identifier)
-            if files.fileExists(atPath: preferences.path) {
-                let staging = files.temporaryDirectory
-                    .appendingPathComponent("purge-uninstall-\(UUID().uuidString)", isDirectory: true)
-                do {
+            if files.fileExists(atPath: preferences.path) { items.append(.copyOf(preferences)) }
+            return SelfUninstallPolicy.moveAllOrNothing(
+                items,
+                trash: { url in
+                    var resulting: NSURL?
+                    try files.trashItem(at: url, resultingItemURL: &resulting)
+                    return resulting as URL?
+                },
+                copy: { source in
+                    let staging = files.temporaryDirectory
+                        .appendingPathComponent("purge-uninstall-\(UUID().uuidString)", isDirectory: true)
                     try files.createDirectory(at: staging, withIntermediateDirectories: true)
-                    let copy = staging.appendingPathComponent(preferences.lastPathComponent)
-                    try files.copyItem(at: preferences, to: copy)
-                    try files.trashItem(at: copy, resultingItemURL: nil)
-                } catch {
-                    ok = false
-                }
-                try? files.removeItem(at: staging)
-            }
-            for folder in SelfUninstallPolicy.dataFolders(home: home, bundleIdentifier: identifier)
-            where files.fileExists(atPath: folder.path) {
-                guard SelfUninstallPolicy.isOwnDataFolder(folder, home: home, bundleIdentifier: identifier) else {
-                    ok = false
-                    continue
-                }
-                do {
-                    try files.trashItem(at: folder, resultingItemURL: nil)
-                } catch {
-                    ok = false
-                }
-            }
-            return ok
+                    let copy = staging.appendingPathComponent(source.lastPathComponent)
+                    try files.copyItem(at: source, to: copy)
+                    return copy
+                },
+                putBack: { trashed, original in try files.moveItem(at: trashed, to: original) }
+            )
         }.value
-        if moved { SelfUninstallState.defaultsDomainToClear = identifier }
-        return moved
+        if result == .moved { SelfUninstallState.defaultsDomainToClear = identifier }
+        return result
     }
 
     func moveApp() async -> SelfUninstallAppMove {
@@ -162,7 +166,7 @@ struct LiveSelfUninstallFileMover: SelfUninstallFileMover {
 /// shares the real user's files.
 @MainActor
 private struct InertSelfUninstallFileMover: SelfUninstallFileMover {
-    func moveData() async -> Bool { false }
+    func moveData() async -> SelfUninstallDataMove { .failed }
     func moveApp() async -> SelfUninstallAppMove { .refused(.notThisApp) }
 }
 

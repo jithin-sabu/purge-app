@@ -121,6 +121,47 @@ nonisolated enum SelfUninstallPolicy {
         }
     }
 
+    // MARK: Moving the data
+
+    enum DataItem: Equatable, Sendable {
+        /// Moved itself, and moved back on a failure.
+        case folder(URL)
+        /// Copied first and the copy moved, so the original never leaves.
+        case copyOf(URL)
+    }
+
+    /// Moves every item to the Trash or none. When one fails, the folders that
+    /// already went are moved back to where they were; `.failedPartly` means
+    /// at least one could not be. A copy left in the Trash is only a copy.
+    static func moveAllOrNothing(
+        _ items: [DataItem],
+        trash: (URL) throws -> URL?,
+        copy: (URL) throws -> URL,
+        putBack: (URL, URL) throws -> Void
+    ) -> SelfUninstallDataMove {
+        var moved: [(original: URL, trashed: URL?)] = []
+        for item in items {
+            do {
+                switch item {
+                case .folder(let url):
+                    moved.append((url, try trash(url)))
+                case .copyOf(let url):
+                    _ = try trash(try copy(url))
+                }
+            } catch {
+                var allBack = true
+                for entry in moved.reversed() {
+                    guard let trashed = entry.trashed, (try? putBack(trashed, entry.original)) != nil else {
+                        allBack = false
+                        continue
+                    }
+                }
+                return allBack ? .failed : .failedPartly
+            }
+        }
+        return .moved
+    }
+
     // MARK: Reading from disk
 
     static func readFacts(of url: URL) -> BundleFacts {

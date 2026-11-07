@@ -26,8 +26,20 @@ protocol SelfUninstallPartControl {
 @MainActor
 protocol SelfUninstallFileMover {
     /// Moves the data folders and a copy of the preferences. True when nothing failed.
-    func moveData() async -> Bool
+    func moveData() async -> SelfUninstallDataMove
     func moveApp() async -> SelfUninstallAppMove
+}
+
+/// How the data step ended. The folders move all or nothing: on a failure the
+/// ones that already went are put back.
+nonisolated enum SelfUninstallDataMove: Equatable, Sendable {
+    case moved
+    /// Another copy of Purge turned up, so the shared data stays.
+    case keptForOtherCopy
+    /// Nothing moved, or what moved was put back.
+    case failed
+    /// Some folders are in the Trash and could not be put back.
+    case failedPartly
 }
 
 nonisolated enum SelfUninstallAppMove: Equatable, Sendable {
@@ -93,6 +105,11 @@ final class SelfUninstaller: ObservableObject, Identifiable {
     @Published private(set) var hasStartedMoving = false
     /// True when the data step ran and finished.
     @Published private(set) var movedData = false
+    /// True when part of the data is in the Trash and could not be put back.
+    /// Going back to normal running would then make a new, empty data folder
+    /// beside the old one, so Cancel is gone and only Try Again or Uninstall
+    /// Anyway remain.
+    @Published private(set) var dataIsSplit = false
     /// Other copies of Purge on this Mac. They share the settings and history,
     /// so the box is off while any exists: an Xcode build once took the data of
     /// the installed copy this way.
@@ -156,17 +173,28 @@ final class SelfUninstaller: ObservableObject, Identifiable {
         await runParts()
     }
 
-    /// Moves on with the failed parts still on. A failed data move still blocks:
-    /// the app would leave half its data behind.
+    /// Moves on with the failed parts still on. A data move that failed cleanly
+    /// runs again; one that left data split between here and the Trash is not
+    /// repeated, and the app moves on its own.
     func uninstallAnyway() async {
         guard phase == .stepFailed else { return }
-        for index in steps.indices where steps[index].state == .skipped
-            || (steps[index].kind == .data && steps[index].state == .failed) {
-            steps[index].state = .pending
+        for index in steps.indices {
+            switch (steps[index].kind, steps[index].state) {
+            case (.data, .failed):
+                // Split data stays as it is and keeps its row on the done screen.
+                if !dataIsSplit { steps[index].state = .pending }
+            case (_, .skipped):
+                steps[index].state = .pending
+            default:
+                break
+            }
         }
         phase = .working
         await runMoves()
     }
+
+    /// Whether the sheet may close back into a running Purge.
+    var mayCancel: Bool { !dataIsSplit }
 
     /// Stops after the step running now. Parts already off stay off.
     func requestStop() {
@@ -177,7 +205,7 @@ final class SelfUninstaller: ObservableObject, Identifiable {
 
     /// The sheet closed without uninstalling: lets scans and cleans run again.
     func dismissed() {
-        guard !hasStartedMoving || phase == .stepFailed else { return }
+        guard !hasStartedMoving || phase == .stepFailed, mayCancel else { return }
         setRunning(false)
     }
 
@@ -207,10 +235,25 @@ final class SelfUninstaller: ObservableObject, Identifiable {
         isStopping = false
         if let index = steps.firstIndex(where: { $0.kind == .data && $0.state == .pending }) {
             steps[index].state = .working
-            let ok = await mover.moveData()
-            steps[index].state = ok ? .done : .failed
-            movedData = ok
-            if !ok { return failRemaining() }
+            // Read again: a copy can appear while the sheet is open.
+            let others = await findOtherCopies()
+            let result: SelfUninstallDataMove = others.isEmpty ? await mover.moveData() : .keptForOtherCopy
+            switch result {
+            case .moved:
+                steps[index].state = .done
+                movedData = true
+                dataIsSplit = false
+            case .keptForOtherCopy:
+                if !others.isEmpty { otherCopies = others }
+                steps[index].state = .skipped
+            case .failed:
+                steps[index].state = .failed
+                return failRemaining()
+            case .failedPartly:
+                steps[index].state = .failed
+                dataIsSplit = true
+                return failRemaining()
+            }
         }
         guard let index = steps.firstIndex(where: { $0.kind == .app }) else { return }
         steps[index].state = .working

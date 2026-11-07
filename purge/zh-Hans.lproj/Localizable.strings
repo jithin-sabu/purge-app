@@ -1459,7 +1459,8 @@
 "Still in Login Items" = "仍在登录项中";
 "Still in Finder’s menu" = "仍在访达菜单中";
 "Still scheduled" = "仍在计划中";
-"Not all moved" = "未全部移动";
+"Nothing moved" = "未移动任何内容";
+"Some are in the Trash" = "部分已在废纸篓中";
 "Not moved" = "未移动";
 "Purge is running from a disk image." = "Purge 正从磁盘映像运行。";
 "Purge is running from a temporary copy." = "Purge 正从临时副本运行。";

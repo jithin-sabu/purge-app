@@ -33,6 +33,8 @@ struct SettingsView: View {
     /// Adding and removing share the alert; each says which one failed.
     @State private var appFolderAlertTitle = AppFolderAdding.refusalTitle
     @State private var showCleaningHistorySheet = false
+    /// Uninstall… turns red under the pointer.
+    @State private var isHoveringUninstall = false
     @State private var showCustomIntervalSheet = false
     @State private var selectedHistoryEntry: CleanupHistoryEntry?
     /// Session cache of on-disk sizes for excluded paths, keyed by path. No entry
@@ -408,7 +410,8 @@ struct SettingsView: View {
                 } label: {
                     Label(String(localized: "Uninstall…"), systemImage: "trash")
                 }
-                .buttonStyle(.purge(.secondary))
+                .buttonStyle(.purge(isHoveringUninstall ? .destructive : .secondary))
+                .onHover { isHoveringUninstall = $0 }
             }
         }
     }

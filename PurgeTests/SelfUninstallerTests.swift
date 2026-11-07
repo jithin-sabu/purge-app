@@ -44,14 +44,14 @@ struct SelfUninstallerTests {
     }
 
     final class FakeMover: SelfUninstallFileMover {
-        var dataResults: [Bool] = [true]
+        var dataResults: [SelfUninstallDataMove] = [.moved]
         var appResult: SelfUninstallAppMove = .moved
         private(set) var dataMoves = 0
         private(set) var appMoves = 0
 
-        func moveData() async -> Bool {
+        func moveData() async -> SelfUninstallDataMove {
             dataMoves += 1
-            return dataResults.count > 1 ? dataResults.removeFirst() : (dataResults.first ?? true)
+            return dataResults.count > 1 ? dataResults.removeFirst() : (dataResults.first ?? .moved)
         }
 
         func moveApp() async -> SelfUninstallAppMove {
@@ -166,6 +166,63 @@ struct SelfUninstallerTests {
         #expect(!model.steps.contains { $0.kind == .data })
     }
 
+    /// A copy that turns up after the sheet opened still keeps the data.
+    @Test func aCopyThatAppearsAfterOpeningStillKeepsTheData() async {
+        final class Copies { var list: [URL] = [] }
+        let copies = Copies()
+        let mover = FakeMover()
+        let model = SelfUninstaller(parts: [FakePart(.loginItem)], mover: mover, otherCopies: { copies.list })
+        await model.load()
+        #expect(model.mayMoveData)
+        model.movesData = true
+        copies.list = [URL(fileURLWithPath: "/Applications/Purge.app")]
+        await model.start()
+
+        #expect(mover.dataMoves == 0)
+        #expect(model.phase == .done)
+        #expect(!model.movedData)
+        #expect(model.steps.first { $0.kind == .data }?.state == .skipped)
+        #expect(!model.mayMoveData)
+    }
+
+    @Test func aDataMoveThatPutEverythingBackMayBeCancelled() async {
+        let mover = FakeMover()
+        mover.dataResults = [.failed]
+        let gate = Gate()
+        let model = make([FakePart(.loginItem)], mover: mover, gate: gate)
+        await model.load()
+        model.movesData = true
+        await model.start()
+        #expect(model.phase == .stepFailed)
+        #expect(!model.dataIsSplit)
+        #expect(model.mayCancel)
+        model.dismissed()
+        #expect(!gate.isHeld)
+    }
+
+    /// Part of the data is in the Trash and couldn't be put back: going back to
+    /// a running Purge would start a new, empty data folder beside it.
+    @Test func splitDataMayNotBeCancelledAndAnywayLeavesItAlone() async {
+        let mover = FakeMover()
+        mover.dataResults = [.failedPartly]
+        let gate = Gate()
+        let model = make([FakePart(.loginItem)], mover: mover, gate: gate)
+        await model.load()
+        model.movesData = true
+        await model.start()
+        #expect(model.phase == .stepFailed)
+        #expect(model.dataIsSplit)
+        #expect(!model.mayCancel)
+        model.dismissed()
+        #expect(gate.isHeld)
+
+        await model.uninstallAnyway()
+        #expect(model.phase == .done)
+        #expect(mover.dataMoves == 1)
+        #expect(mover.appMoves == 1)
+        #expect(model.failedSteps.map(\.kind) == [.data])
+    }
+
     // MARK: A part stays on
 
     @Test func aPartStillOnStopsTheRunBeforeAnythingMoves() async {
@@ -235,7 +292,7 @@ struct SelfUninstallerTests {
 
     @Test func aFailedDataMoveStopsBeforeTheApp() async {
         let mover = FakeMover()
-        mover.dataResults = [false, true]
+        mover.dataResults = [.failed, .moved]
         let model = make([FakePart(.loginItem)], mover: mover)
         await model.load()
         model.movesData = true

@@ -201,6 +201,76 @@ struct SelfUninstallPolicyTests {
         #expect(SelfUninstallPolicy.otherCopies(among: [running], running: running) { _ in true }.isEmpty)
     }
 
+    // MARK: All or nothing
+
+    private final class FakeBin {
+        var trashed: [URL] = []
+        var putBack: [URL] = []
+        var failTrashing: Set<String> = []
+        var failPutBack = false
+
+        func trash(_ url: URL) throws -> URL? {
+            if failTrashing.contains(url.lastPathComponent) { throw CocoaError(.fileWriteNoPermission) }
+            trashed.append(url)
+            return URL(fileURLWithPath: "/Trash").appendingPathComponent(url.lastPathComponent)
+        }
+
+        func copy(_ url: URL) throws -> URL {
+            URL(fileURLWithPath: "/staging").appendingPathComponent(url.lastPathComponent)
+        }
+
+        func putBack(_ trashed: URL, _ original: URL) throws {
+            if failPutBack { throw CocoaError(.fileWriteNoPermission) }
+            putBack.append(original)
+        }
+    }
+
+    private static func run(_ bin: FakeBin, _ items: [SelfUninstallPolicy.DataItem]) -> SelfUninstallDataMove {
+        SelfUninstallPolicy.moveAllOrNothing(items, trash: bin.trash, copy: bin.copy, putBack: bin.putBack)
+    }
+
+    private static let support = URL(fileURLWithPath: "/Users/me/Library/Application Support/io.getpurge.app")
+    private static let caches = URL(fileURLWithPath: "/Users/me/Library/Caches/io.getpurge.app.c")
+    private static let prefs = URL(fileURLWithPath: "/Users/me/Library/Preferences/io.getpurge.app.plist")
+
+    @Test func everythingMovesWhenNothingFails() {
+        let bin = FakeBin()
+        #expect(Self.run(bin, [.folder(Self.support), .folder(Self.caches), .copyOf(Self.prefs)]) == .moved)
+        #expect(bin.trashed.map(\.lastPathComponent) == ["io.getpurge.app", "io.getpurge.app.c", "io.getpurge.app.plist"])
+        // The preferences went as a copy; the original was never trashed.
+        #expect(!bin.trashed.contains(Self.prefs))
+        #expect(bin.putBack.isEmpty)
+    }
+
+    @Test func aLaterFailurePutsBackWhatAlreadyMoved() {
+        let bin = FakeBin()
+        bin.failTrashing = ["io.getpurge.app.c"]
+        #expect(Self.run(bin, [.folder(Self.support), .folder(Self.caches), .copyOf(Self.prefs)]) == .failed)
+        #expect(bin.putBack == [Self.support])
+    }
+
+    @Test func aFailedCopyPutsTheFoldersBack() {
+        let bin = FakeBin()
+        bin.failTrashing = ["io.getpurge.app.plist"]
+        #expect(Self.run(bin, [.folder(Self.support), .folder(Self.caches), .copyOf(Self.prefs)]) == .failed)
+        #expect(bin.putBack == [Self.caches, Self.support])
+    }
+
+    @Test func whatCannotBePutBackIsReportedAsSplit() {
+        let bin = FakeBin()
+        bin.failTrashing = ["io.getpurge.app.c"]
+        bin.failPutBack = true
+        #expect(Self.run(bin, [.folder(Self.support), .folder(Self.caches)]) == .failedPartly)
+    }
+
+    @Test func aFirstFailureMovesNothing() {
+        let bin = FakeBin()
+        bin.failTrashing = ["io.getpurge.app"]
+        #expect(Self.run(bin, [.folder(Self.support), .folder(Self.caches)]) == .failed)
+        #expect(bin.trashed.isEmpty)
+        #expect(bin.putBack.isEmpty)
+    }
+
     // MARK: Uninstaller search
 
     @Test func searchingForPurgeInTheUninstallerIsRecognised() {
