@@ -381,6 +381,55 @@ final class RemovedAppMonitor: ObservableObject {
         }
     }
 
+    // MARK: Uninstall Purge (#330)
+
+    /// Whether macOS lists the agent, on or waiting for approval, whatever the
+    /// setting says.
+    var isAgentRegistered: Bool {
+        guard managesLiveAgent else { return false }
+        switch agentService.status {
+        case .enabled, .requiresApproval: return true
+        case .notRegistered, .notFound: return false
+        @unknown default: return true
+        }
+    }
+
+    /// Turns the setting off and waits until the unregister has run, so
+    /// Uninstall Purge reads the result rather than a queued request. Also
+    /// unregisters an agent macOS still lists while the setting was already off.
+    func turnOffForUninstall() async {
+        if isEnabled {
+            setEnabled(false)
+        } else if isAgentRegistered {
+            unregisterAgent()
+        }
+        await agentTask?.value
+    }
+
+    /// Pings this copy's agent and waits up to `timeout` for its answer. An
+    /// answer means it is still running, whatever launchd reports.
+    func ownAgentAnswers(within timeout: Duration) async -> Bool {
+        guard managesLiveAgent else { return false }
+        let ownAgent = Self.realPath(RemovedAppHandoff.agentExecutable(inApp: Bundle.main.bundleURL).path)
+        final class Answer { var received = false }
+        let answer = Answer()
+        let center = DistributedNotificationCenter.default()
+        let observer = center.addObserver(
+            forName: RemovedAppHandoff.agentPongNotification,
+            object: nil,
+            queue: .main
+        ) { note in
+            if let path = note.object as? String, Self.realPath(path) == ownAgent { answer.received = true }
+        }
+        defer { center.removeObserver(observer) }
+        center.postNotificationName(RemovedAppHandoff.agentPingNotification, object: nil, userInfo: nil, deliverImmediately: true)
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline, !answer.received {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        return answer.received
+    }
+
     /// Runs `work` once every register or unregister asked for before it is done.
     private func runAgentWork(_ work: @escaping @MainActor () async -> Void) {
         let previous = agentTask

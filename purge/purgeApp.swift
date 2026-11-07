@@ -56,7 +56,12 @@ final class PurgeAppDelegate: NSObject, NSApplicationDelegate {
     /// Writes the last scan's pending changes and waits for the file, so a clean
     /// just before quitting is already in it at the next launch (#283).
     func applicationWillTerminate(_ notification: Notification) {
-        AppEnvironment.store.flushLastScanWrites()
+        // After Uninstall Purge moved the data to the Trash, writing the last scan
+        // would make the folder again.
+        if !SelfUninstallState.clearsDefaultsOnQuit {
+            AppEnvironment.store.flushLastScanWrites()
+        }
+        SelfUninstallState.finishQuit()
     }
 
     /// Always `false`, in both modes. In the menu bar mode closing the window is
@@ -212,6 +217,8 @@ struct PurgeCommands: Commands {
         }
         CommandGroup(replacing: .appSettings) {
             SettingsMenuItem(store: store)
+            Divider()
+            UninstallPurgeMenuItem(store: store)
         }
         CommandGroup(after: .newItem) {
             Button("Scan Everything") {
@@ -258,6 +265,21 @@ private struct SettingsMenuItem: View {
         }
         .keyboardShortcut(",", modifiers: .command)
         .disabled(!hasCompletedOnboarding)
+    }
+}
+
+/// Purge > Uninstall Purge… (#330), in its own section below Settings. Brings
+/// the window back first and waits for onboarding, the same as Settings…
+private struct UninstallPurgeMenuItem: View {
+    @ObservedObject var store: PurgeStore
+    @AppStorage(FirstRunGate.onboardingCompletedKey) private var hasCompletedOnboarding = false
+
+    var body: some View {
+        Button("Uninstall Purge…") {
+            IntentRouter.revealWindow()
+            store.presentSelfUninstall()
+        }
+        .disabled(!hasCompletedOnboarding || store.isAnotherSheetOpen || store.isSelfUninstallPresented)
     }
 }
 

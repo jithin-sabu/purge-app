@@ -455,6 +455,11 @@ final class PurgeStore: ObservableObject {
     /// Access. Set by the sidebar notice, the locked tabs, and a deleted-app review
     /// that needs access to find leftovers.
     @Published var isLookDeeperPresented = false
+    /// The Uninstall Purge sheet (#330).
+    @Published var isSelfUninstallPresented = false
+    /// True while Uninstall Purge turns parts off and moves files. Scans, cleans,
+    /// scheduled cleans and removed-app reviews wait.
+    @Published var isUninstallingPurge = false
     /// Lifetime bytes Purge has moved to the trash. Not a reclaim figure: most of it
     /// only becomes free space once the user empties the trash.
     @Published var totalMovedToTrashBytes: Int64 = 0
@@ -918,6 +923,7 @@ final class PurgeStore: ObservableObject {
     /// unprompted review waits until this clears.
     var isShowingReviewOrCleaning: Bool {
         isReviewingOrCleaning
+            || isSelfUninstallPresented
             || manualDeletionSession != nil
             || interactiveSafeCleanupSession != nil
             || onboardingCelebrationMovedToTrashBytes != nil
@@ -944,6 +950,28 @@ final class PurgeStore: ObservableObject {
             || isDeleting
             || isManualCleaningInProgress
             || isInteractiveSafeCleanupInProgress
+            || isUninstallingPurge
+    }
+
+    /// Whether a sheet other than Uninstall Purge is open. SwiftUI shows one
+    /// sheet at a time, so Uninstall Purge can't open over one.
+    var isAnotherSheetOpen: Bool {
+        isLookDeeperPresented
+            || showDeletionSheet
+            || showLargeFileDeletionSheet
+            || pendingRemoveDownload != nil
+            || removeDownloadResult != nil
+            || pendingDuplicateCleanup != nil
+            || uninstallPlan != nil
+            || orphanCleanupPlan != nil
+            || commandLineToolRemovalPlan != nil
+            || removedAppLeftoverPlan != nil
+    }
+
+    /// Opens the Uninstall Purge sheet, unless another sheet is up.
+    func presentSelfUninstall() {
+        guard !isAnotherSheetOpen else { return }
+        isSelfUninstallPresented = true
     }
 
     /// Whether a safe clean may claim `isDeleting` now. A scheduled clean also
@@ -953,7 +981,7 @@ final class PurgeStore: ObservableObject {
     func mayStartSafeClean(trigger: CleanupTrigger) -> Bool {
         switch trigger {
         case .manual:
-            return !isDeleting
+            return !isDeleting && !isUninstallingPurge
         case .scheduled:
             return !isReviewingOrCleaning
         }
