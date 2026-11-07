@@ -64,6 +64,7 @@ nonisolated final class DevScanner {
         "Xcode Test Devices": "xctest-devices",
         "Old Claude Code Versions": "old-cli-versions",
         "Old Cursor Agent Versions": "old-cli-versions",
+        "Old Grok Versions": "old-cli-versions",
         "Dart Pub Cache": "pub-cache",
         "pre-commit Environments": "pre-commit-cache",
         "Prisma Engines": "prisma-nodejs",
@@ -77,6 +78,11 @@ nonisolated final class DevScanner {
         "Hermes Agent Cache": "hermes-agent-cache",
         "Antigravity Browser Cache": "antigravity-browser-cache",
         "Bun Cache": "bun-cache",
+        "nvm Download Cache": "nvm-download-cache",
+        "giget Template Cache": "giget-cache",
+        "Firebase Emulators": "firebase-emulators",
+        "Gradle Logs and Temp Files": "gradle-leftovers",
+        "Clang Module Cache": "clang-module-cache",
         "VS Code Old Workspace Data": "orphaned-editor-workspace-storage",
         "Cursor Old Workspace Data": "orphaned-editor-workspace-storage"
     ]
@@ -587,6 +593,24 @@ nonisolated final class DevScanner {
         return paths
     }
 
+    /// Each `~/.gradle/daemon/<version>` folder and `~/.gradle/.tmp`. Which of them
+    /// may go is the policy's call, made again at delete time.
+    nonisolated static func gradleLeftoverPaths(home: URL) -> [URL] {
+        let gradle = home.appendingPathComponent(".gradle", isDirectory: true)
+        // Listing follows a link, so a `~/.gradle` linked into Documents is skipped.
+        guard ProtectedLocations.isReadable(gradle, access: .limited, home: home) else { return [] }
+        let daemonFolder = gradle.appendingPathComponent("daemon", isDirectory: true)
+        // The same for `daemon` itself, which is listed below.
+        let readable = ProtectedLocations.isReadable(daemonFolder, access: .limited, home: home)
+        // Built from the names, so each path keeps the spelling of `home`.
+        let versions = ((readable ? try? FileManager.default.contentsOfDirectory(atPath: daemonFolder.path) : nil) ?? [])
+            .filter { !$0.hasPrefix(".") }
+            .sorted()
+            .map { daemonFolder.appendingPathComponent($0, isDirectory: true) }
+        return (versions + [gradle.appendingPathComponent(".tmp", isDirectory: true)])
+            .filter { DeletionSafetyPolicy.gradleLeftover(at: $0.path, home: home.path) != nil }
+    }
+
     /// Every child of each `~/Library/Caches/JetBrains/<IDE><version>` folder except
     /// `LocalHistory`, which is the IDE's record of your file edits.
     nonisolated static func jetBrainsCachePaths(home: URL) -> [URL] {
@@ -684,6 +708,15 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent(".gradle/caches", isDirectory: true),
                 home.appendingPathComponent(".gradle/wrapper/dists", isDirectory: true)
             ]),
+            // Stopped daemons' folders and a week-old temp folder; the policy keeps the rest.
+            ("Gradle Logs and Temp Files", gradleLeftoverPaths(home: home)),
+            ("nvm Download Cache", [home.appendingPathComponent(".nvm/.cache", isDirectory: true)]),
+            ("giget Template Cache", [home.appendingPathComponent(".cache/giget", isDirectory: true)]),
+            ("Firebase Emulators", [home.appendingPathComponent(".cache/firebase/emulators", isDirectory: true)]),
+            // In the per-user cache folder under /var/folders, not the home folder.
+            ("Clang Module Cache", DeletionSafetyPolicy.clangModuleCachePaths.prefix(1).map {
+                URL(fileURLWithPath: $0, isDirectory: true)
+            }),
             ("Hex Package Cache", [home.appendingPathComponent(".hex/packages", isDirectory: true)]),
             ("Rebar3 Cache", [home.appendingPathComponent(".cache/rebar3", isDirectory: true)]),
             ("NuGet Packages", [home.appendingPathComponent(".nuget/packages", isDirectory: true)]),
@@ -874,22 +907,22 @@ nonisolated final class DevScanner {
         return entries.filter { !$0.paths.isEmpty }
     }
 
-    /// Old Claude Code and Cursor Agent versions, keeping the one each command runs
-    /// and the newest. The policy re-checks this before anything is deleted.
+    /// Old Claude Code, Cursor Agent and Grok versions, keeping the one each command
+    /// runs and the newest. The policy re-checks this before anything is deleted.
     nonisolated static func oldCLIVersionDefinitions(home: URL) -> [(label: String, paths: [URL])] {
         let homePath = home.standardizedFileURL.path
-        let labels = ["Old Claude Code Versions", "Old Cursor Agent Versions"]
-        return zip(DeletionSafetyPolicy.cliVersionStores, labels).compactMap { pair in
-            let (store, label) = pair
+        return DeletionSafetyPolicy.cliVersionStores.compactMap { store in
+            let label = store.label
             let root = "\(homePath)/\(store.versions)"
             guard ProtectedLocations.isReadable(URL(fileURLWithPath: root), access: .limited),
                   let kept = DeletionSafetyPolicy.keptCLIVersions(
                     versionsRoot: root,
-                    command: "\(homePath)/\(store.command)"
+                    command: "\(homePath)/\(store.command)",
+                    entry: store.entry
                   ),
                   let names = try? FileManager.default.contentsOfDirectory(atPath: root) else { return nil }
             let old = names
-                .filter { !$0.hasPrefix(".") && !kept.contains($0) }
+                .filter { !$0.hasPrefix(".") && !kept.contains($0) && store.entry.accepts(name: $0, in: root) }
                 .sorted { $0.compare($1, options: .numeric) == .orderedAscending }
                 .map { URL(fileURLWithPath: "\(root)/\($0)") }
             return old.isEmpty ? nil : (label, old)

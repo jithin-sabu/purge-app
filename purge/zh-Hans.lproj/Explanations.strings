@@ -1094,7 +1094,7 @@
 
 /* old-cli-versions */
 "Old AI Coding Tool Versions" = "旧版 AI 编程工具";
-"Earlier versions of Claude Code or Cursor Agent that stayed behind after updates. The version you run and the newest one are kept. Safe to delete." = "Claude Code 或 Cursor Agent 更新后遗留的旧版本。正在运行的版本与最新版本会保留。可以安全删除。";
+"Earlier versions of Claude Code, Cursor Agent or Grok that stayed behind after updates. The version you run and the newest one are kept. Safe to delete." = "Claude Code、Cursor Agent 或 Grok 更新后遗留的旧版本。正在运行的版本与最新版本会保留。可以安全删除。";
 
 /* pre-commit-cache */
 "pre-commit Environments" = "pre-commit 环境";
@@ -1139,3 +1139,40 @@
 /* antigravity-browser-cache */
 "Antigravity Browser Cache" = "Antigravity 浏览器缓存";
 "Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity 网页任务浏览器的网页与脚本缓存，加载页面时会重新填充。不会动登录信息、历史记录和扩展。";
+
+/* nvm-download-cache */
+"nvm Download Cache" = "nvm 下载缓存";
+"Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it." = "nvm 安装某个版本后保留的 Node.js 下载文件。不会动已安装的版本。可以安全删除，重新安装某个版本时 nvm 会再次下载。";
+
+/* giget-cache */
+"giget Template Cache" = "giget 模板缓存";
+"Project templates giget downloaded for tools like nuxi init. Safe to delete; they download again the next time you create a project." = "giget 为 nuxi init 等工具下载的项目模板。可以安全删除，下次创建项目时会重新下载。";
+
+/* firebase-emulators */
+"Firebase Emulators" = "Firebase 模拟器";
+"Emulator files the Firebase CLI downloaded. Safe to delete; the Firebase CLI downloads them again the next time you start the emulators." = "Firebase CLI 下载的模拟器文件。可以安全删除，下次启动模拟器时 Firebase CLI 会重新下载。";
+
+/* gradle-leftovers */
+"Gradle Logs and Temp Files" = "Gradle 日志与临时文件";
+"Logs from Gradle daemons that have stopped, and Gradle's temporary files once a week old and no build runs. Gradle makes new ones when needed. Safe to delete." = "已停止的 Gradle 守护进程留下的日志，以及在没有构建运行时、已超过一周的 Gradle 临时文件。Gradle 需要时会重新生成。可以安全删除。";
+
+/* clang-module-cache */
+"Clang Module Cache" = "Clang 模块缓存";
+"Compiled module files clang and the Swift compiler keep for command-line builds and scripts. Xcode's own builds use another folder. Safe to delete; the next compile builds them again." = "clang 和 Swift 编译器为命令行构建和脚本保留的已编译模块文件。Xcode 自身的构建使用另一个文件夹。可以安全删除，下次编译时会重新生成。";
+
+/* codexbar-cache */
+"CodexBar Cache" = "CodexBar 缓存";
+"Web downloads and update files the CodexBar menu bar app keeps. Safe to delete; CodexBar downloads them again when needed." = "CodexBar 菜单栏应用保留的网络下载与更新文件。可以安全删除，CodexBar 需要时会重新下载。";
+
+/* codexbar-usage-history */
+"CodexBar Usage History" = "CodexBar 用量记录";
+"Cost and usage totals CodexBar worked out from your Claude and Codex session logs. CodexBar works them out again, but days whose logs are gone stay missing." = "CodexBar 根据 Claude 和 Codex 会话日志算出的费用与用量统计。CodexBar 会重新计算，但日志已不在的日期将无法恢复。";
+
+/* intelligenceflowd-cache */
+"Apple Intelligence Service Cache" = "Apple 智能服务缓存";
+"Web downloads and compiled model files a background Apple Intelligence service keeps. The Apple Intelligence models are not touched. Safe to delete; macOS builds these again when the service next needs them." = "一个 Apple 智能后台服务保留的网络下载与已编译模型文件。不会动 Apple 智能模型本身。可以安全删除，该服务下次需要时 macOS 会重新生成。";
+
+
+/* swift-frontend-cache */
+"Swift Compiler Cache" = "Swift 编译器缓存";
+"Compiled model files the Swift compiler keeps. Safe to delete; they are built again when the compiler next needs them." = "Swift 编译器保留的已编译模型文件。可以安全删除，编译器下次需要时会重新生成。";
