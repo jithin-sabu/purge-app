@@ -11,6 +11,49 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-11-07: Browsers' Service Worker caches were Safe to Clean
+
+**Found internally** in a deletion-safety review of [#325](https://github.com/jithin-sabu/purge-app/pull/325) before 1.14.0, no report. **Fixed:** [#335](https://github.com/jithin-sabu/purge-app/pull/335), not yet released. **Affected:** browsers that keep a `User Data` folder, such as Dia and Arc, v1.1.2 to v1.13.4. Chrome, Brave and Edge only on `main` after #325, never in a release.
+
+### What happened
+
+A Chromium profile's `Service Worker` folder holds two caches. `CacheStorage`
+is the offline content of installed web apps. `ScriptCache` is each site's
+worker script. When Chromium can't read a stored script, it deletes that
+site's registration, and its web push subscription goes with it
+(`registration->ForceDelete()` in Chromium's
+`service_worker_installed_scripts_sender.cc`).
+
+Purge offered both as Safe to Clean in every `User Data/<profile>` folder
+under Application Support. Electron apps rarely use that layout, but browsers
+do. On the Mac where this was found, Dia's profile had 198 MB in
+`CacheStorage` and 3.5 MB in `ScriptCache`, both Safe, so Clean Safe Items or
+a scheduled clean would move them to the Trash. #325 then offered
+`ScriptCache` in Chrome, Brave and Edge profiles too.
+
+### Who was affected
+
+Nobody reported a loss. The folders went to the Trash and could be put back
+while the browser was closed. After a clean, sites stop sending web
+notifications and installed web apps don't work offline until you visit each
+site again.
+
+### What changed
+
+Nothing in a `Service Worker` folder is offered, in any Chromium layout: an
+app folder, a `User Data` profile, a nested profile, or the Antigravity
+browser profile. The tier list no longer calls them Safe either.
+
+### What would have caught it earlier
+
+A rule that a cache is Safe only when its app rebuilds it by itself, checked
+against what the browser does when the folder is gone.
+[`PurgeTests/AllowlistAuditTests.swift`](../PurgeTests/AllowlistAuditTests.swift)
+now refuses these folders in Chrome, Brave, Edge, Dia, Arc and Antigravity
+profiles, and
+[`PurgeTests/MissedSafeCachesTests.swift`](../PurgeTests/MissedSafeCachesTests.swift)
+checks that discovery lists none of them.
+
 ## 2026-11-04: A Cursor agent folder in use could be listed as a leftover
 
 **Found internally** in a code audit ([#183](https://github.com/jithin-sabu/purge-app/issues/183)), no report. **Fixed:** [#315](https://github.com/jithin-sabu/purge-app/pull/315), shipped in v1.13.3 (2026-11-04). **Affected:** v1.5.3 to v1.13.2.

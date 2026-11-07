@@ -834,8 +834,32 @@ struct EverythingElseCacheAuditTests {
         #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
     }
 
+    /// A browser profile's Service Worker caches are refused wherever the
+    /// browser keeps them. Losing `ScriptCache` makes Chromium delete each
+    /// site's registration and its web push subscription, and `CacheStorage`
+    /// holds installed web apps' offline content. On a Mac with these browsers
+    /// the shape rules see the real folders; elsewhere they are missing.
+    @Test(arguments: [
+        "Library/Application Support/Google/Chrome/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Google/Chrome Beta/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Google/Chrome Beta/Default/Service Worker/CacheStorage",
+        "Library/Application Support/BraveSoftware/Brave-Browser/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Microsoft Edge/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Dia/User Data/Default/Service Worker/ScriptCache",
+        "Library/Application Support/Dia/User Data/Default/Service Worker/CacheStorage",
+        "Library/Application Support/Arc/User Data/Default/Service Worker/CacheStorage",
+        ".gemini/antigravity-browser-profile/Default/Service Worker/CacheStorage",
+    ])
+    func browserServiceWorkerCachesAreRefused(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+        #expect(AuditPaths.evaluate(relative + "/index") != .allow, "\(relative)")
+        let tier = SafetyTierList.evaluate(folderName: "Dia", path: AuditPaths.url(relative))
+        #expect(tier != .safe, "\(relative)")
+    }
+
     /// Discovery lists the same shape the policy allows: the cache folders at the
-    /// root and in each profile, never a profile or the files beside the caches.
+    /// root and in each profile, never a profile, its Service Worker caches, or
+    /// the files beside the caches.
     @Test
     func chromiumUserDataDiscoveryListsOnlyCaches() throws {
         let fm = FileManager.default
@@ -844,7 +868,8 @@ struct EverythingElseCacheAuditTests {
         defer { try? fm.removeItem(at: base) }
         for folder in [
             "Default/Cache/Cache_Data", "Default/Code Cache/js", "Default/Service Worker/CacheStorage",
-            "Default/Service Worker/Database", "Default/Extensions", "Default/IndexedDB",
+            "Default/Service Worker/ScriptCache", "Default/Service Worker/Database", "Default/Extensions",
+            "Default/IndexedDB",
             "Profile 1/GPUCache", "Profile 1/Cache", "component_crx_cache", "Safe Browsing", "GraphiteDawnCache",
             "Profile 1/DawnGraphiteCache",
         ] {
@@ -861,7 +886,6 @@ struct EverythingElseCacheAuditTests {
         #expect(found == [
             "Default/Cache",
             "Default/Code Cache",
-            "Default/Service Worker/CacheStorage",
             "GraphiteDawnCache",
             "Profile 1/DawnGraphiteCache",
             "Profile 1/GPUCache",
@@ -897,12 +921,14 @@ struct EverythingElseCacheAuditTests {
         try Data().write(to: profile.appendingPathComponent("Local State"))
         for relative in [
             "Default/Cache", "Default/Cache/Cache_Data/index", "Default/Code Cache", "Default/GPUCache",
-            "Default/ShaderCache", "Default/Service Worker/CacheStorage", "Default/Service Worker/ScriptCache",
-            "component_crx_cache", "ShaderCache", "GraphiteDawnCache",
+            "Default/ShaderCache", "component_crx_cache", "ShaderCache", "GraphiteDawnCache",
         ] {
             #expect(allowed(relative), "\(relative)")
         }
-        for relative in ["Default", "Local State", "Default/Login Data", "Default/Service Worker", "Profile 1/Cache"] {
+        for relative in [
+            "Default", "Local State", "Default/Login Data", "Default/Service Worker",
+            "Default/Service Worker/CacheStorage", "Default/Service Worker/ScriptCache", "Profile 1/Cache",
+        ] {
             #expect(!allowed(relative), "\(relative)")
         }
     }

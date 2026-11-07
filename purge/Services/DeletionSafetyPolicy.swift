@@ -679,10 +679,10 @@ enum DeletionSafetyPolicy {
     }
 
     /// Whether `path` is a cache folder inside one of `chromiumUserDataRoots`, or
-    /// a descendant of one: `<root>/<cache name>`, `<root>/<profile>/<cache name>`
-    /// or `<root>/<profile>/Service Worker/{CacheStorage,ScriptCache}`, the same
-    /// shape `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists. The root, a
-    /// profile folder and everything else in it are refused.
+    /// a descendant of one: `<root>/<cache name>` or `<root>/<profile>/<cache name>`,
+    /// the same shape `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists. The
+    /// root, a profile folder, its `Service Worker` folder and everything else in
+    /// it are refused.
     nonisolated static func isWhitelistedChromiumUserDataCachePath(_ path: String, home: String) -> Bool {
         for root in chromiumUserDataRoots(home: home) {
             guard PathContainment.isInside(path, root) else { continue }
@@ -690,7 +690,7 @@ enum DeletionSafetyPolicy {
             // The cache folder itself, or anything inside one, in the shape
             // `CacheDiscoveryPaths.chromiumUserDataCacheURLs` lists.
             let userData = URL(fileURLWithPath: root, isDirectory: true)
-            return (1...min(3, max(parts.count, 1))).contains { depth in
+            return (1...min(2, max(parts.count, 1))).contains { depth in
                 CacheDiscoveryPaths.isChromiumUserDataCachePath(Array(parts.prefix(depth)), userData: userData)
             }
         }

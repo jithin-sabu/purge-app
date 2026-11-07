@@ -26,9 +26,7 @@ enum SafetyAllowlistSummary {
         let appSupportCacheCount = CacheDiscoveryPaths.applicationSupportDirectCacheNames.count
         let libraryCachesIncluded = whitelistedPrefixes.contains { $0.hasSuffix("/Library/Caches") } ? 1 : 0
 
-        let browserCacheCount =
-            CacheDiscoveryPaths.chromiumProfileCacheNames.count
-            + CacheDiscoveryPaths.chromiumProfileRelativePaths.count
+        let browserCacheCount = CacheDiscoveryPaths.chromiumProfileCacheNames.count
 
         let devCacheCount = DeletionSafetyPolicy.whitelistedFolderNames.count
 
@@ -50,7 +48,7 @@ enum SafetyAllowlistSummary {
                 id: CategoryID.browserCaches,
                 icon: "globe",
                 title: String(localized: "Browser caches per profile"),
-                description: String(localized: "Chromium profile caches and service worker stores, per browser profile"),
+                description: String(localized: "Chromium profile caches, per browser profile"),
                 backingCount: browserCacheCount
             ),
             Category(
