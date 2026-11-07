@@ -162,26 +162,31 @@ struct OldToolVersionShapeTests {
 
     /// `evaluate` allows the shapes, so the gate in `isOfferedForCleanup` is what
     /// decides. Neither lets through a path next to them.
+    /// The shape `evaluate` allows: each entry, never the folder holding it.
+    /// Checked against a made-up home, so no real folder is read.
     @Test
-    func evaluateAllowsOnlyTheShapes() {
-        let home = DeletionSafetyPolicy.cachedHomePath
-        func decision(_ relative: String) -> DeletionSafetyDecision {
-            DeletionSafetyPolicy.evaluate(URL(fileURLWithPath: "\(home)/\(relative)"))
+    func shapesAreAllowedAndTheirFoldersAreNot() {
+        let home = "/Users/someone"
+        func allowed(_ relative: String) -> Bool {
+            OldVersions.Policy.isWhitelistedPath("\(home)/\(relative)", home: home)
         }
-        #expect(decision(".claude/downloads/claude-2.1.44-darwin-arm64") == .allow)
-        #expect(decision("Library/Android/sdk/ndk/27.0.12077973") == .allow)
-        #expect(decision("Library/Application Support/Figma/DesktopProfile/v42") == .allow)
-        #expect(decision(".claude/downloads") != .allow)
-        #expect(decision("Library/Android/sdk/ndk") != .allow)
-        #expect(decision("Library/Android/sdk") != .allow)
-        #expect(decision("Library/Application Support/Figma/DesktopProfile") != .allow)
+        #expect(allowed(".claude/downloads/claude-2.1.44-darwin-arm64"))
+        #expect(allowed("Library/Android/sdk/ndk/27.0.12077973"))
+        #expect(allowed("Library/Application Support/Figma/DesktopProfile/v42"))
+        #expect(!allowed(".claude/downloads"))
+        #expect(!allowed("Library/Android/sdk/ndk"))
+        #expect(!allowed("Library/Android/sdk"))
+        #expect(!allowed("Library/Application Support/Figma/DesktopProfile"))
     }
 
-    /// Paths that don't exist pass `evaluate` by shape, and `isOfferedForCleanup`,
-    /// which `FileDeleter` asks before every move, still refuses them.
+    /// Paths that don't exist pass the shape check, and the delete-time gate,
+    /// which `isOfferedForCleanup` runs before every move, still refuses them.
+    /// The home is a throwaway folder and the Android context is a fake, so
+    /// neither a real AVD folder nor the process list is read.
     @Test
-    func missingPathsAreNeverOffered() {
-        let home = DeletionSafetyPolicy.cachedHomePath
+    func missingPathsAreNeverOffered() throws {
+        let home = try OldVersions.makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
         for relative in [
             ".claude/downloads/claude-0.0.1-purge-test-324",
             "Library/Android/sdk/ndk/0.0.324",
@@ -189,7 +194,8 @@ struct OldToolVersionShapeTests {
             "Library/Application Support/Figma/DesktopProfile/v0",
             "\(OldVersions.cursorVersions)/.tmp-purge-test-324",
         ] {
-            #expect(!DeletionSafetyPolicy.isOfferedForCleanup(URL(fileURLWithPath: "\(home)/\(relative)")), "\(relative)")
+            #expect(OldVersions.Policy.isWhitelistedPath("\(home.path)/\(relative)", home: home.path), "\(relative)")
+            #expect(!OldVersions.offered(home, relative), "\(relative)")
         }
     }
 
