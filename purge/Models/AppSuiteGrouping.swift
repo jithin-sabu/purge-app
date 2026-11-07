@@ -172,7 +172,8 @@ nonisolated struct PartialSuite: Hashable, Sendable {
 
 extension AppSuiteGrouping {
     /// The groups with an uninstaller that a removal of `removingIDs` should
-    /// warn about. The uninstaller never counts as one of the parts.
+    /// warn about. The uninstaller never counts as one of the parts, and only
+    /// apps in `apps`, the listed ones, count at all.
     static func partialSuites(
         removingIDs: Set<String>,
         groups: [AppSuiteGroup],
@@ -181,7 +182,9 @@ extension AppSuiteGrouping {
         let byID = Dictionary(apps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return groups.compactMap { group in
             guard let uninstallerID = group.uninstallerID, let uninstaller = byID[uninstallerID] else { return nil }
-            let parts = group.appIDs.filter { $0 != uninstallerID }
+            // Only listed apps count: a saved row from the last scan can't be
+            // ticked, so it never makes a full pick look partial.
+            let parts = group.appIDs.filter { $0 != uninstallerID && byID[$0] != nil }
             let picked = parts.filter(removingIDs.contains).count
             let kind: PartialSuite.Kind
             if removingIDs.contains(uninstallerID) {

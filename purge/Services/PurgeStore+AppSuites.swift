@@ -17,30 +17,41 @@ extension PurgeStore {
         let known = appTeamIDByPath
         let reader = appTeamIDReader
         appSuiteGroupingTask = Task { [weak self] in
-            let (groups, teams) = await Task.detached(priority: .utility) {
-                Self.buildSuiteGroups(apps: apps, roots: roots, known: known, reader: reader)
-            }.value
-            guard !Task.isCancelled, let self else { return }
+            // A scan lists apps a few at a time; wait for a pause so one build
+            // covers the burst instead of one per app.
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            let (groups, teams) = await Self.buildSuiteGroups(apps: apps, roots: roots, known: known, reader: reader)
+            guard let self else { return }
+            // Teams read before a newer build took over still go in the cache.
             appTeamIDByPath.merge(teams) { _, new in new }
+            guard !Task.isCancelled, let groups else { return }
             if groups != appSuiteGroups { appSuiteGroups = groups }
         }
     }
 
-    /// Reads the team only for apps that sit in a folder, once per path.
+    /// Reads the team only for apps that sit in a folder, once per path. Stops
+    /// reading once a newer build cancels it, and then returns no groups.
+    @concurrent
     nonisolated private static func buildSuiteGroups(
         apps: [InstalledApp],
         roots: [String],
         known: [String: String],
         reader: @Sendable (URL) -> String?
-    ) -> ([AppSuiteGroup], [String: String]) {
+    ) async -> ([AppSuiteGroup]?, [String: String]) {
         var teams = known
+        var stopped = false
         let groups = AppSuiteGrouping.groups(apps: apps, roots: roots) { url in
             if let team = teams[url.path] { return team.isEmpty ? nil : team }
+            if stopped || Task.isCancelled {
+                stopped = true
+                return nil
+            }
             let team = reader(url) ?? ""
             teams[url.path] = team
             return team.isEmpty ? nil : team
         }
-        return (groups, teams)
+        return (stopped ? nil : groups, teams)
     }
 
     /// The groups' entries for `apps`, in the order given.

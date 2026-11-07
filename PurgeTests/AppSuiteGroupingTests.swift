@@ -288,6 +288,18 @@ struct AppSuiteGroupingTests {
         #expect(all.first?.pickedCount == 3)
     }
 
+    /// Review of #337: a saved row from the last scan can't be ticked, so it
+    /// never turns a full pick of the listed apps into a partial one.
+    @Test
+    func savedMembersDoNotCountTowardAPartialPick() {
+        let (_, groups) = suiteSetup
+        let listed = [resolve[0], resolve[1], resolve[3]] // resolve[2] is a saved row only
+        let picked = Set([resolve[0].id, resolve[1].id])
+        #expect(AppSuiteGrouping.partialSuites(removingIDs: picked, groups: groups, apps: listed).isEmpty)
+        let some = AppSuiteGrouping.partialSuites(removingIDs: [resolve[0].id], groups: groups, apps: listed)
+        #expect(some.first?.totalCount == 2)
+    }
+
     private func appPlan(_ app: InstalledApp, bundleTicked: Bool = true) -> UninstallAppPlan {
         UninstallAppPlan(app: app, items: [UninstallItem(
             path: app.bundleURL, sizeBytes: 1, category: .bundle,

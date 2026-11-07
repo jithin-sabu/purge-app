@@ -103,6 +103,29 @@ struct AppSuiteStoreTests {
         #expect(calls.count == readsAfterFirstBuild)
     }
 
+    /// Review of #337: a scan lists apps a few at a time. The rebuilds it sets
+    /// off fold into one, so each signature is read once, and off the main thread.
+    @Test
+    func aScanBurstReadsEachSignatureOnceOffTheMainThread() async throws {
+        let scans = FakeScans()
+        let fixture = try makeFixture()
+        defer { scans.cleanUp(); try? fm.removeItem(at: fixture.root) }
+        let calls = Calls()
+        let readOnMain = Calls()
+        let store = scans.makeStore()
+        store.appTeamIDReader = { url in
+            calls.record(url.path)
+            if Thread.isMainThread { readOnMain.record(url.path) }
+            return "ABCDE12345"
+        }
+        store.appFolderPaths = AppFolderPaths(roots: [fixture.applications.path])
+        for app in fixture.apps { store.installedApps.append(app) }
+
+        #expect(await eventually { store.appSuiteGroups.count == 1 })
+        #expect(calls.count == 3)
+        #expect(readOnMain.count == 0)
+    }
+
     @Test
     func groupTicksOnlyListedAppsAndClearsAll() throws {
         let scans = FakeScans()
