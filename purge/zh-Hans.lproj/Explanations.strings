@@ -1154,7 +1154,7 @@
 
 /* gradle-leftovers */
 "Gradle Logs and Temp Files" = "Gradle 日志与临时文件";
-"Logs from Gradle daemons that have stopped, and temporary files Gradle left behind more than a week ago. Gradle never reads them again. Safe to delete." = "已停止的 Gradle 守护进程留下的日志，以及 Gradle 一周多以前留下的临时文件。Gradle 不会再读取它们。可以安全删除。";
+"Logs from Gradle daemons that have stopped, and Gradle's temporary files once a week old and no build runs. Gradle makes new ones when needed. Safe to delete." = "已停止的 Gradle 守护进程留下的日志，以及在没有构建运行时、已超过一周的 Gradle 临时文件。Gradle 需要时会重新生成。可以安全删除。";
 
 /* clang-module-cache */
 "Clang Module Cache" = "Clang 模块缓存";

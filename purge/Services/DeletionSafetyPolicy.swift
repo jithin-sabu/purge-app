@@ -959,78 +959,110 @@ enum DeletionSafetyPolicy {
         #endif
     }
 
-    /// What Gradle leaves behind that it never reads again (#323).
+    /// What Gradle leaves behind that it never reads again (#323). Folders, not the
+    /// files in them, so a clean lists a handful of lines instead of one per log.
     nonisolated enum GradleLeftover: Equatable, Sendable {
-        /// `~/.gradle/daemon/<version>/daemon-<pid>.out.log`, one daemon's log.
-        case daemonLog(pid: Int32)
-        /// `~/.gradle/.tmp/gradle_download<n>bin` or `gradle-worker-classpath<n>txt`.
-        case temporaryFile
+        /// `~/.gradle/daemon/<version>`: one Gradle version's daemon logs and its
+        /// registry of running daemons, which Gradle writes again when one starts.
+        case daemonFolder
+        /// `~/.gradle/.tmp`, Gradle's temp folder.
+        case temporaryFolder
     }
 
-    /// A temp file younger than this could belong to a build that is still running.
+    /// Nothing in the temp folder may be younger than this. A download in progress,
+    /// or a worker that has just read its class path, is minutes old.
     nonisolated static let gradleTemporaryFileMinimumAge: TimeInterval = 7 * 24 * 60 * 60
 
-    /// The leftover `path` is, by its name and place alone. `registry.bin`, the
-    /// JDKs and everything else in `~/.gradle` are never one.
+    /// The leftover `path` is, by its place alone. `~/.gradle/daemon` itself, the
+    /// files inside these folders, the JDKs and everything else in `~/.gradle` are
+    /// never one.
     nonisolated static func gradleLeftover(at path: String, home: String) -> GradleLeftover? {
-        func isDigits(_ text: Substring) -> Bool {
-            !text.isEmpty && text.allSatisfy { ("0"..."9").contains($0) }
-        }
-
+        if path == "\(home)/.gradle/.tmp" { return .temporaryFolder }
         let daemonRoot = "\(home)/.gradle/daemon/"
-        if path.hasPrefix(daemonRoot) {
-            let parts = path.dropFirst(daemonRoot.count).split(separator: "/", omittingEmptySubsequences: false)
-            guard parts.count == 2, !parts[0].isEmpty, !parts[0].hasPrefix(".") else { return nil }
-            let name = parts[1]
-            guard name.hasPrefix("daemon-"), name.hasSuffix(".out.log"),
-                  case let digits = name.dropFirst("daemon-".count).dropLast(".out.log".count),
-                  isDigits(digits), let pid = Int32(digits), pid > 0 else { return nil }
-            return .daemonLog(pid: pid)
-        }
-
-        let tempRoot = "\(home)/.gradle/.tmp/"
-        guard path.hasPrefix(tempRoot) else { return nil }
-        let name = path.dropFirst(tempRoot.count)
-        guard !name.contains("/") else { return nil }
-        for (prefix, suffix) in [("gradle_download", "bin"), ("gradle-worker-classpath", "txt")]
-        where name.hasPrefix(prefix) && name.hasSuffix(suffix) && name.count > prefix.count + suffix.count {
-            // Java's random temp names run to 20 digits, so they are not parsed as a number.
-            if isDigits(name.dropFirst(prefix.count).dropLast(suffix.count)) { return .temporaryFile }
-        }
-        return nil
+        guard path.hasPrefix(daemonRoot) else { return nil }
+        let version = path.dropFirst(daemonRoot.count)
+        // Gradle names each one for its version (`8.10.2`, `9.0-rc-1`), so it starts
+        // with a digit. `CACHEDIR.TAG` and stray files next to them never do.
+        guard let first = version.first, ("0"..."9").contains(first), !version.contains("/") else { return nil }
+        return .daemonFolder
     }
 
-    /// Only a plain file is ever taken, in folders that are real folders and not
-    /// links. A daemon's log stays while a process with its pid runs, even when
-    /// the pid now belongs to something else. A temp file stays until it is a week
-    /// old: a download in progress, or a worker that has just read its class path,
-    /// is minutes old.
+    /// The pids in a version folder's `daemon-<pid>.out.log` names. Nil when the
+    /// folder can't be listed.
+    nonisolated static func gradleDaemonPids(in versionFolder: URL) -> [Int32]? {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: versionFolder.path) else { return nil }
+        return names.compactMap { name in
+            guard name.hasPrefix("daemon-"), name.hasSuffix(".out.log") else { return nil }
+            let digits = name.dropFirst("daemon-".count).dropLast(".out.log".count)
+            guard !digits.isEmpty, digits.allSatisfy({ ("0"..."9").contains($0) }) else { return nil }
+            return Int32(digits)
+        }
+    }
+
+    /// A version folder stays while any daemon whose log is in it may still run
+    /// (`isGradleDaemonRunning`). The temp folder stays while any
+    /// Gradle daemon runs, and while anything directly in it changed in the last
+    /// week. `~/.gradle`, `~/.gradle/daemon` and the folder itself must be real
+    /// folders, not links, and anything that can't be read keeps the folder.
     nonisolated static func gradleLeftoverRefusesDeletion(
         _ url: URL,
         home: String = cachedHomePath,
         now: Date = Date(),
-        isRunning: (Int32) -> Bool = isProcessRunning
+        isRunning: (Int32) -> Bool = isGradleDaemonRunning
     ) -> Bool {
         let standardized = url.standardizedFileURL
         guard let leftover = gradleLeftover(at: standardized.path, home: home) else { return false }
-        // `~/.gradle/daemon` and the version folder, or `~/.gradle/.tmp`. A link
-        // there would take the file from wherever the link points.
-        let parent = standardized.deletingLastPathComponent()
-        let folders = leftover == .temporaryFile ? [parent] : [parent.deletingLastPathComponent(), parent]
-        for folder in folders {
-            guard let folderValues = try? folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
-                  folderValues.isDirectory == true, folderValues.isSymbolicLink != true else { return true }
+        let gradle = URL(fileURLWithPath: "\(home)/.gradle", isDirectory: true)
+        let daemonRoot = gradle.appendingPathComponent("daemon", isDirectory: true)
+
+        func isRealFolder(_ folder: URL) -> Bool {
+            guard let values = try? folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else {
+                return false
+            }
+            return values.isDirectory == true && values.isSymbolicLink != true
         }
-        guard let values = try? standardized.resourceValues(
-            forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey]
-        ), values.isRegularFile == true, values.isSymbolicLink != true else { return true }
+        func hasRunningDaemon(_ versionFolder: URL) -> Bool {
+            guard let pids = gradleDaemonPids(in: versionFolder) else { return true }
+            return pids.contains(where: isRunning)
+        }
+
         switch leftover {
-        case .daemonLog(let pid):
-            return isRunning(pid)
-        case .temporaryFile:
-            guard let modified = values.contentModificationDate else { return true }
-            return now.timeIntervalSince(modified) < gradleTemporaryFileMinimumAge
+        case .daemonFolder:
+            guard isRealFolder(gradle), isRealFolder(daemonRoot), isRealFolder(standardized) else { return true }
+            return hasRunningDaemon(standardized)
+        case .temporaryFolder:
+            guard isRealFolder(gradle), isRealFolder(standardized) else { return true }
+            // No daemon folder at all means no daemon has ever run.
+            if FileManager.default.fileExists(atPath: daemonRoot.path) {
+                guard isRealFolder(daemonRoot),
+                      let versions = try? FileManager.default.contentsOfDirectory(atPath: daemonRoot.path) else {
+                    return true
+                }
+                for version in versions where !version.hasPrefix(".") {
+                    let folder = daemonRoot.appendingPathComponent(version, isDirectory: true)
+                    if isRealFolder(folder), hasRunningDaemon(folder) { return true }
+                }
+            }
+            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: standardized.path) else {
+                return true
+            }
+            let checked = [standardized] + entries.map { standardized.appendingPathComponent($0) }
+            for entry in checked {
+                guard let modified = try? entry.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate else { return true }
+                if now.timeIntervalSince(modified) < gradleTemporaryFileMinimumAge { return true }
+            }
+            return false
         }
+    }
+
+    /// Whether `pid` may still be a Gradle daemon: a process with it exists and runs
+    /// `java`, or can't be read. macOS hands old pids to new processes, and one
+    /// Siri took on this Mac would otherwise hold a whole version folder back.
+    nonisolated static func isGradleDaemonRunning(_ pid: Int32) -> Bool {
+        guard isProcessRunning(pid) else { return false }
+        guard pid > 0, let path = ProcessWorkingDirectories.executablePath(of: pid) else { return true }
+        return URL(fileURLWithPath: path).lastPathComponent == "java"
     }
 
     /// True when a process with `pid` exists, ours or not.

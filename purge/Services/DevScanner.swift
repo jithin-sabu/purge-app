@@ -593,25 +593,20 @@ nonisolated final class DevScanner {
         return paths
     }
 
-    /// Each file in `~/.gradle/daemon/<version>` and `~/.gradle/.tmp` that
-    /// `DeletionSafetyPolicy.gradleLeftover` names: daemon logs and Gradle's temp
-    /// files. Which of them may go is the policy's call, made again at delete time.
+    /// Each `~/.gradle/daemon/<version>` folder and `~/.gradle/.tmp`. Which of them
+    /// may go is the policy's call, made again at delete time.
     nonisolated static func gradleLeftoverPaths(home: URL) -> [URL] {
-        let fm = FileManager.default
         let gradle = home.appendingPathComponent(".gradle", isDirectory: true)
         // Listing follows a link, so a `~/.gradle` linked into Documents is skipped.
         guard ProtectedLocations.isReadable(gradle, access: .limited) else { return [] }
-        // Built from the names, so each path keeps the spelling of `home`.
-        func children(_ folder: URL) -> [URL] {
-            ((try? fm.contentsOfDirectory(atPath: folder.path)) ?? [])
-                .filter { !$0.hasPrefix(".") }
-                .sorted()
-                .map { folder.appendingPathComponent($0) }
-        }
         let daemonFolder = gradle.appendingPathComponent("daemon", isDirectory: true)
-        let candidates = children(daemonFolder).flatMap(children)
-            + children(gradle.appendingPathComponent(".tmp", isDirectory: true))
-        return candidates.filter { DeletionSafetyPolicy.gradleLeftover(at: $0.path, home: home.path) != nil }
+        // Built from the names, so each path keeps the spelling of `home`.
+        let versions = ((try? FileManager.default.contentsOfDirectory(atPath: daemonFolder.path)) ?? [])
+            .filter { !$0.hasPrefix(".") }
+            .sorted()
+            .map { daemonFolder.appendingPathComponent($0, isDirectory: true) }
+        return (versions + [gradle.appendingPathComponent(".tmp", isDirectory: true)])
+            .filter { DeletionSafetyPolicy.gradleLeftover(at: $0.path, home: home.path) != nil }
     }
 
     /// Every child of each `~/Library/Caches/JetBrains/<IDE><version>` folder except
@@ -711,7 +706,7 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent(".gradle/caches", isDirectory: true),
                 home.appendingPathComponent(".gradle/wrapper/dists", isDirectory: true)
             ]),
-            // Stopped daemons' logs and week-old temp files; the policy keeps the rest.
+            // Stopped daemons' folders and a week-old temp folder; the policy keeps the rest.
             ("Gradle Logs and Temp Files", gradleLeftoverPaths(home: home)),
             ("nvm Download Cache", [home.appendingPathComponent(".nvm/.cache", isDirectory: true)]),
             ("giget Template Cache", [home.appendingPathComponent(".cache/giget", isDirectory: true)]),

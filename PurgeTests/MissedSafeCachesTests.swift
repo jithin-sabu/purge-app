@@ -266,155 +266,164 @@ struct NestedChromiumCacheTests {
     }
 }
 
-// MARK: - Gradle daemon logs and temp files
+// MARK: - Gradle daemon folders and temp folder
 
 @Suite("Missed caches (#323): Gradle leftovers")
 struct GradleLeftoverTests {
     private let home = "/Users/alice"
+    private let weekAndADay: TimeInterval = 8 * 24 * 60 * 60
 
     @Test(arguments: [
-        (".gradle/daemon/8.10.2/daemon-12345.out.log", DeletionSafetyPolicy.GradleLeftover.daemonLog(pid: 12345)),
-        (".gradle/daemon/7.5.1/daemon-1.out.log", .daemonLog(pid: 1)),
-        (".gradle/.tmp/gradle_download16784810064779947987bin", .temporaryFile),
-        (".gradle/.tmp/gradle-worker-classpath10292051080325833030txt", .temporaryFile),
+        (".gradle/daemon/8.10.2", DeletionSafetyPolicy.GradleLeftover.daemonFolder),
+        (".gradle/daemon/7.5.1", .daemonFolder),
+        (".gradle/daemon/9.0-rc-1", .daemonFolder),
+        (".gradle/.tmp", .temporaryFolder),
     ])
     func leftoversAreNamed(relative: String, kind: DeletionSafetyPolicy.GradleLeftover) {
         #expect(DeletionSafetyPolicy.gradleLeftover(at: "\(home)/\(relative)", home: home) == kind)
     }
 
+    /// The folders only: nothing inside them, and nothing else in `~/.gradle`.
     @Test(arguments: [
-        ".gradle", ".gradle/daemon", ".gradle/daemon/8.13", ".gradle/daemon/8.13/registry.bin",
-        ".gradle/daemon/8.13/registry.bin.lock", ".gradle/daemon/daemon-1.out.log",
-        ".gradle/daemon/8.13/sub/daemon-1.out.log", ".gradle/daemon/8.13/daemon-.out.log",
-        ".gradle/daemon/8.13/daemon-12a.out.log", ".gradle/daemon/8.13/daemon-0.out.log",
-        ".gradle/daemon/8.13/daemon-99999999999.out.log", ".gradle/daemon/.hidden/daemon-1.out.log",
-        ".gradle/.tmp", ".gradle/.tmp/jdks", ".gradle/.tmp/.cache/expanded",
-        ".gradle/.tmp/gradle_downloadbin", ".gradle/.tmp/gradle_download12.bin",
-        ".gradle/.tmp/problems-report1.html", ".gradle/.tmp/jdks/gradle_download1bin",
-        ".gradle/caches/gradle_download1bin", ".gradle/jdks", "gradle/.tmp/gradle_download1bin",
+        ".gradle", ".gradle/daemon", ".gradle/daemon/8.13/registry.bin", ".gradle/daemon/8.13/daemon-1.out.log",
+        ".gradle/daemon/8.13/sub", ".gradle/daemon/.hidden", ".gradle/daemon/daemon-1.out.log",
+        ".gradle/.tmp/jdks", ".gradle/.tmp/.cache", ".gradle/.tmp/gradle_download1bin",
+        ".gradle/caches", ".gradle/jdks", ".gradle/native", "gradle/.tmp", ".gradle/tmp",
+        ".gradle/daemon/CACHEDIR.TAG", ".gradle/daemon/latest",
     ])
     func everythingElseInGradleIsNotOne(relative: String) {
         #expect(DeletionSafetyPolicy.gradleLeftover(at: "\(home)/\(relative)", home: home) == nil, "\(relative)")
     }
 
+    /// A version folder stays while any of its daemons runs.
     @Test
-    func aLiveDaemonsLogStays() throws {
+    func aVersionWithALiveDaemonStays() throws {
         let base = try MissedPaths.makeFolder()
         defer { try? FileManager.default.removeItem(at: base) }
-        try MissedPaths.lay(base, folders: [], files: [
+        try MissedPaths.lay(base, folders: [".gradle/daemon/8.9"], files: [
             ".gradle/daemon/8.13/daemon-111.out.log", ".gradle/daemon/8.13/daemon-222.out.log",
+            ".gradle/daemon/8.13/registry.bin", ".gradle/daemon/8.10/daemon-333.out.log",
         ])
-        let logs = base.appendingPathComponent(".gradle/daemon/8.13", isDirectory: true)
-        let running: (Int32) -> Bool = { $0 == 111 }
-        func refuses(_ name: String) -> Bool {
+        let homePath = base.standardizedFileURL.path
+        func refuses(_ version: String) -> Bool {
             DeletionSafetyPolicy.gradleLeftoverRefusesDeletion(
-                logs.appendingPathComponent(name), home: base.standardizedFileURL.path, isRunning: running
+                base.appendingPathComponent(".gradle/daemon/\(version)", isDirectory: true),
+                home: homePath, isRunning: { $0 == 111 }
             )
         }
-        #expect(refuses("daemon-111.out.log"))
-        #expect(!refuses("daemon-222.out.log"))
+        #expect(refuses("8.13"))
+        #expect(!refuses("8.10"))
+        // A version folder with no logs has no daemon to wait for.
+        #expect(!refuses("8.9"))
         // Gone already: nothing to take.
-        #expect(refuses("daemon-333.out.log"))
+        #expect(refuses("8.0"))
     }
 
+    /// The temp folder stays while any daemon runs, and until nothing directly in
+    /// it changed for a week.
     @Test
-    func aTempFileMustBeAWeekOld() throws {
+    func theTempFolderWaitsForIdleAndAge() throws {
         let base = try MissedPaths.makeFolder()
         defer { try? FileManager.default.removeItem(at: base) }
-        try MissedPaths.lay(base, folders: [], files: [".gradle/.tmp/gradle_download42bin"])
-        let file = base.appendingPathComponent(".gradle/.tmp/gradle_download42bin")
-        let modified = try #require(try file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
-        func refuses(after age: TimeInterval) -> Bool {
+        try MissedPaths.lay(base, folders: [".gradle/.tmp/jdks"], files: [
+            ".gradle/.tmp/gradle_download42bin", ".gradle/daemon/8.13/daemon-111.out.log",
+        ])
+        let tmp = base.appendingPathComponent(".gradle/.tmp", isDirectory: true)
+        let homePath = base.standardizedFileURL.path
+        func refuses(after age: TimeInterval, running: Set<Int32> = []) -> Bool {
             DeletionSafetyPolicy.gradleLeftoverRefusesDeletion(
-                file, home: base.standardizedFileURL.path, now: modified.addingTimeInterval(age), isRunning: { _ in false }
+                tmp, home: homePath, now: Date().addingTimeInterval(age), isRunning: { running.contains($0) }
             )
         }
         #expect(refuses(after: 6 * 24 * 60 * 60))
-        #expect(!refuses(after: DeletionSafetyPolicy.gradleTemporaryFileMinimumAge + 60))
+        #expect(!refuses(after: weekAndADay))
+        #expect(refuses(after: weekAndADay, running: [111]))
     }
 
-    /// A link or a folder by a leftover's name is never taken.
+    /// With no daemon folder at all, nothing has run, so age alone decides.
     @Test
-    func onlyAPlainFileIsTaken() throws {
+    func theTempFolderWithNoDaemonFolder() throws {
         let base = try MissedPaths.makeFolder()
         defer { try? FileManager.default.removeItem(at: base) }
-        try MissedPaths.lay(base, folders: [".gradle/daemon/8.13/daemon-5.out.log"], files: ["Documents/notes.txt"])
-        let logs = base.appendingPathComponent(".gradle/daemon/8.13", isDirectory: true)
-        try FileManager.default.createSymbolicLink(
-            at: logs.appendingPathComponent("daemon-6.out.log"),
-            withDestinationURL: base.appendingPathComponent("Documents/notes.txt")
-        )
-        for name in ["daemon-5.out.log", "daemon-6.out.log"] {
-            #expect(DeletionSafetyPolicy.gradleLeftoverRefusesDeletion(
-                logs.appendingPathComponent(name), home: base.standardizedFileURL.path, isRunning: { _ in false }
-            ), "\(name)")
-        }
+        try MissedPaths.lay(base, folders: [], files: [".gradle/.tmp/gradle-worker-classpath8txt"])
+        #expect(!DeletionSafetyPolicy.gradleLeftoverRefusesDeletion(
+            base.appendingPathComponent(".gradle/.tmp", isDirectory: true), home: base.standardizedFileURL.path,
+            now: Date().addingTimeInterval(weekAndADay), isRunning: { _ in false }
+        ))
     }
 
-    /// A linked version folder, `daemon` folder or `.tmp` is not followed, even
-    /// to a file with a leftover's name.
+    /// A linked version folder, `daemon` folder, `.tmp` or `.gradle` is not
+    /// followed, and a file by a folder's name is not a folder.
     @Test
-    func aLinkedParentFolderIsNotFollowed() throws {
+    func linksAndFilesAreNotTaken() throws {
         let base = try MissedPaths.makeFolder()
         defer { try? FileManager.default.removeItem(at: base) }
-        let home = base.appendingPathComponent("home", isDirectory: true)
-        let elsewhere = base.appendingPathComponent("elsewhere", isDirectory: true)
-        try MissedPaths.lay(elsewhere, folders: ["daemon/8.13"], files: [
-            "logs/daemon-7.out.log", "daemon/8.13/daemon-8.out.log", "tmp/gradle_download9bin",
-        ])
-        let old = Date().addingTimeInterval(-30 * 24 * 60 * 60)
-        try FileManager.default.setAttributes(
-            [.modificationDate: old], ofItemAtPath: elsewhere.appendingPathComponent("tmp/gradle_download9bin").path
-        )
         let fm = FileManager.default
-        try MissedPaths.lay(home, folders: [".gradle/daemon"])
+        let elsewhere = base.appendingPathComponent("elsewhere", isDirectory: true)
+        try MissedPaths.lay(elsewhere, folders: ["logs", "tmp", "daemon/8.13", "gradle/daemon/8.13", "gradle/.tmp"])
+
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        try MissedPaths.lay(home, folders: [".gradle/daemon"], files: [".gradle/daemon/8.9"])
         try fm.createSymbolicLink(at: home.appendingPathComponent(".gradle/daemon/8.13"),
                                   withDestinationURL: elsewhere.appendingPathComponent("logs"))
         try fm.createSymbolicLink(at: home.appendingPathComponent(".gradle/.tmp"),
                                   withDestinationURL: elsewhere.appendingPathComponent("tmp"))
-        let linkedDaemonHome = base.appendingPathComponent("home2", isDirectory: true)
-        try MissedPaths.lay(linkedDaemonHome, folders: [".gradle"])
-        try fm.createSymbolicLink(at: linkedDaemonHome.appendingPathComponent(".gradle/daemon"),
+        let linkedDaemon = base.appendingPathComponent("home2", isDirectory: true)
+        try MissedPaths.lay(linkedDaemon, folders: [".gradle"])
+        try fm.createSymbolicLink(at: linkedDaemon.appendingPathComponent(".gradle/daemon"),
                                   withDestinationURL: elsewhere.appendingPathComponent("daemon"))
+        let linkedGradle = base.appendingPathComponent("home3", isDirectory: true)
+        try fm.createDirectory(at: linkedGradle, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: linkedGradle.appendingPathComponent(".gradle"),
+                                  withDestinationURL: elsewhere.appendingPathComponent("gradle"))
 
         func refuses(_ relative: String, in home: URL) -> Bool {
             DeletionSafetyPolicy.gradleLeftoverRefusesDeletion(
-                home.appendingPathComponent(relative), home: home.standardizedFileURL.path, isRunning: { _ in false }
+                home.appendingPathComponent(relative), home: home.standardizedFileURL.path,
+                now: Date().addingTimeInterval(weekAndADay), isRunning: { _ in false }
             )
         }
-        #expect(refuses(".gradle/daemon/8.13/daemon-7.out.log", in: home))
-        #expect(refuses(".gradle/.tmp/gradle_download9bin", in: home))
-        #expect(refuses(".gradle/daemon/8.13/daemon-8.out.log", in: linkedDaemonHome))
+        #expect(refuses(".gradle/daemon/8.13", in: home))
+        #expect(refuses(".gradle/daemon/8.9", in: home))
+        #expect(refuses(".gradle/.tmp", in: home))
+        #expect(refuses(".gradle/daemon/8.13", in: linkedDaemon))
+        #expect(refuses(".gradle/daemon/8.13", in: linkedGradle))
+        #expect(refuses(".gradle/.tmp", in: linkedGradle))
     }
 
     @Test
-    func theRowListsOnlyLeftovers() throws {
+    func theRowListsTheFolders() throws {
         let base = try MissedPaths.makeFolder()
         defer { try? FileManager.default.removeItem(at: base) }
-        try MissedPaths.lay(base, folders: [".gradle/.tmp/jdks", ".gradle/caches/modules-2"], files: [
+        try MissedPaths.lay(base, folders: [".gradle/.tmp/jdks", ".gradle/caches/modules-2", ".gradle/daemon/.hidden"], files: [
             ".gradle/daemon/8.13/daemon-5.out.log", ".gradle/daemon/8.13/registry.bin",
             ".gradle/daemon/8.9/daemon-6.out.log", ".gradle/.tmp/gradle_download7bin",
-            ".gradle/.tmp/gradle-worker-classpath8txt", ".gradle/.tmp/problems-report9.html",
         ])
         let names = DevScanner.gradleLeftoverPaths(home: base).map {
             String($0.path.dropFirst(base.path.count + 1))
         }
-        #expect(names.sorted() == [
-            ".gradle/.tmp/gradle-worker-classpath8txt", ".gradle/.tmp/gradle_download7bin",
-            ".gradle/daemon/8.13/daemon-5.out.log", ".gradle/daemon/8.9/daemon-6.out.log",
-        ])
+        #expect(names.sorted() == [".gradle/.tmp", ".gradle/daemon/8.13", ".gradle/daemon/8.9"])
     }
 
-    /// Through the whole chain on this Mac's home path: the shapes are allowed,
+    /// Through the whole chain on this Mac's home path: the folders are allowed,
     /// Gradle's own state is not.
     @Test
-    func evaluateAllowsOnlyTheShapes() {
-        #expect(MissedPaths.evaluate(".gradle/daemon/8.13/daemon-5.out.log") == .allow)
-        #expect(MissedPaths.evaluate(".gradle/.tmp/gradle_download7bin") == .allow)
-        for relative in [".gradle/daemon", ".gradle/daemon/8.13", ".gradle/daemon/8.13/registry.bin",
-                         ".gradle/.tmp", ".gradle/.tmp/jdks", ".gradle/jdks", ".gradle/gradle.properties"] {
+    func evaluateAllowsOnlyTheFolders() {
+        #expect(MissedPaths.evaluate(".gradle/daemon/8.13") == .allow)
+        #expect(MissedPaths.evaluate(".gradle/.tmp") == .allow)
+        for relative in [".gradle", ".gradle/daemon", ".gradle/daemon/8.13/registry.bin",
+                         ".gradle/.tmp/jdks", ".gradle/jdks", ".gradle/gradle.properties", ".gradle/init.d"] {
             #expect(MissedPaths.evaluate(relative) != .allow, "\(relative)")
         }
+    }
+
+    /// A pid now used by something other than `java` is not a daemon. This test
+    /// host is `Purge`; a pid that can't be read still counts as one.
+    @Test
+    func aReusedPidIsNotADaemon() {
+        #expect(!DeletionSafetyPolicy.isGradleDaemonRunning(getpid()))
+        #expect(DeletionSafetyPolicy.isGradleDaemonRunning(0))
+        #expect(DeletionSafetyPolicy.isGradleDaemonRunning(-1))
     }
 
     @Test

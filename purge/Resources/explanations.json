@@ -3499,7 +3499,7 @@
     "key": "gradle-leftovers",
     "display_name": "Gradle Logs and Temp Files",
     "tag": "safe",
-    "explanation": "Logs from Gradle daemons that have stopped, and temporary files Gradle left behind more than a week ago. Gradle never reads them again. Safe to delete.",
+    "explanation": "Logs from Gradle daemons that have stopped, and Gradle's temporary files once a week old and no build runs. Gradle makes new ones when needed. Safe to delete.",
     "bundle_ids": [],
     "aliases": [],
     "kind": "logs"
