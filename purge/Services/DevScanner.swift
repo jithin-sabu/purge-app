@@ -144,7 +144,7 @@ nonisolated final class DevScanner {
 
     func discoverProjectsStream(access: ScanAccess) -> AsyncStream<DeveloperScanEvent> {
         AsyncStream { continuation in
-            let task = Task.detached(priority: .background) { [weak self] in
+            let task = Task.detached(priority: .userInitiated) { [weak self] in
                 guard let self else {
                     continuation.finish()
                     return
@@ -334,7 +334,7 @@ nonisolated final class DevScanner {
     }
 
     private static func sized(_ devices: [SimulatorDevice]) -> [SimulatorDevice] {
-        let sizesByPath = FolderSizing.directorySizes(at: devices.map(\.folderURL))
+        let sizesByPath = FolderSizing.directorySizes(at: devices.map(\.folderURL), split: .spread)
         return devices.map { device in
             var sized = device
             sized.sizeOnDisk = sizesByPath[device.folderURL.standardizedFileURL.path] ?? 0
@@ -970,7 +970,7 @@ nonisolated final class DevScanner {
         guard !jobs.isEmpty else { return }
 
         let allPaths = jobs.flatMap(\.paths)
-        let sizesByPath = FolderSizing.directorySizes(at: allPaths)
+        let sizesByPath = FolderSizing.directorySizes(at: allPaths, split: .spread)
 
         for job in jobs {
             if Task.isCancelled { return }
@@ -1001,7 +1001,7 @@ nonisolated final class DevScanner {
         guard !devices.isEmpty else { return }
 
         let folderURLs = devices.map(\.folderURL)
-        let sizesByPath = FolderSizing.directorySizes(at: folderURLs)
+        let sizesByPath = FolderSizing.directorySizes(at: folderURLs, split: .spread)
 
         for device in devices {
             if Task.isCancelled { return }
@@ -1445,7 +1445,7 @@ nonisolated final class DevScanner {
         }
 
         let artifactPaths = rows.map(\.path)
-        let sizesByPath = FolderSizing.directorySizes(at: artifactPaths)
+        let sizesByPath = FolderSizing.directorySizes(at: artifactPaths, split: .spread)
 
         var sized: [ProjectCacheArtifact] = []
         for row in rows {

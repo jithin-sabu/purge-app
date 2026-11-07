@@ -409,6 +409,12 @@ final class PurgeStore: ObservableObject {
     @Published private(set) var isScanningAll = false
     @Published private(set) var isEnrichingGeneral = false
     @Published private(set) var isEnrichingDeveloper = false
+    /// How many Dev Tools git passes are running. A full scan's project
+    /// discovery can run its pass while the Dev Tools pass still runs, so the
+    /// flag above stays on until both end.
+    private var developerEnrichmentCount = 0 {
+        didSet { isEnrichingDeveloper = developerEnrichmentCount > 0 }
+    }
     /// Which half of the App Caches and Dev Tools scan is running. The flags above
     /// drop for a moment between that scan's passes (caches, dev tools, project
     /// discovery, git checks), so the Overview reads this instead and each row goes
@@ -622,6 +628,9 @@ final class PurgeStore: ObservableObject {
     private var stagedSimulatorsByID: [UUID: SimulatorDevice] = [:]
     private var scanTask: Task<Void, Never>?
     private var projectDiscoveryTask: Task<Void, Never>?
+    /// Project discovery finished while the full scan it started with was still
+    /// running. The project list is saved once that scan finishes.
+    private var projectListFinishedDuringFullScan = false
     private var scanCompletionHideTask: Task<Void, Never>?
     private var interactiveSafeCleanupRemovalTask: Task<Void, Never>?
     /// Set while an interactive safe cleanup tracks a live engine run, so
@@ -2540,14 +2549,14 @@ final class PurgeStore: ObservableObject {
         // The app list just changed under "Uninstall <app> with Purge".
         PurgeAppShortcuts.refreshAppList()
 
-        // Bundle sizes first, then leftover-inclusive totals. Both write in
-        // place so alphabetical order never jumps. Kept as a task the scan queue
-        // can wait on, so the next scan does not start while this one still walks.
+        // Bundle sizes and leftover-inclusive totals, measured side by side.
+        // Both write in place so alphabetical order never jumps. Kept as a task
+        // the scan queue can wait on, so the next scan does not start while this
+        // one still walks.
         isMeasuringRemovableTotals = true
         removableTotalsTask = Task { [weak self] in
             guard let self else { return }
-            await self.measureBundleSizes(generation: generation)
-            await self.measureRemovableTotals(generation: generation)
+            await self.measureBundlesAndRemovableTotals(generation: generation)
             guard self.installedAppsScanGeneration == generation else { return }
             self.isMeasuringRemovableTotals = false
             self.removableTotalsTask = nil
@@ -2558,62 +2567,128 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    /// Replaces Spotlight's first-pass size with a `du` walk, chunk by chunk, so
-    /// the number on each tile settles without waiting for every app up front.
-    private func measureBundleSizes(generation: Int) async {
-        let urls = installedApps.map(\.bundleURL)
-        guard !urls.isEmpty else { return }
+    /// How many apps' leftovers are found and sized at once. Their `du` runs
+    /// share the process-wide cap with the bundle sizing, so this adds no `du`
+    /// beyond it, and a leftover scan the user starts by picking apps still
+    /// gets its turn.
+    private static let removableTotalsWidth = 4
 
-        var index = 0
-        while index < urls.count {
-            if installedAppsScanGeneration != generation || Task.isCancelled { return }
-            let end = min(index + FolderSizing.duChunkSize, urls.count)
-            let chunk = Array(urls[index..<end])
-            index = end
+    /// Replaces Spotlight's first-pass bundle size with a `du` walk, and sums
+    /// each app's bundle plus every leftover matched to it, so the tile shows
+    /// the app's full footprint on disk rather than only the default-checked
+    /// subset.
+    ///
+    /// The two run side by side, so the leftovers are measured while the
+    /// biggest bundle (Xcode's, often) is still being walked. Each bundle is
+    /// walked once, by the bundle pass, and each tile's bundle size settles as
+    /// its chunk comes back; the leftover scans leave the bundle out and take
+    /// its size from that pass. Totals are counted strictly in list order, once
+    /// an app's leftovers and bundle size are both in, so a shared path lands in
+    /// the same tile it would if the apps were done one by one.
+    private func measureBundlesAndRemovableTotals(generation: Int) async {
+        let apps = installedApps
+        guard !apps.isEmpty else { return }
+        let progress = AppTotalsProgress()
 
-            let sizes = await Task.detached(priority: .utility) {
-                FolderSizing.directorySizesForChunk(chunk)
-            }.value
+        func countReadyApps() {
+            while let leftovers = progress.leftovers[progress.nextToCount] {
+                let app = apps[progress.nextToCount]
+                let bundleKey = app.bundleURL.standardizedFileURL.path
+                // A bundle `du` could not read even on the retry counts as 0, as
+                // it did when the leftover scan's second `du` failed too.
+                guard let bundleBytes = progress.bundleBytes[bundleKey] ?? (progress.bundlesDone ? 0 : nil) else { return }
+                progress.leftovers[progress.nextToCount] = nil
+                progress.nextToCount += 1
+                var total: Int64 = 0
+                var items: [OverviewSizedItem] = []
+                var namedFolders: [URL] = []
+                for item in leftovers {
+                    if item.matchReason == .appName { namedFolders.append(item.path) }
+                    guard progress.countedPaths.insert(item.path.standardizedFileURL.path).inserted else { continue }
+                    let size = item.category == .bundle ? bundleBytes : item.sizeBytes
+                    total += size
+                    items.append(OverviewSizedItem(path: item.path.path, bytes: size))
+                }
+                appFootprintItemsByAppID[app.id] = items
+                removableBytesByAppID[app.id] = total
+                recordLeftoverOwner(app, namedFolders: namedFolders)
+            }
+        }
 
-            guard installedAppsScanGeneration == generation else { return }
-            var updated = installedApps
-            var changed = false
-            for i in updated.indices {
-                let path = updated[i].bundleURL.standardizedFileURL.path
-                if let size = sizes[path] {
-                    updated[i].bundleSizeBytes = size
-                    changed = true
+        let urls = apps.map(\.bundleURL)
+        let (chunkSizes, sizesContinuation) = AsyncStream.makeStream(of: [String: Int64].self)
+        let sizing = Task.detached(priority: .userInitiated) {
+            _ = FolderSizing.directorySizes(at: urls, split: .spread, onChunkSizes: { sizesContinuation.yield($0) })
+            sizesContinuation.finish()
+        }
+
+        await withTaskCancellationHandler {
+            // Listed once for every app's scan, rather than once per app.
+            let rootListings = await uninstallScanner.listLeftoverRoots()
+            await withTaskGroup(of: Void.self) { group in
+                // The bundle pass: each chunk's sizes go on the tiles as they land.
+                group.addTask { @MainActor [weak self] in
+                    for await sizes in chunkSizes {
+                        guard let self, self.installedAppsScanGeneration == generation, !Task.isCancelled else {
+                            sizing.cancel()
+                            return
+                        }
+                        progress.bundleBytes.merge(sizes) { _, new in new }
+                        var updated = self.installedApps
+                        var changed = false
+                        for i in updated.indices {
+                            if let size = sizes[updated[i].bundleURL.standardizedFileURL.path] {
+                                updated[i].bundleSizeBytes = size
+                                changed = true
+                            }
+                        }
+                        if changed { self.installedApps = updated }
+                        countReadyApps()
+                    }
+                    guard !Task.isCancelled else { return }
+                    // A bundle `du` could not size gets one more try, as it did
+                    // when each app's leftover scan sized its bundle again.
+                    let missing = apps.map(\.bundleURL).filter {
+                        progress.bundleBytes[$0.standardizedFileURL.path] == nil
+                    }
+                    if !missing.isEmpty {
+                        let retried = await Task.detached(priority: .userInitiated) {
+                            FolderSizing.directorySizes(at: missing, split: .spread)
+                        }.value
+                        guard let self, self.installedAppsScanGeneration == generation, !Task.isCancelled else { return }
+                        progress.bundleBytes.merge(retried) { _, new in new }
+                        var updated = self.installedApps
+                        for i in updated.indices {
+                            if let size = retried[updated[i].bundleURL.standardizedFileURL.path] {
+                                updated[i].bundleSizeBytes = size
+                            }
+                        }
+                        self.installedApps = updated
+                    }
+                    progress.bundlesDone = true
+                    countReadyApps()
+                }
+                // The leftover scans, a few at a time, each taking the next app.
+                for _ in 0..<min(Self.removableTotalsWidth, apps.count) {
+                    group.addTask { @MainActor [weak self] in
+                        while let self, let index = progress.takeNextApp(count: apps.count) {
+                            // The bundle is sized by the bundle pass above.
+                            let stream = self.uninstallScanner.leftoverStream(
+                                for: apps[index],
+                                knownBundleBytes: 0,
+                                rootListings: rootListings
+                            )
+                            var items: [UninstallItem] = []
+                            for await item in stream { items.append(item) }
+                            guard self.installedAppsScanGeneration == generation, !Task.isCancelled else { return }
+                            progress.leftovers[index] = items
+                            countReadyApps()
+                        }
+                    }
                 }
             }
-            if changed { installedApps = updated }
-        }
-    }
-
-    /// For each app, sums the bundle plus every leftover matched to it, so the
-    /// tile shows the app's full footprint on disk rather than only the
-    /// default-checked subset. Runs one app at a time so it never competes hard
-    /// with a leftover scan the user triggers by selecting apps.
-    private func measureRemovableTotals(generation: Int) async {
-        // A path is sized once across the whole pass. Two installs that share a
-        // bundle id resolve to the same bundle-id-keyed leftovers; without this the
-        // shared bytes would land in both tiles and double the summed figure on the
-        // Uninstall button (`selectedAppsRemovableBytes`).
-        var sizedPaths = Set<String>()
-        for app in installedApps {
-            if installedAppsScanGeneration != generation || Task.isCancelled { return }
-            var total: Int64 = 0
-            var items: [OverviewSizedItem] = []
-            var namedFolders: [URL] = []
-            for await item in uninstallScanner.leftoverStream(for: app) {
-                if item.matchReason == .appName { namedFolders.append(item.path) }
-                guard sizedPaths.insert(item.path.standardizedFileURL.path).inserted else { continue }
-                total += item.sizeBytes
-                items.append(OverviewSizedItem(path: item.path.path, bytes: item.sizeBytes))
-            }
-            guard installedAppsScanGeneration == generation else { return }
-            appFootprintItemsByAppID[app.id] = items
-            removableBytesByAppID[app.id] = total
-            recordLeftoverOwner(app, namedFolders: namedFolders)
+        } onCancel: {
+            sizing.cancel()
         }
     }
 
@@ -3965,23 +4040,60 @@ final class PurgeStore: ObservableObject {
             ScanPhaseTiming.finish("runFullScan total", since: fullStart)
         }
 
-        await runGeneralScan(generation: generation, access: access)
+        // One git session for the whole scan, started before discovery. Its git
+        // check can still be running when either half below starts, and a fresh
+        // session then would drop its answers and leave its rows unknown.
+        await gitChecker.clearSessionCache()
+        await gitChecker.setAccess(access)
         guard !Task.isCancelled, scanGeneration == generation else { return }
+
+        // Project discovery walks the home folders and needs nothing from the
+        // two scans below, so it starts with them rather than after them, and
+        // carries Dev Tools on if it is still going when they end.
+        startProjectDiscovery(generation: generation, access: access)
+        let discovery = projectDiscoveryTask
+
+        await runGeneralScan(generation: generation, access: access, inFullScan: true)
+        guard !Task.isCancelled, scanGeneration == generation else {
+            stopProjectDiscovery(discovery)
+            return
+        }
         cacheScanStage = .devTools
-        await runDeveloperScan(generation: generation, access: access)
-        guard !Task.isCancelled, scanGeneration == generation else { return }
+        await runDeveloperScan(generation: generation, access: access, inFullScan: true)
+        guard !Task.isCancelled, scanGeneration == generation else {
+            stopProjectDiscovery(discovery)
+            return
+        }
         finishScan(generation: generation)
+        if projectListFinishedDuringFullScan {
+            projectListFinishedDuringFullScan = false
+            lastScanListsFinished([.projects])
+        }
     }
 
-    private func runGeneralScan(generation: Int, access: ScanAccess) async {
+    /// Stops the discovery a full scan started, when that scan is stopped or
+    /// replaced before its Dev Tools half ends. A newer scan's discovery is
+    /// left alone.
+    private func stopProjectDiscovery(_ discovery: Task<Void, Never>?) {
+        guard let discovery, projectDiscoveryTask == discovery else { return }
+        discovery.cancel()
+        projectDiscoveryTask = nil
+        isScanningProjects = false
+    }
+
+    /// `inFullScan` is true when `runFullScan` runs this half. That scan has
+    /// started the git session for both halves and its project discovery.
+    private func runGeneralScan(generation: Int, access: ScanAccess, inFullScan: Bool = false) async {
         let generalStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         isScanningGeneral = true
         generalResultsAccess = access
         readableWithoutFullDiskAccess.removeAll()
-        await gitChecker.clearSessionCache()
-        await gitChecker.setAccess(access)
+        if !inFullScan {
+            await gitChecker.clearSessionCache()
+            await gitChecker.setAccess(access)
+        }
         defer {
             if scanGeneration == generation {
                 isScanningGeneral = false
@@ -4031,7 +4143,9 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    private func runDeveloperScan(generation: Int, access: ScanAccess) async {
+    /// `inFullScan` is true when `runFullScan` runs this half. That scan has
+    /// started the git session for both halves and its project discovery.
+    private func runDeveloperScan(generation: Int, access: ScanAccess, inFullScan: Bool = false) async {
         let developerStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
@@ -4039,8 +4153,10 @@ final class PurgeStore: ObservableObject {
         isScanningDeveloper = true
         developerResultsAccess = access
         readableWithoutFullDiskAccess.removeAll()
-        await gitChecker.clearSessionCache()
-        await gitChecker.setAccess(access)
+        if !inFullScan {
+            await gitChecker.clearSessionCache()
+            await gitChecker.setAccess(access)
+        }
         defer {
             if scanGeneration == generation {
                 isScanningDeveloper = false
@@ -4103,8 +4219,8 @@ final class PurgeStore: ObservableObject {
         guard scanGeneration == generation, !Task.isCancelled else { return }
         let needsToolRepoHydration = devTools.contains { !$0.paths.isEmpty }
         if needsToolRepoHydration {
-            isEnrichingDeveloper = true
-            defer { isEnrichingDeveloper = false }
+            developerEnrichmentCount += 1
+            defer { developerEnrichmentCount = max(0, developerEnrichmentCount - 1) }
             let hydrateStart = Date()
             let pathCount = devTools.flatMap(\.paths).count
             await hydrateDeveloperToolRepoStatusesParallel(generation: generation)
@@ -4118,11 +4234,14 @@ final class PurgeStore: ObservableObject {
         if scanGeneration == generation, !Task.isCancelled {
             lastScanListsFinished([.devTools, .simulators, .runtimes])
         }
-        startProjectDiscovery(generation: generation, access: access)
+        if !inFullScan {
+            startProjectDiscovery(generation: generation, access: access)
+        }
     }
 
     private func startProjectDiscovery(generation: Int, access: ScanAccess) {
         projectDiscoveryTask?.cancel()
+        projectListFinishedDuringFullScan = false
         projectDiscoveryTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let discoveryStart = Date()
@@ -4131,7 +4250,10 @@ final class PurgeStore: ObservableObject {
                 if self.scanGeneration == generation {
                     self.isScanningProjects = false
                     self.projectDiscoveryTask = nil
-                    self.cacheScanStage = .idle
+                    // A full scan still running ends the stage itself.
+                    if !self.isScanningAll {
+                        self.cacheScanStage = .idle
+                    }
                     // Project artifacts land after `finishScan`, so the Dev Tools
                     // record catches up once discovery settles.
                     self.categoryInputsDidChange()
@@ -4161,7 +4283,13 @@ final class PurgeStore: ObservableObject {
             // the newer discovery's git check would mark it clean (#173).
             guard scanGeneration == generation, !Task.isCancelled else { return }
             flushProjectGroupBuffers(coalesce: coalesce, animate: false)
-            lastScanListsFinished([.projects])
+            // Ended before the full scan it started with: the list is saved when
+            // that scan finishes, as it was when discovery only ran after it.
+            if isScanningAll {
+                projectListFinishedDuringFullScan = true
+            } else {
+                lastScanListsFinished([.projects])
+            }
             ScanPhaseTiming.finish(
                 "discoverProjects stream",
                 since: streamStart,
@@ -4169,8 +4297,8 @@ final class PurgeStore: ObservableObject {
             )
 
             guard !projectGroups.isEmpty else { return }
-            isEnrichingDeveloper = true
-            defer { isEnrichingDeveloper = false }
+            developerEnrichmentCount += 1
+            defer { developerEnrichmentCount = max(0, developerEnrichmentCount - 1) }
             let hydrateStart = Date()
             let artifactCount = projectGroups.flatMap(\.artifacts).count
             await hydrateDeveloperGitStatusesParallel(generation: generation)
@@ -4809,7 +4937,7 @@ final class PurgeStore: ObservableObject {
         scanSelection.simulatorRuntimeIDs.removeAll()
         scanSelection.artifactIDs.removeAll()
         devToolRepoStatusByPath = [:]
-        isEnrichingDeveloper = false
+        developerEnrichmentCount = 0
     }
 
     // MARK: - Scan stream coalescing
@@ -5860,4 +5988,30 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+}
+
+/// Where `measureBundlesAndRemovableTotals` has got to. Main-actor state shared
+/// by its bundle pass and its leftover scans.
+@MainActor
+private final class AppTotalsProgress {
+    /// `du` bundle sizes so far, by standardized bundle path.
+    var bundleBytes: [String: Int64] = [:]
+    /// The bundle pass has ended; a bundle with no size by then has none.
+    var bundlesDone = false
+    /// Leftover scans that have finished but are not counted yet, by app index.
+    var leftovers: [Int: [UninstallItem]] = [:]
+    /// The next app, in list order, to be counted.
+    var nextToCount = 0
+    /// A path is counted once across the whole pass. Two installs that share a
+    /// bundle id resolve to the same bundle-id-keyed leftovers; without this the
+    /// shared bytes would land in both tiles and double the summed figure on the
+    /// Uninstall button (`selectedAppsRemovableBytes`).
+    var countedPaths = Set<String>()
+    private var nextToScan = 0
+
+    func takeNextApp(count: Int) -> Int? {
+        guard nextToScan < count else { return nil }
+        defer { nextToScan += 1 }
+        return nextToScan
+    }
 }

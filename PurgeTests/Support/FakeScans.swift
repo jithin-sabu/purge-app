@@ -40,6 +40,9 @@ final class FakeScans {
     /// What the git status check answers, by standardized path, once it returns.
     /// A path with no answer comes back clean, as a folder outside any repository does.
     var gitAnswers: [String: GitWorktreeStatus] = [:]
+    /// When set, the store's git status checks go to this real checker instead of
+    /// `gitAnswers`, so a test can see what its session cache does to them.
+    var gitStatusChecker: GitStatusChecker?
     private(set) var generalAccesses: [ScanAccess] = []
     private(set) var developerAccesses: [ScanAccess] = []
     private(set) var projectScanCount = 0
@@ -237,6 +240,9 @@ final class FakeScans {
             },
             gitStatuses: { urls in
                 self.gitStatusRequests.append(urls)
+                if let checker = self.gitStatusChecker {
+                    return await checker.cleanupStatuses(for: urls)
+                }
                 if self.holdsGitStatus {
                     await withCheckedContinuation { self.heldGitStatus.append($0) }
                 }

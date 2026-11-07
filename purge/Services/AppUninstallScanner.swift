@@ -182,14 +182,52 @@ nonisolated final class AppUninstallScanner {
 
     /// Streams the chosen app's bundle plus every leftover matched to it. Sizes
     /// are resolved in one pass before emitting, so the review list is complete
-    /// and sortable when it appears.
-    func leftoverStream(for app: InstalledApp) -> AsyncStream<UninstallItem> {
+    /// and sortable when it appears. `knownBundleBytes` is the bundle's size when
+    /// the caller has just measured it with `du`: the bundle is then not walked
+    /// again, which for a big app is most of the scan.
+    ///
+    /// `rootListings` is the leftover roots listed once for many apps' scans
+    /// (`listLeftoverRoots()`); without it each scan lists them itself.
+    func leftoverStream(
+        for app: InstalledApp,
+        knownBundleBytes: Int64? = nil,
+        rootListings: LeftoverRootListings? = nil
+    ) -> AsyncStream<UninstallItem> {
         AsyncStream { [home, catalog] continuation in
             let task = Task.detached(priority: .userInitiated) {
-                Self.runLeftoverScan(for: app, home: home, catalog: catalog, continuation: continuation)
+                Self.runLeftoverScan(
+                    for: app,
+                    home: home,
+                    catalog: catalog,
+                    knownBundleBytes: knownBundleBytes,
+                    rootListings: rootListings,
+                    continuation: continuation
+                )
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// The entries of every leftover root, listed once so a pass over many apps
+    /// does not list the same Library folders for each one. A root that could
+    /// not be listed is kept as nil, which a scan treats as it would its own
+    /// failed listing.
+    struct LeftoverRootListings: Sendable {
+        fileprivate let entriesByRoot: [String: [URL]?]
+    }
+
+    /// Lists the leftover roots now, off the main actor.
+    @concurrent func listLeftoverRoots() async -> LeftoverRootListings {
+        let fm = FileManager.default
+        var entries: [String: [URL]?] = [:]
+        for root in AppUninstallScanPolicy.leftoverSearchRoots(home: home) {
+            entries[root.url.path] = try? fm.contentsOfDirectory(
+                at: root.url,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+        }
+        return LeftoverRootListings(entriesByRoot: entries)
     }
 
     private struct Match {
@@ -202,6 +240,8 @@ nonisolated final class AppUninstallScanner {
         for app: InstalledApp,
         home: URL,
         catalog: AppDotFolderCatalog,
+        knownBundleBytes: Int64?,
+        rootListings: LeftoverRootListings?,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
@@ -218,11 +258,17 @@ nonisolated final class AppUninstallScanner {
                 continuation.finish()
                 return
             }
-            guard let entries = try? fm.contentsOfDirectory(
-                at: root.url,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
-            ) else { continue }
+            let listed: [URL]?
+            if let shared = rootListings?.entriesByRoot[root.url.path] {
+                listed = shared
+            } else {
+                listed = try? fm.contentsOfDirectory(
+                    at: root.url,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                )
+            }
+            guard let entries = listed else { continue }
 
             for entry in entries {
                 let name = entry.lastPathComponent
@@ -254,11 +300,14 @@ nonisolated final class AppUninstallScanner {
             matches.append(Match(url: url, category: .homeFolderData, reason: .dotFolderCatalog))
         }
 
-        let sizes = FolderSizing.directorySizes(at: matches.map(\.url))
+        let measured = knownBundleBytes == nil ? matches : matches.filter { $0.category != .bundle }
+        let sizes = FolderSizing.directorySizes(at: measured.map(\.url), split: .spread)
 
         for match in matches {
             if Task.isCancelled { break }
-            let size = sizes[match.url.standardizedFileURL.path] ?? 0
+            let size = match.category == .bundle
+                ? knownBundleBytes ?? sizes[match.url.standardizedFileURL.path] ?? 0
+                : sizes[match.url.standardizedFileURL.path] ?? 0
             let safety = AppUninstallScanPolicy.safetyInfo(
                 for: match.reason,
                 category: match.category,

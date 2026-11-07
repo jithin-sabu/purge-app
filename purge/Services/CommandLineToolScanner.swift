@@ -18,7 +18,7 @@ nonisolated struct CommandLineToolScanner: Sendable {
         let installs = CommandLineToolScanPolicy.pairedInstalls(home: home)
         var managed = PackageManagerToolScanner.tools(roots: managerRoots)
         let urls = installs.map(\.folder) + managed.flatMap(\.locations)
-        let sizes = FolderSizing.directorySizes(at: urls)
+        let sizes = FolderSizing.directorySizes(at: urls, split: .spread)
         func size(_ url: URL) -> Int64 { sizes[url.standardizedFileURL.path] ?? 0 }
 
         let standalone = installs.map { install in
