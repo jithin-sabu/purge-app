@@ -5537,7 +5537,7 @@ final class PurgeStore: ObservableObject {
             sizeBytes: pathBytes,
             safetyInfo: tool.safetyInfo,
             reinstallCommand: tool.safetyInfo.reinstallCommand,
-            subtitle: path.lastPathComponent,
+            subtitle: OldToolVersionScanPolicy.deletionSubtitle(for: path) ?? path.lastPathComponent,
             reinstallSafety: tool.reinstallSafety,
             gitStatus: devToolRepoStatusByPath[key] ?? .unknown
         )

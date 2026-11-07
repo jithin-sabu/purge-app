@@ -136,6 +136,16 @@ struct OldToolVersionShapeTests {
         #expect(Policy.kind(of: "\(home)/\(relative)", home: home) == nil)
     }
 
+    /// Every image folder is named for its CPU, so the confirm sheet names the
+    /// Android version and tag too.
+    @Test
+    func systemImagesShowWhichImage() {
+        let image = URL(fileURLWithPath: "\(home)/Library/Android/sdk/system-images/android-36/google_apis/arm64-v8a")
+        #expect(Policy.deletionSubtitle(for: image, home: home) == "android-36/google_apis/arm64-v8a")
+        let ndk = URL(fileURLWithPath: "\(home)/Library/Android/sdk/ndk/27.0.12077973")
+        #expect(Policy.deletionSubtitle(for: ndk, home: home) == nil)
+    }
+
     @Test
     func ndkLabelsCarryTheirVersion() {
         #expect(Policy.ndkVersion(inLabel: "Android NDK 27.0.12077973") == "27.0.12077973")

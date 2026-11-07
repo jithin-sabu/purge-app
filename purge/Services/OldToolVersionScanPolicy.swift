@@ -107,6 +107,15 @@ nonisolated enum OldToolVersionScanPolicy {
         kind(of: path, home: home) != nil
     }
 
+    /// The confirm sheet's line under a system image. Every image folder is named
+    /// for its CPU (`arm64-v8a`), so it shows `android-36/google_apis/arm64-v8a`.
+    /// Nil for every other path, which shows its own name.
+    static func deletionSubtitle(for url: URL, home: String = DeletionSafetyPolicy.cachedHomePath) -> String? {
+        let path = url.standardizedFileURL.path
+        guard kind(of: path, home: home) == .androidSystemImage else { return nil }
+        return String(path.dropFirst("\(home)/\(androidSDK)/system-images/".count))
+    }
+
     /// The name of `path` when it sits directly in `root`.
     static func onlyChild(_ path: String, of root: String) -> String? {
         guard PathContainment.isInside(path, root) else { return nil }
