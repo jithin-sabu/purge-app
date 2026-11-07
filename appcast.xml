@@ -3,6 +3,26 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.14.0</title>
+      <pubDate>Sat, 07 Nov 2026 21:11:10 +0000</pubDate>
+      <sparkle:version>41</sparkle:version>
+      <sparkle:shortVersionString>1.14.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>More caches found</strong>: App Caches and Dev Tools now find caches Purge missed, such as Chromium caches deeper in an app's folder, stopped Gradle daemons' logs and the clang module cache.</li>
+          <li><strong>Old tool versions</strong>: Dev Tools lists old Android NDKs, unused emulator images, old Figma profiles and old Claude Code downloads, each as Check First.</li>
+          <li><strong>Playwright browsers in use stay</strong>: Dev Tools offers only the Playwright browser builds no installed Playwright uses.</li>
+          <li><strong>Browsers keep their offline data</strong>: Purge no longer offers browsers' Service Worker caches, so sites keep sending notifications.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.14.0/Purgev1.14.0.dmg"
+        sparkle:edSignature="DuQQMIBohhCOJ1RARFKphJwUc3CZxTOJ0B9y34xJXmKAgmiMo6X+MFQpwwKRDQ7F7NAQuIkaB024eO6Ivd61Cw=="
+        length="11512444"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.13.4</title>
       <pubDate>Sat, 07 Nov 2026 01:04:22 +0000</pubDate>
       <sparkle:version>40</sparkle:version>
