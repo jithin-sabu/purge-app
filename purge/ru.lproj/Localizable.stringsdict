@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%@ %lld Check First items (%@)</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%@ %#@n@ (%@)</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%@ %lld элемента для проверки (%@)</string>
+			<key>many</key>
+			<string>%@ %lld элементов для проверки (%@)</string>
+			<key>one</key>
+			<string>%@ %lld элемент для проверки (%@)</string>
+			<key>other</key>
+			<string>%@ %lld элемента для проверки (%@)</string>
+		</dict>
+	</dict>
+	<key>%lld apps</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld приложения</string>
+			<key>many</key>
+			<string>%lld приложений</string>
+			<key>one</key>
+			<string>%lld приложение</string>
+			<key>other</key>
+			<string>%lld приложения</string>
+		</dict>
+	</dict>
+	<key>%lld files over %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ крупнее %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла крупнее %@</string>
+			<key>many</key>
+			<string>%lld файлов крупнее %@</string>
+			<key>one</key>
+			<string>%lld файл крупнее %@</string>
+			<key>other</key>
+			<string>%lld файла крупнее %@</string>
+		</dict>
+	</dict>
+	<key>%lld files over %@ not used in %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ крупнее %@, которыми не пользовались %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла крупнее %@, которыми не пользовались %@</string>
+			<key>many</key>
+			<string>%lld файлов крупнее %@, которыми не пользовались %@</string>
+			<key>one</key>
+			<string>%lld файл крупнее %@, которым не пользовались %@</string>
+			<key>other</key>
+			<string>%lld файла крупнее %@, которыми не пользовались %@</string>
+		</dict>
+	</dict>
+	<key>%lld files · %@ to review</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ · %@ на проверку</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла · %@ на проверку</string>
+			<key>many</key>
+			<string>%lld файлов · %@ на проверку</string>
+			<key>one</key>
+			<string>%lld файл · %@ на проверку</string>
+			<key>other</key>
+			<string>%lld файла · %@ на проверку</string>
+		</dict>
+	</dict>
+	<key>%lld items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+	<key>%lld items to trash</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ в Корзину</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента в Корзину</string>
+			<key>many</key>
+			<string>%lld элементов в Корзину</string>
+			<key>one</key>
+			<string>%lld элемент в Корзину</string>
+			<key>other</key>
+			<string>%lld элемента в Корзину</string>
+		</dict>
+	</dict>
+	<key>%lld items · %@ recoverable</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ · %@ можно вернуть</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента · %@ можно вернуть</string>
+			<key>many</key>
+			<string>%lld элементов · %@ можно вернуть</string>
+			<key>one</key>
+			<string>%lld элемент · %@ можно вернуть</string>
+			<key>other</key>
+			<string>%lld элемента · %@ можно вернуть</string>
+		</dict>
+	</dict>
+	<key>%lld other copies</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld другие копии</string>
+			<key>many</key>
+			<string>%lld других копий</string>
+			<key>one</key>
+			<string>%lld другая копия</string>
+			<key>other</key>
+			<string>%lld другие копии</string>
+		</dict>
+	</dict>
+	<key>%lld other identical copies found</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ найдено</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld другие идентичные копии найдены</string>
+			<key>many</key>
+			<string>%lld других идентичных копий найдено</string>
+			<key>one</key>
+			<string>%lld другая идентичная копия найдена</string>
+			<key>other</key>
+			<string>%lld другие идентичные копии найдены</string>
+		</dict>
+	</dict>
+	<key>%lld tools</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld инструмента</string>
+			<key>many</key>
+			<string>%lld инструментов</string>
+			<key>one</key>
+			<string>%lld инструмент</string>
+			<key>other</key>
+			<string>%lld инструмента</string>
+		</dict>
+	</dict>
+	<key>Moved %lld items to Trash, about %@. Empty the trash to reclaim the space.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Перемещено в Корзину: %#@n@, около %@. Очистите Корзину, чтобы освободить место.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+</dict>
+</plist>
