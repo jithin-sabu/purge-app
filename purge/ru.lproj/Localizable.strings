@@ -1390,7 +1390,7 @@
 "macOS didn’t let Purge move itself." = "macOS не дала Purge переместиться самостоятельно.";
 "macOS hasn't finished removing them" = "macOS ещё не завершила удаление";
 "macOS is blocking Purge's background watcher, so deleted apps go unnoticed." = "macOS блокирует фоновый монитор Purge, поэтому удалённые приложения остаются незамеченными.";
-"macOS is keeping this file on this Mac, for example because it's set to Keep Downloaded." = "macOS оставляет этот файл на этом Mac — например, потому что для него включён параметр «Оставлять загруженным».";
+"macOS is keeping this file on this Mac, for example because it's set to Keep Downloaded." = "macOS оставляет этот файл на этом Mac — например, потому что для него выбрано «Оставить в загрузках».";
 "macOS is stopping Purge from running in the background. In System Settings, open Login Items and switch Purge on." = "macOS не даёт Purge работать в фоне. Откройте в Системных настройках раздел «Объекты входа» и включите Purge.";
 "macOS kept the %@ download (%@), so that space is still in use." = "macOS сохранил загрузку %@ (%@), поэтому это место всё ещё занято.";
 "macOS kept the %@ download, so that space is still in use." = "macOS сохранила загрузку %@, поэтому это место всё ещё занято.";

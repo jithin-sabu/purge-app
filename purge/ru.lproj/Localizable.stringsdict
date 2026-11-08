@@ -5,7 +5,7 @@
 	<key>%@ %lld Check First items (%@)</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@</string>
+		<string>%@ %#@n@ (%@)</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -13,13 +13,13 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>few</key>
-			<string>%@ %lld элемента для проверки (%@)</string>
+			<string>%lld элемента для проверки</string>
 			<key>many</key>
-			<string>%@ %lld элементов для проверки (%@)</string>
+			<string>%lld элементов для проверки</string>
 			<key>one</key>
-			<string>%@ %lld элемент для проверки (%@)</string>
+			<string>%lld элемент для проверки</string>
 			<key>other</key>
-			<string>%@ %lld элемента для проверки (%@)</string>
+			<string>%lld элемента для проверки</string>
 		</dict>
 	</dict>
 	<key>%lld apps</key>
