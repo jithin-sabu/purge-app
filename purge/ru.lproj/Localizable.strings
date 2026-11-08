@@ -200,11 +200,11 @@
 "Another user's home folder. Only that user, or an administrator in System Settings > Users & Groups, can remove it." = "Домашняя папка другого пользователя. Удалить её может только этот пользователь или администратор в «Системных настройках» > «Пользователи и группы».";
 "Any time" = "Любое время";
 "App" = "Приложение";
-"App Caches" = "Кэши приложений";
+"App Caches" = "Кэши";
 "App Caches and Dev Tools" = "Кэши приложений и инструменты разработчика";
 "App Data" = "Данные приложений";
 "App Store app caches" = "Кэши приложений из App Store";
-"App Uninstaller" = "Программа удаления";
+"App Uninstaller" = "Деинсталлятор";
 "App caches" = "Кэши приложений";
 "App data" = "Данные приложения";
 "App data holds settings, documents, databases and offline downloads. Only the cache folders inside it are known to be safe, and App Caches already lists those." = "Данные приложения включают настройки, документы, базы данных и офлайн-загрузки. Безопасными считаются только папки кэша внутри них — их уже показывает раздел «Кэши приложений».";
@@ -219,8 +219,8 @@
 "Application" = "Приложение";
 "Application Caches" = "Кэши приложений";
 "Application Logs" = "Логи приложений";
-"Application Support" = "Файлы поддержки приложений";
-"Application Support, Containers and Group Containers" = "Файлы поддержки приложений, контейнеры и групповые контейнеры";
+"Application Support" = "Application Support";
+"Application Support, Containers and Group Containers" = "Application Support, Containers и Group Containers";
 "Application Support, Containers and the rest of your Library that no installed app claims." = "Application Support, Containers и остальная часть «Библиотеки», на которую не претендует ни одно установленное приложение.";
 "Application caches are safe to remove" = "Кэши приложений можно безопасно удалить";
 "Applications" = "Приложения";
@@ -326,7 +326,7 @@
 "Command-line tools removed" = "Инструменты командной строки удалены";
 "Common dev caches" = "Распространённые кэши разработчика";
 "Consider stale after" = "Срок устаревания";
-"Containers" = "Контейнеры";
+"Containers" = "Containers";
 "Continue" = "Продолжить";
 "Copy Command" = "Скопировать команду";
 "Copy Path" = "Скопировать путь";
@@ -367,7 +367,7 @@
 "Deleted-app watcher" = "Монитор удалённых приложений";
 "Deletes its apps and data." = "Удаляет его приложения и данные.";
 "Dependencies" = "Зависимости";
-"Dev Tools" = "Инструменты разработчика";
+"Dev Tools" = "Инструменты";
 "Dev Tools not scanned yet" = "Инструменты разработчика ещё не сканировались";
 "Dev tool artifacts" = "Артефакты инструментов разработчика";
 "Developer" = "Разработчик";
@@ -453,6 +453,7 @@
 "From the last scan, %@ · Checking again…" = "Из прошлого сканирования, %@ · Проверяем снова…";
 "From the last scan. Purge is checking it again." = "Из последнего сканирования. Purge проверяет снова.";
 "Full Disk Access" = "Полный доступ к диску";
+"GB" = "ГБ";
 "GarageBand projects and the sounds it downloaded. Remove sound packs in GarageBand under Sound Library." = "Проекты GarageBand и скачанные им звуки. Удалить наборы звуков можно в GarageBand в разделе «Библиотека звуков».";
 "General" = "Общие";
 "Get started" = "Начать";
@@ -460,7 +461,7 @@
 "Gradle" = "Gradle";
 "Gradle build" = "Сборка Gradle";
 "Grid" = "Сетка";
-"Group Containers" = "Групповые контейнеры";
+"Group Containers" = "Group Containers";
 "Grouped dev tool cleanup targets" = "Сгруппированные объекты очистки инструментов разработчика";
 "Has its own uninstall" = "Есть собственное удаление";
 "Hidden folders the app is known to keep" = "Скрытые папки, которые приложение обычно хранит";
@@ -505,6 +506,7 @@
 "Items found, %lld" = "Найдено элементов: %lld";
 "Jithin" = "Jithin";
 "Jithin on X" = "Jithin в X";
+"KB" = "КБ";
 "Keep" = "Оставить";
 "Keep %lld files only in iCloud?" = "Оставить %lld файлов только в iCloud?";
 "Keep Cleaning" = "Продолжить очистку";
@@ -574,6 +576,7 @@
 "Looking for large files again" = "Повторный поиск больших файлов";
 "Loose files" = "Отдельные файлы";
 "Loose files · %@" = "Отдельные файлы · %@";
+"MB" = "МБ";
 "Made with" = "Сделано с";
 "Mail & Messages" = "Почта и Сообщения";
 "Mail keeps a copy of every message and attachment here. Mail > Settings > Accounts lets you download only recent attachments, and Mailbox > Erase Junk Mail and Erase Deleted Items free space." = "Почта хранит здесь копию каждого письма и вложений. В разделе «Почта» > «Настройки» > «Учётные записи» можно скачивать только недавние вложения, а «Почтовый ящик» > «Стереть спам» и «Стереть удалённые объекты» освобождают место.";
@@ -637,7 +640,7 @@
 "Moved %@ of junk to the Trash." = "В Корзину перемещено %@ мусора.";
 "Moved %@ to Trash" = "%@ перемещено в Корзину";
 "Moved %@ to trash" = "Перемещено %@ в Корзину";
-"Moved %lld items to Trash, about %@. Empty the trash to reclaim the space." = "Перемещено в Корзину: %lld элементов, около %@. Очистите Корзину, чтобы освободить место.";
+"Moved %lld items to Trash, about %@. Empty the trash to reclaim the space." = "%lld элементов перемещено в Корзину, около %@. Очистите Корзину, чтобы освободить место.";
 "Moved to Trash" = "Перемещено в Корзину";
 "Moved to the Trash, not deleted. Restore it anytime." = "Перемещено в Корзину, а не удалено. Можно восстановить в любой момент.";
 "Moved to the Trash, not deleted. Restore them anytime." = "Перемещено в Корзину, а не удалено. Вы можете восстановить их в любой момент.";
@@ -1110,6 +1113,7 @@
 "System" = "Как в системе";
 "System Data" = "Системные данные";
 "System junk" = "Системный мусор";
+"TB" = "ТБ";
 "Terraform plugins" = "Плагины Terraform";
 "Test the schedule" = "Проверить расписание";
 "Thanks, that means a lot." = "Спасибо, это очень приятно.";
@@ -1221,7 +1225,7 @@
 "Uninstall from Finder's right-click menu" = "Удалить через контекстное меню Finder";
 "Uninstall in Steam" = "Удалить в Steam";
 "Uninstall with Purge in Finder's right-click menu" = "«Удалить с помощью Purge» в контекстном меню Finder";
-"Uninstaller" = "Удаление приложений";
+"Uninstaller" = "Деинсталлятор";
 "Uninstalling" = "Удаление";
 "Uninstalling Purge" = "Удаление Purge";
 "Uninstall…" = "Удалить…";
@@ -1397,7 +1401,7 @@
 "macOS updates" = "обновления macOS";
 "macOS will ask you to install a profile. It stops the models from downloading again. To get them back, click Download Again. The profile is listed in System Settings > General > Device Management." = "macOS предложит установить профиль. Он не даст моделям скачиваться снова. Чтобы вернуть их, нажмите «Скачать снова». Профиль указан в «Системных настройках» > «Основные» > «Управление устройством».";
 "macOS won't let Purge move this app from where it is. Drag it to the Trash in Finder, then retry to remove what it left behind." = "macOS не позволяет Purge переместить это приложение с текущего места. Перетащите его в Корзину в Finder, а затем повторите попытку, чтобы удалить то, что осталось.";
-"macOS, your documents and photos, and files Purge doesn't sort" = "macOS, ваши документы и фото, а также файлы, которые Purge не сортирует";
+"macOS, your documents and photos, and files Purge doesn't sort" = "macOS, ваши документы и фото, а также файлы, которые Purge не относит ни к одной категории";
 "macOS, your files, app data and more" = "macOS, ваши файлы, данные приложений и другое";
 "macOS, your files, app data and more. Click to see what's in it" = "macOS, ваши файлы, данные приложений и другое. Нажмите, чтобы посмотреть содержимое";
 "month" = "месяц";

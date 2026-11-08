@@ -5,7 +5,7 @@
 	<key>%@ %lld Check First items (%@)</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%@ %#@n@ (%@)</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -45,7 +45,7 @@
 	<key>%lld files over %@</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ крупнее %@</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -65,7 +65,7 @@
 	<key>%lld files over %@ not used in %@</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ крупнее %@, которыми не пользовались %@</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -85,7 +85,7 @@
 	<key>%lld files · %@ to review</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ · %@ на проверку</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -125,7 +125,7 @@
 	<key>%lld items to trash</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ в Корзину</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -145,7 +145,7 @@
 	<key>%lld items · %@ recoverable</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ · %@ можно вернуть</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -185,7 +185,7 @@
 	<key>%lld other identical copies found</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@n@ найдено</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -225,7 +225,7 @@
 	<key>Moved %lld items to Trash, about %@. Empty the trash to reclaim the space.</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>Перемещено в Корзину: %#@n@, около %@. Очистите Корзину, чтобы освободить место.</string>
+		<string>%#@n@</string>
 		<key>n</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -233,13 +233,13 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>lld</string>
 			<key>few</key>
-			<string>%lld элемента</string>
+			<string>%lld элемента перемещено в Корзину, около %@. Очистите Корзину, чтобы освободить место.</string>
 			<key>many</key>
-			<string>%lld элементов</string>
+			<string>%lld элементов перемещено в Корзину, около %@. Очистите Корзину, чтобы освободить место.</string>
 			<key>one</key>
-			<string>%lld элемент</string>
+			<string>%lld элемент перемещён в Корзину, около %@. Очистите Корзину, чтобы освободить место.</string>
 			<key>other</key>
-			<string>%lld элемента</string>
+			<string>%lld элемента перемещено в Корзину, около %@. Очистите Корзину, чтобы освободить место.</string>
 		</dict>
 	</dict>
 </dict>
