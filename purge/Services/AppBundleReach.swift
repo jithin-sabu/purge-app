@@ -8,7 +8,9 @@ import Foundation
 /// `/Applications/Autodesk/AutoCAD 2026/AutoCAD 2026.app` (#143), and people
 /// sort their own apps into folders. Every app found is listed, including a
 /// suite's background parts, so the checks that hold back a leftover another
-/// installed app still uses can see them all.
+/// installed app still uses can see them all. The list folds a vendor's apps
+/// that share a folder into one entry for display only (`AppSuiteGrouping`,
+/// #155); every bundle stays in the list those checks read.
 ///
 /// The picker, the delete gate, the Finder service check, the removal watcher,
 /// the orphan index, and the root helper all read this one rule, so an app the

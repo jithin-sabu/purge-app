@@ -127,6 +127,11 @@ struct UninstallView: View {
     @AppStorage("sort.leftovers") private var leftoversSortRaw = SortOption.sizeDesc.rawValue
     /// Why a folder picked from the hint under the list could not be added (#99).
     @State private var appFolderMessage: String?
+    /// The vendor group whose tray is open in the grid (#155), and the groups
+    /// opened in the list. Kept on the store for the session, so a group stays
+    /// open across a trip to another tab.
+    private var openGridGroupID: String? { store.openGridAppGroupID }
+    private var expandedListGroupIDs: Set<String> { store.expandedListAppGroupIDs }
 
     /// The active view lives on the store so the tab header can swap its action
     /// button to match; this view reads and writes it through `store`.
@@ -371,8 +376,115 @@ struct UninstallView: View {
     }
 
     private var filteredApps: [InstalledApp] {
-        sortedApps(Self.matchingApps(store.installedApps + lastScanApps, query: appSearchQuery, focus: focusedSearch))
+        sortedApps(Self.matchingApps(
+            store.installedApps + lastScanApps,
+            query: appSearchQuery,
+            focus: focusedSearch,
+            groups: store.appSuiteGroups
+        ))
     }
+
+    /// While the search has text, matching apps show on their own, as before #155.
+    private var isSearching: Bool {
+        focusedSearch != nil || !appSearchQuery.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// What the grid and list show: a vendor's apps folded into one group entry
+    /// (#155), each app still on its own while searching.
+    private var filteredEntries: [AppListEntry] {
+        if isSearching { return filteredApps.map { .app($0) } }
+        return sortedEntries(store.appListEntries(store.installedApps + lastScanApps))
+    }
+
+    /// Groups sort with the apps: by folder name, by the members' total size,
+    /// or by the newest open among them. Members follow the same order inside.
+    private func sortedEntries(_ entries: [AppListEntry]) -> [AppListEntry] {
+        let inner: [AppListEntry] = entries.map { entry in
+            if case .group(let group, let apps) = entry { return .group(group, sortedApps(apps)) }
+            return entry
+        }
+        func bytes(_ entry: AppListEntry) -> Int64 {
+            entry.apps.reduce(Int64(0)) { $0 + store.removableBytes(for: $1) }
+        }
+        func newest(_ entry: AppListEntry) -> Date? { entry.apps.compactMap(\.lastOpened).max() }
+        func byName(_ lhs: AppListEntry, _ rhs: AppListEntry) -> Bool {
+            lhs.sortName.localizedCaseInsensitiveCompare(rhs.sortName) == .orderedAscending
+        }
+        switch currentSort {
+        case .largest where store.hasMeasuredAllRemovableTotals:
+            return inner.sorted { bytes($0) > bytes($1) }
+        case .smallest where store.hasMeasuredAllRemovableTotals:
+            return inner.sorted { bytes($0) < bytes($1) }
+        case .largest, .smallest, .nameAZ:
+            return inner.sorted(by: byName)
+        case .recentlyUsed:
+            return inner.sorted { lhs, rhs in
+                switch (newest(lhs), newest(rhs)) {
+                case let (left?, right?) where left != right: return left > right
+                case (.some, .none): return true
+                case (.none, .some): return false
+                default: return byName(lhs, rhs)
+                }
+            }
+        }
+    }
+
+    /// A group's size: the sum its members show, pending while any is.
+    private func displayedSize(for apps: [InstalledApp], savedPaths: Set<String>) -> AppRowSize {
+        let sizes = apps.map { displayedSize(for: $0, isFromLastScan: savedPaths.contains($0.bundleURL.path)) }
+        return AppRowSize(
+            bytes: sizes.reduce(Int64(0)) { $0 + $1.bytes },
+            isPending: sizes.contains(where: \.isPending),
+            isFromLastScan: sizes.contains(where: \.isFromLastScan)
+        )
+    }
+
+    /// The caption a group shows while sorting by last used: its newest open.
+    private func activityLabel(for apps: [InstalledApp]) -> String? {
+        guard let newest = apps.max(by: { ($0.lastOpened ?? .distantPast) < ($1.lastOpened ?? .distantPast) }) else {
+            return nil
+        }
+        return activityLabel(for: newest)
+    }
+
+    private func groupSelection(_ apps: [InstalledApp]) -> SelectAllTriState {
+        let live = liveIDs(apps)
+        return live.isEmpty ? .none : AppGroupSelection.state(appIDs: live, selected: store.selectedAppIDs)
+    }
+
+    /// The members that can be ticked: not the last scan's saved rows (#283).
+    private func liveIDs(_ apps: [InstalledApp]) -> [String] {
+        let saved = Set(lastScanApps.map(\.id))
+        return apps.map(\.id).filter { !saved.contains($0) }
+    }
+
+    private func toggleGroupSelection(_ apps: [InstalledApp]) {
+        store.setAppsSelected(liveIDs(apps), groupSelection(apps) != .all)
+    }
+
+    private func uninstaller(of group: AppSuiteGroup, in apps: [InstalledApp]) -> InstalledApp? {
+        guard let id = group.uninstallerID else { return nil }
+        return apps.first { $0.id == id }
+    }
+
+    private func toggleGridGroup(_ id: String) {
+        let change = { store.openGridAppGroupID = store.openGridAppGroupID == id ? nil : id }
+        if reduceMotion { change() } else { withAnimation(Self.groupExpandAnimation, change) }
+    }
+
+    private func toggleListGroup(_ id: String) {
+        let change = {
+            if store.expandedListAppGroupIDs.contains(id) {
+                store.expandedListAppGroupIDs.remove(id)
+            } else {
+                store.expandedListAppGroupIDs.insert(id)
+            }
+        }
+        if reduceMotion { change() } else { withAnimation(Self.groupExpandAnimation, change) }
+    }
+
+    /// The Dev Tools project card's spring, so groups open the same way.
+    private static let groupExpandAnimation = Animation.spring(response: 0.28, dampingFraction: 0.86, blendDuration: 0.08)
 
     /// Apps from the last scan (#283) this scan has not listed yet, by bundle path.
     private var lastScanApps: [InstalledApp] {
@@ -407,15 +519,23 @@ struct UninstallView: View {
     /// The apps the search shows: the focused installation alone while the box
     /// still holds the text Uninstall an App filled in, otherwise every app whose
     /// name or bundle id contains the query.
-    static func matchingApps(_ apps: [InstalledApp], query: String, focus: UninstallerFocus?) -> [InstalledApp] {
+    /// A query that names a vendor group's folder lists every app in it (#155).
+    static func matchingApps(
+        _ apps: [InstalledApp],
+        query: String,
+        focus: UninstallerFocus?,
+        groups: [AppSuiteGroup] = []
+    ) -> [InstalledApp] {
         if let focus, query == focus.name {
             return apps.filter { $0.id == focus.appID }
         }
         let query = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !query.isEmpty else { return apps }
+        let inMatchingGroup = Set(groups.filter { $0.name.lowercased().contains(query) }.flatMap(\.appIDs))
         return apps.filter {
             $0.name.lowercased().contains(query)
                 || ($0.bundleID?.lowercased().contains(query) ?? false)
+                || inMatchingGroup.contains($0.id)
         }
     }
 
@@ -658,18 +778,15 @@ struct UninstallView: View {
             // Non-lazy so every row stays in the hierarchy and can slide to its
             // new index on sort. LazyVStack treats reorders as remove + insert.
             VStack(spacing: AppStyle.Spacing.xxSmallPlus) {
-                ForEach(filteredApps) { app in
-                    let isFromLastScan = savedPaths.contains(app.bundleURL.path)
-                    AppListRow(
-                        app: app,
-                        size: displayedSize(for: app, isFromLastScan: isFromLastScan),
-                        activityLabel: activityLabel(for: app),
-                        isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
-                        isFromLastScan: isFromLastScan
-                    ) {
-                        store.toggleAppSelected(id: app.id)
+                ForEach(filteredEntries) { entry in
+                    switch entry {
+                    case .app(let app):
+                        appListRow(app, savedPaths: savedPaths)
+                            .matchedGeometryEffect(id: entry.id, in: listReorderNamespace)
+                    case .group(let group, let apps):
+                        groupListRows(group, apps: apps, savedPaths: savedPaths)
+                            .matchedGeometryEffect(id: entry.id, in: listReorderNamespace)
                     }
-                    .matchedGeometryEffect(id: app.id, in: listReorderNamespace)
                 }
             }
             .padding(.horizontal, AppDetailPageLayout.horizontalInset)
@@ -683,6 +800,56 @@ struct UninstallView: View {
         .clipped()
     }
 
+    private func appListRow(_ app: InstalledApp, savedPaths: Set<String>) -> some View {
+        let isFromLastScan = savedPaths.contains(app.bundleURL.path)
+        return AppListRow(
+            app: app,
+            size: displayedSize(for: app, isFromLastScan: isFromLastScan),
+            activityLabel: activityLabel(for: app),
+            isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
+            isFromLastScan: isFromLastScan
+        ) {
+            store.toggleAppSelected(id: app.id)
+        }
+    }
+
+    /// A group's header row and, while it is open, the uninstaller note and its
+    /// apps indented under it (#155).
+    private func groupListRows(_ group: AppSuiteGroup, apps: [InstalledApp], savedPaths: Set<String>) -> some View {
+        let isExpanded = expandedListGroupIDs.contains(group.id)
+        let live = liveIDs(apps)
+        return VStack(spacing: AppStyle.Spacing.xxSmallPlus) {
+            AppGroupListRow(
+                group: group,
+                apps: apps,
+                size: displayedSize(for: apps, savedPaths: savedPaths),
+                activityLabel: activityLabel(for: apps),
+                selection: groupSelection(apps),
+                pickedCount: live.filter(store.selectedAppIDs.contains).count,
+                isExpanded: isExpanded,
+                canSelect: !live.isEmpty,
+                onToggleExpanded: { toggleListGroup(group.id) },
+                onToggleSelection: { toggleGroupSelection(apps) }
+            )
+            if isExpanded {
+                VStack(spacing: AppStyle.Spacing.xxSmallPlus) {
+                    if let uninstaller = uninstaller(of: group, in: apps) {
+                        SuiteUninstallerNote(groupName: group.name, uninstallerName: uninstaller.name) {
+                            store.openSuiteUninstaller(at: uninstaller.bundleURL)
+                        }
+                        .padding(.horizontal, AppStyle.Spacing.small)
+                        .padding(.vertical, AppStyle.Spacing.xxSmall)
+                    }
+                    ForEach(apps) { app in
+                        appListRow(app, savedPaths: savedPaths)
+                    }
+                }
+                .padding(.leading, AppStyle.Spacing.large)
+                .transition(.opacity)
+            }
+        }
+    }
+
     private var loadedGrid: some View {
         let savedPaths = Set(lastScanApps.map(\.bundleURL.path))
         return ScrollView {
@@ -691,19 +858,10 @@ struct UninstallView: View {
             VStack(spacing: AppStyle.Spacing.small) {
                 ForEach(gridRows, id: \.startIndex) { row in
                     HStack(spacing: AppStyle.Spacing.small) {
-                        ForEach(row.apps) { app in
-                            let isFromLastScan = savedPaths.contains(app.bundleURL.path)
-                            AppTile(
-                                app: app,
-                                size: displayedSize(for: app, isFromLastScan: isFromLastScan),
-                                activityLabel: activityLabel(for: app),
-                                isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
-                                isFromLastScan: isFromLastScan
-                            ) {
-                                store.toggleAppSelected(id: app.id)
-                            }
-                            .matchedGeometryEffect(id: app.id, in: gridReorderNamespace)
-                            .frame(maxWidth: .infinity)
+                        ForEach(row.entries) { entry in
+                            gridCell(entry, savedPaths: savedPaths)
+                                .matchedGeometryEffect(id: entry.id, in: gridReorderNamespace)
+                                .frame(maxWidth: .infinity)
                         }
 
                         // Keep the last row's columns aligned with the ones above.
@@ -712,6 +870,13 @@ struct UninstallView: View {
                                 .frame(maxWidth: .infinity)
                                 .accessibilityHidden(true)
                         }
+                    }
+
+                    // The open group's tray sits right under the row that holds it.
+                    if let open = row.entries.first(where: { $0.id == openGridGroupID.map { "group:" + $0 } }),
+                       case .group(let group, let apps) = open {
+                        groupTray(group, apps: apps, savedPaths: savedPaths)
+                            .transition(.opacity)
                     }
                 }
             }
@@ -725,20 +890,119 @@ struct UninstallView: View {
         .clipped()
     }
 
+    @ViewBuilder
+    private func gridCell(_ entry: AppListEntry, savedPaths: Set<String>) -> some View {
+        switch entry {
+        case .app(let app):
+            appTile(app, savedPaths: savedPaths)
+        case .group(let group, let apps):
+            let live = liveIDs(apps)
+            AppGroupTile(
+                group: group,
+                apps: apps,
+                size: displayedSize(for: apps, savedPaths: savedPaths),
+                activityLabel: activityLabel(for: apps),
+                selection: groupSelection(apps),
+                pickedCount: live.filter(store.selectedAppIDs.contains).count,
+                isOpen: openGridGroupID == group.id,
+                canSelect: !live.isEmpty,
+                onToggleOpen: { toggleGridGroup(group.id) },
+                onToggleSelection: { toggleGroupSelection(apps) }
+            )
+        }
+    }
+
+    private func appTile(_ app: InstalledApp, savedPaths: Set<String>) -> some View {
+        let isFromLastScan = savedPaths.contains(app.bundleURL.path)
+        return AppTile(
+            app: app,
+            size: displayedSize(for: app, isFromLastScan: isFromLastScan),
+            activityLabel: activityLabel(for: app),
+            isSelected: !isFromLastScan && store.selectedAppIDs.contains(app.id),
+            isFromLastScan: isFromLastScan
+        ) {
+            store.toggleAppSelected(id: app.id)
+        }
+    }
+
+    /// The open group in the grid (#155): its name and checkbox, the uninstaller
+    /// note when it has one, then its apps as ordinary tiles, four to a row.
+    private func groupTray(_ group: AppSuiteGroup, apps: [InstalledApp], savedPaths: Set<String>) -> some View {
+        let live = liveIDs(apps)
+        let picked = live.filter(store.selectedAppIDs.contains).count
+        let folder = (group.folderURL.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
+        let rows = stride(from: 0, to: apps.count, by: 4).map { Array(apps[$0..<min($0 + 4, apps.count)]) }
+        return VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            HStack(spacing: AppStyle.Spacing.xSmall) {
+                if !live.isEmpty {
+                    TriStateCheckbox(title: "", state: groupSelection(apps)) { toggleGroupSelection(apps) }
+                        .fixedSize()
+                        .accessibilityLabel(String(localized: "Select every app in \(group.name)"))
+                }
+                Text(group.name)
+                    .font(AppStyle.Typography.rowTitle)
+                    .foregroundStyle(AppColors.textPrimary)
+                Text("\(folder) · \(AppGroupSelection.countLine(total: apps.count, picked: picked))")
+                    .font(AppStyle.Typography.metadata)
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: AppStyle.Spacing.small)
+                Button {
+                    toggleGridGroup(group.id)
+                } label: {
+                    Label(String(localized: "Close"), systemImage: "chevron.up")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.purge(.quiet, size: .small, width: .square))
+                .help(String(localized: "Collapse group"))
+            }
+            if let uninstaller = uninstaller(of: group, in: apps) {
+                SuiteUninstallerNote(groupName: group.name, uninstallerName: uninstaller.name) {
+                    store.openSuiteUninstaller(at: uninstaller.bundleURL)
+                }
+            }
+            ForEach(rows.indices, id: \.self) { index in
+                HStack(spacing: AppStyle.Spacing.small) {
+                    ForEach(rows[index]) { app in
+                        appTile(app, savedPaths: savedPaths)
+                            .frame(maxWidth: .infinity)
+                    }
+                    ForEach(0..<max(0, 4 - rows[index].count), id: \.self) { _ in
+                        Color.clear
+                            .frame(maxWidth: .infinity)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+        }
+        .padding(AppStyle.Spacing.small)
+        .background(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+                .fill(AppColors.surfaceCard)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppStyle.Radius.lg, style: .continuous)
+                .strokeBorder(AppColors.borderStrong, lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "\(group.name), \(apps.count) apps"))
+    }
+
     private struct AppGridRow: Identifiable {
         let startIndex: Int
-        let apps: ArraySlice<InstalledApp>
+        let entries: ArraySlice<AppListEntry>
         var id: Int { startIndex }
-        var leadingPad: Int { max(0, 4 - apps.count) }
+        var leadingPad: Int { max(0, 4 - entries.count) }
     }
 
     private var gridRows: [AppGridRow] {
-        let apps = filteredApps
+        let entries = filteredEntries
         var rows: [AppGridRow] = []
         var index = 0
-        while index < apps.count {
-            let end = min(index + 4, apps.count)
-            rows.append(AppGridRow(startIndex: index, apps: apps[index..<end]))
+        while index < entries.count {
+            let end = min(index + 4, entries.count)
+            rows.append(AppGridRow(startIndex: index, entries: entries[index..<end]))
             index = end
         }
         return rows
@@ -998,7 +1262,7 @@ private struct OptionalRowTap: ViewModifier {
 // MARK: - App list row
 
 /// What an app row shows for its size.
-private struct AppRowSize {
+struct AppRowSize {
     let bytes: Int64
     /// No size to show yet (Spotlight and `du` pending).
     let isPending: Bool
@@ -1284,15 +1548,19 @@ struct UninstallReviewSheet: View {
     @State private var plan: UninstallPlan
     let onCancel: () -> Void
     let onConfirm: (UninstallPlan) -> Void
+    /// Opens a suite's own uninstaller from the partial-suite warning (#155).
+    let onOpenUninstaller: (URL) -> Void
 
     init(
         plan: UninstallPlan,
         onCancel: @escaping () -> Void,
-        onConfirm: @escaping (UninstallPlan) -> Void
+        onConfirm: @escaping (UninstallPlan) -> Void,
+        onOpenUninstaller: @escaping (URL) -> Void = { _ in }
     ) {
         _plan = State(initialValue: plan)
         self.onCancel = onCancel
         self.onConfirm = onConfirm
+        self.onOpenUninstaller = onOpenUninstaller
     }
 
     var body: some View {
@@ -1326,6 +1594,11 @@ struct UninstallReviewSheet: View {
                 .font(AppStyle.Typography.callout)
                 .foregroundStyle(AppColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(plan.partialSuites, id: \.self) { suite in
+                PartialSuiteWarning(suite: suite) { onOpenUninstaller(suite.uninstallerURL) }
+                    .padding(.top, AppStyle.Spacing.xxSmall)
+            }
         }
     }
 
