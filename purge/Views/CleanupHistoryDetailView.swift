@@ -143,7 +143,7 @@ struct CleanupHistoryDetailView: View {
 
         return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                Text(isModelSet ? item.path : fileURL.lastPathComponent)
+                Text(isModelSet ? item.path : itemName(fileURL))
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
@@ -171,7 +171,7 @@ struct CleanupHistoryDetailView: View {
 
         return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                Text(fileURL.lastPathComponent)
+                Text(itemName(fileURL))
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
@@ -196,7 +196,7 @@ struct CleanupHistoryDetailView: View {
 
         return HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
             VStack(alignment: .leading, spacing: AppStyle.Spacing.xxxSmall) {
-                Text(fileURL.lastPathComponent)
+                Text(itemName(fileURL))
                     .font(AppStyle.Typography.body)
                     .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
@@ -220,6 +220,12 @@ struct CleanupHistoryDetailView: View {
                     .foregroundStyle(AppColors.textSecondary)
             }
         }
+    }
+
+    /// The file or folder's name. An Xcode component's asset folder is named by
+    /// a hash, so it shows as the component instead (#132).
+    private func itemName(_ fileURL: URL) -> String {
+        XcodeComponent.Kind(assetFolder: fileURL)?.displayName ?? fileURL.lastPathComponent
     }
 
     /// The item's folder, with iCloud Drive's own folder named as Finder names it.

@@ -87,6 +87,13 @@ struct LastScanSnapshotTests {
         snapshot.devTools = .init(savedAt: now, rows: [SavedDevTool(tool)])
         snapshot.simulators = .init(savedAt: now, rows: [SavedSimulatorDevice(device)])
         snapshot.runtimes = .init(savedAt: now, rows: [SavedSimulatorRuntime(runtime)])
+        let component = XcodeComponent(
+            kind: .metalToolchain,
+            build: "27A266a",
+            assetURL: URL(fileURLWithPath: "/System/Library/AssetsV2/com_apple_MobileAsset_MetalToolchain/389a.asset"),
+            sizeBytes: 923_582_464
+        )
+        snapshot.xcodeComponents = .init(savedAt: now, rows: [SavedXcodeComponent(component)])
         snapshot.projects = .init(savedAt: now, rows: [SavedProjectGroup(group)])
         snapshot.apps = .init(savedAt: now, rows: [SavedInstalledApp(app, removableBytes: 80_000)])
         snapshot.leftovers = .init(savedAt: now, rows: [SavedLeftover(leftover)])
@@ -103,6 +110,8 @@ struct LastScanSnapshotTests {
         #expect(rows.devTools.first?.sizeBytes == 9_000)
         #expect(rows.simulatorDevices.map(\.id) == [device.id])
         #expect(rows.simulatorRuntimes.map(\.id) == ["R1"])
+        #expect(rows.xcodeComponents == [component])
+        #expect(rows.xcodeComponents.first?.safetyInfo.level == .medium)
         #expect(rows.projectGroups.map(\.id) == [group.id])
         #expect(rows.projectGroups.first?.artifacts.first?.isSelected == false)
         #expect(rows.projectGroups.first?.artifacts.first?.checkFirstReason == .usedRecently)

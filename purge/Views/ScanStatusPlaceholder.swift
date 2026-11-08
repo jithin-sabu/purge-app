@@ -34,7 +34,7 @@ extension PurgeStore {
     /// a scan that found only simulator runtimes once showed the empty state (#292).
     var hasLiveDevToolsRows: Bool {
         !projectGroups.isEmpty || !devTools.isEmpty || !simulatorDevices.isEmpty
-            || !runningSimulatorDevices.isEmpty || !simulatorRuntimes.isEmpty
+            || !runningSimulatorDevices.isEmpty || !simulatorRuntimes.isEmpty || !xcodeComponents.isEmpty
     }
 }
 

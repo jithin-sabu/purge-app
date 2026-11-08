@@ -108,6 +108,7 @@ final class ScanSelection: ObservableObject {
     @Published var devToolIDs: Set<String> = []
     @Published var simulatorIDs: Set<UUID> = []
     @Published var simulatorRuntimeIDs: Set<String> = []
+    @Published var xcodeComponentIDs: Set<String> = []
     @Published var artifactIDs: Set<String> = []
 
     func removeAll() {
@@ -115,6 +116,7 @@ final class ScanSelection: ObservableObject {
         devToolIDs.removeAll()
         simulatorIDs.removeAll()
         simulatorRuntimeIDs.removeAll()
+        xcodeComponentIDs.removeAll()
         artifactIDs.removeAll()
     }
 }
@@ -182,6 +184,8 @@ final class PurgeStore: ObservableObject {
         /// Set on a simulator runtime row, so the clean can check the runtime
         /// exclusion list after the row itself is gone (#178).
         var simulatorRuntime: SimulatorRuntimeHandle? = nil
+        /// Set on an Xcode component row: the component `xcodebuild` deletes (#132).
+        var xcodeComponent: XcodeComponent.Kind? = nil
 
         var formattedSize: String { formatBytes(sizeBytes) }
 
@@ -263,6 +267,15 @@ final class PurgeStore: ObservableObject {
         didSet {
             categoryInputsDidChange()
             lastScanListDidChange(.runtimes)
+        }
+    }
+    /// Optional Xcode components such as the Metal Toolchain (#132). Removed
+    /// through `xcodebuild -deleteComponent`, never trashed, so never part of the
+    /// one-click safe clean or a scheduled clean.
+    @Published var xcodeComponents: [XcodeComponent] = [] {
+        didSet {
+            categoryInputsDidChange()
+            lastScanListDidChange(.xcodeComponents)
         }
     }
     @Published var projectGroups: [ProjectGroup] = [] {
@@ -735,8 +748,9 @@ final class PurgeStore: ObservableObject {
         let selectedTools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let simSelected = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }.reduce(Int64(0)) { $0 + ($1.sizeOnDisk ?? 0) }
         let runtimeSelected = simulatorRuntimes.filter { scanSelection.simulatorRuntimeIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let componentSelected = xcodeComponents.filter { scanSelection.xcodeComponentIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let projectSelected = projectGroups.flatMap(\.artifacts).filter { scanSelection.artifactIDs.contains($0.id) }.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        return selectedCaches + selectedTools + simSelected + runtimeSelected + projectSelected
+        return selectedCaches + selectedTools + simSelected + runtimeSelected + componentSelected + projectSelected
     }
 
     /// Byte totals for one-click safe cleanup, grouped by tab so sidebar and filter totals stay aligned.
@@ -1142,8 +1156,9 @@ final class PurgeStore: ObservableObject {
         let selectedTools = devTools.filter { scanSelection.devToolIDs.contains($0.id) }.count
         let selectedSims = simulatorDevices.filter { scanSelection.simulatorIDs.contains($0.id) }.count
         let selectedRuntimes = simulatorRuntimes.filter { scanSelection.simulatorRuntimeIDs.contains($0.id) }.count
+        let selectedComponents = xcodeComponents.filter { scanSelection.xcodeComponentIDs.contains($0.id) }.count
         let selectedProjects = projectGroups.flatMap(\.artifacts).filter { scanSelection.artifactIDs.contains($0.id) }.count
-        return selectedCaches + selectedTools + selectedSims + selectedRuntimes + selectedProjects
+        return selectedCaches + selectedTools + selectedSims + selectedRuntimes + selectedComponents + selectedProjects
     }
 
     /// Selected caches for manual delete (includes Not Sure when selected).
@@ -1166,12 +1181,13 @@ final class PurgeStore: ObservableObject {
             .map(simulatorDeletionCandidate)
 
         let runtimes = selectedSimulatorRuntimeCandidates()
+        let components = selectedXcodeComponentCandidates()
 
         let artifacts = projectGroups.flatMap(\.artifacts)
             .filter { scanSelection.artifactIDs.contains($0.id) }
             .map(artifactDeletionCandidate)
 
-        let merged = tools + sims + runtimes + artifacts
+        let merged = tools + sims + runtimes + components + artifacts
         let unique = Dictionary(grouping: merged, by: { $0.path }).compactMap { $0.value.first }
         return unique.sorted { $0.sizeBytes > $1.sizeBytes }
     }
@@ -1187,12 +1203,13 @@ final class PurgeStore: ObservableObject {
             .map(simulatorDeletionCandidate)
 
         let runtimes = selectedSimulatorRuntimeCandidates()
+        let components = selectedXcodeComponentCandidates()
 
         let artifacts = projectGroups.flatMap(\.artifacts)
             .filter { scanSelection.artifactIDs.contains($0.id) }
             .map(artifactDeletionCandidate)
 
-        let unique = Dictionary(grouping: caches + tools + sims + runtimes + artifacts, by: { $0.path }).compactMap { $0.value.first }
+        let unique = Dictionary(grouping: caches + tools + sims + runtimes + components + artifacts, by: { $0.path }).compactMap { $0.value.first }
         return unique.sorted { $0.sizeBytes > $1.sizeBytes }
     }
 
@@ -1280,34 +1297,56 @@ final class PurgeStore: ObservableObject {
         highRiskDeletionStagingCandidates = nil
     }
 
-    /// The Not Sure alert. Those folders go to the Trash. A simulator or runtime
-    /// selected in the same cleanup is deleted permanently, so the alert says so.
+    /// The Not Sure alert. Those folders go to the Trash. A simulator, runtime or
+    /// Xcode component selected in the same cleanup is deleted permanently, so the
+    /// alert says so.
     var highRiskDeletionSecondConfirmMessage: String {
         let base = String(localized: "Purge doesn't know what these folders are for. They go to the Trash, so you can put them back, but check that nothing depends on them before you clean.")
-        guard confirmationRemovesSimulators(highRiskDeletionStagingCandidates ?? []) else { return base }
-        return base + " " + String(localized: "iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back.")
+        guard let note = permanentRemovalNote(highRiskDeletionStagingCandidates ?? []) else { return base }
+        return base + " " + note
     }
 
-    /// The unsaved-git alert. The projects go to the Trash. Same simulator note.
+    /// The unsaved-git alert. The projects go to the Trash. Same permanent note.
     var uncommittedGitFrictionMessage: String {
         let base = String(localized: "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash, so you can put them back.")
-        guard confirmationRemovesSimulators(stagedDeletionCandidates ?? []) else { return base }
-        return String(localized: "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back.")
+        guard let note = permanentRemovalNote(stagedDeletionCandidates ?? []) else { return base }
+        return String(localized: "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash.") + " " + note
     }
 
     /// The ids of the picks `FileDeleter.deleteItems` deletes permanently instead of
-    /// moving to the Trash. Same split the engine uses: runtimes by path, devices by
-    /// the CoreSimulator device-folder shape. The confirm sheet lists these on their
-    /// own, so what it promises can't drift from what the engine does (#170).
+    /// moving to the Trash. Same split the engine uses: runtimes and Xcode
+    /// components by path, devices by the CoreSimulator device-folder shape. The
+    /// confirm sheet lists these on their own, so what it promises can't drift
+    /// from what the engine does (#170).
     func permanentlyDeletedCandidateIDs(in candidates: [DeletionCandidate]) -> Set<String> {
         let runtimePaths = Set(simulatorRuntimeIDsByPath().keys)
+        let componentPaths = Set(xcodeComponentsByPath().keys)
         return Set(candidates.lazy
-            .filter { FileDeleter.removesDirectly($0.path, simulatorRuntimePaths: runtimePaths) }
+            .filter {
+                FileDeleter.removesDirectly($0.path, simulatorRuntimePaths: runtimePaths, xcodeComponentPaths: componentPaths)
+            }
             .map(\.id))
     }
 
-    private func confirmationRemovesSimulators(_ candidates: [DeletionCandidate]) -> Bool {
-        !permanentlyDeletedCandidateIDs(in: candidates).isEmpty
+    /// What the alerts add when part of the cleanup skips the Trash: `simctl` for
+    /// simulators and runtimes, `xcodebuild` for Xcode components. `nil` when
+    /// everything goes to the Trash.
+    private func permanentRemovalNote(_ candidates: [DeletionCandidate]) -> String? {
+        let permanentIDs = permanentlyDeletedCandidateIDs(in: candidates)
+        guard !permanentIDs.isEmpty else { return nil }
+        let componentPaths = Set(xcodeComponentsByPath().keys)
+        let permanent = candidates.filter { permanentIDs.contains($0.id) }
+        let isComponent = { (candidate: DeletionCandidate) in
+            componentPaths.contains(candidate.path.standardizedFileURL.path)
+        }
+        var notes: [String] = []
+        if permanent.contains(where: { !isComponent($0) }) {
+            notes.append(String(localized: "iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back."))
+        }
+        if permanent.contains(where: isComponent) {
+            notes.append(String(localized: "The Metal Toolchain in this cleanup is deleted permanently through xcodebuild, not moved to the Trash. Xcode can download it again."))
+        }
+        return notes.joined(separator: " ")
     }
 
     private func beginManualDeletionPipeline(with picks: [DeletionCandidate]) {
@@ -1372,6 +1411,7 @@ final class PurgeStore: ObservableObject {
             pathToExpectedSizeBytes[key] = candidate.sizeBytes
         }
         let simulatorRuntimeIDsByPath = self.simulatorRuntimeIDsByPath()
+        let xcodeComponentsByPath = self.xcodeComponentsByPath()
 
         // Present the cleanup overlay in its cleaning phase for interactive runs.
         // Totals come from the selected items, before the engine starts.
@@ -1405,6 +1445,7 @@ final class PurgeStore: ObservableObject {
                 pathToDisplayName: pathToDisplayName,
                 pathToExpectedSizeBytes: pathToExpectedSizeBytes,
                 simulatorRuntimeIDsByPath: simulatorRuntimeIDsByPath,
+                xcodeComponentsByPath: xcodeComponentsByPath,
                 onProgress: onProgress
             )
             let elapsedSeconds = Date().timeIntervalSince(engineStart)
@@ -1504,7 +1545,8 @@ final class PurgeStore: ObservableObject {
             displayName: item.displayName,
             expectedSizeBytes: item.sizeBytes,
             route: item.route,
-            simulatorRuntimeID: simulatorRuntimeIDsByPath()[key]
+            simulatorRuntimeID: simulatorRuntimeIDsByPath()[key],
+            xcodeComponent: xcodeComponentsByPath()[key]
         )
         switch outcome {
         case .deleted(let bytes, let movedToTrash, let remaining, let keptRuntimeDownloads):
@@ -2047,6 +2089,7 @@ final class PurgeStore: ObservableObject {
             simulatorDevices.removeAll { isRemoved($0.folderURL) }
             runningSimulatorDevices.removeAll { isRemoved($0.folderURL) }
             simulatorRuntimes.removeAll { isRemoved($0.locationURL) }
+            xcodeComponents.removeAll { isRemoved($0.assetURL) }
 
             var groups = projectGroups
             for gi in groups.indices {
@@ -2087,6 +2130,10 @@ final class PurgeStore: ObservableObject {
 
         for runtime in simulatorRuntimes where skippedPaths.contains(runtime.locationURL.standardizedFileURL.path) {
             scanSelection.simulatorRuntimeIDs.remove(runtime.id)
+        }
+
+        for component in xcodeComponents where skippedPaths.contains(component.id) {
+            scanSelection.xcodeComponentIDs.remove(component.id)
         }
 
         for artifact in projectGroups.flatMap(\.artifacts)
@@ -4286,6 +4333,10 @@ final class PurgeStore: ObservableObject {
                 scheduleDeveloperScanFlush(coalesce: coalesce, generation: generation)
             case .runningSimulatorsFound(let devices):
                 runningSimulatorDevices = devices.sorted { ($0.sizeOnDisk ?? 0) > ($1.sizeOnDisk ?? 0) }
+            case .xcodeComponentFound(let component):
+                // At most one per kind, so no coalescing pass.
+                xcodeComponents.removeAll { $0.kind == component.kind }
+                xcodeComponents.append(component)
             }
         }
         coalesce.debounceTask?.cancel()
@@ -4315,7 +4366,7 @@ final class PurgeStore: ObservableObject {
         }
 
         if scanGeneration == generation, !Task.isCancelled {
-            lastScanListsFinished([.devTools, .simulators, .runtimes])
+            lastScanListsFinished([.devTools, .simulators, .runtimes, .xcodeComponents])
         }
         if !inFullScan {
             startProjectDiscovery(generation: generation, access: access)
@@ -4453,6 +4504,10 @@ final class PurgeStore: ObservableObject {
         for runtime in simulatorRuntimes where runtime.safetyInfo.level != .unknown {
             totals.count += 1
             totals.bytes += runtime.sizeBytes
+        }
+        for component in xcodeComponents where component.safetyInfo.level != .unknown {
+            totals.count += 1
+            totals.bytes += component.sizeBytes
         }
         for artifact in projectGroups.flatMap(\.artifacts) where artifact.safetyInfo.level != .unknown {
             totals.count += 1
@@ -5002,7 +5057,7 @@ final class PurgeStore: ObservableObject {
     }
 
     private func clearDeveloperScanState() {
-        lastScanListsStarted([.devTools, .simulators, .runtimes, .projects])
+        lastScanListsStarted([.devTools, .simulators, .runtimes, .xcodeComponents, .projects])
         projectDiscoveryTask?.cancel()
         projectDiscoveryTask = nil
         isScanningProjects = false
@@ -5013,11 +5068,13 @@ final class PurgeStore: ObservableObject {
         simulatorDevices = []
         stagedSimulatorsByID = [:]
         simulatorRuntimes = []
+        xcodeComponents = []
         runningSimulatorDevices = []
         projectGroups = []
         scanSelection.devToolIDs.removeAll()
         scanSelection.simulatorIDs.removeAll()
         scanSelection.simulatorRuntimeIDs.removeAll()
+        scanSelection.xcodeComponentIDs.removeAll()
         scanSelection.artifactIDs.removeAll()
         devToolRepoStatusByPath = [:]
         developerEnrichmentCount = 0
@@ -5670,6 +5727,35 @@ final class PurgeStore: ObservableObject {
         return ids
     }
 
+    private func xcodeComponentDeletionCandidate(_ component: XcodeComponent) -> DeletionCandidate {
+        DeletionCandidate(
+            title: component.safetyInfo.headline,
+            path: component.assetURL.standardizedFileURL,
+            sizeBytes: component.sizeBytes,
+            safetyInfo: component.safetyInfo,
+            reinstallCommand: nil,
+            subtitle: component.build.isEmpty ? nil : String(localized: "Build \(component.build)"),
+            reinstallSafety: .notApplicable,
+            gitStatus: .clean,
+            xcodeComponent: component.kind
+        )
+    }
+
+    private func selectedXcodeComponentCandidates() -> [DeletionCandidate] {
+        xcodeComponents.filter { scanSelection.xcodeComponentIDs.contains($0.id) }
+            .map(xcodeComponentDeletionCandidate)
+    }
+
+    /// The engine's lookup from an Xcode component row's path to the component
+    /// `xcodebuild` deletes. Keyed the way the engine keys everything else.
+    private func xcodeComponentsByPath() -> [String: XcodeComponent.Kind] {
+        var kinds: [String: XcodeComponent.Kind] = [:]
+        for component in xcodeComponents {
+            kinds[component.id] = component.kind
+        }
+        return kinds
+    }
+
     private func artifactDeletionCandidate(_ artifact: ProjectCacheArtifact) -> DeletionCandidate {
         DeletionCandidate(
             title: artifact.safetyInfo.headline,
@@ -5785,6 +5871,15 @@ final class PurgeStore: ObservableObject {
             scanSelection.simulatorRuntimeIDs.insert(id)
         } else {
             scanSelection.simulatorRuntimeIDs.remove(id)
+        }
+    }
+
+    func setXcodeComponentSelected(id: String, isSelected: Bool) {
+        if isSelected {
+            guard xcodeComponents.contains(where: { $0.id == id }) else { return }
+            scanSelection.xcodeComponentIDs.insert(id)
+        } else {
+            scanSelection.xcodeComponentIDs.remove(id)
         }
     }
 

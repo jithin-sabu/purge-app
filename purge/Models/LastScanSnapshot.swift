@@ -19,6 +19,7 @@ nonisolated struct LastScanSnapshot: Codable, Equatable, Sendable {
     var devTools: Section<SavedDevTool>?
     var simulators: Section<SavedSimulatorDevice>?
     var runtimes: Section<SavedSimulatorRuntime>?
+    var xcodeComponents: Section<SavedXcodeComponent>?
     var projects: Section<SavedProjectGroup>?
     var apps: Section<SavedInstalledApp>?
     var leftovers: Section<SavedLeftover>?
@@ -55,6 +56,7 @@ nonisolated struct LastScanSnapshot: Codable, Equatable, Sendable {
         case .devTools: devTools = other.devTools
         case .simulators: simulators = other.simulators
         case .runtimes: runtimes = other.runtimes
+        case .xcodeComponents: xcodeComponents = other.xcodeComponents
         case .projects: projects = other.projects
         case .apps: apps = other.apps
         case .leftovers: leftovers = other.leftovers
@@ -75,6 +77,7 @@ nonisolated struct LastScanSnapshot: Codable, Equatable, Sendable {
         devTools?.rows.removeAll { $0.paths.contains(where: isRemoved) }
         simulators?.rows.removeAll { isRemoved($0.folderURL) }
         runtimes?.rows.removeAll { isRemoved($0.locationURL) }
+        xcodeComponents?.rows.removeAll { isRemoved($0.assetURL) }
         if var section = projects {
             section.rows = section.rows.compactMap { group in
                 guard !isRemoved(group.rootPath) else { return nil }
@@ -95,13 +98,14 @@ nonisolated enum LastScanSection: String, CaseIterable, Sendable {
     case devTools
     case simulators
     case runtimes
+    case xcodeComponents
     case projects
     case apps
     case leftovers
 
     var step: ScanStep {
         switch self {
-        case .appCaches, .devTools, .simulators, .runtimes, .projects: return .cachesAndDevTools
+        case .appCaches, .devTools, .simulators, .runtimes, .xcodeComponents, .projects: return .cachesAndDevTools
         case .apps: return .apps
         case .leftovers: return .leftovers
         }
@@ -316,6 +320,29 @@ nonisolated struct SavedSimulatorRuntime: Codable, Equatable, Sendable {
             locationURL: locationURL,
             safetyInfo: safety.info
         )
+    }
+}
+
+nonisolated struct SavedXcodeComponent: Codable, Equatable, Sendable {
+    /// `XcodeComponent.Kind`'s raw value, the name `xcodebuild` takes.
+    var kind: String
+    var build: String
+    var assetURL: URL
+    var sizeBytes: Int64
+
+    init(_ component: XcodeComponent) {
+        kind = component.kind.rawValue
+        build = component.build
+        assetURL = component.assetURL
+        sizeBytes = component.sizeBytes
+    }
+
+    var urls: [URL] { [assetURL] }
+
+    /// `nil` for a kind this build no longer knows.
+    var restored: XcodeComponent? {
+        guard let kind = XcodeComponent.Kind(rawValue: kind) else { return nil }
+        return XcodeComponent(kind: kind, build: build, assetURL: assetURL, sizeBytes: sizeBytes)
     }
 }
 

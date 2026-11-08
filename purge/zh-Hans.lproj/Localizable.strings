@@ -405,7 +405,7 @@
 "On. Admin-locked apps can be moved to the Trash without a password." = "已开启。管理员锁定的应用可移到废纸篓，无需重复输入密码。";
 "On. Purge is watching for deleted apps." = "已开启。Purge 正在监测应用删除。";
 "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash, so you can put them back." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。文件和文件夹会移到废纸篓，因此可以放回原处。";
-"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。文件和文件夹会移到废纸篓。这次清理中的 iOS 模拟器和模拟器运行时会通过 simctl 永久删除，无法放回。";
+"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash." = "其中一个项目的更改尚未保存到 Git。清理前请确保工作已备份。文件和文件夹会移到废纸篓。";
 "Only cleans when you say" = "只在你确认后清理";
 "Only items marked Safe. They rebuild when needed, and you can put anything back from the Trash." = "只处理标记为“可安全清理”的项目。它们会在需要时重建，也可以从废纸篓恢复。";
 "Open Disk Utility" = "打开磁盘工具";
@@ -1486,3 +1486,7 @@
 "Purge isn’t listed here" = "Purge 不会列在这里";
 "Turns off background items and moves Purge to the Trash." = "关闭后台项目，并将 Purge 移到废纸篓。";
 "Another copy of Purge is on this Mac, so they stay." = "这台 Mac 上还有另一份 Purge，因此它们会保留。";
+"Xcode Components" = "Xcode 组件";
+"Metal Toolchain" = "Metal 工具链";
+"Xcode's compiler for Metal shaders, an optional download that every account on this Mac shares. Xcode downloads it again (%@) when a project needs it, or run %@." = "Xcode 用于编译 Metal 着色器的可选下载内容，这台 Mac 上的所有账户共用。项目需要时 Xcode 会重新下载（%@），也可以运行 %@。";
+"The Metal Toolchain in this cleanup is deleted permanently through xcodebuild, not moved to the Trash. Xcode can download it again." = "这次清理中的 Metal 工具链会通过 xcodebuild 永久删除，不会移到废纸篓。Xcode 可以重新下载。";
