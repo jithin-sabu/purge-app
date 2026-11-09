@@ -208,6 +208,9 @@ extension PurgeStore {
             for runtime in simulatorRuntimes where runtime.safetyInfo.level != .unknown {
                 items.append(OverviewSizedItem(path: runtime.locationURL.path, bytes: runtime.sizeBytes))
             }
+            for component in xcodeComponents where component.safetyInfo.level != .unknown {
+                items.append(OverviewSizedItem(path: component.assetURL.path, bytes: component.sizeBytes))
+            }
             for artifact in projectGroups.flatMap(\.artifacts) where artifact.safetyInfo.level != .unknown {
                 items.append(OverviewSizedItem(path: artifact.path.path, bytes: artifact.sizeBytes))
             }

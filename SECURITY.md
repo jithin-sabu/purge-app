@@ -22,8 +22,10 @@ patient, but safety reports get priority over everything else.
 
 - **Trash by default.** Files and folders are moved to the macOS Trash, so
   you can put them back until you empty it yourself. Purge has no button that
-  empties the Trash. Four removals are for good. iOS simulators
-  and simulator runtimes go through Xcode's `simctl`. Time Machine local
+  empties the Trash. Some removals are for good. iOS simulators
+  and simulator runtimes go through Xcode's `simctl`. Xcode's optional Metal
+  Toolchain goes through `xcodebuild -deleteComponent`, and Xcode downloads it
+  again when a project needs it. Time Machine local
   snapshots go through `tmutil deletelocalsnapshots`; Purge asks first and
   keeps the newest snapshot and the one from your last backup. The Apple
   Intelligence models on macOS 27 are released through Apple's own asset

@@ -15,6 +15,7 @@ nonisolated struct LastScanRows: Equatable {
     var devTools: [DevTool] = []
     var simulatorDevices: [SimulatorDevice] = []
     var simulatorRuntimes: [SimulatorRuntime] = []
+    var xcodeComponents: [XcodeComponent] = []
     var projectGroups: [ProjectGroup] = []
     var installedApps: [InstalledApp] = []
     /// An app's measured total from the last scan, by bundle path, shown dimmed on
@@ -28,6 +29,7 @@ nonisolated struct LastScanRows: Equatable {
         case .devTools: return devTools.isEmpty
         case .simulators: return simulatorDevices.isEmpty
         case .runtimes: return simulatorRuntimes.isEmpty
+        case .xcodeComponents: return xcodeComponents.isEmpty
         case .projects: return projectGroups.isEmpty
         case .apps: return installedApps.isEmpty
         case .leftovers: return orphanLeftovers.isEmpty
@@ -46,6 +48,7 @@ nonisolated struct LastScanRows: Equatable {
         case .devTools: devTools = []
         case .simulators: simulatorDevices = []
         case .runtimes: simulatorRuntimes = []
+        case .xcodeComponents: xcodeComponents = []
         case .projects: projectGroups = []
         case .apps: installedApps = []
         case .leftovers: orphanLeftovers = []
@@ -72,6 +75,10 @@ nonisolated struct LastScanRows: Equatable {
             case .runtimes:
                 guard let saved = snapshot.runtimes else { continue }
                 simulatorRuntimes = saved.rows.compactMap(\.restored)
+                savedAt[section] = saved.savedAt
+            case .xcodeComponents:
+                guard let saved = snapshot.xcodeComponents else { continue }
+                xcodeComponents = saved.rows.compactMap(\.restored)
                 savedAt[section] = saved.savedAt
             case .projects:
                 guard let saved = snapshot.projects else { continue }
@@ -213,6 +220,10 @@ extension PurgeStore {
             let live = Set(simulatorRuntimes.map(\.id))
             let kept = lastScanRows.simulatorRuntimes.filter { !live.contains($0.id) }
             if kept.count != lastScanRows.simulatorRuntimes.count { lastScanRows.simulatorRuntimes = kept }
+        case .xcodeComponents:
+            let live = Set(xcodeComponents.map(\.kind))
+            let kept = lastScanRows.xcodeComponents.filter { !live.contains($0.kind) }
+            if kept.count != lastScanRows.xcodeComponents.count { lastScanRows.xcodeComponents = kept }
         case .projects:
             let live = Set(projectGroups.map(\.id))
             let kept = lastScanRows.projectGroups.filter { !live.contains($0.id) }
@@ -272,6 +283,7 @@ extension PurgeStore {
         rows.devTools.removeAll { $0.paths.contains(where: isRemoved) }
         rows.simulatorDevices.removeAll { isRemoved($0.folderURL) }
         rows.simulatorRuntimes.removeAll { isRemoved($0.locationURL) }
+        rows.xcodeComponents.removeAll { isRemoved($0.assetURL) }
         rows.projectGroups = rows.projectGroups.compactMap { group in
             var group = group
             group.artifacts.removeAll { isRemoved($0.path) }
@@ -301,7 +313,7 @@ extension PurgeStore {
     func hasFinishedLists(for category: OverviewCategory) -> Bool {
         switch category {
         case .appCaches: return lastScanSavable.contains(.appCaches)
-        case .devTools: return lastScanSavable.isSuperset(of: [.devTools, .simulators, .runtimes, .projects])
+        case .devTools: return lastScanSavable.isSuperset(of: [.devTools, .simulators, .runtimes, .xcodeComponents, .projects])
         case .largeFiles, .apps, .leftovers: return true
         }
     }
@@ -369,6 +381,8 @@ extension PurgeStore {
                 snapshot.simulators = .init(savedAt: savedAt, rows: simulatorDevices.map(SavedSimulatorDevice.init))
             case .runtimes:
                 snapshot.runtimes = .init(savedAt: savedAt, rows: simulatorRuntimes.map(SavedSimulatorRuntime.init))
+            case .xcodeComponents:
+                snapshot.xcodeComponents = .init(savedAt: savedAt, rows: xcodeComponents.map(SavedXcodeComponent.init))
             case .projects:
                 snapshot.projects = .init(savedAt: savedAt, rows: projectGroups.map(SavedProjectGroup.init))
             case .apps:

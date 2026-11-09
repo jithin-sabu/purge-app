@@ -11,6 +11,8 @@ enum DeveloperScanEvent {
     case runningSimulatorsFound([SimulatorDevice])
     /// Sized on arrival: `simctl` reports the image size, so there is no sizing pass.
     case simulatorRuntimeFound(SimulatorRuntime)
+    /// An optional Xcode component such as the Metal Toolchain, already sized (#132).
+    case xcodeComponentFound(XcodeComponent)
 }
 
 /// `nonisolated` for the same reason as `CacheScanner` — a probe confirmed
@@ -257,6 +259,21 @@ nonisolated final class DevScanner {
                     continuation.yield(.simulatorRuntimeFound(runtime))
                 }
             }
+
+            group.addTask {
+                if Task.isCancelled { return }
+                let componentStart = Date()
+                let components = await self.discoverXcodeComponents()
+                ScanPhaseTiming.finish(
+                    "xcode component discovery",
+                    since: componentStart,
+                    detail: "\(components.count) components"
+                )
+                for component in components {
+                    if Task.isCancelled { return }
+                    continuation.yield(.xcodeComponentFound(component))
+                }
+            }
         }
 
         continuation.finish()
@@ -323,6 +340,44 @@ nonisolated final class DevScanner {
         )
         .filter { $0.safetyInfo.level.canSurfaceInScanResults }
         .filter { !ExcludedSimulatorRuntimesStore.isExcluded($0) }
+    }
+
+    // MARK: - Xcode components
+
+    /// Optional Xcode components that `xcodebuild` lists as installed, sized from
+    /// their asset folder (#132). Launches nothing unless the component's AssetsV2
+    /// folder holds a download: `-showComponent` can mount the toolchain as a side
+    /// effect, and most Macs have nothing to find. `XcodeBuildTool` then runs only
+    /// a full Xcode's own `xcodebuild`, never the `/usr/bin` shim (#298).
+    func discoverXcodeComponents(
+        assetsRoot: URL = SimulatorRuntime.mobileAssetRoot,
+        run: @escaping XcodeBuildTool.Runner = XcodeBuildTool.run,
+        measure: @escaping @Sendable (URL) -> Int64? = { FolderSizing.directoryByteSizeIfMeasurable(at: $0) }
+    ) async -> [XcodeComponent] {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: Self.xcodeComponents(assetsRoot: assetsRoot, run: run, measure: measure))
+            }
+        }
+    }
+
+    /// The blocking part of `discoverXcodeComponents`, run off the main thread.
+    private static func xcodeComponents(
+        assetsRoot: URL,
+        run: XcodeBuildTool.Runner,
+        measure: (URL) -> Int64?
+    ) -> [XcodeComponent] {
+        var found: [XcodeComponent] = []
+        for kind in XcodeComponent.Kind.allCases {
+            guard XcodeComponent.mayBeInstalled(kind, in: assetsRoot),
+                  let status = XcodeBuildTool.status(of: kind, run: run, assetsRoot: assetsRoot),
+                  let asset = status.installedAsset,
+                  XcodeComponent.isOnlyDownload(asset, kind: kind, in: assetsRoot),
+                  let size = measure(asset), size > 0
+            else { continue }
+            found.append(XcodeComponent(kind: kind, build: status.build ?? "", assetURL: asset, sizeBytes: size))
+        }
+        return found
     }
 
     // MARK: - iOS Simulators

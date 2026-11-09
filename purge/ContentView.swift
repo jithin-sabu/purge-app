@@ -659,7 +659,7 @@ struct ContentView: View {
             return pageSubtitle(count: appCachesSubtitleItemCount, bytes: appCachesSubtitleTotalSize)
         case .devTools:
             if let saved = lastScanSubtitle(
-                showing: [.devTools, .simulators, .runtimes, .projects],
+                showing: [.devTools, .simulators, .runtimes, .xcodeComponents, .projects],
                 step: .cachesAndDevTools,
                 isScanning: store.isScanningDeveloper || store.isScanningProjects || store.isScanningAll,
                 now: now
@@ -903,10 +903,11 @@ struct ContentView: View {
         let tools = store.devTools.filter(devToolVisible).count
         let sims = store.simulatorDevices.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
         let runtimes = store.simulatorRuntimes.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
+        let components = store.xcodeComponents.filter { devToolsSafetyFilter.matches($0.safetyInfo) }.count
         let artifacts = store.projectGroups.reduce(0) { sum, group in
             sum + group.artifacts.filter(projectArtifactVisible).count
         }
-        return tools + sims + runtimes + artifacts
+        return tools + sims + runtimes + components + artifacts
     }
 
     private var devToolsVisibleByteSize: Int64 {
@@ -919,12 +920,15 @@ struct ContentView: View {
         let runtimes = store.simulatorRuntimes
             .filter { devToolsSafetyFilter.matches($0.safetyInfo) }
             .reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let components = store.xcodeComponents
+            .filter { devToolsSafetyFilter.matches($0.safetyInfo) }
+            .reduce(Int64(0)) { $0 + $1.sizeBytes }
         let artifacts = store.projectGroups.reduce(Int64(0)) { sum, group in
             sum + group.artifacts
                 .filter(projectArtifactVisible)
                 .reduce(Int64(0)) { $0 + $1.sizeBytes }
         }
-        return tools + sims + runtimes + artifacts
+        return tools + sims + runtimes + components + artifacts
     }
 
     private func devToolVisible(_ tool: DevTool) -> Bool {

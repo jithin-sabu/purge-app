@@ -193,6 +193,9 @@ nonisolated enum SimulatorDeviceRemoval: Sendable, Equatable {
 nonisolated final class FileDeleter: Sendable {
     typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) async -> SimulatorRuntimeRemoval
     typealias SimulatorDeviceRemover = @Sendable (_ udid: String, _ folder: URL) -> SimulatorDeviceRemoval
+    /// Asks `xcodebuild` to delete a component, after checking it still names
+    /// `expectedAsset`. Tests pass a fake.
+    typealias XcodeComponentRemover = @Sendable (_ kind: XcodeComponent.Kind, _ expectedAsset: URL) async -> XcodeComponentRemoval
     typealias PrivilegedMover = @Sendable (_ urls: [URL]) async -> PrivilegedMoveResult
     typealias Trasher = @Sendable (_ url: URL) throws -> Void
     typealias ContentsLister = @Sendable (_ folder: URL) throws -> [URL]
@@ -218,6 +221,10 @@ nonisolated final class FileDeleter: Sendable {
     /// How a simulator device row is removed. Same reason as the runtime remover.
     private let simulatorDeviceRemover: SimulatorDeviceRemover
 
+    /// How an Xcode component row is removed. The live one runs `xcodebuild`;
+    /// tests hand in a fake (#132).
+    private let xcodeComponentRemover: XcodeComponentRemover
+
     /// Moves root-owned paths to the Trash through the helper. Tests hand in a fake
     /// so the routing can be checked without a registered helper.
     private let privilegedMover: PrivilegedMover
@@ -232,6 +239,7 @@ nonisolated final class FileDeleter: Sendable {
     init(
         simulatorRuntimeRemover: @escaping SimulatorRuntimeRemover = { await FileDeleter.removeSimulatorRuntime(identifier: $0) },
         simulatorDeviceRemover: @escaping SimulatorDeviceRemover = { FileDeleter.removeSimulatorDevice(udid: $0, folder: $1) },
+        xcodeComponentRemover: @escaping XcodeComponentRemover = { await FileDeleter.removeXcodeComponent($0, expectedAsset: $1) },
         privilegedMover: @escaping PrivilegedMover = { await PrivilegedUninstall.moveToTrash($0) },
         installLeftoverRule: @escaping @Sendable () -> Bool = { MacOSInstallLeftovers.isLeftover() },
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
@@ -241,6 +249,7 @@ nonisolated final class FileDeleter: Sendable {
     ) {
         self.simulatorRuntimeRemover = simulatorRuntimeRemover
         self.simulatorDeviceRemover = simulatorDeviceRemover
+        self.xcodeComponentRemover = xcodeComponentRemover
         self.privilegedMover = privilegedMover
         self.installLeftoverRule = installLeftoverRule
         self.home = home
@@ -255,6 +264,10 @@ nonisolated final class FileDeleter: Sendable {
     ///   standardized path, with the image identifier `simctl runtime delete` takes. These
     ///   never go near the filesystem policy: the path is a root-owned mount that only
     ///   CoreSimulator may remove.
+    /// - Parameter xcodeComponentsByPath: Rows that are optional Xcode components, keyed
+    ///   by the standardized path of their asset folder, with the component
+    ///   `xcodebuild -deleteComponent` takes. Same rule: the path is Apple's asset
+    ///   store, which only `xcodebuild` may change (#132).
     /// - Parameter onProgress: Called on the engine's executor after each item starts / successfully
     ///   deletes. Must be cheap; UI publishing is buffered elsewhere.
     @concurrent func deleteItems(
@@ -262,6 +275,7 @@ nonisolated final class FileDeleter: Sendable {
         pathToDisplayName: [String: String] = [:],
         pathToExpectedSizeBytes: [String: Int64] = [:],
         simulatorRuntimeIDsByPath: [String: String] = [:],
+        xcodeComponentsByPath: [String: XcodeComponent.Kind] = [:],
         onProgress: (@Sendable (DeletionProgressEvent) -> Void)? = nil
     ) async throws -> DeletionReport {
         var bytesMovedToTrash: Int64 = 0
@@ -339,6 +353,51 @@ nonisolated final class FileDeleter: Sendable {
                     ))
                 case .failed(let reason):
                     NSLog("Purge: failed to delete simulator runtime %@ — %@", runtimeID, reason)
+                    failedItems.append(FailedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: .unknown,
+                        sizeBytes: size
+                    ))
+                }
+                continue
+            }
+
+            if let component = xcodeComponentsByPath[standardizedPath] {
+                onProgress?(.itemStarted(name: friendlyTitle ?? url.lastPathComponent))
+                // Never measured or touched here: the folder is Apple's asset store.
+                let size = pathToExpectedSizeBytes[standardizedPath] ?? 0
+                switch await xcodeComponentRemover(component, url.standardizedFileURL) {
+                case .removed(let freed):
+                    let removedBytes = Self.xcodeComponentRemovedBytes(listed: size, freed: freed)
+                    bytesRemovedDirectly += removedBytes
+                    deletedItems.append(DeletedItem(
+                        path: url.path,
+                        sizeBytes: removedBytes,
+                        displayName: friendlyTitle,
+                        movedToTrash: false
+                    ))
+                    onProgress?(.itemDeleted(sizeBytes: removedBytes))
+                case .alreadyGone:
+                    // Like a file that vanished before its move: nothing to book or
+                    // record, so a Retry reads it as gone and drops the row.
+                    Self.xcodeComponentLog.notice(
+                        "Xcode component \(component.rawValue, privacy: .public) was already gone"
+                    )
+                case .refused(let reason):
+                    Self.xcodeComponentLog.notice(
+                        "Skipped Xcode component \(component.rawValue, privacy: .public): \(reason, privacy: .public)"
+                    )
+                    skippedItems.append(SkippedDeletionItem(
+                        path: url.path,
+                        displayName: friendlyTitle,
+                        reason: "This file was skipped for safety",
+                        isUserVisible: true
+                    ))
+                case .failed(let reason):
+                    Self.xcodeComponentLog.error(
+                        "Failed to delete Xcode component \(component.rawValue, privacy: .public): \(reason, privacy: .public)"
+                    )
                     failedItems.append(FailedDeletionItem(
                         path: url.path,
                         displayName: friendlyTitle,
@@ -944,10 +1003,16 @@ nonisolated final class FileDeleter: Sendable {
     }
 
     /// True when `deleteItems` removes this URL for good instead of moving it to the
-    /// Trash: a simulator runtime whose path is in `simulatorRuntimePaths`, or a
-    /// simulator device folder. Confirmations use the same rule as the engine.
-    static func removesDirectly(_ url: URL, simulatorRuntimePaths: Set<String>) -> Bool {
-        if simulatorRuntimePaths.contains(url.standardizedFileURL.path) { return true }
+    /// Trash: a simulator runtime whose path is in `simulatorRuntimePaths`, an Xcode
+    /// component whose path is in `xcodeComponentPaths`, or a simulator device
+    /// folder. Confirmations use the same rule as the engine.
+    static func removesDirectly(
+        _ url: URL,
+        simulatorRuntimePaths: Set<String>,
+        xcodeComponentPaths: Set<String> = []
+    ) -> Bool {
+        let path = url.standardizedFileURL.path
+        if simulatorRuntimePaths.contains(path) || xcodeComponentPaths.contains(path) { return true }
         return coreSimulatorDeviceUDID(from: url) != nil
     }
 
@@ -973,6 +1038,10 @@ nonisolated final class FileDeleter: Sendable {
     /// Public on purpose: simctl's text is the only way to read a failed device
     /// delete from someone's log (#161).
     private static let simulatorLog = Logger(subsystem: "io.getpurge.app", category: "simulators")
+
+    /// Public on purpose for the same reason: `xcodebuild`'s text is the only way
+    /// to read a failed component delete from someone's log (#132).
+    private static let xcodeComponentLog = Logger(subsystem: "io.getpurge.app", category: "xcode-components")
 
     /// Prefetched with a contents-only listing, so sizing a file costs no extra stat.
     private static let contentsEntryKeys: [URLResourceKey] = [
@@ -1205,13 +1274,15 @@ nonisolated final class FileDeleter: Sendable {
         displayName: String?,
         expectedSizeBytes: Int64,
         route: DeletionRoute,
-        simulatorRuntimeID: String? = nil
+        simulatorRuntimeID: String? = nil,
+        xcodeComponent: XcodeComponent.Kind? = nil
     ) async -> RetryOutcome {
         let key = url.standardizedFileURL.path
-        // A runtime or device row's path is only a handle for `simctl`, so only a
-        // file row can be seen to be gone.
-        let isSimulatorHandle = simulatorRuntimeID != nil || Self.coreSimulatorDeviceUDID(from: url) != nil
-        if !isSimulatorHandle, !Self.stillOnDisk(url) { return .alreadyGone }
+        // A runtime, device or Xcode component row's path is only a handle for
+        // `simctl` or `xcodebuild`, so only a file row can be seen to be gone.
+        let isToolHandle = simulatorRuntimeID != nil || xcodeComponent != nil
+            || Self.coreSimulatorDeviceUDID(from: url) != nil
+        if !isToolHandle, !Self.stillOnDisk(url) { return .alreadyGone }
 
         let names = [key: displayName ?? url.lastPathComponent]
         let sizes = [key: expectedSizeBytes]
@@ -1223,7 +1294,8 @@ nonisolated final class FileDeleter: Sendable {
                     at: [url],
                     pathToDisplayName: names,
                     pathToExpectedSizeBytes: sizes,
-                    simulatorRuntimeIDsByPath: simulatorRuntimeID.map { [key: $0] } ?? [:]
+                    simulatorRuntimeIDsByPath: simulatorRuntimeID.map { [key: $0] } ?? [:],
+                    xcodeComponentsByPath: xcodeComponent.map { [key: $0] } ?? [:]
                 )
             case .userSelected(let isAIModel, let privilegedEligible):
                 report = try await deleteUserSelectedFiles(

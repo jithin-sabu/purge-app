@@ -44,7 +44,7 @@
 Your Mac quietly fills up with cache and junk you never see and never asked for. Purge finds it, marks what is safe, and clears it in one click.
 
 > [!NOTE]
-> Files and folders go to the Trash by default, and Purge never empties the Trash, so you can put them back until you empty it yourself. Removed for good: iOS simulators and simulator runtimes, through Xcode's `simctl`; Time Machine local snapshots, through `tmutil` (Purge keeps the newest and the one from your last backup); the Apple Intelligence models on macOS 27, which Apple's asset service releases and Purge can download again; command-line tools and Homebrew cask apps that their package manager uninstalls, when you choose that in the review sheet. Docker Desktop's folder goes to the Trash. Purge does not run `docker system prune`.
+> Files and folders go to the Trash by default, and Purge never empties the Trash, so you can put them back until you empty it yourself. Removed for good: iOS simulators and simulator runtimes, through Xcode's `simctl`; Xcode's optional Metal Toolchain, through `xcodebuild -deleteComponent` (Xcode downloads it again when a project needs it); Time Machine local snapshots, through `tmutil` (Purge keeps the newest and the one from your last backup); the Apple Intelligence models on macOS 27, which Apple's asset service releases and Purge can download again; command-line tools and Homebrew cask apps that their package manager uninstalls, when you choose that in the review sheet. Docker Desktop's folder goes to the Trash. Purge does not run `docker system prune`.
 
 You do not need to understand any of it to use it. But if you ever want to check, every item carries a plain-language explanation and a safety label, so nothing gets touched that you cannot see and verify first.
 
@@ -73,10 +73,11 @@ Scans `~/Library/Caches`, sandbox container caches, and common system junk:
 
 ### Dev Tools
 
-Three sections in one view:
+Four sections in one view:
 
 - **Global dev tool caches**: Xcode (Derived Data, Archives, DeviceSupport), Homebrew, npm, pnpm, Yarn, CocoaPods, Gradle, Flutter, Docker Desktop, VS Code, Cursor, JetBrains, Cargo, Terraform, and more
 - **iOS Simulators**: unused simulator runtimes grouped together (booted simulators are skipped)
+- **Xcode Components**: Xcode's optional Metal Toolchain (about 900 MB), removed with `xcodebuild -deleteComponent` when a full Xcode lists it as installed
 - **Developer projects**: `node_modules`, Python virtual environments, Rust `target`, Flutter build output, Xcode `Pods`, Android `.gradle`, and other artifacts grouped by project
 
 In **Settings → Developer Projects**, choose **Consider stale after** (1 month to 2 years, or Show all) to control which projects appear. Age is measured from the last time anything in the project changed, including git activity, not from the date on `node_modules` or `target`. A project in use right now, with a terminal or dev server running inside it or a git command in progress, never appears.
@@ -146,7 +147,7 @@ The labels and explanations are there to be checked, not read cover to cover. Se
 - **Clean Selected**: pick specific rows, review in a confirmation sheet, then delete. Git and lockfile checks run first
 - **Clean Safe Files**: same safe cleanup from the menu bar
 - **Scheduled cleaning**: in **Settings → Cleaning**, turn on **Clean automatically** and choose how often (weekly, monthly, every 3 months, or a **Custom** interval you set in days, weeks, or months). Purge sends a local reminder and cleans safe items when you open the app, so the cleanup keeps happening without you thinking about it
-- Files and folders move to the **Trash**. Purge never empties the Trash. iOS simulators and simulator runtimes are removed for good through Xcode's `simctl`. Time Machine local snapshots are removed for good through `tmutil`; Purge keeps the newest and the one from your last backup. The Apple Intelligence models are released through Apple's asset service and can be downloaded again. Tools and cask apps a package manager installed are removed by that manager's own uninstall, permanently, when you pick that in the review sheet
+- Files and folders move to the **Trash**. Purge never empties the Trash. iOS simulators and simulator runtimes are removed for good through Xcode's `simctl`. The Metal Toolchain is removed for good through `xcodebuild -deleteComponent`, and Xcode downloads it again when a project needs it. Time Machine local snapshots are removed for good through `tmutil`; Purge keeps the newest and the one from your last backup. The Apple Intelligence models are released through Apple's asset service and can be downloaded again. Tools and cask apps a package manager installed are removed by that manager's own uninstall, permanently, when you pick that in the review sheet
 
 ### Settings
 
@@ -364,7 +365,7 @@ Purge does not use AI. Nothing you scan or clean is sent to an AI service.
 
 Purge deletes files, so safety is the point. A few things worth knowing:
 
-- **Trash by default**: Files and folders move to the macOS Trash, and Purge never empties it. You can restore them until you empty the Trash yourself. iOS simulators and simulator runtimes are removed for good through `simctl`. Time Machine local snapshots are removed for good through `tmutil`; Purge keeps the newest and the one from your last backup. The Apple Intelligence models are released through Apple's asset service and can be downloaded again from Purge. Command-line tools and Homebrew cask apps you choose to remove through their package manager are deleted by that manager, permanently. Docker Desktop's data folder goes to the Trash. Purge does not run `docker system prune`.
+- **Trash by default**: Files and folders move to the macOS Trash, and Purge never empties it. You can restore them until you empty the Trash yourself. iOS simulators and simulator runtimes are removed for good through `simctl`. Xcode's Metal Toolchain is removed for good through `xcodebuild -deleteComponent` and downloads again when a project needs it. Time Machine local snapshots are removed for good through `tmutil`; Purge keeps the newest and the one from your last backup. The Apple Intelligence models are released through Apple's asset service and can be downloaded again from Purge. Command-line tools and Homebrew cask apps you choose to remove through their package manager are deleted by that manager, permanently. Docker Desktop's data folder goes to the Trash. Purge does not run `docker system prune`.
 - **Allowlist-based deletion**: Only paths that match an explicit safety allowlist are ever eligible for cleanup. Anything Purge does not recognize is never touched. The [safety page](https://purgemac.com/safety) lists every allowed location and everything Purge will never touch, generated from the app's source.
 - **You choose what goes**: Purge shows what is reclaimable and you decide what to clear.
 - **Open source**: The full deletion logic, including the allowlist, is in this repo for you to read or build from source yourself.

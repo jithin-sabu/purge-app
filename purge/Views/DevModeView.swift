@@ -163,6 +163,13 @@ struct DevToolsView: View {
         return saved.filter { !live.contains($0.id) }
     }
 
+    private var lastScanXcodeComponents: [XcodeComponent] {
+        let saved = store.lastScanRows.xcodeComponents
+        guard !saved.isEmpty else { return [] }
+        let live = Set(store.xcodeComponents.map(\.kind))
+        return saved.filter { !live.contains($0.kind) }
+    }
+
     private var lastScanProjectGroups: [ProjectGroup] {
         let saved = store.lastScanRows.projectGroups
         guard !saved.isEmpty else { return [] }
@@ -174,6 +181,7 @@ struct DevToolsView: View {
         !store.lastScanRows.devTools.isEmpty
             || !store.lastScanRows.simulatorDevices.isEmpty
             || !store.lastScanRows.simulatorRuntimes.isEmpty
+            || !store.lastScanRows.xcodeComponents.isEmpty
             || !store.lastScanRows.projectGroups.isEmpty
     }
 
@@ -282,6 +290,26 @@ struct DevToolsView: View {
     private func visibleRuntimeIndices() -> [Int] {
         let filter = currentSafetyFilter
         return store.simulatorRuntimes.indices.filter { filter.matches(store.simulatorRuntimes[$0].safetyInfo) }
+    }
+
+    private var xcodeComponentSectionVisible: Bool {
+        let filter = currentSafetyFilter
+        return store.xcodeComponents.contains { filter.matches($0.safetyInfo) }
+            || lastScanXcodeComponents.contains { filter.matches($0.safetyInfo) }
+    }
+
+    /// Live and saved components by id, largest first. There is one per kind, so
+    /// the list's other orders would change nothing worth the code.
+    private func sortedXcodeComponentRowIDs() -> [String] {
+        let filter = currentSafetyFilter
+        let list = store.xcodeComponents.filter { filter.matches($0.safetyInfo) }
+            + lastScanXcodeComponents.filter { filter.matches($0.safetyInfo) }
+        return list.sorted { $0.sizeBytes > $1.sizeBytes }.map(\.id)
+    }
+
+    private func visibleXcodeComponentIndices() -> [Int] {
+        let filter = currentSafetyFilter
+        return store.xcodeComponents.indices.filter { filter.matches(store.xcodeComponents[$0].safetyInfo) }
     }
 
     private func mergedStandardRowEntries() -> [MergedDevStandardRow] {
@@ -447,6 +475,7 @@ struct DevToolsView: View {
         case artifact(groupID: String, artifactID: String)
         case simulator(UUID)
         case runtime(String)
+        case xcodeComponent(String)
     }
 
     /// Every visible row in one list, so Select All treats tools, project artifacts
@@ -491,6 +520,15 @@ struct DevToolsView: View {
                 bytes: runtime.sizeBytes
             ))
         }
+        for ci in visibleXcodeComponentIndices() {
+            let component = store.xcodeComponents[ci]
+            entries.append(.init(
+                key: .xcodeComponent(component.id),
+                isSafe: component.safetyInfo.level == .safe,
+                isSelected: sel.xcodeComponentIDs.contains(component.id),
+                bytes: component.sizeBytes
+            ))
+        }
         return SafeFirstSelectAll(entries: entries, filter: currentSafetyFilter)
     }
 
@@ -509,6 +547,8 @@ struct DevToolsView: View {
             store.setSimulatorDeviceSelected(id: id, isSelected: isSelected)
         case .runtime(let id):
             store.setSimulatorRuntimeSelected(id: id, isSelected: isSelected)
+        case .xcodeComponent(let id):
+            store.setXcodeComponentSelected(id: id, isSelected: isSelected)
         }
     }
 
@@ -525,11 +565,15 @@ struct DevToolsView: View {
         for runtime in store.simulatorRuntimes {
             infos.append(runtime.safetyInfo)
         }
+        for component in store.xcodeComponents {
+            infos.append(component.safetyInfo)
+        }
         // Rows from the last scan count in the chips, so a filter never looks
         // empty while they show (#283).
         infos += lastScanTools.map(\.safetyInfo)
         infos += lastScanSimulators.map(\.safetyInfo)
         infos += lastScanRuntimes.map(\.safetyInfo)
+        infos += lastScanXcodeComponents.map(\.safetyInfo)
         infos += lastScanProjectGroups.flatMap(\.artifacts).map(\.safetyInfo)
         return infos
     }
@@ -571,6 +615,7 @@ struct DevToolsView: View {
         mergedStandardRowEntries().isEmpty
             && !simulatorSectionVisible
             && !runtimeSectionVisible
+            && !xcodeComponentSectionVisible
             && sortedProjectGroupRows().isEmpty
     }
 
@@ -580,6 +625,7 @@ struct DevToolsView: View {
         store.devTools.filter { $0.isDetected && $0.safetyInfo.level != .unknown }.count +
             store.simulatorDevices.filter { $0.safetyInfo.level != .unknown }.count +
             store.simulatorRuntimes.filter { $0.safetyInfo.level != .unknown }.count +
+            store.xcodeComponents.filter { $0.safetyInfo.level != .unknown }.count +
             store.projectGroups.reduce(0) { sum, group in
                 sum + group.artifacts.filter { $0.safetyInfo.level != .unknown }.count
             }
@@ -709,6 +755,7 @@ struct DevToolsView: View {
         case tool(String)
         case simulators
         case runtimes
+        case xcodeComponents
         case projects
     }
 
@@ -719,6 +766,7 @@ struct DevToolsView: View {
         }
         if simulatorSectionVisible { return .simulators }
         if runtimeSectionVisible { return .runtimes }
+        if xcodeComponentSectionVisible { return .xcodeComponents }
         if !sortedProjectGroupRows().isEmpty || store.isScanningProjects { return .projects }
         return nil
     }
@@ -971,6 +1019,67 @@ struct DevToolsView: View {
                 }
             }
 
+            if xcodeComponentSectionVisible {
+                Group {
+                    xcodeComponentsSectionHeader
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+
+                    ForEach(sortedXcodeComponentRowIDs(), id: \.self) { componentID in
+                        if let component = store.xcodeComponents.first(where: { $0.id == componentID }) {
+                            ScanSelectionScope(
+                                selection: store.scanSelection,
+                                isSelected: { $0.xcodeComponentIDs.contains(component.id) }
+                            ) { selected in
+                                ScanResultRow(
+                                    isSelected: selected,
+                                    onToggle: {
+                                        store.setXcodeComponentSelected(
+                                            id: component.id,
+                                            isSelected: !store.scanSelection.xcodeComponentIDs.contains(component.id)
+                                        )
+                                    },
+                                    primaryLabel: component.safetyInfo.headline,
+                                    formattedSize: component.formattedSize,
+                                    safetyInfo: component.safetyInfo,
+                                    brandIcon: .sfSymbol("hammer"),
+                                    detailCaption: xcodeComponentCaption(component),
+                                    reinstallSafety: .notApplicable,
+                                    revealLocations: {
+                                        [ScanRowLocation(url: component.assetURL, sizeBytes: component.sizeBytes)]
+                                    },
+                                    allowsBulkSelection: true,
+                                    usesCompactExplanation: true
+                                )
+                            }
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(rowInsertionTransition)
+                        } else if let component = lastScanXcodeComponents.first(where: { $0.id == componentID }) {
+                            ScanResultRow(
+                                isSelected: false,
+                                primaryLabel: component.safetyInfo.headline,
+                                formattedSize: component.formattedSize,
+                                safetyInfo: component.safetyInfo,
+                                brandIcon: .sfSymbol("hammer"),
+                                detailCaption: xcodeComponentCaption(component),
+                                revealLocations: {
+                                    [ScanRowLocation(url: component.assetURL, sizeBytes: component.sizeBytes)]
+                                },
+                                usesCompactExplanation: true,
+                                isFromLastScan: true
+                            )
+                            .listRowInsets(ScanListRowInsets.standard)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .transition(rowInsertionTransition)
+                        }
+                    }
+                }
+            }
+
             if !sortedProjectGroupRows().isEmpty {
                 Group {
                     developerProjectsSectionHeader
@@ -1099,8 +1208,19 @@ struct DevToolsView: View {
         }
     }
 
-    /// `simctl` deletes simulators and runtimes, so the header says they skip the
-    /// Trash before anything is ticked (#170).
+    private var xcodeComponentsSectionHeader: some View {
+        devToolsSectionHeader(.xcodeComponents) {
+            permanentSectionTitle(String(localized: "Xcode Components"))
+        }
+    }
+
+    private func xcodeComponentCaption(_ component: XcodeComponent) -> String? {
+        component.build.isEmpty ? nil : String(localized: "Build \(component.build)")
+    }
+
+    /// `simctl` deletes simulators and runtimes, and `xcodebuild` Xcode
+    /// components, so the header says they skip the Trash before anything is
+    /// ticked (#170, #132).
     private func permanentSectionTitle(_ title: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.small) {
             Text(title)

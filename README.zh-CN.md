@@ -48,7 +48,7 @@
 你的 Mac 会悄悄积累大量缓存和垃圾文件，你既看不到，也从没要求过它们存在。Purge 会找出这些文件，标出哪些是安全的，并一键清理。
 
 > [!NOTE]
-> 文件和文件夹默认会移到废纸篓，Purge 从不清空废纸篓，所以在你自己清空之前都可以放回去。以下内容会被永久移除：iOS 模拟器和模拟器运行时（通过 Xcode 的 `simctl`）；Time Machine 本地快照（通过 `tmutil`，Purge 会保留最新的一张和上次备份留下的那张）；macOS 27 上的 Apple Intelligence 模型（由 Apple 的资源服务释放，之后可以在 Purge 里重新下载）；以及你在检查面板中选择交给包管理器卸载的命令行工具和 Homebrew cask 应用。Docker Desktop 的文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
+> 文件和文件夹默认会移到废纸篓，Purge 从不清空废纸篓，所以在你自己清空之前都可以放回去。以下内容会被永久移除：iOS 模拟器和模拟器运行时（通过 Xcode 的 `simctl`）；Xcode 可选的 Metal 工具链（通过 `xcodebuild -deleteComponent`，项目需要时 Xcode 会重新下载）；Time Machine 本地快照（通过 `tmutil`，Purge 会保留最新的一张和上次备份留下的那张）；macOS 27 上的 Apple Intelligence 模型（由 Apple 的资源服务释放，之后可以在 Purge 里重新下载）；以及你在检查面板中选择交给包管理器卸载的命令行工具和 Homebrew cask 应用。Docker Desktop 的文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
 
 你不需要了解其中的细节也能使用。不过，如果你想自己核对，每个项目都附有通俗易懂的说明和安全标签，所以不会有任何你事先看不到、验证不了的内容被动到。
 
@@ -77,10 +77,11 @@
 
 ### 开发工具（Dev Tools）
 
-一个视图中包含三个部分：
+一个视图中包含四个部分：
 
 - **全局开发工具缓存**：Xcode（Derived Data、Archives、DeviceSupport）、Homebrew、npm、pnpm、Yarn、CocoaPods、Gradle、Flutter、Docker Desktop、VS Code、Cursor、JetBrains、Cargo、Terraform 等
 - **iOS 模拟器**：把不再使用的模拟器运行环境归在一起（已启动的模拟器会被跳过）
+- **Xcode 组件**：Xcode 可选的 Metal 工具链（约 900 MB），在完整的 Xcode 列出它已安装时，通过 `xcodebuild -deleteComponent` 移除
 - **开发项目**：`node_modules`、Python 虚拟环境、Rust 的 `target`、Flutter 构建产物、Xcode 的 `Pods`、Android 的 `.gradle` 以及其他生成文件，按项目分组
 
 在 **设置 → 开发项目** 中，选择 **超过此时间视为未使用**（1 个月到 2 年，或显示全部），来控制显示哪些项目。时间从项目内任何内容最后一次变动算起，包括 git 活动，而不是看 `node_modules` 或 `target` 的日期。正在使用的项目，例如其中正运行着终端或开发服务器，或正在执行 git 命令，永远不会出现。
@@ -148,7 +149,7 @@ Purge 会为它识别的每个项目分配一个安全标签：
 - **清理所选项目**：选中特定的行，在确认面板中检查，然后删除。会先进行 Git 和 lockfile 检查
 - **清理安全文件**：从菜单栏执行同样的安全清理
 - **定时清理**：在 **设置 → 清理** 中，开启 **自动清理**，并选择清理频率（每周、每月、每 3 个月，或按天、周、月设定的 **自定义** 间隔）。Purge 会发送本地提醒，并在你打开应用时清理安全项目，让清理在你不用惦记的情况下持续进行
-- 文件和文件夹会移到 **废纸篓**。Purge 从不清空废纸篓。iOS 模拟器和模拟器运行时通过 Xcode 的 `simctl` 永久移除。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple Intelligence 模型由 Apple 的资源服务释放，之后可以重新下载。包管理器安装的工具和 cask 应用，在你于检查面板中选择后，由该管理器自己的卸载命令永久删除
+- 文件和文件夹会移到 **废纸篓**。Purge 从不清空废纸篓。iOS 模拟器和模拟器运行时通过 Xcode 的 `simctl` 永久移除。Metal 工具链通过 `xcodebuild -deleteComponent` 永久移除，项目需要时 Xcode 会重新下载。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple Intelligence 模型由 Apple 的资源服务释放，之后可以重新下载。包管理器安装的工具和 cask 应用，在你于检查面板中选择后，由该管理器自己的卸载命令永久删除
 
 ### 设置
 
@@ -364,7 +365,7 @@ Purge 不使用 AI。你扫描或清理的任何内容都不会发送给 AI 服�
 
 Purge 会删除文件，所以安全就是重点。以下几点值得了解：
 
-- **默认移到废纸篓**：文件和文件夹会移到 macOS 废纸篓，Purge 从不清空废纸篓。在你自己清空之前都可以恢复。iOS 模拟器和模拟器运行时通过 `simctl` 永久移除。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple Intelligence 模型由 Apple 的资源服务释放，之后可以在 Purge 里重新下载。你选择通过包管理器移除的命令行工具和 Homebrew cask 应用会由该管理器永久删除。Docker Desktop 的数据文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
+- **默认移到废纸篓**：文件和文件夹会移到 macOS 废纸篓，Purge 从不清空废纸篓。在你自己清空之前都可以恢复。iOS 模拟器和模拟器运行时通过 `simctl` 永久移除。Xcode 的 Metal 工具链通过 `xcodebuild -deleteComponent` 永久移除，项目需要时会重新下载。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple Intelligence 模型由 Apple 的资源服务释放，之后可以在 Purge 里重新下载。你选择通过包管理器移除的命令行工具和 Homebrew cask 应用会由该管理器永久删除。Docker Desktop 的数据文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
 - **基于允许列表的删除**：只有匹配明确的安全允许列表的路径，才有资格被清理。Purge 不认识的内容，一律不会动。
 - **由你决定清理什么**：Purge 会显示哪些空间可以回收，由你决定清理哪些。
 - **开源**：完整的删除逻辑（包括允许列表）都在这个仓库中，你可以阅读，也可以自己从源码构建。
