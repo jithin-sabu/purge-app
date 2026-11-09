@@ -496,21 +496,21 @@ struct AppleIntelligenceModelStoreTests {
         #expect(AppleIntelligenceWorker.details([]) == nil)
     }
 
-    /// The log keeps an error's userInfo private: macOS chooses what goes in
-    /// it, and it could name a file. The domain, code and description go in
-    /// the clear, and so do Purge's and the worker's own fixed sentences.
-    @Test func theLogLeavesOutWhatMacOSPutInUserInfo() {
+    /// The log keeps an error's words private: macOS chooses its description
+    /// and its userInfo, and either could name a file. Only the domain and
+    /// code go in the clear, with Purge's and the worker's own fixed sentences.
+    @Test func theLogLeavesOutWhatMacOSWrote() {
         let withPath = AppleIntelligenceWorker.Outcome(
             ok: false, result: [:],
-            error: "NSCocoaErrorDomain 260: The file couldn’t be opened.; NSFilePath: /Users/someone/Library/x",
+            error: "NSCocoaErrorDomain 260: The file “/Users/someone/a” couldn’t be opened.; NSFilePath: /Users/someone/a",
             domain: NSCocoaErrorDomain, code: 260,
-            summary: "NSCocoaErrorDomain 260: The file couldn’t be opened.")
-        #expect(AppleIntelligenceWorker.clearText(of: withPath) == "NSCocoaErrorDomain 260: The file couldn’t be opened.")
+            summary: "NSCocoaErrorDomain 260: The file “/Users/someone/a” couldn’t be opened.")
+        #expect(AppleIntelligenceWorker.clearText(of: withPath) == "NSCocoaErrorDomain 260")
         #expect(!AppleIntelligenceWorker.clearText(of: withPath).contains("/Users/"))
 
-        let noSummary = AppleIntelligenceWorker.Outcome(
-            ok: false, result: [:], error: "X 7: y; NSFilePath: /Users/someone/z", domain: "X", code: 7)
-        #expect(AppleIntelligenceWorker.clearText(of: noSummary) == "X 7")
+        let noCode = AppleIntelligenceWorker.Outcome(
+            ok: false, result: [:], error: "X: y; NSFilePath: /Users/someone/z", domain: "X")
+        #expect(AppleIntelligenceWorker.clearText(of: noCode) == "X ?")
 
         let refusal = AppleIntelligenceWorker.outcome(fromReply: ["ok": false, "error": "refusing a reset with no asset sets"])
         #expect(AppleIntelligenceWorker.clearText(of: refusal) == "refusing a reset with no asset sets")

@@ -532,17 +532,19 @@ nonisolated enum AppleIntelligenceWorker {
 
     /// The op, its sets and `clearText` are public on purpose: they are the
     /// only way to read a failed removal from someone's log (#343). The whole
-    /// answer is private. The Details button is where a user copies that.
+    /// answer, description included, is private. The Details button is where
+    /// a user copies that.
     private static let log = Logger(subsystem: "io.getpurge.app", category: "apple-intelligence")
 
     /// The part of a failure that goes in the log unredacted. For an error
-    /// macOS returned that is its domain, code and description. The userInfo
-    /// after them is whatever macOS put there and could name a file, so it is
-    /// left out. Purge's and the worker's own refusals are fixed sentences
-    /// with Apple's set names, and go whole.
+    /// macOS returned that is its domain and code, which are what tell one
+    /// failure from another. The description and the userInfo are whatever
+    /// macOS put there and could name a file, so they are left out. Purge's
+    /// and the worker's own refusals are fixed sentences with Apple's set
+    /// names, and go whole.
     static func clearText(of outcome: Outcome) -> String {
         guard let domain = outcome.domain else { return outcome.error ?? "no reason given" }
-        return outcome.summary ?? "\(domain) \(outcome.code.map(String.init) ?? "?")"
+        return "\(domain) \(outcome.code.map(String.init) ?? "?")"
     }
 
     /// Calls whose failure the store expects and ignores. Download Again
