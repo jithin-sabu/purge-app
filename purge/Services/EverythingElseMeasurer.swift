@@ -15,16 +15,28 @@ nonisolated final class EverythingElseMeasurer {
     /// `home`, `steamLibraries`, `otherUserHomes` and `usersFolder` default to
     /// this Mac's; tests pass their own so nothing here reads the real home
     /// folder or `/Users`.
+    ///
+    /// `diskRoot` and `userTemporaryFolder` are the folders outside every home:
+    /// Homebrew, `/Library`, the swap files and this user's folder in
+    /// `/private/var/folders`. They default to this Mac's only when `home`
+    /// does too. A walk given a home of its own, which is every test, reads
+    /// nothing outside it unless it passes these as well.
     func measureStream(
         access: ScanAccess,
         home: URL? = nil,
         steamLibraries: [URL]? = nil,
         otherUserHomes: [URL]? = nil,
         usersFolder: URL? = nil,
+        diskRoot: URL? = nil,
+        userTemporaryFolder: URL? = nil,
         readsSystemVolume: Bool = true
     ) -> AsyncStream<EverythingElseMeasureEvent> {
-        AsyncStream { continuation in
+        // Read here, before `home` takes its default inside the task.
+        let walksThisMac = home == nil
+        return AsyncStream { continuation in
             let task = Task.detached(priority: .utility) {
+                let diskRoot = diskRoot ?? (walksThisMac ? URL(fileURLWithPath: "/", isDirectory: true) : nil)
+                let userTemporaryFolder = userTemporaryFolder ?? (walksThisMac ? Self.userTemporaryFolder() : nil)
                 let home = (home ?? FileManager.default.homeDirectoryForCurrentUser).standardizedFileURL
                 let usersFolder = usersFolder ?? URL(fileURLWithPath: "/Users", isDirectory: true)
                 let homeNames = (try? FileManager.default.contentsOfDirectory(atPath: home.path)) ?? []
@@ -34,7 +46,9 @@ nonisolated final class EverythingElseMeasurer {
                     steamLibraries: steamLibraries ?? Self.steamLibraries(home: home, access: access),
                     otherUserHomes: otherUserHomes ?? Self.otherUserHomes(home: home, usersFolder: usersFolder),
                     homeFolderNames: homeNames,
-                    usersFolder: usersFolder
+                    usersFolder: usersFolder,
+                    diskRoot: diskRoot,
+                    userTemporaryFolder: userTemporaryFolder
                 )
                 await Self.run(roots: roots, access: access, home: home, readsSystemVolume: readsSystemVolume, continuation: continuation)
             }
@@ -268,6 +282,22 @@ nonisolated final class EverythingElseMeasurer {
     private static func otherUserHomes(home: URL, usersFolder: URL) -> [URL] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: usersFolder.path)) ?? []
         return EverythingElseRootPlan.otherUserHomes(in: usersFolder, names: names, home: home)
+    }
+
+    /// This user's folder in `/private/var/folders`, which holds their
+    /// temporary files (`T`) and per-user caches (`C`). macOS hands every
+    /// process its `T` folder as the temporary directory, so the parent of
+    /// that is the folder. Nil when the temporary directory is somewhere else,
+    /// as it is for a sandboxed process.
+    static func userTemporaryFolder(temporaryDirectory: String = NSTemporaryDirectory()) -> URL? {
+        let temporary = URL(fileURLWithPath: temporaryDirectory, isDirectory: true)
+        guard temporary.lastPathComponent == "T" else { return nil }
+        let folder = temporary.deletingLastPathComponent()
+        let path = OverviewSizedItem.normalized(folder.path)
+        // `/private/var/folders/<two characters>/<name>`, and nothing above it.
+        let parts = path.split(separator: "/")
+        guard path.hasPrefix("/private/var/folders/"), parts.count == 5 else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
     }
 
     /// The system volume's used space, the figure System Settings calls macOS.

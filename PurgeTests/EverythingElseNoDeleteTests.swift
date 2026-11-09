@@ -20,6 +20,7 @@ struct EverythingElseNoDeleteTests {
         "purge/Services/PurgeStore+EverythingElse.swift",
         "purge/Services/EverythingElseMeasurer.swift",
         "purge/Models/EverythingElseGroup.swift",
+        "purge/Models/EverythingElseFolderCatalog.swift",
         "purge/Models/EverythingElseMeasurement.swift",
         "purge/Models/EverythingElseSections.swift",
         "purge/Models/EverythingElseFolderHint.swift",

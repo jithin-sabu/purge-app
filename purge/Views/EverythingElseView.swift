@@ -12,11 +12,22 @@ enum EverythingElseStyle {
         case .otherApps: return String(localized: "Other Apps")
         case .mediaLibraries: return String(localized: "Media Libraries")
         case .mailAndMessages: return String(localized: "Mail & Messages")
+        case .chatApps: return String(localized: "Chat Apps")
+        case .deviceBackups: return String(localized: "iPhone & iPad")
+        case .cloudDrives: return String(localized: "Cloud Drives")
+        case .virtualMachines: return String(localized: "Virtual Machines")
+        case .aiModels: return String(localized: "AI Models")
+        case .browsers: return String(localized: "Browsers")
         case .protectedCaches: return String(localized: "Protected Caches")
         case .developer: return String(localized: "Developer")
+        case .systemTools: return String(localized: "Homebrew & System Tools")
+        case .systemAppData: return String(localized: "macOS App Data")
         case .appData: return String(localized: "App Data")
+        case .sharedAppData: return String(localized: "Shared App Data")
         case .documents: return String(localized: "Documents")
         case .otherUsers: return String(localized: "Other Users")
+        case .virtualMemory: return String(localized: "Virtual Memory")
+        case .temporaryFiles: return String(localized: "Temporary Files")
         case .trash: return String(localized: "Trash")
         case .macOS: return String(localized: "macOS")
         case .systemData: return String(localized: "System Data")
@@ -27,27 +38,49 @@ enum EverythingElseStyle {
     static func detail(_ group: EverythingElseGroup) -> String {
         switch group {
         case .otherApps:
-            return String(localized: "Apps and games that Steam, Epic, itch or JetBrains Toolbox installed.")
+            return String(localized: "Apps and games installed outside Applications: by Steam, Epic, itch, Heroic or JetBrains Toolbox, in CrossOver or Whisky bottles, and Minecraft.")
         case .mediaLibraries:
-            return String(localized: "The libraries Photos, Music, TV, iMovie and GarageBand keep.")
+            return String(localized: "The libraries Photos, Music, TV, Podcasts, Books, iMovie, Final Cut Pro, Logic Pro, GarageBand and Lightroom keep, and the sound libraries installed for every user.")
         case .mailAndMessages:
             return String(localized: "Mail's messages and attachments, and the photos and videos people send you in Messages.")
+        case .chatApps:
+            return String(localized: "Chat history, photos, videos and files that WeChat, WhatsApp, Telegram, Slack, Discord and other chat apps keep, apart from what an installed app already counts.")
+        case .deviceBackups:
+            return String(localized: "iPhone and iPad backups made on this Mac, and the software updates downloaded for them.")
+        case .cloudDrives:
+            return String(localized: "The iCloud Drive, Dropbox, Google Drive, OneDrive and Box files that are downloaded to this Mac, apart from what Large Files lists.")
+        case .virtualMachines:
+            return String(localized: "The disks of virtual machines and containers: Docker, OrbStack, UTM, Parallels, VMware, VirtualBox and others.")
+        case .aiModels:
+            return String(localized: "The folders Ollama, LM Studio, Hugging Face and other local AI tools keep, apart from the models Large Files lists.")
+        case .browsers:
+            return String(localized: "Browser profiles: bookmarks, history, extensions and site data in Safari, Chrome, Firefox and others. Their caches are under App Caches.")
         case .protectedCaches:
             return String(localized: "Cache folders that aren't on Purge's list of caches known to rebuild themselves, so Purge leaves them alone.")
         case .developer:
-            return String(localized: "Code projects, Xcode's other data, and the toolchains, packages and AI agent data that developer tools keep in hidden folders in your home folder.")
+            return String(localized: "Code projects, Xcode's other data, SDKs and editors' data, and the toolchains, packages and AI agent data that developer tools keep in hidden folders in your home folder.")
+        case .systemTools:
+            return String(localized: "Tools installed for the whole Mac: Homebrew's packages, /usr/local, /opt, and Xcode's Command Line Tools.")
+        case .systemAppData:
+            return String(localized: "What macOS and its built-in apps keep in your Library: Notes, Calendar, Spotlight's index, Siri's data and more.")
         case .appData:
             return String(localized: "Application Support, Containers and the rest of your Library that no installed app claims.")
+        case .sharedAppData:
+            return String(localized: "What apps keep in the Mac's shared Library for every user: fonts, plug-ins, printer drivers and app support files.")
         case .documents:
             return String(localized: "Your files in Documents, Desktop, Downloads, Movies, Music, Pictures and your other home folders, apart from what Large Files lists.")
         case .otherUsers:
             return String(localized: "Other accounts on this Mac, and the Shared folder.")
+        case .virtualMemory:
+            return String(localized: "The swap files macOS writes when memory runs short, and the sleep image. macOS sizes them itself and clears the swap files at restart.")
+        case .temporaryFiles:
+            return String(localized: "Files apps are still working with, and caches macOS keeps for your account. macOS clears the temporary ones at restart and after a few days unused.")
         case .trash:
             return String(localized: "Files you moved to the Trash. They take up space until you empty it.")
         case .macOS:
             return String(localized: "The operating system, on its own read-only volume. It can't be changed or removed.")
         case .systemData:
-            return String(localized: "Snapshots, virtual memory, logs and other space macOS manages itself, plus anything Purge couldn't read.")
+            return String(localized: "Snapshots, logs, Spotlight's index and other space macOS manages itself, plus anything Purge couldn't read.")
         }
     }
 
@@ -58,17 +91,35 @@ enum EverythingElseStyle {
             return String(localized: "This is an installed app or game. The store that installed it knows how to remove it, so Purge leaves that to it.")
         case .mediaLibraries, .mailAndMessages:
             return String(localized: "An app manages this library and expects every file in it. Removing parts of it from outside the app can corrupt the library, so Purge only ever shows it.")
+        case .chatApps:
+            return String(localized: "This is your chat history and the files people sent you. Much of it exists nowhere else, so Purge only ever shows it.")
+        case .deviceBackups:
+            return String(localized: "A backup can be the only copy of what was on the device when it was made. Purge never removes one; delete old backups yourself in Finder.")
+        case .cloudDrives:
+            return String(localized: "These files sync. Moving one to the Trash here removes it from the cloud service and from every other device, so Purge leaves them to you.")
+        case .virtualMachines:
+            return String(localized: "A virtual machine's disk holds a whole system with its apps and files. Removing it deletes that machine, so Purge leaves that to the app that made it.")
+        case .aiModels:
+            return String(localized: "Models are downloads you chose, and big ones take a long time to fetch again. Large Files lists each one so you can decide.")
+        case .browsers:
+            return String(localized: "A browser profile holds bookmarks, history, saved logins and extensions next to its caches. App Caches lists the cache folders; the rest stays.")
         case .protectedCaches:
             return String(localized: "Purge cleans a cache only when it is on the list of caches known to rebuild themselves. This folder isn't on that list, so it could hold things the app can't get back.")
+        case .systemTools:
+            return String(localized: "These are installed tools and libraries, not caches. Other software may depend on them, so remove one with the package manager that installed it.")
+        case .systemAppData:
+            return String(localized: "macOS and its built-in apps keep their databases and settings here. Removing them can lose data or break the app, so Purge only ever shows them.")
         case .appData:
             return String(localized: "App data holds settings, documents, databases and offline downloads. Only the cache folders inside it are known to be safe, and App Caches already lists those.")
+        case .sharedAppData:
+            return String(localized: "Apps keep fonts, plug-ins, licences and support files here for every user of this Mac. Purge can't tell which are still needed, so it leaves them alone.")
         case .documents:
             return String(localized: "These are your own files. Purge never cleans them on its own; Large Files lists the biggest so you can decide one by one.")
         case .developer:
             return String(localized: "Projects and tool folders mix caches with source code, installed packages, keys and settings. Dev Tools lists the parts that are safe to clean; the rest stays.")
         case .otherUsers:
             return String(localized: "This belongs to another user on this Mac. Only that user, or an administrator in System Settings, can remove it.")
-        case .trash, .macOS, .systemData:
+        case .virtualMemory, .temporaryFiles, .trash, .macOS, .systemData:
             return detail(group)
         }
     }
@@ -341,8 +392,10 @@ struct EverythingElseView: View {
         case .macOS: return breakdown.macOSBytes != nil
         case .trash: return breakdown.trashBytes != nil
         case .systemData: return breakdown.isComplete
-        case .otherApps, .mediaLibraries, .mailAndMessages, .protectedCaches,
-             .developer, .appData, .documents, .otherUsers:
+        case .otherApps, .mediaLibraries, .mailAndMessages, .chatApps, .deviceBackups,
+             .cloudDrives, .virtualMachines, .aiModels, .browsers, .protectedCaches,
+             .developer, .systemTools, .systemAppData, .appData, .sharedAppData,
+             .documents, .otherUsers, .virtualMemory, .temporaryFiles:
             return breakdown[group]?.isFinished == true
         }
     }
@@ -469,8 +522,10 @@ private struct EverythingElseMapLayout: Equatable {
             switch group {
             case .systemData: return false
             case .macOS, .trash: return true
-            case .otherApps, .mediaLibraries, .mailAndMessages, .protectedCaches,
-                 .developer, .appData, .documents, .otherUsers:
+            case .otherApps, .mediaLibraries, .mailAndMessages, .chatApps, .deviceBackups,
+                 .cloudDrives, .virtualMachines, .aiModels, .browsers, .protectedCaches,
+                 .developer, .systemTools, .systemAppData, .appData, .sharedAppData,
+                 .documents, .otherUsers, .virtualMemory, .temporaryFiles:
                 return breakdown.isComplete || breakdown[group]?.isFinished == true
             }
         }

@@ -133,6 +133,64 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
                     action: .showInDevTools
                 )
             }
+            // The disk spells these as the app did; compared without case.
+            let folded = relative.lowercased()
+            if folded == "library/application support/mobilesync" {
+                return EverythingElseFolderHint(
+                    steps: String(localized: "iPhone and iPad backups made on this Mac. Delete old ones in Finder: select the device, then Manage Backups. System Settings > General > Storage lists them too."),
+                    action: nil
+                )
+            }
+            if folded == "library/itunes" {
+                return EverythingElseFolderHint(
+                    steps: String(localized: "Software updates downloaded for an iPhone or iPad. They are only needed while a device updates or restores."),
+                    action: nil
+                )
+            }
+            if folded == "library/mobile documents" {
+                return EverythingElseFolderHint(
+                    steps: String(localized: "The iCloud Drive files downloaded to this Mac. Large Files lists the big ones, and Keep Only in iCloud frees the space while the file stays in iCloud."),
+                    action: .showInLargeFiles
+                )
+            }
+            if folded == "library/cloudstorage" {
+                return EverythingElseFolderHint(
+                    steps: String(localized: "Files a cloud service keeps on this Mac. In Finder, Control-click a file or folder and choose Remove Download to keep it online only."),
+                    action: nil
+                )
+            }
+            if folded == "library/containers/com.tencent.xinwechat" {
+                return EverythingElseFolderHint(
+                    steps: String(localized: "WeChat keeps your chat history and the photos, videos and files from your chats here. Its settings have a storage page under General that clears them chat by chat."),
+                    action: .openApp(bundleID: "com.tencent.xinWeChat", title: String(localized: "Open WeChat"))
+                )
+            }
+            if folded == "library/group containers/243lu875e5.groups.com.apple.podcasts" {
+                return EverythingElseFolderHint(
+                    steps: String(localized: "Episodes the Podcasts app downloaded. Remove downloads in Podcasts, or have it remove played episodes in its settings."),
+                    action: .openApp(bundleID: "com.apple.podcasts", title: String(localized: "Open Podcasts"))
+                )
+            }
+        }
+
+        // Folders outside the home folder, by their place on the startup disk.
+        if isSameOrInside(path, anyOf: ["/opt/homebrew", "/usr/local/Cellar", "/usr/local/Caskroom", "/usr/local/Homebrew"]) {
+            return EverythingElseFolderHint(
+                steps: String(localized: "Homebrew keeps the tools and libraries it installed here. Running brew cleanup removes old versions, and the uninstaller lists each tool under Command-Line Tools."),
+                action: nil
+            )
+        }
+        if PathContainment.isInside(path, "/Library/Developer") {
+            return EverythingElseFolderHint(
+                steps: String(localized: "Xcode's Command Line Tools and simulator runtimes. The runtimes are listed on the Dev Tools tab."),
+                action: .showInDevTools
+            )
+        }
+        if isSameOrInside(path, anyOf: ["/Library/Audio", "/Library/Application Support/GarageBand", "/Library/Application Support/Logic"]) {
+            return EverythingElseFolderHint(
+                steps: String(localized: "Instruments, loops and audio plug-ins installed for every user. The sound library GarageBand and Logic Pro downloaded can be removed in System Settings > General > Storage > Music Creation."),
+                action: nil
+            )
         }
 
         switch group {
@@ -147,9 +205,41 @@ nonisolated struct EverythingElseFolderHint: Equatable, Sendable {
                 steps: String(localized: "Another user's home folder. Only that user, or an administrator in System Settings > Users & Groups, can remove it."),
                 action: nil
             )
-        case .otherApps, .mediaLibraries, .mailAndMessages, .protectedCaches,
-             .developer, .appData, .documents, .trash, .macOS, .systemData:
+        case .chatApps:
+            return EverythingElseFolderHint(
+                steps: String(localized: "Chat history and the photos, videos and files from your conversations. Free the space from the app's own storage settings."),
+                action: nil
+            )
+        case .cloudDrives:
+            // The sync services' own data in Library is not a synced folder.
+            guard relative?.hasPrefix("Library/") != true else { return nil }
+            return EverythingElseFolderHint(
+                steps: String(localized: "A folder a cloud service syncs. Removing a file here removes it from the service and from your other devices, so use the service's own online-only setting to free space."),
+                action: nil
+            )
+        case .virtualMachines:
+            return EverythingElseFolderHint(
+                steps: String(localized: "A virtual machine or container disk. It only shrinks from inside the app that made it: delete the machines, images and snapshots you no longer need there."),
+                action: nil
+            )
+        case .aiModels:
+            return EverythingElseFolderHint(
+                steps: String(localized: "The models in here are listed one by one on the Large Files tab, where each can be removed."),
+                action: .showInLargeFiles
+            )
+        case .browsers:
+            return EverythingElseFolderHint(
+                steps: String(localized: "A browser's profile: bookmarks, history, extensions and the data sites store. Clear browsing data from the browser's own settings."),
+                action: nil
+            )
+        case .otherApps, .mediaLibraries, .mailAndMessages, .deviceBackups, .protectedCaches,
+             .developer, .systemTools, .systemAppData, .appData, .sharedAppData, .documents,
+             .virtualMemory, .temporaryFiles, .trash, .macOS, .systemData:
             return nil
         }
+    }
+
+    private static func isSameOrInside(_ path: String, anyOf folders: [String]) -> Bool {
+        folders.contains { PathContainment.isSameOrInside(path, $0) }
     }
 }

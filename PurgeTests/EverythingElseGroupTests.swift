@@ -36,8 +36,10 @@ struct EverythingElseGroupTests {
 
     @Test func theMeasuredGroupsComeInClaimOrderAndTheDisplayGroupsLast() {
         #expect(EverythingElseGroup.measured == [
-            .otherApps, .mediaLibraries, .mailAndMessages, .protectedCaches,
-            .developer, .appData, .documents, .otherUsers
+            .otherApps, .mediaLibraries, .mailAndMessages, .chatApps, .deviceBackups,
+            .cloudDrives, .virtualMachines, .aiModels, .browsers, .protectedCaches,
+            .developer, .systemTools, .systemAppData, .appData, .sharedAppData,
+            .documents, .otherUsers, .virtualMemory, .temporaryFiles
         ])
         for group in [EverythingElseGroup.trash, .macOS, .systemData] {
             #expect(!group.isMeasured)
@@ -45,10 +47,12 @@ struct EverythingElseGroupTests {
     }
 
     @Test func everyGroupBelongsToTheBucketThatSaysWhatToDo() {
-        #expect(EverythingElseBucket.managedInApps.groups == [.otherApps, .mediaLibraries, .mailAndMessages, .trash])
-        #expect(EverythingElseBucket.yourFiles.groups == [.developer, .documents])
-        #expect(EverythingElseBucket.leftAlone.groups == [.protectedCaches, .appData])
-        #expect(EverythingElseBucket.managedByMacOS.groups == [.otherUsers, .macOS, .systemData])
+        #expect(EverythingElseBucket.managedInApps.groups == [
+            .otherApps, .mediaLibraries, .mailAndMessages, .chatApps, .deviceBackups, .virtualMachines, .browsers, .trash
+        ])
+        #expect(EverythingElseBucket.yourFiles.groups == [.cloudDrives, .aiModels, .developer, .systemTools, .documents])
+        #expect(EverythingElseBucket.leftAlone.groups == [.protectedCaches, .systemAppData, .appData, .sharedAppData])
+        #expect(EverythingElseBucket.managedByMacOS.groups == [.otherUsers, .virtualMemory, .temporaryFiles, .macOS, .systemData])
         // Every group is in exactly one bucket.
         let all = EverythingElseBucket.allCases.flatMap(\.groups)
         #expect(all.count == EverythingElseGroup.allCases.count)
@@ -80,6 +84,17 @@ struct EverythingElseGroupTests {
         ])
         #expect(paths(.documents) == EverythingElseRootPlan.documentFolders.map { "/Users/alice/\($0)" } + ["/Users/alice"])
         #expect(paths(.otherUsers) == ["/Users/bob"])
+        // The named groups walk only the folders too deep for a catalog rule;
+        // the rest of theirs is picked by name out of the roots above.
+        #expect(paths(.browsers) == ["/Users/alice/Library/Application Support/Google/Chrome"])
+        #expect(paths(.aiModels).contains("/Users/alice/.cache/huggingface"))
+        #expect(paths(.virtualMachines).contains("/Users/alice/.local/share/containers"))
+        #expect(paths(.deviceBackups).isEmpty)
+        #expect(paths(.systemAppData).isEmpty)
+        // Nothing outside the homes without a disk root to walk.
+        for group in [EverythingElseGroup.systemTools, .sharedAppData, .virtualMemory, .temporaryFiles] {
+            #expect(paths(group).isEmpty)
+        }
         for group in [EverythingElseGroup.trash, .macOS, .systemData] {
             #expect(paths(group).isEmpty)
         }
@@ -90,7 +105,8 @@ struct EverythingElseGroupTests {
         let home = OverviewSizedItem.normalized(self.home.path)
         for root in plan {
             switch root.group {
-            case .mediaLibraries, .mailAndMessages, .otherUsers:
+            case .mediaLibraries, .mailAndMessages, .otherUsers,
+                 .chatApps, .cloudDrives, .virtualMachines, .aiModels, .browsers:
                 #expect(root.kind == .whole, "\(root.path)")
             case .developer where root.path == home:
                 #expect(root.kind == .hiddenChildren)
@@ -105,6 +121,10 @@ struct EverythingElseGroupTests {
                 #expect(skipped.isSuperset(of: ["documents", "pictures", "library", "applications", "developer"]))
             case .otherApps, .protectedCaches, .developer, .appData, .documents:
                 #expect(root.kind == .children, "\(root.path)")
+            case .deviceBackups, .systemAppData:
+                Issue.record("\(root.group) is picked out of other roots and has none of its own")
+            case .systemTools, .sharedAppData, .virtualMemory, .temporaryFiles:
+                Issue.record("\(root.group) is walked only when a disk root is given")
             case .trash, .macOS, .systemData:
                 Issue.record("\(root.group) has no roots to walk")
             }
@@ -196,7 +216,11 @@ struct EverythingElseGroupTests {
         #expect(breakdown[.appData]?.isLocked == true)
         #expect(breakdown[.mailAndMessages]?.isLocked == true)
         #expect(breakdown[.protectedCaches]?.isLocked == false)
-        #expect(breakdown[.developer]?.isLocked == false)
+        // Developer takes the Android SDK out of the rest of Library and GitHub
+        // Desktop's folder out of Documents, and a limited scan read neither.
+        #expect(breakdown[.developer]?.isLocked == true)
+        // Chat apps keep most of their data in Containers.
+        #expect(breakdown[.chatApps]?.isLocked == true)
         // Measured roots still to come, so this group is not finished yet.
         #expect(breakdown[.protectedCaches]?.isFinished == false)
         // Mail and Messages are both locked without access, so that group is done at once.
@@ -499,7 +523,10 @@ struct EverythingElseGroupTests {
         let breakdown = EverythingElseBreakdown(measurement: measurement, claimedFirst: [], everythingElseBytes: 200 * gb)
         #expect(breakdown.measuredGroupsBySize.prefix(2) == [.appData, .documents])
         #expect(Array(breakdown.measuredGroupsBySize.dropFirst(2)) == [
-            .otherApps, .mediaLibraries, .mailAndMessages, .protectedCaches, .developer, .otherUsers
+            .otherApps, .mediaLibraries, .mailAndMessages, .chatApps, .deviceBackups,
+            .cloudDrives, .virtualMachines, .aiModels, .browsers, .protectedCaches,
+            .developer, .systemTools, .systemAppData, .sharedAppData, .otherUsers,
+            .virtualMemory, .temporaryFiles
         ])
     }
 

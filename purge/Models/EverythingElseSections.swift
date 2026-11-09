@@ -73,8 +73,10 @@ nonisolated struct EverythingElseSection: Identifiable, Equatable, Sendable {
         case .systemData:
             let bytes = breakdown.systemDataBytes
             return bytes > 0 ? [EverythingElseItem(group: group, kind: .system, bytes: bytes)] : []
-        case .otherApps, .mediaLibraries, .mailAndMessages, .protectedCaches,
-             .developer, .appData, .documents, .otherUsers:
+        case .otherApps, .mediaLibraries, .mailAndMessages, .chatApps, .deviceBackups,
+             .cloudDrives, .virtualMachines, .aiModels, .browsers, .protectedCaches,
+             .developer, .systemTools, .systemAppData, .appData, .sharedAppData,
+             .documents, .otherUsers, .virtualMemory, .temporaryFiles:
             guard let figures = breakdown[group] else { return [] }
             if figures.isLocked, figures.bytes == 0 {
                 return [EverythingElseItem(group: group, kind: .locked, bytes: 0)]
