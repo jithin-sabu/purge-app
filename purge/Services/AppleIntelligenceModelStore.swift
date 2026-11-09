@@ -476,6 +476,9 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 }
             } else {
                 gone.append(set)
+                // Its request failed but the set went anyway. The reason must
+                // come from a set that stayed, as the details do.
+                failures[set.name] = nil
             }
         }
         let removed = gone.count

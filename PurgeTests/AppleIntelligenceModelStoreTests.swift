@@ -334,6 +334,19 @@ struct AppleIntelligenceModelStoreTests {
         var recorded: [[AppleIntelligenceModelSet]] = []
         /// What the worker answers for an op instead of success.
         var failing: [String: AppleIntelligenceWorker.Outcome] = [:]
+        /// What the worker answers for a release of one set, by set name.
+        var failingResets: [String: AppleIntelligenceWorker.Outcome] = [:]
+        /// What the Mac reads as once a release has been asked for.
+        var readingAfterReset: AppleIntelligenceReading?
+
+        /// The current reading, behind a lock: the store reads it off the main actor.
+        private final class ReadingBox: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value: AppleIntelligenceReading
+            init(_ value: AppleIntelligenceReading) { self.value = value }
+            func get() -> AppleIntelligenceReading { lock.withLock { value } }
+            func set(_ new: AppleIntelligenceReading) { lock.withLock { value = new } }
+        }
 
         init(reading: AppleIntelligenceReading, blocks: [String]) {
             self.reading = reading
@@ -342,7 +355,8 @@ struct AppleIntelligenceModelStoreTests {
 
         var services: Store.Services {
             var services = Store.Services()
-            services.read = { [reading] in reading }
+            let current = ReadingBox(reading)
+            services.read = { current.get() }
             services.installedBlocks = { [blocks] in blocks }
             services.siriLanguage = { [siriLanguage] in siriLanguage }
             services.definedAliasValues = { _ in ["language_en", "language_zh", "language_zh_TW"] }
@@ -354,8 +368,11 @@ struct AppleIntelligenceModelStoreTests {
                     let type = AppleIntelligenceCatalog.sets.first { $0.name == name }?.assetType
                     return AppleIntelligenceWorker.Outcome(ok: true, result: ["assetType": type as Any], error: nil)
                 case "reset":
-                    self.resets += input["assetSets"] as? [String] ?? []
-                    return self.failing[op] ?? AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
+                    let names = input["assetSets"] as? [String] ?? []
+                    self.resets += names
+                    if let after = self.readingAfterReset { current.set(after) }
+                    return names.first.flatMap { self.failingResets[$0] } ?? self.failing[op]
+                        ?? AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
                 case "subscribe":
                     self.subscribed = input["subscriptions"] as? [[String: Any]] ?? []
                     return self.failing[op] ?? AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
@@ -514,6 +531,32 @@ struct AppleIntelligenceModelStoreTests {
         #expect(store.lastOutcome?.details == details)
         #expect(mac.recorded.isEmpty)
         #expect(Store.loadRemovedSetNames(from: defaults.defaults).isEmpty)
+    }
+
+    /// Set 0's release fails on the connection but the set is gone afterwards;
+    /// set 1's release is accepted but the set is still listed. The row must
+    /// not quote set 0's error for set 1: the reason comes from a set that
+    /// stayed, and with nothing failed for it there are no details.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func theReasonComesFromASetThatStayed() async throws {
+        let mac = FakeMac(reading: reading(present: 2), blocks: catalog.map(\.assetType))
+        mac.failingResets[catalog[0].name] = dropped
+        mac.readingAfterReset = AppleIntelligenceReading(
+            sets: reading(present: 2).sets.map { item in
+                item.set == catalog[0]
+                    ? AppleIntelligenceSetReading(set: item.set, recordsOnDisk: 0, eliminating: 0, latestBytes: 0, folder: .empty)
+                    : item
+            },
+            readAt: Date())
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+
+        await store.remove(sets: [catalog[0], catalog[1]])
+
+        #expect(store.lastOutcome == .someLeft(
+            removed: 1, left: 1,
+            reason: String(localized: "macOS hasn't finished removing them"),
+            details: nil))
+        #expect(mac.recorded == [[catalog[0]]])
     }
 
     /// macOS can say "current locks" after the description, in the part the
