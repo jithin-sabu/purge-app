@@ -17,6 +17,7 @@ struct OverviewAppleIntelligenceRow: View {
     /// confirmation opens (#179).
     @State private var plan: AppleIntelligenceRemovalPlan?
     @State private var isShowingInfo = false
+    @State private var isShowingDetails = false
 
     /// Not a bar segment, so the bar never highlights it; it only fades with the rest.
     static let id = "appleIntelligenceModels"
@@ -37,7 +38,11 @@ struct OverviewAppleIntelligenceRow: View {
                 Text(detail)
                     .font(AppStyle.Typography.callout)
                     .foregroundStyle(AppColors.textSecondary)
-                    .lineLimit(1)
+                    // A failure gets a second line: its reason is the one thing
+                    // the row must not cut off (#343).
+                    .lineLimit(showsFailure ? 2 : 1)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(detail)
             }
             Spacer(minLength: AppStyle.Spacing.small)
             trailing
@@ -55,6 +60,32 @@ struct OverviewAppleIntelligenceRow: View {
                 await store.refresh()
             }
         }
+    }
+
+    /// The last action failed and the row is saying why.
+    private var showsFailure: Bool {
+        guard store.phase == .idle else { return false }
+        switch store.lastOutcome {
+        case .someLeft, .notReady, .downloadRequestFailed:
+            return true
+        case .removed, .profileNotInstalled, .downloadRequested, .downloadNotStarted, .profileStillInstalled, nil:
+            return false
+        }
+    }
+
+    /// Everything macOS answered when the last action failed, when there is
+    /// more than the row's line says.
+    private var failureDetails: String? {
+        store.phase == .idle ? store.lastOutcome?.details : nil
+    }
+
+    private func detailsButton(_ details: String) -> some View {
+        Button("Details") { isShowingDetails = true }
+            .buttonStyle(.purge(.quiet, size: .small))
+            .help("Show everything macOS answered")
+            .popover(isPresented: $isShowingDetails, arrowEdge: .bottom) {
+                AppleIntelligenceFailureDetails(details: details)
+            }
     }
 
     private var infoButton: some View {
@@ -99,6 +130,9 @@ struct OverviewAppleIntelligenceRow: View {
             .disabled(true)
         } else {
             HStack(spacing: AppStyle.Spacing.xSmall) {
+                if let failureDetails {
+                    detailsButton(failureDetails)
+                }
                 if store.offersDownloadAgain {
                     downloadButton
                 }
@@ -178,11 +212,11 @@ struct OverviewAppleIntelligenceRow: View {
             if let shown { return String(localized: "Removed, freed \(formatBytes(shown))") }
             if let raw { return String(localized: "Removed, \(formatBytes(raw)) freed on the disk that macOS already counted as available") }
             return String(localized: "Removed")
-        case .someLeft(let removed, let left, let reason):
+        case .someLeft(let removed, let left, let reason, _):
             return String(localized: "Removed \(removed), but \(left) stayed: \(reason)")
         case .profileNotInstalled:
             return String(localized: "The profile wasn't installed, so nothing was removed")
-        case .notReady(let reason):
+        case .notReady(let reason, _):
             return reason
         case .downloadRequested:
             if store.isDownloading {
@@ -196,7 +230,7 @@ struct OverviewAppleIntelligenceRow: View {
             return String(localized: "Download requested, but nothing has arrived yet")
         case .profileStillInstalled:
             return String(localized: "The profile is still installed, so downloads stay blocked")
-        case .downloadRequestFailed(let reason):
+        case .downloadRequestFailed(let reason, _):
             return String(localized: "macOS didn't accept the download request: \(reason)")
         case nil:
             break
@@ -362,5 +396,41 @@ struct OverviewAppleIntelligenceConfirmation: View {
             }
         }
         return String(localized: "The models are shared by every account on this Mac: \(names.joined(separator: ", ")).")
+    }
+}
+
+/// Everything macOS answered when a removal or a download request failed,
+/// with a button that copies it. The row has room for the short reason only,
+/// and a report with half an error code can't be acted on (#343).
+struct AppleIntelligenceFailureDetails: View {
+    /// The Purge and macOS versions, then one line per failed request, as the
+    /// service worded them.
+    let details: String
+
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppStyle.Spacing.small) {
+            Text("This is everything macOS answered. If you report the problem, copy it into the report.")
+                .font(AppStyle.Typography.callout)
+                .foregroundStyle(AppColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(verbatim: details)
+                .font(AppStyle.Typography.metadata.monospaced())
+                .foregroundStyle(AppColors.textPrimary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Spacer()
+                Button(copied ? String(localized: "Copied") : String(localized: "Copy")) {
+                    FinderReveal.copyText(details)
+                    copied = true
+                }
+                .buttonStyle(.purge(.secondary, size: .small))
+            }
+        }
+        .padding(AppStyle.Spacing.medium)
+        .frame(width: 400)
     }
 }

@@ -332,6 +332,8 @@ struct AppleIntelligenceModelStoreTests {
         var resets: [String] = []
         var subscribed: [[String: Any]] = []
         var recorded: [[AppleIntelligenceModelSet]] = []
+        /// What the worker answers for an op instead of success.
+        var failing: [String: AppleIntelligenceWorker.Outcome] = [:]
 
         init(reading: AppleIntelligenceReading, blocks: [String]) {
             self.reading = reading
@@ -353,10 +355,10 @@ struct AppleIntelligenceModelStoreTests {
                     return AppleIntelligenceWorker.Outcome(ok: true, result: ["assetType": type as Any], error: nil)
                 case "reset":
                     self.resets += input["assetSets"] as? [String] ?? []
-                    return AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
+                    return self.failing[op] ?? AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
                 case "subscribe":
                     self.subscribed = input["subscriptions"] as? [[String: Any]] ?? []
-                    return AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
+                    return self.failing[op] ?? AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
                 default:
                     return AppleIntelligenceWorker.Outcome(ok: true, result: [:], error: nil)
                 }
@@ -409,6 +411,164 @@ struct AppleIntelligenceModelStoreTests {
         #expect(store.lastOutcome == .downloadRequested)
         // Set 1 is on the Mac, so the record let go of it at the reading.
         #expect(Store.loadRemovedSetNames(from: defaults.defaults) == [catalog[0].name, catalog[4].name])
+    }
+
+    // MARK: A failure the user can read and report (#343)
+
+    /// What the worker sends when macOS's asset service drops the connection.
+    private static let droppedText = "NSCocoaErrorDomain 4097: Couldn’t communicate with a helper application."
+        + "; NSDebugDescription: connection to service named com.apple.siri.uaf.subscription.service"
+
+    private var dropped: AppleIntelligenceWorker.Outcome {
+        AppleIntelligenceWorker.outcome(fromReply: [
+            "ok": false,
+            "error": Self.droppedText,
+            "errorDomain": NSCocoaErrorDomain,
+            "errorCode": 4097,
+            "errorSummary": "NSCocoaErrorDomain 4097: Couldn’t communicate with a helper application.",
+        ])
+    }
+
+    /// The domain and code come apart from the text, and a reply without them,
+    /// as the worker's own refusals are, still reads.
+    @Test func theWorkersReplyKeepsItsDomainAndCode() {
+        #expect(!dropped.ok)
+        #expect(dropped.domain == NSCocoaErrorDomain)
+        #expect(dropped.code == 4097)
+        #expect(dropped.error == Self.droppedText)
+
+        let refusal = AppleIntelligenceWorker.outcome(fromReply: ["ok": false, "error": "refusing a reset with no asset sets"])
+        #expect(!refusal.ok)
+        #expect(refusal.domain == nil && refusal.code == nil && refusal.summary == nil)
+        #expect(refusal.problem == "refusing a reset with no asset sets")
+
+        let fine = AppleIntelligenceWorker.outcome(fromReply: ["ok": true, "result": ["assetType": "x"]])
+        #expect(fine.ok)
+        #expect(fine.result["assetType"] as? String == "x")
+    }
+
+    /// The row has room for one short reason. The three ways the connection to
+    /// the service fails get plain words; any other error keeps its own first
+    /// part and drops the userInfo, which is in the details.
+    @Test func aConnectionFailureReadsInPlainWords() {
+        #expect(dropped.problem == String(localized: "macOS's asset service stopped before it answered"))
+        #expect(AppleIntelligenceWorker.connectionProblem(domain: NSCocoaErrorDomain, code: 4099)
+            == String(localized: "macOS's asset service couldn't be reached"))
+        #expect(AppleIntelligenceWorker.connectionProblem(domain: NSCocoaErrorDomain, code: 4101)
+            == String(localized: "macOS's asset service sent an answer Purge couldn't read"))
+        #expect(AppleIntelligenceWorker.connectionProblem(domain: NSCocoaErrorDomain, code: 260) == nil)
+        #expect(AppleIntelligenceWorker.connectionProblem(domain: "com.apple.UnifiedAssetFramework", code: 4097) == nil)
+        #expect(AppleIntelligenceWorker.connectionProblem(domain: nil, code: nil) == nil)
+
+        let other = AppleIntelligenceWorker.Outcome(
+            ok: false, result: [:],
+            error: "com.apple.UnifiedAssetFramework -1: The operation couldn’t be completed.; NSUnderlyingError: x",
+            domain: "com.apple.UnifiedAssetFramework", code: -1,
+            summary: "com.apple.UnifiedAssetFramework -1: The operation couldn’t be completed.")
+        #expect(other.problem == "com.apple.UnifiedAssetFramework -1: The operation couldn’t be completed.")
+    }
+
+    /// The details open with the two versions a report needs, then every
+    /// failed request as it came. Nothing failed, nothing to show.
+    @Test func detailsCarryTheVersionsAndEveryFailedRequest() {
+        let line = dropped.detailLine(op: "reset", subject: "com.apple.modelcatalog")
+        #expect(line == "reset com.apple.modelcatalog: \(Self.droppedText)")
+        let details = AppleIntelligenceWorker.details(
+            [line, "reset b: y"], purge: "1.14.1 (42)", system: "Version 27.3 (Build 26C5035r)")
+        #expect(details == "Purge 1.14.1 (42), macOS Version 27.3 (Build 26C5035r)\n\n\(line)\n\nreset b: y")
+        #expect(AppleIntelligenceWorker.details([]) == nil)
+    }
+
+    /// The log line names what the call was about.
+    @Test func aCallIsNamedByItsSetsOrSubscriptions() {
+        #expect(AppleIntelligenceWorker.subject(of: ["assetSet": "a"]) == "a")
+        #expect(AppleIntelligenceWorker.subject(of: ["assetSets": ["a", "b"]]) == "a, b")
+        #expect(AppleIntelligenceWorker.subject(of: ["subscriber": "s", "names": ["n"]]) == "n")
+        #expect(AppleIntelligenceWorker.subject(of: ["subscriptions": [["name": "x"], ["name": "y"]]]) == "x, y")
+        #expect(AppleIntelligenceWorker.subject(of: [:]) == "")
+    }
+
+    /// Run whole, as in the report: the profile is in, every release fails on
+    /// the connection, and every set stays. The row gets the short reason, the
+    /// details get each request in full, and nothing is booked as removed.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func aFailedReleaseSaysWhyAndKeepsTheWholeAnswer() async throws {
+        let mac = FakeMac(reading: reading(present: 2), blocks: catalog.map(\.assetType))
+        mac.failing["reset"] = dropped
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+
+        await store.remove(sets: [catalog[0], catalog[1]])
+
+        #expect(mac.resets == [catalog[0].name, catalog[1].name])
+        guard case .someLeft(let removed, let left, let reason, let details) = store.lastOutcome else {
+            Issue.record("expected someLeft, got \(String(describing: store.lastOutcome))")
+            return
+        }
+        #expect(removed == 0)
+        #expect(left == 2)
+        #expect(reason == String(localized: "macOS's asset service stopped before it answered"))
+        let text = try #require(details)
+        #expect(text.hasPrefix("Purge "))
+        #expect(text.contains("reset \(catalog[0].name): \(Self.droppedText)"))
+        #expect(text.contains("reset \(catalog[1].name): \(Self.droppedText)"))
+        #expect(store.lastOutcome?.details == details)
+        #expect(mac.recorded.isEmpty)
+        #expect(Store.loadRemovedSetNames(from: defaults.defaults).isEmpty)
+    }
+
+    /// macOS can say "current locks" after the description, in the part the
+    /// short reason leaves out. It still counts as a lock reply, so the row
+    /// says the models are in use rather than quoting the error.
+    @Test(.enabled(if: Store.isSupported, "the removal is gated to macOS 27 on Apple silicon"))
+    @MainActor func aLockReplyIsFoundInTheWholeAnswer() async throws {
+        let mac = FakeMac(reading: reading(present: 1), blocks: catalog.map(\.assetType))
+        mac.failing["reset"] = AppleIntelligenceWorker.Outcome(
+            ok: false, result: [:],
+            error: "com.apple.UnifiedAssetFramework -1: The operation couldn’t be completed.; NSDebugDescription: current locks",
+            domain: "com.apple.UnifiedAssetFramework", code: -1,
+            summary: "com.apple.UnifiedAssetFramework -1: The operation couldn’t be completed.")
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+
+        await store.remove(sets: [catalog[0]])
+
+        guard case .someLeft(_, _, let reason, let details) = store.lastOutcome else {
+            Issue.record("expected someLeft, got \(String(describing: store.lastOutcome))")
+            return
+        }
+        #expect(reason == String(localized: "macOS says these are still in use"))
+        #expect(details?.contains("current locks") == true)
+    }
+
+    /// Run whole: macOS turns the download request down. The row gets the
+    /// short reason and the details name the subscriptions that were asked for.
+    @Test(.enabled(if: Store.isSupported, "the download is gated to macOS 27 on Apple silicon"))
+    @MainActor func aFailedDownloadRequestKeepsTheWholeAnswer() async throws {
+        let mac = FakeMac(reading: reading(present: 0), blocks: [])
+        mac.failing["subscribe"] = dropped
+        let store = Store(defaults: defaults.defaults, services: mac.services)
+
+        await store.downloadAgain()
+
+        guard case .downloadRequestFailed(let reason, let details) = store.lastOutcome else {
+            Issue.record("expected downloadRequestFailed, got \(String(describing: store.lastOutcome))")
+            return
+        }
+        #expect(reason == String(localized: "macOS's asset service stopped before it answered"))
+        let text = try #require(details)
+        #expect(text.contains("subscribe \(catalog.map(\.recovery.name).joined(separator: ", ")): \(Self.droppedText)"))
+    }
+
+    /// Only a failure with more to say than its line has details.
+    @Test func onlyFailuresHaveDetails() {
+        #expect(AppleIntelligenceOutcome.someLeft(removed: 0, left: 1, reason: "r", details: "d").details == "d")
+        #expect(AppleIntelligenceOutcome.notReady("r", details: "d").details == "d")
+        #expect(AppleIntelligenceOutcome.downloadRequestFailed("r", details: "d").details == "d")
+        #expect(AppleIntelligenceOutcome.notReady("r", details: nil).details == nil)
+        #expect(AppleIntelligenceOutcome.removed(sets: 1, freedShownBytes: nil, freedRawBytes: nil).details == nil)
+        #expect(AppleIntelligenceOutcome.profileNotInstalled.details == nil)
+        #expect(AppleIntelligenceOutcome.downloadRequested.details == nil)
+        #expect(AppleIntelligenceOutcome.downloadNotStarted.details == nil)
+        #expect(AppleIntelligenceOutcome.profileStillInstalled.details == nil)
     }
 
     /// Cancel shows a second before the wait begins. A click in that second

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Reads MobileAsset's persisted records to measure the Apple Intelligence
 /// models, with no private API: plain reads of world-readable property lists
@@ -462,16 +463,115 @@ nonisolated enum AppleIntelligenceWorker {
     nonisolated struct Outcome {
         let ok: Bool
         let result: [String: Any]
+        /// The whole failure, userInfo included. It goes in the details and the
+        /// log; the row shows `problem`.
         let error: String?
+        /// The `NSError` behind the failure, when the service or the connection
+        /// gave one. The worker's own refusals have neither.
+        let domain: String?
+        let code: Int?
+        /// `domain code: description`, without the userInfo that follows it in `error`.
+        let summary: String?
 
-        var problem: String { error ?? String(localized: "no reason given") }
+        init(ok: Bool, result: [String: Any], error: String?,
+             domain: String? = nil, code: Int? = nil, summary: String? = nil) {
+            self.ok = ok
+            self.result = result
+            self.error = error
+            self.domain = domain
+            self.code = code
+            self.summary = summary
+        }
+
+        /// The reason short enough for the row. The row has one or two lines,
+        /// and the full text once cut the code off (#343).
+        var problem: String {
+            AppleIntelligenceWorker.connectionProblem(domain: domain, code: code)
+                ?? summary ?? error ?? String(localized: "no reason given")
+        }
+
+        /// One line for the details: what was asked, about what, and the whole answer.
+        func detailLine(op: String, subject: String) -> String {
+            "\(op) \(subject): \(error ?? "no reason given")"
+        }
     }
+
+    /// The three ways the connection to macOS's asset service fails, in plain
+    /// words: it was interrupted, it was never made, or the reply could not be
+    /// read. Nil for any other error, which keeps its own text.
+    static func connectionProblem(domain: String?, code: Int?) -> String? {
+        guard domain == NSCocoaErrorDomain, let code else { return nil }
+        switch code {
+        case NSXPCConnectionInterrupted:
+            return String(localized: "macOS's asset service stopped before it answered")
+        case NSXPCConnectionInvalid:
+            return String(localized: "macOS's asset service couldn't be reached")
+        case NSXPCConnectionReplyInvalid:
+            return String(localized: "macOS's asset service sent an answer Purge couldn't read")
+        default:
+            return nil
+        }
+    }
+
+    /// The text behind the row's Details button, made to be pasted into a bug
+    /// report: the Purge and macOS versions, then one line per failed call.
+    /// The lines are the service's own words, so they stay as they came.
+    static func details(_ lines: [String], purge: String = AppleIntelligenceWorker.purgeVersion,
+                        system: String = ProcessInfo.processInfo.operatingSystemVersionString) -> String? {
+        guard !lines.isEmpty else { return nil }
+        // A blank line between requests: each one wraps over several lines.
+        return (["Purge \(purge), macOS \(system)"] + lines).joined(separator: "\n\n")
+    }
+
+    static var purgeVersion: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
+    }
+
+    /// Public on purpose: the service's answer is the only way to read a failed
+    /// removal from someone's log, and it names Apple's asset sets, no files of
+    /// the user's (#343).
+    private static let log = Logger(subsystem: "io.getpurge.app", category: "apple-intelligence")
 
     static var executableURL: URL {
         Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/io.getpurge.assetworker")
     }
 
+    /// Runs one call and writes a failed one to the log.
     static func run(_ op: String, _ input: [String: Any] = [:], timeout: TimeInterval) async -> Outcome {
+        let outcome = await call(op, input, timeout: timeout)
+        if !outcome.ok {
+            log.error("\(op, privacy: .public) \(subject(of: input), privacy: .public) failed: \(outcome.error ?? "no reason given", privacy: .public)")
+        }
+        return outcome
+    }
+
+    /// What a call was about, for the log and the details: the set or the
+    /// subscription names it carried.
+    static func subject(of input: [String: Any]) -> String {
+        if let set = input["assetSet"] as? String { return set }
+        if let sets = input["assetSets"] as? [String] { return sets.joined(separator: ", ") }
+        if let names = input["names"] as? [String] { return names.joined(separator: ", ") }
+        if let subscriptions = input["subscriptions"] as? [[String: Any]] {
+            return subscriptions.compactMap { $0["name"] as? String }.joined(separator: ", ")
+        }
+        return ""
+    }
+
+    /// The worker's JSON reply as an outcome. A reply from a worker that sends
+    /// no domain or code still reads; the row then shows its whole text.
+    static func outcome(fromReply reply: [String: Any]) -> Outcome {
+        Outcome(ok: reply["ok"] as? Bool ?? false,
+                result: reply["result"] as? [String: Any] ?? [:],
+                error: reply["error"] as? String,
+                domain: reply["errorDomain"] as? String,
+                code: reply["errorCode"] as? Int,
+                summary: reply["errorSummary"] as? String)
+    }
+
+    private static func call(_ op: String, _ input: [String: Any], timeout: TimeInterval) async -> Outcome {
         let path = executableURL.path
         guard FileManager.default.isExecutableFile(atPath: path) else {
             return Outcome(ok: false, result: [:], error: String(localized: "Purge's asset worker is missing from the app"))
@@ -490,9 +590,7 @@ nonisolated enum AppleIntelligenceWorker {
             return Outcome(ok: false, result: [:],
                            error: String(localized: "The asset service call stopped without an answer (status \(Int(output.status)))"))
         }
-        return Outcome(ok: reply["ok"] as? Bool ?? false,
-                       result: reply["result"] as? [String: Any] ?? [:],
-                       error: reply["error"] as? String)
+        return outcome(fromReply: reply)
     }
 }
 
