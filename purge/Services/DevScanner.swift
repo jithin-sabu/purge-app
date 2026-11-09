@@ -361,6 +361,7 @@ nonisolated final class DevScanner {
         }
     }
 
+    /// The blocking part of `discoverXcodeComponents`, run off the main thread.
     private static func xcodeComponents(
         assetsRoot: URL,
         run: XcodeBuildTool.Runner,
@@ -371,6 +372,7 @@ nonisolated final class DevScanner {
             guard XcodeComponent.mayBeInstalled(kind, in: assetsRoot),
                   let status = XcodeBuildTool.status(of: kind, run: run, assetsRoot: assetsRoot),
                   let asset = status.installedAsset,
+                  XcodeComponent.isOnlyDownload(asset, kind: kind, in: assetsRoot),
                   let size = measure(asset), size > 0
             else { continue }
             found.append(XcodeComponent(kind: kind, build: status.build ?? "", assetURL: asset, sizeBytes: size))

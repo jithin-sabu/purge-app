@@ -5,9 +5,15 @@ nonisolated enum XcodeComponentRemoval: Sendable, Equatable {
     /// `xcodebuild` no longer lists it as installed and its asset folder is gone.
     /// `freed` is what the volume gave back.
     case removed(freed: VolumeCapacityReader.SettledGain)
+    /// Not attempted: `xcodebuild` no longer lists it and the ticked asset folder
+    /// is gone. Another tool removed it, or a delete that timed out finished
+    /// later. Nothing is booked, and a Retry drops the row.
+    case alreadyGone
     /// Not attempted: no full Xcode to run `xcodebuild` from, or the component
     /// changed since the scan.
     case refused(String)
+    /// `xcodebuild` could not be read, failed, timed out, or still listed the
+    /// component afterwards. The row offers Retry.
     case failed(String)
 }
 
@@ -44,10 +50,18 @@ nonisolated extension FileDeleter {
             return .failed(describe(before, command: "-showComponent"))
         }
         guard let installed = status.installedAsset else {
+            // Gone only when the folder the user ticked is gone too. A folder
+            // still on disk that xcodebuild doesn't list stays a refusal.
+            if !FileManager.default.fileExists(atPath: expectedAsset.path) { return .alreadyGone }
             return .refused("xcodebuild no longer lists \(kind.rawValue) as installed in AssetsV2")
         }
         guard installed.standardizedFileURL.path == expectedAsset.standardizedFileURL.path else {
             return .refused("xcodebuild names a different \(kind.rawValue) download than the scan found")
+        }
+        // -deleteComponent takes no asset ID. With a second download there it
+        // could remove more than the user ticked.
+        guard XcodeComponent.isOnlyDownload(installed, kind: kind, in: assetsRoot) else {
+            return .refused("more than one \(kind.rawValue) download in AssetsV2")
         }
 
         let availableBefore = readAvailableBytes()

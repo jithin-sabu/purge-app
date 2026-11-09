@@ -24,6 +24,7 @@ struct LastScanStoreTests {
         #expect(!store.lastScanRows.projectGroups.isEmpty)
         #expect(!store.lastScanRows.simulatorRuntimes.isEmpty)
         #expect(!store.lastScanRows.simulatorDevices.isEmpty)
+        #expect(!store.lastScanRows.xcodeComponents.isEmpty)
         #expect(!store.lastScanRows.installedApps.isEmpty)
         #expect(!store.lastScanRows.orphanLeftovers.isEmpty)
 
@@ -33,6 +34,7 @@ struct LastScanStoreTests {
         #expect(store.projectGroups.isEmpty)
         #expect(store.simulatorRuntimes.isEmpty)
         #expect(store.simulatorDevices.isEmpty)
+        #expect(store.xcodeComponents.isEmpty)
         #expect(store.installedApps.isEmpty)
         #expect(store.orphanLeftovers.isEmpty)
         #expect(store.manualSafeCleanupCandidates().isEmpty)
@@ -53,17 +55,24 @@ struct LastScanStoreTests {
     }
 
     /// No setter ticks a saved row's id, single row or Select All, or the live row
-    /// would land already ticked. Simulators and runtimes are removed permanently.
+    /// would land already ticked. Simulators, runtimes and Xcode components are
+    /// removed permanently, so a saved one must never reach `simctl` or `xcodebuild`.
     @Test
     func savedIDsNeverEnterTheSelection() async throws {
         let (fake, file) = try setUp()
         defer { tearDown(fake, file) }
-        let store = fake.makeStore(lastScanStore: LastScanStore(fileURL: file, appBuild: build))
+        let removerCalls = Counter()
+        let deleter = FileDeleter(xcodeComponentRemover: { _, _ in
+            removerCalls.increment()
+            return .removed(freed: .unknown)
+        })
+        let store = fake.makeStore(fileDeleter: deleter, lastScanStore: LastScanStore(fileURL: file, appBuild: build))
         await store.loadLastScan()
         let savedCache = try #require(store.lastScanRows.cacheItems.first)
         let savedTool = try #require(store.lastScanRows.devTools.first)
         let savedDevice = try #require(store.lastScanRows.simulatorDevices.first)
         let savedRuntime = try #require(store.lastScanRows.simulatorRuntimes.first)
+        let savedComponent = try #require(store.lastScanRows.xcodeComponents.first)
         let savedLeftover = try #require(store.lastScanRows.orphanLeftovers.first)
         let savedApp = try #require(store.lastScanRows.installedApps.first)
 
@@ -72,6 +81,7 @@ struct LastScanStoreTests {
         store.setDevToolSelected(id: savedTool.id, isSelected: true)
         store.setSimulatorDeviceSelected(id: savedDevice.id, isSelected: true)
         store.setSimulatorRuntimeSelected(id: savedRuntime.id, isSelected: true)
+        store.setXcodeComponentSelected(id: savedComponent.id, isSelected: true)
         store.setAllOrphansSelected(true, ids: [savedLeftover.id])
         store.toggleOrphanSelected(id: savedLeftover.id)
         store.toggleAppSelected(id: savedApp.id)
@@ -80,6 +90,7 @@ struct LastScanStoreTests {
         #expect(store.scanSelection.devToolIDs.isEmpty)
         #expect(store.scanSelection.simulatorIDs.isEmpty)
         #expect(store.scanSelection.simulatorRuntimeIDs.isEmpty)
+        #expect(store.scanSelection.xcodeComponentIDs.isEmpty)
         #expect(store.orphanSelectedIDs.isEmpty)
         #expect(store.selectedAppIDs.isEmpty)
 
@@ -93,6 +104,13 @@ struct LastScanStoreTests {
         store.simulatorRuntimes = [savedRuntime]
         #expect(store.selectedGeneralDeletionCandidates.isEmpty)
         #expect(store.selectedDeveloperDeletionCandidates.isEmpty)
+        #expect(store.deletionCandidates.isEmpty)
+
+        // A clean with nothing ticked never asks xcodebuild about the saved row.
+        store.presentDeletionSheet(candidates: store.deletionCandidates)
+        store.userConfirmedDeletionFromPrimarySheet()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(removerCalls.value == 0)
     }
 
     /// An app deleted outside Purge while the file is still being read stays gone:
@@ -322,6 +340,12 @@ struct LastScanStoreTests {
             locationURL: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS_\(marker)"),
             safetyInfo: safety(.medium)
         ))])
+        snapshot.xcodeComponents = .init(savedAt: savedAt, rows: [SavedXcodeComponent(XcodeComponent(
+            kind: .metalToolchain,
+            build: "27A266a",
+            assetURL: URL(fileURLWithPath: "/System/Library/AssetsV2/com_apple_MobileAsset_MetalToolchain/\(marker).asset"),
+            sizeBytes: 923_582_464
+        ))])
         snapshot.simulators = .init(savedAt: savedAt, rows: [SavedSimulatorDevice(SimulatorDevice(
             id: UUID(),
             deviceName: "iPhone 17",
@@ -370,6 +394,13 @@ struct LastScanStoreTests {
         saver.save(Set(LastScanSection.allCases), from: snapshot)
         saver.flush()
         return (FakeScans(), file)
+    }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func increment() { lock.withLock { count += 1 } }
+        var value: Int { lock.withLock { count } }
     }
 
     private func tearDown(_ fake: FakeScans, _ file: URL) {

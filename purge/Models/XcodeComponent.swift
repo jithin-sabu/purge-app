@@ -88,6 +88,21 @@ nonisolated struct XcodeComponent: Identifiable, Hashable {
         }
     }
 
+    /// Whether `asset` is the only `.asset` folder in the component's AssetsV2
+    /// folder. `xcodebuild -deleteComponent` takes no asset ID, so with a second
+    /// download there (another Xcode's build, or one left from an update) it may
+    /// remove more than the row shows. Such a component is never offered or
+    /// deleted. A folder that can't be read counts as not the only one.
+    static func isOnlyDownload(_ asset: URL, kind: Kind, in root: URL = SimulatorRuntime.mobileAssetRoot) -> Bool {
+        let folder = assetTypeFolder(for: kind, in: root)
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
+            return false
+        }
+        let downloads = entries.filter { $0.pathExtension == "asset" }
+        return downloads.count == 1
+            && downloads[0].standardizedFileURL.path == asset.standardizedFileURL.path
+    }
+
     // MARK: - What xcodebuild says
 
     /// One `-showComponent` answer.

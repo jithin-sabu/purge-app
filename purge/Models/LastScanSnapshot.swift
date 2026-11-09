@@ -323,6 +323,8 @@ nonisolated struct SavedSimulatorRuntime: Codable, Equatable, Sendable {
     }
 }
 
+/// An Xcode component row as the last scan saw it (#132). Restored rows are
+/// shown read only and never reach `xcodebuild`.
 nonisolated struct SavedXcodeComponent: Codable, Equatable, Sendable {
     /// `XcodeComponent.Kind`'s raw value, the name `xcodebuild` takes.
     var kind: String

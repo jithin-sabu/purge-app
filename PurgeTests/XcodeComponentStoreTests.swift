@@ -145,6 +145,38 @@ struct XcodeComponentStoreTests {
         #expect(store.selectedCount == 0)
     }
 
+    /// The first delete fails (say `-deleteComponent` timed out), then finishes in
+    /// the background. Retry drops the row and books nothing (#340 review).
+    @Test func retryAfterTheToolchainWentDropsTheRow() async throws {
+        let scans = FakeScans()
+        defer { scans.cleanUp() }
+        let row = toolchain()
+        scans.developerEvents = [.xcodeComponentFound(row)]
+        let attempts = Asked()
+        let deleter = FileDeleter(xcodeComponentRemover: { kind, _ in
+            attempts.add(kind.rawValue)
+            return attempts.values.count == 1 ? .failed("xcodebuild -deleteComponent timed out after 180s") : .alreadyGone
+        })
+        let store = scans.makeStore(fileDeleter: deleter)
+        await store.scanDeveloper()
+        store.setXcodeComponentSelected(id: row.id, isSelected: true)
+        store.presentDeletionSheet(candidates: store.deletionCandidates)
+        store.userConfirmedDeletionFromPrimarySheet()
+        for _ in 0..<500 where store.manualDeletionSession?.phase != .complete {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let session = try #require(store.manualDeletionSession)
+        let failure = try #require(session.failedItems.first)
+        #expect(store.xcodeComponents.count == 1)
+
+        let bytes = await store.retryCleanFailure(failure, session: session)
+
+        #expect(bytes == nil)
+        #expect(attempts.values.count == 2)
+        #expect(session.failedItems.isEmpty)
+        #expect(store.xcodeComponents.isEmpty)
+    }
+
     private final class Asked: @unchecked Sendable {
         private let lock = NSLock()
         private var list: [String] = []

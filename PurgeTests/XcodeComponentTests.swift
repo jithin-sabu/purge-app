@@ -171,6 +171,27 @@ struct XcodeComponentTests {
         #expect(await scanner.discoverXcodeComponents(assetsRoot: assets.root, run: { license.run($0, $1) }).isEmpty)
     }
 
+    /// `-deleteComponent` takes no asset ID, so a second download in the folder
+    /// (another Xcode's build, or one left from an update) means the delete may
+    /// take more than the row shows. No row then.
+    @Test func aSecondDownloadOffersNothing() async throws {
+        let assets = try FakeAssetsV2()
+        defer { assets.cleanUp() }
+        let folder = XcodeComponent.Kind.metalToolchain.assetTypeFolderName
+        let listed = try assets.addDownload(build: nil, folder: folder)
+        _ = try assets.addDownload(build: nil, folder: folder)
+        let xcodebuild = FakeXcodebuild(asset: listed)
+
+        let found = await DevScanner().discoverXcodeComponents(
+            assetsRoot: assets.root,
+            run: { xcodebuild.run($0, $1) },
+            measure: { _ in 923_582_464 }
+        )
+
+        #expect(found.isEmpty)
+        #expect(XcodeComponent.isOnlyDownload(listed, kind: .metalToolchain, in: assets.root) == false)
+    }
+
     /// A size that can't be read, or reads zero, offers nothing.
     @Test func unmeasuredDownloadIsLeftOut() async throws {
         let assets = try FakeAssetsV2()

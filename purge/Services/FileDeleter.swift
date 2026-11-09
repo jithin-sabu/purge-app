@@ -193,6 +193,8 @@ nonisolated enum SimulatorDeviceRemoval: Sendable, Equatable {
 nonisolated final class FileDeleter: Sendable {
     typealias SimulatorRuntimeRemover = @Sendable (_ identifier: String) async -> SimulatorRuntimeRemoval
     typealias SimulatorDeviceRemover = @Sendable (_ udid: String, _ folder: URL) -> SimulatorDeviceRemoval
+    /// Asks `xcodebuild` to delete a component, after checking it still names
+    /// `expectedAsset`. Tests pass a fake.
     typealias XcodeComponentRemover = @Sendable (_ kind: XcodeComponent.Kind, _ expectedAsset: URL) async -> XcodeComponentRemoval
     typealias PrivilegedMover = @Sendable (_ urls: [URL]) async -> PrivilegedMoveResult
     typealias Trasher = @Sendable (_ url: URL) throws -> Void
@@ -376,6 +378,12 @@ nonisolated final class FileDeleter: Sendable {
                         movedToTrash: false
                     ))
                     onProgress?(.itemDeleted(sizeBytes: removedBytes))
+                case .alreadyGone:
+                    // Like a file that vanished before its move: nothing to book or
+                    // record, so a Retry reads it as gone and drops the row.
+                    Self.xcodeComponentLog.notice(
+                        "Xcode component \(component.rawValue, privacy: .public) was already gone"
+                    )
                 case .refused(let reason):
                     Self.xcodeComponentLog.notice(
                         "Skipped Xcode component \(component.rawValue, privacy: .public): \(reason, privacy: .public)"

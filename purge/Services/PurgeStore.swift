@@ -5874,6 +5874,8 @@ final class PurgeStore: ObservableObject {
         }
     }
 
+    /// Ticks or unticks a live Xcode component row. An id that is not in the live
+    /// list, such as a saved last-scan row, is never ticked.
     func setXcodeComponentSelected(id: String, isSelected: Bool) {
         if isSelected {
             guard xcodeComponents.contains(where: { $0.id == id }) else { return }

@@ -73,6 +73,17 @@ struct FileDeleterXcodeComponentTests {
         #expect(skipped.isUserVisible)
     }
 
+    /// Gone before Purge asked: nothing is deleted, skipped or failed, so the
+    /// clean books nothing and a Retry reads it as gone.
+    @Test func alreadyGoneRecordsNothing() async throws {
+        let report = try await report(for: .alreadyGone)
+
+        #expect(report.deletedItems.isEmpty)
+        #expect(report.skippedItems.isEmpty)
+        #expect(report.failedItems.isEmpty)
+        #expect(report.bytesRemovedDirectly == 0)
+    }
+
     @Test func failedOffersRetry() async throws {
         let report = try await report(for: .failed("xcodebuild: error"))
 
@@ -124,6 +135,22 @@ struct FileDeleterXcodeComponentTests {
 
         #expect(outcome == .deleted(bytes: 903_900_000, movedToTrash: false, remaining: []))
         #expect(recorder.asked.map(\.0) == [.metalToolchain])
+    }
+
+    /// A delete that timed out finished later, or another tool removed it. The
+    /// Retry drops the row instead of showing "skipped for safety" with no Retry.
+    @Test func retryAfterTheToolchainWentReadsAsGone() async throws {
+        let deleter = FileDeleter(xcodeComponentRemover: { _, _ in .alreadyGone })
+
+        let outcome = await deleter.retryDeleteItem(
+            at: asset,
+            displayName: "Metal Toolchain",
+            expectedSizeBytes: Self.listed,
+            route: .cache,
+            xcodeComponent: .metalToolchain
+        )
+
+        #expect(outcome == .alreadyGone)
     }
 
     // MARK: The gate before the delete
@@ -187,6 +214,57 @@ struct FileDeleterXcodeComponentTests {
         let xcodebuild = FakeXcodebuild(asset: folder, installed: false)
 
         let result = await remove(xcodebuild, expecting: folder, assets: assets)
+
+        guard case .refused = result else {
+            Issue.record("expected a refusal, got \(result)")
+            return
+        }
+        #expect(xcodebuild.deleteCalls.isEmpty)
+    }
+
+    /// A second download appeared since the scan. `-deleteComponent` takes no
+    /// asset ID, so it could remove both: refused, and nothing is run.
+    @Test func aSecondDownloadIsRefusedWithoutADelete() async throws {
+        let assets = try FakeAssetsV2()
+        defer { assets.cleanUp() }
+        let ticked = try installedToolchain(assets)
+        _ = try installedToolchain(assets)
+        let xcodebuild = FakeXcodebuild(asset: ticked)
+
+        let result = await remove(xcodebuild, expecting: ticked, assets: assets)
+
+        guard case .refused = result else {
+            Issue.record("expected a refusal, got \(result)")
+            return
+        }
+        #expect(xcodebuild.deleteCalls.isEmpty)
+    }
+
+    /// Not listed and the ticked folder gone: already gone, and nothing is run.
+    @Test func notInstalledAndFolderGoneIsAlreadyGone() async throws {
+        let assets = try FakeAssetsV2()
+        defer { assets.cleanUp() }
+        let folder = try installedToolchain(assets)
+        try FileManager.default.removeItem(at: folder)
+        let xcodebuild = FakeXcodebuild(asset: folder, installed: false)
+
+        let result = await remove(xcodebuild, expecting: folder, assets: assets)
+
+        #expect(result == .alreadyGone)
+        #expect(xcodebuild.deleteCalls.isEmpty)
+    }
+
+    /// Xcode updated the toolchain since the scan: the ticked folder is gone but
+    /// another one is listed. That is a different download, so still a refusal.
+    @Test func aNewerDownloadAfterTheTickedOneWentIsRefused() async throws {
+        let assets = try FakeAssetsV2()
+        defer { assets.cleanUp() }
+        let ticked = try installedToolchain(assets)
+        let current = try installedToolchain(assets)
+        try FileManager.default.removeItem(at: ticked)
+        let xcodebuild = FakeXcodebuild(asset: current)
+
+        let result = await remove(xcodebuild, expecting: ticked, assets: assets)
 
         guard case .refused = result else {
             Issue.record("expected a refusal, got \(result)")
