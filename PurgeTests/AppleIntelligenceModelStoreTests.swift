@@ -496,6 +496,33 @@ struct AppleIntelligenceModelStoreTests {
         #expect(AppleIntelligenceWorker.details([]) == nil)
     }
 
+    /// The log keeps an error's userInfo private: macOS chooses what goes in
+    /// it, and it could name a file. The domain, code and description go in
+    /// the clear, and so do Purge's and the worker's own fixed sentences.
+    @Test func theLogLeavesOutWhatMacOSPutInUserInfo() {
+        let withPath = AppleIntelligenceWorker.Outcome(
+            ok: false, result: [:],
+            error: "NSCocoaErrorDomain 260: The file couldn’t be opened.; NSFilePath: /Users/someone/Library/x",
+            domain: NSCocoaErrorDomain, code: 260,
+            summary: "NSCocoaErrorDomain 260: The file couldn’t be opened.")
+        #expect(AppleIntelligenceWorker.clearText(of: withPath) == "NSCocoaErrorDomain 260: The file couldn’t be opened.")
+        #expect(!AppleIntelligenceWorker.clearText(of: withPath).contains("/Users/"))
+
+        let noSummary = AppleIntelligenceWorker.Outcome(
+            ok: false, result: [:], error: "X 7: y; NSFilePath: /Users/someone/z", domain: "X", code: 7)
+        #expect(AppleIntelligenceWorker.clearText(of: noSummary) == "X 7")
+
+        let refusal = AppleIntelligenceWorker.outcome(fromReply: ["ok": false, "error": "refusing a reset with no asset sets"])
+        #expect(AppleIntelligenceWorker.clearText(of: refusal) == "refusing a reset with no asset sets")
+    }
+
+    /// Download Again clears its old subscriptions first and ignores the
+    /// answer, so that call alone is kept out of the error log. A failed
+    /// release, lookup or download request is always logged as an error.
+    @Test func onlyTheIgnoredUnsubscribeIsLoggedQuietly() {
+        #expect(AppleIntelligenceWorker.ignoredFailures == ["unsubscribe"])
+    }
+
     /// The log line names what the call was about.
     @Test func aCallIsNamedByItsSetsOrSubscriptions() {
         #expect(AppleIntelligenceWorker.subject(of: ["assetSet": "a"]) == "a")

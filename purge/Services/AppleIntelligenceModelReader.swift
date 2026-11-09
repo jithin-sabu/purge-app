@@ -530,10 +530,26 @@ nonisolated enum AppleIntelligenceWorker {
         return "\(version) (\(build))"
     }
 
-    /// Public on purpose: the service's answer is the only way to read a failed
-    /// removal from someone's log, and it names Apple's asset sets, no files of
-    /// the user's (#343).
+    /// The op, its sets and `clearText` are public on purpose: they are the
+    /// only way to read a failed removal from someone's log (#343). The whole
+    /// answer is private. The Details button is where a user copies that.
     private static let log = Logger(subsystem: "io.getpurge.app", category: "apple-intelligence")
+
+    /// The part of a failure that goes in the log unredacted. For an error
+    /// macOS returned that is its domain, code and description. The userInfo
+    /// after them is whatever macOS put there and could name a file, so it is
+    /// left out. Purge's and the worker's own refusals are fixed sentences
+    /// with Apple's set names, and go whole.
+    static func clearText(of outcome: Outcome) -> String {
+        guard let domain = outcome.domain else { return outcome.error ?? "no reason given" }
+        return outcome.summary ?? "\(domain) \(outcome.code.map(String.init) ?? "?")"
+    }
+
+    /// Calls whose failure the store expects and ignores. Download Again
+    /// clears Purge's old subscriptions before it asks again, and a name that
+    /// was never subscribed may answer with an error. Logged as an error, that
+    /// line would point a reader at the wrong call.
+    static let ignoredFailures: Set<String> = ["unsubscribe"]
 
     static var executableURL: URL {
         Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/io.getpurge.assetworker")
@@ -543,7 +559,13 @@ nonisolated enum AppleIntelligenceWorker {
     static func run(_ op: String, _ input: [String: Any] = [:], timeout: TimeInterval) async -> Outcome {
         let outcome = await call(op, input, timeout: timeout)
         if !outcome.ok {
-            log.error("\(op, privacy: .public) \(subject(of: input), privacy: .public) failed: \(outcome.error ?? "no reason given", privacy: .public)")
+            let subject = subject(of: input)
+            let clear = clearText(of: outcome)
+            if ignoredFailures.contains(op) {
+                log.debug("\(op, privacy: .public) \(subject, privacy: .public) answered: \(clear, privacy: .public)")
+            } else {
+                log.error("\(op, privacy: .public) \(subject, privacy: .public) failed: \(clear, privacy: .public); whole answer: \(outcome.error ?? "no reason given", privacy: .private)")
+            }
         }
         return outcome
     }
