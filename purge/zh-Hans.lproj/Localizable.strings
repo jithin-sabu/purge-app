@@ -1498,3 +1498,9 @@
 "Metal Toolchain" = "Metal 工具链";
 "Xcode's compiler for Metal shaders, an optional download that every account on this Mac shares. Xcode downloads it again (%@) when a project needs it, or run %@." = "Xcode 用于编译 Metal 着色器的可选下载内容，这台 Mac 上的所有账户共用。项目需要时 Xcode 会重新下载（%@），也可以运行 %@。";
 "The Metal Toolchain in this cleanup is deleted permanently through xcodebuild, not moved to the Trash. Xcode can download it again." = "这次清理中的 Metal 工具链会通过 xcodebuild 永久删除，不会移到废纸篓。Xcode 可以重新下载。";
+
+/* Units of the storage figures, used by ByteFormatter. */
+"KB" = "KB";
+"MB" = "MB";
+"GB" = "GB";
+"TB" = "TB";
