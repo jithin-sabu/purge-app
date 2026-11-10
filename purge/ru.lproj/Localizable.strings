@@ -1296,7 +1296,7 @@
 "Xcode deletes these itself. They skip the Trash, so you can't put them back." = "Xcode удаляет их сам. Они минуют Корзину, поэтому вернуть их нельзя.";
 "Xcode downloads it again (%@) if a simulator needs it." = "Xcode скачает его снова (%@), если он понадобится симулятору.";
 "Xcode lists it as %@. %@" = "В Xcode это указано как %@. %@";
-"Xcode's caches, simulators and archives are on the Dev Tools tab." = "Кэши, симуляторы и архивы Xcode — на вкладке «Инструменты разработчика».";
+"Xcode's caches, simulators and archives are on the Dev Tools tab." = "Кэши, симуляторы и архивы Xcode — на вкладке «Инструменты».";
 "Xcode's compiler for Metal shaders, an optional download that every account on this Mac shares. Xcode downloads it again (%@) when a project needs it, or run %@." = "Компилятор Xcode для шейдеров Metal — необязательная загрузка, общая для всех учётных записей на этом Mac. Xcode скачает её снова (%@), когда она понадобится проекту, или выполните %@.";
 "Xcode's predictive code completion" = "Предиктивное автодополнение кода в Xcode";
 "Yesterday" = "Вчера";
