@@ -443,6 +443,7 @@
 			knownRegions = (
 				en,
 				Base,
+				ru,
 				"zh-Hans",
 			);
 			mainGroup = 5AF3803C2FAA15E4001693A0;

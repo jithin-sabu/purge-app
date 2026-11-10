@@ -80,8 +80,12 @@ struct OverviewView: View {
 
     private func diskSummary(_ breakdown: OverviewBreakdown) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: AppStyle.Spacing.xSmall) {
+            // One line, ahead of the smaller figures: Russian puts the word first
+            // ("Занято 372.7 GB"), and a narrow window broke it after the word (#342).
             Text("\(formatStorageBytes(breakdown.usedBytes)) used")
                 .font(AppStyle.Typography.title.weight(.bold).numbers)
+                .lineLimit(1)
+                .layoutPriority(1)
                 .overviewNumberTransition(breakdown.usedBytes, reduceMotion: reduceMotion)
             Text("of \(formatStorageBytes(breakdown.totalBytes))")
                 .font(AppStyle.Typography.rowTitle.numbers)

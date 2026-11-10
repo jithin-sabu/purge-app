@@ -6,7 +6,7 @@
 
   <p><b>Free up your Mac. Safely.</b></p>
 
-  <p>English | <a href="README.zh-CN.md">简体中文</a></p>
+  <p>English | <a href="README.zh-CN.md">简体中文</a> | <a href="README.ru.md">Русский</a></p>
 
   <p>
     A free, open-source native Mac app that clears the cache and junk your Mac piles up on its own.<br/>

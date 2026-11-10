@@ -32,37 +32,52 @@ struct PageHeaderActionBar: View {
 
     var body: some View {
         if let secondary, let primary {
-            HStack(spacing: AppStyle.Spacing.xSmall) {
-                if showsLookDeeper {
-                    LookDeeperHeaderButton()
-                        .transition(.opacity)
-                }
-
-                Button(action: secondary.action) {
-                    MorphingActionLabel(action: secondary)
-                }
-                .buttonStyle(.purge(.secondary))
-                .keyboardShortcut("r", modifiers: [.command])
-                .disabled(secondary.isDisabled)
-                .help(secondary.help ?? "")
-
-                Button(action: primary.action) {
-                    MorphingActionLabel(action: primary)
-                }
-                .buttonStyle(.purge(.primary))
-                .disabled(primary.isDisabled)
-                .help(primary.help ?? "")
-                // Only the Overview's Clean Safe Items confirms in a popover. The
-                // bar stays mounted across tabs, so a tab change closes it rather
-                // than leaving it beside another tab's button.
-                .popover(isPresented: safeCleanConfirmationShown, arrowEdge: .bottom) {
-                    safeCleanConfirmation
-                }
+            // Icons only when the labels would squeeze the page title, as in a
+            // narrow window or a language with long labels like Russian (#342).
+            ViewThatFits(in: .horizontal) {
+                buttons(secondary: secondary, primary: primary, showsTitles: true)
+                buttons(secondary: secondary, primary: primary, showsTitles: false)
             }
-            .fixedSize()
             .onChange(of: tab) { _ in isConfirmingSafeClean = false }
             .animation(reduceMotion ? nil : MorphingActionLabel.widthAnimation, value: showsLookDeeper)
         }
+    }
+
+    private func buttons(secondary: PageHeaderAction, primary: PageHeaderAction, showsTitles: Bool) -> some View {
+        HStack(spacing: AppStyle.Spacing.xSmall) {
+            if showsLookDeeper {
+                LookDeeperHeaderButton(showsTitle: showsTitles)
+                    .transition(.opacity)
+            }
+
+            Button(action: secondary.action) {
+                MorphingActionLabel(action: secondary, showsTitle: showsTitles)
+            }
+            .buttonStyle(.purge(.secondary))
+            .keyboardShortcut("r", modifiers: [.command])
+            .disabled(secondary.isDisabled)
+            .help(help(for: secondary, showsTitle: showsTitles))
+
+            Button(action: primary.action) {
+                MorphingActionLabel(action: primary, showsTitle: showsTitles)
+            }
+            .buttonStyle(.purge(.primary))
+            .disabled(primary.isDisabled)
+            .help(help(for: primary, showsTitle: showsTitles))
+            // Only the Overview's Clean Safe Items confirms in a popover. The
+            // bar stays mounted across tabs, so a tab change closes it rather
+            // than leaving it beside another tab's button.
+            .popover(isPresented: safeCleanConfirmationShown, arrowEdge: .bottom) {
+                safeCleanConfirmation
+            }
+        }
+        .fixedSize()
+    }
+
+    /// An icon-only button names itself on hover when it has no help of its own.
+    private func help(for action: PageHeaderAction, showsTitle: Bool) -> LocalizedStringKey {
+        if let help = action.help { return help }
+        return showsTitle ? "" : LocalizedStringKey(action.title)
     }
 
     private var safeCleanConfirmationShown: Binding<Bool> {
@@ -331,6 +346,8 @@ struct PageHeaderActionBar: View {
 /// button keeps its place while its content changes.
 struct MorphingActionLabel: View {
     let action: PageHeaderAction
+    /// False shows the icon alone. VoiceOver still reads the title.
+    var showsTitle = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var measuredWidth: CGFloat?
@@ -369,26 +386,33 @@ struct MorphingActionLabel: View {
     private var content: some View {
         HStack(spacing: AppStyle.Spacing.xSmall) {
             icon
-            HStack(spacing: 0) {
-                Text(LocalizedStringKey(action.title))
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                if let bytes = action.suffixBytes {
-                    HStack(spacing: 0) {
-                        Text(" (")
-                        Text(formatBytes(bytes))
-                            .font(AppStyle.Typography.headline.numbers)
-                            .monospacedDigit()
-                            .contentTransition(reduceMotion ? .identity : .numericText())
-                        Text(")")
-                    }
-                    .transition(suffixTransition)
-                }
+            // A label with no icon to stand for it keeps its text.
+            if showsTitle || (action.systemImage == nil && !action.isBusy) {
+                titleText
             }
         }
         .animation(reduceMotion ? nil : Self.textAnimation, value: action.title)
         .animation(reduceMotion ? nil : Self.textAnimation, value: action.suffixBytes)
         .animation(reduceMotion ? nil : Self.textAnimation, value: action.systemImage)
         .animation(reduceMotion ? nil : Self.textAnimation, value: action.isBusy)
+    }
+
+    private var titleText: some View {
+        HStack(spacing: 0) {
+            Text(LocalizedStringKey(action.title))
+                .contentTransition(reduceMotion ? .identity : .numericText())
+            if let bytes = action.suffixBytes {
+                HStack(spacing: 0) {
+                    Text(" (")
+                    Text(formatBytes(bytes))
+                        .font(AppStyle.Typography.headline.numbers)
+                        .monospacedDigit()
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                    Text(")")
+                }
+                .transition(suffixTransition)
+            }
+        }
     }
 
     @ViewBuilder

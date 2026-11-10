@@ -1,0 +1,3 @@
+/* The Finder Services item declared under NSServices in Info.plist. */
+
+"Uninstall with Purge" = "Удалить с помощью Purge";

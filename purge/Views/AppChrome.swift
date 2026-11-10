@@ -178,6 +178,9 @@ struct AppSectionPageHeader<Trailing: View>: View {
                     }
                 }
             }
+            // The title takes its width first, so long button labels turn to icons
+            // instead of wrapping the subtitle a few letters a line (#342).
+            .layoutPriority(1)
 
             Spacer(minLength: AppStyle.Spacing.medium)
 
