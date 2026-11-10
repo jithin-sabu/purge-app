@@ -403,6 +403,12 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/pnpm/store",
             "\(home)/.yarn/berry/cache",
             "\(home)/.cache/pre-commit",
+            // Check First. The prek store also holds patches for unstaged work,
+            // so only the known cache folders are offered.
+            "\(home)/.cache/prek/repos",
+            "\(home)/.cache/prek/hooks",
+            "\(home)/.cache/prek/tools",
+            "\(home)/.cache/prek/cache",
             "\(home)/.cache/prisma",
             // Expo's download caches only; `~/.expo/state.json` holds the login.
             "\(home)/.expo/android-apk-cache",
@@ -490,6 +496,9 @@ enum DeletionSafetyPolicy {
         // flush, so it may reuse a read from the last few seconds. `FileDeleter`
         // asks off the main thread, so a move always reads the links again.
         if PlaywrightBuildScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
+        // Recheck before a move in case the prek store was redirected since the scan.
+        if PathContainment.isInside(key, "\(cachedHomePath)/.cache/prek"),
+           PathContainment.containsSymlinkComponent(url, home: cachedHomePath) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
         if gradleLeftoverRefusesDeletion(url) { return false }

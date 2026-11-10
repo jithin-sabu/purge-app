@@ -594,6 +594,22 @@ struct AllowlistAdditionTests {
         #expect(info.level == level, "\(label) is \(info.level)")
     }
 
+    @Test
+    func prekCacheDefaultsToCheckFirstAndKeepsRecoveryPatches() {
+        let claimed = DevScanner.claimedGlobalCachePaths()
+        for folder in ["repos", "hooks", "tools", "cache"] {
+            let path = ".cache/prek/\(folder)"
+            #expect(claimed.contains(AuditPaths.url(path).path))
+            #expect(AuditPaths.evaluate(path) == .allow)
+        }
+        #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "prek Cache", primaryPath: nil).level == .medium)
+        for path in [".cache", ".cache/prek", ".cache/prek/patches", ".cache/prek/patches/123-456.patch",
+                     ".cache/prek/repos-backup", ".cache/prek-backup/repos", ".config/prek"] {
+            #expect(!claimed.contains(AuditPaths.url(path).path))
+            #expect(AuditPaths.evaluate(path) != .allow)
+        }
+    }
+
     @Test(arguments: [
         ("Device Software Updates", SafetyLevel.safe),
         ("CacheClip", .safe),

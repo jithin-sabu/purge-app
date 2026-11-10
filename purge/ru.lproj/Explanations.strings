@@ -594,6 +594,8 @@
 "photoshop, lightroom and bridge cache raw previews here. safe to clean. rebuilds automatically when you open images." = "Photoshop, Lightroom и Bridge кэшируют здесь RAW-превью. Можно безопасно очистить — при открытии изображений они создадутся заново автоматически.";
 "pnpm Package Store" = "Хранилище пакетов pnpm";
 "pre-commit Environments" = "Среды pre-commit";
+"prek Cache" = "Кэш prek";
+"Cached hook repositories, environments and tools. Clean while prek is idle. The next run rebuilds them. Recovery patches stay." = "Кэш репозиториев хуков, сред и инструментов. Очищайте, когда prek не работает. Кэш восстановится при следующем запуске. Патчи для восстановления сохранятся.";
 "pyenv and rbenv Downloads" = "Загрузки pyenv и rbenv";
 "pytest Cache" = "Кэш pytest";
 "sbt Build Output" = "Результаты сборки sbt";

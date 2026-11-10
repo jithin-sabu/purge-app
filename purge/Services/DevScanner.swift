@@ -73,6 +73,7 @@ nonisolated final class DevScanner {
         "Old Figma Profiles": "old-figma-profiles",
         "Dart Pub Cache": "pub-cache",
         "pre-commit Environments": "pre-commit-cache",
+        "prek Cache": "prek-cache",
         "Prisma Engines": "prisma-nodejs",
         "Expo Cache": "expo-cache",
         "pyenv and rbenv Downloads": "version-manager-downloads",
@@ -761,6 +762,9 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent(".pub-cache/git", isDirectory: true)
             ]),
             ("pre-commit Environments", [home.appendingPathComponent(".cache/pre-commit", isDirectory: true)]),
+            ("prek Cache", ["repos", "hooks", "tools", "cache"].map {
+                home.appendingPathComponent(".cache/prek/\($0)", isDirectory: true)
+            }),
             ("Prisma Engines", [home.appendingPathComponent(".cache/prisma", isDirectory: true)]),
             ("Expo Cache", [
                 "android-apk-cache", "ios-simulator-app-cache", "native-modules-cache",
