@@ -33,23 +33,19 @@ nonisolated func formatBytesRoundedDown(_ bytes: Int64) -> String {
 nonisolated private func formatOneDecimal(_ bytes: Int64, roundingDown: Bool) -> String {
     guard bytes > 0 else { return String(localized: "0 bytes") }
 
-    // Units and the decimal separator come from the string tables, so a Mac set to
-    // Russian reads "217,1 ГБ" rather than "217.1 GB", the way `formatBytes` already
-    // writes its own figures.
     let units: [(threshold: Int64, suffix: String)] = [
-        (1_000_000_000_000, String(localized: "TB")),
-        (1_000_000_000, String(localized: "GB")),
-        (1_000_000, String(localized: "MB")),
-        (1_000, String(localized: "KB"))
+        (1_000_000_000_000, "TB"),
+        (1_000_000_000, "GB"),
+        (1_000_000, "MB"),
+        (1_000, "KB")
     ]
-    let decimalSeparator = Locale.current.decimalSeparator ?? "."
 
     for unit in units where bytes >= unit.threshold {
         let tenths = (bytes * 10 + (roundingDown ? 0 : unit.threshold / 2)) / unit.threshold
         let whole = tenths / 10
         let fraction = tenths % 10
         guard fraction > 0 else { return "\(whole) \(unit.suffix)" }
-        return "\(whole)\(decimalSeparator)\(fraction) \(unit.suffix)"
+        return "\(whole).\(fraction) \(unit.suffix)"
     }
 
     return String(localized: "\(bytes) bytes")

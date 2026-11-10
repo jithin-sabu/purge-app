@@ -148,7 +148,7 @@
 "1 month" = "1 месяц";
 "1 of these files syncs with iCloud, so it also leaves your other devices." = "1 из этих файлов синхронизируется с iCloud, поэтому он исчезнет и на других ваших устройствах.";
 "1 on this Mac, from %@, kept for the next backup" = "На этом Mac 1 снимок от %@, сохранён для следующей резервной копии";
-"1 other file is still selected." = "Ещё 1 файл всё ещё выбран.";
+"1 other file is still selected." = "Выбран ещё 1 файл.";
 "1 other selected file can't be kept only in iCloud right now, so it stays." = "Ещё 1 выбранный файл сейчас нельзя оставить только в iCloud, поэтому он остаётся.";
 "1 other selected file isn't in iCloud, so it stays." = "Ещё 1 выбранный файл не в iCloud, поэтому он останется.";
 "1 runtime" = "1 среда выполнения";
@@ -293,7 +293,7 @@
 "Clean Selected" = "Очистить выбранное";
 "Clean anyway" = "Всё равно очистить";
 "Clean automatically" = "Очищать автоматически";
-"Clean items marked Not Sure?" = "Очистить элементы с меткой «Не уверен»?";
+"Clean items marked Not Sure?" = "Очистить элементы с меткой «Неизвестно»?";
 "Clean selected items?" = "Очистить выбранные элементы?";
 "Cleaning" = "Очистка";
 "Cleaning %@…" = "Очистка %@…";
@@ -453,7 +453,6 @@
 "From the last scan, %@ · Checking again…" = "Из прошлого сканирования, %@ · Проверяем снова…";
 "From the last scan. Purge is checking it again." = "Из последнего сканирования. Purge проверяет снова.";
 "Full Disk Access" = "Полный доступ к диску";
-"GB" = "ГБ";
 "GarageBand projects and the sounds it downloaded. Remove sound packs in GarageBand under Sound Library." = "Проекты GarageBand и скачанные им звуки. Удалить наборы звуков можно в GarageBand в разделе «Библиотека звуков».";
 "General" = "Общие";
 "Get started" = "Начать";
@@ -506,7 +505,6 @@
 "Items found, %lld" = "Найдено элементов: %lld";
 "Jithin" = "Jithin";
 "Jithin on X" = "Jithin в X";
-"KB" = "КБ";
 "Keep" = "Оставить";
 "Keep %lld files only in iCloud?" = "Оставить %lld файлов только в iCloud?";
 "Keep Cleaning" = "Продолжить очистку";
@@ -576,7 +574,6 @@
 "Looking for large files again" = "Повторный поиск больших файлов";
 "Loose files" = "Отдельные файлы";
 "Loose files · %@" = "Отдельные файлы · %@";
-"MB" = "МБ";
 "Made with" = "Сделано с";
 "Mail & Messages" = "Почта и Сообщения";
 "Mail keeps a copy of every message and attachment here. Mail > Settings > Accounts lets you download only recent attachments, and Mailbox > Erase Junk Mail and Erase Deleted Items free space." = "Почта хранит здесь копию каждого письма и вложений. В разделе «Почта» > «Настройки» > «Учётные записи» можно скачивать только недавние вложения, а «Почтовый ящик» > «Стереть спам» и «Стереть удалённые объекты» освобождают место.";
@@ -694,7 +691,7 @@
 "None of these go to the Trash. Once they're deleted, you can't put them back." = "Ничто из этого не попадает в Корзину. После удаления вернуть это нельзя.";
 "None on this Mac right now" = "На этом Mac их сейчас нет";
 "None yet" = "Пока нет";
-"Not Sure" = "Не уверен";
+"Not Sure" = "Неизвестно";
 "Not connected" = "Не подключено";
 "Not done" = "Не выполнено";
 "Not found" = "Не найдено";
@@ -1113,7 +1110,6 @@
 "System" = "Как в системе";
 "System Data" = "Системные данные";
 "System junk" = "Системный мусор";
-"TB" = "ТБ";
 "Terraform plugins" = "Плагины Terraform";
 "Test the schedule" = "Проверить расписание";
 "Thanks, that means a lot." = "Спасибо, это очень приятно.";
@@ -1301,7 +1297,7 @@
 "Yesterday" = "Вчера";
 "You have unsaved code changes nearby" = "Рядом есть несохранённые изменения кода";
 "You marked this as Check First." = "Вы отметили это как «Сначала проверить».";
-"You marked this as Not Sure." = "Вы отметили это как «Не уверен».";
+"You marked this as Not Sure." = "Вы пометили это как «Неизвестно».";
 "You marked this as Safe to Clean." = "Вы отметили это как «Безопасно очистить».";
 "You picked %lld of %lld apps in %@. Removing only some of them can stop its own uninstaller from removing the rest." = "Вы выбрали %lld из %lld приложений в %@. Если удалить только часть, его собственный деинсталлятор может не удалить остальные.";
 "You're all clear" = "Всё чисто";
