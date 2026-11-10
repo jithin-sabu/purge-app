@@ -605,6 +605,7 @@
 "Measuring…" = "Измерение…";
 "Media Libraries" = "Медиатеки";
 "Messages keeps the photos and videos from your conversations here. Messages > Settings > General > Keep messages sets how long they stay." = "«Сообщения» хранят здесь фото и видео из ваших бесед. «Сообщения» > «Настройки» > «Общие» > «Хранить сообщения» задаёт, как долго они хранятся.";
+"Metal Toolchain" = "Metal Toolchain";
 "Missing reinstall instructions" = "Нет инструкций по переустановке";
 "Model an app downloaded into its Hugging Face cache. Purge can't change the app's own list of installed models, so the app may still show it as installed until it checks." = "Модель, скачанная приложением в его кэш Hugging Face. Purge не может изменить собственный список установленных моделей приложения, поэтому оно может показывать модель как установленную, пока не проверит.";
 "Model an app downloaded through the Hugging Face Hub. The next use downloads it again." = "Модель, скачанная приложением через Hugging Face Hub. При следующем использовании она скачается снова.";
@@ -732,6 +733,7 @@
 "On. Admin-locked apps can be moved to the Trash without a password." = "Включено. Приложения с защитой администратора можно перемещать в Корзину без пароля.";
 "On. Purge is watching for deleted apps." = "Включено. Purge следит за удалёнными приложениями.";
 "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash, so you can put them back." = "В одном из ваших проектов есть изменения, ещё не сохранённые в git. Перед очисткой убедитесь, что работа сохранена в резервной копии. Файлы и папки отправятся в Корзину, так что их можно вернуть.";
+"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash." = "В одном из ваших проектов есть изменения, ещё не сохранённые в git. Перед очисткой убедитесь, что работа сохранена. Файлы и папки отправляются в Корзину.";
 "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back." = "В одном из ваших проектов есть изменения, ещё не сохранённые в git. Убедитесь, что работа сохранена, прежде чем очищать. Файлы и папки перемещаются в Корзину. Симуляторы iOS и среды выполнения симулятора в этой очистке удаляются безвозвратно через simctl, и вернуть их нельзя.";
 "Only cleans when you say" = "Очищает только по вашей команде";
 "Only items marked Safe. They rebuild when needed, and you can put anything back from the Trash." = "Только элементы с пометкой «Безопасно». Они создаются заново при необходимости, и всё можно вернуть из Корзины.";
@@ -1123,6 +1125,7 @@
 "That's room for" = "Этого хватит на";
 "That's room for %@" = "Хватит на %@";
 "That's room for %@." = "Хватит на %@.";
+"The Metal Toolchain in this cleanup is deleted permanently through xcodebuild, not moved to the Trash. Xcode can download it again." = "Metal Toolchain в этой очистке удаляется безвозвратно через xcodebuild, а не перемещается в Корзину. Xcode может скачать его снова.";
 "The application bundle. Moving it to the Trash removes the app itself." = "Пакет приложения. Перемещение в Корзину удаляет само приложение.";
 "The application itself" = "Само приложение";
 "The asset service call stopped without an answer (status %lld)" = "Вызов службы ресурсов прервался без ответа (статус %lld)";
@@ -1286,6 +1289,7 @@
 "Without Full Disk Access, Documents, Desktop, Downloads, Mail, Messages and app containers are skipped and counted as not measured." = "Без «Полного доступа к диску» папки «Документы», «Рабочий стол», «Загрузки», «Почта», «Сообщения» и контейнеры приложений пропускаются и считаются неизмеренными.";
 "Worked on in the last 6 months, so Purge won't clean it without asking." = "Использовался в последние 6 месяцев, поэтому Purge не станет очищать его без спроса.";
 "Working..." = "Обработка…";
+"Xcode Components" = "Компоненты Xcode";
 "Xcode can no longer run this device. %@" = "Xcode больше не может запускать это устройство. %@";
 "Xcode can no longer use this runtime. %@" = "Xcode больше не может использовать эту среду выполнения. %@";
 "Xcode creates new simulators on this runtime. %@" = "Xcode создаёт новые симуляторы на этой среде выполнения. %@";
@@ -1293,6 +1297,7 @@
 "Xcode downloads it again (%@) if a simulator needs it." = "Xcode скачает его снова (%@), если он понадобится симулятору.";
 "Xcode lists it as %@. %@" = "В Xcode это указано как %@. %@";
 "Xcode's caches, simulators and archives are on the Dev Tools tab." = "Кэши, симуляторы и архивы Xcode — на вкладке «Инструменты разработчика».";
+"Xcode's compiler for Metal shaders, an optional download that every account on this Mac shares. Xcode downloads it again (%@) when a project needs it, or run %@." = "Компилятор Xcode для шейдеров Metal — необязательная загрузка, общая для всех учётных записей на этом Mac. Xcode скачает её снова (%@), когда она понадобится проекту, или выполните %@.";
 "Xcode's predictive code completion" = "Предиктивное автодополнение кода в Xcode";
 "Yesterday" = "Вчера";
 "You have unsaved code changes nearby" = "Рядом есть несохранённые изменения кода";
