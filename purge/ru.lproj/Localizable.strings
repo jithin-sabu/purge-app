@@ -328,6 +328,8 @@
 "Consider stale after" = "Срок устаревания";
 "Containers" = "Containers";
 "Continue" = "Продолжить";
+"Copied" = "Скопировано";
+"Copy" = "Скопировать";
 "Copy Command" = "Скопировать команду";
 "Copy Path" = "Скопировать путь";
 "Copy Paths" = "Копировать пути";
@@ -367,6 +369,7 @@
 "Deleted-app watcher" = "Монитор удалённых приложений";
 "Deletes its apps and data." = "Удаляет его приложения и данные.";
 "Dependencies" = "Зависимости";
+"Details" = "Подробности";
 "Dev Tools" = "Инструменты";
 "Dev Tools not scanned yet" = "Инструменты разработчика ещё не сканировались";
 "Dev tool artifacts" = "Артефакты инструментов разработчика";
@@ -453,6 +456,7 @@
 "From the last scan, %@ · Checking again…" = "Из прошлого сканирования, %@ · Проверяем снова…";
 "From the last scan. Purge is checking it again." = "Из последнего сканирования. Purge проверяет снова.";
 "Full Disk Access" = "Полный доступ к диску";
+"GB" = "ГБ";
 "GarageBand projects and the sounds it downloaded. Remove sound packs in GarageBand under Sound Library." = "Проекты GarageBand и скачанные им звуки. Удалить наборы звуков можно в GarageBand в разделе «Библиотека звуков».";
 "General" = "Общие";
 "Get started" = "Начать";
@@ -505,6 +509,7 @@
 "Items found, %lld" = "Найдено элементов: %lld";
 "Jithin" = "Jithin";
 "Jithin on X" = "Jithin в X";
+"KB" = "КБ";
 "Keep" = "Оставить";
 "Keep %lld files only in iCloud?" = "Оставить %lld файлов только в iCloud?";
 "Keep Cleaning" = "Продолжить очистку";
@@ -574,6 +579,7 @@
 "Looking for large files again" = "Повторный поиск больших файлов";
 "Loose files" = "Отдельные файлы";
 "Loose files · %@" = "Отдельные файлы · %@";
+"MB" = "МБ";
 "Made with" = "Сделано с";
 "Mail & Messages" = "Почта и Сообщения";
 "Mail keeps a copy of every message and attachment here. Mail > Settings > Accounts lets you download only recent attachments, and Mailbox > Erase Junk Mail and Erase Deleted Items free space." = "Почта хранит здесь копию каждого письма и вложений. В разделе «Почта» > «Настройки» > «Учётные записи» можно скачивать только недавние вложения, а «Почтовый ящик» > «Стереть спам» и «Стереть удалённые объекты» освобождают место.";
@@ -1038,6 +1044,7 @@
 "Show all" = "Показать все";
 "Show all items (⌥⌘1)" = "Показать все элементы (⌥⌘1)";
 "Show check-first items (⌥⌘3)" = "Показать элементы для проверки (⌥⌘3)";
+"Show everything macOS answered" = "Показать полный ответ macOS";
 "Show in Dev Tools" = "Показать в инструментах разработчика";
 "Show in Finder" = "Показать в Finder";
 "Show in Finder\n%@" = "Показать в Finder\n%@";
@@ -1111,6 +1118,7 @@
 "System" = "Как в системе";
 "System Data" = "Системные данные";
 "System junk" = "Системный мусор";
+"TB" = "ТБ";
 "Terraform plugins" = "Плагины Terraform";
 "Test the schedule" = "Проверить расписание";
 "Thanks, that means a lot." = "Спасибо, это очень приятно.";
@@ -1174,6 +1182,7 @@
 "This is a known cache folder that apps or developer tools recreate automatically." = "Это известная папка кэша, которую приложения или инструменты разработчика создают заново автоматически.";
 "This is an installed app or game. The store that installed it knows how to remove it cleanly and keep your saves, so Purge leaves that to it." = "Это установленное приложение или игра. Магазин, который его установил, умеет аккуратно удалять его, не теряя ваши сохранения, поэтому Purge оставляет это ему.";
 "This is an installed app or game. The store that installed it knows how to remove it, so Purge leaves that to it." = "Это установленное приложение или игра. Магазин, из которого они установлены, умеет их удалять, поэтому Purge оставляет это ему.";
+"This is everything macOS answered. If you report the problem, copy it into the report." = "Это полный ответ macOS. Если будете сообщать о проблеме, скопируйте его в сообщение.";
 "This is the operating system itself, on a sealed volume nothing can change." = "Это сама операционная система, на защищённом томе, который невозможно изменить.";
 "This one couldn't be removed. Try again." = "Не удалось удалить этот элемент. Попробуйте ещё раз.";
 "This one may hold something you'd miss. If you're not sure about it, cancel and untick it." = "Здесь может быть что-то важное для вас. Если не уверены, отмените и снимите отметку.";
@@ -1401,6 +1410,9 @@
 "macOS updates" = "обновления macOS";
 "macOS will ask you to install a profile. It stops the models from downloading again. To get them back, click Download Again. The profile is listed in System Settings > General > Device Management." = "macOS предложит установить профиль. Он не даст моделям скачиваться снова. Чтобы вернуть их, нажмите «Скачать снова». Профиль указан в «Системных настройках» > «Основные» > «Управление устройством».";
 "macOS won't let Purge move this app from where it is. Drag it to the Trash in Finder, then retry to remove what it left behind." = "macOS не позволяет Purge переместить это приложение с текущего места. Перетащите его в Корзину в Finder, а затем повторите попытку, чтобы удалить то, что осталось.";
+"macOS's asset service couldn't be reached" = "Не удалось связаться со службой ресурсов macOS";
+"macOS's asset service sent an answer Purge couldn't read" = "Служба ресурсов macOS прислала ответ, который Purge не смог прочитать";
+"macOS's asset service stopped before it answered" = "Служба ресурсов macOS остановилась, не успев ответить";
 "macOS, your documents and photos, and files Purge doesn't sort" = "macOS, ваши документы и фото, а также файлы, которые Purge не относит ни к одной категории";
 "macOS, your files, app data and more" = "macOS, ваши файлы, данные приложений и другое";
 "macOS, your files, app data and more. Click to see what's in it" = "macOS, ваши файлы, данные приложений и другое. Нажмите, чтобы посмотреть содержимое";
