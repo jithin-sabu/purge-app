@@ -361,9 +361,15 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 phase = .idle
                 // The reason can be the worker's own English diagnostics, so it
                 // follows a translated sentence rather than stand alone (#187).
-                lastOutcome = .notReady(mapping.ok
-                    ? String(localized: "This version of macOS names \(set.title) differently, so Purge left them alone.")
-                    : String(localized: "Purge couldn't look up \(set.title), so it left them alone: \(mapping.problem)"))
+                if mapping.ok {
+                    lastOutcome = .notReady(
+                        String(localized: "This version of macOS names \(set.title) differently, so Purge left them alone."),
+                        details: nil)
+                } else {
+                    lastOutcome = .notReady(
+                        String(localized: "Purge couldn't look up \(set.title), so it left them alone: \(mapping.problem)"),
+                        details: AppleIntelligenceWorker.details([mapping.detailLine(op: "asset-type", subject: set.name)]))
+                }
                 return
             }
         }
@@ -386,7 +392,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
                 NSWorkspace.shared.open(profileURL)
             } catch {
                 phase = .idle
-                lastOutcome = .notReady(String(localized: "Purge couldn't write the profile: \(error.localizedDescription)"))
+                lastOutcome = .notReady(
+                    String(localized: "Purge couldn't write the profile: \(error.localizedDescription)"), details: nil)
                 return
             }
             // The Cancel button shows with the phase, so the flag is cleared
@@ -420,6 +427,8 @@ final class AppleIntelligenceModelStore: ObservableObject {
         let shownBefore = VolumeCapacityReader.read()?.availableBytes
         let rawBefore = VolumeRawCapacityReader.readAvailableBytes()
         var failures: [String: String] = [:]
+        // Each failed request in full, by set, for the row's Details button (#343).
+        var failureDetails: [String: String] = [:]
         var lockReplies: [AppleIntelligenceModelSet] = []
         var stopped = false
         for set in targets {
@@ -429,10 +438,12 @@ final class AppleIntelligenceModelStore: ObservableObject {
             }
             let reset = await services.runWorker("reset", ["assetSets": [set.name]], 120)
             if reset.ok { continue }
+            failureDetails[set.name] = reset.detailLine(op: "reset", subject: set.name)
             // macOS can answer "current locks" and still have removed the set
             // (pared, RemoveMacAI issue 15, and the spike all saw it), so those
-            // are judged by their folders below.
-            if reset.problem.contains("current locks") {
+            // are judged by their folders below. The whole answer is searched,
+            // because the short reason leaves out the part after the description.
+            if (reset.error ?? "").contains("current locks") {
                 lockReplies.append(set)
             } else {
                 failures[set.name] = reset.problem
@@ -454,15 +465,20 @@ final class AppleIntelligenceModelStore: ObservableObject {
         }()
         var left = 0
         var gone: [AppleIntelligenceModelSet] = []
+        var stayedDetails: [String] = []
         for set in targets {
             let stillThere = after.sets.first { $0.set.name == set.name }?.isPresent ?? true
             if stillThere {
                 left += 1
+                if let line = failureDetails[set.name] { stayedDetails.append(line) }
                 if lockReplies.contains(set) {
                     failures[set.name] = String(localized: "macOS says these are still in use")
                 }
             } else {
                 gone.append(set)
+                // Its request failed but the set went anyway. The reason must
+                // come from a set that stayed, as the details do.
+                failures[set.name] = nil
             }
         }
         let removed = gone.count
@@ -482,7 +498,9 @@ final class AppleIntelligenceModelStore: ObservableObject {
             } else {
                 reason = reasons.first { $0 != generic } ?? reasons.first ?? String(localized: "macOS hasn't finished removing them")
             }
-            lastOutcome = .someLeft(removed: removed, left: left, reason: reason)
+            lastOutcome = .someLeft(
+                removed: removed, left: left, reason: reason,
+                details: AppleIntelligenceWorker.details(stayedDetails))
         }
         if removed > 0 {
             removedSetNames = Self.remembering(removed: gone.map(\.name), in: removedSetNames)
@@ -564,7 +582,10 @@ final class AppleIntelligenceModelStore: ObservableObject {
             downloadRequest = DownloadRequest(requestedAt: Date(), sets: setsAtRequest)
             lastOutcome = .downloadRequested
         } else {
-            lastOutcome = .downloadRequestFailed(subscribe.problem)
+            let names = sets.map(\.recovery.name).joined(separator: ", ")
+            lastOutcome = .downloadRequestFailed(
+                subscribe.problem,
+                details: AppleIntelligenceWorker.details([subscribe.detailLine(op: "subscribe", subject: names)]))
         }
         lastArrivalChange = Date()
         _ = await readLatest()

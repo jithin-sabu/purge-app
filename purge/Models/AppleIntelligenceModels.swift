@@ -194,14 +194,26 @@ nonisolated enum AppleIntelligenceOutcome: Equatable, Sendable {
     /// before versus after: as System Settings shows it, and in raw blocks.
     /// Either is nil unless it cleared the noise floor.
     case removed(sets: Int, freedShownBytes: Int64?, freedRawBytes: Int64?)
-    case someLeft(removed: Int, left: Int, reason: String)
+    /// `reason` is short enough for the row. `details` is everything macOS
+    /// answered, for the Details button; nil when Purge has no more to say (#343).
+    case someLeft(removed: Int, left: Int, reason: String, details: String?)
     /// The profile was never installed, so nothing was released.
     case profileNotInstalled
-    case notReady(String)
+    case notReady(String, details: String?)
     case downloadRequested
     /// Download Again was accepted, but nothing arrived while Purge watched.
     case downloadNotStarted
     /// The profile is still installed, so downloads stay blocked.
     case profileStillInstalled
-    case downloadRequestFailed(String)
+    case downloadRequestFailed(String, details: String?)
+
+    /// What macOS answered when the action failed, for the row's Details button.
+    var details: String? {
+        switch self {
+        case .someLeft(_, _, _, let details), .notReady(_, let details), .downloadRequestFailed(_, let details):
+            return details
+        case .removed, .profileNotInstalled, .downloadRequested, .downloadNotStarted, .profileStillInstalled:
+            return nil
+        }
+    }
 }
