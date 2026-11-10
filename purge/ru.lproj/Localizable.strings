@@ -71,7 +71,7 @@
 "%@, %lld apps" = "%@, %lld приложений";
 "%@, %lld items" = "%@, %lld элементов";
 "%@, %lld selected" = "%@, выбрано %lld";
-"%@, Purge moves what Clean Safe Items would take to the Trash: Safe caches and Dev Tools items, and build and dependency folders, such as node_modules, in projects you haven't used for a while. It never takes anything marked Check First, and you can put it all back until you empty the Trash." = "%@, Purge перемещает в Корзину то же, что и «Очистить безопасные элементы»: безопасные кэши и элементы «Инструментов разработчика», а также папки сборки и зависимостей, например node_modules, в проектах, которые вы давно не открывали. Он никогда не трогает элементы с пометкой «Сначала проверить», и всё можно вернуть обратно, пока вы не очистите Корзину.";
+"%@, Purge moves what Clean Safe Items would take to the Trash: Safe caches and Dev Tools items, and build and dependency folders, such as node_modules, in projects you haven't used for a while. It never takes anything marked Check First, and you can put it all back until you empty the Trash." = "%@, Purge перемещает в Корзину то же, что и «Очистить безопасное»: безопасные кэши и элементы «Инструментов разработчика», а также папки сборки и зависимостей, например node_modules, в проектах, которые вы давно не открывали. Он никогда не трогает элементы с пометкой «Сначала проверить», и всё можно вернуть обратно, пока вы не очистите Корзину.";
 "%@, not downloaded" = "%@, не загружено";
 "%@, twice over" = "%@, дважды";
 "%@." = "%@.";
@@ -181,7 +181,7 @@
 "Admin helper" = "Помощник администратора";
 "All" = "Все";
 "All %lld files sync with iCloud, so they also leave your other devices." = "Все %lld файлов синхронизируются с iCloud, поэтому они исчезнут и с других ваших устройств.";
-"All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them." = "Все обнаруженные проекты отображаются в «Проектах разработчика» независимо от того, когда их последний раз использовали, кроме тех, что используются сейчас. Проекты, с которыми работали последние 6 месяцев, помечаются «Сначала проверить», поэтому «Очистить безопасные элементы» и плановые очистки их пропускают.";
+"All detected projects appear in Developer Projects regardless of when they were last used, except ones in use right now. Projects worked on in the last 6 months are marked Check First, so Clean Safe Items and scheduled cleans skip them." = "Все обнаруженные проекты отображаются в «Проектах разработчика» независимо от того, когда их последний раз использовали, кроме тех, что используются сейчас. Проекты, с которыми работали последние 6 месяцев, помечаются «Сначала проверить», поэтому «Очистить безопасное» и плановые очистки их пропускают.";
 "All removed" = "Всё удалено";
 "Also in this cleanup" = "Также в этой очистке";
 "Also move settings and history to the Trash" = "Также переместить настройки и историю в Корзину";
@@ -288,7 +288,7 @@
 "Clean" = "Очистить";
 "Clean %lld Items" = "Очистить %lld элементов";
 "Clean Safe Files" = "Очистить безопасные файлы";
-"Clean Safe Items" = "Очистить безопасные элементы";
+"Clean Safe Items" = "Очистить безопасное";
 "Clean Safe Junk" = "Очистить безопасный мусор";
 "Clean Selected" = "Очистить выбранное";
 "Clean anyway" = "Всё равно очистить";
@@ -582,7 +582,7 @@
 "Mail, Messages and media libraries" = "Почта, Сообщения и медиатеки";
 "Mail, Messages, Photos, Music, TV and iMovie keep these" = "Эти данные хранят Почта, Сообщения, Фото, Музыка, TV и iMovie";
 "Managed by macOS" = "Управляется macOS";
-"Managed in Apps" = "Управление в «Приложениях»";
+"Managed in Apps" = "Через приложения";
 "Manual category" = "Ручная категория";
 "Manual clean" = "Ручная очистка";
 "Map" = "Карты";
@@ -734,7 +734,6 @@
 "On. Purge is watching for deleted apps." = "Включено. Purge следит за удалёнными приложениями.";
 "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash, so you can put them back." = "В одном из ваших проектов есть изменения, ещё не сохранённые в git. Перед очисткой убедитесь, что работа сохранена в резервной копии. Файлы и папки отправятся в Корзину, так что их можно вернуть.";
 "One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash." = "В одном из ваших проектов есть изменения, ещё не сохранённые в git. Перед очисткой убедитесь, что работа сохранена. Файлы и папки отправляются в Корзину.";
-"One of your projects has changes that have not been saved to git yet. Make sure your work is backed up before cleaning. Files and folders go to the Trash. iOS simulators and simulator runtimes in this cleanup are deleted permanently through simctl and can't be put back." = "В одном из ваших проектов есть изменения, ещё не сохранённые в git. Убедитесь, что работа сохранена, прежде чем очищать. Файлы и папки перемещаются в Корзину. Симуляторы iOS и среды выполнения симулятора в этой очистке удаляются безвозвратно через simctl, и вернуть их нельзя.";
 "Only cleans when you say" = "Очищает только по вашей команде";
 "Only items marked Safe. They rebuild when needed, and you can put anything back from the Trash." = "Только элементы с пометкой «Безопасно». Они создаются заново при необходимости, и всё можно вернуть из Корзины.";
 "Only runs %@ simulators. %@" = "Запускает только симуляторы %@. %@";
@@ -1238,9 +1237,9 @@
 "Unreal intermediate" = "Промежуточные файлы Unreal";
 "Unreal rebuilds this cache on the next build. Expect a long first build, including shader compilation." = "Unreal пересоздаст этот кэш при следующей сборке. Первая сборка будет долгой, включая компиляцию шейдеров.";
 "Until you download them again, these stop working:" = "Пока вы не скачаете их снова, перестанут работать:";
-"Up next" = "Далее";
-"Up next, after %@" = "Далее, после %@";
-"Up next..." = "Далее…";
+"Up next" = "В очереди";
+"Up next, after %@" = "В очереди, после %@";
+"Up next..." = "В очереди…";
 "Updates" = "Обновления";
 "Updates and History" = "Обновления и история";
 "Use Rescan to find your apps." = "Нажмите «Сканировать снова», чтобы найти приложения.";

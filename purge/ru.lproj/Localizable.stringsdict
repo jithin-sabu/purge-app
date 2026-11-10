@@ -242,5 +242,980 @@
 			<string>%lld элемента перемещено в Корзину, около %@. Очистите Корзину, чтобы освободить место.</string>
 		</dict>
 	</dict>
+	<key>%lld of %lld groups</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%lld из %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld групп</string>
+			<key>many</key>
+			<string>%lld групп</string>
+			<key>one</key>
+			<string>%lld группы</string>
+			<key>other</key>
+			<string>%lld групп</string>
+		</dict>
+	</dict>
+	<key>%lld items couldn't be cleaned</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ не удалось очистить</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+	<key>%lld other selected files can't be kept only in iCloud right now, so they stay.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>Ещё %lld выбранных файла сейчас нельзя оставить только в iCloud, поэтому они останутся.</string>
+			<key>many</key>
+			<string>Ещё %lld выбранных файлов сейчас нельзя оставить только в iCloud, поэтому они останутся.</string>
+			<key>one</key>
+			<string>Ещё %lld выбранный файл сейчас нельзя оставить только в iCloud, поэтому он останется.</string>
+			<key>other</key>
+			<string>Ещё %lld выбранных файла сейчас нельзя оставить только в iCloud, поэтому они останутся.</string>
+		</dict>
+	</dict>
+	<key>%lld files, still in iCloud Drive</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@, всё ещё в iCloud Drive</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла</string>
+			<key>many</key>
+			<string>%lld файлов</string>
+			<key>one</key>
+			<string>%lld файл</string>
+			<key>other</key>
+			<string>%lld файла</string>
+		</dict>
+	</dict>
+	<key>%lld identical copies</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld одинаковые копии</string>
+			<key>many</key>
+			<string>%lld одинаковых копий</string>
+			<key>one</key>
+			<string>%lld одинаковая копия</string>
+			<key>other</key>
+			<string>%lld одинаковые копии</string>
+		</dict>
+	</dict>
+	<key>%lld other files are still selected.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>Ещё %lld файла остаются выбранными.</string>
+			<key>many</key>
+			<string>Ещё %lld файлов остаются выбранными.</string>
+			<key>one</key>
+			<string>Ещё %lld файл остаётся выбранным.</string>
+			<key>other</key>
+			<string>Ещё %lld файла остаются выбранными.</string>
+		</dict>
+	</dict>
+	<key>Last used %lld months ago. %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Последнее использование %#@n@ назад. %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld месяца</string>
+			<key>many</key>
+			<string>%lld месяцев</string>
+			<key>one</key>
+			<string>%lld месяц</string>
+			<key>other</key>
+			<string>%lld месяца</string>
+		</dict>
+	</dict>
+	<key>Keep %lld files only in iCloud?</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Оставить %#@n@ только в iCloud?</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла</string>
+			<key>many</key>
+			<string>%lld файлов</string>
+			<key>one</key>
+			<string>%lld файл</string>
+			<key>other</key>
+			<string>%lld файла</string>
+		</dict>
+	</dict>
+	<key>%lld commands</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld команды</string>
+			<key>many</key>
+			<string>%lld команд</string>
+			<key>one</key>
+			<string>%lld команда</string>
+			<key>other</key>
+			<string>%lld команды</string>
+		</dict>
+	</dict>
+	<key>%lld not opened in 90 days</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ 90 дней</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld не открывались</string>
+			<key>many</key>
+			<string>%lld не открывались</string>
+			<key>one</key>
+			<string>%lld не открывалось</string>
+			<key>other</key>
+			<string>%lld не открывались</string>
+		</dict>
+	</dict>
+	<key>%lld runtimes</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld среды выполнения</string>
+			<key>many</key>
+			<string>%lld сред выполнения</string>
+			<key>one</key>
+			<string>%lld среда выполнения</string>
+			<key>other</key>
+			<string>%lld среды выполнения</string>
+		</dict>
+	</dict>
+	<key>%lld files kept only in iCloud</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ только в iCloud</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла оставлены</string>
+			<key>many</key>
+			<string>%lld файлов оставлено</string>
+			<key>one</key>
+			<string>%lld файл оставлен</string>
+			<key>other</key>
+			<string>%lld файла оставлены</string>
+		</dict>
+	</dict>
+	<key>%@, %lld apps</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%@, %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld приложения</string>
+			<key>many</key>
+			<string>%lld приложений</string>
+			<key>one</key>
+			<string>%lld приложение</string>
+			<key>other</key>
+			<string>%lld приложения</string>
+		</dict>
+	</dict>
+	<key>%lld of %lld items cleaned</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Очищено %lld из %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элементов</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемента</string>
+			<key>other</key>
+			<string>%lld элементов</string>
+		</dict>
+	</dict>
+	<key>Last scan: %lld files, %@, %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Последнее сканирование: %#@n@, %@, %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла</string>
+			<key>many</key>
+			<string>%lld файлов</string>
+			<key>one</key>
+			<string>%lld файл</string>
+			<key>other</key>
+			<string>%lld файла</string>
+		</dict>
+	</dict>
+	<key>from %lld folders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>из %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld папок</string>
+			<key>many</key>
+			<string>%lld папок</string>
+			<key>one</key>
+			<string>%lld папки</string>
+			<key>other</key>
+			<string>%lld папок</string>
+		</dict>
+	</dict>
+	<key>%lld bytes</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld байта</string>
+			<key>many</key>
+			<string>%lld байт</string>
+			<key>one</key>
+			<string>%lld байт</string>
+			<key>other</key>
+			<string>%lld байта</string>
+		</dict>
+	</dict>
+	<key>%lld other selected files aren't in iCloud, so they stay.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>Ещё %lld выбранных файла не в iCloud, поэтому они остаются на месте.</string>
+			<key>many</key>
+			<string>Ещё %lld выбранных файлов не в iCloud, поэтому они остаются на месте.</string>
+			<key>one</key>
+			<string>Ещё %lld выбранный файл не в iCloud, поэтому он остаётся на месте.</string>
+			<key>other</key>
+			<string>Ещё %lld выбранных файла не в iCloud, поэтому они остаются на месте.</string>
+		</dict>
+	</dict>
+	<key>%lld model sets</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld набора моделей</string>
+			<key>many</key>
+			<string>%lld наборов моделей</string>
+			<key>one</key>
+			<string>%lld набор моделей</string>
+			<key>other</key>
+			<string>%lld набора моделей</string>
+		</dict>
+	</dict>
+	<key>%lld of these files sync with iCloud, so they also leave your other devices.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld из этих файлов синхронизируются с iCloud, поэтому исчезнут и с других ваших устройств.</string>
+			<key>many</key>
+			<string>%lld из этих файлов синхронизируются с iCloud, поэтому исчезнут и с других ваших устройств.</string>
+			<key>one</key>
+			<string>%lld из этих файлов синхронизируется с iCloud, поэтому исчезнет и с других ваших устройств.</string>
+			<key>other</key>
+			<string>%lld из этих файлов синхронизируются с iCloud, поэтому исчезнут и с других ваших устройств.</string>
+		</dict>
+	</dict>
+	<key>%lld folders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld папки</string>
+			<key>many</key>
+			<string>%lld папок</string>
+			<key>one</key>
+			<string>%lld папка</string>
+			<key>other</key>
+			<string>%lld папки</string>
+		</dict>
+	</dict>
+	<key>%lld apps · %lld selected</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ · выбрано %lld</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld приложения</string>
+			<key>many</key>
+			<string>%lld приложений</string>
+			<key>one</key>
+			<string>%lld приложение</string>
+			<key>other</key>
+			<string>%lld приложения</string>
+		</dict>
+	</dict>
+	<key>%@, %lld items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%@, %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+	<key>Clean %lld Items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Очистить %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+	<key>%lld files · %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ · %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла</string>
+			<key>many</key>
+			<string>%lld файлов</string>
+			<key>one</key>
+			<string>%lld файл</string>
+			<key>other</key>
+			<string>%lld файла</string>
+		</dict>
+	</dict>
+	<key>%lld other selected files stay: %lld aren't in iCloud, %lld can't be kept only there right now.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Ещё %#@n@: %lld не в iCloud, %lld сейчас нельзя хранить только там.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld выбранных файла остаются</string>
+			<key>many</key>
+			<string>%lld выбранных файлов остаются</string>
+			<key>one</key>
+			<string>%lld выбранный файл остаётся</string>
+			<key>other</key>
+			<string>%lld выбранных файла остаются</string>
+		</dict>
+	</dict>
+	<key>%lld files in this scan have identical contents, including this one.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>В этом сканировании %#@n@ одинаковое содержимое, включая этот.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла имеют</string>
+			<key>many</key>
+			<string>%lld файлов имеют</string>
+			<key>one</key>
+			<string>%lld файл имеет</string>
+			<key>other</key>
+			<string>%lld файла имеют</string>
+		</dict>
+	</dict>
+	<key>You're deleting all %lld copies of %@. No copy will remain.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Вы удаляете %#@n@ %@. Ни одной копии не останется.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>все %lld копии</string>
+			<key>many</key>
+			<string>все %lld копий</string>
+			<key>one</key>
+			<string>все %lld копию</string>
+			<key>other</key>
+			<string>все %lld копии</string>
+		</dict>
+	</dict>
+	<key>You picked %lld of %lld apps in %@. Removing only some of them can stop its own uninstaller from removing the rest.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Вы выбрали %lld из %#@n@ в %@. Если удалить только часть, его собственный деинсталлятор может не удалить остальные.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld приложений</string>
+			<key>many</key>
+			<string>%lld приложений</string>
+			<key>one</key>
+			<string>%lld приложения</string>
+			<key>other</key>
+			<string>%lld приложений</string>
+		</dict>
+	</dict>
+	<key>Last scan found %lld files, %@, %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Последнее сканирование нашло %#@n@, %@, %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла</string>
+			<key>many</key>
+			<string>%lld файлов</string>
+			<key>one</key>
+			<string>%lld файл</string>
+			<key>other</key>
+			<string>%lld файла</string>
+		</dict>
+	</dict>
+	<key>%lld seconds</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld секунды</string>
+			<key>many</key>
+			<string>%lld секунд</string>
+			<key>one</key>
+			<string>%lld секунда</string>
+			<key>other</key>
+			<string>%lld секунды</string>
+		</dict>
+	</dict>
+	<key>%lld files</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла</string>
+			<key>many</key>
+			<string>%lld файлов</string>
+			<key>one</key>
+			<string>%lld файл</string>
+			<key>other</key>
+			<string>%lld файла</string>
+		</dict>
+	</dict>
+	<key>Remove %lld apps</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Удалить %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld приложения</string>
+			<key>many</key>
+			<string>%lld приложений</string>
+			<key>one</key>
+			<string>%lld приложение</string>
+			<key>other</key>
+			<string>%lld приложения</string>
+		</dict>
+	</dict>
+	<key>%lld simulators use it. %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ %@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld симулятора используют его.</string>
+			<key>many</key>
+			<string>%lld симуляторов используют его.</string>
+			<key>one</key>
+			<string>%lld симулятор использует его.</string>
+			<key>other</key>
+			<string>%lld симулятора используют его.</string>
+		</dict>
+	</dict>
+	<key>%lld items couldn't be removed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@ не удалось удалить</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+	<key>Purge kept %lld items to stay on the safe side.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>В целях безопасности Purge оставил %#@n@.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+	<key>All %lld files sync with iCloud, so they also leave your other devices.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Все %#@n@ синхронизируются с iCloud, поэтому они исчезнут и с других ваших устройств.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld файла</string>
+			<key>many</key>
+			<string>%lld файлов</string>
+			<key>one</key>
+			<string>%lld файл</string>
+			<key>other</key>
+			<string>%lld файла</string>
+		</dict>
+	</dict>
+	<key>Remove %lld items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Удалить %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+	<key>%lld percent</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld процента</string>
+			<key>many</key>
+			<string>%lld процентов</string>
+			<key>one</key>
+			<string>%lld процент</string>
+			<key>other</key>
+			<string>%lld процента</string>
+		</dict>
+	</dict>
+	<key>Uninstall %lld apps?</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Удалить %#@n@?</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld приложения</string>
+			<key>many</key>
+			<string>%lld приложений</string>
+			<key>one</key>
+			<string>%lld приложение</string>
+			<key>other</key>
+			<string>%lld приложения</string>
+		</dict>
+	</dict>
+	<key>Remove %lld command-line tools?</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Удалить %#@n@ командной строки?</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld инструмента</string>
+			<key>many</key>
+			<string>%lld инструментов</string>
+			<key>one</key>
+			<string>%lld инструмент</string>
+			<key>other</key>
+			<string>%lld инструмента</string>
+		</dict>
+	</dict>
+	<key> %lld items couldn't be moved.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string> %#@n@ не удалось переместить.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элемента</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемент</string>
+			<key>other</key>
+			<string>%lld элемента</string>
+		</dict>
+	</dict>
+	<key>…and %lld more sets where every copy is selected.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>…и ещё %#@n@, где выбраны все копии.</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld набора</string>
+			<key>many</key>
+			<string>%lld наборов</string>
+			<key>one</key>
+			<string>%lld набор</string>
+			<key>other</key>
+			<string>%lld набора</string>
+		</dict>
+	</dict>
+	<key>%lld smaller folders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld небольшие папки</string>
+			<key>many</key>
+			<string>%lld небольших папок</string>
+			<key>one</key>
+			<string>%lld небольшая папка</string>
+			<key>other</key>
+			<string>%lld небольшие папки</string>
+		</dict>
+	</dict>
+	<key>%lld not removed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld не удалены</string>
+			<key>many</key>
+			<string>%lld не удалено</string>
+			<key>one</key>
+			<string>%lld не удалён</string>
+			<key>other</key>
+			<string>%lld не удалены</string>
+		</dict>
+	</dict>
+	<key>%lld deleted permanently</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld удалены безвозвратно</string>
+			<key>many</key>
+			<string>%lld удалено безвозвратно</string>
+			<key>one</key>
+			<string>%lld удалён безвозвратно</string>
+			<key>other</key>
+			<string>%lld удалены безвозвратно</string>
+		</dict>
+	</dict>
+	<key>%lld moved to trash, %lld deleted permanently</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@a@, %#@b@</string>
+		<key>a</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld перемещены в Корзину</string>
+			<key>many</key>
+			<string>%lld перемещено в Корзину</string>
+			<key>one</key>
+			<string>%lld перемещён в Корзину</string>
+			<key>other</key>
+			<string>%lld перемещены в Корзину</string>
+		</dict>
+		<key>b</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld удалены навсегда</string>
+			<key>many</key>
+			<string>%lld удалено навсегда</string>
+			<key>one</key>
+			<string>%lld удалён навсегда</string>
+			<key>other</key>
+			<string>%lld удалены навсегда</string>
+		</dict>
+	</dict>
+	<key>Retry %lld items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>Повторить для %#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>%lld элементов</string>
+			<key>many</key>
+			<string>%lld элементов</string>
+			<key>one</key>
+			<string>%lld элемента</string>
+			<key>other</key>
+			<string>%lld элементов</string>
+		</dict>
+	</dict>
 </dict>
 </plist>
