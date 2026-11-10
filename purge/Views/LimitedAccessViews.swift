@@ -73,12 +73,19 @@ struct LockedFeatureView: View {
 /// Sits beside Scan on App Caches and Dev Tools, where the list is real but partial.
 struct LookDeeperHeaderButton: View {
     @EnvironmentObject private var store: PurgeStore
+    /// False shows the lock alone, when the header is short of room.
+    var showsTitle = true
 
     var body: some View {
         Button {
             store.isLookDeeperPresented = true
         } label: {
-            Label("Look deeper", systemImage: "lock.open")
+            if showsTitle {
+                Label("Look deeper", systemImage: "lock.open")
+            } else {
+                Label("Look deeper", systemImage: "lock.open")
+                    .labelStyle(.iconOnly)
+            }
         }
         .buttonStyle(.purge(.secondary))
         .help("Some places are still locked. Let Purge look deeper.")
