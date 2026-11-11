@@ -57,7 +57,7 @@ You do not need to understand any of it to use it. But if you ever want to check
 - **Where your space went**: one bar for the whole disk. Used, free and total come straight from the volume, so they match System Settings. App Caches, Dev Tools, Large Files, installed apps and leftovers from deleted apps each get their own segment, and the rest is shown as everything else
 - A row per category with its size and share of the disk. Click one to open its tab
 - **Everything else** opens too. Click the row and a page shows what it holds: four figures for what you can do about the space, over a map where each group is a frame with its biggest folders drawn inside, sized by space and coloured by kind. The kinds are space you free in another app (Photos, Mail, Steam, the Trash), your own files (projects, documents), what Purge leaves alone because it doesn't consider it safe to delete (caches off its list, app data no installed app claims), and what macOS manages. Point at a tile to name it, and click it to see what it is, with Show in Finder or the owning app's own way to free it. It is read only: nothing on it moves a file
-- **Scan Everything** (⇧⌘R) scans every category, one at a time so the Mac stays responsive. When you open Purge it does the same on its own. Large Files, the app list and leftovers need Full Disk Access. Without it Purge still scans App Caches, Dev Tools and command-line tools, and skips the places macOS protects, such as sandboxed apps' caches
+- **Scan Everything** (⇧⌘R) scans every category, one at a time so the Mac stays responsive. When you open Purge it does the same on its own. Large Files, the app list and leftovers need Full Disk Access. Without it Purge still scans App Caches and Dev Tools, and skips the places macOS protects, such as sandboxed apps' caches
 - Each byte is counted once: an app's cache folder counts under App Caches, not again under the app
 - **Hidden in System Data**: a card under the categories for space macOS counts as System Data. Its **Time Machine snapshots** row is where you remove local snapshots, and on macOS 27 it also holds the Apple Intelligence models
 - **Apple Intelligence models** (macOS 27, Apple silicon): the on-device models macOS files under System Data, with no switch to remove them. Remove releases them through Apple's asset service and installs a profile, which you approve once, so they don't download again. Download Again asks you to remove the profile in System Settings, then asks macOS for the sets Purge removed, in your Siri language. The size shown is Apple's figure; Purge records what the disk really gave back
@@ -169,8 +169,8 @@ Settings is a tab in the sidebar (⌘,) with five groups:
 - **General**: **Keep Purge in the menu bar**, which is off on a new install. When it is on, Purge keeps running after you close the window, and you can also choose **Launch Purge at login** and **Hide Dock icon**. **Appearance** is Auto, Light, or Dark
 - **Cleaning**: **Clean automatically**, with a frequency and the next-clean date. **Projects count as stale after**, the threshold for Developer Projects. **Excluded folders**, the folders you've told Purge to leave alone, each with its current size. Right-click a row in App Caches, Dev Tools or Large Files and choose **Exclude from scans** to add one. An excluded simulator runtime is listed by name and build, with the size it had when you excluded it. Excluding only ever narrows what Purge looks at
 - **Uninstalling**: **Uninstall from Finder's right-click menu**, **Where Purge looks for apps**, **Review leftovers when an app is deleted**, and **Remove admin-locked apps without a password**
-- **Uninstall**: **Uninstall Purge**, covered under [Uninstalling](#uninstalling)
 - **Updates and History**: **Check for updates automatically**, **Install updates automatically**, and **Cleaning history**, which lists every automatic and manual clean with the space freed and the item count, and shows a summary of the last one. Open a clean to see what was moved to the Trash, what was deleted permanently, and what was skipped
+- **Uninstall**: **Uninstall Purge**, covered under [Uninstalling](#uninstalling)
 
 ### More
 
@@ -248,7 +248,7 @@ Double-click Purge to open it. Purge is notarized by Apple, so it opens normally
 
 #### Step 5: Let Purge look deeper (optional)
 
-Purge works without Full Disk Access: it scans App Caches, Dev Tools and command-line tools. With it, Purge also finds App Store apps' caches, large files, installed apps and deleted apps' leftovers.
+Purge works without Full Disk Access: it scans App Caches and Dev Tools. With it, Purge also finds App Store apps' caches, large files, installed apps and deleted apps' leftovers.
 
 1. At the end of the first run, or later from **Look deeper**, click **Let Purge in**. System Settings opens
 2. Find Purge in the list and turn on its switch
