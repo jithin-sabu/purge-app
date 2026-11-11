@@ -1,0 +1,901 @@
+/* Türkçe görüntülenen metin. Eşleştirme kuralları ve risk etiketleri explanations.json içinde kalır. */
+
+"Adobe Media Cache Files" = "Adobe Medya Önbellek Dosyaları";
+"Rendered previews and conformed audio from Premiere Pro and After Effects. The apps rebuild them on next launch, which can take minutes on large projects." = "Premiere Pro ve After Effects'in işlenmiş önizlemeleri ve uyarlanmış sesleri. Uygulamalar bunları bir sonraki açılışta yeniden oluşturur; büyük projelerde bu dakikalar sürebilir.";
+
+"Adobe Media Cache Database" = "Adobe Medya Önbellek Veritabanı";
+"the index adobe uses to track media cache files. safe to clean. rebuilds alongside the cache." = "Adobe'nin medya önbellek dosyalarını izlemek için kullandığı dizin. Temizlemek güvenlidir. Önbellekle birlikte yeniden oluşur.";
+
+"Adobe Camera Raw Cache" = "Adobe Camera Raw Önbelleği";
+"photoshop, lightroom and bridge cache raw previews here. safe to clean. rebuilds automatically when you open images." = "Photoshop, Lightroom ve Bridge ham önizlemeleri burada önbelleğe alır. Temizlemek güvenlidir. Görselleri açtığınızda otomatik olarak yeniden oluşur.";
+
+"Android Build Cache" = "Android Derleme Önbelleği";
+"Build caches in ~/.android that the next build recreates. Emulators, the key your phones trust for debugging, and your debug signing key are left alone." = "~/.android içindeki, bir sonraki derlemenin yeniden oluşturduğu derleme önbellekleri. Emülatörlere, telefonlarınızın hata ayıklama için güvendiği anahtara ve hata ayıklama imzalama anahtarınıza dokunulmaz.";
+
+"Perplexity App Updater" = "Perplexity Uygulama Güncelleyicisi";
+"These are temporary files used to update the Perplexity AI app. They are regenerated automatically whenever Perplexity checks for a new version." = "Bunlar Perplexity AI uygulamasını güncellemek için kullanılan geçici dosyalardır. Perplexity yeni sürümü her denetlediğinde otomatik olarak yeniden oluşturulur.";
+
+"Blender 3D App" = "Blender 3D Uygulaması";
+"Temporary files Blender saves while you work. Safe to delete; Blender may take a little longer to start the next time you open it." = "Blender'ın siz çalışırken kaydettiği geçici dosyalar. Silmek güvenlidir; Blender bir sonraki açışınızda biraz daha geç başlayabilir.";
+
+"Node.js Dev Tool" = "Node.js Geliştirici Aracı";
+"This is a temporary storage folder used by a developer tool that runs on your Mac. It is safe to delete and will be recreated automatically." = "Bu, Mac'inizde çalışan bir geliştirici aracının kullandığı geçici depolama klasörüdür. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"iCloud Data Sync" = "iCloud Veri Eşitleme";
+"Data your Mac uses to sync with iCloud. Nothing is lost from iCloud, but apps must sync again afterwards, which can take time on a slow connection." = "Mac'inizin iCloud ile eşitlemek için kullandığı veriler. iCloud'dan hiçbir şey kaybolmaz ancak uygulamaların sonradan yeniden eşitlenmesi gerekir; yavaş bağlantıda bu zaman alabilir.";
+
+"Claude App Updater" = "Claude Uygulama Güncelleyicisi";
+"These are temporary files used to update the Claude AI desktop app. They are recreated automatically each time Claude checks for updates." = "Bunlar Claude AI masaüstü uygulamasını güncellemek için kullanılan geçici dosyalardır. Claude her güncelleme denetlediğinde otomatik olarak yeniden oluşturulur.";
+
+"Apple Accounts Service" = "Apple Hesapları Servisi";
+"This supports the system service that manages your Apple ID and connected accounts. Deleting it can sign accounts out and ask you to sign in again." = "Bu, Apple Kimliğinizi ve bağlı hesaplarınızı yöneten sistem servisini destekler. Silmek hesaplarda oturumu kapatabilir ve yeniden oturum açmanızı isteyebilir.";
+
+"Apple Key Service" = "Apple Anahtar Servisi";
+"This is used by the Apple background service that handles authentication and security keys. Deleting it can prompt you to re-authenticate." = "Bu, kimlik doğrulama ve güvenlik anahtarlarını yöneten Apple arka plan servisi tarafından kullanılır. Silmek sizden yeniden kimlik doğrulaması isteyebilir.";
+
+"Apple Music Library" = "Apple Music Kitaplığı";
+"Temporary data for your Apple Music library. Nothing is lost, but Apple Music may take a while to rebuild your library view." = "Apple Music kitaplığınızın geçici verileri. Hiçbir şey kaybolmaz ancak Apple Music kitaplık görünümünüzü yeniden oluşturması biraz zaman alabilir.";
+
+"App Store Accounts" = "App Store Hesapları";
+"This supports the App Store's sign-in and account system. Deleting it can prompt you to sign in to the App Store again." = "Bu, App Store'un oturum açma ve hesap sistemini destekler. Silmek App Store'da yeniden oturum açmanızı isteyebilir.";
+
+"App Store Notifications" = "App Store Bildirimleri";
+"This folder stores temporary data related to App Store recommendations and notifications. It is completely safe to delete and will be rebuilt automatically." = "Bu klasör App Store önerileri ve bildirimleriyle ilgili geçici verileri saklar. Silmek tamamen güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Apple Ad Privacy" = "Apple Reklam Gizliliği";
+"This is temporary data used by Apple's privacy-focused advertising system. Deleting it is safe and has no effect on your apps or personal data." = "Bu, Apple'ın gizlilik odaklı reklam sisteminin kullandığı geçici verilerdir. Silmek güvenlidir ve uygulamalarınızı veya kişisel verilerinizi etkilemez.";
+
+"Apple ID Service" = "Apple Kimliği Servisi";
+"This is used by the service that manages your Apple ID on your Mac. Deleting it can prompt you to sign in to your Apple ID again." = "Bu, Mac'inizde Apple Kimliğinizi yöneten servis tarafından kullanılır. Silmek Apple Kimliğinizle yeniden oturum açmanızı isteyebilir.";
+
+"Apple Media Services" = "Apple Medya Servisleri";
+"Temporary data for the App Store, Apple TV and Apple Music. Safe to delete; these services rebuild it as needed." = "App Store, Apple TV ve Apple Music için geçici veriler. Silmek güvenlidir; bu servisler gerektiğinde yeniden oluşturur.";
+
+"App Store Agent" = "App Store Aracısı";
+"This contains temporary files used by the App Store to manage downloads and updates in the background. It is safe to delete and will be recreated automatically." = "Bu, App Store'un indirmeleri ve güncellemeleri arka planda yönetmek için kullandığı geçici dosyaları içerir. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Siri Assistant" = "Siri Asistanı";
+"This folder holds temporary data for Siri on your Mac. Deleting it is completely safe and Siri will rebuild it automatically." = "Bu klasör Mac'inizdeki Siri'nin geçici verilerini tutar. Silmek tamamen güvenlidir ve Siri bunu otomatik olarak yeniden oluşturur.";
+
+"Sign In with Apple" = "Apple ile Giriş Yap";
+"This supports the 'Sign in with Apple' feature used by apps and websites. Deleting it can sign you out and require signing in again." = "Bu, uygulamaların ve web sitelerinin kullandığı 'Apple ile Giriş Yap' özelliğini destekler. Silmek oturumunuzu kapatabilir ve yeniden oturum açmanızı gerektirebilir.";
+
+"Apple Beta Program" = "Apple Beta Programı";
+"This is temporary data related to Apple's beta software programme. It is safe to delete and will be recreated if you are enrolled in the beta programme." = "Bu, Apple'ın beta yazılım programıyla ilgili geçici verilerdir. Silmek güvenlidir ve beta programına kayıtlıysanız yeniden oluşturulur.";
+
+"iCloud Drive Sync" = "iCloud Drive Eşitleme";
+"Used by the service that keeps iCloud Drive in sync. Nothing is lost from iCloud, but your Mac re-checks and re-downloads file state afterwards." = "iCloud Drive'ı eşitlemede tutan servis tarafından kullanılır. iCloud'dan hiçbir şey kaybolmaz ancak Mac'iniz sonradan dosya durumunu yeniden denetler ve yeniden indirir.";
+
+"Apple Business Services" = "Apple Business Servisleri";
+"This holds temporary data for Apple's business and organisation account features. It is safe to delete and will be regenerated automatically." = "Bu, Apple'ın iş ve kuruluş hesabı özellikleri için geçici verileri tutar. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"System Cache Manager" = "Sistem Önbellek Yöneticisi";
+"This is a folder used by macOS itself to manage and clean up other temporary files. It is safe to delete." = "Bu, macOS'in diğer geçici dosyaları yönetmek ve temizlemek için kullandığı bir klasördür. Silmek güvenlidir.";
+
+"iCloud Background Service" = "iCloud Arka Plan Servisi";
+"This is used by the background service that handles iCloud data on your Mac. Nothing is lost from iCloud, but your Mac will need to re-sync afterwards." = "Bu, Mac'inizdeki iCloud verilerini yöneten arka plan servisi tarafından kullanılır. iCloud'dan hiçbir şey kaybolmaz ancak Mac'inizin sonradan yeniden eşitlenmesi gerekir.";
+
+"Apple Usage Reports" = "Apple Kullanım Raporları";
+"This stores temporary data that Apple uses for anonymous usage analytics. Deleting it is completely safe and causes no issues." = "Bu, Apple'ın anonim kullanım analizi için kullandığı geçici verileri saklar. Silmek tamamen güvenlidir ve sorun yaratmaz.";
+
+"Content Type Service" = "İçerik Türü Servisi";
+"This is a temporary folder used by a macOS service that categorises content for features like Screen Time and parental controls. It is safe to delete." = "Bu, Ekran Süresi ve ebeveyn denetimleri gibi özellikler için içeriği sınıflandıran bir macOS servisinin kullandığı geçici bir klasördür. Silmek güvenlidir.";
+
+"Contacts & Calendar Sync" = "Kişiler ve Takvim Eşitleme";
+"Used by the service that syncs your contacts and calendars. Nothing is lost, but your Mac downloads them again and they may be missing briefly." = "Kişilerinizi ve takvimlerinizi eşitleyen servis tarafından kullanılır. Hiçbir şey kaybolmaz ancak Mac'iniz bunları yeniden indirir ve kısa süreliğine eksik görünebilirler.";
+
+"Focus Mode Service" = "Odaklanma Modu Servisi";
+"This is temporary data for your Mac's Focus and Do Not Disturb settings. It is safe to delete and will be recreated automatically." = "Bu, Mac'inizin Odaklanma ve Rahatsız Etmeyin ayarlarının geçici verileridir. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Siri Intelligence Engine" = "Siri Zekâ Motoru";
+"Apple's on-device intelligence that powers Siri Suggestions and app predictions. Deleting it resets what it has learned about how you use your Mac." = "Siri Önerilerini ve uygulama tahminlerini çalıştıran Apple'ın aygıt üstü zekâsı. Silmek, Mac'i nasıl kullandığınıza dair öğrendiklerini sıfırlar.";
+
+"Apple ML Model Cache" = "Apple ML Model Önbelleği";
+"Compiled machine learning models that macOS features such as Photos and Live Text use. macOS compiles them again when needed, using some processor time." = "Fotoğraflar ve Canlı Metin gibi macOS özelliklerinin kullandığı derlenmiş makine öğrenimi modelleri. macOS gerektiğinde bunları yeniden derler ve bir miktar işlemci zamanı kullanır.";
+
+"Feature Permissions" = "Özellik İzinleri";
+"This temporary folder helps macOS manage which features and capabilities apps are allowed to use. It is safe to delete and will be rebuilt automatically." = "Bu geçici klasör, macOS'in uygulamaların hangi özellikleri ve yetenekleri kullanabileceğini yönetmesine yardımcı olur. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Apple Feedback Logger" = "Apple Geri Bildirim Günlüğü";
+"This stores temporary logs that are sent to Apple as diagnostic feedback. Deleting it is completely safe." = "Bu, tanılama geri bildirimi olarak Apple'a gönderilen geçici günlükleri saklar. Silmek tamamen güvenlidir.";
+
+"App Store File Service" = "App Store Dosya Servisi";
+"This is used by a background service that helps the App Store manage files on your Mac. It is safe to delete." = "Bu, App Store'un Mac'inizdeki dosyaları yönetmesine yardımcı olan bir arka plan servisi tarafından kullanılır. Silmek güvenlidir.";
+
+"Find My Service" = "Bul Servisi";
+"Temporary data used by Find My to track your Apple devices. Nothing is lost, but device locations may take a while to reappear." = "Bul'un Apple aygıtlarınızı izlemek için kullandığı geçici veriler. Hiçbir şey kaybolmaz ancak aygıt konumlarının yeniden görünmesi biraz zaman alabilir.";
+
+"Location Analytics" = "Konum Analizi";
+"This is temporary data used by Apple's location analytics system. Deleting it is completely safe and has no effect on Maps or other apps." = "Bu, Apple'ın konum analizi sisteminin kullandığı geçici verilerdir. Silmek tamamen güvenlidir ve Haritalar'ı veya diğer uygulamaları etkilemez.";
+
+"Apple Maps Tile Cache" = "Apple Haritalar Karo Önbelleği";
+"Map tiles and place data that Apple Maps has downloaded. Nothing is lost, but Maps downloads them again as you browse, which is slower and uses data." = "Apple Haritalar'ın indirdiği harita karoları ve yer verileri. Hiçbir şey kaybolmaz ancak Haritalar gezindikçe bunları yeniden indirir; bu daha yavaştır ve veri kullanır.";
+
+"macOS Help System" = "macOS Yardım Sistemi";
+"This stores temporary data for the built-in macOS Help viewer. It is safe to delete and the Help system will rebuild it when next opened." = "Bu, yerleşik macOS Yardım görüntüleyicisinin geçici verilerini saklar. Silmek güvenlidir ve Yardım sistemi bir sonraki açılışta bunu yeniden oluşturur.";
+
+"Apple Home & HomeKit" = "Apple Ev ve HomeKit";
+"Temporary data for the Home app and your connected smart home devices. Nothing is unpaired, but the Home app may be slow or incomplete until it re-syncs." = "Ev uygulamasının ve bağlı akıllı ev aygıtlarınızın geçici verileri. Hiçbir eşleşme kaldırılmaz ancak Ev uygulaması yeniden eşitlenene kadar yavaş veya eksik olabilir.";
+
+"iCloud Notifications" = "iCloud Bildirimleri";
+"Temporary data for iCloud notifications. It is rebuilt automatically, but iCloud notifications can be delayed until it is." = "iCloud bildirimlerinin geçici verileri. Otomatik olarak yeniden oluşturulur ancak o zamana kadar iCloud bildirimleri gecikebilir.";
+
+"iTunes & Apple Music" = "iTunes ve Apple Music";
+"Temporary data from iTunes and Apple Music, including artwork and media previews. Nothing is lost, but artwork is re-downloaded as you browse." = "iTunes ve Apple Music'in kapak resimleri ve medya önizlemeleri dahil geçici verileri. Hiçbir şey kaybolmaz ancak kapak resimleri gezindikçe yeniden indirilir.";
+
+"Managed App Service" = "Yönetilen Uygulama Servisi";
+"This is used by a background service that helps distribute and manage apps, typically in business or school environments. It is safe to delete." = "Bu, uygulamaları dağıtmaya ve yönetmeye yardımcı olan, genellikle iş veya okul ortamlarında kullanılan bir arka plan servisi tarafından kullanılır. Silmek güvenlidir.";
+
+"Background Downloads" = "Arka Plan İndirmeleri";
+"This holds state for apps that download content in the background. Deleting it can interrupt downloads in progress, which then have to start over." = "Bu, içeriği arka planda indiren uygulamaların durumunu tutar. Silmek devam eden indirmeleri kesebilir; bunların baştan başlaması gerekir.";
+
+"Siri Knowledge Engine" = "Siri Bilgi Motoru";
+"Used by a background Apple service that helps Siri and Spotlight understand natural language. Safe to delete; it is rebuilt automatically." = "Siri ve Spotlight'ın doğal dili anlamasına yardımcı olan bir Apple arka plan servisi tarafından kullanılır. Silmek güvenlidir; otomatik olarak yeniden oluşturulur.";
+
+"Apple Wallet Passes" = "Apple Wallet Kartları";
+"Temporary data for passes in Apple Wallet, such as boarding passes and loyalty cards. Safe to delete, but Wallet may need to re-sync them." = "Apple Wallet'taki biniş kartları ve sadakat kartları gibi kartların geçici verileri. Silmek güvenlidir ancak Wallet'ın bunları yeniden eşitlemesi gerekebilir.";
+
+"Siri Suggestions Data" = "Siri Önerileri Verileri";
+"This is what Siri Suggestions has learned about your habits and routines. Deleting it resets those personalised suggestions until Siri learns them again." = "Bu, Siri Önerileri'nin alışkanlıklarınız ve rutinleriniz hakkında öğrendikleridir. Silmek, Siri bunları yeniden öğrenene kadar bu kişiselleştirilmiş önerileri sıfırlar.";
+
+"Reminders Service" = "Anımsatıcılar Servisi";
+"This is temporary data used by the Reminders app in the background. Deleting it is safe but the Reminders app may need a moment to reload when next opened." = "Bu, Anımsatıcılar uygulamasının arka planda kullandığı geçici verilerdir. Silmek güvenlidir ancak Anımsatıcılar uygulamasının bir sonraki açılışta yeniden yüklenmesi biraz sürebilir.";
+
+"Safari Browser" = "Safari Tarayıcısı";
+"Safari's temporary browsing data, such as website previews and recent page data. Websites may load a little slower until it rebuilds." = "Safari'nin web sitesi önizlemeleri ve son sayfa verileri gibi geçici gezinme verileri. Yeniden oluşana kadar web siteleri biraz daha yavaş yüklenebilir.";
+
+"Shazam Music ID" = "Shazam Müzik Tanıma";
+"This stores temporary data downloaded by Shazam to help identify music. It is completely safe to delete and Shazam will re-download what it needs." = "Bu, Shazam'ın müziği tanımaya yardımcı olmak için indirdiği geçici verileri saklar. Silmek tamamen güvenlidir ve Shazam ihtiyacı olanı yeniden indirir.";
+
+"Siri Voice Data" = "Siri Ses Verileri";
+"This stores temporary voice and speech data used by Siri to speak responses. It is safe to delete and Siri will rebuild it automatically." = "Bu, Siri'nin yanıtları seslendirmek için kullandığı geçici ses ve konuşma verilerini saklar. Silmek güvenlidir ve Siri bunu otomatik olarak yeniden oluşturur.";
+
+"Spotlight Search" = "Spotlight Araması";
+"The index Spotlight uses to search your Mac. Nothing is lost, but search is slow or incomplete until macOS rebuilds the index, which can take a while." = "Spotlight'ın Mac'inizde arama yapmak için kullandığı dizin. Hiçbir şey kaybolmaz ancak macOS dizini yeniden oluşturana kadar arama yavaş veya eksik olur; bu biraz zaman alabilir.";
+
+"macOS Tips App" = "macOS İpuçları Uygulaması";
+"This stores temporary data for the Tips app that shows you helpful macOS features. It is completely safe to delete." = "Bu, size yararlı macOS özelliklerini gösteren İpuçları uygulamasının geçici verilerini saklar. Silmek tamamen güvenlidir.";
+
+"FaceTime & Video Calls" = "FaceTime ve Görüntülü Aramalar";
+"This is temporary data used by FaceTime and other Apple video calling features. It is safe to delete and will be recreated as needed." = "Bu, FaceTime'ın ve diğer Apple görüntülü arama özelliklerinin kullandığı geçici verilerdir. Silmek güvenlidir ve gerektiğinde yeniden oluşturulur.";
+
+"Datadog Monitoring" = "Datadog İzleme";
+"This stores temporary data for Datadog, a developer monitoring and analytics tool. It is safe to delete and will be recreated if Datadog is running." = "Bu, bir geliştirici izleme ve analiz aracı olan Datadog'un geçici verilerini saklar. Silmek güvenlidir ve Datadog çalışıyorsa yeniden oluşturulur.";
+
+"Google App Updater" = "Google Uygulama Güncelleyicisi";
+"Temporary files Google's updater uses to keep apps like Chrome up to date. They are created again at the next update check." = "Google'ın güncelleyicisinin Chrome gibi uygulamaları güncel tutmak için kullandığı geçici dosyalar. Bir sonraki güncelleme denetiminde yeniden oluşturulur.";
+
+"Microsoft Auto-Updater" = "Microsoft Otomatik Güncelleyici";
+"This holds temporary files used by Microsoft AutoUpdate to keep apps like Word and Excel up to date. It is safe to delete and will be recreated automatically." = "Bu, Microsoft AutoUpdate'in Word ve Excel gibi uygulamaları güncel tutmak için kullandığı geçici dosyaları tutar. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Edge Browser Updater" = "Edge Tarayıcı Güncelleyicisi";
+"These are temporary files used to update the Microsoft Edge browser. They are safe to delete and will be recreated when Edge next checks for updates." = "Bunlar Microsoft Edge tarayıcısını güncellemek için kullanılan geçici dosyalardır. Silmek güvenlidir ve Edge bir sonraki güncelleme denetiminde bunları yeniden oluşturur.";
+
+"NT-ware Print Client" = "NT-ware Yazdırma İstemcisi";
+"Used by NT-ware's SmartClient, a print management tool common in offices and universities. Usually safe to delete, but the client may set itself up again." = "Ofislerde ve üniversitelerde yaygın bir yazdırma yönetim aracı olan NT-ware'in SmartClient'ı tarafından kullanılır. Genellikle silmek güvenlidir ancak istemci kendini yeniden kurabilir.";
+
+"OpenAI Codex" = "OpenAI Codex";
+"Page and script caches of the Codex app and command line tool, rebuilt as you use it. Your sessions and sign-in in ~/.codex are left alone." = "Codex uygulamasının ve komut satırı aracının sayfa ve betik önbellekleri; kullandıkça yeniden oluşturulur. ~/.codex içindeki oturumlarınıza ve girişinize dokunulmaz.";
+
+"ToDesktop App Updater" = "ToDesktop Uygulama Güncelleyicisi";
+"This stores temporary files used by apps built with ToDesktop to deliver updates. It is safe to delete." = "Bu, ToDesktop ile oluşturulan uygulamaların güncelleme sunmak için kullandığı geçici dosyaları saklar. Silmek güvenlidir.";
+
+"Arc / Dia Browser" = "Arc / Dia Tarayıcısı";
+"This stores temporary data for the Arc or Dia web browser. Deleting it is safe but the browser may reload some website data more slowly on next launch." = "Bu, Arc veya Dia web tarayıcısının geçici verilerini saklar. Silmek güvenlidir ancak tarayıcı bir sonraki açılışta bazı web sitesi verilerini daha yavaş yükleyebilir.";
+
+"Family Sharing Service" = "Aile Paylaşımı Servisi";
+"Temporary data for Family Sharing. Nothing is lost, but family and sharing settings may take a moment to re-sync." = "Aile Paylaşımı'nın geçici verileri. Hiçbir şey kaybolmaz ancak aile ve paylaşım ayarlarının yeniden eşitlenmesi biraz sürebilir.";
+
+"Purge App" = "Purge Uygulaması";
+"This is temporary data created by the Purge app itself. It is safe to delete." = "Bu, Purge uygulamasının kendisinin oluşturduğu geçici verilerdir. Silmek güvenlidir.";
+
+"Sentry Error Reports" = "Sentry Hata Raporları";
+"This stores temporary error and crash reports collected by Sentry, a tool used by developers to track app issues. It is safe to delete." = "Bu, geliştiricilerin uygulama sorunlarını izlemek için kullandığı Sentry'nin topladığı geçici hata ve çökme raporlarını saklar. Silmek güvenlidir.";
+
+"Playwright Browsers" = "Playwright Tarayıcıları";
+"Browsers Playwright downloaded for automated website testing. Your tests fail until you run npx playwright install, which downloads them again." = "Playwright'ın otomatik web sitesi testi için indirdiği tarayıcılar. npx playwright install komutunu çalıştırıp bunları yeniden indirene kadar testleriniz başarısız olur.";
+
+"Unused Playwright Browsers" = "Kullanılmayan Playwright Tarayıcıları";
+"Browser builds no Playwright install still lists. A project that never ran npx playwright install may use one. That command downloads it again." = "Hiçbir Playwright kurulumunun hâlâ listelemediği tarayıcı sürümleri. npx playwright install hiç çalıştırmamış bir proje bunlardan birini kullanıyor olabilir. Bu komut onu yeniden indirir.";
+
+"Node.js Packages" = "Node.js Paketleri";
+"Code libraries installed for developer projects. Safe to remove for stale projects — run npm install to restore them anytime." = "Geliştirici projeleri için yüklenmiş kod kitaplıkları. Eski projeler için kaldırmak güvenlidir — istediğiniz zaman npm install çalıştırarak geri yükleyin.";
+
+"Prisma Database Tool" = "Prisma Veritabanı Aracı";
+"This stores temporary files used by Prisma, a developer database tool. It is safe to delete and will be regenerated when Prisma is next used." = "Bu, bir geliştirici veritabanı aracı olan Prisma'nın kullandığı geçici dosyaları saklar. Silmek güvenlidir ve Prisma bir sonraki kullanıldığında yeniden oluşturulur.";
+
+"Segment Analytics" = "Segment Analitik";
+"This stores temporary data for Segment, a tool developers use to collect usage analytics. It is safe to delete." = "Bu, geliştiricilerin kullanım analizi toplamak için kullandığı Segment'in geçici verilerini saklar. Silmek güvenlidir.";
+
+"Apple Software Update" = "Apple Yazılım Güncelleme";
+"This is temporary data used by Apple's software update system. It is safe to delete and will be recreated when your Mac next checks for updates." = "Bu, Apple'ın yazılım güncelleme sisteminin kullandığı geçici verilerdir. Silmek güvenlidir ve Mac'iniz bir sonraki güncelleme denetiminde bunları yeniden oluşturur.";
+
+"macOS Installer" = "macOS Yükleyicisi";
+"A full macOS installer, usually 12 to 15 GB. macOS does not need it after installing, and the App Store has it. Keep it to make a bootable USB installer." = "Genellikle 12 ila 15 GB boyutunda tam bir macOS yükleyicisi. macOS yükleme sonrasında buna ihtiyaç duymaz ve App Store'da mevcuttur. Önyüklenebilir bir USB yükleyici yapmak için saklayın.";
+
+"Leftover macOS update files" = "Artık macOS güncelleme dosyaları";
+"Install files a finished macOS update left behind, counted as System Data. Only shown when older than the installed macOS, so a waiting update never is." = "Tamamlanmış bir macOS güncellemesinin geride bıraktığı, Sistem Verileri olarak sayılan kurulum dosyaları. Yalnızca yüklü macOS'ten eskiyse gösterilir, bu yüzden bekleyen bir güncelleme asla gösterilmez.";
+
+"Flutter Dev Tool" = "Flutter Geliştirici Aracı";
+"A temporary folder used by the Dart and Flutter development tools. Safe to delete and will be recreated automatically the next time you run a Flutter project." = "Dart ve Flutter geliştirme araçlarının kullandığı geçici bir klasör. Silmek güvenlidir ve bir Flutter projesini bir sonraki çalıştırışınızda otomatik olarak yeniden oluşturulur.";
+
+"App Store Migration Tool" = "App Store Taşıma Aracı";
+"This is a temporary folder used by Apple's App Store services to migrate account or media data. It is safe to delete." = "Bu, Apple'ın App Store servislerinin hesap veya medya verilerini taşımak için kullandığı geçici bir klasördür. Silmek güvenlidir.";
+
+"Spokenly App" = "Spokenly Uygulaması";
+"This stores temporary data for the Spokenly app. It is safe to delete and will be recreated when the app is next used." = "Bu, Spokenly uygulamasının geçici verilerini saklar. Silmek güvenlidir ve uygulama bir sonraki kullanıldığında yeniden oluşturulur.";
+
+"App Archives" = "Uygulama Arşivleri";
+"Archived builds created by development tools. Check contents before deleting — may contain important project archives." = "Geliştirme araçlarının oluşturduğu arşivlenmiş derlemeler. Silmeden önce içeriği kontrol edin — önemli proje arşivleri içerebilir.";
+
+"App Sandbox Manager" = "Uygulama Korumalı Alan Yöneticisi";
+"Used by the macOS service that manages each app's private storage. Usually safe to delete, but some apps may need to set their storage up again." = "Her uygulamanın özel depolama alanını yöneten macOS servisi tarafından kullanılır. Genellikle silmek güvenlidir ancak bazı uygulamaların depolama alanlarını yeniden kurması gerekebilir.";
+
+"In-App Purchase Service" = "Uygulama İçi Satın Alma Servisi";
+"Temporary data for in-app purchases and App Store transactions. Nothing is lost, but apps may ask you to restore purchases or sign in again." = "Uygulama içi satın almaların ve App Store işlemlerinin geçici verileri. Hiçbir şey kaybolmaz ancak uygulamalar satın alımları geri yüklemenizi veya yeniden oturum açmanızı isteyebilir.";
+
+"Docker Desktop" = "Docker Desktop";
+"All images, containers and volumes; some hold databases. To keep volumes, run docker --context desktop-linux system prune while Docker is open or quit Docker." = "Tüm imajlar, kapsayıcılar ve birimler; bazıları veritabanı barındırır. Birimleri korumak için Docker açıkken veya Docker'dan çıkmışken docker --context desktop-linux system prune komutunu çalıştırın.";
+
+"Raycast Launcher" = "Raycast Başlatıcısı";
+"This stores temporary data for Raycast, a productivity launcher app. It is safe to delete and Raycast will rebuild it automatically." = "Bu, bir üretkenlik başlatıcı uygulaması olan Raycast'in geçici verilerini saklar. Silmek güvenlidir ve Raycast bunu otomatik olarak yeniden oluşturur.";
+
+"Xcode Build Files" = "Xcode Derleme Dosyaları";
+"Temporary files Xcode creates while building apps. Always safe to delete — your next build will just take a little longer." = "Xcode'un uygulamaları derlerken oluşturduğu geçici dosyalar. Silmek her zaman güvenlidir — bir sonraki derlemeniz biraz daha uzun sürer.";
+
+"Swift Package Manager" = "Swift Paket Yöneticisi";
+"Swift packages downloaded for your projects. Each project downloads its dependencies again the next time you build it." = "Projeleriniz için indirilen Swift paketleri. Her proje, bir sonraki derlemenizde bağımlılıklarını yeniden indirir.";
+
+"Zen Browser" = "Zen Tarayıcısı";
+"This stores temporary data for the Zen web browser. Deleting it is safe but the browser may reload some website data more slowly on next launch." = "Bu, Zen web tarayıcısının geçici verilerini saklar. Silmek güvenlidir ancak tarayıcı bir sonraki açılışta bazı web sitesi verilerini daha yavaş yükleyebilir.";
+
+"Xcode Device Support" = "Xcode Aygıt Desteği";
+"Temporary files Xcode uses to install and test apps on connected Apple devices. Safe to delete, but Xcode may download device support files again." = "Xcode'un bağlı Apple aygıtlarına uygulama yüklemek ve test etmek için kullandığı geçici dosyalar. Silmek güvenlidir ancak Xcode aygıt desteği dosyalarını yeniden indirebilir.";
+
+"Game Center Service" = "Game Center Servisi";
+"This stores temporary data for Apple's Game Center, which manages game scores and achievements. It is safe to delete and will be rebuilt automatically." = "Bu, oyun skorlarını ve başarımları yöneten Apple Game Center'ın geçici verilerini saklar. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Widgets Cache" = "Widget Önbelleği";
+"Saved snapshots of your desktop and Notification Center widgets. Safe to delete; widgets draw themselves again and may look blank for a moment until they do." = "Masaüstü ve Bildirim Merkezi widget'larınızın kayıtlı anlık görüntüleri. Silmek güvenlidir; widget'lar kendilerini yeniden çizer ve bunu yapana kadar kısa süre boş görünebilir.";
+
+"Translation Service" = "Çeviri Servisi";
+"This stores temporary data used by macOS's built-in translation feature. It is safe to delete and the translation service will rebuild it as needed." = "Bu, macOS'in yerleşik çeviri özelliğinin kullandığı geçici verileri saklar. Silmek güvenlidir ve çeviri servisi gerektiğinde bunu yeniden oluşturur.";
+
+"Figma Desktop Agent" = "Figma Masaüstü Aracısı";
+"This stores temporary data for Figma's background helper that enables font access and desktop features. It is safe to delete." = "Bu, yazı tipi erişimini ve masaüstü özelliklerini sağlayan Figma'nın arka plan yardımcısının geçici verilerini saklar. Silmek güvenlidir.";
+
+"GameKit Framework" = "GameKit Çerçevesi";
+"This stores temporary data for Apple's gaming framework used by game apps. It is safe to delete and will be rebuilt when a game app is next opened." = "Bu, oyun uygulamalarının kullandığı Apple'ın oyun çerçevesinin geçici verilerini saklar. Silmek güvenlidir ve bir oyun uygulaması bir sonraki açıldığında yeniden oluşturulur.";
+
+"Image Thumbnail Cache" = "Görsel Küçük Resim Önbelleği";
+"Saved image previews and thumbnails that speed up display in apps. Safe to delete; images load a little slower until the previews rebuild." = "Uygulamalarda görüntülemeyi hızlandıran kayıtlı görsel önizlemeleri ve küçük resimler. Silmek güvenlidir; önizlemeler yeniden oluşana kadar görseller biraz daha yavaş yüklenir.";
+
+"RevenueCat Purchases" = "RevenueCat Satın Alımları";
+"This stores temporary data for RevenueCat, a tool that apps use to manage in-app subscriptions and purchases. It is safe to delete." = "Bu, uygulamaların uygulama içi abonelikleri ve satın alımları yönetmek için kullandığı RevenueCat'in geçici verilerini saklar. Silmek güvenlidir.";
+
+"Git Worktree Checkouts" = "Git Worktree Çıkışları";
+"Forgotten branch checkouts created by Git. Safe to remove if you are no longer working on those branches, but check first that you have no unsaved work." = "Git'in oluşturduğu unutulmuş dal çıkışları. Bu dallarda artık çalışmıyorsanız kaldırmak güvenlidir ancak önce kaydedilmemiş çalışmanız olmadığından emin olun.";
+
+"VS Code Cache" = "VS Code Önbelleği";
+"Temporary files stored by Visual Studio Code. Safe to delete and will be recreated when you open VS Code again." = "Visual Studio Code'un sakladığı geçici dosyalar. Silmek güvenlidir ve VS Code'u yeniden açtığınızda yeniden oluşturulur.";
+
+"Cursor Cache" = "Cursor Önbelleği";
+"Temporary files stored by the Cursor code editor. Safe to delete and will be recreated when you open Cursor again." = "Cursor kod düzenleyicisinin sakladığı geçici dosyalar. Silmek güvenlidir ve Cursor'u yeniden açtığınızda yeniden oluşturulur.";
+
+"JetBrains IDE Cache" = "JetBrains IDE Önbelleği";
+"Indexes and caches JetBrains IDEs rebuild on their own. Local History is left alone. Each project re-indexes when you next open it, which takes a few minutes." = "JetBrains IDE'lerinin kendi kendine yeniden oluşturduğu dizinler ve önbellekler. Yerel Geçmiş'e dokunulmaz. Her proje bir sonraki açışınızda yeniden dizinlenir; bu birkaç dakika sürer.";
+
+"Zed Editor Cache" = "Zed Düzenleyici Önbelleği";
+"Temporary files stored by the Zed code editor. Safe to delete and will be recreated when you open Zed again." = "Zed kod düzenleyicisinin sakladığı geçici dosyalar. Silmek güvenlidir ve Zed'i yeniden açtığınızda yeniden oluşturulur.";
+
+"Go Module Cache" = "Go Modül Önbelleği";
+"Cached Go packages and build outputs. Safe to delete and will be re-downloaded when you build your Go projects again." = "Önbelleğe alınmış Go paketleri ve derleme çıktıları. Silmek güvenlidir ve Go projelerinizi yeniden derlediğinizde yeniden indirilir.";
+
+"Maven Package Cache" = "Maven Paket Önbelleği";
+"Maven's downloaded libraries and your own mvn install builds. Libraries download again on your next build; your own builds come back only if you rebuild them." = "Maven'in indirdiği kitaplıklar ve kendi mvn install derlemeleriniz. Kitaplıklar bir sonraki derlemenizde yeniden indirilir; kendi derlemeleriniz yalnızca yeniden derlerseniz geri gelir.";
+
+"Ivy Dependency Cache" = "Ivy Bağımlılık Önbelleği";
+"Java and Scala libraries downloaded by sbt and Ivy. Nothing is lost, but the next build downloads them all again, which is slow and needs a connection." = "sbt ve Ivy'nin indirdiği Java ve Scala kitaplıkları. Hiçbir şey kaybolmaz ancak bir sonraki derleme hepsini yeniden indirir; bu yavaştır ve bağlantı gerektirir.";
+
+"Ruby Gem Downloads" = "Ruby Gem İndirmeleri";
+"Downloaded .gem files and the spec index RubyGems keeps after installing. Your installed gems stay; RubyGems downloads these again when needed." = "RubyGems'in yüklemeden sonra tuttuğu indirilmiş .gem dosyaları ve spec dizini. Yüklü gem'leriniz kalır; RubyGems bunları gerektiğinde yeniden indirir.";
+
+"Bundler Cache" = "Bundler Önbelleği";
+"Cached Ruby gems downloaded by Bundler. Safe to delete and will be re-downloaded when you run bundle install." = "Bundler'ın indirdiği önbelleğe alınmış Ruby gem'leri. Silmek güvenlidir ve bundle install çalıştırdığınızda yeniden indirilir.";
+
+"Composer Cache" = "Composer Önbelleği";
+"Cached PHP packages downloaded by Composer. Safe to delete and will be re-downloaded when you run composer install." = "Composer'ın indirdiği önbelleğe alınmış PHP paketleri. Silmek güvenlidir ve composer install çalıştırdığınızda yeniden indirilir.";
+
+"Rust Package Cache" = "Rust Paket Önbelleği";
+"Cached Rust packages and compiled dependencies. Safe to delete and will be re-downloaded when you build your Rust projects." = "Önbelleğe alınmış Rust paketleri ve derlenmiş bağımlılıklar. Silmek güvenlidir ve Rust projelerinizi derlediğinizde yeniden indirilir.";
+
+"Terraform Plugin Cache" = "Terraform Eklenti Önbelleği";
+"Cached Terraform provider plugins. Safe to delete and will be re-downloaded when you run terraform init." = "Önbelleğe alınmış Terraform sağlayıcı eklentileri. Silmek güvenlidir ve terraform init çalıştırdığınızda yeniden indirilir.";
+
+"GitHub Actions Cache" = "GitHub Actions Önbelleği";
+"Cached files used when running GitHub Actions locally. Safe to delete and will be recreated automatically." = "GitHub Actions yerel olarak çalıştırılırken kullanılan önbelleğe alınmış dosyalar. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Vagrant Box Cache" = "Vagrant Box Önbelleği";
+"Virtual machine images used by Vagrant. Safe to delete if unused — re-downloading takes a while." = "Vagrant'ın kullandığı sanal makine imajları. Kullanılmıyorsa silmek güvenlidir — yeniden indirmek biraz zaman alır.";
+
+"Zsh Session Cache" = "Zsh Oturum Önbelleği";
+"Temporary files created by your terminal shell. Safe to delete and will be recreated automatically when you open a new terminal window." = "Terminal kabuğunuzun oluşturduğu geçici dosyalar. Silmek güvenlidir ve yeni bir terminal penceresi açtığınızda otomatik olarak yeniden oluşturulur.";
+
+"Electron App Cache" = "Electron Uygulama Önbelleği";
+"Temporary files stored by apps built with Electron like Slack, Discord, and Notion. Safe to delete and will be recreated automatically." = "Slack, Discord ve Notion gibi Electron ile oluşturulmuş uygulamaların sakladığı geçici dosyalar. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Application Logs" = "Uygulama Günlükleri";
+"Log files created by apps to record what they are doing. Safe to delete. Apps will create new log files automatically." = "Uygulamaların ne yaptıklarını kaydetmek için oluşturduğu günlük dosyaları. Silmek güvenlidir. Uygulamalar yeni günlük dosyalarını otomatik olarak oluşturur.";
+
+"Crash Reports" = "Çökme Raporları";
+"Records of app crashes saved by macOS. Safe to delete. These are only useful if you are reporting a bug to an app developer." = "macOS'in kaydettiği uygulama çökme kayıtları. Silmek güvenlidir. Bunlar yalnızca bir uygulama geliştiricisine hata bildiriyorsanız işe yarar.";
+
+"iOS Simulators" = "iOS Simülatörleri";
+"Virtual iPhone and iPad devices Xcode tests apps on. Deleting one also deletes its apps and data. Xcode can create a new one when you need it." = "Xcode'un uygulamaları test ettiği sanal iPhone ve iPad aygıtları. Birini silmek uygulamalarını ve verilerini de siler. Xcode ihtiyaç duyduğunuzda yenisini oluşturabilir.";
+
+"Bun Package Cache" = "Bun Paket Önbelleği";
+"Packages downloaded by Bun, a JavaScript runtime and package manager. Safe to delete; they download again the next time you run bun install." = "Bir JavaScript çalışma zamanı ve paket yöneticisi olan Bun'ın indirdiği paketler. Silmek güvenlidir; bun install komutunu bir sonraki çalıştırışınızda yeniden indirilir.";
+
+"Deno Module Cache" = "Deno Modül Önbelleği";
+"Cached modules downloaded by Deno, a JavaScript and TypeScript runtime. Safe to delete and will be re-downloaded when you next run a Deno project." = "Bir JavaScript ve TypeScript çalışma zamanı olan Deno'nun indirdiği önbelleğe alınmış modüller. Silmek güvenlidir ve bir Deno projesini bir sonraki çalıştırışınızda yeniden indirilir.";
+
+"Turborepo Build Cache" = "Turborepo Derleme Önbelleği";
+"Saved build outputs from Turborepo, a build tool for JavaScript monorepos. Safe to delete. Your next build will simply take a little longer as it rebuilds from scratch." = "JavaScript monorepo'ları için bir derleme aracı olan Turborepo'nun kayıtlı derleme çıktıları. Silmek güvenlidir. Bir sonraki derlemeniz sıfırdan yeniden oluşturulacağı için biraz daha uzun sürer.";
+
+"Mise Cache" = "Mise Önbelleği";
+"Version lists and other data cached by Mise (formerly rtx), a tool version manager. Installed tools stay, and Mise fetches the rest again." = "Bir araç sürüm yöneticisi olan Mise'in (eski adıyla rtx) önbelleğe aldığı sürüm listeleri ve diğer veriler. Yüklü araçlar kalır ve Mise gerisini yeniden getirir.";
+
+"Next.js Build Cache" = "Next.js Derleme Önbelleği";
+"Temporary build files created by Next.js. Safe to delete and will be recreated the next time you build or run your Next.js project." = "Next.js'in oluşturduğu geçici derleme dosyaları. Silmek güvenlidir ve Next.js projenizi bir sonraki derleyişinizde veya çalıştırışınızda yeniden oluşturulur.";
+
+"Vite Build Cache" = "Vite Derleme Önbelleği";
+"Temporary files created by Vite, a fast frontend build tool. Safe to delete and will be regenerated when you next start your project." = "Hızlı bir ön yüz derleme aracı olan Vite'in oluşturduğu geçici dosyalar. Silmek güvenlidir ve projenizi bir sonraki başlatışınızda yeniden oluşturulur.";
+
+"Parcel Build Cache" = "Parcel Derleme Önbelleği";
+"Saved build outputs from the Parcel bundler. Safe to delete and will be rebuilt next time you run a Parcel build." = "Parcel paketleyicisinin kayıtlı derleme çıktıları. Silmek güvenlidir ve bir sonraki Parcel derlemenizde yeniden oluşturulur.";
+
+"ESLint Cache" = "ESLint Önbelleği";
+"Saved results from ESLint, a JavaScript code checker. Safe to delete. ESLint will simply re-check all your files on the next run." = "Bir JavaScript kod denetleyicisi olan ESLint'in kayıtlı sonuçları. Silmek güvenlidir. ESLint bir sonraki çalışmasında tüm dosyalarınızı yeniden denetler.";
+
+"Jest Test Cache" = "Jest Test Önbelleği";
+"Temporary files saved by Jest, a JavaScript testing tool, to make tests run faster. Safe to delete and will be recreated on the next test run." = "Bir JavaScript test aracı olan Jest'in testleri hızlandırmak için kaydettiği geçici dosyalar. Silmek güvenlidir ve bir sonraki test çalışmasında yeniden oluşturulur.";
+
+"Vitest Test Cache" = "Vitest Test Önbelleği";
+"Temporary files saved by Vitest to speed up test runs. Safe to delete and will be recreated automatically." = "Vitest'in test çalışmalarını hızlandırmak için kaydettiği geçici dosyalar. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Cypress Test Binaries" = "Cypress Test İkili Dosyaları";
+"The Cypress app that runs your end-to-end tests. Tests fail until you run npx cypress install, which downloads it again." = "Uçtan uca testlerinizi çalıştıran Cypress uygulaması. npx cypress install komutunu çalıştırıp yeniden indirene kadar testler başarısız olur.";
+
+"Python Bytecode Cache" = "Python Bayt Kodu Önbelleği";
+"Compiled Python files that make your code run faster. Safe to delete and Python will recreate them automatically when your code runs again." = "Kodunuzun daha hızlı çalışmasını sağlayan derlenmiş Python dosyaları. Silmek güvenlidir ve kodunuz yeniden çalıştığında Python bunları otomatik olarak yeniden oluşturur.";
+
+"uv Package Cache" = "uv Paket Önbelleği";
+"Python packages uv downloaded and built. uv gets them again when needed, but tools running through uvx can stop, and environments in symlink mode break." = "uv'nin indirdiği ve derlediği Python paketleri. uv bunları gerektiğinde yeniden alır ancak uvx üzerinden çalışan araçlar durabilir ve sembolik bağlantı modundaki ortamlar bozulur.";
+
+"Ruff Linter Cache" = "Ruff Linter Önbelleği";
+"Saved results from Ruff, a fast Python code checker. Safe to delete and will be recreated on the next run." = "Hızlı bir Python kod denetleyicisi olan Ruff'ın kayıtlı sonuçları. Silmek güvenlidir ve bir sonraki çalışmada yeniden oluşturulur.";
+
+"Mypy Type Check Cache" = "Mypy Tür Denetimi Önbelleği";
+"Saved results from Mypy, a Python type checker. Safe to delete and will be rebuilt next time Mypy runs." = "Bir Python tür denetleyicisi olan Mypy'ın kayıtlı sonuçları. Silmek güvenlidir ve Mypy bir sonraki çalıştığında yeniden oluşturulur.";
+
+"Kotlin Build Cache" = "Kotlin Derleme Önbelleği";
+"Compiled Kotlin build files. Safe to delete and will be rebuilt the next time you build your Kotlin project." = "Derlenmiş Kotlin derleme dosyaları. Silmek güvenlidir ve Kotlin projenizi bir sonraki derleyişinizde yeniden oluşturulur.";
+
+"Android Build Output" = "Android Derleme Çıktısı";
+"Compiled Android app files. Safe to delete — your project will rebuild automatically next time." = "Derlenmiş Android uygulama dosyaları. Silmek güvenlidir — projeniz bir sonraki sefer otomatik olarak yeniden derlenir.";
+
+"Gradle Build Cache" = "Gradle Derleme Önbelleği";
+"A project's own Gradle state, such as file hashes and build history. The next build recreates it; downloaded libraries live in ~/.gradle." = "Bir projenin dosya özetleri ve derleme geçmişi gibi kendi Gradle durumu. Bir sonraki derleme bunu yeniden oluşturur; indirilen kitaplıklar ~/.gradle içinde bulunur.";
+
+"Gradle Dependency Cache" = "Gradle Bağımlılık Önbelleği";
+"Gradle's downloaded libraries, build cache and wrapper versions. Nothing is lost, but the next build downloads and rebuilds them, which is slow." = "Gradle'ın indirdiği kitaplıklar, derleme önbelleği ve wrapper sürümleri. Hiçbir şey kaybolmaz ancak bir sonraki derleme bunları indirir ve yeniden oluşturur; bu yavaştır.";
+
+"CocoaPods Cache" = "CocoaPods Önbelleği";
+"Cached iOS and macOS library files downloaded by CocoaPods. Safe to delete and will be re-downloaded when you run pod install." = "CocoaPods'un indirdiği önbelleğe alınmış iOS ve macOS kitaplık dosyaları. Silmek güvenlidir ve pod install çalıştırdığınızda yeniden indirilir.";
+
+"CocoaPods Spec Repos" = "CocoaPods Spec Depoları";
+"Spec repos CocoaPods uses to look up libraries. The public one comes back on your next pod install; private ones from pod repo add must be added again." = "CocoaPods'un kitaplıkları aramak için kullandığı spec depoları. Genel olan bir sonraki pod install ile geri gelir; pod repo add ile eklenen özel olanlar yeniden eklenmelidir.";
+
+"Swift Build Artifacts" = "Swift Derleme Çıktıları";
+"Compiled Swift build files. Safe to delete and will be rebuilt the next time you build your Swift project." = "Derlenmiş Swift derleme dosyaları. Silmek güvenlidir ve Swift projenizi bir sonraki derleyişinizde yeniden oluşturulur.";
+
+"Rust Build Output" = "Rust Derleme Çıktısı";
+"Compiled Rust project files. Safe to delete — your project will recompile automatically on the next build." = "Derlenmiş Rust proje dosyaları. Silmek güvenlidir — projeniz bir sonraki derlemede otomatik olarak yeniden derlenir.";
+
+"Flutter Build Cache" = "Flutter Derleme Önbelleği";
+"Temporary build files created by Flutter. Safe to delete and will be recreated the next time you build your Flutter app." = "Flutter'ın oluşturduğu geçici derleme dosyaları. Silmek güvenlidir ve Flutter uygulamanızı bir sonraki derleyişinizde yeniden oluşturulur.";
+
+"Dart Pub Cache" = "Dart Pub Önbelleği";
+"Dart and Flutter packages downloaded by pub; they download again on your next flutter pub get. Tools from dart pub global activate are left alone." = "pub'ın indirdiği Dart ve Flutter paketleri; bir sonraki flutter pub get komutunuzda yeniden indirilir. dart pub global activate ile yüklenen araçlara dokunulmaz.";
+
+"Xcode App Archives" = "Xcode Uygulama Arşivleri";
+"Archived Xcode builds for App Store submission. Cannot be recovered once deleted — only remove if you no longer need them." = "App Store'a gönderim için arşivlenmiş Xcode derlemeleri. Silindikten sonra kurtarılamaz — yalnızca artık ihtiyacınız yoksa kaldırın.";
+
+"Xcode iOS Device Support" = "Xcode iOS Aygıt Desteği";
+"Files Xcode copies from an iPhone, Apple Watch, Apple TV or Vision Pro to debug on it. Nothing is lost; Xcode copies them again when you next connect it." = "Xcode'un bir iPhone, Apple Watch, Apple TV veya Vision Pro üzerinde hata ayıklamak için o aygıttan kopyaladığı dosyalar. Hiçbir şey kaybolmaz; Xcode aygıtı bir sonraki bağlayışınızda bunları yeniden kopyalar.";
+
+"Homebrew Package Cache" = "Homebrew Paket Önbelleği";
+"Downloaded installation files for Homebrew packages. Safe to delete and Homebrew will simply re-download them if you reinstall any packages." = "Homebrew paketleri için indirilmiş kurulum dosyaları. Silmek güvenlidir ve herhangi bir paketi yeniden yüklerseniz Homebrew bunları yeniden indirir.";
+
+"nvm Node.js Versions" = "nvm Node.js Sürümleri";
+"Node.js versions managed by nvm. Safe to delete unused versions — avoid removing versions your projects depend on." = "nvm tarafından yönetilen Node.js sürümleri. Kullanılmayan sürümleri silmek güvenlidir — projelerinizin bağlı olduğu sürümleri kaldırmaktan kaçının.";
+
+"Volta Tool Cache" = "Volta Araç Önbelleği";
+"Cached Node.js and package manager versions managed by Volta. Safe to delete and Volta will re-download versions as needed." = "Volta tarafından yönetilen önbelleğe alınmış Node.js ve paket yöneticisi sürümleri. Silmek güvenlidir ve Volta sürümleri gerektiğinde yeniden indirir.";
+
+"pnpm Package Store" = "pnpm Paket Deposu";
+"The central package store used by pnpm to save disk space across projects. Safe to delete and packages will be re-downloaded when you run pnpm install." = "pnpm'in projeler arasında disk alanından tasarruf etmek için kullandığı merkezi paket deposu. Silmek güvenlidir ve pnpm install çalıştırdığınızda paketler yeniden indirilir.";
+
+"Yarn Package Cache" = "Yarn Paket Önbelleği";
+"Cached packages downloaded by Yarn. Safe to delete and will be re-downloaded when you run yarn install." = "Yarn'ın indirdiği önbelleğe alınmış paketler. Silmek güvenlidir ve yarn install çalıştırdığınızda yeniden indirilir.";
+
+"npm Package Cache" = "npm Paket Önbelleği";
+"Cached packages downloaded by npm. Safe to delete and will be re-downloaded when you run npm install." = "npm'in indirdiği önbelleğe alınmış paketler. Silmek güvenlidir ve npm install çalıştırdığınızda yeniden indirilir.";
+
+"Husky Git Hooks" = "Husky Git Kancaları";
+"Temporary files used by Husky to manage Git hooks in your projects. Safe to delete and will be regenerated automatically." = "Husky'nin projelerinizdeki Git kancalarını yönetmek için kullandığı geçici dosyalar. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Storybook Cache" = "Storybook Önbelleği";
+"Temporary build files created by Storybook, a UI component development tool. Safe to delete and will be rebuilt the next time you start Storybook." = "Bir arayüz bileşeni geliştirme aracı olan Storybook'un oluşturduğu geçici derleme dosyaları. Silmek güvenlidir ve Storybook'u bir sonraki başlatışınızda yeniden oluşturulur.";
+
+"Nx Monorepo Cache" = "Nx Monorepo Önbelleği";
+"Saved build and test results from Nx, a monorepo build tool. Safe to delete. Your next build will take a little longer as it rebuilds from scratch." = "Bir monorepo derleme aracı olan Nx'in kayıtlı derleme ve test sonuçları. Silmek güvenlidir. Bir sonraki derlemeniz sıfırdan yeniden oluşturulacağı için biraz daha uzun sürer.";
+
+"Moon Build Cache" = "Moon Derleme Önbelleği";
+"Saved build outputs from Moon, a build and task runner for monorepos. Safe to delete and will be regenerated on the next run." = "Monorepo'lar için bir derleme ve görev çalıştırıcısı olan Moon'un kayıtlı derleme çıktıları. Silmek güvenlidir ve bir sonraki çalışmada yeniden oluşturulur.";
+
+"Warp Terminal" = "Warp Terminal";
+"Temporary files stored by the Warp terminal app. Safe to delete and Warp will recreate them automatically." = "Warp terminal uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve Warp bunları otomatik olarak yeniden oluşturur.";
+
+"iTerm2 Terminal" = "iTerm2 Terminal";
+"Temporary files stored by the iTerm2 terminal app. Safe to delete and iTerm2 will recreate them automatically." = "iTerm2 terminal uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve iTerm2 bunları otomatik olarak yeniden oluşturur.";
+
+"Ghostty Terminal" = "Ghostty Terminal";
+"Temporary files stored by the Ghostty terminal app. Safe to delete and will be recreated when you next open Ghostty." = "Ghostty terminal uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve Ghostty'yi bir sonraki açışınızda yeniden oluşturulur.";
+
+"Google Chrome" = "Google Chrome";
+"Google Chrome's temporary browsing data, such as website caches and previews. Websites may load a little slower until Chrome rebuilds it." = "Google Chrome'un web sitesi önbellekleri ve önizlemeleri gibi geçici gezinme verileri. Chrome bunu yeniden oluşturana kadar web siteleri biraz daha yavaş yüklenebilir.";
+
+"Firefox Browser" = "Firefox Tarayıcısı";
+"Temporary browsing data stored by Firefox. Deleting it is safe but websites may load a little slower until Firefox rebuilds the cache." = "Firefox'un sakladığı geçici gezinme verileri. Silmek güvenlidir ancak Firefox önbelleği yeniden oluşturana kadar web siteleri biraz daha yavaş yüklenebilir.";
+
+"Brave Browser" = "Brave Tarayıcısı";
+"Temporary browsing data stored by the Brave browser. Deleting it is safe but websites may load a little slower until Brave rebuilds the cache." = "Brave tarayıcısının sakladığı geçici gezinme verileri. Silmek güvenlidir ancak Brave önbelleği yeniden oluşturana kadar web siteleri biraz daha yavaş yüklenebilir.";
+
+"Opera Browser" = "Opera Tarayıcısı";
+"Temporary browsing data stored by Opera. Deleting it is safe but websites may load a little slower until Opera rebuilds the cache." = "Opera'nın sakladığı geçici gezinme verileri. Silmek güvenlidir ancak Opera önbelleği yeniden oluşturana kadar web siteleri biraz daha yavaş yüklenebilir.";
+
+"Slack" = "Slack";
+"Temporary files stored by Slack including message thumbnails and previews. Safe to delete and Slack will rebuild them automatically." = "Slack'in ileti küçük resimleri ve önizlemeleri dahil sakladığı geçici dosyalar. Silmek güvenlidir ve Slack bunları otomatik olarak yeniden oluşturur.";
+
+"Discord" = "Discord";
+"Temporary files stored by Discord. Safe to delete and Discord will rebuild them automatically when you next open it." = "Discord'un sakladığı geçici dosyalar. Silmek güvenlidir ve Discord'u bir sonraki açışınızda bunları otomatik olarak yeniden oluşturur.";
+
+"Zoom" = "Zoom";
+"Temporary files stored by Zoom. Safe to delete and Zoom will recreate them automatically." = "Zoom'un sakladığı geçici dosyalar. Silmek güvenlidir ve Zoom bunları otomatik olarak yeniden oluşturur.";
+
+"Notion" = "Notion";
+"Temporary files stored by the Notion app. Safe to delete and Notion will rebuild them when you next open it." = "Notion uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve Notion'u bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Spotify" = "Spotify";
+"Songs and artwork Spotify saved while you listened. It saves them again as you play. Only shown when nothing is downloaded for offline listening." = "Spotify'ın siz dinlerken kaydettiği şarkılar ve kapak resimleri. Çaldıkça bunları yeniden kaydeder. Yalnızca çevrimdışı dinleme için hiçbir şey indirilmemişse gösterilir.";
+
+"WhatsApp" = "WhatsApp";
+"Temporary files stored by WhatsApp on your Mac. Safe to delete and WhatsApp will rebuild them automatically." = "WhatsApp'ın Mac'inizde sakladığı geçici dosyalar. Silmek güvenlidir ve WhatsApp bunları otomatik olarak yeniden oluşturur.";
+
+"Telegram" = "Telegram";
+"Temporary files stored by Telegram including media previews. Safe to delete and Telegram will reload them as needed." = "Telegram'ın medya önizlemeleri dahil sakladığı geçici dosyalar. Silmek güvenlidir ve Telegram bunları gerektiğinde yeniden yükler.";
+
+"Telegram Media Cache" = "Telegram Medya Önbelleği";
+"Telegram stores auto-downloaded photos, videos and files here. It re-downloads them from the cloud as needed, but secret-chat media may exist only on this Mac." = "Telegram otomatik indirilen fotoğrafları, videoları ve dosyaları burada saklar. Gerektiğinde bunları buluttan yeniden indirir ancak gizli sohbet medyası yalnızca bu Mac'te bulunuyor olabilir.";
+
+"Linear" = "Linear";
+"Temporary files stored by the Linear project management app. Safe to delete and Linear will rebuild them when you next open it." = "Linear proje yönetimi uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve Linear'ı bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Figma" = "Figma";
+"Temporary files stored by the Figma design app. Safe to delete and Figma will rebuild them when you next open it." = "Figma tasarım uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve Figma'yı bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Loom Screen Recorder" = "Loom Ekran Kaydedici";
+"Temporary files stored by Loom. Safe to delete and Loom will recreate them automatically." = "Loom'un sakladığı geçici dosyalar. Silmek güvenlidir ve Loom bunları otomatik olarak yeniden oluşturur.";
+
+"Grammarly" = "Grammarly";
+"Temporary files stored by the Grammarly writing assistant. Safe to delete and Grammarly will rebuild them automatically." = "Grammarly yazma asistanının sakladığı geçici dosyalar. Silmek güvenlidir ve Grammarly bunları otomatik olarak yeniden oluşturur.";
+
+"Alfred Launcher" = "Alfred Başlatıcısı";
+"Temporary files stored by the Alfred productivity launcher. Safe to delete and Alfred will rebuild them automatically." = "Alfred üretkenlik başlatıcısının sakladığı geçici dosyalar. Silmek güvenlidir ve Alfred bunları otomatik olarak yeniden oluşturur.";
+
+"1Password" = "1Password";
+"Temporary data stored by 1Password. Your vaults are safe, but 1Password may need to re-sync and ask you to unlock again." = "1Password'ün sakladığı geçici veriler. Kasalarınız güvendedir ancak 1Password'ün yeniden eşitlenmesi ve kilidi tekrar açmanızı istemesi gerekebilir.";
+
+"Dropbox" = "Dropbox";
+"Temporary sync data stored by Dropbox. Your files are safe, but Dropbox re-verifies your whole synced folder afterwards, which can take a while." = "Dropbox'ın sakladığı geçici eşitleme verileri. Dosyalarınız güvendedir ancak Dropbox sonradan eşitlenen klasörünüzün tamamını yeniden doğrular; bu biraz zaman alabilir.";
+
+"Google Drive" = "Google Drive";
+"Temporary sync data stored by Google Drive. Your files are safe, but Drive will re-check your synced content afterwards and may re-download parts of it." = "Google Drive'ın sakladığı geçici eşitleme verileri. Dosyalarınız güvendedir ancak Drive sonradan eşitlenen içeriğinizi yeniden denetler ve bir kısmını yeniden indirebilir.";
+
+"Microsoft OneDrive" = "Microsoft OneDrive";
+"Temporary sync data stored by OneDrive. Your files are safe, but OneDrive will re-verify your synced folder afterwards, which can take a while." = "OneDrive'ın sakladığı geçici eşitleme verileri. Dosyalarınız güvendedir ancak OneDrive sonradan eşitlenen klasörünüzü yeniden doğrular; bu biraz zaman alabilir.";
+
+"Microsoft Teams" = "Microsoft Teams";
+"Temporary files stored by Microsoft Teams. Safe to delete and Teams will rebuild them when you next open it." = "Microsoft Teams'in sakladığı geçici dosyalar. Silmek güvenlidir ve Teams'i bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Microsoft Word" = "Microsoft Word";
+"Temporary files stored by Microsoft Word. Safe to delete and Word will recreate them automatically." = "Microsoft Word'ün sakladığı geçici dosyalar. Silmek güvenlidir ve Word bunları otomatik olarak yeniden oluşturur.";
+
+"Microsoft Excel" = "Microsoft Excel";
+"Temporary files stored by Microsoft Excel. Safe to delete and Excel will recreate them automatically." = "Microsoft Excel'in sakladığı geçici dosyalar. Silmek güvenlidir ve Excel bunları otomatik olarak yeniden oluşturur.";
+
+"Granola AI Notes" = "Granola AI Notları";
+"Temporary files stored by the Granola AI meeting notes app. Safe to delete and Granola will rebuild them when you next open it." = "Granola AI toplantı notları uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve Granola'yı bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Claude AI App" = "Claude AI Uygulaması";
+"Temporary files stored by the Claude AI desktop app. Safe to delete and Claude will rebuild them automatically." = "Claude AI masaüstü uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve Claude bunları otomatik olarak yeniden oluşturur.";
+
+"ChatGPT App" = "ChatGPT Uygulaması";
+"Temporary files stored by the ChatGPT desktop app. Safe to delete and the app will rebuild them when you next open it." = "ChatGPT masaüstü uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve uygulamayı bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Ollama AI Models" = "Ollama AI Modelleri";
+"Temporary data stored by Ollama, a tool for running AI models locally. Deleting it is safe but Ollama may need to reload model data next time it runs." = "Yapay zekâ modellerini yerel olarak çalıştırma aracı olan Ollama'nın sakladığı geçici veriler. Silmek güvenlidir ancak Ollama bir sonraki çalışmasında model verilerini yeniden yüklemek zorunda kalabilir.";
+
+"Sketch" = "Sketch";
+"Temporary files stored by the Sketch design app. Safe to delete and Sketch will rebuild them automatically." = "Sketch tasarım uygulamasının sakladığı geçici dosyalar. Silmek güvenlidir ve Sketch bunları otomatik olarak yeniden oluşturur.";
+
+"Affinity Designer" = "Affinity Designer";
+"Temporary files stored by Affinity Designer. Safe to delete and Affinity will rebuild them when you next open it." = "Affinity Designer'ın sakladığı geçici dosyalar. Silmek güvenlidir ve Affinity'yi bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Affinity Photo" = "Affinity Photo";
+"Temporary files stored by Affinity Photo. Safe to delete and Affinity will rebuild them when you next open it." = "Affinity Photo'nun sakladığı geçici dosyalar. Silmek güvenlidir ve Affinity'yi bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Xcode" = "Xcode";
+"Temporary files stored by Xcode, Apple's developer tool. Safe to delete and Xcode will rebuild them the next time it runs." = "Apple'ın geliştirici aracı Xcode'un sakladığı geçici dosyalar. Silmek güvenlidir ve Xcode bir sonraki çalışmasında bunları yeniden oluşturur.";
+
+"iOS Simulator Cache" = "iOS Simulator Önbelleği";
+"Temporary files created by the iOS Simulator while testing apps. Safe to delete and the Simulator will recreate them when next launched." = "iOS Simulator'ın uygulamaları test ederken oluşturduğu geçici dosyalar. Silmek güvenlidir ve Simulator bir sonraki açılışta bunları yeniden oluşturur.";
+
+"Android Studio" = "Android Studio";
+"Temporary files stored by Android Studio. Safe to delete and Android Studio will rebuild them when you next open it." = "Android Studio'nun sakladığı geçici dosyalar. Silmek güvenlidir ve Android Studio'yu bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Proxyman Network Tool" = "Proxyman Ağ Aracı";
+"Temporary files stored by Proxyman, a network debugging tool. Safe to delete and Proxyman will rebuild them automatically." = "Bir ağ hata ayıklama aracı olan Proxyman'ın sakladığı geçici dosyalar. Silmek güvenlidir ve Proxyman bunları otomatik olarak yeniden oluşturur.";
+
+"TablePlus Database Tool" = "TablePlus Veritabanı Aracı";
+"Temporary files stored by TablePlus, a database management app. Safe to delete and TablePlus will rebuild them when you next open it." = "Bir veritabanı yönetim uygulaması olan TablePlus'ın sakladığı geçici dosyalar. Silmek güvenlidir ve TablePlus'ı bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Postico Database Tool" = "Postico Veritabanı Aracı";
+"Temporary files stored by Postico, a PostgreSQL database app. Safe to delete and Postico will rebuild them automatically." = "Bir PostgreSQL veritabanı uygulaması olan Postico'nun sakladığı geçici dosyalar. Silmek güvenlidir ve Postico bunları otomatik olarak yeniden oluşturur.";
+
+"Insomnia API Tool" = "Insomnia API Aracı";
+"Temporary files stored by Insomnia, an API testing tool. Safe to delete and Insomnia will rebuild them when you next open it." = "Bir API test aracı olan Insomnia'nın sakladığı geçici dosyalar. Silmek güvenlidir ve Insomnia'yı bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"RapidAPI / Paw" = "RapidAPI / Paw";
+"Temporary files stored by Paw or RapidAPI, API development tools. Safe to delete and they will be rebuilt when you next open the app." = "API geliştirme araçları Paw veya RapidAPI'nin sakladığı geçici dosyalar. Silmek güvenlidir ve uygulamayı bir sonraki açışınızda yeniden oluşturulur.";
+
+"Fork Git Client" = "Fork Git İstemcisi";
+"Temporary files stored by Fork, a Git client for Mac. Safe to delete and Fork will rebuild them automatically." = "Mac için bir Git istemcisi olan Fork'un sakladığı geçici dosyalar. Silmek güvenlidir ve Fork bunları otomatik olarak yeniden oluşturur.";
+
+"Sourcetree Git Client" = "Sourcetree Git İstemcisi";
+"Temporary files stored by Sourcetree, a Git client. Safe to delete and Sourcetree will rebuild them when you next open it." = "Bir Git istemcisi olan Sourcetree'nin sakladığı geçici dosyalar. Silmek güvenlidir ve Sourcetree'yi bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"Tower Git Client" = "Tower Git İstemcisi";
+"Temporary files stored by Tower, a Git client for Mac. Safe to delete and Tower will rebuild them automatically." = "Mac için bir Git istemcisi olan Tower'ın sakladığı geçici dosyalar. Silmek güvenlidir ve Tower bunları otomatik olarak yeniden oluşturur.";
+
+"ScreenFlow Screen Recorder" = "ScreenFlow Ekran Kaydedici";
+"Temporary files stored by ScreenFlow. Safe to delete and ScreenFlow will rebuild them when you next open it." = "ScreenFlow'un sakladığı geçici dosyalar. Silmek güvenlidir ve ScreenFlow'u bir sonraki açışınızda bunları yeniden oluşturur.";
+
+"CleanMyMac" = "CleanMyMac";
+"Temporary files stored by CleanMyMac itself. Safe to delete and CleanMyMac will rebuild them automatically." = "CleanMyMac'in kendisinin sakladığı geçici dosyalar. Silmek güvenlidir ve CleanMyMac bunları otomatik olarak yeniden oluşturur.";
+
+"Lungo Keep-Awake App" = "Lungo Uyanık Tutma Uygulaması";
+"Temporary files stored by Lungo, an app that keeps your Mac awake. Safe to delete." = "Mac'inizi uyanık tutan bir uygulama olan Lungo'nun sakladığı geçici dosyalar. Silmek güvenlidir.";
+
+"Bartender Menu Bar Tool" = "Bartender Menü Çubuğu Aracı";
+"Temporary files stored by Bartender, a menu bar organiser. Safe to delete and Bartender will rebuild them automatically." = "Bir menü çubuğu düzenleyicisi olan Bartender'ın sakladığı geçici dosyalar. Silmek güvenlidir ve Bartender bunları otomatik olarak yeniden oluşturur.";
+
+"CleanShot X Screenshot Tool" = "CleanShot X Ekran Görüntüsü Aracı";
+"Temporary files stored by CleanShot X. Safe to delete and CleanShot will rebuild them automatically." = "CleanShot X'in sakladığı geçici dosyalar. Silmek güvenlidir ve CleanShot bunları otomatik olarak yeniden oluşturur.";
+
+"Screenshots" = "Ekran Görüntüleri";
+"Temporary files created by macOS's built-in screenshot tool. Safe to delete." = "macOS'in yerleşik ekran görüntüsü aracının oluşturduğu geçici dosyalar. Silmek güvenlidir.";
+
+"Xnapper Screenshot Tool" = "Xnapper Ekran Görüntüsü Aracı";
+"Temporary files stored by Xnapper, a screenshot tool. Safe to delete and Xnapper will rebuild them automatically." = "Bir ekran görüntüsü aracı olan Xnapper'ın sakladığı geçici dosyalar. Silmek güvenlidir ve Xnapper bunları otomatik olarak yeniden oluşturur.";
+
+"Apple Maps" = "Apple Haritalar";
+"Map tiles and location data stored by Apple Maps. Nothing is lost, but tiles download again as you use Maps, and offline maps need downloading again." = "Apple Haritalar'ın sakladığı harita karoları ve konum verileri. Hiçbir şey kaybolmaz ancak Haritalar'ı kullandıkça karolar yeniden indirilir ve çevrimdışı haritaların yeniden indirilmesi gerekir.";
+
+"Apple Photos" = "Apple Fotoğraflar";
+"Thumbnails and previews from Apple Photos. No photos are deleted, but Photos makes every thumbnail again, which takes a long time on a large library." = "Apple Fotoğraflar'ın küçük resimleri ve önizlemeleri. Hiçbir fotoğraf silinmez ancak Fotoğraflar her küçük resmi yeniden oluşturur; büyük bir kitaplıkta bu uzun sürer.";
+
+"Apple Mail" = "Apple Mail";
+"Temporary files and message previews stored by Apple Mail. No mail is deleted, but Mail re-indexes afterwards and search can be incomplete until it finishes." = "Apple Mail'in sakladığı geçici dosyalar ve ileti önizlemeleri. Hiçbir posta silinmez ancak Mail sonradan yeniden dizinler ve bitene kadar arama eksik olabilir.";
+
+"Apple Music App" = "Apple Music Uygulaması";
+"Temporary files stored by the Apple Music app. Nothing is lost, but artwork and library data are rebuilt as you use the app." = "Apple Music uygulamasının sakladığı geçici dosyalar. Hiçbir şey kaybolmaz ancak kapak resimleri ve kitaplık verileri uygulamayı kullandıkça yeniden oluşturulur.";
+
+"Network Data Cache" = "Ağ Verisi Önbelleği";
+"Temporary files used by macOS to cache network responses and speed up connections. Safe to delete and will be rebuilt automatically." = "macOS'in ağ yanıtlarını önbelleğe almak ve bağlantıları hızlandırmak için kullandığı geçici dosyalar. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"Screen Time" = "Ekran Süresi";
+"The data Screen Time uses to track app usage. Deleting it clears usage history and reports, and they do not come back." = "Ekran Süresi'nin uygulama kullanımını izlemek için kullandığı veriler. Silmek kullanım geçmişini ve raporları temizler ve bunlar geri gelmez.";
+
+"npm npx Cache" = "npm npx Önbelleği";
+"Temporary packages downloaded when you run npx. Safe to delete; npx will download them again when needed." = "npx çalıştırdığınızda indirilen geçici paketler. Silmek güvenlidir; npx bunları gerektiğinde yeniden indirir.";
+
+"npm Logs" = "npm Günlükleri";
+"Log files written by npm commands. Safe to delete with no effect on installed packages." = "npm komutlarının yazdığı günlük dosyaları. Silmek güvenlidir ve yüklü paketleri etkilemez.";
+
+"Xcode Documentation Cache" = "Xcode Belge Önbelleği";
+"Cached Apple developer documentation used by Xcode. Safe to delete; Xcode will re-download docs when you browse them again." = "Xcode'un kullandığı önbelleğe alınmış Apple geliştirici belgeleri. Silmek güvenlidir; belgelere yeniden göz attığınızda Xcode bunları yeniden indirir.";
+
+"Corepack Cache" = "Corepack Önbelleği";
+"Cached Node.js package manager shims managed by Corepack. Safe to delete; Corepack will restore them on the next use." = "Corepack tarafından yönetilen önbelleğe alınmış Node.js paket yöneticisi kısayolları. Silmek güvenlidir; Corepack bunları bir sonraki kullanımda geri yükler.";
+
+"Cursor Agent Leftovers" = "Cursor Aracı Artıkları";
+"Folders from Cursor temp workspaces and empty windows that are now closed." = "Artık kapalı olan Cursor geçici çalışma alanlarından ve boş pencerelerden kalan klasörler.";
+
+"Orphaned Git Worktrees" = "Sahipsiz Git Worktree'leri";
+"Agent checkouts Git no longer tracks. Look inside first for uncommitted work." = "Git'in artık izlemediği ajan çıkışları. Önce içine bakıp commit edilmemiş çalışma olup olmadığını kontrol edin.";
+
+"Old Editor Workspace Data" = "Eski Düzenleyici Çalışma Alanı Verileri";
+"Saved state, including AI chats, for VS Code or Cursor projects whose folders no longer exist. If you moved or renamed a project, its chats are in here." = "Klasörleri artık var olmayan VS Code veya Cursor projelerinin yapay zekâ sohbetleri dahil kayıtlı durumu. Bir projeyi taşıdıysanız veya yeniden adlandırdıysanız sohbetleri buradadır.";
+
+"Old Browser Framework" = "Eski Tarayıcı Çerçevesi";
+"A leftover Chromium framework no running process uses. Quit and relaunch the browser to clean a version it still runs from; relaunching also removes old ones." = "Çalışan hiçbir işlemin kullanmadığı artık bir Chromium çerçevesi. Tarayıcının hâlâ çalıştığı bir sürümü temizlemek için tarayıcıdan çıkıp yeniden başlatın; yeniden başlatma eskileri de kaldırır.";
+
+"Link Thumbnail Cache" = "Bağlantı Küçük Resim Önbelleği";
+"Cached link preview thumbnails from messaging apps. Regenerated automatically when you open conversations." = "Mesajlaşma uygulamalarından önbelleğe alınmış bağlantı önizleme küçük resimleri. Konuşmaları açtığınızda otomatik olarak yeniden oluşturulur.";
+
+"Chat Media Cache" = "Sohbet Medya Önbelleği";
+"Cached media previews from messaging apps. Not your message history; apps re-fetch media as needed." = "Mesajlaşma uygulamalarından önbelleğe alınmış medya önizlemeleri. Mesaj geçmişiniz değildir; uygulamalar medyayı gerektiğinde yeniden getirir.";
+
+"App Store Binary Deltas" = "App Store İkili Farkları";
+"Cached App Store update deltas. macOS re-downloads them on the next app update." = "Önbelleğe alınmış App Store güncelleme farkları. macOS bunları bir sonraki uygulama güncellemesinde yeniden indirir.";
+
+"App Updater Cache" = "Uygulama Güncelleyici Önbelleği";
+"Temporary files from Squirrel-based app updaters (ShipIt folders). Recreated when apps check for updates." = "Squirrel tabanlı uygulama güncelleyicilerinin (ShipIt klasörleri) geçici dosyaları. Uygulamalar güncelleme denetlediğinde yeniden oluşturulur.";
+
+"App Update Downloads" = "Uygulama Güncelleme İndirmeleri";
+"Update packages Electron apps downloaded to install a new version, left behind once installed. Each app downloads its next update when one comes out." = "Electron uygulamalarının yeni bir sürümü yüklemek için indirdiği, yükleme sonrası geride kalan güncelleme paketleri. Her uygulama bir sonraki güncelleme çıktığında onu indirir.";
+
+"Spotlight Profile Cache" = "Spotlight Profil Önbelleği";
+"Spotlight index profile data. Nothing is lost, but Spotlight rebuilds it afterwards and search can be slower or incomplete in the meantime." = "Spotlight dizin profili verileri. Hiçbir şey kaybolmaz ancak Spotlight bunu sonradan yeniden oluşturur ve bu arada arama daha yavaş veya eksik olabilir.";
+
+"Elixir Build Output" = "Elixir Derleme Çıktısı";
+"Compiled output created by Mix, the build tool for Elixir and Erlang projects. Safe to delete and rebuilt from your own source code the next time you compile." = "Elixir ve Erlang projeleri için derleme aracı olan Mix'in oluşturduğu derlenmiş çıktı. Silmek güvenlidir ve bir sonraki derlemenizde kendi kaynak kodunuzdan yeniden oluşturulur.";
+
+"Elixir Dependencies" = "Elixir Bağımlılıkları";
+"Dependency source code downloaded by Mix for an Elixir or Erlang project. Safe to delete; it downloads again on the next build." = "Mix'in bir Elixir veya Erlang projesi için indirdiği bağımlılık kaynak kodu. Silmek güvenlidir; bir sonraki derlemede yeniden indirilir.";
+
+"Hex Package Cache" = "Hex Paket Önbelleği";
+"Downloaded Elixir and Erlang packages kept by Hex so repeat builds do not re-download them. Safe to delete and re-downloaded on your next build." = "Tekrarlanan derlemelerin yeniden indirmemesi için Hex'in tuttuğu indirilmiş Elixir ve Erlang paketleri. Silmek güvenlidir ve bir sonraki derlemenizde yeniden indirilir.";
+
+"Rebar3 Cache" = "Rebar3 Önbelleği";
+"Downloaded packages and build plugins kept by Rebar3, the Erlang build tool. Safe to delete and re-downloaded on your next build." = "Erlang derleme aracı Rebar3'ün tuttuğu indirilmiş paketler ve derleme eklentileri. Silmek güvenlidir ve bir sonraki derlemenizde yeniden indirilir.";
+
+"Next.js Build Output" = "Next.js Derleme Çıktısı";
+"Compiled pages and assets produced by Next.js. Safe to delete and rebuilt the next time you run or build the site." = "Next.js'in ürettiği derlenmiş sayfalar ve varlıklar. Silmek güvenlidir ve siteyi bir sonraki çalıştırışınızda veya derleyişinizde yeniden oluşturulur.";
+
+"Nuxt Build Cache" = "Nuxt Derleme Önbelleği";
+"Temporary build files created by Nuxt. Safe to delete and rebuilt the next time you run or build the site." = "Nuxt'ın oluşturduğu geçici derleme dosyaları. Silmek güvenlidir ve siteyi bir sonraki çalıştırışınızda veya derleyişinizde yeniden oluşturulur.";
+
+"Nuxt Output" = "Nuxt Çıktısı";
+"The built site Nuxt produces for deployment. Safe to delete and rebuilt on your next build." = "Nuxt'ın dağıtım için ürettiği derlenmiş site. Silmek güvenlidir ve bir sonraki derlemenizde yeniden oluşturulur.";
+
+"SvelteKit Build Cache" = "SvelteKit Derleme Önbelleği";
+"Generated files SvelteKit keeps between builds. Safe to delete and rebuilt the next time you run the project." = "SvelteKit'in derlemeler arasında tuttuğu üretilmiş dosyalar. Silmek güvenlidir ve projeyi bir sonraki çalıştırışınızda yeniden oluşturulur.";
+
+"Astro Build Cache" = "Astro Derleme Önbelleği";
+"Temporary build files created by Astro. Safe to delete and rebuilt on your next build." = "Astro'nun oluşturduğu geçici derleme dosyaları. Silmek güvenlidir ve bir sonraki derlemenizde yeniden oluşturulur.";
+
+"Angular Build Cache" = "Angular Derleme Önbelleği";
+"Build cache kept by the Angular CLI to make repeat builds faster. Safe to delete and rebuilt automatically." = "Angular CLI'nin tekrarlanan derlemeleri hızlandırmak için tuttuğu derleme önbelleği. Silmek güvenlidir ve otomatik olarak yeniden oluşturulur.";
+
+"pytest Cache" = "pytest Önbelleği";
+"Test results and lookup data cached by pytest. Safe to delete and recreated the next time you run your tests." = "pytest'in önbelleğe aldığı test sonuçları ve arama verileri. Silmek güvenlidir ve testlerinizi bir sonraki çalıştırışınızda yeniden oluşturulur.";
+
+"tox Environments" = "tox Ortamları";
+"Throwaway Python environments tox builds to run tests in. Safe to delete and rebuilt on your next tox run, which re-downloads packages." = "tox'un testleri çalıştırmak için oluşturduğu tek kullanımlık Python ortamları. Silmek güvenlidir ve bir sonraki tox çalışmanızda yeniden oluşturulur; bu paketleri yeniden indirir.";
+
+"Swift Package Build" = "Swift Paket Derlemesi";
+"Compiled output from Swift Package Manager. Safe to delete and rebuilt by your next swift build." = "Swift Paket Yöneticisi'nin derlenmiş çıktısı. Silmek güvenlidir ve bir sonraki swift build ile yeniden oluşturulur.";
+
+"Maven Build Output" = "Maven Derleme Çıktısı";
+"Compiled classes and packaged output produced by Maven. Safe to delete and rebuilt by your next build." = "Maven'in ürettiği derlenmiş sınıflar ve paketlenmiş çıktı. Silmek güvenlidir ve bir sonraki derlemenizle yeniden oluşturulur.";
+
+"Gradle Build Output" = "Gradle Derleme Çıktısı";
+"Compiled output produced by a Gradle build. Safe to delete and rebuilt by your next build." = "Bir Gradle derlemesinin ürettiği derlenmiş çıktı. Silmek güvenlidir ve bir sonraki derlemenizle yeniden oluşturulur.";
+
+"sbt Build Output" = "sbt Derleme Çıktısı";
+"Compiled output produced by sbt for a Scala project. Safe to delete and rebuilt by your next build." = "sbt'nin bir Scala projesi için ürettiği derlenmiş çıktı. Silmek güvenlidir ve bir sonraki derlemenizle yeniden oluşturulur.";
+
+".NET Build Output" = ".NET Derleme Çıktısı";
+"Compiled programs and libraries produced by a .NET build. Safe to delete and rebuilt by your next dotnet build." = "Bir .NET derlemesinin ürettiği derlenmiş programlar ve kitaplıklar. Silmek güvenlidir ve bir sonraki dotnet build ile yeniden oluşturulur.";
+
+".NET Intermediate Files" = ".NET Ara Dosyaları";
+"Temporary files .NET creates while compiling. Safe to delete and recreated on your next build." = ".NET'in derleme sırasında oluşturduğu geçici dosyalar. Silmek güvenlidir ve bir sonraki derlemenizde yeniden oluşturulur.";
+
+"PHP Packages" = "PHP Paketleri";
+"Third-party PHP packages downloaded by Composer. Safe to delete and re-downloaded by composer install, which needs an internet connection." = "Composer'ın indirdiği üçüncü taraf PHP paketleri. Silmek güvenlidir ve composer install ile yeniden indirilir; bu internet bağlantısı gerektirir.";
+
+"Ruby Gems" = "Ruby Gem'leri";
+"Ruby gems installed into the project by Bundler. Safe to delete and reinstalled by bundle install, which needs an internet connection." = "Bundler'ın projeye yüklediği Ruby gem'leri. Silmek güvenlidir ve bundle install ile yeniden yüklenir; bu internet bağlantısı gerektirir.";
+
+"Stack Build Output" = "Stack Derleme Çıktısı";
+"Compiled output and dependencies kept by Stack for a Haskell project. Safe to delete and rebuilt by your next build, which can take a while." = "Stack'in bir Haskell projesi için tuttuğu derlenmiş çıktı ve bağımlılıklar. Silmek güvenlidir ve bir sonraki derlemenizle yeniden oluşturulur; bu biraz zaman alabilir.";
+
+"Cabal Build Output" = "Cabal Derleme Çıktısı";
+"Compiled output produced by Cabal for a Haskell project. Safe to delete and rebuilt by your next build, which can take a while." = "Cabal'ın bir Haskell projesi için ürettiği derlenmiş çıktı. Silmek güvenlidir ve bir sonraki derlemenizle yeniden oluşturulur; bu biraz zaman alabilir.";
+
+"Zig Build Cache" = "Zig Derleme Önbelleği";
+"Compilation cache kept by Zig. Safe to delete and rebuilt on your next build." = "Zig'in tuttuğu derleme önbelleği. Silmek güvenlidir ve bir sonraki derlemenizde yeniden oluşturulur.";
+
+"Zig Build Output" = "Zig Derleme Çıktısı";
+"Finished programs and libraries produced by a Zig build. Safe to delete and rebuilt on your next build." = "Bir Zig derlemesinin ürettiği tamamlanmış programlar ve kitaplıklar. Silmek güvenlidir ve bir sonraki derlemenizde yeniden oluşturulur.";
+
+"Dune Build Output" = "Dune Derleme Çıktısı";
+"Compiled output produced by Dune for an OCaml project. Safe to delete and rebuilt by your next build." = "Dune'un bir OCaml projesi için ürettiği derlenmiş çıktı. Silmek güvenlidir ve bir sonraki derlemenizle yeniden oluşturulur.";
+
+"CMake Build Output" = "CMake Derleme Çıktısı";
+"Compiled output and build configuration produced by CMake. Safe to delete, though you will need to configure and build the project again." = "CMake'in ürettiği derlenmiş çıktı ve derleme yapılandırması. Silmek güvenlidir ancak projeyi yeniden yapılandırıp derlemeniz gerekir.";
+
+"Terraform Plugins" = "Terraform Eklentileri";
+"Provider plugins and modules Terraform downloads for a workspace. Safe to delete and re-downloaded by terraform init." = "Terraform'un bir çalışma alanı için indirdiği sağlayıcı eklentileri ve modüller. Silmek güvenlidir ve terraform init ile yeniden indirilir.";
+
+"Godot Project Cache" = "Godot Proje Önbelleği";
+"Imported assets and editor data Godot keeps for a project. Safe to delete and rebuilt the next time you open the project." = "Godot'un bir proje için tuttuğu içe aktarılmış varlıklar ve düzenleyici verileri. Silmek güvenlidir ve projeyi bir sonraki açışınızda yeniden oluşturulur.";
+
+"Unity Library Folder" = "Unity Library Klasörü";
+"Unity's imported-asset database for this project. It rebuilds itself, but reimporting a large project can take a long time, so check before removing it." = "Unity'nin bu proje için içe aktarılmış varlık veritabanı. Kendini yeniden oluşturur ancak büyük bir projeyi yeniden içe aktarmak uzun sürebilir, bu yüzden kaldırmadan önce kontrol edin.";
+
+"Unity Temp Folder" = "Unity Temp Klasörü";
+"Scratch files Unity writes while the editor is running. Recreated automatically, but do not remove it while the project is open in Unity." = "Unity'nin düzenleyici çalışırken yazdığı geçici dosyalar. Otomatik olarak yeniden oluşturulur ancak proje Unity'de açıkken kaldırmayın.";
+
+"Unreal Intermediate Files" = "Unreal Ara Dosyaları";
+"Generated build files Unreal creates while compiling a project. They come back on the next build, which will take longer than usual." = "Unreal'ın bir projeyi derlerken oluşturduğu üretilmiş derleme dosyaları. Bir sonraki derlemede geri gelirler; bu normalden uzun sürer.";
+
+"Unreal Derived Data Cache" = "Unreal Türetilmiş Veri Önbelleği";
+"Cooked assets and compiled shaders Unreal caches for a project. Rebuilt automatically, but the first build afterwards can be very slow." = "Unreal'ın bir proje için önbelleğe aldığı işlenmiş varlıklar ve derlenmiş gölgelendiriciler. Otomatik olarak yeniden oluşturulur ancak sonraki ilk derleme çok yavaş olabilir.";
+
+"NuGet Package Cache" = "NuGet Paket Önbelleği";
+"Downloaded .NET packages NuGet restores your projects from. Nothing is lost, but the next restore downloads them all again and needs a connection." = "NuGet'in projelerinizi geri yüklediği indirilmiş .NET paketleri. Hiçbir şey kaybolmaz ancak bir sonraki geri yükleme hepsini yeniden indirir ve bağlantı gerektirir.";
+
+"Stack Global Cache" = "Stack Genel Önbelleği";
+"Packages and prebuilt libraries Stack shares between Haskell projects. Settings and installed compilers stay. The next build downloads and rebuilds a lot." = "Stack'in Haskell projeleri arasında paylaştığı paketler ve önceden derlenmiş kitaplıklar. Ayarlar ve yüklü derleyiciler kalır. Bir sonraki derleme çok şey indirir ve yeniden oluşturur.";
+
+"Cabal Package Cache" = "Cabal Paket Önbelleği";
+"Haskell packages downloaded by Cabal. Nothing is lost, but your next build downloads and rebuilds them, which can take a long time." = "Cabal'ın indirdiği Haskell paketleri. Hiçbir şey kaybolmaz ancak bir sonraki derlemeniz bunları indirir ve yeniden oluşturur; bu uzun sürebilir.";
+
+"Bazel Build Cache" = "Bazel Derleme Önbelleği";
+"Build outputs Bazel caches between builds. Safe to delete, though the next build starts from scratch and can be slow." = "Bazel'in derlemeler arasında önbelleğe aldığı derleme çıktıları. Silmek güvenlidir ancak bir sonraki derleme sıfırdan başlar ve yavaş olabilir.";
+
+"Swift Package Cache" = "Swift Paket Önbelleği";
+"Package checkouts Swift Package Manager shares between projects. Safe to delete and re-downloaded on your next build." = "Swift Paket Yöneticisi'nin projeler arasında paylaştığı paket çıkışları. Silmek güvenlidir ve bir sonraki derlemenizde yeniden indirilir.";
+
+"Python Environment" = "Python Ortamı";
+"A Python environment with one project's packages. Recreate it by reinstalling from requirements.txt or pyproject.toml, which needs a connection." = "Bir projenin paketlerini içeren Python ortamı. requirements.txt veya pyproject.toml dosyasından yeniden yükleyerek yeniden oluşturun; bu bağlantı gerektirir.";
+
+"node-gyp Headers" = "node-gyp Başlıkları";
+"Node.js header files that node-gyp downloads to build native add-ons. Safe to delete; it downloads them again on the next native build." = "node-gyp'in yerel eklentileri derlemek için indirdiği Node.js başlık dosyaları. Silmek güvenlidir; bir sonraki yerel derlemede yeniden indirir.";
+
+"TypeScript Type Cache" = "TypeScript Tür Önbelleği";
+"Type definitions your editor downloaded so plain JavaScript files get autocomplete. Safe to delete; the editor downloads them again as needed." = "Düz JavaScript dosyalarının otomatik tamamlama alması için düzenleyicinizin indirdiği tür tanımları. Silmek güvenlidir; düzenleyici bunları gerektiğinde yeniden indirir.";
+
+"Cursor Startup Cache" = "Cursor Başlangıç Önbelleği";
+"Compiled code that Cursor saves so it starts faster. Safe to delete; Cursor rebuilds it the next time it opens." = "Cursor'un daha hızlı başlaması için kaydettiği derlenmiş kod. Silmek güvenlidir; Cursor bir sonraki açılışta bunu yeniden oluşturur.";
+
+"Claude Code Logs" = "Claude Code Günlükleri";
+"Logs that Claude Code writes for its MCP servers, one folder per project. Safe to delete; new logs are written as you use it." = "Claude Code'un MCP sunucuları için yazdığı günlükler; proje başına bir klasör. Silmek güvenlidir; kullandıkça yeni günlükler yazılır.";
+
+"Apple Python Cache" = "Apple Python Önbelleği";
+"Compiled files for the Python that comes with the macOS developer tools. Safe to delete; Python recreates them when it next runs." = "macOS geliştirici araçlarıyla gelen Python'un derlenmiş dosyaları. Silmek güvenlidir; Python bir sonraki çalışmasında bunları yeniden oluşturur.";
+
+"Java Native Libraries" = "Java Yerel Kitaplıkları";
+"Native libraries that Java apps unpack here when they start. Safe to delete; they are unpacked again on the next launch." = "Java uygulamalarının başlarken buraya açtığı yerel kitaplıklar. Silmek güvenlidir; bir sonraki açılışta yeniden açılırlar.";
+
+"Dictionary Cache" = "Sözlük Önbelleği";
+"Temporary data for the macOS Dictionary and Look Up. Safe to delete; it is rebuilt the next time you look up a word." = "macOS Sözlük ve Ara özelliğinin geçici verileri. Silmek güvenlidir; bir sonraki kelime aramanızda yeniden oluşturulur.";
+
+"App Store Ads Cache" = "App Store Reklam Önbelleği";
+"Data for the ads Apple shows in the App Store. Safe to delete; it is downloaded again when needed." = "Apple'ın App Store'da gösterdiği reklamların verileri. Silmek güvenlidir; gerektiğinde yeniden indirilir.";
+
+"iPhone and iPad Software Updates" = "iPhone ve iPad Yazılım Güncellemeleri";
+"iPhone, iPad or iPod updates Finder downloaded to update or restore a device, often 5 to 8 GB each. Finder downloads the current one again when needed." = "Finder'ın bir aygıtı güncellemek veya geri yüklemek için indirdiği, çoğunlukla her biri 5 ila 8 GB olan iPhone, iPad veya iPod güncellemeleri. Finder güncel olanı gerektiğinde yeniden indirir.";
+
+"DaVinci Resolve Render Cache" = "DaVinci Resolve Render Önbelleği";
+"Render cache and optimized media DaVinci Resolve keeps in your Movies folder. Resolve renders it again as you work, which takes time on large projects." = "DaVinci Resolve'un Filmler klasörünüzde tuttuğu render önbelleği ve optimize edilmiş medya. Resolve siz çalışırken bunu yeniden işler; büyük projelerde bu zaman alır.";
+
+"Aerial Wallpaper Videos" = "Aerial Duvar Kâğıdı Videoları";
+"Videos for the macOS aerial wallpapers and screen savers, often several GB. Nothing is lost, but the ones you use, and maybe others, download again." = "macOS aerial duvar kâğıtları ve ekran koruyucuları için videolar; çoğunlukla birkaç GB. Hiçbir şey kaybolmaz ancak kullandıklarınız ve belki diğerleri yeniden indirilir.";
+
+"Messages Previews" = "Mesajlar Önizlemeleri";
+"Previews of photos, videos and links in Messages, made again as you scroll a conversation. Your messages and attachments are not touched." = "Mesajlar'daki fotoğrafların, videoların ve bağlantıların önizlemeleri; bir konuşmayı kaydırdıkça yeniden oluşturulur. İletilerinize ve eklerinize dokunulmaz.";
+
+"Mail Attachment Copies" = "Mail Ek Kopyaları";
+"Attachments you opened from Mail; the originals stay in Mail. Edits you made to one and never saved elsewhere exist only here. Held back while Mail is open." = "Mail'den açtığınız ekler; orijinaller Mail'de kalır. Birinde yaptığınız ve başka yere hiç kaydetmediğiniz düzenlemeler yalnızca burada bulunur. Mail açıkken geri tutulur.";
+
+"Unfinished Downloads" = "Tamamlanmamış İndirmeler";
+"Safari, Chrome, Firefox or Parallels downloads that stopped and have not changed in over a week. The app may still resume one, so check before deleting." = "Duran ve bir haftadan uzun süredir değişmeyen Safari, Chrome, Firefox veya Parallels indirmeleri. Uygulama birini hâlâ sürdürebilir, bu yüzden silmeden önce kontrol edin.";
+
+"Simulator Caches" = "Simulator Önbellekleri";
+"Shared caches the iOS Simulator builds for each runtime. It builds them again the next time a device starts, which makes that launch slower." = "iOS Simulator'ın her çalışma zamanı için oluşturduğu paylaşılan önbellekler. Bir aygıt bir sonraki başladığında bunları yeniden oluşturur; bu, o açılışı yavaşlatır.";
+
+"Xcode Test Devices" = "Xcode Test Aygıtları";
+"Temporary simulator copies Xcode makes to run tests in parallel and sometimes leaves behind. Safe to delete when no tests are running." = "Xcode'un testleri paralel çalıştırmak için oluşturduğu ve bazen geride bıraktığı geçici simülatör kopyaları. Hiçbir test çalışmıyorken silmek güvenlidir.";
+
+"Old AI Coding Tool Versions" = "Eski Yapay Zekâ Kodlama Aracı Sürümleri";
+"Earlier versions of Claude Code, Cursor Agent or Grok that stayed behind after updates. The version you run and the newest one are kept. Safe to delete." = "Güncellemelerden sonra geride kalan Claude Code, Cursor Agent veya Grok'un önceki sürümleri. Çalıştırdığınız sürüm ve en yenisi saklanır. Silmek güvenlidir.";
+
+"Cursor Agent Install Leftovers" = "Cursor Agent Kurulum Artıkları";
+"Unfinished installs and a download left by Cursor's agent CLI updates. Only items untouched for a day are listed. The installed versions stay." = "Cursor'un agent CLI güncellemelerinin geride bıraktığı yarım kurulumlar ve bir indirme. Yalnızca bir gündür dokunulmamış öğeler listelenir. Yüklü sürümler kalır.";
+
+"Old Claude Code Downloads" = "Eski Claude Code İndirmeleri";
+"Claude Code installers older than the version you run. Claude Code runs from its versions folder and doesn't open these again." = "Çalıştırdığınız sürümden eski Claude Code yükleyicileri. Claude Code kendi sürümler klasöründen çalışır ve bunları yeniden açmaz.";
+
+"Android NDK" = "Android NDK";
+"An older Android NDK. Gradle downloads it again when a project needs it. A build without Gradle may fail until you reinstall it. The newest one stays." = "Daha eski bir Android NDK. Bir proje ihtiyaç duyduğunda Gradle bunu yeniden indirir. Gradle olmadan yapılan bir derleme, yeniden yükleyene kadar başarısız olabilir. En yenisi kalır.";
+
+"Unused Android System Images" = "Kullanılmayan Android Sistem İmajları";
+"Emulator images no emulator in ~/.android/avd uses. Android Studio downloads one again when you need it. If you keep emulators elsewhere, check them first." = "~/.android/avd içindeki hiçbir emülatörün kullanmadığı emülatör imajları. Android Studio ihtiyaç duyduğunuzda birini yeniden indirir. Emülatörleri başka yerde tutuyorsanız önce onları kontrol edin.";
+
+"Old Figma Profiles" = "Eski Figma Profilleri";
+"Earlier Figma profiles. Figma copied each one into the profile it uses now and doesn't read them again. They still hold old cookies and site data." = "Önceki Figma profilleri. Figma her birini şu an kullandığı profile kopyaladı ve bunları bir daha okumaz. Hâlâ eski çerezleri ve site verilerini barındırırlar.";
+
+"pre-commit Environments" = "pre-commit Ortamları";
+"Tool environments that pre-commit sets up to run your git hooks. Safe to delete; they are set up again on your next commit, which makes that commit slow." = "pre-commit'in git kancalarınızı çalıştırmak için kurduğu araç ortamları. Silmek güvenlidir; bir sonraki commit'inizde yeniden kurulurlar ve bu o commit'i yavaşlatır.";
+
+"Expo Cache" = "Expo Önbelleği";
+"App builds, templates and SDK data the Expo tools downloaded. Your Expo login is left alone. Safe to delete; Expo downloads what it needs again." = "Expo araçlarının indirdiği uygulama derlemeleri, şablonlar ve SDK verileri. Expo girişinize dokunulmaz. Silmek güvenlidir; Expo ihtiyaç duyduğunu yeniden indirir.";
+
+"pyenv and rbenv Downloads" = "pyenv ve rbenv İndirmeleri";
+"Source downloads pyenv and rbenv keep after installing a Python or Ruby version. Installed versions are left alone. Safe to delete." = "pyenv ve rbenv'in bir Python veya Ruby sürümünü yükledikten sonra tuttuğu kaynak indirmeleri. Yüklü sürümlere dokunulmaz. Silmek güvenlidir.";
+
+"Oh My Zsh Cache" = "Oh My Zsh Önbelleği";
+"Completion and update-check files that Oh My Zsh keeps. Safe to delete; they are recreated when you open a new terminal window." = "Oh My Zsh'in tuttuğu tamamlama ve güncelleme denetimi dosyaları. Silmek güvenlidir; yeni bir terminal penceresi açtığınızda yeniden oluşturulurlar.";
+
+"opam Download Cache" = "opam İndirme Önbelleği";
+"Package downloads opam keeps for OCaml. Installed packages are left alone. Safe to delete; opam downloads them again when needed." = "opam'in OCaml için tuttuğu paket indirmeleri. Yüklü paketlere dokunulmaz. Silmek güvenlidir; opam bunları gerektiğinde yeniden indirir.";
+
+"Puppeteer Browsers" = "Puppeteer Tarayıcıları";
+"Browsers Puppeteer downloaded for automated tests. Scripts fail until it is installed again with npm install or npx puppeteer browsers install." = "Puppeteer'ın otomatik testler için indirdiği tarayıcılar. npm install veya npx puppeteer browsers install ile yeniden yüklenene kadar betikler başarısız olur.";
+
+"Conda Package Cache" = "Conda Paket Önbelleği";
+"Packages conda unpacked to build your environments, which link to these files and keep working. Deleting frees less than shown; conda clean --all is safer." = "conda'nın ortamlarınızı oluşturmak için açtığı paketler; ortamlar bu dosyalara bağlanır ve çalışmaya devam eder. Silmek gösterilenden daha az yer açar; conda clean --all daha güvenlidir.";
+
+"EffectCraft Render Cache" = "EffectCraft Render Önbelleği";
+"Rendered frames EffectCraft keeps so effects preview without rendering again. Safe to delete; EffectCraft renders them again when you open a project." = "EffectCraft'ın efektlerin yeniden işlenmeden önizlenmesi için tuttuğu işlenmiş kareler. Silmek güvenlidir; EffectCraft bir projeyi açtığınızda bunları yeniden işler.";
+
+"Dart Analysis Cache" = "Dart Analiz Önbelleği";
+"Analysis results the Dart and Flutter language server keeps in ~/.dartServer so projects open faster. Safe to delete; the analyzer rebuilds them." = "Dart ve Flutter dil sunucusunun projelerin daha hızlı açılması için ~/.dartServer içinde tuttuğu analiz sonuçları. Silmek güvenlidir; çözümleyici bunları yeniden oluşturur.";
+
+"Hermes Agent Cache" = "Hermes Agent Önbelleği";
+"Hermes agent downloads and scratch space in ~/.hermes/cache. Clean it while Hermes is idle, since a running task may use it. Settings, keys and sessions stay." = "Hermes agent'ın ~/.hermes/cache içindeki indirmeleri ve geçici alanı. Çalışan bir görev kullanıyor olabileceğinden Hermes boştayken temizleyin. Ayarlar, anahtarlar ve oturumlar kalır.";
+
+"Antigravity Browser Cache" = "Antigravity Tarayıcı Önbelleği";
+"Page and script caches of the browser Antigravity uses for web tasks, filled again as it loads pages. Sign-ins, history and extensions are left alone." = "Antigravity'nin web görevleri için kullandığı tarayıcının sayfa ve betik önbellekleri; sayfaları yükledikçe yeniden dolar. Oturum açmalarına, geçmişe ve uzantılara dokunulmaz.";
+
+"nvm Download Cache" = "nvm İndirme Önbelleği";
+"Node.js downloads nvm keeps after installing a version. Installed versions are left alone. Safe to delete; nvm downloads a version again if you reinstall it." = "nvm'in bir sürümü yükledikten sonra tuttuğu Node.js indirmeleri. Yüklü sürümlere dokunulmaz. Silmek güvenlidir; bir sürümü yeniden yüklerseniz nvm onu yeniden indirir.";
+
+"giget Template Cache" = "giget Şablon Önbelleği";
+"Project templates giget downloaded for tools like nuxi init. Safe to delete; they download again the next time you create a project." = "giget'in nuxi init gibi araçlar için indirdiği proje şablonları. Silmek güvenlidir; bir sonraki proje oluşturmanızda yeniden indirilirler.";
+
+"Firebase Emulators" = "Firebase Emülatörleri";
+"Emulator files the Firebase CLI downloaded. Safe to delete; the Firebase CLI downloads them again the next time you start the emulators." = "Firebase CLI'nin indirdiği emülatör dosyaları. Silmek güvenlidir; emülatörleri bir sonraki başlatışınızda Firebase CLI bunları yeniden indirir.";
+
+"Gradle Logs and Temp Files" = "Gradle Günlükleri ve Geçici Dosyaları";
+"Logs from Gradle daemons that have stopped, and Gradle's temporary files once a week old and no build runs. Gradle makes new ones when needed. Safe to delete." = "Durmuş Gradle servislerinin günlükleri ve bir haftalık olup hiçbir derleme çalışmıyorken Gradle'ın geçici dosyaları. Gradle gerektiğinde yenilerini oluşturur. Silmek güvenlidir.";
+
+"Clang Module Cache" = "Clang Modül Önbelleği";
+"Compiled module files clang and the Swift compiler keep for command-line builds and scripts. Xcode's own builds use another folder. Safe to delete; the next compile builds them again." = "clang ve Swift derleyicisinin komut satırı derlemeleri ve betikler için tuttuğu derlenmiş modül dosyaları. Xcode'un kendi derlemeleri başka bir klasör kullanır. Silmek güvenlidir; bir sonraki derleme bunları yeniden oluşturur.";
+
+"CodexBar Cache" = "CodexBar Önbelleği";
+"Web downloads and update files the CodexBar menu bar app keeps. Safe to delete; CodexBar downloads them again when needed." = "CodexBar menü çubuğu uygulamasının tuttuğu web indirmeleri ve güncelleme dosyaları. Silmek güvenlidir; CodexBar bunları gerektiğinde yeniden indirir.";
+
+"CodexBar Usage History" = "CodexBar Kullanım Geçmişi";
+"Cost and usage totals CodexBar worked out from your Claude and Codex session logs. CodexBar works them out again, but days whose logs are gone stay missing." = "CodexBar'ın Claude ve Codex oturum günlüklerinizden hesapladığı maliyet ve kullanım toplamları. CodexBar bunları yeniden hesaplar ancak günlükleri silinmiş günler eksik kalır.";
+
+"Apple Intelligence Service Cache" = "Apple Intelligence Servis Önbelleği";
+"Web downloads and compiled model files a background Apple Intelligence service keeps. The Apple Intelligence models are not touched. Safe to delete; macOS builds these again when the service next needs them." = "Bir Apple Intelligence arka plan servisinin tuttuğu web indirmeleri ve derlenmiş model dosyaları. Apple Intelligence modellerine dokunulmaz. Silmek güvenlidir; servis bir sonraki ihtiyaç duyduğunda macOS bunları yeniden oluşturur.";
+
+"Swift Compiler Cache" = "Swift Derleyici Önbelleği";
+"Compiled model files the Swift compiler keeps. Safe to delete; they are built again when the compiler next needs them." = "Swift derleyicisinin tuttuğu derlenmiş model dosyaları. Silmek güvenlidir; derleyici bir sonraki ihtiyaç duyduğunda yeniden oluşturulurlar.";

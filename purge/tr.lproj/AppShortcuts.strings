@@ -1,0 +1,22 @@
+/* PurgeAppShortcuts.swift içindeki Uygulama Kısayolları için Siri ve Spotlight ifadeleri. */
+"Scan for junk with ${applicationName}" = "${applicationName} ile gereksizleri tara";
+"Find junk with ${applicationName}" = "${applicationName} ile gereksizleri bul";
+"Free up space with ${applicationName}" = "${applicationName} ile yer aç";
+"Clean up my Mac with ${applicationName}" = "${applicationName} ile Mac'imi temizle";
+"How much can ${applicationName} free" = "${applicationName} ne kadar yer açabilir";
+"How much space can ${applicationName} free up" = "${applicationName} ne kadar alan açabilir";
+"Check my storage with ${applicationName}" = "${applicationName} ile depolamamı kontrol et";
+"Scan my Mac with ${applicationName}" = "${applicationName} ile Mac'imi tara";
+"${applicationName} scan" = "${applicationName} tara";
+"Clean junk with ${applicationName}" = "${applicationName} ile gereksizleri temizle";
+"Clean safe junk with ${applicationName}" = "${applicationName} ile güvenli gereksizleri temizle";
+"Clear junk with ${applicationName}" = "${applicationName} ile gereksizleri sil";
+"Clear caches with ${applicationName}" = "${applicationName} ile önbellekleri temizle";
+"Delete junk with ${applicationName}" = "${applicationName} ile gereksizleri sil";
+"${applicationName} clean" = "${applicationName} temizle";
+"Uninstall ${app} with ${applicationName}" = "${app} uygulamasını ${applicationName} ile kaldır";
+"Remove ${app} with ${applicationName}" = "${app} uygulamasını ${applicationName} ile sil";
+"Uninstall an app with ${applicationName}" = "${applicationName} ile bir uygulamayı kaldır";
+"Remove an app with ${applicationName}" = "${applicationName} ile bir uygulamayı sil";
+"Delete an app with ${applicationName}" = "${applicationName} ile bir uygulamayı sil";
+"Get rid of an app with ${applicationName}" = "${applicationName} ile bir uygulamadan kurtul";

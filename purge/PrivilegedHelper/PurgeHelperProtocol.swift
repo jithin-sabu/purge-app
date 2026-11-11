@@ -60,7 +60,8 @@ enum PurgeHelperConstants {
             "default-prompt": [
                 "": "Purge wants to move apps or files an administrator installed to the Trash.",
                 "zh-Hans": "Purge 想要将管理员安装的应用或文件移到废纸篓。",
-                "zh_CN": "Purge 想要将管理员安装的应用或文件移到废纸篓。"
+                "zh_CN": "Purge 想要将管理员安装的应用或文件移到废纸篓。",
+                "tr": "Purge, bir yönetici tarafından yüklenen uygulamaları veya dosyaları Çöp Sepeti'ne taşımak istiyor."
             ]
         ]
     }
