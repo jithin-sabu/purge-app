@@ -516,6 +516,73 @@ struct ClangModuleCacheTests {
     }
 }
 
+// MARK: - The Quick Look thumbnail cache in the same folder
+
+/// macOS seals the Quick Look thumbnail cache, which sits in the per-user cache
+/// folder next to clang's module cache. No app can read or delete it, even with
+/// Full Disk Access, and once it is moved to the Trash the Trash can never be
+/// emptied (#353). So no gate may accept it or the agent's folder around it.
+@Suite("Quick Look thumbnail cache is never offered (#353)")
+struct QuickLookThumbnailCacheTests {
+    /// The cache where macOS 11 and later keep it, where 10.14 kept it, the
+    /// agent's folder around it, and a file inside it.
+    private static func sealedPaths(inCacheFolder folder: String) -> [String] {
+        let base = folder.hasSuffix("/") ? String(folder.dropLast()) : folder
+        return [
+            "\(base)/com.apple.quicklook.ThumbnailsAgent",
+            "\(base)/com.apple.quicklook.ThumbnailsAgent/com.apple.QuickLook.thumbnailcache",
+            "\(base)/com.apple.quicklook.ThumbnailsAgent/com.apple.QuickLook.thumbnailcache/thumbnails.data",
+            "\(base)/com.apple.QuickLook.thumbnailcache",
+            "\(base)/com.apple.QuickLook.thumbnailcache/index.sqlite",
+        ]
+    }
+
+    /// This Mac's own cache folder and a made-up one, each under both spellings
+    /// of `/var`.
+    private static func everySealedPath() throws -> [String] {
+        let real = try #require(DeletionSafetyPolicy.darwinUserCacheDirectory())
+        let folders = DeletionSafetyPolicy.bothVarSpellings(of: real)
+            + DeletionSafetyPolicy.bothVarSpellings(of: "/var/folders/ab/cd/C")
+        return folders.flatMap { sealedPaths(inCacheFolder: $0) }
+    }
+
+    @Test
+    func theCacheGateRefusesIt() throws {
+        let paths = try Self.everySealedPath()
+        #expect(paths.count == 20)
+        for path in paths {
+            let url = URL(fileURLWithPath: path)
+            #expect(DeletionSafetyPolicy.evaluate(url) != .allow, "\(path)")
+            #expect(!DeletionSafetyPolicy.isOfferedForCleanup(url), "\(path)")
+            #expect(!DeletionSafetyPolicy.isWhitelistedClangModuleCachePath(path), "\(path)")
+        }
+    }
+
+    /// `FileDeleter.deleteUserSelectedFiles` asks these three. The uninstaller's
+    /// one matters most: another cleaner's uninstall is what moved this folder.
+    @Test
+    func theUserSelectedGatesRefuseIt() throws {
+        for path in try Self.everySealedPath() {
+            let url = URL(fileURLWithPath: path)
+            #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(url), "\(path)")
+            #expect(!LargeFileScanPolicy.isEligibleForDeletion(url), "\(path)")
+            #expect(!AIModelScanPolicy.isEligibleForDeletion(url), "\(path)")
+        }
+    }
+
+    /// The uninstaller looks for leftovers only in Library folders, so it never
+    /// lists the per-user cache folder or anything in it.
+    @Test
+    func theUninstallerNeverSearchesThePerUserCacheFolder() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        for root in AppUninstallScanPolicy.leftoverSearchRoots(home: home) {
+            let path = root.url.standardizedFileURL.path
+            #expect(!path.hasPrefix("/var/"), "\(path)")
+            #expect(!path.hasPrefix("/private/var/"), "\(path)")
+        }
+    }
+}
+
 // MARK: - Download caches, CLI versions and Caches entries
 
 @Suite("Missed caches (#323): allowlist and entries")
