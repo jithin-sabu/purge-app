@@ -536,6 +536,31 @@ struct RemovedAppWatchPolicyTests {
         #expect(rows.map(\.isSelected) == [true, false])
     }
 
+    /// The review opens by itself after an app is dragged to the Trash, so a
+    /// row the scan left unticked must stay unticked there: a scripts folder
+    /// with files in it (#352) is an identifier match inside the home folder,
+    /// and one confirm would otherwise move the user's scripts.
+    @Test
+    func reviewKeepsARowTheScanLeftUnticked() {
+        let home = "/Users/x/Library"
+        var scripts = item("\(home)/Application Scripts/com.knollsoft.Rectangle", category: .applicationScripts,
+                           reason: .bundleID, isSelected: false)
+        scripts.holdsAddedScripts = true
+        let rows = RemovedAppReviewFiltering.reviewItems(
+            from: [
+                scripts,
+                item("\(home)/Application Scripts/XYZ123ABCD.com.knollsoft.Rectangle", category: .applicationScripts, reason: .groupID),
+                item("\(home)/WebKit/com.knollsoft.Rectangle", category: .webData, reason: .bundleID),
+            ],
+            owner: makeApp(),
+            survivors: [],
+            appGroupClaims: AppGroupClaims(),
+            home: URL(fileURLWithPath: "/Users/x")
+        )
+        #expect(rows.map(\.isSelected) == [false, true, true])
+        #expect(rows[0].holdsAddedScripts)
+    }
+
     /// The review opens unprompted, so nothing outside the home folder starts
     /// ticked, even an identifier match. Those are the paths that can need the
     /// administrator helper.

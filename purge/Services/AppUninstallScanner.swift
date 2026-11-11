@@ -280,6 +280,7 @@ nonisolated final class AppUninstallScanner {
                     category: root.category,
                     app: app
                 ) else { continue }
+                guard AppUninstallScanPolicy.offers(reason, in: root) else { continue }
                 let key = entry.standardizedFileURL.path
                 guard !seen.contains(key) else { continue }
                 // Defend in depth: only offer what the delete gate would accept.
@@ -336,7 +337,8 @@ nonisolated final class AppUninstallScanner {
                     // and the user opts in (#228). So does an Application Scripts
                     // folder with scripts in it, which the user may have written
                     // (#352).
-                    isSelected: match.category != .homeFolderData && !match.holdsAddedScripts
+                    isSelected: match.category != .homeFolderData && !match.holdsAddedScripts,
+                    holdsAddedScripts: match.holdsAddedScripts
                 )
             )
         }

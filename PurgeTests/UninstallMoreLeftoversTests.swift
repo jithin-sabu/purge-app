@@ -141,8 +141,27 @@ struct UninstallMoreLeftoversTests {
     private static let sharedFolderCases: [(path: String, allowed: Bool)] = [
         ("/Library/Preferences/com.knollsoft.Rectangle.plist", true),
         ("/Library/Caches/com.knollsoft.Rectangle", true),
-        ("/Library/Logs/Rectangle", true),
         ("/Library/Logs/com.knollsoft.Rectangle", true),
+        ("/Library/Caches/app.spokenly", true),
+
+        // What macOS names in plain words, with no identifier in the name.
+        ("/Library/Logs/DiagnosticReports", false),
+        ("/Library/Logs/CrashReporter", false),
+        ("/Library/Logs/Bluetooth", false),
+        ("/Library/Logs/WindowServer", false),
+        ("/Library/Logs/Rectangle", false),
+        ("/Library/Caches/ColorSync", false),
+        ("/Library/Caches/Desktop Pictures", false),
+        ("/Library/Caches/Desktop Pictures.v2", false),
+        ("/Library/Preferences/systemmigrationd.plist", false),
+        // The system's own log files and the printing system's settings.
+        ("/Library/Logs/MCXTools.log", false),
+        ("/Library/Logs/LKDC-setup.log", false),
+        ("/Library/Preferences/org.cups.printers.plist", false),
+        ("/Library/Caches/org.cups", false),
+        ("/Library/Caches/com.apple", false),
+        ("/Library/Caches/com..Rectangle", false),
+        ("/Library/Caches/Rectangle.", false),
 
         // The folders themselves.
         ("/Library/Preferences", false),
@@ -176,6 +195,22 @@ struct UninstallMoreLeftoversTests {
             #expect(eligible(path) == allowed, "gate: \(path)")
             #expect(helperAllows(path) == allowed, "helper: \(path)")
         }
+    }
+
+    @Test("No name-only match is offered in the shared /Library folders")
+    func sharedFoldersOfferNoNameOnlyMatch() {
+        for root in AppUninstallScanPolicy.leftoverSearchRoots(home: home) {
+            let shared = PurgeHelperConstants.sharedSystemLeftoverRoots.contains(root.url.standardizedFileURL.path)
+            #expect(AppUninstallScanPolicy.offers(.appName, in: root) == !shared, "\(root.url.path)")
+            #expect(AppUninstallScanPolicy.offers(.bundleID, in: root), "\(root.url.path)")
+            #expect(AppUninstallScanPolicy.offers(.groupID, in: root), "\(root.url.path)")
+        }
+        // An app named after a system folder still matches the name in the
+        // user's Logs, where it always did, and the gate refuses the shared one.
+        let bluetooth = makeApp(name: "Bluetooth", bundlePath: "/Applications/Bluetooth.app", bundleID: "com.example.bt")
+        #expect(reason("Bluetooth", .logs, app: bluetooth) == .appName)
+        #expect(!eligible("/Library/Logs/Bluetooth"))
+        #expect(!helperAllows("/Library/Logs/Bluetooth"))
     }
 
     @Test("The shared-folder rule covers exactly the three /Library roots added")
@@ -273,7 +308,18 @@ struct UninstallMoreLeftoversTests {
         let scripts = URL(fileURLWithPath: "/Users/example/Library/Application Scripts/XYZ123ABCD.com.knollsoft.Rectangle")
         #expect(PurgeStore.bundleIDNaming(cookies, category: .webData) == "com.knollsoft.Rectangle")
         #expect(PurgeStore.bundleIDNaming(webKit, category: .webData) == "com.knollsoft.Rectangle")
-        #expect(PurgeStore.bundleIDNaming(scripts, category: .applicationScripts) == nil)
+        // A scripts folder gives its name: the app's own id finds the app, and
+        // a group's name finds none and leaves it to the claim check.
+        #expect(PurgeStore.bundleIDNaming(scripts, category: .applicationScripts) == "XYZ123ABCD.com.knollsoft.Rectangle")
+        let ownScripts = URL(fileURLWithPath: "/Users/example/Library/Application Scripts/com.knollsoft.Rectangle")
+        #expect(PurgeStore.bundleIDNaming(ownScripts, category: .applicationScripts) == "com.knollsoft.Rectangle")
+
+        // A hidden row is asked about by the id after its dot.
+        let lib = "/Users/example/Library/"
+        #expect(PurgeStore.bundleIDNaming(URL(fileURLWithPath: lib + "Application Support/.com.knollsoft.Rectangle"), category: .applicationSupport) == "com.knollsoft.Rectangle")
+        #expect(PurgeStore.bundleIDNaming(URL(fileURLWithPath: lib + "Caches/.com.knollsoft.Rectangle"), category: .caches) == "com.knollsoft.Rectangle")
+        #expect(PurgeStore.bundleIDNaming(URL(fileURLWithPath: lib + "Preferences/.com.knollsoft.Rectangle.plist"), category: .preferences) == "com.knollsoft.Rectangle")
+        #expect(PurgeStore.bundleIDNaming(URL(fileURLWithPath: lib + "Cookies/.com.knollsoft.Rectangle.binarycookies"), category: .webData) == "com.knollsoft.Rectangle")
         #expect(AppUninstallScanPolicy.leftoverCategory(for: cookies, home: home) == .webData)
         #expect(AppUninstallScanPolicy.leftoverCategory(for: scripts, home: home) == .applicationScripts)
     }
@@ -310,14 +356,26 @@ struct UninstallMoreLeftoversTests {
         for await found in scanner.leftoverStream(for: app) { items.append(found) }
         let byPath = Dictionary(uniqueKeysWithValues: items.map { ($0.path.standardizedFileURL.path, $0) })
 
-        let withScripts = byPath[own.standardizedFileURL.path]
-        #expect(withScripts?.category == .applicationScripts)
-        #expect(withScripts?.safetyInfo.level == .medium)
-        #expect(withScripts?.isSelected == false)
+        let withScripts = try #require(byPath[own.standardizedFileURL.path])
+        #expect(withScripts.category == .applicationScripts)
+        #expect(withScripts.safetyInfo.level == .medium)
+        #expect(withScripts.isSelected == false)
+        #expect(withScripts.holdsAddedScripts)
 
-        let empty = byPath[group.standardizedFileURL.path]
-        #expect(empty?.safetyInfo.level == .safe)
-        #expect(empty?.isSelected == true)
+        let empty = try #require(byPath[group.standardizedFileURL.path])
+        #expect(empty.safetyInfo.level == .safe)
+        #expect(empty.isSelected == true)
+        #expect(!empty.holdsAddedScripts)
+
+        // Read again right before the move. A folder the user approved as empty
+        // stays once a script lands in it. One they ticked knowing it held
+        // scripts still moves, and a folder that is gone is not held here.
+        #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(empty))
+        #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(withScripts))
+        try Data("on run\nend run".utf8).write(to: group.appendingPathComponent("Late.scpt"))
+        #expect(AppUninstallScanPolicy.scriptsFolderGainedFiles(empty))
+        try fm.removeItem(at: group)
+        #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(empty))
     }
 
     /// The scan against a temporary home (#171): what it finds in the added

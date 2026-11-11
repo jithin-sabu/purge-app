@@ -29,7 +29,8 @@ enum PurgeHelperConstants {
     /// (#314).
     /// v9 also accepts leftovers in Application Scripts, Cookies and WebKit in the
     /// user's Library, and in `/Library/Caches`, `/Library/Preferences` and
-    /// `/Library/Logs`, where it refuses Apple's own and hidden entries (#352).
+    /// `/Library/Logs`, where it takes only a name shaped like a bundle
+    /// identifier and refuses Apple's own and hidden entries (#352).
     static let version = "9"
 
     /// The authorization right the helper asks for before it moves anything for a
@@ -128,18 +129,37 @@ enum PurgeHelperConstants {
         "/Library/Logs"
     ]
 
+    /// Identifier prefixes macOS itself uses in the shared system folders,
+    /// lowercased: Apple's own, and the printing system's
+    /// (`/Library/Preferences/org.cups.printers.plist`).
+    private nonisolated static let systemOwnedIdentifierPrefixes = ["com.apple", "org.cups"]
+
     /// Whether an entry named `name`, directly inside the shared system folder
-    /// at `rootPath`, can be an app's leftover. Never a hidden entry
-    /// (`.GlobalPreferences.plist`), never one of Apple's (`com.apple.…`), and in
-    /// `/Library/Preferences` only a `.plist`, which keeps out the folders macOS
-    /// stores its settings in (`SystemConfiguration`, `Audio`, `OpenDirectory`).
-    /// The app's gate and the helper both ask here, so neither can accept an
-    /// entry the other refuses.
+    /// at `rootPath`, can be an app's leftover. The name must be shaped like a
+    /// bundle identifier, with at least two parts around a dot and no space,
+    /// which keeps out what macOS names in plain words (`DiagnosticReports`,
+    /// `CrashReporter`, `Bluetooth`, `SystemConfiguration`, `Desktop Pictures`,
+    /// `systemmigrationd.plist`). Never a hidden entry
+    /// (`.GlobalPreferences.plist`), never one of Apple's or the printing
+    /// system's, and never a bare log file (`MCXTools.log`). In
+    /// `/Library/Preferences` only a `.plist`, and the identifier is the name
+    /// without it. The app's gate and the helper both ask here, so neither can
+    /// accept an entry the other refuses.
     nonisolated static func isAllowedSharedSystemLeftover(name: String, inRootAt rootPath: String) -> Bool {
         let lower = name.lowercased()
-        guard !lower.isEmpty, !lower.hasPrefix("."), !lower.hasPrefix("com.apple.") else { return false }
-        if rootPath == "/Library/Preferences" { return lower.hasSuffix(".plist") }
-        return true
+        guard !lower.hasPrefix("."), !lower.contains(" ") else { return false }
+        var identifier = lower
+        if rootPath == "/Library/Preferences" {
+            guard lower.hasSuffix(".plist") else { return false }
+            identifier = String(lower.dropLast(".plist".count))
+        } else if lower.hasSuffix(".log") {
+            return false
+        }
+        for prefix in systemOwnedIdentifierPrefixes where identifier == prefix || identifier.hasPrefix(prefix + ".") {
+            return false
+        }
+        let parts = identifier.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count >= 2 && !parts.contains { $0.isEmpty }
     }
 
     /// Every leftover directory, the user's under `homeDirectory` first. A copy of

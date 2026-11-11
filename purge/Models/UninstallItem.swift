@@ -191,6 +191,10 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// uninstaller's own items, whose app is the one being removed, and for app
     /// groups.
     var ownerBundleIDs: [String] = []
+    /// An Application Scripts folder that held files when it was scanned (#352).
+    /// The user may have written them, so the row starts unticked and only a
+    /// click on the row itself ticks it.
+    var holdsAddedScripts = false
 
     /// Shared with an app that is staying installed, so it must not be trashed.
     var isKeptForOtherApp: Bool { keptForApp != nil }
@@ -198,9 +202,12 @@ nonisolated struct UninstallItem: Identifiable, Hashable {
     /// Whether the per-app header checkbox in the review sheet ticks this row.
     /// A row kept for a surviving app is locked off. A catalog dot folder (#228)
     /// holds settings, extensions and history, so only a click on its own row
-    /// ticks it; the header never sweeps it in. The header can still clear it,
-    /// see `UninstallAppPlan.toggleAllFromHeader`.
-    var isTickedByHeader: Bool { !isKeptForOtherApp && category != .homeFolderData }
+    /// ticks it; the header never sweeps it in. A scripts folder with files in
+    /// it (#352) is the same. The header can still clear either, see
+    /// `UninstallAppPlan.toggleAllFromHeader`.
+    var isTickedByHeader: Bool {
+        !isKeptForOtherApp && category != .homeFolderData && !holdsAddedScripts
+    }
 
     var formattedSize: String { formatBytes(sizeBytes) }
 }

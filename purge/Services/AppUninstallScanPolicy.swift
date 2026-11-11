@@ -120,8 +120,9 @@ enum AppUninstallScanPolicy {
     /// chosen app, and this refuses anything that is not a top-level entry inside
     /// a known leftover root, an `.app` bundle inside an app root, or a hidden
     /// home folder the dot-folder catalog names in full (#224). In the `/Library`
-    /// folders macOS shares with other apps it also refuses Apple's own and
-    /// hidden entries (#352). A bug in matching
+    /// folders macOS shares with other apps it takes only a name shaped like a
+    /// bundle identifier, and refuses Apple's own and hidden entries (#352). A
+    /// bug in matching
     /// can therefore never trash a path outside those bounds.
     ///
     /// `home` is the real home folder everywhere but the tests, which hand in a
@@ -282,6 +283,16 @@ enum AppUninstallScanPolicy {
         return nil
     }
 
+    /// Whether a match of this strength is offered in `root` (#352). In the
+    /// `/Library` folders macOS shares with other apps only an identifier
+    /// counts: a name-only match there could pair an app called `Bluetooth`
+    /// with the system's `/Library/Logs/Bluetooth`, and the root helper would
+    /// move it.
+    nonisolated static func offers(_ reason: MatchReason, in root: LeftoverRoot) -> Bool {
+        guard reason == .appName else { return true }
+        return !PurgeHelperConstants.sharedSystemLeftoverRoots.contains(root.url.standardizedFileURL.path)
+    }
+
     /// Whether `lowerName` is `bundleID` itself or the id plus a known suffix.
     /// Both are lowercased.
     private nonisolated static func isNamedByIdentifier(_ lowerName: String, bundleID: String) -> Bool {
@@ -357,6 +368,17 @@ enum AppUninstallScanPolicy {
     nonisolated static func scriptsFolderHoldsFiles(_ url: URL) -> Bool {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: url.path) else { return true }
         return names.contains { $0 != ".DS_Store" }
+    }
+
+    /// Whether a scripts folder the user approved as empty holds files now
+    /// (#352). The scan read it once, and a script can land in it while the
+    /// review sheet is open or while a locked app waits for a retry. Read again
+    /// right before the move, such a folder stays. One the user ticked knowing
+    /// it held scripts moves, and one that is gone is not this check's concern.
+    nonisolated static func scriptsFolderGainedFiles(_ item: UninstallItem) -> Bool {
+        guard item.category == .applicationScripts, !item.holdsAddedScripts,
+              FileManager.default.fileExists(atPath: item.path.path) else { return false }
+        return scriptsFolderHoldsFiles(item.path)
     }
 
     /// Bundle-id and group anchored matches are safe to remove and preselected;
