@@ -108,6 +108,7 @@
 "Application" = "Uygulama";
 "Application Caches" = "Uygulama Önbellekleri";
 "Application Logs" = "Uygulama Günlükleri";
+"Application Scripts" = "Uygulama Betikleri";
 "Application Support" = "Uygulama Desteği";
 "Application caches are safe to remove" = "Uygulama önbelleklerini kaldırmak güvenlidir";
 "Approval is still needed in System Settings." = "Sistem Ayarları'nda hâlâ onay gerekiyor.";
@@ -502,6 +503,7 @@
 "Removed %lld" = "%lld kaldırıldı";
 "Removed %lld, but %lld couldn't be removed" = "%lld kaldırıldı, ancak %lld kaldırılamadı";
 "Removed 1" = "1 kaldırıldı";
+"Removed items go to the Trash, so you can put them back until you empty it." = "Kaldırılan öğeler Çöp Sepeti'ne gider, böylece boşaltana kadar geri koyabilirsiniz.";
 "Removed items go to the Trash, so you can put them back until you empty it. If you reinstall the app, let it recreate its data." = "Kaldırılan öğeler Çöp Sepeti'ne gider, böylece boşaltana kadar geri koyabilirsiniz. Uygulamayı yeniden yüklerseniz verilerini kendisinin yeniden oluşturmasına izin verin.";
 "Removing this app needs administrator rights. macOS will ask for your password when it moves the app to the Trash." = "Bu uygulamayı kaldırmak için yönetici hakları gerekir. macOS, uygulamayı Çöp Sepeti'ne taşırken parolanızı isteyecek.";
 "Removing..." = "Kaldırılıyor...";
@@ -696,6 +698,7 @@
 "We are not sure what this is. We recommend leaving it alone." = "Bunun ne olduğundan emin değiliz. Dokunmamanızı öneririz.";
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "Bu klasörün nasıl yeniden kurulacağını söyleyen dosyayı bulamadık. Silmek muhtemelen sorun değil, ancak daha sonra yeniden kurduğunuzda öncekinden biraz farklı sürümler indirilebilir.";
 "We could not identify this folder. We recommend leaving it alone." = "Bu klasörü tanıyamadık. Dokunmamanızı öneririz.";
+"Website Data" = "Web Sitesi Verileri";
 "Week" = "Hafta";
 "Weekly" = "Haftalık";
 "Weeks" = "Hafta";
@@ -1346,6 +1349,7 @@
 "%lld other selected files can't be kept only in iCloud right now, so they stay." = "Seçili %lld diğer dosya şu anda yalnızca iCloud'da tutulamaz, bu yüzden kalırlar.";
 "%lld other selected files stay: %lld aren't in iCloud, %lld can't be kept only there right now." = "Seçili %lld diğer dosya kalır: %lld tanesi iCloud'da değil, %lld tanesi şu anda yalnızca orada tutulamaz.";
 "This file is also linked from another place on this Mac." = "Bu dosyaya bu Mac'te başka bir yerden de bağlantı var.";
+"This folder holds scripts added for %@, which may be ones you wrote. Check it before removing." = "Bu klasörde %@ için eklenmiş betikler var; bunları siz yazmış olabilirsiniz. Kaldırmadan önce kontrol edin.";
 
 /* Genel Bakış Büyük Dosyalar satırı (#279) */
 "Change filter" = "Filtreyi değiştir";

@@ -63,7 +63,14 @@ enum AppUninstallScanPolicy {
     }
 
     /// The support locations from the issue. User-domain roots first, then the
-    /// two shared `/Library` roots that hold launch daemons and shared support.
+    /// shared `/Library` roots: launch items and shared support, and the three
+    /// folders macOS also keeps its own files in (#352), where the gate accepts
+    /// less (`PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry`).
+    ///
+    /// `/private/var/db/receipts` is deliberately absent (#352). A receipt is
+    /// named by the installer package's id, which is rarely the app's bundle id,
+    /// and its `.bom` is the only record of what that package put outside the
+    /// app bundle. `pkgutil --forget` is the tool for it.
     nonisolated static func leftoverSearchRoots(home: URL) -> [LeftoverRoot] {
         let lib = home.appendingPathComponent("Library", isDirectory: true)
         return [
@@ -85,12 +92,24 @@ enum AppUninstallScanPolicy {
                          category: .logs),
             LeftoverRoot(url: lib.appendingPathComponent("LaunchAgents", isDirectory: true),
                          category: .launchAgents),
+            LeftoverRoot(url: lib.appendingPathComponent("Application Scripts", isDirectory: true),
+                         category: .applicationScripts),
+            LeftoverRoot(url: lib.appendingPathComponent("Cookies", isDirectory: true),
+                         category: .webData),
+            LeftoverRoot(url: lib.appendingPathComponent("WebKit", isDirectory: true),
+                         category: .webData),
             LeftoverRoot(url: URL(fileURLWithPath: "/Library/LaunchDaemons", isDirectory: true),
                          category: .launchDaemons),
             LeftoverRoot(url: URL(fileURLWithPath: "/Library/Application Support", isDirectory: true),
                          category: .applicationSupport),
             LeftoverRoot(url: URL(fileURLWithPath: "/Library/LaunchAgents", isDirectory: true),
-                         category: .launchAgents)
+                         category: .launchAgents),
+            LeftoverRoot(url: URL(fileURLWithPath: "/Library/Caches", isDirectory: true),
+                         category: .caches),
+            LeftoverRoot(url: URL(fileURLWithPath: "/Library/Preferences", isDirectory: true),
+                         category: .preferences),
+            LeftoverRoot(url: URL(fileURLWithPath: "/Library/Logs", isDirectory: true),
+                         category: .logs)
         ]
     }
 
@@ -100,7 +119,10 @@ enum AppUninstallScanPolicy {
     /// safety net, not the matcher: the scanner decides which paths belong to the
     /// chosen app, and this refuses anything that is not a top-level entry inside
     /// a known leftover root, an `.app` bundle inside an app root, or a hidden
-    /// home folder the dot-folder catalog names in full (#224). A bug in matching
+    /// home folder the dot-folder catalog names in full (#224). In the `/Library`
+    /// folders macOS shares with other apps it takes only a name shaped like a
+    /// bundle identifier, and refuses Apple's own and hidden entries (#352). A
+    /// bug in matching
     /// can therefore never trash a path outside those bounds.
     ///
     /// `home` is the real home folder everywhere but the tests, which hand in a
@@ -122,10 +144,17 @@ enum AppUninstallScanPolicy {
         // refused as bundles outside the app roots. So a `.app` name is a
         // leftover only directly inside a root, and only when it is not a real
         // application bundle; a bundle anywhere under these roots is never one.
+        // In a folder macOS shares with other apps (`/Library/Preferences`),
+        // only a direct child whose name the shared rule accepts (#352).
         for root in leftoverSearchRoots(home: home) {
             let rootPath = root.url.standardizedFileURL.path
             if path == rootPath { return false }
             guard PathContainment.isInside(path, rootPath) else { continue }
+            if PurgeHelperConstants.sharedSystemLeftoverRoots.contains(rootPath) {
+                guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
+                      PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry(std, inRootAt: rootPath)
+                else { return false }
+            }
             if std.pathExtension == "app" {
                 guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
                       !isRealAppBundle(std) else { return false }
@@ -192,6 +221,10 @@ enum AppUninstallScanPolicy {
     /// anchoring requires the whole leftover name to equal the app's display name;
     /// loose substring matching is never used, so uninstalling one Google app does
     /// not sweep in `Application Support/Google`.
+    ///
+    /// A hidden entry (`.com.vendor.App`, #352) is matched by its name without
+    /// the leading dot, and only by the bundle id or the id plus a known suffix:
+    /// never by display name, group, or a launch item's prefix.
     nonisolated static func matchReason(
         forLeftoverName name: String,
         category: UninstallCategory,
@@ -213,12 +246,13 @@ enum AppUninstallScanPolicy {
             return listed ? .dotFolderCatalog : nil
         }
 
+        let isHidden = lowerName.hasPrefix(".")
         if let bundleID = app.bundleID?.lowercased(), !bundleID.isEmpty {
+            if isHidden {
+                return isNamedByIdentifier(String(lowerName.dropFirst()), bundleID: bundleID) ? .bundleID : nil
+            }
             // Exact bundle id, or bundle id plus a known suffix.
-            if lowerName == bundleID { return .bundleID }
-            if lowerName == bundleID + ".plist" { return .bundleID }
-            if lowerName == bundleID + ".savedstate" { return .bundleID }
-            if lowerName == bundleID + ".binarycookies" { return .bundleID }
+            if isNamedByIdentifier(lowerName, bundleID: bundleID) { return .bundleID }
             // Launch agents/daemons are commonly `com.vendor.App.helper.plist`.
             if category == .launchAgents || category == .launchDaemons {
                 if lowerName.hasPrefix(bundleID + ".") && lowerName.hasSuffix(".plist") {
@@ -230,10 +264,13 @@ enum AppUninstallScanPolicy {
             // stem-only match risked two unrelated vendors sharing a final
             // component (both `…​.rectangle`) claiming each other's container,
             // which would be preselected because group matches are high-confidence.
-            if category == .groupContainers {
+            // Application Scripts has a folder for each group too, named the
+            // same way.
+            if entriesCanBeAppGroups(category) {
                 if lowerName.hasSuffix("." + bundleID) { return .groupID }
             }
         }
+        if isHidden { return nil }
 
         // Name-only: the whole leftover name equals the display name. Applies to
         // human-named support and log folders, not to the config locations that
@@ -245,6 +282,54 @@ enum AppUninstallScanPolicy {
         return nil
     }
 
+    /// Whether a match of this strength is offered in `root` (#352). In the
+    /// `/Library` folders macOS shares with other apps only an identifier
+    /// counts: a name-only match there could pair an app called `Bluetooth`
+    /// with the system's `/Library/Logs/Bluetooth`, and the root helper would
+    /// move it.
+    nonisolated static func offers(_ reason: MatchReason, in root: LeftoverRoot) -> Bool {
+        guard reason == .appName else { return true }
+        return !PurgeHelperConstants.sharedSystemLeftoverRoots.contains(root.url.standardizedFileURL.path)
+    }
+
+    /// Whether `lowerName` is `bundleID` itself or the id plus a known suffix.
+    /// Both are lowercased.
+    private nonisolated static func isNamedByIdentifier(_ lowerName: String, bundleID: String) -> Bool {
+        lowerName == bundleID
+            || lowerName == bundleID + ".plist"
+            || lowerName == bundleID + ".savedstate"
+            || lowerName == bundleID + ".binarycookies"
+    }
+
+    /// The categories whose entries can be named after an app group: Group
+    /// Containers, and Application Scripts, where macOS makes a folder for each
+    /// group beside the one for each app (#352).
+    nonisolated static func entriesCanBeAppGroups(_ category: UninstallCategory) -> Bool {
+        switch category {
+        case .groupContainers, .applicationScripts:
+            return true
+        case .bundle, .applicationSupport, .caches, .preferences, .containers, .webData, .savedState,
+             .logs, .launchAgents, .launchDaemons, .homeFolderData, .other:
+            return false
+        }
+    }
+
+    /// Whether `item` is named after an app group, so an app the user is keeping
+    /// could list it in its entitlements. Every Group Containers entry is. In
+    /// Application Scripts only an entry matched as a group is: the rest are
+    /// named after the app's own bundle id, which no other app can list.
+    nonisolated static func isNamedAfterAppGroup(_ item: UninstallItem) -> Bool {
+        switch item.category {
+        case .groupContainers:
+            return true
+        case .applicationScripts:
+            return item.matchReason == .groupID
+        case .bundle, .applicationSupport, .caches, .preferences, .containers, .webData, .savedState,
+             .logs, .launchAgents, .launchDaemons, .homeFolderData, .other:
+            return false
+        }
+    }
+
     // MARK: Shared-leftover detection
 
     /// The first app in `others` (never the one whose id is `ownerID`) that also
@@ -253,8 +338,9 @@ enum AppUninstallScanPolicy {
     /// user is keeping, so removing its owner must not trash it: the two-copies
     /// case, or one app of a suite that shares support with its siblings.
     ///
-    /// A group container is also claimed by an app that lists that exact group in
-    /// its entitlements (`appGroupClaims`, #200). The developer names the group,
+    /// A group container, or a group's Application Scripts folder, is also claimed
+    /// by an app that lists that exact group in its entitlements
+    /// (`appGroupClaims`, #200). The developer names the group,
     /// so `<team>.<id of the app being removed>` can be a group a kept app shares
     /// while nothing in the kept app's own id matches it.
     nonisolated static func claimant(
@@ -267,22 +353,54 @@ enum AppUninstallScanPolicy {
         others.first { candidate in
             guard candidate.id != ownerID else { return false }
             if matchReason(forLeftoverName: name, category: category, app: candidate) != nil { return true }
-            return category == .groupContainers && appGroupClaims.app(candidate, claims: name)
+            return entriesCanBeAppGroups(category) && appGroupClaims.app(candidate, claims: name)
         }
     }
 
     // MARK: Safety mapping
 
+    /// Whether an Application Scripts folder holds anything besides Finder's
+    /// `.DS_Store` (#352). macOS makes the folder empty. Whatever is in it was
+    /// put there for the app to run, often written by the user, so the row is
+    /// Check First and starts unticked. A folder that cannot be listed counts
+    /// as holding something.
+    nonisolated static func scriptsFolderHoldsFiles(_ url: URL) -> Bool {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: url.path) else { return true }
+        return names.contains { $0 != ".DS_Store" }
+    }
+
+    /// Whether a scripts folder the user approved as empty holds files now
+    /// (#352). The scan read it once, and a script can land in it while the
+    /// review sheet is open or while a locked app waits for a retry. Read again
+    /// right before the move, such a folder stays. One the user ticked knowing
+    /// it held scripts moves, and one that is gone is not this check's concern.
+    nonisolated static func scriptsFolderGainedFiles(_ item: UninstallItem) -> Bool {
+        guard item.category == .applicationScripts, !item.holdsAddedScripts,
+              FileManager.default.fileExists(atPath: item.path.path) else { return false }
+        return scriptsFolderHoldsFiles(item.path)
+    }
+
     /// Bundle-id and group anchored matches are safe to remove and preselected;
     /// name matches are "Check First" and left unchecked. The `.app` bundle is
     /// safe unless it needs admin rights to trash, where the medium tier flags
-    /// that Trash may ask for a password.
+    /// that Trash may ask for a password. An Application Scripts folder with
+    /// files in it (`holdsAddedScripts`) is Check First whatever matched it.
     nonisolated static func safetyInfo(
         for reason: MatchReason,
         category: UninstallCategory,
         url: URL,
-        appName: String
+        appName: String,
+        holdsAddedScripts: Bool = false
     ) -> SafetyInfo {
+        if holdsAddedScripts {
+            return SafetyInfo(
+                level: .medium,
+                headline: String(localized: "\(appName) \(category.displayName)"),
+                explanation: String(localized: "This folder holds scripts added for \(appName), which may be ones you wrote. Check it before removing."),
+                recoverySteps: String(localized: "Removed items go to the Trash, so you can put them back until you empty it."),
+                reinstallCommand: nil
+            )
+        }
         switch reason {
         case .appBundle:
             if DeletionSafetyPolicy.requiresAdminPrivileges(for: url) {

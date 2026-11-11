@@ -102,6 +102,13 @@ it checks every request five ways:
   direct child of a folder the uninstaller scans for leftovers, such as
   `~/Library/Application Support` or `/Library/LaunchDaemons`. The full list is in
   [`purge/PrivilegedHelper/PurgeHelperProtocol.swift`](purge/PrivilegedHelper/PurgeHelperProtocol.swift).
+  macOS keeps its own files in three of those folders, `/Library/Caches`,
+  `/Library/Preferences` and `/Library/Logs`. There the helper accepts only a
+  name shaped like a bundle identifier, so never `DiagnosticReports` or
+  `SystemConfiguration`. It refuses hidden entries, Apple's own
+  (`com.apple.…`), the printing system's (`org.cups.…`) and bare `.log` files,
+  and in `/Library/Preferences` it accepts only a `.plist` that is a regular
+  file. It never accepts a real app bundle in a leftover folder.
   The uninstaller also lists apps on drives and in folders the user adds, but
   the app never sends those to the helper, and the helper would refuse them.
   It also accepts a direct child of `macOS Install Data`, never `Locked Files`,

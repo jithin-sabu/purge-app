@@ -1743,7 +1743,8 @@ final class PurgeStore: ObservableObject {
                 recoverySteps: "",
                 reinstallCommand: nil
             ),
-            matchReason: .bundleID,
+            // An Application Scripts folder may be a group's, so its claims are read.
+            matchReason: category == .applicationScripts ? .groupID : .bundleID,
             isSelected: false
         )
         let claims = await AppGroupClaims.gatherOffMain(for: apps, leftovers: [probe])
@@ -1774,16 +1775,23 @@ final class PurgeStore: ObservableObject {
     /// Launch Services can say whether that app is back. `nil` where the name is
     /// something else, such as a group container or a launch agent's own label.
     nonisolated static func bundleIDNaming(_ url: URL, category: UninstallCategory) -> String? {
-        let name = url.lastPathComponent
+        // A hidden row is named `.<bundle id>` (#352); the id is what follows the dot.
+        let fullName = url.lastPathComponent
+        let name = fullName.hasPrefix(".") ? String(fullName.dropFirst()) : fullName
         switch category {
         case .preferences:
             return name.hasSuffix(".plist") ? String(name.dropLast(".plist".count)) : nil
         case .savedState:
             return name.hasSuffix(".savedState") ? String(name.dropLast(".savedState".count)) : nil
-        case .containers:
+        // Application Scripts holds a folder per app and per group. A group's
+        // name finds no app here, and the claim check after this covers groups.
+        case .containers, .applicationScripts:
             return name
         case .applicationSupport, .caches, .logs:
             return name.contains(".") && !name.contains(" ") ? name : nil
+        case .webData:
+            // `Cookies/<bundle id>.binarycookies`, or `WebKit/<bundle id>`.
+            return name.hasSuffix(".binarycookies") ? String(name.dropLast(".binarycookies".count)) : name
         case .bundle, .groupContainers, .launchAgents, .launchDaemons, .homeFolderData, .other:
             return nil
         }
@@ -1915,6 +1923,11 @@ final class PurgeStore: ObservableObject {
                 appGroupClaims: appGroupClaims
             ) {
                 keptSharedFailures.append(keptSharedFailure(item: leftover, otherApp: otherApp))
+                return false
+            }
+            // The app may have waited a long time for this retry.
+            if AppUninstallScanPolicy.scriptsFolderGainedFiles(leftover) {
+                keptSharedFailures.append(scriptsGainedFilesFailure(item: leftover, appName: owner.name))
                 return false
             }
             return true
@@ -3067,6 +3080,9 @@ final class PurgeStore: ObservableObject {
     /// and the removed-app review never pre-ticks anything outside the home folder
     /// (`RemovedAppReviewFiltering`).
     private func performLeftoverCleanup(items: [UninstallItem]) async {
+        // A scripts folder that was empty when it was listed and holds files now
+        // stays where it is (#352).
+        let items = items.filter { !AppUninstallScanPolicy.scriptsFolderGainedFiles($0) }
         guard !items.isEmpty else { return }
         guard claimConfirmedCleanOrExplain() else { return }
 
@@ -3580,6 +3596,17 @@ final class PurgeStore: ObservableObject {
 
     /// Builds the "kept, still used by another app" notice shown for a shared leftover
     /// that Purge deliberately left in place.
+    /// The notice for a scripts folder that was empty when the sheet listed it and
+    /// holds files now (#352): Purge left it alone.
+    private func scriptsGainedFilesFailure(item: UninstallItem, appName: String) -> CleanFailureItem {
+        CleanFailureItem(
+            path: item.path.path,
+            displayName: "\(appName) \(item.category.displayName)",
+            reason: .safetySkipped,
+            sizeBytes: item.sizeBytes
+        )
+    }
+
     private func keptSharedFailure(item: UninstallItem, otherApp: InstalledApp) -> CleanFailureItem {
         CleanFailureItem(
             path: item.path.path,
@@ -3895,6 +3922,10 @@ final class PurgeStore: ObservableObject {
                         appGroupClaims: appGroupClaims
                     ) {
                         keptSharedFailures.append(keptSharedFailure(item: item, otherApp: otherApp))
+                        continue
+                    }
+                    if AppUninstallScanPolicy.scriptsFolderGainedFiles(item) {
+                        keptSharedFailures.append(scriptsGainedFilesFailure(item: item, appName: app.name))
                         continue
                     }
                     urls.append(item.path)

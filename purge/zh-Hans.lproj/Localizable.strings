@@ -108,6 +108,7 @@
 "Application" = "应用程序";
 "Application Caches" = "应用缓存";
 "Application Logs" = "应用日志";
+"Application Scripts" = "应用脚本";
 "Application Support" = "应用支持文件";
 "Application caches are safe to remove" = "应用缓存可安全移除";
 "Approval is still needed in System Settings." = "仍需在系统设置中批准。";
@@ -494,6 +495,7 @@
 "Remove Snapshots" = "移除快照";
 "Remove admin-locked apps without a password" = "移除管理员锁定的应用，无需重复输入密码";
 "Remove admin-locked apps" = "移除管理员锁定的应用";
+"Website Data" = "网站数据";
 "Your account isn't an administrator, so Purge asks for an administrator's name and password each time." = "你的账户不是管理员，因此 Purge 每次都会要求输入管理员的名称和密码。";
 "Remove from exclusions. %@ is scanned again next time." = "从排除列表移除。下次扫描将再次检查 %@。";
 "Remove in Finder instead" = "改用访达删除";
@@ -502,6 +504,7 @@
 "Removed %lld" = "已移除 %lld 个";
 "Removed %lld, but %lld couldn't be removed" = "已移除 %lld 个，但 %lld 个无法移除";
 "Removed 1" = "已移除 1 个";
+"Removed items go to the Trash, so you can put them back until you empty it." = "移除的项目会进入废纸篓，清空前可以恢复。";
 "Removed items go to the Trash, so you can put them back until you empty it. If you reinstall the app, let it recreate its data." = "移除的项目会进入废纸篓，清空前可以恢复。重新安装应用后，可让应用自行重新生成数据。";
 "Removing this app needs administrator rights. macOS will ask for your password when it moves the app to the Trash." = "移除此应用需要管理员权限。macOS 将它移到废纸篓时会要求输入密码。";
 "Removing..." = "正在移除…";
@@ -1354,6 +1357,7 @@
 "%lld other selected files can't be kept only in iCloud right now, so they stay." = "另有 %lld 个所选文件目前无法只在 iCloud 中保留，因此保留在这台 Mac 上。";
 "%lld other selected files stay: %lld aren't in iCloud, %lld can't be kept only there right now." = "另有 %lld 个所选文件保留：%lld 个不在 iCloud 中，%lld 个目前无法只在 iCloud 中保留。";
 "This file is also linked from another place on this Mac." = "此文件在这台 Mac 上的其他位置也有链接。";
+"This folder holds scripts added for %@, which may be ones you wrote. Check it before removing." = "此文件夹中有为 %@ 添加的脚本，可能是你自己编写的。移除前请先检查。";
 
 /* Overview Large Files row (#279) */
 "Change filter" = "更改筛选";

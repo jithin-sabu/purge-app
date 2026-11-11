@@ -302,7 +302,8 @@ enum OrphanLeftoverScanPolicy {
             return httpStorageBundleID(from: name).map(LeftoverOwner.bundleID)
         case .savedState:
             return savedStateBundleID(from: name).map(LeftoverOwner.bundleID)
-        case .bundle, .preferences, .logs, .launchAgents, .launchDaemons, .homeFolderData, .other:
+        case .bundle, .preferences, .logs, .launchAgents, .launchDaemons, .applicationScripts, .webData,
+             .homeFolderData, .other:
             // Not orphan roots. Home folder data comes from the catalog
             // (`dotFolderCandidates`), never from an entry's name.
             return nil
