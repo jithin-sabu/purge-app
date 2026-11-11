@@ -65,7 +65,7 @@ enum AppUninstallScanPolicy {
     /// The support locations from the issue. User-domain roots first, then the
     /// shared `/Library` roots: launch items and shared support, and the three
     /// folders macOS also keeps its own files in (#352), where the gate accepts
-    /// less (`PurgeHelperConstants.isAllowedSharedSystemLeftover`).
+    /// less (`PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry`).
     ///
     /// `/private/var/db/receipts` is deliberately absent (#352). A receipt is
     /// named by the installer package's id, which is rarely the app's bundle id,
@@ -152,9 +152,8 @@ enum AppUninstallScanPolicy {
             guard PathContainment.isInside(path, rootPath) else { continue }
             if PurgeHelperConstants.sharedSystemLeftoverRoots.contains(rootPath) {
                 guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
-                      PurgeHelperConstants.isAllowedSharedSystemLeftover(
-                          name: std.lastPathComponent, inRootAt: rootPath
-                      ) else { return false }
+                      PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry(std, inRootAt: rootPath)
+                else { return false }
             }
             if std.pathExtension == "app" {
                 guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,

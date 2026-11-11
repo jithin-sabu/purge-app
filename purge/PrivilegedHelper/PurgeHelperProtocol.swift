@@ -162,6 +162,32 @@ enum PurgeHelperConstants {
         return parts.count >= 2 && !parts.contains { $0.isEmpty }
     }
 
+    /// Whether the entry at `url`, directly inside the shared system folder at
+    /// `rootPath`, can be an app's leftover: its name passes
+    /// `isAllowedSharedSystemLeftover`, and in `/Library/Preferences` it is a
+    /// settings file, not a folder or a link named like one.
+    nonisolated static func isAllowedSharedSystemLeftoverEntry(_ url: URL, inRootAt rootPath: String) -> Bool {
+        guard isAllowedSharedSystemLeftover(name: url.lastPathComponent, inRootAt: rootPath) else { return false }
+        return rootPath != "/Library/Preferences" || isRegularFileOrMissing(url)
+    }
+
+    /// True for a regular file, read without following a link. Also true when
+    /// nothing is there, since there is then nothing to move. A folder, a link
+    /// or any other kind of entry is false.
+    nonisolated static func isRegularFileOrMissing(_ url: URL) -> Bool {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else { return errno == ENOENT }
+        return (info.st_mode & S_IFMT) == S_IFREG
+    }
+
+    /// A real application bundle, as opposed to a folder whose name ends in
+    /// `.app` because its bundle id does (`com.granola.app`). The app's gate
+    /// refuses one under a leftover root, so the helper does too.
+    nonisolated static func isRealAppBundle(_ url: URL) -> Bool {
+        url.pathExtension.lowercased() == "app"
+            && FileManager.default.fileExists(atPath: url.appendingPathComponent("Contents/Info.plist").path)
+    }
+
     /// Every leftover directory, the user's under `homeDirectory` first. A copy of
     /// `AppUninstallScanPolicy.leftoverSearchRoots`, which the helper does not
     /// compile; a test checks the two match (#189).
@@ -182,8 +208,9 @@ enum PurgeHelperConstants {
     /// Returns true only for locations the app-uninstall scanner can produce:
     /// an app bundle in an Applications folder (at any depth, never through
     /// another bundle or package), or one direct child of a known leftover
-    /// directory. In a folder macOS shares with other apps the child must also
-    /// pass `isAllowedSharedSystemLeftover`. Symlinks are rejected so an
+    /// directory, never a real application bundle. In a folder macOS shares
+    /// with other apps the child must also pass
+    /// `isAllowedSharedSystemLeftoverEntry`. Symlinks are rejected so an
     /// allowed-looking path cannot redirect the root helper somewhere else
     /// between path components.
     static func isAllowedUninstallLocation(_ url: URL, homeDirectory: URL) -> Bool {
@@ -194,10 +221,11 @@ enum PurgeHelperConstants {
         let home = homeDirectory.standardizedFileURL
         let parent = standardized.deletingLastPathComponent().path
         if sharedSystemLeftoverRoots.contains(parent) {
-            return isAllowedSharedSystemLeftover(name: standardized.lastPathComponent, inRootAt: parent)
+            return isAllowedSharedSystemLeftoverEntry(standardized, inRootAt: parent)
+                && !isRealAppBundle(standardized)
         }
         if leftoverRoots(homeDirectory: homeDirectory).contains(where: { $0.path == parent }) {
-            return true
+            return !isRealAppBundle(standardized)
         }
 
         let appRoots = [

@@ -213,6 +213,62 @@ struct UninstallMoreLeftoversTests {
         #expect(!helperAllows("/Library/Logs/Bluetooth"))
     }
 
+    /// In `/Library/Preferences` a leftover is a settings file. A folder or a
+    /// link named `com.vendor.App.plist` passes the name rule, so both gates
+    /// read what is there. The read is tried here in a temporary folder, since
+    /// a test must not write to `/Library`.
+    @Test("A folder or a link named like a plist is not a settings file")
+    func preferencesEntryMustBeARegularFile() throws {
+        let base = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        try fm.createDirectory(at: base, withIntermediateDirectories: true)
+        let file = base.appendingPathComponent("com.vendor.App.plist")
+        let folder = base.appendingPathComponent("com.vendor.Folder.plist", isDirectory: true)
+        let link = base.appendingPathComponent("com.vendor.Link.plist")
+        try Data([0x00]).write(to: file)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: link, withDestinationURL: file)
+
+        #expect(PurgeHelperConstants.isRegularFileOrMissing(file))
+        #expect(!PurgeHelperConstants.isRegularFileOrMissing(folder))
+        #expect(!PurgeHelperConstants.isRegularFileOrMissing(link))
+        // Nothing there, so nothing to move.
+        #expect(PurgeHelperConstants.isRegularFileOrMissing(base.appendingPathComponent("com.vendor.Gone.plist")))
+
+        // Only `/Library/Preferences` asks for a file. The name rule still comes first.
+        #expect(!PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry(folder, inRootAt: "/Library/Preferences"))
+        #expect(!PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry(link, inRootAt: "/Library/Preferences"))
+        #expect(PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry(file, inRootAt: "/Library/Preferences"))
+        #expect(PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry(folder, inRootAt: "/Library/Caches"))
+        let apple = base.appendingPathComponent("com.apple.loginwindow.plist")
+        try Data([0x00]).write(to: apple)
+        #expect(!PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry(apple, inRootAt: "/Library/Preferences"))
+    }
+
+    /// The app's gate refuses a real application bundle under a leftover root.
+    /// The helper checks paths itself, so it refuses one too.
+    @Test("The helper refuses a real app bundle under a leftover root")
+    func helperRefusesRealAppBundleUnderALeftoverRoot() throws {
+        let home = URL(fileURLWithPath: fm.temporaryDirectory.path, isDirectory: true)
+            .resolvingSymlinksInPath()
+            .appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: home) }
+        let caches = home.appendingPathComponent("Library/Caches", isDirectory: true)
+        let bundle = caches.appendingPathComponent("com.vendor.App.app", isDirectory: true)
+        try fm.createDirectory(at: bundle.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        try Data("<plist/>".utf8).write(to: bundle.appendingPathComponent("Contents/Info.plist"))
+        let namedLikeOne = caches.appendingPathComponent("com.granola.app", isDirectory: true)
+        try fm.createDirectory(at: namedLikeOne, withIntermediateDirectories: true)
+
+        #expect(PurgeHelperConstants.isRealAppBundle(bundle))
+        #expect(!PurgeHelperConstants.isRealAppBundle(namedLikeOne))
+        #expect(!PurgeHelperConstants.isAllowedUninstallLocation(bundle, homeDirectory: home))
+        #expect(PurgeHelperConstants.isAllowedUninstallLocation(namedLikeOne, homeDirectory: home))
+        // The app's gate agrees on both.
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(bundle, home: home))
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(namedLikeOne, home: home))
+    }
+
     @Test("The shared-folder rule covers exactly the three /Library roots added")
     func sharedRootsAreTheAddedOnes() {
         #expect(Set(PurgeHelperConstants.sharedSystemLeftoverRoots)
