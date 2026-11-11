@@ -1743,7 +1743,8 @@ final class PurgeStore: ObservableObject {
                 recoverySteps: "",
                 reinstallCommand: nil
             ),
-            matchReason: .bundleID,
+            // An Application Scripts folder may be a group's, so its claims are read.
+            matchReason: category == .applicationScripts ? .groupID : .bundleID,
             isSelected: false
         )
         let claims = await AppGroupClaims.gatherOffMain(for: apps, leftovers: [probe])
@@ -1784,7 +1785,13 @@ final class PurgeStore: ObservableObject {
             return name
         case .applicationSupport, .caches, .logs:
             return name.contains(".") && !name.contains(" ") ? name : nil
-        case .bundle, .groupContainers, .launchAgents, .launchDaemons, .homeFolderData, .other:
+        case .webData:
+            // `Cookies/<bundle id>.binarycookies`, or `WebKit/<bundle id>`.
+            return name.hasSuffix(".binarycookies") ? String(name.dropLast(".binarycookies".count)) : name
+        // Application Scripts holds a folder per app and per group, and the
+        // name alone does not say which, so the claim check below decides.
+        case .bundle, .groupContainers, .applicationScripts, .launchAgents, .launchDaemons,
+             .homeFolderData, .other:
             return nil
         }
     }

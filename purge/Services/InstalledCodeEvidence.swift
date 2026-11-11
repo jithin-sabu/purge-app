@@ -478,8 +478,9 @@ nonisolated struct AppGroupClaims: Equatable {
         gather(for: apps, leftovers: leftovers)
     }
 
-    /// The claims of `apps`. Empty when no leftover is a group container, the
-    /// only category these claims apply to, so most uninstalls skip the reads:
+    /// The claims of `apps`. Empty when no leftover is named after an app group
+    /// (`AppUninstallScanPolicy.isNamedAfterAppGroup`), the only entries these
+    /// claims apply to, so most uninstalls skip the reads:
     /// every app's signature and a walk of its nested code took 0.5 s for 28
     /// apps on a dev Mac, 0.17 s of it Xcode's walk.
     ///
@@ -496,7 +497,7 @@ nonisolated struct AppGroupClaims: Equatable {
         remembered: [DriveAppMemory.Entry] = DriveAppMemory.presentEntries()
     ) -> AppGroupClaims {
         var claims = AppGroupClaims()
-        guard leftovers.contains(where: { $0.category == .groupContainers }) else { return claims }
+        guard leftovers.contains(where: AppUninstallScanPolicy.isNamedAfterAppGroup) else { return claims }
         for entry in remembered where !entry.appGroups.isEmpty {
             claims.groupsByAppID[entry.bundlePath, default: []].formUnion(entry.appGroups.map { $0.lowercased() })
         }

@@ -219,6 +219,7 @@
 "Application" = "Приложение";
 "Application Caches" = "Кэши приложений";
 "Application Logs" = "Логи приложений";
+"Application Scripts" = "Application Scripts";
 "Application Support" = "Application Support";
 "Application Support, Containers and Group Containers" = "Application Support, Containers и Group Containers";
 "Application Support, Containers and the rest of your Library that no installed app claims." = "Application Support, Containers и остальная часть «Библиотеки», на которую не претендует ни одно установленное приложение.";
@@ -945,6 +946,7 @@
 "Removed by its package manager, permanently" = "Удалено менеджером пакетов безвозвратно";
 "Removed earlier, downloads blocked" = "Удалено ранее, загрузки заблокированы";
 "Removed from this Mac, still in iCloud Drive" = "Удалено с этого Mac, но осталось в iCloud Drive";
+"Removed items go to the Trash, so you can put them back until you empty it." = "Удалённые элементы попадают в Корзину, поэтому их можно вернуть, пока вы её не очистите.";
 "Removed items go to the Trash, so you can put them back until you empty it. If you reinstall the app, let it recreate its data." = "Удалённые элементы попадают в Корзину, поэтому их можно вернуть, пока вы её не очистите. Если снова установите приложение, дайте ему создать данные заново.";
 "Removed, %@ freed on the disk that macOS already counted as available" = "Удалено, освобождено %@ на диске, который macOS уже учитывала как доступный";
 "Removed, %@ that macOS already counted as available" = "Удалено, %@ — macOS уже считал это место свободным";
@@ -1188,6 +1190,7 @@
 "This one may hold something you'd miss. If you're not sure about it, cancel and untick it." = "Здесь может быть что-то важное для вас. Если не уверены, отмените и снимите отметку.";
 "This removes all saved cleanup records from this Mac. It cannot be undone." = "Все сохранённые записи об очистке на этом Mac будут удалены. Отменить это нельзя.";
 "This version of macOS names %@ differently, so Purge left them alone." = "В этой версии macOS %@ называется иначе, поэтому Purge их не трогал.";
+"This folder holds scripts added for %@, which may be ones you wrote. Check it before removing." = "В этой папке лежат скрипты, добавленные для %@. Возможно, вы написали их сами. Проверьте её перед удалением.";
 "Time Machine saves a snapshot every hour so you can get files back without your backup disk. Old ones keep deleted files around and count as System Data. Remove keeps the newest and the one from your last backup, which Time Machine may still need." = "Time Machine сохраняет снимок каждый час, чтобы вы могли вернуть файлы без резервного диска. Старые снимки хранят удалённые файлы и учитываются как системные данные. «Удалить» оставит самый новый снимок и снимок последней резервной копии — они могут понадобиться Time Machine.";
 "Time Machine snapshots" = "Снимки Time Machine";
 "To remove Purge, drag it from the Applications folder to the Trash." = "Чтобы удалить Purge, перетащите его из папки «Программы» в Корзину.";
@@ -1284,6 +1287,7 @@
 "We are not sure what this is. We recommend leaving it alone." = "Мы не уверены, что это. Рекомендуем не трогать.";
 "We could not find the file that tells us how to reinstall this folder. Deleting is probably fine, but when you reinstall later it might download slightly different versions than before." = "Не удалось найти файл с инструкциями по переустановке этой папки. Удалять, скорее всего, можно, но при переустановке могут скачаться немного другие версии, чем раньше.";
 "We could not identify this folder. We recommend leaving it alone." = "Не удалось определить эту папку. Рекомендуем её не трогать.";
+"Website Data" = "Данные веб-сайтов";
 "Week" = "Неделя";
 "Weekly" = "Раз в неделю";
 "Weeks" = "Недели";

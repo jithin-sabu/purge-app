@@ -10,6 +10,12 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
     case preferences
     case containers
     case groupContainers
+    /// `~/Library/Application Scripts`, the scripts folder macOS makes for each
+    /// sandboxed app and each app group (#352).
+    case applicationScripts
+    /// Cookies and site storage an app's web views keep: `~/Library/Cookies` and
+    /// `~/Library/WebKit` (#352).
+    case webData
     case savedState
     case logs
     case launchAgents
@@ -29,6 +35,8 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         case .preferences: return String(localized: "Preferences")
         case .containers: return String(localized: "Containers")
         case .groupContainers: return String(localized: "Group Containers")
+        case .applicationScripts: return String(localized: "Application Scripts")
+        case .webData: return String(localized: "Website Data")
         case .savedState: return String(localized: "Saved State")
         case .logs: return String(localized: "Logs")
         case .launchAgents: return String(localized: "Launch Agents")
@@ -46,6 +54,8 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         case .preferences: return "slider.horizontal.3"
         case .containers: return "shippingbox"
         case .groupContainers: return "square.stack.3d.up"
+        case .applicationScripts: return "applescript"
+        case .webData: return "globe"
         case .savedState: return "clock.arrow.circlepath"
         case .logs: return "doc.text"
         case .launchAgents: return "bolt.badge.clock"
@@ -64,13 +74,15 @@ nonisolated enum UninstallCategory: String, CaseIterable, Identifiable, Hashable
         case .homeFolderData: return 2
         case .containers: return 3
         case .groupContainers: return 4
-        case .caches: return 5
-        case .savedState: return 6
-        case .logs: return 7
-        case .preferences: return 8
-        case .launchAgents: return 9
-        case .launchDaemons: return 10
-        case .other: return 11
+        case .applicationScripts: return 5
+        case .caches: return 6
+        case .webData: return 7
+        case .savedState: return 8
+        case .logs: return 9
+        case .preferences: return 10
+        case .launchAgents: return 11
+        case .launchDaemons: return 12
+        case .other: return 13
         }
     }
 }

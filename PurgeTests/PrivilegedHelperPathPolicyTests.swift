@@ -69,7 +69,7 @@ struct PrivilegedHelperPathPolicyTests {
 
     @Test("Helper behavior version is current")
     func helperVersionIsCurrent() {
-        #expect(PurgeHelperConstants.version == "8")
+        #expect(PurgeHelperConstants.version == "9")
     }
 
     /// These numbers cross XPC between an app and a helper that may come from
@@ -185,8 +185,9 @@ struct PrivilegedHelperPathPolicyTests {
         #expect(helper.count == Set(helper).count)
 
         // And through the check the helper runs: one entry directly inside each.
+        // A `.plist`, since `/Library/Preferences` takes nothing else (#352).
         for root in app {
-            let entry = URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent("com.vendor.leftover")
+            let entry = URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent("com.vendor.leftover.plist")
             #expect(isAllowed(entry.path), "\(root)")
         }
     }

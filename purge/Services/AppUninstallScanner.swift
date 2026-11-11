@@ -208,8 +208,9 @@ nonisolated final class AppUninstallScanner {
         }
     }
 
-    /// The entries of every leftover root, listed once so a pass over many apps
-    /// does not list the same Library folders for each one. A root that could
+    /// The entries of every leftover root, hidden ones included (#352), listed
+    /// once so a pass over many apps does not list the same Library folders for
+    /// each one. A root that could
     /// not be listed is kept as nil, which a scan treats as it would its own
     /// failed listing.
     struct LeftoverRootListings: Sendable {
@@ -224,7 +225,7 @@ nonisolated final class AppUninstallScanner {
             entries[root.url.path] = try? fm.contentsOfDirectory(
                 at: root.url,
                 includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
+                options: []
             )
         }
         return LeftoverRootListings(entriesByRoot: entries)
@@ -234,6 +235,8 @@ nonisolated final class AppUninstallScanner {
         let url: URL
         let category: UninstallCategory
         let reason: MatchReason
+        /// An Application Scripts folder with files in it (#352).
+        var holdsAddedScripts = false
     }
 
     private static func runLeftoverScan(
@@ -265,7 +268,7 @@ nonisolated final class AppUninstallScanner {
                 listed = try? fm.contentsOfDirectory(
                     at: root.url,
                     includingPropertiesForKeys: nil,
-                    options: [.skipsHiddenFiles]
+                    options: []
                 )
             }
             guard let entries = listed else { continue }
@@ -282,7 +285,11 @@ nonisolated final class AppUninstallScanner {
                 // Defend in depth: only offer what the delete gate would accept.
                 guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(entry, home: home) else { continue }
                 seen.insert(key)
-                matches.append(Match(url: entry, category: root.category, reason: reason))
+                let holdsAddedScripts = root.category == .applicationScripts
+                    && AppUninstallScanPolicy.scriptsFolderHoldsFiles(entry)
+                matches.append(Match(
+                    url: entry, category: root.category, reason: reason, holdsAddedScripts: holdsAddedScripts
+                ))
             }
         }
 
@@ -312,7 +319,8 @@ nonisolated final class AppUninstallScanner {
                 for: match.reason,
                 category: match.category,
                 url: match.url,
-                appName: app.name
+                appName: app.name,
+                holdsAddedScripts: match.holdsAddedScripts
             )
             continuation.yield(
                 UninstallItem(
@@ -325,8 +333,10 @@ nonisolated final class AppUninstallScanner {
                     // matched item starts checked. The user unticks anything they
                     // want to keep. A catalog dot folder is the exception: it holds
                     // settings and extensions, not a cache, so it starts unticked
-                    // and the user opts in (#228).
-                    isSelected: match.category != .homeFolderData
+                    // and the user opts in (#228). So does an Application Scripts
+                    // folder with scripts in it, which the user may have written
+                    // (#352).
+                    isSelected: match.category != .homeFolderData && !match.holdsAddedScripts
                 )
             )
         }

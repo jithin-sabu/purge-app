@@ -27,7 +27,10 @@ enum PurgeHelperConstants {
     /// password into the macOS dialog the helper asks for, checks every path again
     /// after the dialog, and never moves or hands back a file with a second name
     /// (#314).
-    static let version = "8"
+    /// v9 also accepts leftovers in Application Scripts, Cookies and WebKit in the
+    /// user's Library, and in `/Library/Caches`, `/Library/Preferences` and
+    /// `/Library/Logs`, where it refuses Apple's own and hidden entries (#352).
+    static let version = "9"
 
     /// The authorization right the helper asks for before it moves anything for a
     /// standard account (#314). An administrator approves it in the macOS dialog.
@@ -103,7 +106,10 @@ enum PurgeHelperConstants {
         "Library/Group Containers",
         "Library/Saved Application State",
         "Library/Logs",
-        "Library/LaunchAgents"
+        "Library/LaunchAgents",
+        "Library/Application Scripts",
+        "Library/Cookies",
+        "Library/WebKit"
     ]
 
     private static let systemLeftoverRoots = [
@@ -111,6 +117,30 @@ enum PurgeHelperConstants {
         "/Library/Application Support",
         "/Library/LaunchAgents"
     ]
+
+    /// `/Library` folders where macOS keeps its own files beside other apps'
+    /// (#352): network settings sit in `/Library/Preferences`, crash reports in
+    /// `/Library/Logs`. An entry there is a leftover only when
+    /// `isAllowedSharedSystemLeftover` accepts its name.
+    nonisolated static let sharedSystemLeftoverRoots = [
+        "/Library/Caches",
+        "/Library/Preferences",
+        "/Library/Logs"
+    ]
+
+    /// Whether an entry named `name`, directly inside the shared system folder
+    /// at `rootPath`, can be an app's leftover. Never a hidden entry
+    /// (`.GlobalPreferences.plist`), never one of Apple's (`com.apple.…`), and in
+    /// `/Library/Preferences` only a `.plist`, which keeps out the folders macOS
+    /// stores its settings in (`SystemConfiguration`, `Audio`, `OpenDirectory`).
+    /// The app's gate and the helper both ask here, so neither can accept an
+    /// entry the other refuses.
+    nonisolated static func isAllowedSharedSystemLeftover(name: String, inRootAt rootPath: String) -> Bool {
+        let lower = name.lowercased()
+        guard !lower.isEmpty, !lower.hasPrefix("."), !lower.hasPrefix("com.apple.") else { return false }
+        if rootPath == "/Library/Preferences" { return lower.hasSuffix(".plist") }
+        return true
+    }
 
     /// Every leftover directory, the user's under `homeDirectory` first. A copy of
     /// `AppUninstallScanPolicy.leftoverSearchRoots`, which the helper does not
@@ -123,14 +153,19 @@ enum PurgeHelperConstants {
         let machineRoots = systemLeftoverRoots.map {
             URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL
         }
-        return userRoots + machineRoots
+        let sharedRoots = sharedSystemLeftoverRoots.map {
+            URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL
+        }
+        return userRoots + machineRoots + sharedRoots
     }
 
     /// Returns true only for locations the app-uninstall scanner can produce:
     /// an app bundle in an Applications folder (at any depth, never through
     /// another bundle or package), or one direct child of a known leftover
-    /// directory. Symlinks are rejected so an allowed-looking path cannot
-    /// redirect the root helper somewhere else between path components.
+    /// directory. In a folder macOS shares with other apps the child must also
+    /// pass `isAllowedSharedSystemLeftover`. Symlinks are rejected so an
+    /// allowed-looking path cannot redirect the root helper somewhere else
+    /// between path components.
     static func isAllowedUninstallLocation(_ url: URL, homeDirectory: URL) -> Bool {
         let standardized = url.standardizedFileURL
         let resolved = standardized.resolvingSymlinksInPath().standardizedFileURL
@@ -138,6 +173,9 @@ enum PurgeHelperConstants {
 
         let home = homeDirectory.standardizedFileURL
         let parent = standardized.deletingLastPathComponent().path
+        if sharedSystemLeftoverRoots.contains(parent) {
+            return isAllowedSharedSystemLeftover(name: standardized.lastPathComponent, inRootAt: parent)
+        }
         if leftoverRoots(homeDirectory: homeDirectory).contains(where: { $0.path == parent }) {
             return true
         }
