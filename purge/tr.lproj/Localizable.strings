@@ -212,7 +212,7 @@
 "Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "Şu anda çalışıyor, bu yüzden kaldırılamaz. Simulator'da kapatın, sonra tekrar tarayın.";
 "Busy right now, so it can't be removed. Scan again in a moment." = "Şu anda meşgul, bu yüzden kaldırılamaz. Biraz sonra tekrar tarayın.";
 "Dependencies" = "Bağımlılıklar";
-"Dev Tools" = "Dev Araçları";
+"Dev Tools" = "Geliştirici";
 "Dev tool artifacts" = "Geliştirici aracı çıktıları";
 "Developer" = "Geliştirici";
 "Developer Mode" = "Geliştirici Modu";
