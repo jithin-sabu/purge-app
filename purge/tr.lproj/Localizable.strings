@@ -1490,3 +1490,17 @@
 "Metal Toolchain" = "Metal Araç Zinciri";
 "Xcode's compiler for Metal shaders, an optional download that every account on this Mac shares. Xcode downloads it again (%@) when a project needs it, or run %@." = "Xcode'un Metal gölgelendiricileri için derleyicisi; bu Mac'teki tüm hesapların paylaştığı isteğe bağlı bir indirme. Bir proje ihtiyaç duyduğunda Xcode bunu yeniden indirir (%@) veya %@ komutunu çalıştırın.";
 "The Metal Toolchain in this cleanup is deleted permanently through xcodebuild, not moved to the Trash. Xcode can download it again." = "Bu temizlikteki Metal Araç Zinciri Çöp Sepeti'ne taşınmaz, xcodebuild aracılığıyla kalıcı olarak silinir. Xcode bunu yeniden indirebilir.";
+
+/* Ru ile birlikte gelen yeni metinler: birimler ve Apple Intelligence ayrıntıları */
+"TB" = "TB";
+"GB" = "GB";
+"MB" = "MB";
+"KB" = "KB";
+"Details" = "Ayrıntılar";
+"Show everything macOS answered" = "macOS'in verdiği tüm yanıtı göster";
+"This is everything macOS answered. If you report the problem, copy it into the report." = "macOS'in verdiği tüm yanıt bu. Sorunu bildirirseniz bunu rapora kopyalayın.";
+"Copied" = "Kopyalandı";
+"Copy" = "Kopyala";
+"macOS's asset service stopped before it answered" = "macOS'in varlık servisi yanıt vermeden durdu";
+"macOS's asset service couldn't be reached" = "macOS'in varlık servisine ulaşılamadı";
+"macOS's asset service sent an answer Purge couldn't read" = "macOS'in varlık servisi, Purge'ün okuyamadığı bir yanıt gönderdi";

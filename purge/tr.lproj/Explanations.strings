@@ -370,7 +370,7 @@
 "Compiled Python files that make your code run faster. Safe to delete and Python will recreate them automatically when your code runs again." = "Kodunuzun daha hızlı çalışmasını sağlayan derlenmiş Python dosyaları. Silmek güvenlidir ve kodunuz yeniden çalıştığında Python bunları otomatik olarak yeniden oluşturur.";
 
 "uv Package Cache" = "uv Paket Önbelleği";
-"Cached Python packages downloaded by uv, a fast Python package manager. Safe to delete and will be re-downloaded when you next install packages." = "Hızlı bir Python paket yöneticisi olan uv'nin indirdiği önbelleğe alınmış Python paketleri. Silmek güvenlidir ve bir sonraki paket yüklemenizde yeniden indirilir.";
+"Python packages uv downloaded and built. uv gets them again when needed, but tools running through uvx can stop, and environments in symlink mode break." = "uv'nin indirdiği ve derlediği Python paketleri. uv bunları gerektiğinde yeniden alır ancak uvx üzerinden çalışan araçlar durabilir ve sembolik bağlantı modundaki ortamlar bozulur.";
 
 "Ruff Linter Cache" = "Ruff Linter Önbelleği";
 "Saved results from Ruff, a fast Python code checker. Safe to delete and will be recreated on the next run." = "Hızlı bir Python kod denetleyicisi olan Ruff'ın kayıtlı sonuçları. Silmek güvenlidir ve bir sonraki çalışmada yeniden oluşturulur.";
