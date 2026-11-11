@@ -74,6 +74,7 @@ nonisolated final class DevScanner {
         "Dart Pub Cache": "pub-cache",
         "pre-commit Environments": "pre-commit-cache",
         "prek Cache": "prek-cache",
+        "uv Package Cache": "uv-cache",
         "Prisma Engines": "prisma-nodejs",
         "Expo Cache": "expo-cache",
         "pyenv and rbenv Downloads": "version-manager-downloads",
@@ -766,6 +767,11 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent(".cache/prek/\($0)", isDirectory: true)
             }),
             ("Prisma Engines", [home.appendingPathComponent(".cache/prisma", isDirectory: true)]),
+            // Check First: tools started with `uvx` run from environments in here, and
+            // an environment installed in symlink mode has its packages here (#345).
+            // Tools from `uv tool install` and uv's Python versions are in
+            // `~/.local/share/uv`, which is never listed.
+            ("uv Package Cache", [home.appendingPathComponent(".cache/uv", isDirectory: true)]),
             ("Expo Cache", [
                 "android-apk-cache", "ios-simulator-app-cache", "native-modules-cache",
                 "schema-cache", "template-cache", "versions-cache", "expo-go"

@@ -494,7 +494,7 @@
 
 /* uv-cache */
 "uv Package Cache" = "uv 软件包缓存";
-"Cached Python packages downloaded by uv, a fast Python package manager. Safe to delete and will be re-downloaded when you next install packages." = "快速 Python 软件包管理器 uv 下载并缓存的软件包。可以安全删除，下次安装软件包时会重新下载。";
+"Python packages uv downloaded and built. uv gets them again when needed, but tools running through uvx can stop, and environments in symlink mode break." = "uv 下载并构建的 Python 软件包。需要时 uv 会重新获取，但正在通过 uvx 运行的工具可能会停止，使用符号链接模式的环境会失效。";
 
 /* ruff-cache */
 "Ruff Linter Cache" = "Ruff 检查缓存";

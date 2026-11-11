@@ -445,6 +445,12 @@ enum DeletionSafetyPolicy {
             // The emulator files firebase-tools downloads, and downloads again
             // the next time the emulators start.
             "\(home)/.cache/firebase/emulators",
+            // uv's package cache, which `uv cache clean` empties too (#345). Check
+            // First by its explanation: a tool started with `uvx` runs from an
+            // environment in here, and with `link-mode = "symlink"` an environment's
+            // packages are links into it. `~/.local/share/uv` holds the tools from
+            // `uv tool install` and uv's Python versions, and is not listed.
+            "\(home)/.cache/uv",
             // The videos only. The thumbnails next to them are the covers System
             // Settings shows; deleting those blanks the wallpaper picker.
             "\(home)/Library/Application Support/com.apple.wallpaper/aerials/videos",

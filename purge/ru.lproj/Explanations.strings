@@ -87,7 +87,6 @@
 "Cached Node.js and package manager versions managed by Volta. Safe to delete and Volta will re-download versions as needed." = "Кэш версий Node.js и менеджеров пакетов, которым управляет Volta. Удалять безопасно — Volta скачает версии заново, когда они понадобятся.";
 "Cached Node.js package manager shims managed by Corepack. Safe to delete; Corepack will restore them on the next use." = "Закэшированные обёртки менеджеров пакетов Node.js, которыми управляет Corepack. Можно безопасно удалить — Corepack восстановит их при следующем использовании.";
 "Cached PHP packages downloaded by Composer. Safe to delete and will be re-downloaded when you run composer install." = "Кэшированные пакеты PHP, загруженные Composer. Удалять безопасно — они скачаются заново при запуске composer install.";
-"Cached Python packages downloaded by uv, a fast Python package manager. Safe to delete and will be re-downloaded when you next install packages." = "Кэш пакетов Python, скачанных uv — быстрым менеджером пакетов Python. Можно безопасно удалить — они скачаются заново при следующей установке пакетов.";
 "Cached Ruby gems downloaded by Bundler. Safe to delete and will be re-downloaded when you run bundle install." = "Кэшированные гемы Ruby, скачанные Bundler. Удалять безопасно: они скачаются заново при запуске bundle install.";
 "Cached Rust packages and compiled dependencies. Safe to delete and will be re-downloaded when you build your Rust projects." = "Кэшированные пакеты Rust и скомпилированные зависимости. Удалять безопасно — они скачаются заново, когда вы будете собирать проекты на Rust.";
 "Cached Terraform provider plugins. Safe to delete and will be re-downloaded when you run terraform init." = "Закэшированные плагины провайдеров Terraform. Можно безопасно удалить — они скачаются заново при запуске terraform init.";
@@ -304,6 +303,7 @@
 "Purge App" = "Приложение Purge";
 "Python Bytecode Cache" = "Кэш байт-кода Python";
 "Python Environment" = "Среда Python";
+"Python packages uv downloaded and built. uv gets them again when needed, but tools running through uvx can stop, and environments in symlink mode break." = "Пакеты Python, которые uv скачал и собрал. uv получит их снова, когда они понадобятся, но инструменты, запущенные через uvx, могут остановиться, а окружения в режиме symlink сломаются.";
 "RapidAPI / Paw" = "RapidAPI / Paw";
 "Raycast Launcher" = "Лаунчер Raycast";
 "Rebar3 Cache" = "Кэш Rebar3";
