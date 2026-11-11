@@ -1535,8 +1535,8 @@
   {
     "key": "uv-cache",
     "display_name": "uv Package Cache",
-    "tag": "safe",
-    "explanation": "Cached Python packages downloaded by uv, a fast Python package manager. Safe to delete and will be re-downloaded when you next install packages.",
+    "tag": "medium",
+    "explanation": "Python packages uv downloaded and built. uv gets them again when needed, but tools running through uvx can stop, and environments in symlink mode break.",
     "bundle_ids": [],
     "aliases": [
       "uv",
