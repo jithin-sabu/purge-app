@@ -943,6 +943,52 @@ struct EverythingElseCacheAuditTests {
     }
 }
 
+// MARK: - uv's package cache
+
+@Suite("uv cache (#345): offered, never Safe")
+struct UVCacheTests {
+    @Test(arguments: [
+        ".cache/uv",
+        ".cache/uv/archive-v0/1a2b3c/numpy/__init__.py",
+        ".cache/uv/wheels-v7/pypi/numpy",
+        ".cache/uv/environments-v2/ruff-0a1b2c",
+    ])
+    func cacheIsOffered(relative: String) {
+        #expect(AuditPaths.evaluate(relative) == .allow, "\(relative)")
+    }
+
+    /// The Dev Tools scan lists the folder, so it is a row and not only allowed.
+    @Test
+    func devToolsScanListsTheFolder() {
+        #expect(DevScanner.claimedGlobalCachePaths().contains(AuditPaths.url(".cache/uv").standardizedFileURL.path))
+    }
+
+    /// A tool started with `uvx` runs from an environment inside the cache, and
+    /// with `link-mode = "symlink"` an environment's packages are links into it.
+    /// uv does not put either back by itself, so Clean Safe Items and scheduled
+    /// cleans must not take the folder.
+    @Test
+    func rowIsNeverSafe() {
+        #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "uv Package Cache", primaryPath: nil).level == .medium)
+        #expect(bundledLevel("uv-cache") == .medium)
+        #expect(ExplanationDatabase.matchBundledDatabase(folderName: "uv")?.safetyLevel == .medium)
+    }
+
+    /// Tools from `uv tool install`, uv's Python versions and its settings.
+    @Test(arguments: [
+        ".local/share/uv",
+        ".local/share/uv/tools",
+        ".local/share/uv/tools/ruff",
+        ".local/share/uv/python/cpython-3.13.1-macos-aarch64-none",
+        ".config/uv",
+        ".config/uv/uv.toml",
+        ".cache",
+    ])
+    func installsAndSettingsStayOut(relative: String) {
+        #expect(AuditPaths.evaluate(relative) != .allow, "\(relative)")
+    }
+}
+
 // MARK: - The list itself
 
 @Suite("Allowlist audit: one entry per place")

@@ -941,6 +941,14 @@
 "No answer in %lld seconds" = "%lld 秒内没有回应";
 "The asset service call stopped without an answer (status %lld)" = "资源服务调用在没有回应的情况下停止（状态 %lld）";
 "no reason given" = "未说明原因";
+"macOS's asset service stopped before it answered" = "macOS 的资源服务还没回应就停止了";
+"macOS's asset service couldn't be reached" = "无法连接 macOS 的资源服务";
+"macOS's asset service sent an answer Purge couldn't read" = "macOS 的资源服务返回了 Purge 无法读取的回应";
+"Details" = "详细信息";
+"Show everything macOS answered" = "显示 macOS 的完整回应";
+"This is everything macOS answered. If you report the problem, copy it into the report." = "这是 macOS 的完整回应。如果你要报告这个问题，请把它复制到报告里。";
+"Copy" = "复制";
+"Copied" = "已复制";
 "Apple Intelligence models removed" = "已移除 Apple 智能模型";
 "Not measured" = "未测量";
 "1 model set" = "1 组模型";
@@ -1490,3 +1498,9 @@
 "Metal Toolchain" = "Metal 工具链";
 "Xcode's compiler for Metal shaders, an optional download that every account on this Mac shares. Xcode downloads it again (%@) when a project needs it, or run %@." = "Xcode 用于编译 Metal 着色器的可选下载内容，这台 Mac 上的所有账户共用。项目需要时 Xcode 会重新下载（%@），也可以运行 %@。";
 "The Metal Toolchain in this cleanup is deleted permanently through xcodebuild, not moved to the Trash. Xcode can download it again." = "这次清理中的 Metal 工具链会通过 xcodebuild 永久删除，不会移到废纸篓。Xcode 可以重新下载。";
+
+/* Units of the storage figures, used by ByteFormatter. */
+"KB" = "KB";
+"MB" = "MB";
+"GB" = "GB";
+"TB" = "TB";

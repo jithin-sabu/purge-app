@@ -443,6 +443,7 @@
 			knownRegions = (
 				en,
 				Base,
+				ru,
 				"zh-Hans",
 				tr,
 			);
