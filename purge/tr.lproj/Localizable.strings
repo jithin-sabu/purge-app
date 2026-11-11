@@ -98,7 +98,7 @@
 "Another app you still have installed uses this too, so Purge kept it." = "Yüklü olan başka bir uygulama da bunu kullandığı için Purge bunu korudu.";
 "Any time" = "Her zaman";
 "App" = "Uygulama";
-"App Caches" = "Uygulama Önbellekleri";
+"App Caches" = "Önbellekler";
 "App Caches and Dev Tools" = "Uygulama Önbellekleri ve Geliştirici Araçları";
 "App Store app caches" = "App Store uygulama önbellekleri";
 "App Uninstaller" = "Uygulama Kaldırıcı";
@@ -212,7 +212,7 @@
 "Running now, so it can't be removed. Shut it down in Simulator, then scan again." = "Şu anda çalışıyor, bu yüzden kaldırılamaz. Simulator'da kapatın, sonra tekrar tarayın.";
 "Busy right now, so it can't be removed. Scan again in a moment." = "Şu anda meşgul, bu yüzden kaldırılamaz. Biraz sonra tekrar tarayın.";
 "Dependencies" = "Bağımlılıklar";
-"Dev Tools" = "Geliştirici Araçları";
+"Dev Tools" = "Dev Araçları";
 "Dev tool artifacts" = "Geliştirici aracı çıktıları";
 "Developer" = "Geliştirici";
 "Developer Mode" = "Geliştirici Modu";
