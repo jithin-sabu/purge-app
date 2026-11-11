@@ -595,19 +595,44 @@ struct AllowlistAdditionTests {
     }
 
     @Test
-    func prekCacheDefaultsToCheckFirstAndKeepsRecoveryPatches() {
-        let claimed = DevScanner.claimedGlobalCachePaths()
+    func prekCacheDefaultsToCheckFirstAndKeepsRecoveryPatches() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-audit-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let claimed = DevScanner.claimedGlobalCachePaths(home: home)
         for folder in ["repos", "hooks", "tools", "cache"] {
             let path = ".cache/prek/\(folder)"
-            #expect(claimed.contains(AuditPaths.url(path).path))
+            #expect(claimed.contains(home.appendingPathComponent(path).standardizedFileURL.path))
             #expect(AuditPaths.evaluate(path) == .allow)
         }
         #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "prek Cache", primaryPath: nil).level == .medium)
         for path in [".cache", ".cache/prek", ".cache/prek/patches", ".cache/prek/patches/123-456.patch",
                      ".cache/prek/repos-backup", ".cache/prek-backup/repos", ".config/prek"] {
-            #expect(!claimed.contains(AuditPaths.url(path).path))
+            #expect(!claimed.contains(home.appendingPathComponent(path).standardizedFileURL.path))
             #expect(AuditPaths.evaluate(path) != .allow)
         }
+    }
+
+    @Test(arguments: ["tools", "tools/rust/1.90/bin/cargo"])
+    func keptPrekHooksKeepTheirManagedTools(relative: String) {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-\(UUID().uuidString)", isDirectory: true)
+        let root = home.appendingPathComponent(".cache/prek", isDirectory: true)
+        let path = root.appendingPathComponent(relative)
+        let hooks = root.appendingPathComponent("hooks", isDirectory: true)
+        var hooksExcluded = false
+        let isExcluded: (URL) -> Bool = { hooksExcluded && $0 == hooks }
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+        hooksExcluded = true
+        #expect(DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+        hooksExcluded = false
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+    }
+
+    @Test(arguments: ["repos", "hooks", "cache", "patches", "tools-backup", "../prek-backup/tools"])
+    func prekToolsDependencyGuardLeavesOtherPathsAlone(relative: String) {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-\(UUID().uuidString)", isDirectory: true)
+        let path = home.appendingPathComponent(".cache/prek/\(relative)")
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: { _ in true }))
     }
 
     @Test(arguments: [

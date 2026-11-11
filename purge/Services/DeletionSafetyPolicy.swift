@@ -505,6 +505,7 @@ enum DeletionSafetyPolicy {
         // Recheck before a move in case the prek store was redirected since the scan.
         if PathContainment.isInside(key, "\(cachedHomePath)/.cache/prek"),
            PathContainment.containsSymlinkComponent(url, home: cachedHomePath) { return false }
+        if prekToolsRefuseDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
         if gradleLeftoverRefusesDeletion(url) { return false }
@@ -528,6 +529,20 @@ enum DeletionSafetyPolicy {
         offeredForCleanupCache[key] = verdict
         offeredForCleanupLock.unlock()
         return verdict
+    }
+
+    /// Installed prek hooks can retain absolute paths to managed Rust tools.
+    /// Recheck exclusions before the cached verdict so a hook kept after scanning
+    /// also keeps its tools at deletion time.
+    nonisolated static func prekToolsRefuseDeletion(
+        _ url: URL,
+        home: String = cachedHomePath,
+        isExcluded: (URL) -> Bool = { ExcludedPathsStore.isExcluded($0) }
+    ) -> Bool {
+        let root = URL(fileURLWithPath: home).appendingPathComponent(".cache/prek", isDirectory: true)
+        let tools = root.appendingPathComponent("tools", isDirectory: true).standardizedFileURL.path
+        guard PathContainment.isSameOrInside(url.standardizedFileURL.path, tools) else { return false }
+        return isExcluded(root.appendingPathComponent("hooks", isDirectory: true))
     }
 
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]
