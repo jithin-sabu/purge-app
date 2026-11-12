@@ -3,6 +3,27 @@
   <channel>
     <title>Purge</title>
     <item>
+      <title>Version 1.15.0</title>
+      <pubDate>Thu, 12 Nov 2026 01:03:12 +0000</pubDate>
+      <sparkle:version>43</sparkle:version>
+      <sparkle:shortVersionString>1.15.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+        <ul>
+          <li><strong>Russian and Turkish</strong>: Purge now runs in Russian and Turkish. Storage sizes also follow your language's units and your region's decimal separator.</li>
+          <li><strong>More leftovers found</strong>: The App Uninstaller now finds an app's scripts, cookies and website data, its hidden files, and its files in the shared Library folder.</li>
+          <li><strong>Xcode's Metal Toolchain</strong>: Dev Tools lists Xcode's optional Metal Toolchain, about 900 MB, and removes it with Xcode's own tool. It is deleted permanently.</li>
+          <li><strong>uv cache</strong>: Dev Tools now offers uv's package cache as Check First.</li>
+          <li><strong>Apple Intelligence errors in full</strong>: When removing the Apple Intelligence models fails, a Details button shows everything macOS answered.</li>
+        </ul>
+      ]]></description>
+      <enclosure
+        url="https://github.com/jithin-sabu/purge-app/releases/download/v1.15.0/Purgev1.15.0.dmg"
+        sparkle:edSignature="1DCmdsXMpEmit8+0EfwvtxzGRJt0Tw3hY0FciYkIlYYvRZ6r5740XzF0/8UXSC5zFKWrEDN4M4Fu46TFPukUBQ=="
+        length="12182591"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.14.1</title>
       <pubDate>Sun, 08 Nov 2026 00:19:34 +0000</pubDate>
       <sparkle:version>42</sparkle:version>
