@@ -43,12 +43,12 @@
 
 > 本应用的简体中文界面基于 [@zihua-zhang](https://github.com/zihua-zhang) 的社区翻译（[Purge-zh](https://github.com/zihua-zhang/Purge-zh)）。如果本文与英文 README 有出入，请以英文 README 为准。
 >
-> Purge 现在同时支持英文和简体中文，并跟随 macOS 的系统语言。你也可以在“系统设置 > 通用 > 语言与地区 > 应用程序”中单独为 Purge 设置语言。
+> Purge 现在支持英文、简体中文、俄文和土耳其文，并跟随 macOS 的系统语言。你也可以在“系统设置 > 通用 > 语言与地区 > 应用程序”中单独为 Purge 设置语言。
 
 你的 Mac 会悄悄积累大量缓存和垃圾文件，你既看不到，也从没要求过它们存在。Purge 会找出这些文件，标出哪些是安全的，并一键清理。
 
 > [!NOTE]
-> 文件和文件夹默认会移到废纸篓，Purge 从不清空废纸篓，所以在你自己清空之前都可以放回去。以下内容会被永久移除：iOS 模拟器和模拟器运行时（通过 Xcode 的 `simctl`）；Xcode 可选的 Metal 工具链（通过 `xcodebuild -deleteComponent`，项目需要时 Xcode 会重新下载）；Time Machine 本地快照（通过 `tmutil`，Purge 会保留最新的一张和上次备份留下的那张）；macOS 27 上的 Apple Intelligence 模型（由 Apple 的资源服务释放，之后可以在 Purge 里重新下载）；以及你在检查面板中选择交给包管理器卸载的命令行工具和 Homebrew cask 应用。Docker Desktop 的文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
+> 文件和文件夹默认会移到废纸篓，Purge 从不清空废纸篓，所以在你自己清空之前都可以放回去。以下内容会被永久移除：iOS 模拟器和模拟器运行时（通过 Xcode 的 `simctl`）；Xcode 可选的 Metal 工具链（通过 `xcodebuild -deleteComponent`，项目需要时 Xcode 会重新下载）；Time Machine 本地快照（通过 `tmutil`，Purge 会保留最新的一张和上次备份留下的那张）；macOS 27 上的 Apple 智能模型（由 Apple 的资源服务释放，之后可以在 Purge 里重新下载）；以及你在检查面板中选择交给包管理器卸载的命令行工具和 Homebrew cask 应用。Docker Desktop 的文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
 
 你不需要了解其中的细节也能使用。不过，如果你想自己核对，每个项目都附有通俗易懂的说明和安全标签，所以不会有任何你事先看不到、验证不了的内容被动到。
 
@@ -63,8 +63,8 @@
 - **其他内容**也可以打开。点击该行会打开一个页面，显示其中有什么：顶部是四个数字，说明你能对这些空间做什么；下方是一张地图，每个分组是一个框，里面按占用空间画出它最大的文件夹，并按类型着色。类型包括：可在其他应用中释放的空间（照片、邮件、Steam、废纸篓）、你自己的文件（项目、文稿）、Purge 认为删除不安全而不去碰的内容（不在清单上的缓存、没有已安装应用认领的应用数据），以及由 macOS 管理的内容。把指针移到某个方块上会显示它的名称，点击可查看它是什么，并提供“在访达中显示”或所属应用自带的释放方式。它是只读的：这里的任何操作都不会移动文件
 - **扫描全部**（⇧⌘R）会逐个扫描所有类别，一次只扫一个，让 Mac 保持流畅。打开 Purge 时，它也会自动执行同样的操作。大文件、应用列表和残留文件需要完全磁盘访问权限。没有该权限时，Purge 仍会扫描应用缓存和开发工具，并跳过受 macOS 保护的位置，例如沙盒应用的缓存
 - 每个字节只统计一次：应用的缓存文件夹计入应用缓存，不会在该应用名下重复计算
-- **藏在“系统数据”中**：位于各类别下方的一张卡片，显示 macOS 计入“系统数据”的空间。其中的 **时间机器快照** 一行用来移除本地快照；在 macOS 27 上，它还包含 Apple Intelligence 模型
-- **Apple Intelligence 模型**（macOS 27，Apple 芯片）：macOS 归入“系统数据”的设备端模型，系统没有提供移除它们的开关。**移除** 会通过 Apple 的资源服务释放它们，并安装一个描述文件（你只需批准一次），让它们不会再次下载。**重新下载** 会请你在系统设置中移除该描述文件，然后按你的 Siri 语言向 macOS 请求 Purge 移除的那些模型。显示的大小是 Apple 给出的数字；Purge 记录的是磁盘实际释放的空间
+- **藏在“系统数据”中**：位于各类别下方的一张卡片，显示 macOS 计入“系统数据”的空间。其中的 **时间机器快照** 一行用来移除本地快照；在 macOS 27 上，它还包含 Apple 智能模型
+- **Apple 智能模型**（macOS 27，Apple 芯片）：macOS 归入“系统数据”的设备端模型，系统没有提供移除它们的开关。**移除** 会通过 Apple 的资源服务释放它们，并安装一个描述文件（你只需批准一次），让它们不会再次下载。**重新下载** 会请你在系统设置中移除该描述文件，然后按你的 Siri 语言向 macOS 请求 Purge 移除的那些模型。显示的大小是 Apple 给出的数字；Purge 记录的是磁盘实际释放的空间
 
 ### 应用缓存（App Caches）
 
@@ -97,6 +97,7 @@
 不用逐个翻文件夹，就能找到占用空间的个人文件：
 
 - 扫描 **文稿**、**桌面**、**下载**、**影片**、**音乐** 和 **图片**，另外只在 `~/Parallels` 和 `~/Virtual Machines.localized` 中查找虚拟机，并在 iCloud 云盘自己的文件夹中查找可以只保留在 iCloud 中的文件
+- 你移走并换成链接的文件夹（例如指向另一块磁盘的 `~/Documents`），如果链接指向你的个人文件夹内，或指向 `/Volumes` 下连接到这台 Mac 的磁盘，Purge 会扫描链接指向的位置。其中的文件按真实路径列出，并移到该磁盘的废纸篓。指向其他位置的链接（例如 `~/Library/CloudStorage`、网络共享、整块磁盘或 Mac 的副本）不会被跟随，扫描会说明它指向哪里。文件夹内部的链接一律不会跟随
 - 跳过受管理的资源库（照片、iMovie、音乐等）、隐藏文件夹，以及 `node_modules`、`Pods`、`DerivedData` 和构建产物这类项目文件夹。从依赖目录中单独删除一个文件只会破坏安装，所以这些内容应归开发工具处理，它会按文件夹整个移除
 - **搜索** 会在你输入时筛选列表，可匹配文件名、所在文件夹及其来源标签
 - 按 **大小**（5 MB 到 1 GB）和 **上次使用时间**（不限时间到一年以上）筛选
@@ -163,7 +164,7 @@ Purge 会为它识别的每个项目分配一个安全标签：
 - **清理安全项目**：在概览中，确认一次后把所有“可安全清理”的项目移到废纸篓
 - **清理安全文件**：从菜单栏执行同样的安全清理
 - **定时清理**：在 **设置 → 清理** 中，开启 **自动清理**，并选择清理频率（每周、每月、每 3 个月，或按天、周、月设定的 **自定义** 间隔）。到期时 Purge 会发送本地提醒，并在你下次打开或切换回 Purge 时执行清理，让清理在你不用惦记的情况下持续进行。它从不在后台清理
-- 文件和文件夹会移到 **废纸篓**。Purge 从不清空废纸篓。iOS 模拟器和模拟器运行时通过 Xcode 的 `simctl` 永久移除。Metal 工具链通过 `xcodebuild -deleteComponent` 永久移除，项目需要时 Xcode 会重新下载。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple Intelligence 模型由 Apple 的资源服务释放，之后可以重新下载。包管理器安装的工具和 cask 应用，在你于检查面板中选择后，由该管理器自己的卸载命令永久删除
+- 文件和文件夹会移到 **废纸篓**。Purge 从不清空废纸篓。iOS 模拟器和模拟器运行时通过 Xcode 的 `simctl` 永久移除。Metal 工具链通过 `xcodebuild -deleteComponent` 永久移除，项目需要时 Xcode 会重新下载。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple 智能模型由 Apple 的资源服务释放，之后可以重新下载。包管理器安装的工具和 cask 应用，在你于检查面板中选择后，由该管理器自己的卸载命令永久删除
 
 ### 设置
 
@@ -389,8 +390,8 @@ Purge 不使用 AI。你扫描或清理的任何内容都不会发送给 AI 服�
 
 Purge 会删除文件，所以安全就是重点。以下几点值得了解：
 
-- **默认移到废纸篓**：文件和文件夹会移到 macOS 废纸篓，Purge 从不清空废纸篓。在你自己清空之前都可以恢复。iOS 模拟器和模拟器运行时通过 `simctl` 永久移除。Xcode 的 Metal 工具链通过 `xcodebuild -deleteComponent` 永久移除，项目需要时会重新下载。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple Intelligence 模型由 Apple 的资源服务释放，之后可以在 Purge 里重新下载。你选择通过包管理器移除的命令行工具和 Homebrew cask 应用会由该管理器永久删除。Docker Desktop 的数据文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
-- **基于允许列表的删除**：只有匹配明确的安全允许列表的路径，才有资格被清理。Purge 不认识的内容，一律不会动。
+- **默认移到废纸篓**：文件和文件夹会移到 macOS 废纸篓，Purge 从不清空废纸篓。在你自己清空之前都可以恢复。iOS 模拟器和模拟器运行时通过 `simctl` 永久移除。Xcode 的 Metal 工具链通过 `xcodebuild -deleteComponent` 永久移除，项目需要时会重新下载。Time Machine 本地快照通过 `tmutil` 永久移除；Purge 会保留最新的一张和上次备份留下的那张。Apple 智能模型由 Apple 的资源服务释放，之后可以在 Purge 里重新下载。你选择通过包管理器移除的命令行工具和 Homebrew cask 应用会由该管理器永久删除。Docker Desktop 的数据文件夹会移到废纸篓。Purge 不会执行 `docker system prune`。
+- **基于允许列表的删除**：只有匹配明确的安全允许列表的路径，才有资格被清理。Purge 不认识的内容，一律不会动。[安全页面](https://purgemac.com/safety)列出了每个允许清理的位置，以及 Purge 永远不会碰的所有内容，由应用的源代码生成。
 - **由你决定清理什么**：Purge 会显示哪些空间可以回收，由你决定清理哪些。
 - **root 辅助程序，默认关闭**：为了移动管理员安装的应用，Purge 可以安装一个以 root 身份运行的小型辅助程序。在你开启 **移除管理员锁定的应用，无需重复输入密码** 并在系统设置中批准之前，它一直是关闭的。它只做一件事：把卸载工具已批准的路径，或残留的 macOS 更新文件，移到你的废纸篓。它的源码在 `PurgeHelper/` 中。
 - **开源**：完整的删除逻辑（包括允许列表）都在这个仓库中，你可以阅读，也可以自己从源码构建。
@@ -434,6 +435,6 @@ Purge 是免费的。如果它帮你节省了一些磁盘空间，你可以在�
 <a href="https://jithinsabu.com"><img src="https://img.shields.io/badge/jithinsabu.com-black?style=flat&logo=safari&logoColor=white" alt="网站" /></a>
 <a href="https://linkedin.com/in/jithinsabu"><img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=flat&logo=linkedin&logoColor=white" alt="LinkedIn" /></a>
 <a href="https://x.com/sabu_jithin"><img src="https://img.shields.io/badge/X-000000?style=flat&logo=x&logoColor=white" alt="X" /></a>
-<a href="mailto:design@jithinsabu.com"><img src="https://img.shields.io/badge/Email-EA4335?style=flat&logo=gmail&logoColor=white" alt="电子邮件" /></a>
+<a href="mailto:jithin@purgemac.com"><img src="https://img.shields.io/badge/Email-EA4335?style=flat&logo=gmail&logoColor=white" alt="电子邮件" /></a>
 
 </div>
