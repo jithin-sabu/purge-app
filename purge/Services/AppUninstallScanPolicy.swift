@@ -144,18 +144,27 @@ enum AppUninstallScanPolicy {
         // refused as bundles outside the app roots. So a `.app` name is a
         // leftover only directly inside a root, and only when it is not a real
         // application bundle; a bundle anywhere under these roots is never one.
+        // The extension is read without case, as the root helper reads it, so
+        // a bundle named `Foo.APP` is refused here too (#362).
         // In a folder macOS shares with other apps (`/Library/Preferences`),
         // only a direct child whose name the shared rule accepts (#352).
+        // In Cookies and WebKit, only a direct child named after an
+        // identifier, so never the system's `Cookies.binarycookies`,
+        // `HSTS.plist` or `Databases`, whatever the matcher made of them (#362).
         for root in leftoverSearchRoots(home: home) {
             let rootPath = root.url.standardizedFileURL.path
             if path == rootPath { return false }
             guard PathContainment.isInside(path, rootPath) else { continue }
+            if root.category == .webData {
+                guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
+                      isAppWebDataName(std.lastPathComponent) else { return false }
+            }
             if PurgeHelperConstants.sharedSystemLeftoverRoots.contains(rootPath) {
                 guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
                       PurgeHelperConstants.isAllowedSharedSystemLeftoverEntry(std, inRootAt: rootPath)
                 else { return false }
             }
-            if std.pathExtension == "app" {
+            if std.pathExtension.lowercased() == "app" {
                 guard std.deletingLastPathComponent().standardizedFileURL.path == rootPath,
                       !isRealAppBundle(std) else { return false }
             }
@@ -248,6 +257,15 @@ enum AppUninstallScanPolicy {
 
         let isHidden = lowerName.hasPrefix(".")
         if let bundleID = app.bundleID?.lowercased(), !bundleID.isEmpty {
+            // Cookies and WebKit also hold the system's own files under plain
+            // names (`Cookies.binarycookies`, `HSTS.plist`, `Databases`). An
+            // app whose bundle id is one word (`Cookies`) would be paired with
+            // them, so there the id must be shaped like an identifier. So must
+            // what the entry is named after: an id of `hsts.plist` has the
+            // shape, and `HSTS.plist` is still the system's file (#362).
+            if category == .webData {
+                guard isShapedLikeIdentifier(bundleID), isAppWebDataName(name) else { return nil }
+            }
             if isHidden {
                 return isNamedByIdentifier(String(lowerName.dropFirst()), bundleID: bundleID) ? .bundleID : nil
             }
@@ -299,6 +317,31 @@ enum AppUninstallScanPolicy {
             || lowerName == bundleID + ".plist"
             || lowerName == bundleID + ".savedstate"
             || lowerName == bundleID + ".binarycookies"
+    }
+
+    /// Whether `identifier` has at least two parts around a dot, none of them
+    /// empty, and no space: the shape of `com.vendor.App`, and the same shape
+    /// `PurgeHelperConstants.isAllowedSharedSystemLeftover` asks of a name.
+    private nonisolated static func isShapedLikeIdentifier(_ identifier: String) -> Bool {
+        guard !identifier.contains(" ") else { return false }
+        let parts = identifier.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count >= 2 && !parts.contains { $0.isEmpty }
+    }
+
+    /// Whether an entry in Cookies or WebKit can be an app's (#362). An app's
+    /// entry there is `<bundle id>` or the id plus a known suffix, perhaps
+    /// hidden behind a leading dot, so what is left without the dot and the
+    /// suffix must be shaped like an identifier. `Cookies.binarycookies` leaves
+    /// `Cookies` and `HSTS.plist` leaves `HSTS`: the system's own, like
+    /// `Databases`. The matcher and the delete gate both ask here.
+    nonisolated static func isAppWebDataName(_ name: String) -> Bool {
+        var identifier = name.lowercased()
+        if identifier.hasPrefix(".") { identifier.removeFirst() }
+        for suffix in [".binarycookies", ".plist", ".savedstate"] where identifier.hasSuffix(suffix) {
+            identifier.removeLast(suffix.count)
+            break
+        }
+        return isShapedLikeIdentifier(identifier)
     }
 
     /// The categories whose entries can be named after an app group: Group
@@ -378,6 +421,80 @@ enum AppUninstallScanPolicy {
         guard item.category == .applicationScripts, !item.holdsAddedScripts,
               FileManager.default.fileExists(atPath: item.path.path) else { return false }
         return scriptsFolderHoldsFiles(item.path)
+    }
+
+    /// The same check for a failure row, which has a path and no item (#362).
+    /// Retry can come minutes after the clean, so it reads the folder again.
+    /// `approvedWithFiles` is the row's `holdsAddedScripts`: false for a folder
+    /// the user approved as empty, and for a row that does not say.
+    nonisolated static func scriptsFolderGainedFiles(
+        at url: URL,
+        approvedWithFiles: Bool,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Bool {
+        guard !approvedWithFiles,
+              leftoverCategory(for: url, home: home) == .applicationScripts,
+              FileManager.default.fileExists(atPath: url.path) else { return false }
+        return scriptsFolderHoldsFiles(url)
+    }
+
+    // MARK: Helper eligibility
+
+    /// Whether a leftover may go to the root helper when its plain move fails.
+    /// A move needs write access to the folder holding the entry. The entry's
+    /// own owner and mode do not matter for a rename, so checking the entry
+    /// would send files in a user-writable folder to the helper for nothing.
+    ///
+    /// A sticky folder is the exception (#362). `/Library/Caches` is
+    /// `drwxrwxrwt root:admin`: an administrator can write to it, and still
+    /// can't move an entry there unless they own the entry or the folder. A
+    /// root-owned cache folder a removed app left there read as "no privilege
+    /// needed", and its row kept a Retry that could never work. Such an entry
+    /// may go to the helper, and only when root owns it
+    /// (`stickyFolderEntryNeedsHelper`).
+    ///
+    /// This only names what may be handed to the helper. The helper's own gate
+    /// (`PurgeHelperConstants.isAllowedUninstallLocation`) still decides what
+    /// it moves.
+    ///
+    /// `entryOwner` is read from disk. A test can't make a root-owned entry,
+    /// so it hands one in.
+    nonisolated static func moveNeedsPrivilege(
+        _ url: URL,
+        user: uid_t = getuid(),
+        entryOwner: uid_t? = nil
+    ) -> Bool {
+        let parent = url.deletingLastPathComponent()
+        guard FileManager.default.isWritableFile(atPath: parent.path) else { return true }
+        var parentInfo = stat()
+        guard stat(parent.path, &parentInfo) == 0, parentInfo.st_mode & S_ISVTX != 0 else { return false }
+        var entryInfo = stat()
+        guard lstat(url.path, &entryInfo) == 0 else { return false }
+        return stickyFolderEntryNeedsHelper(
+            entryOwner: entryOwner ?? entryInfo.st_uid,
+            folderOwner: parentInfo.st_uid,
+            user: user
+        )
+    }
+
+    /// The sticky-folder rule on its own, for an entry in a folder `user` can
+    /// write to. The sticky bit holds the move back unless `user` is root or
+    /// owns the entry or the folder. Of the entries it holds back, only one
+    /// root owns may go to the helper, and an entry root owns is never the
+    /// user's own.
+    ///
+    /// An entry another account owns stays. Any account can make a folder in
+    /// `/Library/Caches`, and the sticky bit is what keeps it that account's.
+    /// The helper checks where an entry is and what it is named, never who
+    /// owns it, and hands what it moves to whoever asked. Sent there, another
+    /// person's cache folder would end up in this user's Trash as this user's.
+    nonisolated static func stickyFolderEntryNeedsHelper(
+        entryOwner: uid_t,
+        folderOwner: uid_t,
+        user: uid_t
+    ) -> Bool {
+        guard user != 0, folderOwner != user else { return false }
+        return entryOwner == 0
     }
 
     /// Bundle-id and group anchored matches are safe to remove and preselected;

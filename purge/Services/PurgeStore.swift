@@ -1522,6 +1522,19 @@ final class PurgeStore: ObservableObject {
             session.replaceFailure(id: item.id, with: [item.replacingReason(.keptForOtherApp)])
             return nil
         }
+        // A scripts folder the user approved as empty stays once files land in
+        // it (#352). Every clean reads the folder right before the move, and a
+        // retry can come long after, so it reads it again (#362). The home is
+        // the engine's, the one its gate will judge the path against.
+        if case .userSelected(isAIModel: false, _) = item.route,
+           AppUninstallScanPolicy.scriptsFolderGainedFiles(
+               at: url,
+               approvedWithFiles: item.holdsAddedScripts,
+               home: fileDeleter.home
+           ) {
+            session.replaceFailure(id: item.id, with: [item.replacingReason(.safetySkipped)])
+            return nil
+        }
 
         switch item.route {
         case .lockedUninstall:
@@ -2006,7 +2019,8 @@ final class PurgeStore: ObservableObject {
                 displayName: "\(bundleName) \(leftover.category.displayName)",
                 reason: reason,
                 sizeBytes: leftover.sizeBytes,
-                route: .userSelected(isAIModel: false, privilegedEligible: eligible.contains(key))
+                route: .userSelected(isAIModel: false, privilegedEligible: eligible.contains(key)),
+                holdsAddedScripts: leftover.holdsAddedScripts
             )
         }
         // Both the leftovers that failed and the ones kept for another app remain as
@@ -2542,6 +2556,7 @@ final class PurgeStore: ObservableObject {
         pathToExpectedSizeBytes: [String: Int64],
         aiModelPaths: Set<String> = [],
         privilegedEligiblePaths: Set<String> = [],
+        scriptsFoldersApprovedWithFiles: Set<String> = [],
         totalBytes: Int64,
         source: CleanupSource,
         removeRows: (Set<String>) -> Void,
@@ -2580,7 +2595,9 @@ final class PurgeStore: ObservableObject {
             liveSession.completeRun(
                 bytesMovedToTrash: report.bytesMovedToTrash,
                 elapsedSeconds: elapsedSeconds,
-                failedItems: report.userVisibleFailures,
+                failedItems: report.userVisibleFailures.map {
+                    $0.markingScriptsFolder(approvedWithFiles: scriptsFoldersApprovedWithFiles)
+                },
                 movedToTrashCount: report.movedToTrashCount
             )
             if !report.ownershipWarningPaths.isEmpty { liveSession.noteTrashOwnershipWarning() }
@@ -3090,6 +3107,9 @@ final class PurgeStore: ObservableObject {
         var pathToDisplayName: [String: String] = [:]
         var pathToExpectedSizeBytes: [String: Int64] = [:]
         var privilegedEligiblePaths = Set<String>()
+        // Kept for the failure rows, so a retry knows which scripts folders
+        // were ticked with files in them (#362).
+        var scriptsFoldersApprovedWithFiles = Set<String>()
         for item in items {
             let key = item.path.standardizedFileURL.path
             urls.append(item.path)
@@ -3098,6 +3118,7 @@ final class PurgeStore: ObservableObject {
             // Shared `/Library` roots (launch daemons, shared support) are not
             // user-writable; everything in the home Library stays unprivileged.
             if pathNeedsPrivilege(item.path) { privilegedEligiblePaths.insert(key) }
+            if item.holdsAddedScripts { scriptsFoldersApprovedWithFiles.insert(key) }
         }
 
         leftoverCleanupFailed = false
@@ -3106,6 +3127,7 @@ final class PurgeStore: ObservableObject {
             pathToDisplayName: pathToDisplayName,
             pathToExpectedSizeBytes: pathToExpectedSizeBytes,
             privilegedEligiblePaths: privilegedEligiblePaths,
+            scriptsFoldersApprovedWithFiles: scriptsFoldersApprovedWithFiles,
             totalBytes: items.reduce(Int64(0)) { $0 + $1.sizeBytes },
             source: .leftovers,
             removeRows: { deletedPaths in removeTrashedRowsEverywhere(deletedPaths: deletedPaths) },
@@ -3537,11 +3559,11 @@ final class PurgeStore: ObservableObject {
 
     private var pendingLockedUninstalls: [PendingLockedUninstall] = []
 
-    /// Moving an item requires write access to the directory containing it. The
-    /// item's own owner and mode do not matter for a rename, so checking the item
-    /// itself would unnecessarily elevate files in a user-writable folder.
+    /// Whether a leftover may go to the helper when its plain move fails: its
+    /// folder is not writable, or is sticky and the entry is root's
+    /// (`AppUninstallScanPolicy.moveNeedsPrivilege`, #362).
     private func pathNeedsPrivilege(_ url: URL) -> Bool {
-        !FileManager.default.isWritableFile(atPath: url.deletingLastPathComponent().path)
+        AppUninstallScanPolicy.moveNeedsPrivilege(url)
     }
 
     /// `survivors` plus the apps the uninstaller never lists, Apple's among them
@@ -3896,6 +3918,9 @@ final class PurgeStore: ObservableObject {
             !movedBundlePaths.contains($0.bundleURL.standardizedFileURL.path)
         }
         var keptSharedFailures: [CleanFailureItem] = []
+        // Kept for the failure rows, so a retry knows which scripts folders
+        // were ticked with files in them (#362).
+        var scriptsFoldersApprovedWithFiles = Set<String>()
 
         var leftoverReport: DeletionReport?
         if !leftoverBatch.isEmpty {
@@ -3932,6 +3957,7 @@ final class PurgeStore: ObservableObject {
                     names[key] = app.name
                     sizes[key] = item.sizeBytes
                     if pathNeedsPrivilege(item.path) { eligible.insert(key) }
+                    if item.holdsAddedScripts { scriptsFoldersApprovedWithFiles.insert(key) }
                 }
             }
             // Bundles already moved; a leftover failure here must not discard that.
@@ -4005,7 +4031,9 @@ final class PurgeStore: ObservableObject {
         liveSession.completeRun(
             bytesMovedToTrash: report.bytesMovedToTrash + report.bytesRemovedDirectly,
             elapsedSeconds: elapsedSeconds,
-            failedItems: report.userVisibleFailures + heldFailures + keptSharedFailures,
+            failedItems: report.userVisibleFailures.map {
+                $0.markingScriptsFolder(approvedWithFiles: scriptsFoldersApprovedWithFiles)
+            } + heldFailures + keptSharedFailures,
             movedToTrashCount: report.movedToTrashCount,
             removedPermanentlyCount: report.deletedItems.count - report.movedToTrashCount
         )

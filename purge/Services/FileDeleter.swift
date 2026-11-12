@@ -211,8 +211,9 @@ nonisolated final class FileDeleter: Sendable {
 
     /// The home folder the user-selected gates check against. Tests hand in a
     /// temporary one. The cache route never uses it: `DeletionSafetyPolicy`
-    /// knows only the real home, so its checks keep that one.
-    private let home: URL
+    /// knows only the real home, so its checks keep that one. The store reads
+    /// it for the one check it runs on a path before a retry (#362).
+    let home: URL
 
     /// How a simulator runtime row is removed. The live one calls `simctl`; tests
     /// hand in a fake so the dispatch can be checked without CoreSimulator.

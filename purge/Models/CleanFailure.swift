@@ -264,6 +264,11 @@ struct CleanFailureItem: Identifiable, Equatable {
     let reason: CleanFailureReason
     let sizeBytes: Int64
     let route: DeletionRoute
+    /// An Application Scripts folder the user ticked knowing it held files
+    /// (`UninstallItem.holdsAddedScripts`). Retry moves such a folder. Any other
+    /// scripts folder that holds files by the time of the retry stays, as it
+    /// does in the clean (#352, #362).
+    let holdsAddedScripts: Bool
 
     init(
         id: UUID = UUID(),
@@ -271,7 +276,8 @@ struct CleanFailureItem: Identifiable, Equatable {
         displayName: String,
         reason: CleanFailureReason,
         sizeBytes: Int64 = 0,
-        route: DeletionRoute = .cache
+        route: DeletionRoute = .cache,
+        holdsAddedScripts: Bool = false
     ) {
         self.id = id
         self.path = path
@@ -279,6 +285,7 @@ struct CleanFailureItem: Identifiable, Equatable {
         self.reason = reason
         self.sizeBytes = sizeBytes
         self.route = route
+        self.holdsAddedScripts = holdsAddedScripts
     }
 
     /// The same row with the reason a retry just came back with. Keeps the id, so
@@ -290,7 +297,24 @@ struct CleanFailureItem: Identifiable, Equatable {
             displayName: displayName,
             reason: reason,
             sizeBytes: sizeBytes,
-            route: route
+            route: route,
+            holdsAddedScripts: holdsAddedScripts
+        )
+    }
+
+    /// The same row, marked when its path is one of `paths`: the scripts
+    /// folders the user ticked knowing they held files. `paths` are standardized.
+    func markingScriptsFolder(approvedWithFiles paths: Set<String>) -> CleanFailureItem {
+        guard !holdsAddedScripts,
+              paths.contains(URL(fileURLWithPath: path).standardizedFileURL.path) else { return self }
+        return CleanFailureItem(
+            id: id,
+            path: path,
+            displayName: displayName,
+            reason: reason,
+            sizeBytes: sizeBytes,
+            route: route,
+            holdsAddedScripts: true
         )
     }
 
