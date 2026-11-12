@@ -11,6 +11,44 @@ that belongs here, [SECURITY.md](../SECURITY.md) says how to report it.
 
 Newest first.
 
+## 2026-11-12: Retry could move a scripts folder that had gained files
+
+**Found internally** in a deletion-safety review before 1.15.0 ([#362](https://github.com/jithin-sabu/purge-app/issues/362)), no report. **Fixed:** [#363](https://github.com/jithin-sabu/purge-app/pull/363), not yet released. **Affected:** v1.15.0.
+
+### What happened
+
+macOS makes an app's folder in `~/Library/Application Scripts` empty. Files in
+it were put there for the app to run, and the user may have written them. The
+App Uninstaller offers an empty folder ticked, and one with files as Check
+First and unticked. Each clean reads the folder again right before the move,
+and leaves one that was approved as empty and holds files by then.
+
+Retry on the completion screen did not read it again. If the move of an empty
+folder failed and a file landed in it before the user clicked Retry, the
+folder went to the Trash with the file.
+
+### Who was affected
+
+Nobody reported a loss. It took a failed move of an empty scripts folder, a
+file written into it afterwards, and a click on Retry. The folder went to the
+Trash and could be put back.
+
+### What changed
+
+Retry runs the check the clean runs
+(`AppUninstallScanPolicy.scriptsFolderGainedFiles`). The failure row keeps
+whether the folder was ticked with files in it, so one the user approved
+knowing what it held still moves.
+
+### What would have caught it earlier
+
+A test that takes Retry, not only the clean, through each check a clean makes
+right before the move.
+[`PurgeTests/PurgeStoreRetryTests.swift`](../PurgeTests/PurgeStoreRetryTests.swift)
+now takes the failed row of an empty scripts folder, writes a script into the
+folder, retries, and expects the folder to stay and the row to read as skipped
+for safety.
+
 ## 2026-11-07: Browsers' Service Worker caches were Safe to Clean
 
 **Found internally** in a deletion-safety review of [#325](https://github.com/jithin-sabu/purge-app/pull/325) before 1.14.0, no report. **Fixed:** [#335](https://github.com/jithin-sabu/purge-app/pull/335), shipped in v1.14.0 (2026-11-07). **Affected:** browsers that keep a `User Data` folder, such as Dia and Arc, v1.1.2 to v1.13.4. Chrome, Brave and Edge only on `main` after #325, never in a release.
