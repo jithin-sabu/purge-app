@@ -503,8 +503,7 @@ enum DeletionSafetyPolicy {
         // asks off the main thread, so a move always reads the links again.
         if PlaywrightBuildScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
         // Recheck before a move in case the prek store was redirected since the scan.
-        if PathContainment.isInside(key, "\(cachedHomePath)/.cache/prek"),
-           PathContainment.containsSymlinkComponent(url, home: cachedHomePath) { return false }
+        if prekStoreLinkRefusesDeletion(url) { return false }
         if prekToolsRefuseDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
@@ -529,6 +528,14 @@ enum DeletionSafetyPolicy {
         offeredForCleanupCache[key] = verdict
         offeredForCleanupLock.unlock()
         return verdict
+    }
+
+    /// The allowlist compares path text, so if `~/.cache/prek` or `~/.cache` were a
+    /// link to `~/Developer`, its `repos`, `tools` and `cache` would be the user's own
+    /// folders. Any link on the way down from home refuses the path.
+    nonisolated static func prekStoreLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
+        guard PathContainment.isInside(url.standardizedFileURL.path, "\(home)/.cache/prek") else { return false }
+        return PathContainment.containsSymlinkComponent(url, home: home)
     }
 
     /// Installed prek hooks can retain absolute paths to managed Rust tools.
