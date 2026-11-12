@@ -92,6 +92,32 @@ struct UninstallMoreLeftoversTests {
         #expect(reason("Databases", .webData) == nil)
     }
 
+    /// Cookies and WebKit also hold the system's own files under plain names.
+    /// An id of one word would be paired with them (#362).
+    @Test("A one-word bundle id matches nothing in Cookies or WebKit")
+    func oneWordBundleIDMatchesNoWebData() {
+        let cookies = makeApp(name: "Cookies", bundlePath: "/Applications/Cookies.app", bundleID: "Cookies")
+        #expect(reason("Cookies.binarycookies", .webData, app: cookies) == nil)
+        #expect(reason("Cookies", .webData, app: cookies) == nil)
+        #expect(reason(".Cookies.binarycookies", .webData, app: cookies) == nil)
+        let hsts = makeApp(name: "HSTS", bundlePath: "/Applications/HSTS.app", bundleID: "HSTS")
+        #expect(reason("HSTS.plist", .webData, app: hsts) == nil)
+        let databases = makeApp(name: "Databases", bundlePath: "/Applications/Databases.app", bundleID: "databases")
+        #expect(reason("Databases", .webData, app: databases) == nil)
+        // An id with an empty part or a space is not shaped like one either.
+        #expect(reason("Cookies..binarycookies", .webData, app: makeApp(bundleID: "Cookies.")) == nil)
+        #expect(reason("My App.binarycookies", .webData, app: makeApp(bundleID: "My App")) == nil)
+
+        // Two parts are enough, as in the shared `/Library` folders.
+        let spokenly = makeApp(name: "Spokenly", bundlePath: "/Applications/Spokenly.app", bundleID: "app.spokenly")
+        #expect(reason("app.spokenly.binarycookies", .webData, app: spokenly) == .bundleID)
+        #expect(reason("app.spokenly", .webData, app: spokenly) == .bundleID)
+        // The rule is for the website-data folders only. A one-word id still
+        // names its own entries where the system keeps none under that name.
+        #expect(reason("Cookies", .caches, app: cookies) == .bundleID)
+        #expect(reason("Cookies.plist", .preferences, app: cookies) == .bundleID)
+    }
+
     @Test("A group's Application Scripts folder matches like its group container")
     func applicationScriptsGroupFolder() {
         #expect(reason("XYZ123ABCD.com.knollsoft.Rectangle", .applicationScripts) == .groupID)
@@ -187,6 +213,38 @@ struct UninstallMoreLeftoversTests {
         ("/Library/Preferences/Vendor/com.knollsoft.Rectangle.plist", false),
         ("/Library/Caches/com.knollsoft.Rectangle/data.db", false),
         ("/Library/Logs/Rectangle/today.log", false),
+
+        // Other spellings of the three folders (#362). A different case is not
+        // a folder the rule knows, so nothing under it is a leftover, even
+        // where the disk reads both spellings as the same folder.
+        ("/library/preferences/com.knollsoft.Rectangle.plist", false),
+        ("/library/preferences/com.apple.loginwindow.plist", false),
+        ("/LIBRARY/CACHES/com.knollsoft.Rectangle", false),
+        ("/Library/caches/com.knollsoft.Rectangle", false),
+        ("/Library/logs/com.knollsoft.Rectangle", false),
+        ("/Library/PREFERENCES/com.knollsoft.Rectangle.plist", false),
+        // `..` is read as the path it leads to: a folder itself, something
+        // above it, or an entry the rule refuses.
+        ("/Library/Caches/com.knollsoft.Rectangle/..", false),
+        ("/Library/Caches/com.knollsoft.Rectangle/../..", false),
+        ("/Library/Caches/com.knollsoft.Rectangle/../ColorSync", false),
+        ("/Library/Caches/../Preferences/com.apple.loginwindow.plist", false),
+        ("/Library/Caches/../Preferences/SystemConfiguration", false),
+        ("/Library/Logs/com.knollsoft.Rectangle/../DiagnosticReports", false),
+        ("/Library/Preferences/../Preferences", false),
+        ("/Library/Preferences/../../etc/hosts", false),
+        // So is a trailing slash.
+        ("/Library/Preferences/", false),
+        ("/Library/Caches/", false),
+        ("/Library/Logs/", false),
+        ("/Library/Logs/DiagnosticReports/", false),
+        ("/Library/Caches/com.apple.iconservices.store/", false),
+        ("/Library/Preferences/SystemConfiguration/", false),
+        ("/Library/Caches/com.knollsoft.Rectangle/data.db/", false),
+        // A spelling that leads to an allowed entry is still that entry.
+        ("/Library/Caches/com.knollsoft.Rectangle/", true),
+        ("/Library/Caches/../Caches/com.knollsoft.Rectangle", true),
+        ("/Library/Logs/./com.knollsoft.Rectangle", true),
     ]
 
     @Test("The shared /Library folders give up only a direct child that is not Apple's or hidden")
@@ -267,6 +325,80 @@ struct UninstallMoreLeftoversTests {
         // The app's gate agrees on both.
         #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(bundle, home: home))
         #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(namedLikeOne, home: home))
+
+        // The case of the extension changes nothing for either gate (#362).
+        // The app's gate once compared it as written, so the helper alone
+        // refused a bundle named `.APP`.
+        let logs = home.appendingPathComponent("Library/Logs", isDirectory: true)
+        for name in ["com.vendor.Loud.APP", "com.vendor.Mixed.App"] {
+            let loud = logs.appendingPathComponent(name, isDirectory: true)
+            try fm.createDirectory(at: loud.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+            try Data("<plist/>".utf8).write(to: loud.appendingPathComponent("Contents/Info.plist"))
+            #expect(PurgeHelperConstants.isRealAppBundle(loud), "\(name)")
+            #expect(!PurgeHelperConstants.isAllowedUninstallLocation(loud, homeDirectory: home), "\(name)")
+            #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(loud, home: home), "\(name)")
+        }
+        let loudName = logs.appendingPathComponent("com.granola.APP", isDirectory: true)
+        try fm.createDirectory(at: loudName, withIntermediateDirectories: true)
+        #expect(PurgeHelperConstants.isAllowedUninstallLocation(loudName, homeDirectory: home))
+        #expect(AppUninstallScanPolicy.isEligibleForUninstallDeletion(loudName, home: home))
+        // Deeper than a direct child, a `.APP` name is never a leftover, as a
+        // `.app` one never was.
+        let deep = logs.appendingPathComponent("com.vendor.Tool/Helper.APP", isDirectory: true)
+        try fm.createDirectory(at: deep, withIntermediateDirectories: true)
+        #expect(!PurgeHelperConstants.isAllowedUninstallLocation(deep, homeDirectory: home))
+        #expect(!AppUninstallScanPolicy.isEligibleForUninstallDeletion(deep, home: home))
+    }
+
+    // MARK: Helper eligibility
+
+    /// `/Library/Caches` is `drwxrwxrwt root:admin`. An administrator can write
+    /// to it, and the sticky bit still refuses the move of an entry they don't
+    /// own, so asking only whether the folder is writable kept a root-owned
+    /// leftover there from ever reaching the helper (#362). A test can't make a
+    /// root-owned entry, so the same folder mode is made in a temporary folder
+    /// and the check is asked on behalf of a user who owns neither.
+    @Test("An entry someone else owns in a sticky folder needs the helper")
+    func stickyFolderEntryNeedsPrivilege() throws {
+        let base = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
+        let sticky = base.appendingPathComponent("sticky", isDirectory: true)
+        let plain = base.appendingPathComponent("plain", isDirectory: true)
+        let locked = base.appendingPathComponent("locked", isDirectory: true)
+        defer {
+            try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path)
+            try? fm.removeItem(at: base)
+        }
+        var entries: [URL] = []
+        for folder in [sticky, plain, locked] {
+            let entry = folder.appendingPathComponent("com.vendor.App", isDirectory: true)
+            try fm.createDirectory(at: entry, withIntermediateDirectories: true)
+            entries.append(entry)
+        }
+        try fm.setAttributes([.posixPermissions: 0o1777], ofItemAtPath: sticky.path)
+        try fm.setAttributes([.posixPermissions: 0o777], ofItemAtPath: plain.path)
+        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
+        let me = getuid()
+        let someoneElse = me + 1
+
+        // The mode of `/Library/Caches`, and neither the folder nor the entry
+        // is this user's: the plain move fails, so the helper may take it.
+        #expect(AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: someoneElse))
+        // The user who owns the entry, or the folder, can move it unaided.
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: me))
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[0]))
+        // Root is never held by the sticky bit.
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: 0))
+        // Nothing there, so nothing to hand over.
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(sticky.appendingPathComponent("com.vendor.Gone"), user: someoneElse))
+
+        // Without the sticky bit a writable folder gives up any entry, whoever
+        // owns it, so nothing in a user-writable folder goes to the helper.
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[1], user: someoneElse))
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[1], user: me))
+
+        // A folder that is not writable always did need it.
+        #expect(AppUninstallScanPolicy.moveNeedsPrivilege(entries[2], user: me))
+        #expect(AppUninstallScanPolicy.moveNeedsPrivilege(entries[2], user: someoneElse))
     }
 
     @Test("The shared-folder rule covers exactly the three /Library roots added")
@@ -430,8 +562,20 @@ struct UninstallMoreLeftoversTests {
         #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(withScripts))
         try Data("on run\nend run".utf8).write(to: group.appendingPathComponent("Late.scpt"))
         #expect(AppUninstallScanPolicy.scriptsFolderGainedFiles(empty))
+        // The same answers for a failure row, which has only the path (#362).
+        let testHome = base.appendingPathComponent("home", isDirectory: true)
+        #expect(AppUninstallScanPolicy.scriptsFolderGainedFiles(at: group, approvedWithFiles: false, home: testHome))
+        #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(at: group, approvedWithFiles: true, home: testHome))
+        #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(at: own, approvedWithFiles: true, home: testHome))
+        // Only a scripts folder is read: any other leftover is not this check's.
+        let support = base.appendingPathComponent("home/Library/Application Support/\(bundleID)", isDirectory: true)
+        try fm.createDirectory(at: support, withIntermediateDirectories: true)
+        try Data([0x00]).write(to: support.appendingPathComponent("data.db"))
+        #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(at: support, approvedWithFiles: false, home: testHome))
+
         try fm.removeItem(at: group)
         #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(empty))
+        #expect(!AppUninstallScanPolicy.scriptsFolderGainedFiles(at: group, approvedWithFiles: false, home: testHome))
     }
 
     /// The scan against a temporary home (#171): what it finds in the added
