@@ -3426,6 +3426,15 @@
     "kind": "packages"
   },
   {
+    "key": "prek-cache",
+    "display_name": "prek Cache",
+    "tag": "medium",
+    "explanation": "Cached hook repositories, environments and tools. Clean while prek is idle. The next run rebuilds them. Recovery patches stay.",
+    "bundle_ids": [],
+    "aliases": [],
+    "kind": "packages"
+  },
+  {
     "key": "expo-cache",
     "display_name": "Expo Cache",
     "tag": "safe",

@@ -594,6 +594,73 @@ struct AllowlistAdditionTests {
         #expect(info.level == level, "\(label) is \(info.level)")
     }
 
+    @Test
+    func prekCacheDefaultsToCheckFirstAndKeepsRecoveryPatches() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-audit-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let claimed = DevScanner.claimedGlobalCachePaths(home: home)
+        for folder in ["repos", "hooks", "tools", "cache"] {
+            let path = ".cache/prek/\(folder)"
+            #expect(claimed.contains(home.appendingPathComponent(path).standardizedFileURL.path))
+            #expect(AuditPaths.evaluate(path) == .allow)
+        }
+        #expect(DevScanner.automaticSafetyInfo(forDevToolLabel: "prek Cache", primaryPath: nil).level == .medium)
+        for path in [".cache", ".cache/prek", ".cache/prek/patches", ".cache/prek/patches/123-456.patch",
+                     ".cache/prek/repos-backup", ".cache/prek-backup/repos", ".config/prek"] {
+            #expect(!claimed.contains(home.appendingPathComponent(path).standardizedFileURL.path))
+            #expect(AuditPaths.evaluate(path) != .allow)
+        }
+    }
+
+    @Test(arguments: ["tools", "tools/rust/1.90/bin/cargo"])
+    func keptPrekHooksKeepTheirManagedTools(relative: String) {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-\(UUID().uuidString)", isDirectory: true)
+        let root = home.appendingPathComponent(".cache/prek", isDirectory: true)
+        let path = root.appendingPathComponent(relative)
+        let hooks = root.appendingPathComponent("hooks", isDirectory: true)
+        var hooksExcluded = false
+        let isExcluded: (URL) -> Bool = { hooksExcluded && $0 == hooks }
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+        hooksExcluded = true
+        #expect(DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+        hooksExcluded = false
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: isExcluded))
+    }
+
+    @Test(arguments: ["repos", "hooks", "cache", "patches", "tools-backup", "../prek-backup/tools"])
+    func prekToolsDependencyGuardLeavesOtherPathsAlone(relative: String) {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("prek-\(UUID().uuidString)", isDirectory: true)
+        let path = home.appendingPathComponent(".cache/prek/\(relative)")
+        #expect(!DeletionSafetyPolicy.prekToolsRefuseDeletion(path, home: home.path, isExcluded: { _ in true }))
+    }
+
+    // The allowlist accepts `.cache/prek/repos` by its text, so a store that is a link
+    // to another folder is caught only by this recheck.
+    @Test(arguments: [true, false])
+    func prekStoreReachedThroughALinkIsRefused(storeIsLink: Bool) throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("prek-link-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let home = base.appendingPathComponent("home", isDirectory: true)
+        let store = home.appendingPathComponent(".cache/prek", isDirectory: true)
+        let elsewhere = base.appendingPathComponent("Developer", isDirectory: true)
+        let folders = ["repos", "hooks", "tools", "cache"]
+        if storeIsLink {
+            try fm.createDirectory(at: home.appendingPathComponent(".cache", isDirectory: true), withIntermediateDirectories: true)
+            try fm.createSymbolicLink(at: store, withDestinationURL: elsewhere)
+        }
+        for folder in folders {
+            try fm.createDirectory(at: (storeIsLink ? elsewhere : store).appendingPathComponent(folder, isDirectory: true),
+                                   withIntermediateDirectories: true)
+        }
+        for folder in folders {
+            let url = store.appendingPathComponent(folder, isDirectory: true)
+            #expect(fm.fileExists(atPath: url.path))
+            #expect(DeletionSafetyPolicy.prekStoreLinkRefusesDeletion(url, home: home.path) == storeIsLink, "\(folder)")
+        }
+    }
+
     @Test(arguments: [
         ("Device Software Updates", SafetyLevel.safe),
         ("CacheClip", .safe),

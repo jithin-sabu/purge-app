@@ -403,6 +403,12 @@ enum DeletionSafetyPolicy {
             "\(home)/Library/pnpm/store",
             "\(home)/.yarn/berry/cache",
             "\(home)/.cache/pre-commit",
+            // Check First. The prek store also holds patches for unstaged work,
+            // so only the known cache folders are offered.
+            "\(home)/.cache/prek/repos",
+            "\(home)/.cache/prek/hooks",
+            "\(home)/.cache/prek/tools",
+            "\(home)/.cache/prek/cache",
             "\(home)/.cache/prisma",
             // Expo's download caches only; `~/.expo/state.json` holds the login.
             "\(home)/.expo/android-apk-cache",
@@ -496,6 +502,9 @@ enum DeletionSafetyPolicy {
         // flush, so it may reuse a read from the last few seconds. `FileDeleter`
         // asks off the main thread, so a move always reads the links again.
         if PlaywrightBuildScanPolicy.refusesDeletion(url, reuseRecentRead: Thread.isMainThread) { return false }
+        // Recheck before a move in case the prek store was redirected since the scan.
+        if prekStoreLinkRefusesDeletion(url) { return false }
+        if prekToolsRefuseDeletion(url) { return false }
         if mailRunningRefusesDeletion(url) { return false }
         // A daemon's log stays while it runs, and a temp file until it is old.
         if gradleLeftoverRefusesDeletion(url) { return false }
@@ -519,6 +528,28 @@ enum DeletionSafetyPolicy {
         offeredForCleanupCache[key] = verdict
         offeredForCleanupLock.unlock()
         return verdict
+    }
+
+    /// The allowlist compares path text, so if `~/.cache/prek` or `~/.cache` were a
+    /// link to `~/Developer`, its `repos`, `tools` and `cache` would be the user's own
+    /// folders. Any link on the way down from home refuses the path.
+    nonisolated static func prekStoreLinkRefusesDeletion(_ url: URL, home: String = cachedHomePath) -> Bool {
+        guard PathContainment.isInside(url.standardizedFileURL.path, "\(home)/.cache/prek") else { return false }
+        return PathContainment.containsSymlinkComponent(url, home: home)
+    }
+
+    /// Installed prek hooks can retain absolute paths to managed Rust tools.
+    /// Recheck exclusions before the cached verdict so a hook kept after scanning
+    /// also keeps its tools at deletion time.
+    nonisolated static func prekToolsRefuseDeletion(
+        _ url: URL,
+        home: String = cachedHomePath,
+        isExcluded: (URL) -> Bool = { ExcludedPathsStore.isExcluded($0) }
+    ) -> Bool {
+        let root = URL(fileURLWithPath: home).appendingPathComponent(".cache/prek", isDirectory: true)
+        let tools = root.appendingPathComponent("tools", isDirectory: true).standardizedFileURL.path
+        guard PathContainment.isSameOrInside(url.standardizedFileURL.path, tools) else { return false }
+        return isExcluded(root.appendingPathComponent("hooks", isDirectory: true))
     }
 
     private nonisolated(unsafe) static var offeredForCleanupCache: [String: Bool] = [:]

@@ -1124,6 +1124,10 @@
 "pre-commit Environments" = "pre-commit 环境";
 "Tool environments that pre-commit sets up to run your git hooks. Safe to delete; they are set up again on your next commit, which makes that commit slow." = "pre-commit 为运行 Git 钩子而设置的工具环境。可以安全删除，下次提交时会重新设置，导致该次提交较慢。";
 
+/* prek-cache */
+"prek Cache" = "prek 缓存";
+"Cached hook repositories, environments and tools. Clean while prek is idle. The next run rebuilds them. Recovery patches stay." = "缓存的钩子仓库、运行环境和工具。请在 prek 空闲时清理。下次运行时会重新创建这些缓存。恢复补丁会保留。";
+
 /* expo-cache */
 "Expo Cache" = "Expo 缓存";
 "App builds, templates and SDK data the Expo tools downloaded. Your Expo login is left alone. Safe to delete; Expo downloads what it needs again." = "Expo 工具下载的应用构建、模板和 SDK 数据。不会动 Expo 登录信息。可以安全删除，Expo 会重新下载所需内容。";

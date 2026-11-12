@@ -73,6 +73,7 @@ nonisolated final class DevScanner {
         "Old Figma Profiles": "old-figma-profiles",
         "Dart Pub Cache": "pub-cache",
         "pre-commit Environments": "pre-commit-cache",
+        "prek Cache": "prek-cache",
         "uv Package Cache": "uv-cache",
         "Prisma Engines": "prisma-nodejs",
         "Expo Cache": "expo-cache",
@@ -642,9 +643,10 @@ nonisolated final class DevScanner {
     /// Standardized paths owned by the Dev Tools scan. The general cache scan skips
     /// these up front so they don't surface under App Caches and then get removed
     /// once the dev scan claims them.
-    nonisolated static func claimedGlobalCachePaths() -> Set<String> {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return Set((globalCacheDefinitions().flatMap(\.paths) + claimedRoots(home: home)).map { $0.standardizedFileURL.path })
+    nonisolated static func claimedGlobalCachePaths(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Set<String> {
+        return Set((globalCacheDefinitions(home: home).flatMap(\.paths) + claimedRoots(home: home)).map { $0.standardizedFileURL.path })
     }
 
     /// Folders claimed by name although no row lists them whole. The JetBrains and
@@ -718,9 +720,9 @@ nonisolated final class DevScanner {
         return paths
     }
 
-    private nonisolated static func globalCacheDefinitions() -> [(label: String, paths: [URL])] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-
+    private nonisolated static func globalCacheDefinitions(
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [(label: String, paths: [URL])] {
         return [
             ("Xcode Derived Data", [home.appendingPathComponent("Library/Developer/Xcode/DerivedData", isDirectory: true)]),
             ("Xcode Archives", [home.appendingPathComponent("Library/Developer/Xcode/Archives", isDirectory: true)]),
@@ -762,6 +764,9 @@ nonisolated final class DevScanner {
                 home.appendingPathComponent(".pub-cache/git", isDirectory: true)
             ]),
             ("pre-commit Environments", [home.appendingPathComponent(".cache/pre-commit", isDirectory: true)]),
+            ("prek Cache", ["repos", "hooks", "tools", "cache"].map {
+                home.appendingPathComponent(".cache/prek/\($0)", isDirectory: true)
+            }),
             ("Prisma Engines", [home.appendingPathComponent(".cache/prisma", isDirectory: true)]),
             // Check First: tools started with `uvx` run from environments in here, and
             // an environment installed in symlink mode has its packages here (#345).
