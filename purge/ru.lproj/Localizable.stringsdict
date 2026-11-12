@@ -1197,6 +1197,66 @@
 			<string>%lld удалены навсегда</string>
 		</dict>
 	</dict>
+	<key>Every %lld days</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>Каждые %lld дня</string>
+			<key>many</key>
+			<string>Каждые %lld дней</string>
+			<key>one</key>
+			<string>Каждый %lld день</string>
+			<key>other</key>
+			<string>Каждые %lld дня</string>
+		</dict>
+	</dict>
+	<key>Every %lld months</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>Каждые %lld месяца</string>
+			<key>many</key>
+			<string>Каждые %lld месяцев</string>
+			<key>one</key>
+			<string>Каждый %lld месяц</string>
+			<key>other</key>
+			<string>Каждые %lld месяца</string>
+		</dict>
+	</dict>
+	<key>Every %lld weeks</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@n@</string>
+		<key>n</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>few</key>
+			<string>Каждые %lld недели</string>
+			<key>many</key>
+			<string>Каждые %lld недель</string>
+			<key>one</key>
+			<string>Каждую %lld неделю</string>
+			<key>other</key>
+			<string>Каждые %lld недели</string>
+		</dict>
+	</dict>
 	<key>Retry %lld items</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

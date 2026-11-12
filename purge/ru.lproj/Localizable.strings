@@ -410,7 +410,9 @@
 "Enter Password" = "Введите пароль";
 "Enter your password if it asks for one." = "Введите пароль, если появится запрос.";
 "Every" = "Каждые";
-"Every %lld %@" = "Каждые %lld %@";
+"Every %lld days" = "Каждые %lld дней";
+"Every %lld months" = "Каждые %lld месяцев";
+"Every %lld weeks" = "Каждые %lld недель";
 "Every 3 months" = "Каждые 3 месяца";
 "Every copy is identical, so keeping any one is safe. Purge keeps the copy in a real folder over one in Downloads, a cache, or a build folder, and prefers the original name. The rest go to Trash. Tap a copy to keep it instead." = "Все копии одинаковы, поэтому любую из них безопасно сохранить. Purge предпочитает копию в обычной папке копии в «Загрузках», кэше или папке сборки и выбирает вариант с исходным именем. Остальные копии отправляются в Корзину. Нажмите на копию, чтобы сохранить её вместо этого.";
 "Every day" = "Каждый день";
@@ -867,7 +869,7 @@
 "Purge lists apps in Applications, on drives you plug in, and in folders you add. Put %@ in a folder, then add that folder, or drag it to the Trash yourself." = "Purge показывает приложения в «Программах», на подключаемых дисках и в добавленных вами папках. Поместите %@ в папку и добавьте её либо перетащите его в Корзину самостоятельно.";
 "Purge looks in Applications, your home Applications folder, the Applications folder on each drive, and folders you add in Settings." = "Purge ищет в папке «Программы», в папке «Программы» вашей домашней папки, в папке «Программы» на каждом диске и в папках, которые вы добавили в настройках.";
 "Purge moves each app and the items you keep ticked to the Trash. Nothing is deleted permanently, so you can put anything back if you change your mind." = "Purge перемещает каждое приложение и отмеченные элементы в Корзину. Ничего не удаляется безвозвратно, поэтому всё можно вернуть, если передумаете.";
-"Purge moves most of these to Trash, where you can put them back. The ones under Deleted Permanently can't be put back." = "Purge перемещает большинство из них в Корзину, откуда их можно вернуть. Элементы в разделе «Удалено безвозвратно» вернуть нельзя.";
+"Purge moves most of these to Trash, where you can put them back. The ones under Deleted Permanently can't be put back." = "Purge перемещает большинство из них в Корзину, откуда их можно вернуть. Элементы в разделе «Удалено навсегда» вернуть нельзя.";
 "Purge moves these to Trash. You can put anything back if you change your mind." = "Purge переместит их в Корзину. Если передумаете, всё можно вернуть.";
 "Purge needs Full Disk Access to remove this." = "Чтобы удалить это, Purge нужен полный доступ к диску.";
 "Purge never removes Apple's built-in apps." = "Purge никогда не удаляет встроенные приложения Apple.";

@@ -103,6 +103,21 @@ struct PrivilegedHelperPathPolicyTests {
         #expect(PurgeHelperConstants.removalRightName.hasPrefix(PurgeHelperConstants.machServiceName + "."))
     }
 
+    /// The prompt is a dictionary in code, not a string table, so the translations
+    /// check can't see it. Russian shipped its tables without a prompt, and a
+    /// standard account was asked in English.
+    @Test("The removal prompt is written in every language the app ships")
+    func removalPromptCoversEveryShippedLanguage() throws {
+        let prompts = try #require(PurgeHelperConstants.removalRightDefinition["default-prompt"] as? [String: String])
+        #expect(prompts[""]?.isEmpty == false)
+
+        let shipped = Bundle.main.localizations.filter { $0 != "Base" && $0 != "en" }
+        #expect(shipped.contains("ru"))
+        for language in shipped {
+            #expect(prompts[language]?.isEmpty == false, "no admin prompt for \(language)")
+        }
+    }
+
     private func isAllowedMove(_ path: String, ruleHolds: Bool) -> Bool {
         PurgeHelperConstants.isAllowedMoveSource(
             URL(fileURLWithPath: path),

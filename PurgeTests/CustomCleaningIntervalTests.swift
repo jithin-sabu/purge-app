@@ -39,7 +39,32 @@ struct CustomCleaningIntervalTests {
         #expect(text("Every day") == "每天")
         #expect(text("Every week") == "每周")
         #expect(text("Every month") == "每月")
-        #expect(String(format: text("Every %lld %@"), 2, text("Weeks")) == "每 2 周")
+        #expect(String(format: text("Every %lld days"), 2) == "每 2 天")
+        #expect(String(format: text("Every %lld weeks"), 2) == "每 2 周")
+        #expect(String(format: text("Every %lld months"), 2) == "每 2 个月")
+    }
+
+    /// The test host runs in English, so this reads the ru table directly. The
+    /// first Russian build put the number in front of "дни" and showed
+    /// "Каждые 2 дни". Russian changes both words with the number.
+    @Test("Russian interval phrases agree with the number")
+    func russianIntervalPhrase() throws {
+        let path = try #require(Bundle.main.path(forResource: "ru", ofType: "lproj"))
+        let ru = try #require(Bundle(path: path))
+        let locale = Locale(identifier: "ru")
+        func text(_ value: String.LocalizationValue) -> String {
+            String(localized: value, bundle: ru, locale: locale)
+        }
+
+        #expect(text("Every \(2) days") == "Каждые 2 дня")
+        #expect(text("Every \(5) days") == "Каждые 5 дней")
+        #expect(text("Every \(21) days") == "Каждый 21 день")
+        #expect(text("Every \(2) weeks") == "Каждые 2 недели")
+        #expect(text("Every \(5) weeks") == "Каждые 5 недель")
+        #expect(text("Every \(21) weeks") == "Каждую 21 неделю")
+        #expect(text("Every \(2) months") == "Каждые 2 месяца")
+        #expect(text("Every \(6) months") == "Каждые 6 месяцев")
+        #expect(text("Every \(11) months") == "Каждые 11 месяцев")
     }
 
     @Test("Preset intervals are unchanged", arguments: [
