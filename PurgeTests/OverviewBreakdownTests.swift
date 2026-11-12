@@ -308,9 +308,20 @@ struct OverviewPresentationTests {
     }
 
     @Test func sharesUnderATenthOfAPercentSaySo() {
-        #expect(OverviewCategoryStyle.shareText(0) == "0%")
-        #expect(OverviewCategoryStyle.shareText(0.0004) == "<0.1%")
-        #expect(OverviewCategoryStyle.shareText(0.078) == "7.8%")
+        let english = Locale(identifier: "en_US")
+        #expect(OverviewCategoryStyle.shareText(0, locale: english) == "0%")
+        #expect(OverviewCategoryStyle.shareText(0.0004, locale: english) == "<0.1%")
+        #expect(OverviewCategoryStyle.shareText(0.078, locale: english) == "7.8%")
+        #expect(OverviewCategoryStyle.shareText(0.01, locale: english) == "1.0%")
+        #expect(OverviewCategoryStyle.shareText(1, locale: english) == "100.0%")
+    }
+
+    /// The Overview showed "1.0%" beside "5,04 ГБ" on a Mac set to Russian.
+    @Test func sharesUseTheLanguagesDecimalSeparator() {
+        let russian = Locale(identifier: "ru_RU")
+        #expect(OverviewCategoryStyle.shareText(0.078, locale: russian) == "7,8\u{00A0}%")
+        #expect(OverviewCategoryStyle.shareText(0.0004, locale: russian) == "<0,1\u{00A0}%")
+        #expect(OverviewCategoryStyle.shareText(0, locale: russian) == "0\u{00A0}%")
     }
 
     @MainActor

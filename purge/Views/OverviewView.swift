@@ -914,10 +914,14 @@ enum OverviewCategoryStyle {
         }
     }
 
-    static func shareText(_ share: Double) -> String {
-        if share <= 0 { return "0%" }
-        if share < 0.001 { return "<0.1%" }
-        return String(format: "%.1f%%", share * 100)
+    /// The share of the disk, written the way the Mac's language writes a percentage:
+    /// "7.8%" in English and "7,8 %" in Russian, beside sizes that already read "5,04 ГБ".
+    /// `locale` is injected so the tests can check both without touching the process's own.
+    static func shareText(_ share: Double, locale: Locale = .current) -> String {
+        if share <= 0 { return (0.0).formatted(.percent.precision(.fractionLength(0)).locale(locale)) }
+        let oneDecimal = FloatingPointFormatStyle<Double>.Percent.percent.precision(.fractionLength(1)).locale(locale)
+        if share < 0.001 { return "<" + (0.001).formatted(oneDecimal) }
+        return share.formatted(oneDecimal)
     }
 }
 

@@ -234,7 +234,9 @@
 "Enable" = "Etkinleştir";
 "Enabled" = "Etkin";
 "Every" = "Her";
-"Every %lld %@" = "Her %lld %@";
+"Every %lld days" = "Her %lld gün";
+"Every %lld months" = "Her %lld ay";
+"Every %lld weeks" = "Her %lld hafta";
 "Every …" = "Her …";
 "Every 3 months" = "3 ayda bir";
 "Every copy is identical, so keeping any one is safe. Purge keeps the copy in a real folder over one in Downloads, a cache, or a build folder, and prefers the original name. The rest go to Trash. Tap a copy to keep it instead." = "Her kopya birebir aynı olduğundan herhangi birini saklamak güvenlidir. Purge; İndirilenler, bir önbellek veya bir derleme klasöründeki kopya yerine gerçek bir klasördeki kopyayı saklar ve özgün adı tercih eder. Geri kalanlar Çöp Sepeti'ne gider. Onun yerine saklamak istediğiniz kopyaya dokunun.";

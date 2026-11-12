@@ -234,7 +234,9 @@
 "Enable" = "启用";
 "Enabled" = "已启用";
 "Every" = "每隔";
-"Every %lld %@" = "每 %lld %@";
+"Every %lld days" = "每 %lld 天";
+"Every %lld months" = "每 %lld 个月";
+"Every %lld weeks" = "每 %lld 周";
 "Every …" = "每…";
 "Every 3 months" = "每 3 个月";
 "Every copy is identical, so keeping any one is safe. Purge keeps the copy in a real folder over one in Downloads, a cache, or a build folder, and prefers the original name. The rest go to Trash. Tap a copy to keep it instead." = "所有副本内容完全相同，保留任何一份都可以。Purge 优先保留普通文件夹中、使用原始名称的副本，而非下载、缓存或构建文件夹中的副本。其余副本会移到废纸篓。你也可以点选另一份保留。";
