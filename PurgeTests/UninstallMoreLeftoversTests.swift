@@ -108,6 +108,16 @@ struct UninstallMoreLeftoversTests {
         #expect(reason("Cookies..binarycookies", .webData, app: makeApp(bundleID: "Cookies.")) == nil)
         #expect(reason("My App.binarycookies", .webData, app: makeApp(bundleID: "My App")) == nil)
 
+        // An id can have the shape and still spell a system file. What the
+        // entry is named after, without its suffix, is one word: not an app's.
+        let cookieShaped = makeApp(name: "Jar", bundlePath: "/Applications/Jar.app", bundleID: "cookies.binarycookies")
+        #expect(reason("Cookies.binarycookies", .webData, app: cookieShaped) == nil)
+        #expect(reason(".Cookies.binarycookies", .webData, app: cookieShaped) == nil)
+        let hstsShaped = makeApp(name: "Strict", bundlePath: "/Applications/Strict.app", bundleID: "hsts.plist")
+        #expect(reason("HSTS.plist", .webData, app: hstsShaped) == nil)
+        // That app's own cookies file is still its own.
+        #expect(reason("hsts.plist.binarycookies", .webData, app: hstsShaped) == .bundleID)
+
         // Two parts are enough, as in the shared `/Library` folders.
         let spokenly = makeApp(name: "Spokenly", bundlePath: "/Applications/Spokenly.app", bundleID: "app.spokenly")
         #expect(reason("app.spokenly.binarycookies", .webData, app: spokenly) == .bundleID)
@@ -159,6 +169,51 @@ struct UninstallMoreLeftoversTests {
         #expect(!eligible("/Users/example/Library/Application Scripts"))
         #expect(!eligible("/Users/example/Library/Cookies"))
         #expect(!eligible("/Users/example/Library/WebKit"))
+    }
+
+    /// The matcher offers only identifier-named direct children in Cookies and
+    /// WebKit. The gate holds the same line by itself, so a matcher bug can't
+    /// carry the system's files past it (#362).
+    @Test("The gate refuses the system's own files in Cookies and WebKit")
+    func gateRefusesSystemWebData() {
+        let lib = "/Users/example/Library/"
+        for path in [
+            "Cookies/Cookies.binarycookies",
+            "Cookies/cookies.binarycookies",
+            "Cookies/HSTS.plist",
+            "Cookies/.Cookies.binarycookies",
+            "WebKit/Databases",
+            "WebKit/Rectangle",
+            "WebKit/com..Rectangle",
+            "Cookies/My App.binarycookies",
+            // Deeper than a direct child, whatever the name.
+            "WebKit/com.knollsoft.Rectangle/WebsiteData",
+            "WebKit/Databases/com.knollsoft.Rectangle",
+            "Cookies/Vendor/com.knollsoft.Rectangle.binarycookies",
+        ] {
+            #expect(!eligible(lib + path), "\(path)")
+        }
+        for path in [
+            "Cookies/com.knollsoft.Rectangle.binarycookies",
+            "Cookies/.com.knollsoft.Rectangle.binarycookies",
+            "WebKit/com.knollsoft.Rectangle",
+            "WebKit/app.spokenly",
+            "Cookies/hsts.plist.binarycookies",
+        ] {
+            #expect(eligible(lib + path), "\(path)")
+        }
+
+        #expect(!AppUninstallScanPolicy.isAppWebDataName("Cookies.binarycookies"))
+        #expect(!AppUninstallScanPolicy.isAppWebDataName("HSTS.plist"))
+        #expect(!AppUninstallScanPolicy.isAppWebDataName("Databases"))
+        #expect(!AppUninstallScanPolicy.isAppWebDataName(".binarycookies"))
+        #expect(AppUninstallScanPolicy.isAppWebDataName("com.knollsoft.Rectangle"))
+        #expect(AppUninstallScanPolicy.isAppWebDataName("com.knollsoft.Rectangle.binarycookies"))
+
+        // The rule is for the two website-data folders. Elsewhere in the
+        // user's Library a plain name can still be an app's.
+        #expect(eligible(lib + "Application Support/Rectangle"))
+        #expect(eligible(lib + "Caches/Cookies"))
     }
 
     /// Paths in the `/Library` folders macOS shares with other apps, and whether
@@ -355,11 +410,41 @@ struct UninstallMoreLeftoversTests {
     /// `/Library/Caches` is `drwxrwxrwt root:admin`. An administrator can write
     /// to it, and the sticky bit still refuses the move of an entry they don't
     /// own, so asking only whether the folder is writable kept a root-owned
-    /// leftover there from ever reaching the helper (#362). A test can't make a
-    /// root-owned entry, so the same folder mode is made in a temporary folder
-    /// and the check is asked on behalf of a user who owns neither.
-    @Test("An entry someone else owns in a sticky folder needs the helper")
-    func stickyFolderEntryNeedsPrivilege() throws {
+    /// leftover there from ever reaching the helper (#362). Each owner is varied
+    /// by itself here, so dropping either comparison fails a row.
+    @Test("In a sticky folder only a root-owned entry the user can't move needs the helper")
+    func stickyFolderRule() {
+        let me: uid_t = 501
+        let other: uid_t = 502
+        let rows: [(entry: uid_t, folder: uid_t, user: uid_t, needsHelper: Bool, why: String)] = [
+            (0, 0, me, true, "root's entry in root's folder, as in /Library/Caches"),
+            (0, other, me, true, "root's entry in another account's folder"),
+            (0, me, me, false, "the user owns the folder, so the plain move works"),
+            (me, 0, me, false, "the user owns the entry, so the plain move works"),
+            (me, me, me, false, "the user owns both"),
+            // The sticky bit is what keeps this the other account's. The helper
+            // never asks who owns an entry, so it must not be sent there.
+            (other, 0, me, false, "another account's entry in root's folder"),
+            (other, other, me, false, "another account's entry in its own folder"),
+            (other, me, me, false, "another account's entry in the user's folder"),
+            (0, 0, 0, false, "root is never held by the sticky bit"),
+            (0, other, 0, false, "root is never held by the sticky bit, in anyone's folder"),
+            (other, 0, 0, false, "root is never held by the sticky bit"),
+        ]
+        for row in rows {
+            let answer = AppUninstallScanPolicy.stickyFolderEntryNeedsHelper(
+                entryOwner: row.entry, folderOwner: row.folder, user: row.user
+            )
+            #expect(answer == row.needsHelper, "\(row.why)")
+        }
+    }
+
+    /// The same rule read from disk. A test can't make a root-owned entry or a
+    /// folder someone else owns, so the folder mode is made in a temporary
+    /// folder, the check is asked on behalf of another user id, and the entry's
+    /// owner is handed in where it has to be root.
+    @Test("An entry's folder decides whether its move needs the helper")
+    func moveNeedsPrivilegeReadsTheFolder() throws {
         let base = fm.temporaryDirectory.appendingPathComponent("purgetest-\(UUID().uuidString)", isDirectory: true)
         let sticky = base.appendingPathComponent("sticky", isDirectory: true)
         let plain = base.appendingPathComponent("plain", isDirectory: true)
@@ -380,20 +465,23 @@ struct UninstallMoreLeftoversTests {
         let me = getuid()
         let someoneElse = me + 1
 
-        // The mode of `/Library/Caches`, and neither the folder nor the entry
-        // is this user's: the plain move fails, so the helper may take it.
-        #expect(AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: someoneElse))
-        // The user who owns the entry, or the folder, can move it unaided.
-        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: me))
+        // The mode of `/Library/Caches`, a folder that is not this user's, and
+        // an entry root owns: the plain move fails, so the helper may take it.
+        #expect(AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: someoneElse, entryOwner: 0))
+        // The entry as it is on disk belongs to another account than the one
+        // asking. It stays that account's.
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: someoneElse))
+        // The user who owns the folder can move anything in it unaided.
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: me, entryOwner: 0))
         #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[0]))
-        // Root is never held by the sticky bit.
-        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[0], user: 0))
         // Nothing there, so nothing to hand over.
-        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(sticky.appendingPathComponent("com.vendor.Gone"), user: someoneElse))
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(
+            sticky.appendingPathComponent("com.vendor.Gone"), user: someoneElse, entryOwner: 0
+        ))
 
         // Without the sticky bit a writable folder gives up any entry, whoever
         // owns it, so nothing in a user-writable folder goes to the helper.
-        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[1], user: someoneElse))
+        #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[1], user: someoneElse, entryOwner: 0))
         #expect(!AppUninstallScanPolicy.moveNeedsPrivilege(entries[1], user: me))
 
         // A folder that is not writable always did need it.

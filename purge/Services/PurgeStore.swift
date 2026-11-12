@@ -3560,7 +3560,7 @@ final class PurgeStore: ObservableObject {
     private var pendingLockedUninstalls: [PendingLockedUninstall] = []
 
     /// Whether a leftover may go to the helper when its plain move fails: its
-    /// folder is not writable, or is sticky and holds an entry someone else owns
+    /// folder is not writable, or is sticky and the entry is root's
     /// (`AppUninstallScanPolicy.moveNeedsPrivilege`, #362).
     private func pathNeedsPrivilege(_ url: URL) -> Bool {
         AppUninstallScanPolicy.moveNeedsPrivilege(url)
