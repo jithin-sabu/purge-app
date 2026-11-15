@@ -71,10 +71,6 @@ nonisolated final class FolderWalker: @unchecked Sendable {
     /// never followed, packages walked into. Nothing for a root that is not a
     /// readable folder.
     func fileTotals(of root: String, isCancelled: () -> Bool = { Task.isCancelled }) -> (bytes: Int64, lastUsed: Date) {
-        var info = stat()
-        guard ContainerAccessGate.access(root, { lstat(root, &info) }) == 0, (info.st_mode & S_IFMT) == S_IFDIR else {
-            return (0, .distantPast)
-        }
         let request = Request(rootCount: 1, counting: .regularFiles, staysOnVolume: false, onRootDone: nil)
         walk([root], request: request, isCancelled: isCancelled)
         guard let totals = request.results().first ?? nil else { return (0, .distantPast) }
@@ -83,26 +79,16 @@ nonisolated final class FolderWalker: @unchecked Sendable {
 
     private func walk(_ roots: [String], request: Request, isCancelled: () -> Bool) {
         let startedAt = Date()
-        var rootJobs: [Job] = []
-        for (index, path) in roots.enumerated() {
-            var info = stat()
-            guard ContainerAccessGate.access(path, { lstat(path, &info) }) == 0 else {
-                request.finishRootEarly(index, bytes: nil)
-                continue
-            }
-            guard (info.st_mode & S_IFMT) == S_IFDIR else {
-                // `du` asked about a file or a link reports that entry alone.
-                request.finishRootEarly(index, bytes: Self.kilobyteRounded(blocks: Int64(info.st_blocks)))
-                continue
-            }
-            rootJobs.append(Job(request: request, root: index, path: path, isRoot: true, rootDevice: 0))
+        // Even a root's own `lstat` runs on a walker thread: inside a container
+        // it can wait on `ContainerAccessGate`, and this thread must stay free
+        // to notice a cancel or the timeout.
+        let rootJobs = roots.enumerated().map { index, path in
+            Job(request: request, root: index, path: path, isRoot: true, rootDevice: 0)
         }
-        if !rootJobs.isEmpty {
-            request.lock.lock()
-            for job in rootJobs { request.pending[job.root] = 1 }
-            request.lock.unlock()
-            enqueue(rootJobs)
-        }
+        request.lock.lock()
+        for job in rootJobs { request.pending[job.root] = 1 }
+        request.lock.unlock()
+        enqueue(rootJobs)
         // Waits in short steps so a cancelled caller lets go quickly.
         let deadline = DispatchTime.now() + timeout
         while request.done.wait(timeout: .now() + .milliseconds(50)) == .timedOut {
@@ -168,6 +154,20 @@ nonisolated final class FolderWalker: @unchecked Sendable {
             guard !request.isCancelled else {
                 request.finish(job.root, read: nil)
                 continue
+            }
+            if job.isRoot {
+                var info = stat()
+                guard ContainerAccessGate.access(job.path, { lstat(job.path, &info) }) == 0 else {
+                    request.finishRootEarly(job.root, bytes: nil)
+                    continue
+                }
+                guard (info.st_mode & S_IFMT) == S_IFDIR else {
+                    // `du` asked about a file or a link reports that entry
+                    // alone; `walkedSize` finds no files to sum in one.
+                    let bytes = request.counting == .du ? Self.kilobyteRounded(blocks: Int64(info.st_blocks)) : 0
+                    request.finishRootEarly(job.root, bytes: bytes)
+                    continue
+                }
             }
             let read = reader.read(
                 job.path,
@@ -258,6 +258,10 @@ nonisolated final class FolderWalker: @unchecked Sendable {
         /// A folder asked about that is not walked: missing, a file or a link.
         func finishRootEarly(_ root: Int, bytes: Int64?) {
             lock.lock()
+            guard !finished[root] else {
+                lock.unlock()
+                return
+            }
             finished[root] = true
             if let bytes {
                 blocks[root] = bytes / 512
@@ -265,9 +269,15 @@ nonisolated final class FolderWalker: @unchecked Sendable {
                 unreadable[root] = true
             }
             remaining -= 1
+            // A cancelled caller has stopped listening.
+            guard !cancelled, let onRootDone else {
+                signalIfDone()
+                lock.unlock()
+                return
+            }
             callbacksInFlight += 1
             lock.unlock()
-            onRootDone?(root, bytes)
+            onRootDone(root, bytes)
             callbackReturned()
         }
 

@@ -4158,11 +4158,15 @@ final class PurgeStore: ObservableObject {
     /// A standalone pass replaces any full scan in flight. That scan stops at its
     /// next check and, no longer current, never clears its own flags. Left set,
     /// `isScanningAll` would make the queue wait on a scan that already ended and
-    /// hold every Scan button on "Scanning...".
+    /// hold every Scan button on "Scanning...". Its halves run side by side, so
+    /// either can be mid-way, and neither clears its own flag once it is no
+    /// longer current; the standalone pass sets its own again.
     private func supersedeFullScan() {
         scanTask?.cancel()
         scanTask = nil
         isScanningAll = false
+        isScanningGeneral = false
+        isScanningDeveloper = false
         cacheScanStage = .idle
     }
 
@@ -4341,6 +4345,9 @@ final class PurgeStore: ObservableObject {
             }
         }
         coalesce.debounceTask?.cancel()
+        // A newer scan owns the staged rows now; the stream can end without
+        // another event, so the loop's check may not have run.
+        guard scanGeneration == generation else { return }
         flushCacheScanBuffers(coalesce: coalesce, animate: true, filtersEveryRow: true)
         ScanPhaseTiming.finish(
             "runGeneralScan stream",

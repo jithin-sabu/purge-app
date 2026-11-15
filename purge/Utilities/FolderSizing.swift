@@ -151,9 +151,11 @@ nonisolated enum FolderSizing {
         guard !urls.isEmpty else { return [:] }
         if split == .spread {
             let done = Counter()
+            // Each folder is measured once, however often it is listed.
+            let total = Set(urls.map { $0.standardizedFileURL.path }).count
             return walkedSizes(at: urls, staysOnVolume: staysOnVolume) { path, bytes in
                 onChunkSizes?(bytes.map { [path: $0] } ?? [:])
-                onChunkDone?(done.increment(), urls.count)
+                onChunkDone?(done.increment(), total)
             }
         }
 
