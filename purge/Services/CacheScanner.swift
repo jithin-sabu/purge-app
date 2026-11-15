@@ -44,10 +44,13 @@ nonisolated final class CacheScanner {
         let discoveryStart = Date()
         let home = FileManager.default.homeDirectoryForCurrentUser
         let cachesURL = home.appendingPathComponent("Library/Caches", isDirectory: true)
-        var sizeJobs: [SizeJob] = []
         // Seed with paths the Dev Tools scan owns so they are skipped here instead of
         // appearing under App Caches and later being pulled out when the dev scan runs.
         var collectedPaths = DevScanner.claimedGlobalCachePaths()
+
+        // Listed before the passes and the sizing below start reading, one
+        // container at a time (see `ContainerAccessGate`).
+        let containerCacheURLs = access == .full ? CacheDiscoveryPaths.containerCacheURLs(home: home) : []
 
         let contents: [URL]
         do {
@@ -61,6 +64,7 @@ nonisolated final class CacheScanner {
             return
         }
 
+        var cachesFolderJobs: [SizeJob] = []
         for directory in contents {
             if Task.isCancelled {
                 continuation.finish()
@@ -72,161 +76,135 @@ nonisolated final class CacheScanner {
                 collectedPaths: &collectedPaths
             ) else { continue }
             continuation.yield(.found(item))
-            sizeJobs.append(SizeJob(path: directory.standardizedFileURL))
+            cachesFolderJobs.append(SizeJob(path: directory.standardizedFileURL))
         }
 
-        // Application Support is readable without Full Disk Access, and it is where
-        // Chromium browsers, Electron apps and Adobe keep their biggest caches, so
-        // it belongs in the limited scan. The sensitive roots under it are already
-        // skipped by `excludedApplicationSupportRoots`.
-        let appSupportItems = applicationSupportCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
-        for item in appSupportItems {
-            if Task.isCancelled {
-                continuation.finish()
-                return
+        // `~/Library/Caches` holds most rows, so its folders are sized while the
+        // passes below run. Their sizes go out only after every pass has sent
+        // its rows: a row is published once it has a size, and its safety
+        // level is then pinned, so a row from a later pass that joins it under
+        // the same key, at a more cautious level, must be there first.
+        let heldSizes = HeldScanEvents(continuation)
+        async let cachesFolderSizing: Void = runSizeJobs(cachesFolderJobs, access: access, send: heldSizes.send)
+
+        // Each pass reads its own folders, so they run side by side. A path two
+        // passes find stays with the earlier pass, as when they ran one after
+        // another: each pass starts from the paths claimed so far, and the merge
+        // below drops what an earlier pass already took.
+        let claimedBeforePasses = collectedPaths
+        let passes = discoveryPasses(home: home, access: access, containerCacheURLs: containerCacheURLs)
+        let passItems = ConcurrentMap.values(passes, width: passes.count, outer: true) { pass -> [CacheItem] in
+            var claimed = claimedBeforePasses
+            return pass.find(&claimed)
+        }
+        var sizeJobs: [SizeJob] = []
+        for (pass, items) in zip(passes, passItems) {
+            for item in items {
+                if Task.isCancelled {
+                    continuation.finish()
+                    return
+                }
+                if pass.claimsPaths {
+                    guard collectedPaths.insert(item.path.standardizedFileURL.path).inserted else { continue }
+                }
+                continuation.yield(.found(item))
+                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
             }
-            continuation.yield(.found(item))
-            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
         }
+        heldSizes.release()
 
-        let knownItems = knownCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
-        for item in knownItems {
-            if Task.isCancelled {
-                continuation.finish()
-                return
-            }
-            continuation.yield(.found(item))
-            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
-        }
+        ScanPhaseTiming.finish(
+            "app cache discovery",
+            since: discoveryStart,
+            detail: "\(cachesFolderJobs.count + sizeJobs.count) cache locations queued, \(collectedPaths.count) unique paths"
+        )
 
-        let adobeItems = adobeMediaCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
-        for item in adobeItems {
-            if Task.isCancelled {
-                continuation.finish()
-                return
-            }
-            continuation.yield(.found(item))
-            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
-        }
+        let sizingStart = Date()
+        await runSizeJobs(sizeJobs, access: access, send: { continuation.yield($0) })
+        await cachesFolderSizing
+        ScanPhaseTiming.finish(
+            "app cache sizing",
+            since: sizingStart,
+            detail: "\(cachesFolderJobs.count + sizeJobs.count) folders"
+        )
+        continuation.finish()
+    }
 
-        // Everything below lives in other apps' containers. Without Full Disk Access
-        // macOS asks the user about each one, so a limited scan leaves them alone.
+    /// One discovery pass after `~/Library/Caches`. `claimsPaths` is false only
+    /// for the system junk folders, which never took part in the dedupe.
+    private struct DiscoveryPass {
+        let claimsPaths: Bool
+        let find: (inout Set<String>) -> [CacheItem]
+    }
+
+    /// The passes in the order they claim paths.
+    private func discoveryPasses(home: URL, access: ScanAccess, containerCacheURLs: [URL]) -> [DiscoveryPass] {
+        var passes: [DiscoveryPass] = [
+            // Application Support is readable without Full Disk Access, and it is where
+            // Chromium browsers, Electron apps and Adobe keep their biggest caches, so
+            // it belongs in the limited scan. The sensitive roots under it are already
+            // skipped by `excludedApplicationSupportRoots`.
+            DiscoveryPass(claimsPaths: true) { self.applicationSupportCacheItems(home: home, access: access, collectedPaths: &$0) },
+            DiscoveryPass(claimsPaths: true) { self.knownCacheItems(home: home, access: access, collectedPaths: &$0) },
+            DiscoveryPass(claimsPaths: true) { self.adobeMediaCacheItems(home: home, access: access, collectedPaths: &$0) },
+        ]
+        // Everything in these lives in other apps' containers. Without Full Disk
+        // Access macOS asks the user about each one, so a limited scan leaves them alone.
         if access == .full {
-            for url in CacheDiscoveryPaths.unfinishedDownloadURLs(home: home) {
-                guard let item = cacheItemAtDiscoveredPath(
-                    url,
-                    headline: url.lastPathComponent,
-                    folderName: CacheDiscoveryPaths.unfinishedDownloadsKey,
-                    access: access,
-                    collectedPaths: &collectedPaths
-                ) else { continue }
-                continuation.yield(.found(item))
-                sizeJobs.append(SizeJob(path: url))
-            }
+            passes += [
+                DiscoveryPass(claimsPaths: true) { self.unfinishedDownloadItems(home: home, access: access, collectedPaths: &$0) },
+                DiscoveryPass(claimsPaths: true) { self.telegramMediaCacheItems(home: home, access: access, collectedPaths: &$0) },
+                DiscoveryPass(claimsPaths: true) { self.allContainerCacheItems(containerCacheURLs, access: access, collectedPaths: &$0) },
+            ]
+        }
+        passes += [
+            DiscoveryPass(claimsPaths: true) { self.staleChromiumFrameworkItems(access: access, collectedPaths: &$0) },
+            DiscoveryPass(claimsPaths: true) { self.applicationLogItems(home: home, access: access, collectedPaths: &$0) },
+            DiscoveryPass(claimsPaths: true) { self.macOSInstallerItems(access: access, collectedPaths: &$0) },
+            DiscoveryPass(claimsPaths: true) { self.macOSInstallLeftoverItems(access: access, collectedPaths: &$0) },
+            DiscoveryPass(claimsPaths: false) { _ in self.systemJunkItems(home: home, access: access) },
+        ]
+        return passes
+    }
 
-            let telegramItems = telegramMediaCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
-            for item in telegramItems {
-                if Task.isCancelled {
-                    continuation.finish()
-                    return
-                }
-                continuation.yield(.found(item))
-                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
-            }
+    private func unfinishedDownloadItems(home: URL, access: ScanAccess, collectedPaths: inout Set<String>) -> [CacheItem] {
+        CacheDiscoveryPaths.unfinishedDownloadURLs(home: home).compactMap { url in
+            cacheItemAtDiscoveredPath(
+                url,
+                headline: url.lastPathComponent,
+                folderName: CacheDiscoveryPaths.unfinishedDownloadsKey,
+                access: access,
+                collectedPaths: &collectedPaths
+            )
+        }
+    }
 
-            let containerItems = allContainerCacheItems(home: home, access: access, collectedPaths: &collectedPaths)
-            for item in containerItems {
-                if Task.isCancelled {
-                    continuation.finish()
-                    return
-                }
-                continuation.yield(.found(item))
-                sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
-            }
-        }
-
-        let staleFrameworkItems = staleChromiumFrameworkItems(access: access, collectedPaths: &collectedPaths)
-        for item in staleFrameworkItems {
-            if Task.isCancelled {
-                continuation.finish()
-                return
-            }
-            continuation.yield(.found(item))
-            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
-        }
-
-        for item in applicationLogItems(home: home, access: access, collectedPaths: &collectedPaths) {
-            if Task.isCancelled {
-                continuation.finish()
-                return
-            }
-            continuation.yield(.found(item))
-            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
-        }
-        for item in macOSInstallerItems(access: access, collectedPaths: &collectedPaths) {
-            if Task.isCancelled {
-                continuation.finish()
-                return
-            }
-            continuation.yield(.found(item))
-            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
-        }
-        for item in macOSInstallLeftoverItems(access: access, collectedPaths: &collectedPaths) {
-            if Task.isCancelled {
-                continuation.finish()
-                return
-            }
-            continuation.yield(.found(item))
-            sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
-        }
-        for location in systemJunkLocations(home: home) {
-            if Task.isCancelled {
-                continuation.finish()
-                return
-            }
+    private func systemJunkItems(home: URL, access: ScanAccess) -> [CacheItem] {
+        systemJunkLocations(home: home).compactMap { location in
             let displayName = location.displayName
-            guard ProtectedLocations.isReadable(location.url, access: access) else { continue }
+            guard ProtectedLocations.isReadable(location.url, access: access) else { return nil }
             let url = location.url.standardizedFileURL
-            guard FileManager.default.fileExists(atPath: url.path) else { continue }
-            guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { continue }
-            guard !ExcludedPathsStore.isExcluded(url) else { continue }
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+            guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { return nil }
+            guard !ExcludedPathsStore.isExcluded(url) else { return nil }
             let folderName = url.lastPathComponent
             let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
                 folderName: folderName,
                 friendlyHeadline: displayName,
                 path: url
             )
-
-            continuation.yield(.found(
-                CacheItem(
-                    definitionKey: ExplanationDatabase.definitionKey(forFolderName: folderName),
-                    location: CacheLocation(
-                        path: url,
-                        sizeBytes: 0,
-                        lastModified: .distantPast,
-                        folderName: folderName
-                    ),
-                    appName: displayName,
-                    safetyInfo: safetyInfo
-                )
-            ))
-            sizeJobs.append(SizeJob(path: url))
+            return CacheItem(
+                definitionKey: ExplanationDatabase.definitionKey(forFolderName: folderName),
+                location: CacheLocation(
+                    path: url,
+                    sizeBytes: 0,
+                    lastModified: .distantPast,
+                    folderName: folderName
+                ),
+                appName: displayName,
+                safetyInfo: safetyInfo
+            )
         }
-
-        ScanPhaseTiming.finish(
-            "app cache discovery",
-            since: discoveryStart,
-            detail: "\(sizeJobs.count) cache locations queued, \(collectedPaths.count) unique paths"
-        )
-
-        let sizingStart = Date()
-        await runSizeJobs(sizeJobs, access: access, continuation: continuation)
-        ScanPhaseTiming.finish(
-            "app cache sizing",
-            since: sizingStart,
-            detail: "\(sizeJobs.count) du batch paths"
-        )
-        continuation.finish()
     }
 
     private func cacheItem(
@@ -294,15 +272,16 @@ nonisolated final class CacheScanner {
             options: [.skipsHiddenFiles]
         ) else { return [] }
 
-        var items: [CacheItem] = []
-        for appDir in appDirs {
-            guard ProtectedLocations.isReadable(appDir, access: access) else { continue }
+        // Each app's folder is read on its own, side by side; the paths are then
+        // claimed in the order one pass after another would have claimed them.
+        let prepared = ConcurrentMap.values(appDirs) { appDir -> [CacheItem?] in
+            guard ProtectedLocations.isReadable(appDir, access: access) else { return [] }
             guard (try? appDir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
-                continue
+                return []
             }
             let appFolderName = appDir.lastPathComponent
             guard !CacheDiscoveryPaths.excludedApplicationSupportRoots.contains(appFolderName) else {
-                continue
+                return []
             }
 
             // An app with an `explanations.json` entry groups under that entry. Any
@@ -310,21 +289,19 @@ nonisolated final class CacheScanner {
             let groupKey = ExplanationDatabase.definitionKey(forFolderName: appFolderName) == nil
                 ? CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: appFolderName)
                 : nil
-            for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir, access: access) {
+            return CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir, access: access).map { cacheURL in
                 let row = Self.applicationSupportRow(for: cacheURL, appFolderName: appFolderName, groupKey: groupKey)
-                guard let item = cacheItemAtDiscoveredPath(
+                return discoveredItem(
                     cacheURL,
                     headline: row.headline,
                     folderName: appFolderName,
                     classificationName: row.classificationName,
                     groupKey: row.groupKey,
-                    access: access,
-                    collectedPaths: &collectedPaths
-                ) else { continue }
-                items.append(item)
+                    access: access
+                )
             }
         }
-        return items
+        return claimInOrder(prepared.flatMap { $0 }, collectedPaths: &collectedPaths)
     }
 
     private func knownCacheItems(
@@ -392,28 +369,30 @@ nonisolated final class CacheScanner {
     }
 
     private func allContainerCacheItems(
-        home: URL,
+        _ containerCacheURLs: [URL],
         access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> [CacheItem] {
-        var items: [CacheItem] = []
-        for cacheURL in CacheDiscoveryPaths.containerCacheURLs(home: home) {
+        // Built side by side, since naming each app asks Launch Services; the
+        // folder checks go through `ContainerAccessGate`. Claimed in order.
+        let prepared = ConcurrentMap.values(containerCacheURLs) { cacheURL -> CacheItem? in
             let bundleID = containerBundleID(from: cacheURL) ?? cacheURL.lastPathComponent
             let appName = appDisplayName(forBundleID: bundleID) ?? bundleID
             let subfolderName = cacheURL.lastPathComponent
             let isCachesRoot = subfolderName == "Caches"
             let folderName = isCachesRoot ? bundleID : subfolderName
             let headline = isCachesRoot ? "\(appName) Cache" : "\(appName) \(subfolderName)"
-            guard let item = cacheItemAtDiscoveredPath(
-                cacheURL,
-                headline: headline,
-                folderName: folderName,
-                access: access,
-                collectedPaths: &collectedPaths
-            ) else { continue }
-            items.append(item)
+            // The checks read the folder, so one container at a time.
+            return ContainerAccessGate.access(cacheURL.path) {
+                discoveredItem(
+                    cacheURL,
+                    headline: headline,
+                    folderName: folderName,
+                    access: access
+                )
+            }
         }
-        return items
+        return claimInOrder(prepared, collectedPaths: &collectedPaths)
     }
 
     private func staleChromiumFrameworkItems(access: ScanAccess, collectedPaths: inout Set<String>) -> [CacheItem] {
@@ -462,17 +441,38 @@ nonisolated final class CacheScanner {
         access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> CacheItem? {
+        claimInOrder(
+            [discoveredItem(
+                url,
+                headline: headline,
+                folderName: folderName,
+                classificationName: classificationName,
+                groupKey: groupKey,
+                access: access
+            )],
+            collectedPaths: &collectedPaths
+        ).first
+    }
+
+    /// The row for a discovered cache folder, or nil when it is not offered.
+    /// Reads only, so passes can build rows side by side; `claimInOrder` then
+    /// keeps the first row for each path.
+    private func discoveredItem(
+        _ url: URL,
+        headline: String,
+        folderName: String,
+        classificationName: String? = nil,
+        groupKey: String? = nil,
+        access: ScanAccess
+    ) -> CacheItem? {
         // The name the tier and row come from. The location keeps `folderName`,
         // which its label in the confirm sheets is read from.
         let classificationName = classificationName ?? folderName
         // Before `standardizedFileURL` and the modification date, both of which
         // follow a symlink to its target.
         guard ProtectedLocations.isReadable(url, access: access) else { return nil }
-        let pathKey = url.standardizedFileURL.path
         guard DeletionSafetyPolicy.isOfferedForCleanup(url) else { return nil }
         guard !ExcludedPathsStore.isExcluded(url) else { return nil }
-        guard !collectedPaths.contains(pathKey) else { return nil }
-        collectedPaths.insert(pathKey)
 
         let modified = FolderSizing.contentModificationDate(at: url)
         let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
@@ -491,6 +491,14 @@ nonisolated final class CacheScanner {
             appName: safetyInfo.headline,
             safetyInfo: safetyInfo
         )
+    }
+
+    /// Keeps each item whose path no earlier item claimed, in order, and claims it.
+    private func claimInOrder(_ items: [CacheItem?], collectedPaths: inout Set<String>) -> [CacheItem] {
+        items.compactMap { item in
+            guard let item, collectedPaths.insert(item.path.standardizedFileURL.path).inserted else { return nil }
+            return item
+        }
     }
 
     /// One row location per item in `~/Library/Logs`, except Crash Reports, which
@@ -602,64 +610,20 @@ nonisolated final class CacheScanner {
     private func runSizeJobs(
         _ jobs: [SizeJob],
         access: ScanAccess,
-        continuation: AsyncStream<CacheScanEvent>.Continuation
+        send: @escaping (CacheScanEvent) -> Void
     ) async {
         // Discovery already dropped locked paths; this keeps `du` honest if a
         // new discovery path forgets to.
         let jobs = jobs.filter { ProtectedLocations.isReadable($0.path, access: access) }
         guard !jobs.isEmpty else { return }
 
-        // Matches the process-wide `du` cap. Each task takes one limiter permit
-        // inside `directorySizesForChunk`, so this is the fan-out, not a second
-        // multiplier on top of `directorySizes` callers.
-        let maxConcurrent = FolderSizing.maxConcurrentDuChunks
-        // Short chunks, so every permit is in use and one big cache folder holds
-        // up only the few beside it.
-        let chunks = FolderSizing.chunks(of: jobs, split: .spread)
-
-        await withTaskGroup(of: ([SizeJob], [String: Int64])?.self) { group in
-            var iterator = chunks.makeIterator()
-            var running = 0
-
-            func enqueueNext() {
-                guard let chunk = iterator.next() else { return }
-                running += 1
-                group.addTask {
-                    if Task.isCancelled { return nil }
-                    let paths = chunk.map(\.path)
-                    let sizesByPath = FolderSizing.directorySizesForChunk(paths)
-                    if Task.isCancelled { return nil }
-                    return (chunk, sizesByPath)
-                }
-            }
-
-            for _ in 0..<min(maxConcurrent, chunks.count) {
-                enqueueNext()
-            }
-
-            while running > 0 {
-                guard let result = await group.next() else { break }
-                running -= 1
-
-                if let (chunk, sizesByPath) = result {
-                    for job in chunk {
-                        if Task.isCancelled {
-                            group.cancelAll()
-                            return
-                        }
-                        let pathKey = job.path.standardizedFileURL.path
-                        let size = sizesByPath[pathKey] ?? 0
-                        let modified = FolderSizing.contentModificationDate(at: job.path)
-                        continuation.yield(.sizeResolved(path: pathKey, sizeBytes: size, lastModified: modified))
-                    }
-                }
-
-                if Task.isCancelled {
-                    group.cancelAll()
-                    break
-                }
-                enqueueNext()
-            }
+        // Each folder is reported as soon as it is sized, so one big cache
+        // folder holds up nothing else.
+        let jobsByPath = Dictionary(jobs.map { ($0.path.standardizedFileURL.path, $0) }, uniquingKeysWith: { first, _ in first })
+        _ = FolderSizing.walkedSizes(at: jobs.map(\.path)) { path, bytes in
+            guard let job = jobsByPath[path] else { return }
+            let modified = FolderSizing.contentModificationDate(at: job.path)
+            send(.sizeResolved(path: path, sizeBytes: bytes ?? 0, lastModified: modified))
         }
     }
 
@@ -680,3 +644,40 @@ nonisolated final class CacheScanner {
         ]
     }
 }
+
+/// Scan events held back until `release()`, then sent in the order they came,
+/// and every later one sent at once. `send` may be called from any thread.
+nonisolated final class HeldScanEvents<Event>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held: [Event]? = []
+    private let deliver: (Event) -> Void
+
+    init(_ continuation: AsyncStream<Event>.Continuation) {
+        deliver = { continuation.yield($0) }
+    }
+
+    init(deliver: @escaping (Event) -> Void) {
+        self.deliver = deliver
+    }
+
+    func send(_ event: Event) {
+        lock.lock()
+        defer { lock.unlock() }
+        if held != nil {
+            held?.append(event)
+        } else {
+            deliver(event)
+        }
+    }
+
+    /// Sends what was held, with the lock held so nothing sent meanwhile
+    /// overtakes it.
+    func release() {
+        lock.lock()
+        defer { lock.unlock() }
+        let events = held ?? []
+        held = nil
+        events.forEach(deliver)
+    }
+}
+

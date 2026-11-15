@@ -55,14 +55,22 @@ nonisolated final class OrphanLeftoverScanner {
         AsyncStream { [home, defaults, installedApps, ledger, catalog] continuation in
             let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults)
             let task = Task.detached(priority: .userInitiated) {
-                Self.run(
-                    home: home,
-                    staleDays: staleDays,
-                    installed: installedApps(),
-                    ledger: ledger(home),
-                    catalog: catalog,
-                    continuation: continuation
-                )
+                // The folders are judged on threads of their own, where
+                // `Task.isCancelled` is always false, so a cancel raises this.
+                let stop = CancellationFlag()
+                await withTaskCancellationHandler {
+                    Self.run(
+                        home: home,
+                        staleDays: staleDays,
+                        installed: installedApps,
+                        ledger: { ledger(home) },
+                        catalog: catalog,
+                        stop: stop,
+                        continuation: continuation
+                    )
+                } onCancel: {
+                    stop.raise()
+                }
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -80,75 +88,88 @@ nonisolated final class OrphanLeftoverScanner {
     private static func run(
         home: URL,
         staleDays: Int,
-        installed: OrphanLeftoverScanPolicy.InstalledAppIndex,
-        ledger: LeftoverOwnerLedger,
+        installed installedApps: () -> OrphanLeftoverScanPolicy.InstalledAppIndex,
+        ledger readLedger: () -> LeftoverOwnerLedger,
         catalog: AppDotFolderCatalog,
+        stop: CancellationFlag,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
 
-        guard installed.looksComplete else {
+        // What is installed takes longest to learn: it reads every app's
+        // signature. Nothing else here needs it until the folders are judged, so
+        // the ledger, the clues and the folder listings are read beside it.
+        let (installed, (ledger, clues, listings)) = ConcurrentMap.both(installedApps) {
+            let ledger = readLedger()
+            // Which ids Preferences and Caches carry, read once for every
+            // human-named Application Support folder (#224).
+            let clues = OrphanLeftoverScanPolicy.LibraryIdentifierClues.gather(home: home)
+            let listings = OrphanLeftoverScanPolicy.orphanRoots(home: home).map { root in
+                (root, (try? fm.contentsOfDirectory(
+                    at: root.url,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                )) ?? [])
+            }
+            return (ledger, clues, listings)
+        }
+
+        guard installed.looksComplete, !Task.isCancelled else {
             continuation.finish()
             return
         }
         let cutoff = OrphanLeftoverScanPolicy.staleCutoff(staleDays: staleDays)
-        // Which ids Preferences and Caches carry, read once for every
-        // human-named Application Support folder (#224).
-        let clues = OrphanLeftoverScanPolicy.LibraryIdentifierClues.gather(home: home)
+
+        // Each folder is judged on its own, so they are judged side by side;
+        // the list keeps the order one root after another gave it.
+        let entries = listings.flatMap { root, entries in entries.map { (root: root, url: $0) } }
+        func judge(_ entry: URL, category: UninstallCategory) -> Candidate? {
+            // Owner, orphaned, and untouched all the way down, in one
+            // tested decision.
+            guard let orphan = OrphanLeftoverScanPolicy.orphanCandidate(
+                at: entry,
+                category: category,
+                installed: installed,
+                cutoff: cutoff,
+                home: home,
+                ledger: ledger,
+                clues: clues
+            ) else { return nil }
+
+            // Defend in depth: only offer what the delete gate would accept.
+            // Orphan data lives outside the cache allowlist, so this is the
+            // same authority the deletion pass uses (`deleteUserSelectedFiles`),
+            // not `DeletionSafetyPolicy.isOfferedForCleanup`.
+            guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(entry, home: home) else { return nil }
+            guard !ExcludedPathsStore.isExcluded(entry) else { return nil }
+
+            return Candidate(
+                url: entry,
+                category: category,
+                appName: orphan.appName
+                    ?? OrphanLeftoverScanPolicy.friendlyName(bundleID: orphan.owner.displayName, url: entry),
+                evidence: orphan.evidence,
+                ownerBundleIDs: orphan.ownerBundleIDs,
+                modified: orphan.lastModified
+            )
+        }
+
+        let judged = ConcurrentMap.values(entries) { root, entry -> Candidate? in
+            // A stopped scan judges nothing more; the list below is dropped.
+            guard !stop.isRaised else { return nil }
+            // Judging a container reads inside it, so one container at a time.
+            return ContainerAccessGate.access(entry.path) { judge(entry, category: root.category) }
+        }
 
         var candidates: [Candidate] = []
         var seen = Set<String>()
-
-        for root in OrphanLeftoverScanPolicy.orphanRoots(home: home) {
+        for candidate in judged {
             if Task.isCancelled {
                 continuation.finish()
                 return
             }
-            guard let entries = try? fm.contentsOfDirectory(
-                at: root.url,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles]
-            ) else { continue }
-
-            for entry in entries {
-                if Task.isCancelled {
-                    continuation.finish()
-                    return
-                }
-                // Owner, orphaned, and untouched all the way down, in one
-                // tested decision.
-                guard let orphan = OrphanLeftoverScanPolicy.orphanCandidate(
-                    at: entry,
-                    category: root.category,
-                    installed: installed,
-                    cutoff: cutoff,
-                    home: home,
-                    ledger: ledger,
-                    clues: clues
-                ) else { continue }
-
-                // Defend in depth: only offer what the delete gate would accept.
-                // Orphan data lives outside the cache allowlist, so this is the
-                // same authority the deletion pass uses (`deleteUserSelectedFiles`),
-                // not `DeletionSafetyPolicy.isOfferedForCleanup`.
-                guard AppUninstallScanPolicy.isEligibleForUninstallDeletion(entry, home: home) else { continue }
-                guard !ExcludedPathsStore.isExcluded(entry) else { continue }
-
-                let key = entry.standardizedFileURL.path
-                guard seen.insert(key).inserted else { continue }
-
-                candidates.append(
-                    Candidate(
-                        url: entry,
-                        category: root.category,
-                        appName: orphan.appName
-                            ?? OrphanLeftoverScanPolicy.friendlyName(bundleID: orphan.owner.displayName, url: entry),
-                        evidence: orphan.evidence,
-                        ownerBundleIDs: orphan.ownerBundleIDs,
-                        modified: orphan.lastModified
-                    )
-                )
-            }
+            guard let candidate, seen.insert(candidate.url.standardizedFileURL.path).inserted else { continue }
+            candidates.append(candidate)
         }
 
         // Hidden home folders of removed apps, from the catalog alone (#224).

@@ -637,7 +637,11 @@ final class PurgeStore: ObservableObject {
         /// slow enough that each tick's `.numericText()` roll finishes before the
         /// next value lands rather than being retargeted mid-flight.
         static let flushInterval: Duration = .milliseconds(140)
-        static let flushThreshold = 100
+        /// A backstop for a producer far faster than the beat. Each flush filters
+        /// every row found so far through the safety policy on the main thread,
+        /// so at 100 a fast cache scan flushed about 20 times and the main thread
+        /// fell 0.6 s behind it.
+        static let flushThreshold = 1_000
     }
 
     /// The scan-flush cadence in seconds, derived from `ScanCoalesce.flushInterval`.
@@ -682,6 +686,10 @@ final class PurgeStore: ObservableObject {
     /// Project discovery finished while the full scan it started with was still
     /// running. The project list is saved once that scan finishes.
     private var projectListFinishedDuringFullScan = false
+    /// The Dev Tools half of a full scan finished while the App Caches half
+    /// still ran beside it. Its lists are saved once the whole scan finishes,
+    /// as they were when the halves ran one after the other.
+    private var developerListsFinishedDuringFullScan = false
     private var scanCompletionHideTask: Task<Void, Never>?
     private var interactiveSafeCleanupRemovalTask: Task<Void, Never>?
     /// Set while an interactive safe cleanup tracks a live engine run, so
@@ -4150,11 +4158,15 @@ final class PurgeStore: ObservableObject {
     /// A standalone pass replaces any full scan in flight. That scan stops at its
     /// next check and, no longer current, never clears its own flags. Left set,
     /// `isScanningAll` would make the queue wait on a scan that already ended and
-    /// hold every Scan button on "Scanning...".
+    /// hold every Scan button on "Scanning...". Its halves run side by side, so
+    /// either can be mid-way, and neither clears its own flag once it is no
+    /// longer current; the standalone pass sets its own again.
     private func supersedeFullScan() {
         scanTask?.cancel()
         scanTask = nil
         isScanningAll = false
+        isScanningGeneral = false
+        isScanningDeveloper = false
         cacheScanStage = .idle
     }
 
@@ -4239,24 +4251,40 @@ final class PurgeStore: ObservableObject {
         await gitChecker.setAccess(access)
         guard !Task.isCancelled, scanGeneration == generation else { return }
 
+        // The first read inside each app's container makes macOS decide, in
+        // the kernel, whether Purge may read it. Made while other folders were
+        // being read, that sometimes stalled 5 s; made first, alone, it never
+        // did, and the reads below find it decided.
+        if let prepare = scanSources.prepareFullScan {
+            await prepare(access)
+            guard !Task.isCancelled, scanGeneration == generation else { return }
+        }
+
         // Project discovery walks the home folders and needs nothing from the
         // two scans below, so it starts with them rather than after them, and
         // carries Dev Tools on if it is still going when they end.
         startProjectDiscovery(generation: generation, access: access)
         let discovery = projectDiscoveryTask
 
+        // The two halves read different folders and share nothing, so they run
+        // side by side; one after the other, the scan took their sum.
+        readableWithoutFullDiskAccess.removeAll()
+        developerListsFinishedDuringFullScan = false
+        async let developerHalf: Void = runDeveloperScan(generation: generation, access: access, inFullScan: true)
         await runGeneralScan(generation: generation, access: access, inFullScan: true)
-        guard !Task.isCancelled, scanGeneration == generation else {
-            stopProjectDiscovery(discovery)
-            return
+        if !Task.isCancelled, scanGeneration == generation {
+            cacheScanStage = .devTools
         }
-        cacheScanStage = .devTools
-        await runDeveloperScan(generation: generation, access: access, inFullScan: true)
+        await developerHalf
         guard !Task.isCancelled, scanGeneration == generation else {
             stopProjectDiscovery(discovery)
             return
         }
         finishScan(generation: generation)
+        if developerListsFinishedDuringFullScan {
+            developerListsFinishedDuringFullScan = false
+            lastScanListsFinished(Self.developerListSections)
+        }
         if projectListFinishedDuringFullScan {
             projectListFinishedDuringFullScan = false
             lastScanListsFinished([.projects])
@@ -4281,8 +4309,9 @@ final class PurgeStore: ObservableObject {
         errorMessage = nil
         isScanningGeneral = true
         generalResultsAccess = access
-        readableWithoutFullDiskAccess.removeAll()
         if !inFullScan {
+            // A full scan clears this once for both halves.
+            readableWithoutFullDiskAccess.removeAll()
             await gitChecker.clearSessionCache()
             await gitChecker.setAccess(access)
         }
@@ -4300,7 +4329,10 @@ final class PurgeStore: ObservableObject {
         defer { coalesce.debounceTask?.cancel() }
 
         for await event in scanSources.general(access) {
-            guard scanGeneration == generation, !Task.isCancelled else { return }
+            guard scanGeneration == generation else { return }
+            // A stopped scan still ends with the flush below, which runs the
+            // safety filter over every row it leaves on the list.
+            if Task.isCancelled { break }
             switch event {
             case .found(let item):
                 cacheItemsFound += 1
@@ -4313,7 +4345,10 @@ final class PurgeStore: ObservableObject {
             }
         }
         coalesce.debounceTask?.cancel()
-        flushCacheScanBuffers(coalesce: coalesce, animate: true)
+        // A newer scan owns the staged rows now; the stream can end without
+        // another event, so the loop's check may not have run.
+        guard scanGeneration == generation else { return }
+        flushCacheScanBuffers(coalesce: coalesce, animate: true, filtersEveryRow: true)
         ScanPhaseTiming.finish(
             "runGeneralScan stream",
             since: streamStart,
@@ -4338,14 +4373,19 @@ final class PurgeStore: ObservableObject {
     /// `inFullScan` is true when `runFullScan` runs this half. That scan has
     /// started the git session for both halves and its project discovery.
     private func runDeveloperScan(generation: Int, access: ScanAccess, inFullScan: Bool = false) async {
+        // A full scan starts this half on a task of its own, which can get its
+        // first turn after a standalone scan replaced the full one. The flag
+        // it set then stayed set, since only the current scan clears it.
+        guard scanGeneration == generation else { return }
         let developerStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
         simulatorSizingGeneration += 1
         isScanningDeveloper = true
         developerResultsAccess = access
-        readableWithoutFullDiskAccess.removeAll()
         if !inFullScan {
+            // A full scan clears this once for both halves.
+            readableWithoutFullDiskAccess.removeAll()
             await gitChecker.clearSessionCache()
             await gitChecker.setAccess(access)
         }
@@ -4402,6 +4442,9 @@ final class PurgeStore: ObservableObject {
             }
         }
         coalesce.debounceTask?.cancel()
+        // A newer scan owns the lists now; the stream can end without another
+        // event, so the loop's check may not have run.
+        guard scanGeneration == generation else { return }
         flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
         // The scan moves a runtime excluded by path before #178 to the runtime
         // list, so Settings would show neither until the lists are read again.
@@ -4428,12 +4471,19 @@ final class PurgeStore: ObservableObject {
         }
 
         if scanGeneration == generation, !Task.isCancelled {
-            lastScanListsFinished([.devTools, .simulators, .runtimes, .xcodeComponents])
+            if inFullScan {
+                developerListsFinishedDuringFullScan = true
+            } else {
+                lastScanListsFinished(Self.developerListSections)
+            }
         }
         if !inFullScan {
             startProjectDiscovery(generation: generation, access: access)
         }
     }
+
+    /// The saved-scan lists the Dev Tools half finishes.
+    private static let developerListSections: [LastScanSection] = [.devTools, .simulators, .runtimes, .xcodeComponents]
 
     private func startProjectDiscovery(generation: Int, access: ScanAccess) {
         projectDiscoveryTask?.cancel()
@@ -5311,22 +5361,30 @@ final class PurgeStore: ObservableObject {
         }
     }
 
-    private func flushCacheScanBuffers(coalesce: CacheScanCoalesceBuffers, animate: Bool) {
-        guard coalesce.eventCount > 0 else { return }
+    /// `filtersEveryRow` runs the safety filter over every row found so far,
+    /// as the scan's last flush does; the flushes before it filter only the rows
+    /// they add. Filtering every row on every flush kept the main thread busy
+    /// for about 0.6 s of a 2 s scan, and the list it published at the end
+    /// passed the same filter either way.
+    private func flushCacheScanBuffers(coalesce: CacheScanCoalesceBuffers, animate: Bool, filtersEveryRow: Bool = false) {
+        // With nothing new and nothing staged there is nothing to filter, and
+        // publishing would replace the list with an empty one.
+        guard coalesce.eventCount > 0 || (filtersEveryRow && !stagedGeneralCacheItems.isEmpty) else { return }
         let snapshot = coalesce.takeSnapshot()
-        flushCacheScanBuffers(found: snapshot.found, sizes: snapshot.sizes, animate: animate)
+        flushCacheScanBuffers(found: snapshot.found, sizes: snapshot.sizes, animate: animate, filtersEveryRow: filtersEveryRow)
     }
 
     private func flushCacheScanBuffers(
         found: [CacheItem],
         sizes: [String: (sizeBytes: Int64, lastModified: Date)],
-        animate: Bool
+        animate: Bool,
+        filtersEveryRow: Bool
     ) {
-        guard !found.isEmpty || !sizes.isEmpty else { return }
+        guard !found.isEmpty || !sizes.isEmpty || filtersEveryRow else { return }
 
         var items = stagedGeneralCacheItems
         if !found.isEmpty {
-            items.append(contentsOf: found)
+            items.append(contentsOf: filtersEveryRow ? found : DeletionSafetyPolicy.filterCacheItems(found))
             for item in found {
                 pendingCacheSizePaths.formUnion(
                     item.locations.map { $0.path.standardizedFileURL.path }
@@ -5342,7 +5400,9 @@ final class PurgeStore: ObservableObject {
 
         items = DefinitionCacheGrouper.group(items)
         items = dedupeCacheItemsByPath(items)
-        items = DeletionSafetyPolicy.filterCacheItems(items)
+        if filtersEveryRow {
+            items = DeletionSafetyPolicy.filterCacheItems(items)
+        }
         stagedGeneralCacheItems = items
 
         let published = publishedCacheItems(from: items)

@@ -422,6 +422,10 @@ nonisolated final class AIModelScanner {
         let fm = FileManager.default
         let knownRoots = Set(AIModelScanPolicy.allRoots(home: home, environment: environment)
             .map { $0.resolvingSymlinksInPath().path })
+        // A folder the sweep meets is never a link (a link reads as neither file
+        // nor folder), so it can only be a known root of the same name. Resolving
+        // every folder's path to check cost a `lstat` per path component.
+        let knownRootNames = Set(knownRoots.map { ($0 as NSString).lastPathComponent })
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileSizeKey,
             .contentAccessDateKey, .contentModificationDateKey, .isPackageKey
@@ -434,12 +438,28 @@ nonisolated final class AIModelScanner {
             case descend
             case skip
         }
-        func judge(_ url: URL, values: URLResourceValues, level: Int) -> Verdict {
+        /// What the sweep reads of an entry, from `URLResourceValues` or from
+        /// `DirectoryListing`.
+        struct Seen {
+            let isDirectory: Bool
+            let isRegularFile: Bool
+            let bytes: Int64
+            let lastUsed: Date
+        }
+        func seen(_ values: URLResourceValues) -> Seen {
+            Seen(
+                isDirectory: values.isDirectory == true,
+                isRegularFile: values.isRegularFile == true,
+                bytes: Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0),
+                lastUsed: max(values.contentAccessDate ?? .distantPast, values.contentModificationDate ?? .distantPast)
+            )
+        }
+        func judge(_ url: URL, values: Seen, level: Int) -> Verdict {
             let name = url.lastPathComponent
-            if values.isDirectory == true {
+            if values.isDirectory {
                 if AIModelScanPolicy.sweepSkipsDirectory(named: name)
                     || level >= AIModelScanPolicy.looseWeightMaxDepth
-                    || knownRoots.contains(url.resolvingSymlinksInPath().path)
+                    || (knownRootNames.contains(name) && knownRoots.contains(url.resolvingSymlinksInPath().path))
                     || !ProtectedLocations.isReadable(url, access: access, home: home) {
                     return .skip
                 }
@@ -449,16 +469,11 @@ nonisolated final class AIModelScanner {
                 guard !isCancelled(), measured.bytes >= sizeFloor else { return .skip }
                 return .row(looseWeightRow(url, bytes: measured.bytes, lastUsed: measured.lastUsed))
             }
-            guard values.isRegularFile == true,
+            guard values.isRegularFile,
                   AIModelScanPolicy.isWeightFile(named: name, insideKnownStore: false)
             else { return .skip }
-            let bytes = Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
-            guard bytes >= sizeFloor else { return .skip }
-            return .row(looseWeightRow(
-                url,
-                bytes: bytes,
-                lastUsed: max(values.contentAccessDate ?? .distantPast, values.contentModificationDate ?? .distantPast)
-            ))
+            guard values.bytes >= sizeFloor else { return .skip }
+            return .row(looseWeightRow(url, bytes: values.bytes, lastUsed: values.lastUsed))
         }
 
         // The entries directly inside each root, in the order a walk of the
@@ -477,45 +492,67 @@ nonisolated final class AIModelScanner {
             }
         }
 
-        let found = ConcurrentMap.values(topLevel, width: looseWeightSweepWidth) { entry -> [LargeFile] in
+        // Folders are read on several threads, each as soon as one is free;
+        // the rows come back in the order one walk of each root met them.
+        var topSteps: [TreeStep<LargeFile, SweepFolder>] = []
+        for entry in topLevel {
             if isCancelled() { return [] }
-            switch judge(entry.url, values: entry.values, level: 1) {
+            switch judge(entry.url, values: seen(entry.values), level: 1) {
             case .row(let model):
-                return [model]
+                topSteps.append(.value(model))
             case .skip:
-                return []
+                continue
             case .descend:
                 // A walk of the root never goes into a package.
-                guard entry.values.isPackage != true else { return [] }
+                guard entry.values.isPackage != true else { continue }
+                topSteps.append(.child(.folder(entry.url, depth: 1)))
             }
-            guard let enumerator = fm.enumerator(
-                at: entry.url,
-                includingPropertiesForKeys: Array(keys),
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            ) else { return [] }
-            var models: [LargeFile] = []
-            while let next = enumerator.nextObject() {
-                if isCancelled() { return models }
-                guard let url = next as? URL, let values = try? url.resourceValues(forKeys: keys) else { continue }
-                // One level deeper than this walk counts, since it starts one
-                // folder below the root.
-                switch judge(url, values: values, level: enumerator.level + 1) {
+        }
+        let rows = ConcurrentMap.tree([SweepFolder.top], width: looseWeightSweepWidth, isCancelled: isCancelled) { folder -> [TreeStep<LargeFile, SweepFolder>] in
+            guard case .folder(let folderURL, let depth) = folder else { return topSteps }
+            // As `FileManager` lists with `.skipsHiddenFiles`.
+            let entries = DirectoryListing.entries(of: folderURL.path) ?? []
+            return entries.compactMap { entry in
+                guard !entry.isHidden else { return nil }
+                // Only a folder or a weight file over the floor can come to
+                // anything, so nothing else costs a URL.
+                if !entry.isDirectory {
+                    guard entry.isRegularFile, entry.allocatedBytes >= sizeFloor,
+                          AIModelScanPolicy.isWeightFile(named: entry.name, insideKnownStore: false)
+                    else { return nil }
+                }
+                let url = folderURL.appendingPathComponent(entry.name, isDirectory: entry.isDirectory)
+                let values = Seen(
+                    isDirectory: entry.isDirectory,
+                    isRegularFile: entry.isRegularFile,
+                    bytes: entry.allocatedBytes,
+                    lastUsed: max(entry.accessDate, entry.modificationDate)
+                )
+                switch judge(url, values: values, level: depth + 1) {
                 case .row(let model):
-                    if values.isDirectory == true { enumerator.skipDescendants() }
-                    models.append(model)
+                    return .value(model)
                 case .skip:
-                    if values.isDirectory == true { enumerator.skipDescendants() }
+                    return nil
                 case .descend:
-                    continue
+                    // A walk of the root never goes into a package, which only
+                    // a folder it would go into is asked about.
+                    guard (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage != true else { return nil }
+                    return .child(.folder(url, depth: depth + 1))
                 }
             }
-            return models
         }
-        return found.flatMap { $0 }
+        return isCancelled() ? [] : rows
     }
 
-    /// How many folders the loose-weight sweep walks at once.
-    static let looseWeightSweepWidth = 4
+    /// A folder the sweep reads: the roots' own entries, read above, or one
+    /// `depth` folders below a root.
+    private enum SweepFolder {
+        case top
+        case folder(URL, depth: Int)
+    }
+
+    /// How many folders the loose-weight sweep reads at once.
+    static let looseWeightSweepWidth = 8
 
     /// No `sourceLabel`: the row shows its folder, the way an ordinary Large
     /// Files row does, because the folder is what names the owning app.

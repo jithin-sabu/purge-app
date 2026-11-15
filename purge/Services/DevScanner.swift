@@ -354,7 +354,7 @@ nonisolated final class DevScanner {
     func discoverXcodeComponents(
         assetsRoot: URL = SimulatorRuntime.mobileAssetRoot,
         run: @escaping XcodeBuildTool.Runner = XcodeBuildTool.run,
-        measure: @escaping @Sendable (URL) -> Int64? = { FolderSizing.directoryByteSizeIfMeasurable(at: $0) }
+        measure: @escaping @Sendable (URL) -> Int64? = { FolderSizing.measuredSize(at: $0) }
     ) async -> [XcodeComponent] {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
@@ -1298,30 +1298,32 @@ nonisolated final class DevScanner {
 
         let protectedRoots = ProtectedLocations.resolvedRootPaths(home: home)
 
-        /// `realPath` is `directory` with its root's symlinks resolved, in a limited
-        /// scan only; nil with full access, where nothing needs checking.
-        func walk(directory: URL, realPath: String?, depth: Int, maxDepth: Int) {
-            // A newer scan replaced this one: stop rather than walk the rest of home.
-            guard depth <= maxDepth, !Task.isCancelled else { return }
-            directoriesWalked += 1
-            onDirectory?(directory)
+        /// One folder the walk enters. `realPath` is the folder with its root's
+        /// symlinks resolved, in a limited scan only; nil with full access, where
+        /// nothing needs checking.
+        struct Folder {
+            let url: URL
+            let realPath: String?
+            let depth: Int
+            let maxDepth: Int
+            var types: [ProjectType] = []
+            var children: [Int] = []
+        }
 
+        /// Reads one folder: its project markers, and the folders to walk next.
+        func read(_ folder: Folder) -> (types: [ProjectType], next: [(URL, String?)]) {
             // One listing serves the project markers and the walk below (#190).
             let listing = try? fm.contentsOfDirectory(
-                at: directory,
+                at: folder.url,
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey, .nameKey],
                 options: [.skipsPackageDescendants]
             )
+            let types = Self.projectTypes(at: folder.url, listing: listing)
 
-            let types = Self.projectTypes(at: directory, listing: listing)
-            if !types.isEmpty {
-                discoveredRoots.append((directory, types))
-            }
+            guard folder.depth < folder.maxDepth, let entries = listing else { return (types, []) }
+            guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else { return (types, []) }
 
-            guard depth < maxDepth, let entries = listing else { return }
-
-            guard entries.count <= Self.maxDirectoryEntriesBeforeSkip else { return }
-
+            var next: [(URL, String?)] = []
             for entry in entries {
                 let name = entry.lastPathComponent
                 /// Skip invisible dot folders (noise and huge caches handled elsewhere).
@@ -1332,7 +1334,7 @@ nonisolated final class DevScanner {
                 // home root walks one level down, which would open Desktop,
                 // Documents and Downloads. `realPath` is the folder's resolved path,
                 // so a root that links back into home is judged by where it lands.
-                let entryRealPath = realPath.map { $0 + "/" + name }
+                let entryRealPath = folder.realPath.map { $0 + "/" + name }
                 if let entryRealPath, ProtectedLocations.isPath(entryRealPath, inAnyOf: protectedRoots) { continue }
 
                 // Never through a link: `~/Projects/client` pointing into Documents
@@ -1344,10 +1346,13 @@ nonisolated final class DevScanner {
                 let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
                 guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
 
-                walk(directory: entry, realPath: entryRealPath, depth: depth + 1, maxDepth: maxDepth)
+                next.append((entry, entryRealPath))
             }
+            return (types, next)
         }
 
+        var folders: [Folder] = []
+        var rootIndices: [Int] = []
         var walkedDepths: [FileIdentity: Int] = [:]
         for root in roots where !Task.isCancelled {
             // A limited scan resolves the root with `readlink` alone first, so a
@@ -1366,8 +1371,48 @@ nonisolated final class DevScanner {
             let effectiveMaxDepth = (root.path == home.path) ? 1 : maxDepth
             // After the checks above, since `stat` follows a link.
             guard Self.shouldWalk(root, toDepth: effectiveMaxDepth, walkedDepths: &walkedDepths) else { continue }
-            walk(directory: root, realPath: realRoot, depth: 0, maxDepth: effectiveMaxDepth)
+            rootIndices.append(folders.count)
+            folders.append(Folder(url: root, realPath: realRoot, depth: 0, maxDepth: effectiveMaxDepth))
         }
+
+        // The folders at one depth are read side by side, then the next depth.
+        // Reading them one at a time took about 2.5 s for 4,700 folders.
+        var level = rootIndices
+        while !level.isEmpty, !Task.isCancelled {
+            // Entered one by one on this thread, so a scan cancelled as it
+            // enters a folder reads nothing past it.
+            var entered: [Int] = []
+            for index in level {
+                guard !Task.isCancelled else { break }
+                onDirectory?(folders[index].url)
+                entered.append(index)
+            }
+            guard !Task.isCancelled else { break }
+            level = entered
+            let reads = ConcurrentMap.values(level.map { folders[$0] }, read)
+            directoriesWalked += level.count
+            var nextLevel: [Int] = []
+            for (index, result) in zip(level, reads) {
+                folders[index].types = result.types
+                let parent = folders[index]
+                for (url, realPath) in result.next {
+                    folders[index].children.append(folders.count)
+                    nextLevel.append(folders.count)
+                    folders.append(Folder(url: url, realPath: realPath, depth: parent.depth + 1, maxDepth: parent.maxDepth))
+                }
+            }
+            level = nextLevel
+        }
+
+        // Project roots in the order a depth-first walk meets them, root by root.
+        func collect(_ index: Int) {
+            let folder = folders[index]
+            if !folder.types.isEmpty {
+                discoveredRoots.append((folder.url, folder.types))
+            }
+            folder.children.forEach(collect)
+        }
+        rootIndices.forEach(collect)
 
         discoveredRoots = Self.firstOfEachProject(discoveredRoots)
         discoveredRoots.sort { $0.0.path.count < $1.0.path.count }
