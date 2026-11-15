@@ -12,6 +12,10 @@ import CoreGraphics
 /// row slot. Swift task cancellation cancels the underlying QuickLook request, so rows that
 /// scroll off-screen before completion don't waste work.
 ///
+/// QuickLook maps the file to draw it, which moves the file's access time, the
+/// "Last used" the next scan shows. Each request notes the times before and
+/// after in `FileAccessLedger`, so the scan can show the user's own (#373).
+///
 /// Scoped to the Large Files feature; nothing else in the app uses this.
 final class LargeFileThumbnailService: @unchecked Sendable {
     static let shared = LargeFileThumbnailService()
@@ -23,6 +27,7 @@ final class LargeFileThumbnailService: @unchecked Sendable {
     static let countLimit = 500
 
     private let generator = QLThumbnailGenerator.shared
+    private let accessLedger = FileAccessLedger.shared
 
     private let cache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
@@ -75,6 +80,7 @@ final class LargeFileThumbnailService: @unchecked Sendable {
             representationTypes: .thumbnail
         )
 
+        let before = FileAccessLedger.Times(url: url)
         let image: NSImage? = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 generator.generateBestRepresentation(for: request) { representation, _ in
@@ -84,6 +90,9 @@ final class LargeFileThumbnailService: @unchecked Sendable {
         } onCancel: {
             generator.cancel(request)
         }
+        // Read even when QuickLook made nothing: it may have mapped the file
+        // before it gave up.
+        accessLedger.record(url: url, before: before, after: FileAccessLedger.Times(url: url))
 
         guard let image else { return nil }
         let fitted = Self.fittedThumbnail(image, pointSize: pointSize, scale: scale)

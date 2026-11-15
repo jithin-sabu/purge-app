@@ -1,0 +1,207 @@
+import Foundation
+
+/// The access times Purge moved itself, so Large Files' "Last used" shows the
+/// user's own use and not Purge's (#373).
+///
+/// "Last used" is a file's access time. On APFS a memory-mapped read moves it
+/// every time. Quick Look maps files, in its own processes, so no I/O policy
+/// Purge sets can stop it: the preview panel moved the access time of every
+/// file it showed, and a thumbnail moves it for images and PDFs. At the next
+/// scan those rows read "Today", and the age filter dropped files it had shown
+/// a minute before.
+///
+/// So Purge reads the times before Quick Look reads the file and again after.
+/// When they moved, this keeps the earlier access time, and the scan shows it
+/// while the file still has exactly the access and modification times Quick
+/// Look left. Once the user opens the file, the access time moves again, the entry
+/// no longer matches and is dropped, and the scan shows the new time. A file
+/// written since is dropped the same way.
+///
+/// Entries are kept by standardized path, as `LargeFile.path` spells it, in one
+/// JSON file in Purge's Application Support folder, because the next scan is
+/// often after a relaunch. Times are seconds since 1970, not ISO 8601 dates,
+/// which drop the fractions an exact match needs.
+nonisolated final class FileAccessLedger: @unchecked Sendable {
+    static let shared = FileAccessLedger(
+        fileURL: AppSupportFolder.url().appendingPathComponent("access-times.json", isDirectory: false)
+    )
+
+    /// When `watch` checks a file after the preview panel shows it. The panel
+    /// reads a file as it loads it, and Purge can't tell when that is done.
+    static let previewChecks: [TimeInterval] = [1, 3, 10]
+
+    /// One file's times. The two dates match the file's own to within this.
+    /// The listing and `URLResourceValues` round nanoseconds differently.
+    static let matchTolerance: Double = 0.000_001
+
+    struct Entry: Codable, Equatable, Sendable {
+        /// The access time Purge's read left on the file.
+        var causedAccess: Double
+        /// The access time before Purge first moved it: the user's own.
+        var userAccess: Double
+        /// The modification time around the read.
+        var modification: Double
+        /// When the entry was made, so the oldest go first past `maxEntries`.
+        var recorded: Double
+    }
+
+    /// A file's access and modification times, in seconds since 1970, as
+    /// `lstat` reads them.
+    struct Times: Equatable, Sendable {
+        let access: Double
+        let modification: Double
+
+        init(access: Double, modification: Double) {
+            self.access = access
+            self.modification = modification
+        }
+
+        /// Nil when the file can't be read.
+        init?(url: URL) {
+            var info = stat()
+            guard lstat(url.path, &info) == 0 else { return nil }
+            access = Self.seconds(info.st_atimespec)
+            modification = Self.seconds(info.st_mtimespec)
+        }
+
+        private static func seconds(_ time: timespec) -> Double {
+            Double(time.tv_sec) + Double(time.tv_nsec) / 1_000_000_000
+        }
+    }
+
+    let fileURL: URL
+    private let maxEntries: Int
+    private let lock = NSLock()
+    private var loaded: [String: Entry]?
+    /// Records and writes run here, off the caller's thread: the thumbnail
+    /// service calls in from the main actor.
+    private let queue = DispatchQueue(label: "io.getpurge.file-access-ledger", qos: .utility)
+    private var writeScheduled = false
+
+    init(fileURL: URL, maxEntries: Int = 5_000) {
+        self.fileURL = fileURL
+        self.maxEntries = maxEntries
+    }
+
+    /// The access time the scan shows for the file at `url`: the user's own
+    /// when Purge moved it and the file still has the times Purge left, else
+    /// `access` as it is.
+    func userAccess(of url: URL, access: Date, modification: Date) -> Date {
+        if lock.withLock({ loadLocked().isEmpty }) { return access }
+        let key = Self.key(url)
+        return lock.withLock {
+            var entries = loadLocked()
+            guard let entry = entries[key] else { return access }
+            if Self.matches(entry.causedAccess, access.timeIntervalSince1970),
+               Self.matches(entry.modification, modification.timeIntervalSince1970) {
+                return Date(timeIntervalSince1970: entry.userAccess)
+            }
+            // The user opened the file, or it was written, since Purge read it.
+            entries[key] = nil
+            loaded = entries
+            scheduleWriteLocked()
+            return access
+        }
+    }
+
+    /// Notes what a read of Purge's did to the file at `url`, from its times
+    /// right before and right after the read. Nothing is kept when the access
+    /// time didn't move, or when the file was written in between.
+    func record(url: URL, before: Times?, after: Times?, now: Date = Date()) {
+        guard let before, let after,
+              Self.matches(before.modification, after.modification),
+              !Self.matches(before.access, after.access) else { return }
+        let key = Self.key(url)
+        queue.async { [self] in
+            lock.withLock {
+                var entries = loadLocked()
+                // A second read after the first: the user's time is still the
+                // one from before the first.
+                var userAccess = before.access
+                if let earlier = entries[key],
+                   Self.matches(earlier.causedAccess, before.access),
+                   Self.matches(earlier.modification, before.modification) {
+                    userAccess = earlier.userAccess
+                }
+                entries[key] = Entry(
+                    causedAccess: after.access,
+                    userAccess: userAccess,
+                    modification: after.modification,
+                    recorded: now.timeIntervalSince1970
+                )
+                if entries.count > maxEntries {
+                    let oldest = entries.sorted { $0.value.recorded < $1.value.recorded }
+                        .prefix(entries.count - maxEntries)
+                    for (path, _) in oldest { entries[path] = nil }
+                }
+                loaded = entries
+                scheduleWriteLocked()
+            }
+        }
+    }
+
+    /// Notes what a read in another process does to the file at `url` over
+    /// the next few seconds, for a reader that gives no sign when it is done:
+    /// the Quick Look panel. Call it before the read starts. A change after the
+    /// last check, such as the user opening the file, is the user's own.
+    func watch(_ url: URL, checks: [TimeInterval] = previewChecks) {
+        let before = Times(url: url)
+        for delay in checks {
+            queue.asyncAfter(deadline: .now() + delay) { [self] in
+                record(url: url, before: before, after: Times(url: url))
+            }
+        }
+    }
+
+    /// The entry kept for `url`, after every pending record.
+    func entry(for url: URL) -> Entry? {
+        queue.sync {}
+        return lock.withLock { loadLocked()[Self.key(url)] }
+    }
+
+    /// Waits for every pending record and writes the file now.
+    func flush() {
+        queue.sync { writeNow() }
+    }
+
+    private static func key(_ url: URL) -> String {
+        url.standardizedFileURL.path
+    }
+
+    private static func matches(_ lhs: Double, _ rhs: Double) -> Bool {
+        abs(lhs - rhs) < matchTolerance
+    }
+
+    // MARK: - Disk
+
+    private func loadLocked() -> [String: Entry] {
+        if let loaded { return loaded }
+        let disk = (try? Data(contentsOf: fileURL))
+            .flatMap { try? JSONDecoder().decode([String: Entry].self, from: $0) } ?? [:]
+        loaded = disk
+        return disk
+    }
+
+    /// Several records in a row, as a list full of new thumbnails makes, cost
+    /// one write.
+    private func scheduleWriteLocked() {
+        guard !writeScheduled else { return }
+        writeScheduled = true
+        queue.asyncAfter(deadline: .now() + 1) { [self] in writeNow() }
+    }
+
+    private func writeNow() {
+        let entries: [String: Entry]? = lock.withLock {
+            writeScheduled = false
+            return loaded
+        }
+        guard let entries else { return }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(entries) else { return }
+        try? FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try? data.write(to: fileURL, options: [.atomic])
+    }
+}
