@@ -442,7 +442,7 @@
 
 /* crashpad-pending */
 "Unsent Crash Reports" = "未发送的崩溃报告";
-"Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first, or it saves no new reports until it opens again." = "应用已保存但尚未发送的崩溃报告。没有它们应用也能正常运行，但开发者将收不到这些报告。请先退出应用，否则在应用再次打开之前，它不会保存新的报告。";
+"Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first." = "应用已保存但尚未发送的崩溃报告。没有它们应用也能正常运行，但开发者将收不到这些报告。请先退出应用。";
 
 /* iossimulators */
 "iOS Simulators" = "iOS 模拟器";

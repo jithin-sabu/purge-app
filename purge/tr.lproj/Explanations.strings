@@ -331,7 +331,7 @@
 "Records of app crashes saved by macOS. Safe to delete. These are only useful if you are reporting a bug to an app developer." = "macOS'in kaydettiği uygulama çökme kayıtları. Silmek güvenlidir. Bunlar yalnızca bir uygulama geliştiricisine hata bildiriyorsanız işe yarar.";
 
 "Unsent Crash Reports" = "Gönderilmemiş Çökme Raporları";
-"Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first, or it saves no new reports until it opens again." = "Uygulamaların kaydettiği ama henüz göndermediği çökme raporları. Uygulamalar bunlar olmadan da çalışır, ancak geliştiricileri bu raporları hiç almaz. Önce uygulamadan çıkın; yoksa uygulama yeniden açılana kadar yeni rapor kaydetmez.";
+"Crash reports apps saved but have not sent yet. Apps work without them, but their developers never get these. Quit the app first." = "Uygulamaların kaydettiği ama henüz göndermediği çökme raporları. Uygulamalar bunlar olmadan da çalışır, ancak geliştiricileri bu raporları hiç almaz. Önce uygulamadan çıkın.";
 
 "iOS Simulators" = "iOS Simülatörleri";
 "Virtual iPhone and iPad devices Xcode tests apps on. Deleting one also deletes its apps and data. Xcode can create a new one when you need it." = "Xcode'un uygulamaları test ettiği sanal iPhone ve iPad aygıtları. Birini silmek uygulamalarını ve verilerini de siler. Xcode ihtiyaç duyduğunuzda yenisini oluşturabilir.";
