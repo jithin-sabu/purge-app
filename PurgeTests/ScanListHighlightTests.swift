@@ -221,3 +221,69 @@ struct ScanListKeyTests {
         #expect(key(48, "\t") == nil)
     }
 }
+
+/// The ring shows only after a list key, like a browser's `:focus-visible`: a
+/// click makes its row current without the ring, and the next key shows it.
+@MainActor
+@Suite("Scan list ring follows the keyboard")
+struct ScanListRingTests {
+    private func controller(toggled: @escaping (String) -> Void = { _ in }) -> ScanListKeyboardController<String> {
+        let controller = ScanListKeyboardController<String>()
+        controller.update(
+            rows: [["a"], ["b"], ["c"]],
+            actions: ScanListKeyActions(
+                toggle: { id in toggled(id); return true },
+                trash: { _ in true },
+                previewURL: { _ in nil },
+                copyURLs: { _ in [] },
+                stillExists: { _ in true }
+            ),
+            isBlocked: { false }
+        )
+        return controller
+    }
+
+    @Test
+    func aClickMakesTheRowCurrentWithoutTheRing() {
+        let controller = controller()
+        controller.highlight("b")
+        #expect(controller.highlight.id == "b")
+        #expect(!controller.highlight.showsRing)
+    }
+
+    /// Return right after a click acts on the clicked row and shows the ring there.
+    @Test
+    func aKeyAfterAClickShowsTheRingOnTheClickedRow() {
+        var toggled: [String] = []
+        let controller = controller { toggled.append($0) }
+        controller.highlight("b")
+
+        #expect(controller.perform(.toggle, isRepeat: false))
+        #expect(toggled == ["b"])
+        #expect(controller.highlight.id == "b")
+        #expect(controller.highlight.showsRing)
+    }
+
+    @Test
+    func theNextClickHidesTheRingAgain() {
+        let controller = controller()
+        controller.highlight("a")
+        _ = controller.perform(.toggle, isRepeat: false)
+        #expect(controller.highlight.showsRing)
+
+        controller.highlight("a")
+        #expect(!controller.highlight.showsRing)
+        controller.highlight("c")
+        #expect(controller.highlight.id == "c")
+        #expect(!controller.highlight.showsRing)
+    }
+
+    /// A key the list doesn't use, like Return with nothing current, shows nothing.
+    @Test
+    func anUnusedKeyShowsNoRing() {
+        let controller = controller()
+        #expect(!controller.perform(.toggle, isRepeat: false))
+        #expect(controller.highlight.id == nil)
+        #expect(!controller.highlight.showsRing)
+    }
+}

@@ -19,6 +19,10 @@ import SwiftUI
 @MainActor
 final class ScanHighlight<ID: Hashable>: ObservableObject {
     @Published var id: ID?
+    /// Whether the ring shows on the current row. Like a browser's
+    /// `:focus-visible`, it shows once a list key is pressed and hides on the
+    /// next click: a click still makes its row current, without the ring.
+    @Published var showsRing = false
 }
 
 /// What the keys do to a row of one tab. Every action returns whether it acted;
@@ -89,8 +93,10 @@ final class ScanListKeyboardController<ID: Hashable>: ScanListKeyResponder {
         }
     }
 
-    /// A click on a row makes it the current one. No scroll: it is on screen.
+    /// A click on a row makes it the current one, without the ring. No scroll:
+    /// it is on screen.
     func highlight(_ id: ID) {
+        if highlight.showsRing { highlight.showsRing = false }
         guard highlight.id != id else { return }
         highlight.id = id
         followWithPreview(id)
@@ -124,6 +130,14 @@ final class ScanListKeyboardController<ID: Hashable>: ScanListKeyResponder {
     }
 
     func perform(_ key: ScanListKey, isRepeat: Bool) -> Bool {
+        let used = performKey(key, isRepeat: isRepeat)
+        // Any key the list used shows the ring on the current row, the one a
+        // click made current included.
+        if used, highlight.id != nil, !highlight.showsRing { highlight.showsRing = true }
+        return used
+    }
+
+    private func performKey(_ key: ScanListKey, isRepeat: Bool) -> Bool {
         guard let actions else { return false }
         let current = highlight.id.flatMap { orderSet.contains($0) ? $0 : nil }
 
@@ -438,7 +452,7 @@ private struct ScanListHighlightRing<ID: Hashable>: View {
     private static var gap: CGFloat { AppStyle.Spacing.xxxSmall }
 
     var body: some View {
-        if highlight.id == id {
+        if highlight.id == id, highlight.showsRing {
             switch placement {
             case .outside:
                 RoundedRectangle(cornerRadius: cornerRadius + Self.gap, style: .continuous)
