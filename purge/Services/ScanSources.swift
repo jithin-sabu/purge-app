@@ -30,8 +30,9 @@ struct ScanSources {
     var gitStatuses: ([URL]) async -> [String: GitWorktreeStatus]
     /// Runs before a full scan starts its parts side by side. The live one
     /// lists every app container's caches folder alone first (see
-    /// `PurgeStore.runFullScan`); tests read none of the user's folders.
-    var prepareFullScan: (ScanAccess) async -> Void = { _ in }
+    /// `PurgeStore.runFullScan`); tests leave it nil and read none of the
+    /// user's folders.
+    var prepareFullScan: ((ScanAccess) async -> Void)? = nil
 
     static func live(
         cacheScanner: CacheScanner,

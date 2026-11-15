@@ -3,9 +3,10 @@ import Testing
 @testable import Purge
 
 /// The App Caches scan publishes its rows in flushes. Flushes during the scan
-/// run the safety filter only over the rows they add; the scan's last flush
-/// runs it over every row. These pin that a row the policy refuses is never on
-/// the list, during the scan or after it.
+/// run the safety filter over the rows they add; the scan's last flush, which
+/// a stopped scan runs too, runs it over every row. These pin that a row the
+/// policy refuses when it arrives is never on the list, and that the list a
+/// scan leaves behind has passed the filter.
 ///
 /// Every row is a folder under `~/Library/Caches` that is never made (#171).
 @MainActor

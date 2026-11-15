@@ -79,9 +79,13 @@ nonisolated final class CacheScanner {
             cachesFolderJobs.append(SizeJob(path: directory.standardizedFileURL))
         }
 
-        // `~/Library/Caches` holds most rows, and no later pass can take one of
-        // them, so its folders are sized while the passes below run.
-        async let cachesFolderSizing: Void = runSizeJobs(cachesFolderJobs, access: access, continuation: continuation)
+        // `~/Library/Caches` holds most rows, so its folders are sized while the
+        // passes below run. Their sizes go out only after every pass has sent
+        // its rows: a row is published once it has a size, and its safety
+        // level is then pinned, so a row from a later pass that joins it under
+        // the same key, at a more cautious level, must be there first.
+        let heldSizes = HeldScanEvents(continuation)
+        async let cachesFolderSizing: Void = runSizeJobs(cachesFolderJobs, access: access, send: heldSizes.send)
 
         // Each pass reads its own folders, so they run side by side. A path two
         // passes find stays with the earlier pass, as when they ran one after
@@ -107,6 +111,7 @@ nonisolated final class CacheScanner {
                 sizeJobs.append(contentsOf: item.locations.map { SizeJob(path: $0.path.standardizedFileURL) })
             }
         }
+        heldSizes.release()
 
         ScanPhaseTiming.finish(
             "app cache discovery",
@@ -115,7 +120,7 @@ nonisolated final class CacheScanner {
         )
 
         let sizingStart = Date()
-        await runSizeJobs(sizeJobs, access: access, continuation: continuation)
+        await runSizeJobs(sizeJobs, access: access, send: { continuation.yield($0) })
         await cachesFolderSizing
         ScanPhaseTiming.finish(
             "app cache sizing",
@@ -565,7 +570,7 @@ nonisolated final class CacheScanner {
     private func runSizeJobs(
         _ jobs: [SizeJob],
         access: ScanAccess,
-        continuation: AsyncStream<CacheScanEvent>.Continuation
+        send: @escaping (CacheScanEvent) -> Void
     ) async {
         // Discovery already dropped locked paths; this keeps `du` honest if a
         // new discovery path forgets to.
@@ -578,7 +583,7 @@ nonisolated final class CacheScanner {
         _ = FolderSizing.walkedSizes(at: jobs.map(\.path)) { path, bytes in
             guard let job = jobsByPath[path] else { return }
             let modified = FolderSizing.contentModificationDate(at: job.path)
-            continuation.yield(.sizeResolved(path: path, sizeBytes: bytes ?? 0, lastModified: modified))
+            send(.sizeResolved(path: path, sizeBytes: bytes ?? 0, lastModified: modified))
         }
     }
 
@@ -599,3 +604,40 @@ nonisolated final class CacheScanner {
         ]
     }
 }
+
+/// Scan events held back until `release()`, then sent in the order they came,
+/// and every later one sent at once. `send` may be called from any thread.
+nonisolated final class HeldScanEvents<Event>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held: [Event]? = []
+    private let deliver: (Event) -> Void
+
+    init(_ continuation: AsyncStream<Event>.Continuation) {
+        deliver = { continuation.yield($0) }
+    }
+
+    init(deliver: @escaping (Event) -> Void) {
+        self.deliver = deliver
+    }
+
+    func send(_ event: Event) {
+        lock.lock()
+        defer { lock.unlock() }
+        if held != nil {
+            held?.append(event)
+        } else {
+            deliver(event)
+        }
+    }
+
+    /// Sends what was held, with the lock held so nothing sent meanwhile
+    /// overtakes it.
+    func release() {
+        lock.lock()
+        defer { lock.unlock() }
+        let events = held ?? []
+        held = nil
+        events.forEach(deliver)
+    }
+}
+

@@ -81,7 +81,10 @@ struct ScanQueueStoreTests {
         let store = fake.makeStore()
         fake.holdsGeneral = true
         store.requestScan(.cachesAndDevTools)
-        #expect(await eventually { store.isScanningAll })
+        // The full scan has started its App Caches half, which the held scan
+        // keeps open. Its git set-up comes first and can still be running when
+        // `isScanningAll` turns true.
+        #expect(await eventually { store.isScanningAll && fake.generalAccesses.count == 1 })
 
         // What a scheduled clean's rescan does.
         fake.holdsGeneral = false
@@ -225,7 +228,10 @@ struct ScanQueueStoreTests {
         store.requestScan(.cachesAndDevTools)
         #expect(await eventually { fake.developerAccesses == [.full] })
 
-        #expect(store.overviewPhase(for: .appCaches) == .ready)
+        // The halves run side by side, so App Caches may still be finishing
+        // when Dev Tools starts. It is done while Dev Tools, held, still scans.
+        #expect(await eventually { store.overviewPhase(for: .appCaches) == .ready })
+        #expect(store.isScanningDeveloper)
         #expect(!store.isShowingRecordedFigure(for: .appCaches))
         fake.cleanUp()
         #expect(await eventually { isIdle(store) })

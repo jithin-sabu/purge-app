@@ -37,14 +37,22 @@ nonisolated final class FolderWalker: @unchecked Sendable {
     private var started = false
     private let threadCount: Int
 
-    init(threadCount: Int) {
+    /// How long one call waits before it gives up on the folders not done
+    /// yet, as a `du` run was stopped after 300 s. A read stuck on a dead
+    /// network or device mount can't be interrupted; this only stops the scan
+    /// from waiting on it.
+    private let timeout: TimeInterval
+
+    init(threadCount: Int, timeout: TimeInterval = 300) {
         self.threadCount = threadCount
+        self.timeout = timeout
     }
 
     /// The size of each folder in `roots`, in their order; nil where a folder
     /// could not be read. `onRootDone` hears each folder as it finishes, on a
-    /// walker thread. Blocks until every folder is done, or `isCancelled`
-    /// turns true: then folders not finished yet come back nil.
+    /// walker thread, and has returned for every folder before this does.
+    /// Blocks until every folder is done, `isCancelled` turns true, or the
+    /// timeout passes: then folders not finished yet come back nil.
     func sizes(
         of roots: [String],
         staysOnVolume: Bool,
@@ -96,8 +104,9 @@ nonisolated final class FolderWalker: @unchecked Sendable {
             enqueue(rootJobs)
         }
         // Waits in short steps so a cancelled caller lets go quickly.
+        let deadline = DispatchTime.now() + timeout
         while request.done.wait(timeout: .now() + .milliseconds(50)) == .timedOut {
-            if isCancelled() {
+            if isCancelled() || DispatchTime.now() >= deadline {
                 request.cancel()
                 break
             }
@@ -207,6 +216,10 @@ nonisolated final class FolderWalker: @unchecked Sendable {
         private var finished: [Bool]
         private var linked: [Set<FileKey>]
         private var remaining: Int
+        /// `onRootDone` calls under way. `done` waits for them, so a caller
+        /// that finishes a stream after the walk loses no folder's report.
+        private var callbacksInFlight = 0
+        private var signaled = false
         private var cancelled = false
         private var entryCount = 0
         private var directoryCount = 0
@@ -252,10 +265,25 @@ nonisolated final class FolderWalker: @unchecked Sendable {
                 unreadable[root] = true
             }
             remaining -= 1
-            let last = remaining == 0
+            callbacksInFlight += 1
             lock.unlock()
             onRootDone?(root, bytes)
-            if last { done.signal() }
+            callbackReturned()
+        }
+
+        /// Signals `done` once every folder is finished and every report has
+        /// been heard. Called with `lock` held.
+        private func signalIfDone() {
+            guard remaining == 0, callbacksInFlight == 0, !signaled else { return }
+            signaled = true
+            done.signal()
+        }
+
+        private func callbackReturned() {
+            lock.lock()
+            callbacksInFlight -= 1
+            signalIfDone()
+            lock.unlock()
         }
 
         /// Adds one directory's reading and returns the folders to read next.
@@ -267,6 +295,7 @@ nonisolated final class FolderWalker: @unchecked Sendable {
             if cancelled {
                 unreadable[root] = true
             } else if let read {
+                if read.isIncomplete { unreadable[root] = true }
                 entryCount += read.entryCount
                 directoryCount += 1
                 blocks[root] += read.blocks
@@ -281,21 +310,21 @@ nonisolated final class FolderWalker: @unchecked Sendable {
             }
             pending[root] -= 1
             var doneBytes: Int64?? = nil
-            var last = false
             if pending[root] == 0, !finished[root] {
                 finished[root] = true
                 remaining -= 1
-                last = remaining == 0
                 // A cancelled caller has stopped listening.
-                if !cancelled {
+                if !cancelled, onRootDone != nil {
                     doneBytes = .some(unreadable[root] ? nil : total(root))
+                    callbacksInFlight += 1
                 }
             }
+            signalIfDone()
             lock.unlock()
             if let doneBytes {
                 onRootDone?(root, doneBytes)
+                callbackReturned()
             }
-            if last { done.signal() }
             return children
         }
 
@@ -330,6 +359,8 @@ nonisolated struct DirectoryReading {
     /// The latest access or change of a regular file in it, in seconds since
     /// 1970; only `.regularFiles` reads it.
     var latest: Double = -.infinity
+    /// The listing failed part way, so the folder's figure would be short.
+    var isIncomplete = false
 }
 
 nonisolated struct FileKey: Hashable {
@@ -348,8 +379,12 @@ nonisolated final class DirectoryReader {
     private static func attributes(withTimes: Bool) -> attrlist {
         var list = attrlist()
         list.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
+        // `ATTR_CMN_ERROR` reports an entry whose attributes can't be read in
+        // that entry, which is then skipped. Without it, one such entry fails
+        // the whole call.
         list.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS) | attrgroup_t(ATTR_CMN_NAME)
             | attrgroup_t(ATTR_CMN_DEVID) | attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_FILEID)
+            | attrgroup_t(ATTR_CMN_ERROR)
         if withTimes {
             list.commonattr |= attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_ACCTIME)
         }
@@ -391,6 +426,10 @@ nonisolated final class DirectoryReader {
             case .regularFiles: count = getattrlistbulk(fd, &attributesWithTimes, buffer, Self.bufferSize, 0)
             }
             if count < 0, errno == EINTR { continue }
+            if count < 0 {
+                reading.isIncomplete = true
+                break
+            }
             guard count > 0 else { break }
             var entry = buffer
             for _ in 0..<count {
@@ -414,6 +453,12 @@ nonisolated final class DirectoryReader {
         var field = entry + 4
         let returned = field.loadUnaligned(as: attribute_set_t.self)
         field += MemoryLayout<attribute_set_t>.size
+        // Right after the returned set. An entry that could not be read is
+        // left out, as `du` leaves out an entry it can't stat.
+        if returned.commonattr & attrgroup_t(ATTR_CMN_ERROR) != 0 {
+            guard field.loadUnaligned(as: UInt32.self) == 0 else { return }
+            field += MemoryLayout<UInt32>.size
+        }
         var nameStart: UnsafeMutableRawPointer?
         if returned.commonattr & attrgroup_t(ATTR_CMN_NAME) != 0 {
             let reference = field.loadUnaligned(as: attrreference_t.self)
@@ -538,7 +583,7 @@ nonisolated enum DirectoryListing {
         list.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
         list.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS) | attrgroup_t(ATTR_CMN_NAME)
             | attrgroup_t(ATTR_CMN_OBJTYPE) | attrgroup_t(ATTR_CMN_MODTIME) | attrgroup_t(ATTR_CMN_ACCTIME)
-            | attrgroup_t(ATTR_CMN_FLAGS)
+            | attrgroup_t(ATTR_CMN_FLAGS) | attrgroup_t(ATTR_CMN_ERROR)
         list.fileattr = attrgroup_t(ATTR_FILE_ALLOCSIZE) | attrgroup_t(ATTR_FILE_DATALENGTH)
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: bufferSize, alignment: 16)
         defer { buffer.deallocate() }
@@ -546,6 +591,8 @@ nonisolated enum DirectoryListing {
         while true {
             let count = getattrlistbulk(fd, &list, buffer, bufferSize, 0)
             if count < 0, errno == EINTR { continue }
+            // A listing that fails part way is not passed off as the folder.
+            if count < 0 { return nil }
             guard count > 0 else { break }
             var entry = buffer
             for _ in 0..<count {
@@ -563,6 +610,12 @@ nonisolated enum DirectoryListing {
         var field = entry + 4
         let returned = field.loadUnaligned(as: attribute_set_t.self)
         field += MemoryLayout<attribute_set_t>.size
+        // Right after the returned set; an entry that could not be read is
+        // left out.
+        if returned.commonattr & attrgroup_t(ATTR_CMN_ERROR) != 0 {
+            guard field.loadUnaligned(as: UInt32.self) == 0 else { return nil }
+            field += MemoryLayout<UInt32>.size
+        }
         guard returned.commonattr & attrgroup_t(ATTR_CMN_NAME) != 0 else { return nil }
         let reference = field.loadUnaligned(as: attrreference_t.self)
         let name = String(cString: (field + Int(reference.attr_dataoffset)).assumingMemoryBound(to: CChar.self))

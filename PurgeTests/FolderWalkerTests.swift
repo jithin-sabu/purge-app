@@ -152,6 +152,24 @@ struct FolderWalkerTests {
         #expect(heard.sorted.map(\.1) == sizes)
     }
 
+    /// A caller may finish a stream as soon as the walk returns, so a folder's
+    /// report still being delivered must be heard first.
+    @Test
+    func theWalkReturnsOnlyAfterEveryReportIsHeard() throws {
+        let base = try makeTemporaryDirectory()
+        defer { try? fm.removeItem(at: base) }
+        let (one, two) = try makeTree(in: base)
+        let heard = Heard()
+
+        let sizes = FolderWalker.shared.sizes(of: [one.path, two.path], staysOnVolume: false) { index, bytes in
+            // The first folder's report is slow; the second finishes meanwhile.
+            if index == 0 { Thread.sleep(forTimeInterval: 0.5) }
+            heard.add(index, bytes)
+        }
+        #expect(heard.sorted.map(\.0) == [0, 1])
+        #expect(heard.sorted.map(\.1) == sizes)
+    }
+
     @Test(.timeLimit(.minutes(1)))
     func aCancelledCallReturnsAndTheWalkerKeepsWorking() throws {
         let base = try makeTemporaryDirectory()
@@ -250,6 +268,27 @@ struct ConcurrentMapTests {
         #expect(values == roots.flatMap(depthFirst))
     }
 
+    @Test(arguments: [1, 4, 12])
+    func treeHandsOutValuesInDepthFirstOrderAsTheyAreReady(width: Int) {
+        let roots = [0, 1000]
+        let batches = Batches()
+        let values = ConcurrentMap.tree(roots, width: width, isCancelled: { false }, onValues: { batches.add($0) }, read: steps)
+        #expect(batches.all == values)
+        #expect(values == roots.flatMap(depthFirst))
+    }
+
+    @Test
+    func heldEventsComeOutInOrderOnceReleased() {
+        let delivered = Batches()
+        let held = HeldScanEvents<Int>(deliver: { delivered.add([$0]) })
+        held.send(1)
+        held.send(2)
+        #expect(delivered.all.isEmpty)
+        held.release()
+        held.send(3)
+        #expect(delivered.all == [1, 2, 3])
+    }
+
     @Test
     func aCancelledTreeStops() {
         let values = ConcurrentMap.tree([0], width: 4, isCancelled: { true }, read: steps)
@@ -286,6 +325,24 @@ private extension URL {
     func appendingPathComponentCreatingParent(_ name: String) throws -> URL {
         try FileManager.default.createDirectory(at: self, withIntermediateDirectories: true)
         return appendingPathComponent(name)
+    }
+}
+
+/// Values handed out from other threads, in the order they came.
+private final class Batches: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Int] = []
+
+    func add(_ batch: [Int]) {
+        lock.lock()
+        values += batch
+        lock.unlock()
+    }
+
+    var all: [Int] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
     }
 }
 

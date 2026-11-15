@@ -683,6 +683,10 @@ final class PurgeStore: ObservableObject {
     /// Project discovery finished while the full scan it started with was still
     /// running. The project list is saved once that scan finishes.
     private var projectListFinishedDuringFullScan = false
+    /// The Dev Tools half of a full scan finished while the App Caches half
+    /// still ran beside it. Its lists are saved once the whole scan finishes,
+    /// as they were when the halves ran one after the other.
+    private var developerListsFinishedDuringFullScan = false
     private var scanCompletionHideTask: Task<Void, Never>?
     private var interactiveSafeCleanupRemovalTask: Task<Void, Never>?
     /// Set while an interactive safe cleanup tracks a live engine run, so
@@ -4244,8 +4248,10 @@ final class PurgeStore: ObservableObject {
         // the kernel, whether Purge may read it. Made while other folders were
         // being read, that sometimes stalled 5 s; made first, alone, it never
         // did, and the reads below find it decided.
-        await scanSources.prepareFullScan(access)
-        guard !Task.isCancelled, scanGeneration == generation else { return }
+        if let prepare = scanSources.prepareFullScan {
+            await prepare(access)
+            guard !Task.isCancelled, scanGeneration == generation else { return }
+        }
 
         // Project discovery walks the home folders and needs nothing from the
         // two scans below, so it starts with them rather than after them, and
@@ -4256,6 +4262,7 @@ final class PurgeStore: ObservableObject {
         // The two halves read different folders and share nothing, so they run
         // side by side; one after the other, the scan took their sum.
         readableWithoutFullDiskAccess.removeAll()
+        developerListsFinishedDuringFullScan = false
         async let developerHalf: Void = runDeveloperScan(generation: generation, access: access, inFullScan: true)
         await runGeneralScan(generation: generation, access: access, inFullScan: true)
         if !Task.isCancelled, scanGeneration == generation {
@@ -4267,6 +4274,10 @@ final class PurgeStore: ObservableObject {
             return
         }
         finishScan(generation: generation)
+        if developerListsFinishedDuringFullScan {
+            developerListsFinishedDuringFullScan = false
+            lastScanListsFinished(Self.developerListSections)
+        }
         if projectListFinishedDuringFullScan {
             projectListFinishedDuringFullScan = false
             lastScanListsFinished([.projects])
@@ -4311,7 +4322,10 @@ final class PurgeStore: ObservableObject {
         defer { coalesce.debounceTask?.cancel() }
 
         for await event in scanSources.general(access) {
-            guard scanGeneration == generation, !Task.isCancelled else { return }
+            guard scanGeneration == generation else { return }
+            // A stopped scan still ends with the flush below, which runs the
+            // safety filter over every row it leaves on the list.
+            if Task.isCancelled { break }
             switch event {
             case .found(let item):
                 cacheItemsFound += 1
@@ -4440,12 +4454,19 @@ final class PurgeStore: ObservableObject {
         }
 
         if scanGeneration == generation, !Task.isCancelled {
-            lastScanListsFinished([.devTools, .simulators, .runtimes, .xcodeComponents])
+            if inFullScan {
+                developerListsFinishedDuringFullScan = true
+            } else {
+                lastScanListsFinished(Self.developerListSections)
+            }
         }
         if !inFullScan {
             startProjectDiscovery(generation: generation, access: access)
         }
     }
+
+    /// The saved-scan lists the Dev Tools half finishes.
+    private static let developerListSections: [LastScanSection] = [.devTools, .simulators, .runtimes, .xcodeComponents]
 
     private func startProjectDiscovery(generation: Int, access: ScanAccess) {
         projectDiscoveryTask?.cancel()

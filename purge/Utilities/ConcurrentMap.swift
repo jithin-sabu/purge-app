@@ -126,28 +126,63 @@ extension ConcurrentMap {
     /// Reads a tree on several threads at once: `read` lists one folder and
     /// returns its steps in listing order. A thread takes the next folder as
     /// soon as it is free, so no folder waits for the others at its depth.
-    /// Returns every value in the order one depth-first walk meets them.
-    /// Blocks the calling thread; stops early once `isCancelled` turns true.
+    /// Returns every value in the order one depth-first walk meets them, and
+    /// hands them to `onValues` in that order as soon as every folder before
+    /// them is read, so a caller can show them while the walk goes on.
+    /// `onValues` runs on a reading thread with the walk's lock held, so it
+    /// must be quick. Blocks the calling thread; once `isCancelled` turns true
+    /// it stops and returns the values handed out so far.
     static func tree<Item, Value>(
         _ roots: [Item],
         width: Int,
         isCancelled: () -> Bool,
+        onValues: (([Value]) -> Void)? = nil,
         read: (Item) -> [TreeStep<Value, Item>]
     ) -> [Value] {
-        // Each node's steps, with children replaced by their node's index.
-        var nodes: [[TreeStep<Value, Int>]] = []
+        // Each node's steps, with children replaced by their node's index; nil
+        // until the node is read.
+        var nodes: [[TreeStep<Value, Int>]?] = Array(repeating: nil, count: roots.count)
         var items: [Item] = roots
         var queue = Array(roots.indices.reversed())
-        nodes = Array(repeating: [], count: roots.count)
         var busy = 0
         let condition = NSCondition()
+
+        // Where a depth-first walk over the nodes read so far has got to. It
+        // stops at the first node not read yet, so values come out in walk
+        // order however the reads finish.
+        var values: [Value] = []
+        var path: [(node: Int, step: Int)] = []
+        var nextRoot = 0
+        func advance() -> [Value] {
+            var ready: [Value] = []
+            while true {
+                if path.isEmpty {
+                    guard nextRoot < roots.count else { break }
+                    path.append((nextRoot, 0))
+                    nextRoot += 1
+                }
+                let (node, step) = path[path.count - 1]
+                guard let steps = nodes[node] else { break }
+                guard step < steps.count else {
+                    path.removeLast()
+                    continue
+                }
+                path[path.count - 1].step += 1
+                switch steps[step] {
+                case .value(let value): ready.append(value)
+                case .child(let child): path.append((child, 0))
+                }
+            }
+            return ready
+        }
+
         DispatchQueue.concurrentPerform(iterations: max(1, width)) { _ in
             while true {
                 condition.lock()
                 while queue.isEmpty, busy > 0 { condition.wait() }
-                guard let index = queue.popLast(), !isCancelled() else {
-                    condition.unlock()
+                guard !isCancelled(), let index = queue.popLast() else {
                     condition.broadcast()
+                    condition.unlock()
                     return
                 }
                 let item = items[index]
@@ -167,7 +202,7 @@ extension ConcurrentMap {
                     case .child(let child):
                         let childIndex = items.count
                         items.append(child)
-                        nodes.append([])
+                        nodes.append(nil)
                         resolved.append(.child(childIndex))
                         added.append(childIndex)
                     }
@@ -176,20 +211,15 @@ extension ConcurrentMap {
                 // Reversed, so the first subfolder is read next.
                 queue.append(contentsOf: added.reversed())
                 busy -= 1
-                condition.unlock()
+                // Handed out with the lock held, so batches never overtake
+                // one another.
+                let ready = advance()
+                values += ready
+                if !ready.isEmpty { onValues?(ready) }
                 if !added.isEmpty || busy == 0 { condition.broadcast() }
+                condition.unlock()
             }
         }
-        var values: [Value] = []
-        func collect(_ index: Int) {
-            for step in nodes[index] {
-                switch step {
-                case .value(let value): values.append(value)
-                case .child(let child): collect(child)
-                }
-            }
-        }
-        roots.indices.forEach(collect)
         return values
     }
 }

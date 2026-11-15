@@ -55,14 +55,22 @@ nonisolated final class OrphanLeftoverScanner {
         AsyncStream { [home, defaults, installedApps, ledger, catalog] continuation in
             let staleDays = OrphanLeftoverScanPolicy.effectiveStaleDays(userDefaults: defaults)
             let task = Task.detached(priority: .userInitiated) {
-                Self.run(
-                    home: home,
-                    staleDays: staleDays,
-                    installed: installedApps,
-                    ledger: { ledger(home) },
-                    catalog: catalog,
-                    continuation: continuation
-                )
+                // The folders are judged on threads of their own, where
+                // `Task.isCancelled` is always false, so a cancel raises this.
+                let stop = CancellationFlag()
+                await withTaskCancellationHandler {
+                    Self.run(
+                        home: home,
+                        staleDays: staleDays,
+                        installed: installedApps,
+                        ledger: { ledger(home) },
+                        catalog: catalog,
+                        stop: stop,
+                        continuation: continuation
+                    )
+                } onCancel: {
+                    stop.raise()
+                }
             }
             continuation.onTermination = { _ in task.cancel() }
         }
@@ -83,6 +91,7 @@ nonisolated final class OrphanLeftoverScanner {
         installed installedApps: () -> OrphanLeftoverScanPolicy.InstalledAppIndex,
         ledger readLedger: () -> LeftoverOwnerLedger,
         catalog: AppDotFolderCatalog,
+        stop: CancellationFlag,
         continuation: AsyncStream<UninstallItem>.Continuation
     ) {
         let fm = FileManager.default
@@ -146,8 +155,10 @@ nonisolated final class OrphanLeftoverScanner {
         }
 
         let judged = ConcurrentMap.values(entries) { root, entry -> Candidate? in
+            // A stopped scan judges nothing more; the list below is dropped.
+            guard !stop.isRaised else { return nil }
             // Judging a container reads inside it, so one container at a time.
-            ContainerAccessGate.access(entry.path) { judge(entry, category: root.category) }
+            return ContainerAccessGate.access(entry.path) { judge(entry, category: root.category) }
         }
 
         var candidates: [Candidate] = []

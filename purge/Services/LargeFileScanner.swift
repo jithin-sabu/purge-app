@@ -347,14 +347,35 @@ nonisolated final class LargeFileScanner {
 
             // Folders are read on several threads, each as soon as one is free:
             // one walk of Documents set the pace of the whole scan. What they
-            // find comes back in the order one walk met it, so the rows, which
-            // copy of a file is listed first, and the summary come out the same.
+            // find is applied in the order one walk met it, as soon as every
+            // folder before it is read, so rows still arrive as the walk goes,
+            // and which copy of a file is listed first and the summary come out
+            // the same.
             // The reads run on threads of their own, where `Task.isCancelled` is
             // always false, so cancelling this task raises a flag they read.
             let stop = CancellationFlag()
             let isCancelled = { stop.isRaised }
-            let unitFindings = await withTaskCancellationHandler {
-                ConcurrentMap.tree([WalkFolder.top], width: foldersReadAtOnce, isCancelled: isCancelled) { folder -> [TreeStep<[Finding], WalkFolder>] in
+            func apply(_ batches: [[Finding]]) {
+                for finding in batches.joined() {
+                    switch finding {
+                    case .file(let file):
+                        if isFirstListing(file) {
+                            continuation.yield(.file(file))
+                        }
+                    case .skippedLibrary(let library):
+                        summary.skippedLibraries.append(library)
+                    case .cloudOnly(let provider, let bytes):
+                        summary.addCloudOnly(provider, bytes: bytes)
+                    }
+                }
+            }
+            await withTaskCancellationHandler {
+                _ = ConcurrentMap.tree(
+                    [WalkFolder.top],
+                    width: foldersReadAtOnce,
+                    isCancelled: isCancelled,
+                    onValues: apply
+                ) { folder -> [TreeStep<[Finding], WalkFolder>] in
                     let folderURL: URL
                     switch folder {
                     case .top:
@@ -389,20 +410,6 @@ nonisolated final class LargeFileScanner {
                 stop.raise()
             }
 
-            for finding in unitFindings.joined() {
-                if Task.isCancelled { break }
-                switch finding {
-                case .file(let file):
-                    if isFirstListing(file) {
-                        continuation.yield(.file(file))
-                    }
-                case .skippedLibrary(let library):
-                    summary.skippedLibraries.append(library)
-                case .cloudOnly(let provider, let bytes):
-                    summary.addCloudOnly(provider, bytes: bytes)
-                }
-            }
-
             if !bundlesOnly {
                 if let error = rootFailure.error {
                     summary.unreadableRoots.append(.init(path: root, reason: error.localizedDescription))
@@ -418,7 +425,7 @@ nonisolated final class LargeFileScanner {
         continuation.finish()
     }
 
-    /// What walking one entry adds, applied in walk order once the units are done.
+    /// What walking one entry adds, applied in walk order.
     private enum Finding {
         case file(LargeFile)
         case skippedLibrary(LargeFileScanSummary.SkippedLibrary)
