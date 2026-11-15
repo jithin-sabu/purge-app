@@ -4373,6 +4373,10 @@ final class PurgeStore: ObservableObject {
     /// `inFullScan` is true when `runFullScan` runs this half. That scan has
     /// started the git session for both halves and its project discovery.
     private func runDeveloperScan(generation: Int, access: ScanAccess, inFullScan: Bool = false) async {
+        // A full scan starts this half on a task of its own, which can get its
+        // first turn after a standalone scan replaced the full one. The flag
+        // it set then stayed set, since only the current scan clears it.
+        guard scanGeneration == generation else { return }
         let developerStart = Date()
         scanCompletionHideTask?.cancel()
         errorMessage = nil
@@ -4438,6 +4442,9 @@ final class PurgeStore: ObservableObject {
             }
         }
         coalesce.debounceTask?.cancel()
+        // A newer scan owns the lists now; the stream can end without another
+        // event, so the loop's check may not have run.
+        guard scanGeneration == generation else { return }
         flushDeveloperScanBuffers(coalesce: coalesce, animate: false)
         // The scan moves a runtime excluded by path before #178 to the runtime
         // list, so Settings would show neither until the lists are read again.

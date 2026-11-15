@@ -29,6 +29,10 @@ final class FakeScans {
     var generalEvents: [CacheScanEvent] = []
     /// Yielded by a Dev Tools scan that is not held, before it finishes.
     var developerEvents: [DeveloperScanEvent] = []
+    /// Runs where a full scan prepares, before its halves start (#370). It
+    /// runs on the main actor without a pause, so a task it starts gets its
+    /// turn after the halves are started and before either has run.
+    var onPrepareFullScan: (() -> Void)?
     /// Yielded by project discovery as soon as it starts. A held discovery then
     /// stays open until it is let go.
     var projectEvents: [DeveloperScanEvent] = []
@@ -101,6 +105,13 @@ final class FakeScans {
         let held = heldGeneral
         heldGeneral = []
         held.forEach { $0.finish() }
+    }
+
+    /// Sends events to every held Dev Tools scan, which stays open.
+    func yieldDeveloper(_ events: [DeveloperScanEvent]) {
+        for continuation in heldDeveloper {
+            events.forEach { continuation.yield($0) }
+        }
     }
 
     func finishHeldProjects() {
@@ -253,7 +264,8 @@ final class FakeScans {
                 }
                 self.gitStatusAnswerCount += 1
                 return answers
-            }
+            },
+            prepareFullScan: { _ in self.onPrepareFullScan?() }
         )
     }
 }

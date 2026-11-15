@@ -100,6 +100,78 @@ struct ScanQueueStoreTests {
         fake.cleanUp()
     }
 
+    /// The Dev Tools half of a full scan starts on a task of its own. A
+    /// standalone scan that replaces the full scan before that task's first
+    /// turn has already cleared the flags, and the replaced half must not set
+    /// its own again: only the current scan clears it.
+    @Test
+    func aFullScanReplacedBeforeItsHalvesRunLeavesNeitherMarkedScanning() async {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        var replacement: Task<Void, Never>?
+        fake.onPrepareFullScan = {
+            guard replacement == nil else { return }
+            // What a scheduled clean's rescan does, queued ahead of both halves.
+            replacement = Task { @MainActor in await store.scanGeneral() }
+        }
+        store.requestScan(.cachesAndDevTools)
+        #expect(await eventually { replacement != nil })
+        await replacement?.value
+
+        #expect(await eventually { isIdle(store) })
+        #expect(!store.isScanningDeveloper)
+        #expect(!store.isScanningGeneral)
+    }
+
+    /// A replaced scan's stream ends without another event, so its loop never
+    /// sees that it was replaced. What it still held belongs to lists the newer
+    /// scan has cleared.
+    @Test
+    func aReplacedFullScanPublishesNoDevToolsItStillHeld() async {
+        let fake = FakeScans()
+        defer { fake.cleanUp() }
+        fake.hasAccess = true
+        let store = fake.makeStore()
+        fake.holdsGeneral = true
+        fake.holdsDeveloper = true
+        store.requestScan(.cachesAndDevTools)
+        #expect(await eventually { store.isScanningAll && fake.developerAccesses.count == 1 })
+
+        let caches = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".gradle/caches", isDirectory: true)
+        let tool = DevTool(
+            definitionKey: "gradle",
+            toolName: "Gradle",
+            paths: [caches],
+            sizeBytes: 2_000,
+            pathSizeBytesByPath: [caches.standardizedFileURL.path: 2_000],
+            isDetected: true,
+            safetyInfo: SafetyInfo(level: .safe, headline: "Gradle", explanation: "", recoverySteps: "", reinstallCommand: nil)
+        )
+        fake.yieldDeveloper([
+            .devToolFound(tool),
+            .devToolSizeResolved(
+                id: tool.id,
+                pathSizeBytesByPath: tool.pathSizeBytesByPath,
+                sizeBytes: tool.sizeBytes,
+                lastModified: .distantPast
+            ),
+        ])
+        // The held scan takes both events in, and they wait for its next
+        // flush. On a run slow enough for that flush to come first, the tool
+        // is listed already and the rescan below clears it, so the check
+        // passes either way.
+        for _ in 0..<50 { await Task.yield() }
+
+        // What a scheduled clean's rescan does. It finds no tools.
+        fake.holdsDeveloper = false
+        await store.scanDeveloper()
+
+        #expect(store.devTools.isEmpty)
+    }
+
     // MARK: Nothing scans beside the queue
 
     @Test
