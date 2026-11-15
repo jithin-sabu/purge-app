@@ -669,6 +669,7 @@ struct AllowlistAdditionTests {
         ("Mail Downloads", .medium),
         ("Unfinished Downloads", .medium),
         ("Electron Updater Downloads", .safe),
+        ("Unsent Crash Reports", .medium),
         ("node-gyp", .safe),
         ("typescript", .safe),
         ("claude-cli-nodejs", .safe),

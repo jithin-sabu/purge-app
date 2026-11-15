@@ -311,11 +311,13 @@ nonisolated final class CacheScanner {
                 ? CacheDiscoveryPaths.applicationSupportGroupKey(appFolderName: appFolderName)
                 : nil
             for cacheURL in CacheDiscoveryPaths.applicationSupportCacheURLs(in: appDir, access: access) {
+                let row = Self.applicationSupportRow(for: cacheURL, appFolderName: appFolderName, groupKey: groupKey)
                 guard let item = cacheItemAtDiscoveredPath(
                     cacheURL,
-                    headline: applicationSupportHeadline(appFolderName: appFolderName),
+                    headline: row.headline,
                     folderName: appFolderName,
-                    groupKey: groupKey,
+                    classificationName: row.classificationName,
+                    groupKey: row.groupKey,
                     access: access,
                     collectedPaths: &collectedPaths
                 ) else { continue }
@@ -455,10 +457,14 @@ nonisolated final class CacheScanner {
         _ url: URL,
         headline: String,
         folderName: String,
+        classificationName: String? = nil,
         groupKey: String? = nil,
         access: ScanAccess,
         collectedPaths: inout Set<String>
     ) -> CacheItem? {
+        // The name the tier and row come from. The location keeps `folderName`,
+        // which its label in the confirm sheets is read from.
+        let classificationName = classificationName ?? folderName
         // Before `standardizedFileURL` and the modification date, both of which
         // follow a symlink to its target.
         guard ProtectedLocations.isReadable(url, access: access) else { return nil }
@@ -470,12 +476,12 @@ nonisolated final class CacheScanner {
 
         let modified = FolderSizing.contentModificationDate(at: url)
         let safetyInfo = ExplanationResolver.initialSafetyForCacheFolder(
-            folderName: folderName,
+            folderName: classificationName,
             friendlyHeadline: headline,
             path: url
         )
         return CacheItem(
-            definitionKey: groupKey ?? ExplanationDatabase.definitionKey(forFolderName: folderName),
+            definitionKey: groupKey ?? ExplanationDatabase.definitionKey(forFolderName: classificationName),
             location: CacheLocation(
                 path: url,
                 sizeBytes: 0,
@@ -552,7 +558,33 @@ nonisolated final class CacheScanner {
     }
 
     /// One name for every cache folder of an app, since they share a row.
-    private func applicationSupportHeadline(appFolderName: String) -> String {
+    /// The row an Application Support cache folder is shown on.
+    struct ApplicationSupportRow: Equatable {
+        let headline: String
+        /// The name the tier and row come from, when it is not the app folder.
+        let classificationName: String?
+        let groupKey: String?
+    }
+
+    /// Unsent crash reports from every app share one Check First row (#367),
+    /// never the app's own row, whatever tier the app's entry has. Every other
+    /// folder goes on its app's row.
+    static func applicationSupportRow(for cacheURL: URL, appFolderName: String, groupKey: String?) -> ApplicationSupportRow {
+        if CacheDiscoveryPaths.isCrashpadPendingFolder(cacheURL) {
+            return ApplicationSupportRow(
+                headline: CacheDiscoveryPaths.crashpadPendingKey,
+                classificationName: CacheDiscoveryPaths.crashpadPendingKey,
+                groupKey: nil
+            )
+        }
+        return ApplicationSupportRow(
+            headline: applicationSupportHeadline(appFolderName: appFolderName),
+            classificationName: nil,
+            groupKey: groupKey
+        )
+    }
+
+    private static func applicationSupportHeadline(appFolderName: String) -> String {
         let displayApp = appFolderName
             .replacingOccurrences(of: "company.thebrowser.", with: "")
             .replacingOccurrences(of: "com.google.", with: "")
