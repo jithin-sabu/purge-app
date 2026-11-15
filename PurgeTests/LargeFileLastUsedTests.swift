@@ -12,17 +12,22 @@ import Testing
 struct LargeFileLastUsedTests {
     private let day: TimeInterval = 24 * 60 * 60
 
-    /// `.noindex`, so Spotlight leaves the files alone: its importer reads a
-    /// new file and would move the access times these tests set.
+    /// The folder the scan walks, inside a folder of the test's own. Remove
+    /// the parent when done.
     private func makeRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("purge-last-used-\(UUID().uuidString).noindex", isDirectory: true)
+            .appendingPathComponent("purge-last-used-\(UUID().uuidString)/files", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
     }
 
-    private func makeLedger(in root: URL, maxEntries: Int = 5_000) -> FileAccessLedger {
-        FileAccessLedger(fileURL: root.appendingPathComponent("ledger/access-times.json"), maxEntries: maxEntries)
+    /// Next to the scanned folder, not in it: the ledger writes its file a
+    /// second after a record, and the scan would list it.
+    private func makeLedger(in root: URL, name: String = "ledger", maxEntries: Int = 5_000) -> FileAccessLedger {
+        FileAccessLedger(
+            fileURL: root.deletingLastPathComponent().appendingPathComponent("\(name)/access-times.json"),
+            maxEntries: maxEntries
+        )
     }
 
     private func setTimes(_ url: URL, access: Date, modification: Date) {
@@ -82,7 +87,7 @@ struct LargeFileLastUsedTests {
     @Test("A thumbnail leaves the file's Last used and age filter as they were")
     func thumbnailKeepsLastUsed() async throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let file = try writeOldFile("holiday.mov", in: root, daysAgo: 40)
         let ledger = makeLedger(in: root)
 
@@ -98,35 +103,32 @@ struct LargeFileLastUsedTests {
     @Test("Without the ledger the same file reads Today and the age filter drops it")
     func withoutLedgerTheFileReadsToday() async throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let file = try writeOldFile("holiday.mov", in: root, daysAgo: 40)
 
         try drawThumbnail(of: file, ledger: makeLedger(in: root))
 
-        let other = FileAccessLedger(fileURL: root.appendingPathComponent("other/access-times.json"))
+        let other = makeLedger(in: root, name: "other")
         #expect(await scan(root, staleDays: 30, ledger: other).isEmpty)
         let rows = await scan(root, staleDays: 0, ledger: other)
-        #expect(daysSince(try #require(rows.first).lastUsed) < 1)
+        #expect(daysSince(try #require(rows.first { $0.path.lastPathComponent == file.lastPathComponent }).lastUsed) < 1)
     }
 
     @Test("Once the user opens the file, its new Last used shows and the entry goes")
     func userOpenShowsNewDate() async throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
-        // Not a .pdf: in full test runs something outside Purge read a .pdf
-        // here about a second after the test set its access time, and moved it.
-        let file = try writeOldFile("report.bin", in: root, daysAgo: 40)
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let file = try writeOldFile("report.pdf", in: root, daysAgo: 40)
         let ledger = makeLedger(in: root)
         try drawThumbnail(of: file, ledger: ledger)
 
-        // Any access time other than the one Quick Look left. A past one, as a
-        // time in the future can be moved again by the next read.
+        // Any access time other than the one Quick Look left.
         let opened = Date().addingTimeInterval(-2 * day)
         let modification = try #require(FileAccessLedger.Times(url: file)).modification
         setTimes(file, access: opened, modification: Date(timeIntervalSince1970: modification))
 
         let rows = await scan(root, staleDays: 0, ledger: ledger)
-        let row = try #require(rows.first)
+        let row = try #require(rows.first { $0.path.lastPathComponent == file.lastPathComponent })
         #expect(abs(row.lastUsed.timeIntervalSince(opened)) < 0.001)
         #expect(ledger.entry(for: file) == nil)
     }
@@ -134,7 +136,7 @@ struct LargeFileLastUsedTests {
     @Test("A file written after the thumbnail shows its new date")
     func writtenFileShowsNewDate() async throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let file = try writeOldFile("draft.key", in: root, daysAgo: 40)
         let ledger = makeLedger(in: root)
         try drawThumbnail(of: file, ledger: ledger)
@@ -144,14 +146,14 @@ struct LargeFileLastUsedTests {
         setTimes(file, access: Date(timeIntervalSince1970: access), modification: written)
 
         let rows = await scan(root, staleDays: 0, ledger: ledger)
-        #expect(daysSince(try #require(rows.first).lastUsed) < 1)
+        #expect(daysSince(try #require(rows.first { $0.path.lastPathComponent == file.lastPathComponent }).lastUsed) < 1)
         #expect(ledger.entry(for: file) == nil)
     }
 
     @Test("A second thumbnail keeps the user's date from before the first")
     func secondThumbnailKeepsFirstDate() async throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let file = try writeOldFile("clip.mp4", in: root, daysAgo: 40)
         let ledger = makeLedger(in: root)
 
@@ -160,13 +162,13 @@ struct LargeFileLastUsedTests {
         try drawThumbnail(of: file, ledger: ledger)
 
         let rows = await scan(root, staleDays: 30, ledger: ledger)
-        #expect(abs(daysSince(try #require(rows.first).lastUsed) - 40) < 0.01)
+        #expect(abs(daysSince(try #require(rows.first { $0.path.lastPathComponent == file.lastPathComponent }).lastUsed) - 40) < 0.01)
     }
 
     @Test("The ledger is read back after a relaunch")
     func ledgerSurvivesRelaunch() async throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let file = try writeOldFile("archive.zip", in: root, daysAgo: 40)
         let ledger = makeLedger(in: root)
         try drawThumbnail(of: file, ledger: ledger)
@@ -174,7 +176,7 @@ struct LargeFileLastUsedTests {
 
         let relaunched = FileAccessLedger(fileURL: ledger.fileURL)
         let rows = await scan(root, staleDays: 30, ledger: relaunched)
-        #expect(abs(daysSince(try #require(rows.first).lastUsed) - 40) < 0.01)
+        #expect(abs(daysSince(try #require(rows.first { $0.path.lastPathComponent == file.lastPathComponent }).lastUsed) - 40) < 0.01)
     }
 
     /// The Quick Look panel reads the file some time after it is told to show
@@ -182,7 +184,7 @@ struct LargeFileLastUsedTests {
     @Test("A preview's read is kept when it comes after the panel shows the file")
     func previewKeepsLastUsed() async throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let file = try writeOldFile("Ardia.dmg", in: root, daysAgo: 40)
         let ledger = makeLedger(in: root)
 
@@ -193,13 +195,13 @@ struct LargeFileLastUsedTests {
         #expect(ledger.entry(for: file) != nil)
 
         let rows = await scan(root, staleDays: 30, ledger: ledger)
-        #expect(abs(daysSince(try #require(rows.first).lastUsed) - 40) < 0.01)
+        #expect(abs(daysSince(try #require(rows.first { $0.path.lastPathComponent == file.lastPathComponent }).lastUsed) - 40) < 0.01)
     }
 
     @Test("A read that left the access time alone is not kept")
     func unmovedReadIsNotKept() throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let file = try writeOldFile("plain.bin", in: root, daysAgo: 40)
         let ledger = makeLedger(in: root)
 
@@ -211,7 +213,7 @@ struct LargeFileLastUsedTests {
     @Test("Past the cap the oldest entries go first")
     func capDropsOldest() throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let ledger = makeLedger(in: root, maxEntries: 2)
         let before = FileAccessLedger.Times(access: 100, modification: 100)
         let after = FileAccessLedger.Times(access: 200, modification: 100)
@@ -231,7 +233,7 @@ struct LargeFileLastUsedTests {
     @Test("The duplicate check leaves access times alone")
     func duplicateCheckLeavesAccessTimes() async throws {
         let root = try makeRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
         let payload = Data((0..<(256 * 1024)).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ 17) })
         let written = Date().addingTimeInterval(-10 * day)
         let opened = Date().addingTimeInterval(-40 * day)
