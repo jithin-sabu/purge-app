@@ -113,7 +113,9 @@ struct LargeFileLastUsedTests {
     func userOpenShowsNewDate() async throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let file = try writeOldFile("report.pdf", in: root, daysAgo: 40)
+        // Not a .pdf: in full test runs something outside Purge read a .pdf
+        // here about a second after the test set its access time, and moved it.
+        let file = try writeOldFile("report.bin", in: root, daysAgo: 40)
         let ledger = makeLedger(in: root)
         try drawThumbnail(of: file, ledger: ledger)
 
