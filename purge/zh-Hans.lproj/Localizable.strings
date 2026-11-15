@@ -17,8 +17,6 @@
 "%@ cleaned up with Purge so far. " = "迄今已用 Purge 清理 %@。 ";
 "%@ each" = "每项 %@";
 "%@ free" = "可用 %@";
-"%@ free + %@ purgeable" = "可用 %1$@ + 可清除 %2$@";
-"%@ empty now. macOS frees the other %@ by itself when it needs room." = "当前空闲 %1$@。另外 %2$@ 会在需要空间时由 macOS 自动释放。";
 "%@ is on this Mac again, so its files were kept." = "%@ 又出现在这台 Mac 上了，因此已保留其文件。";
 "%@ is open or back on this Mac, so its files were kept." = "%@ 正在运行或已回到这台 Mac 上，因此已保留其文件。";
 "%@ is still open, so it was left installed. Quit it and try again." = "%@ 仍处于打开状态，因此未卸载。请先退出该应用，然后重试。";
@@ -126,6 +124,11 @@
 "Automatic clean" = "自动清理";
 "Available after the scan finishes" = "扫描完成后可用";
 "Available for new files" = "可用于存放新文件";
+"Purgeable" = "可清除空间";
+"macOS frees this by itself when it needs room" = "macOS 会在需要空间时自动释放";
+"What is purgeable space?" = "什么是可清除空间？";
+"About purgeable space" = "关于可清除空间";
+"Space macOS can take back by itself when something needs room: local Time Machine snapshots, iCloud files kept on this Mac, and caches macOS manages. System Settings counts it as used. Removing old Time Machine snapshots below frees part of it now." = "macOS 会在需要空间时自行收回的空间：本地时间机器快照、保留在这台 Mac 上的 iCloud 文件，以及 macOS 管理的缓存。系统设置将其计为已用空间。删除下方的旧时间机器快照可立即释放其中一部分。";
 "Big files tend to live in Downloads, Documents and Desktop, and macOS keeps those locked until you say Purge can look. Purge only ever shows them to you. It never cleans them on its own." = "大文件通常位于下载、文稿和桌面文件夹中。只有你允许后，Purge 才能访问这些位置。Purge 只会向你显示这些文件，不会自行清理。";
 "Big forgotten files" = "被遗忘的大文件";
 "Browser caches" = "浏览器缓存";

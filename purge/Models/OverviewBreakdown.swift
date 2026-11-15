@@ -101,6 +101,28 @@ nonisolated struct OverviewBreakdown: Equatable, Sendable {
     }
 }
 
+/// Used and free as the Overview shows them (#243).
+///
+/// The breakdown's free figure is free for important use, which counts purgeable
+/// space (local snapshots, iCloud files kept on this Mac, caches macOS manages)
+/// as free. System Settings counts that space as used. When there is enough of it
+/// to show, it moves out of free and into used, with a segment of its own between
+/// them, so used and free match System Settings and still add up to the total.
+/// Display only: gains are measured on the breakdown's free figure.
+nonisolated struct OverviewFreeSpace: Equatable, Sendable {
+    let usedBytes: Int64
+    let purgeableBytes: Int64
+    /// Empty right now, the figure System Settings and `df` show as free.
+    let emptyBytes: Int64
+
+    init(breakdown: OverviewBreakdown, split: FreeSpaceSplit?) {
+        let purgeable = min(max(0, split?.purgeableBytes ?? 0), breakdown.freeBytes)
+        purgeableBytes = purgeable
+        emptyBytes = breakdown.freeBytes - purgeable
+        usedBytes = breakdown.usedBytes + purgeable
+    }
+}
+
 /// Paths already counted, kept sorted so the folders under a new path can be found
 /// with a binary search instead of a scan of every earlier claim. Shared with the
 /// Everything else breakdown, which claims after the five categories have.
