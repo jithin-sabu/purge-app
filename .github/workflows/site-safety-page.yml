@@ -18,6 +18,7 @@ on:
       - purge/PrivilegedHelper/MacOSInstallLeftovers.swift
       - purge/Resources/explanations.json
       - purge/Models/ProjectArtifactCatalog.swift
+      - purge/Services/LargeFileScanPolicy.swift
       - .github/workflows/site-safety-page.yml
   push:
     branches: [main]
@@ -31,6 +32,7 @@ on:
       - purge/PrivilegedHelper/MacOSInstallLeftovers.swift
       - purge/Resources/explanations.json
       - purge/Models/ProjectArtifactCatalog.swift
+      - purge/Services/LargeFileScanPolicy.swift
       - .github/workflows/site-safety-page.yml
 
 permissions:
